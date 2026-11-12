@@ -9,12 +9,7 @@ from std.ffi import OwnedDLHandle, c_int, c_uint, external_call
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_transport import TRANSPORT_BOUNDARY
-
-
-def _inventory_status(status: c_int, operation: String) raises:
-    if status != 0:
-        raise Error("worker inventory: " + operation + " failed with driver status " + String(status))
-
+from bindings.native_worker_inventory_run import _inventory_status, _inventory_hex
 
 def _inventory_dict(value: PythonObject) raises:
     var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
@@ -152,18 +147,6 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
     py_setitem(result, "visibility", visibility)
     _ = driver^
     return result
-
-
-def _inventory_hex(text: String, count_min: Int, count_max: Int) -> Bool:
-    if text.byte_length() < count_min or text.byte_length() > count_max:
-        return False
-    var bytes = text.as_bytes()
-    for i in range(len(bytes)):  # small-loop(the bounded UUID or PCI hexadecimal field)
-        var byte = bytes[i]
-        if not (UInt8(48) <= byte <= UInt8(57)) and not (UInt8(97) <= byte <= UInt8(102)):
-            return False
-    return True
-
 
 def _inventory_pci(text: String) raises -> Bool:
     var parts = py_call(PythonObject(text).split, ":")

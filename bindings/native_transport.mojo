@@ -20,10 +20,16 @@ from bindings.native_posix_transport import (
     posix_sleep, posix_open, posix_accept, posix_transfer, posix_spawn, posix_wait,
 )
 from bindings.native_posix_transport_run import (
-    PosixBytes, PosixWords, posix_clock, posix_close, posix_terminate, posix_errno, posix_failure,
+    PosixBytes, PosixWords, posix_close, posix_errno, posix_failure,
 )
 from bindings.cpython_table import cpython_table
 from core.shared_slot import SharedSlot
+from bindings.native_transport_run import (
+    transport_clock,
+    _transport_timeout,
+    transport_hostname,
+    transport_terminate,
+)
 
 
 struct TransportBoundary(Defaultable, Movable):
@@ -133,19 +139,8 @@ def transport_timeout(socket: PythonObject, seconds: Float64) raises:
     MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(state))[1] = seconds
     _ = socket
 
-
-def transport_clock() raises -> Float64:
-    return posix_clock()
-
-
 def transport_sleep(seconds: Float64) raises:
     posix_sleep(seconds)
-
-
-def _transport_timeout(seconds: Float64) raises:
-    if seconds <= 0 or not isfinite(seconds):
-        raise Error("transport: timeout must be finite and positive")
-
 
 def _transport_host(host: String) raises -> String:
     if host == "":
@@ -213,15 +208,6 @@ def transport_address(socket: PythonObject, peer: Bool = False) raises -> Python
         _ = py_call(result.append, scope)
     _ = storage^
     return py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi.tuple, result)
-
-
-def transport_hostname() raises -> String:
-    var buffer = Array[Int8, 256](uninitialized=True)
-    if external_call["gethostname", c_int](buffer.unsafe_ptr(), c_size_t(256)) != 0:
-        posix_failure("gethostname", posix_errno())
-    buffer[255] = 0
-    return unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
-
 
 def transport_port(socket: PythonObject) raises -> Int:
     return Int(py=transport_address(socket)[1])
@@ -424,13 +410,6 @@ def transport_wait(pid: Int, nohang: Bool = False) raises -> Int:
     if pid <= 0 or pid > 2147483647:
         raise Error("transport: invalid child process ID")
     return posix_wait(pid, nohang)
-
-
-def transport_terminate(pid: Int, signal: Int = 15) raises:
-    if pid <= 0 or pid > 2147483647 or signal <= 0 or signal > 2147483647:
-        raise Error("transport: invalid process ID or signal")
-    posix_terminate(pid, signal)
-
 
 def transport_call(operation: String, args: PythonObject) raises -> PythonObject:
     """Single native operation entry for admission and installed protocol tests."""

@@ -11,17 +11,30 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_transport import (
-    transport_initialize, transport_listen, transport_accept, transport_port, transport_timeout,
-    transport_connect, transport_send, transport_send_parts, transport_receive, transport_receive_owned, transport_close,
-    transport_spawn, transport_wait, transport_terminate, transport_clock,
-    transport_sleep, _transport_json,
+    transport_initialize,
+    transport_listen,
+    transport_accept,
+    transport_port,
+    transport_timeout,
+    transport_connect,
+    transport_send,
+    transport_send_parts,
+    transport_receive,
+    transport_receive_owned,
+    transport_close,
+    transport_spawn,
+    transport_wait,
+    transport_sleep,
+    _transport_json,
 )
+from bindings.native_transport_run import transport_terminate, transport_clock
 from bindings.native_codec import codec_pack_owned, codec_unpack
 from bindings.native_json_door import native_json_parse
 from bindings.native_process_wire import WireOutgoing, wire_send, wire_receive
 from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.shared_slot import SharedSlot
+from bindings.native_process_pool_run import ReapOutcome
 
 
 comptime PROCESS_MAX_BYTES = (1 << 63) - 1
@@ -197,20 +210,6 @@ def process_receive(socket: PythonObject) raises -> PythonObject:
     _ = py_call(result.append, header)
     _ = py_call(result.append, decoded)
     return py_call(p[].bi.tuple, result)
-
-
-struct ReapOutcome(Movable):
-    """Per worker, in pool order: the reap's error ("" when reaped), the
-    seconds from the start of the reap to it, and the signal it needed."""
-    var errors: List[String]
-    var seconds: List[Float64]
-    var signal: List[Int]
-
-    def __init__(out self, n: Int):
-        self.errors = List[String](length=n, fill=String())
-        self.seconds = List[Float64](length=n, fill=0.0)
-        self.signal = List[Int](length=n, fill=0)
-
 
 def _reap_poll(pids: List[Int], mut done: List[Bool], mut outcome: ReapOutcome, start: Float64, window: Float64, level: Int) raises:
     """Nonblocking reaps of every open worker until all are reaped, failed,
