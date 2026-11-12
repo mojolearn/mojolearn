@@ -679,6 +679,12 @@ def _convert(a, dtype, order):
     missing symbol is a stale build and `_native` says so by name
     (fallback arms removed 2026-09-10).
     """
+    # PERF FIX (perf-audit-2-a, 2026-11-11): `_has_order` and `_as_order`
+    # became native calls (lane pyout-runtime-boundary); an input already in
+    # `dtype` and `order`, the common case of every public call, is returned
+    # on the label compare alone instead of crossing into the binding twice.
+    if a.dtype == dtype and a.order == order:
+        return a, False
     if a.dtype == dtype and a._has_order(order):
         # a (1, n) or (n, 1) block is both C- and F-contiguous; relabeling
         # it is free and is not a copy
@@ -701,7 +707,7 @@ def _native_to_f32(a, order):
     # A 2-D block whose layout must flip. An F-order [rows, cols] block IS
     # a C-order [cols, rows] matrix, so the same kernel serves both
     # directions with the dimensions swapped (DEVIATION 2471, 2472).
-    if a.ndim == 2 and not a._has_order(order):
+    if a.ndim == 2 and a.order != order and not a._has_order(order):
         rows, cols = a.shape
         if a.order == "F":
             rows, cols = cols, rows
@@ -851,7 +857,7 @@ def as_f32_forest_layout(obj, *, name):
     the native side stages the same column-major bytes."""
     a, _ = _materialize(obj, name)
     if (a.ndim == 2 and a.dtype == "<f4" and a.size
-            and not a._has_order("F")):
+            and a.order == "C" and not a._has_order("F")):
         return a, True
     return as_f32_colmajor(a, name=name)[0], False
 
