@@ -7,9 +7,8 @@ from std.python import PythonObject
 
 from sequence.moe_dev import moe_forward_dev
 from providers.python.sequence_pyapi import py_ints
-from providers.python.sequence_seq_tensor_pyapi import (
-    seq_tensor_alloc_slots, seq_tensor_free_made, seq_tensor_handles_list,
-)
+from providers.python.sequence_seq_tensor_pyapi import seq_tensor_handles_list
+from sequence.sequence_seq_tensor_run import seq_tensor_alloc_slots, seq_tensor_free_made
 
 
 def moe_forward_dev_py(handles: PythonObject, ip: PythonObject) raises -> PythonObject:
