@@ -18,6 +18,7 @@
 # change. Device ids (the x_decomp pool's) travel in the integer span; host
 # buffers in the address span; float scalars in the Float64 span.
 comptime XD_ABI_NAME = "mojolearn.x_decomp.native.v1"
+from x_decomp.descriptor_mani_schema import XD_MANI_OPERATION_END, xd_is_mani_op, xd_mani_schema
 
 comptime XD_MODE = 0           # -> GLOBAL_NUMERIC_MODE of the image
 comptime XD_CAPABILITIES = 1   # -> XD_CAP_* bits
@@ -122,7 +123,9 @@ comptime XD_RANDOMIZED_SVD = 69   # a: [x, u, s, vt] i: [rows, cols, nc, oversam
 # (`x_decomp_order_small`, `x_decomp_dev_order_small`), appended.
 comptime XD_ORDER_SMALL = 70      # a: [x, dst] i: [n]
 comptime XD_DEV_ORDER_SMALL = 71  # i: [x, dst, n]
-comptime XD_OPERATION_COUNT = 72
+# lane entangled-mkit (2026-11-12): the manifold kit's operations 120 ..
+# XD_MANI_OPERATION_END - 1 (x_decomp/descriptor_mani_schema.mojo).
+comptime XD_OPERATION_COUNT = XD_MANI_OPERATION_END
 
 comptime XD_CAP_HOST = 1       # the host-address operations
 comptime XD_CAP_RESIDENT = 2   # the device-resident operations
@@ -262,6 +265,8 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (2, 1, 0)
     if op == XD_DEV_ORDER_SMALL:
         return (0, 3, 0)
+    if xd_is_mani_op(op):
+        return xd_mani_schema(op)
     raise Error("x_decomp native ABI: unknown operation " + String(op))
 
 

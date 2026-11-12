@@ -37,6 +37,9 @@ from x_decomp.descriptor_schema import (
 )
 from x_decomp.descriptor_owner_ops import xd_is_owner_op
 from x_decomp.descriptor_owner_device import xd_owner_device_op
+from x_decomp.descriptor_mani_device import xd_mani_device_op
+from x_decomp.descriptor_mani_schema import xd_is_mani_op, XD_CAP_DEV_LU, XD_CAP_DEV_EIGH, XD_CAP_LLE_ORDERED
+from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from core.shared_slot import SharedSlot
 
 
@@ -188,10 +191,19 @@ def x_decomp_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             answer = XD_CAP_HOST | XD_CAP_RESIDENT
             comptime if IDN_SVD_RESIDENT:
                 answer |= XD_CAP_DEV_SVD
+            # lane entangled-mkit: the entries the manifold kit probed by name
+            comptime if IDN_LU_RESIDENT:
+                answer |= XD_CAP_DEV_LU
+            comptime if IDN_EIGH_RESIDENT:
+                answer |= XD_CAP_DEV_EIGH
+            comptime if AFN_GEMM_APPLE:
+                answer |= XD_CAP_LLE_ORDERED
         elif xd_is_address_op(operation):
             answer = xd_address_op[DevExec](operation, a, p, ff)
         elif xd_is_owner_op(operation):
             answer = xd_owner_device_op(operation, a, p, ff)
+        elif xd_is_mani_op(operation):
+            answer = xd_mani_device_op(operation, a, p, ff)
         else:
             answer = xd_resident_op(operation, p, ff, a)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = answer

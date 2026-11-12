@@ -14,6 +14,8 @@ from x_decomp.descriptor_schema import (
 )
 from x_decomp.descriptor_owner_ops import xd_is_owner_op
 from x_decomp.descriptor_owner_host import xd_owner_host_op
+from x_decomp.descriptor_mani_host import xd_mani_host_op
+from x_decomp.descriptor_mani_schema import xd_is_mani_op
 from core.shared_slot import SharedSlot
 
 
@@ -38,6 +40,8 @@ def x_decomp_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             answer = xd_address_op[HostExec](operation, a, p, ff)
         elif xd_is_owner_op(operation):
             answer = xd_owner_host_op(operation, a, p, ff)
+        elif xd_is_mani_op(operation):
+            answer = xd_mani_host_op(operation, a, p, ff)
         else:
             raise Error("x_decomp native ABI: the host binding has no device-resident operation "
                         + String(operation))
