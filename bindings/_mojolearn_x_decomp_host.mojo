@@ -13,7 +13,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from providers.python.x_decomp_api_pyapi import (
-    colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py,  move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
+    colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py,  move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
@@ -23,12 +23,6 @@ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial
 from x_decomp.decomp_owner_host import HostDecomp
 from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
 from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
-from providers.python.x_decomp_mds_pyapi import mds_fit_py
-from providers.python.x_decomp_lle_iter_pyapi import lle_iterate_py
-from providers.python.x_decomp_lanczos_host_pyapi import eigh_tridiag_py, lanczos_py
-from providers.python.x_decomp_graph_host_pyapi import (
-    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py, graph_dijkstra_py,
-)
 
 
 def x_decomp_host_numeric_mode_binding() raises -> PythonObject:
@@ -128,14 +122,13 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[rand_py[HostExec]]("x_decomp_rand")
         m.def_function[lu_py[HostExec]]("x_decomp_lu")
         m.def_function[lu_solve_py[HostExec]]("x_decomp_lu_solve")
-        m.def_function[trisolve_py[HostExec]]("x_decomp_trisolve")
+        # TOMBSTONE: the manifold kit's named x_decomp entries (graph_*, dev_graph_*, barycenter_rows, lle_apply, lle_local, lle_iterate, lle_*_ordered, mds_fit, lanczos, dev_lanczos, eigh_tridiag, dev_eigh_tridiag, trisolve, dev_trisolve, dsum_sq, dev_dsum_sq, order_f, dev_order_f; now x_decomp table operations, x_decomp/descriptor_mani_schema.mojo) deleted 2026-11-12 by lane entangled-mkit; code recoverable at e561a66d6b.
+        # Restore: git apply experiments/removed/x_decomp_mani_named_entries.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[eigh_py[HostExec]]("x_decomp_eigh")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[lle_local_py[HostExec]]("x_decomp_lle_local")
-        m.def_function[lle_apply_py[HostExec]]("x_decomp_lle_apply")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[orth_py[HostExec]]("x_decomp_orth")
@@ -147,7 +140,6 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[lu_aux_py[HostExec]]("x_decomp_lu_aux")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[barycenter_rows_py[HostExec]]("x_decomp_barycenter_rows")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[absmax_sign_py[HostExec]]("x_decomp_absmax_sign")
@@ -192,8 +184,6 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[lle_iterate_py[HostExec]]("x_decomp_lle_iterate")
-        m.def_function[mds_fit_py[HostExec]]("x_decomp_mds_fit")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
@@ -201,23 +191,11 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[move_py]("x_decomp_move")
         m.def_function[reduce_py]("x_decomp_reduce")
         m.def_function[order_small_py]("x_decomp_order_small")
-        m.def_function[lanczos_py]("x_decomp_lanczos")
-        m.def_function[eigh_tridiag_py]("x_decomp_eigh_tridiag")
-        m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
-        m.def_function[order_f_py]("x_decomp_order_f")
         m.def_function[select_smallest_py]("x_decomp_select_smallest")
         m.def_function[argmin_all_py]("x_decomp_argmin_all")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
-        m.def_function[graph_knn_py]("x_decomp_graph_knn")
-        m.def_function[graph_knn_dense_py]("x_decomp_graph_knn_dense")
-        m.def_function[graph_radius_py]("x_decomp_graph_radius")
-        m.def_function[graph_radius_geo_py]("x_decomp_graph_radius_geo")
-        m.def_function[graph_lle_iw_py]("x_decomp_graph_lle_iw")
-        m.def_function[graph_components_py]("x_decomp_graph_components")
-        m.def_function[graph_join_py]("x_decomp_graph_join")
-        m.def_function[graph_dijkstra_py]("x_decomp_graph_dijkstra")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
         var published_module = m.finalize()

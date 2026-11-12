@@ -9,8 +9,6 @@ from std.python import PythonObject
 from providers.python.x_decomp_resident_pyapi import _id, _n
 from x_decomp.select_dev import (
     dev_argmin_all_run,
-    dev_dsum_sq_run,
-    dev_order_f_run,
     dev_order_small_run,
     dev_pca_mle_rank_run,
     dev_reduce_run,
@@ -50,24 +48,6 @@ def dev_pca_mle_rank_py(sp: PythonObject, dst: PythonObject, p: PythonObject) ra
     return PythonObject(dev_pca_mle_rank_run(i_sp, i_dst, d, n))
 
 
-def dev_order_f_py(a: PythonObject, skip: PythonObject, dst: PythonObject, cnt: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (n exact floats, device) = the stable ascending order of the first
-    n values of the device matrix a by (value, index) (p = [n, neg,
-    has_skip]: neg orders -a, Python's `key=lambda i: (-x[i], i)`), the
-    positions where the device row `skip` is nonzero last; cnt (one word,
-    device) = how many are not skipped. The caller refuses NaN (one word,
-    the max) first: `order_f` / `topn_desc`'s order, the same positions.
-    Waits once before its sort storage is released."""
-    var n = _n(p, 0)
-    var neg = Int(py=p[1])
-    var has = Int(py=p[2])
-    var i_a = _id(a)
-    var i_skip = _id(skip)
-    var i_dst = _id(dst)
-    var i_cnt = _id(cnt)
-    return PythonObject(dev_order_f_run(i_a, i_skip, i_dst, i_cnt, n, neg, has))
-
-
 def dev_argmin_all_py(a: PythonObject, dst: PythonObject, cnt: PythonObject, p: PythonObject) raises -> PythonObject:
     """dst = every position (exact floats, ascending) of the device matrix
     a's first n values equal to their minimum, then the rest; cnt (one
@@ -92,13 +72,3 @@ def dev_select_smallest_py(a: PythonObject, sel: PythonObject, mask: PythonObjec
     var i_mask = _id(mask)
     return PythonObject(dev_select_smallest_run(i_a, i_sel, i_mask, n, h))
 
-
-def dev_dsum_sq_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (two float32 words, device: one binary64, low first) = the sum of
-    squares of a's first n values (p = [n >= 1]) in `dsum_sq_host`'s order:
-    chunks of DSUM_CHUNK, then the partials DSUM_CHUNK at a time. Enqueued
-    only (the caller's download waits)."""
-    var n = _n(p, 0)
-    var i_a = _id(a)
-    var i_dst = _id(dst)
-    return PythonObject(dev_dsum_sq_run(i_a, i_dst, n))

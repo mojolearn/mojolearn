@@ -15,7 +15,6 @@ from x_decomp.resident import (
     dev_ew_run,
     dev_gemm_run,
     dev_rand_run,
-    dev_trisolve_run,
     dev_colsum_run,
     dev_rowsum_run,
     dev_sqdist_run,
@@ -130,14 +129,6 @@ def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
     var stream = Int(py=p[2])
     var kind = Int(py=p[3])
     return PythonObject(dev_rand_run(_id(dst), count, seed, stream, kind))
-
-
-def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`trisolve_py` on device ids, enqueued (no sync)."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var trans = _n(p, 2)
-    return PythonObject(dev_trisolve_run(_id(lu), _id(idx), _id(src), _id(dst), n, nrhs, trans))
 
 
 def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:

@@ -37,20 +37,19 @@ FAMILIES = (
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_barycenter_rows", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q",
+            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q",
             # lane apple-fast-py2mojo-decomp (2026-10-03): the rest of the module's data path
-            "x_decomp_move", "x_decomp_dsum_sq", "x_decomp_order_f", "x_decomp_select_smallest", "x_decomp_argmin_all", "x_decomp_pca_mle_rank",
-            # lane hr2-graph-embed (2026-10-02): the Isomap / LLE graph builds as cells
-            "x_decomp_graph_knn", "x_decomp_graph_knn_dense", "x_decomp_graph_radius", "x_decomp_graph_lle_iw",
-            "x_decomp_graph_components", "x_decomp_graph_join", "x_decomp_graph_dijkstra",
-            # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order, the Lanczos steps
-            "x_decomp_reduce", "x_decomp_order_small", "x_decomp_lanczos",
-            # lane py-runtime-b (2026-10-05): the solver drivers in Mojo
-            "x_decomp_mds_fit", "x_decomp_lle_iterate",
+            "x_decomp_move", "x_decomp_select_smallest", "x_decomp_argmin_all", "x_decomp_pca_mle_rank",
+            # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order
+            "x_decomp_reduce", "x_decomp_order_small",
             "x_decomp_numeric_mode", "x_decomp_vendor",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "x_decomp_trisolve", "x_decomp_r_signs",
-            "x_decomp_rank_above", "x_decomp_graph_radius_geo",
+            "x_decomp_r_signs",
+            "x_decomp_rank_above",
+            # lane entangled-mkit (2026-11-12): the Isomap / LLE graph builds (lane hr2-graph-embed),
+            # the Lanczos steps and T solve, the MDS / LLE solver drivers (lane py-runtime-b),
+            # barycenter_rows, lle_apply, lle_local, trisolve, dsum_sq and order_f are x_decomp
+            # table operations (x_decomp/descriptor_mani_schema.mojo): no Python export.
             # lane mca2-decomp-a (2026-10-22): TruncatedSVD(algorithm='randomized').fit, one driver
             "x_decomp_tsvd_randomized", "x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project",
             "x_decomp_ica_fit", "x_decomp_ica_project", "x_decomp_nmf_fit", "x_decomp_nmf_inverse",
@@ -61,7 +60,6 @@ FAMILIES = (
             # solver doors above (lu_gesv, mcd, gather, topn_desc, chi2_quantile, consistency_factor,
             # als_fit, pls_fit, dict_learning, dict_minibatch) are x_decomp table operations since
             # lane pyout-decomp-linalg (2026-11-11): no Python export.
-            "x_decomp_eigh_tridiag",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the decomp expansion lane's CPU route (lane/algos-decomp).",

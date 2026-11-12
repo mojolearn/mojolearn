@@ -11,12 +11,12 @@ from std.python._cpython import GILReleased
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.api import (
-    eigh_run, ew_run, gemm_run, lle_apply_run, lle_local_run, lu_solve_run, rand_run,
-    sqdist_run, svd_run, trisolve_run,
+    eigh_run, ew_run, gemm_run, lu_solve_run, rand_run,
+    sqdist_run, svd_run,
     absmax_sign_run, lars_rows_run, lasso_rows_run, lu_aux_run, omp_rows_run, r_signs_run,
     rank_above_run, tsqr_r_run,
-    argmin_all_run, dsum_sq_run, geqrf_run, idn_flags_run,
-    move_run, ols_tsqr_r_run, order_f_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
+    argmin_all_run, geqrf_run, idn_flags_run,
+    move_run, ols_tsqr_r_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
     tsqr_q_run,
 )
 from x_decomp.cells import F32Ptr, I32Ptr
@@ -146,20 +146,6 @@ def lu_py[E: Exec](a: PythonObject, piv: PythonObject, info: PythonObject, p: Py
     return PythonObject(n)
 
 
-def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, nrhs, trans]: `trisolve_serial` (x_decomp/cells.mojo)."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var trans = _n(p, 2)
-    var pl = _f(lu)
-    var pi = _f(idx)
-    var ps = _f(src)
-    var pd = _f(dst)
-    with GILReleased(Python()):
-        trisolve_run[E](pl, pi, ps, pd, n, nrhs, trans)
-    return PythonObject(n)
-
-
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
@@ -185,44 +171,6 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
     var pw = _f(w)
     var pv = _f(v)
     eigh_run[E](pa, pw, pv, n, uplo)
-    return PythonObject(n)
-
-
-def lle_apply_py[E: Exec](
-    wb: PythonObject, idx: PythonObject, emb: PythonObject, dst: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """p = [nq, nf, nn, nc]: LLE transform's out (nq x nc) = W E[idx]."""
-    var nq = _n(p, 0)
-    var nf = _n(p, 1)
-    var nn = _n(p, 2)
-    var nc = _n(p, 3)
-    var pw = _f(wb)
-    var pi = _f(idx)
-    var pe = _f(emb)
-    var po = _f(dst)
-    with GILReleased(Python()):
-        lle_apply_run[E](pw, pi, pe, po, nq, nf, nn, nc)
-    return PythonObject(nq)
-
-
-def lle_local_py[E: Exec](
-    x: PythonObject, idx: PythonObject, b: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """LocallyLinearEmbedding's stacked factor (x_decomp/lle_local.mojo).
-    p = [method (0 ltsa, 1 hessian, 2 modified), n, d, nn, nc]; f = [tol]
-    (hessian_tol / modified_tol). idx (n x nn) the neighbor indices as exact
-    floats; b zeroed, n nn x n (n (nn - 1 - nc) x n for hessian)."""
-    var method = _n(p, 0)
-    var n = _n(p, 1)
-    var d = _n(p, 2)
-    var nn = _n(p, 3)
-    var nc = _n(p, 4)
-    var tol = Float32(Float64(py=f[0]))
-    var px = _f(x)
-    var pi = _f(idx)
-    var pb = _f(b)
-    with GILReleased(Python()):
-        lle_local_run[E](px, pi, pb, method, n, d, nn, nc, tol)
     return PythonObject(n)
 
 
@@ -330,26 +278,6 @@ def omp_rows_py[E: Exec](
     return PythonObject(n)
 
 
-def barycenter_rows_py[E: Exec](
-    x: PythonObject, y: PythonObject, nbr: PythonObject, wt: PythonObject, flags: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
-    # p = [n, ny, d, k]
-    var n = _n(p, 0)
-    var ny = _n(p, 1)
-    var d = _n(p, 2)
-    var k = _n(p, 3)
-    var r = Float32(Float64(py=reg))
-    var px = _f(x)
-    var py_ = _f(y)
-    var pn = _f(nbr)
-    var pw = _f(wt)
-    var pf = _f(flags)
-    with GILReleased(Python()):
-        E.barycenter_rows(px, py_, pn, pw, pf, n, ny, d, k, r)
-    return PythonObject(n)
-
-
 def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var d = _n(p, 1)
@@ -422,8 +350,6 @@ def ols_tsqr_r_py[E: Exec](
     return PythonObject(n)
 
 
-
-
 def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
     """q (m x k) = Q c (c n x k) for the factorization `tsqr_r_py` kept,
     which is then released; p = [m, n, k], k == 0 releases it only."""
@@ -465,10 +391,6 @@ def orgqr_py[E: Exec](h: PythonObject, tau: PythonObject, q: PythonObject, p: Py
     return PythonObject(qc)
 
 
-
-
-
-
 # ---- lane apple-fast-py2mojo-decomp (2026-10-03): host buffers, both bindings
 def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
     """x_decomp/moves.mojo `move` on host buffers; p = [op, count, a1, a2, a3,
@@ -489,24 +411,6 @@ def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonOb
     with GILReleased(Python()):
         move_run(op, ps, pi, pd, count, a1, a2, a3, ist, ioff, nsrc, ndst, nidx)
     return PythonObject(count)
-
-
-def dsum_sq_py(x: PythonObject, m: PythonObject) raises -> PythonObject:
-    """The binary64 sum of the squares of m float32 values in the device
-    form's chunked order (`dsum_sq_host`): the host column."""
-    var n = Int(py=m)
-    var xa = Int(py=x)
-    var t = Float64(0)
-    with GILReleased(Python()):
-        t = dsum_sq_run(xa, n)
-    return PythonObject(t)
-
-
-def order_f_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """The stable order of x (m float32 values) as exact floats; NaN refused."""
-    var n = Int(py=m)
-    order_f_run(Int(py=x), n, Int(py=dst))
-    return PythonObject(n)
 
 
 def select_smallest_py(x: PythonObject, p: PythonObject, sel: PythonObject, mask: PythonObject) raises -> PythonObject:
@@ -531,8 +435,6 @@ def pca_mle_rank_host_py(sp: PythonObject, p: PythonObject) raises -> PythonObje
     var d = _n(p, 0)
     var n = _n(p, 1)
     return PythonObject(pca_mle_rank_host_run(Int(py=sp), d, n))
-
-
 
 
 def numeric_mode_py() raises -> PythonObject:
