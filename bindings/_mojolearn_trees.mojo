@@ -44,6 +44,8 @@ from forest_inference_binding import (
     forest_unstage_input_gpu_binding,
     forest_ordered_resident_binding,
     forest_identical_fused_labels_binding,
+)
+from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
 )
