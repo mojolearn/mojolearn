@@ -261,7 +261,7 @@ def _neural_owner_runtime_names() -> List[String]:
 
 def _neural_owner_env() -> String:
     # Environment switches read by causal_lm_admit_binding.
-    return String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) + "|" + String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH"))
+    return String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH"))
 
 
 def _neural_owner_key(mut mods: NativeModules, block: PythonObject, live: PythonObject, context: PythonObject, mut binding_key: PythonObject, mut uses_default: Bool) raises -> PythonObject:
