@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Named block operations on the common native descriptor transport. All math,
 # transfer, reports and retained stages remain in the existing Mamba owners.
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 from mamba.native_decode_dispatch import mamba_decode_operation
 from mamba.native_tape_dispatch import mamba_tape_operation
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME
@@ -43,7 +44,11 @@ comptime PREFILL_SESSIONS = StateRegistry[Mamba3PrefillSession,
 
 
 def mamba3_prefill_caps() -> Int:
-    """The image's fixed capability bits (NEURAL_MAMBA3_SESSION_CAPS)."""
+    """The image's fixed capability bits (NEURAL_MAMBA3_SESSION_CAPS): the
+    build condition under which the image registered its former session
+    Python entries (`mamba3_prefill_session_*`, `mamba3_owned_weights_enabled`)."""
+    comptime if not (GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]()):
+        return 0
     var caps = MAMBA3_CAP_SESSION_PREFILL
     comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
         caps |= MAMBA3_CAP_REPORTS_OPTIONAL
