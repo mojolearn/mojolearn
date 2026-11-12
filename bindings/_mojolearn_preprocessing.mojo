@@ -3,7 +3,7 @@
 """Borrowed Float32 arrays; GPU arithmetic; no context or pointer retained."""
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_base import BASE_GUARDS_OK
-from core.hostptr import f32_ptr
+from preprocessing.mojolearn_preprocessing_run import ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -20,12 +20,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from preprocessing.estimator import validate_dimensions, validate_standard, minmax_fit_refusing, minmax_transform_refusing, standard_fit_refusing, standard_transform_refusing, minmax_fit_direct, standard_fit_direct, minmax_transform_direct, standard_transform_direct
 from preprocessing.minmax import PREP_FAST_MINMAX
 from preprocessing.estimator import PREP_FAST_FIT_TRANSFORM_FUSED, standard_fit_transform_direct, minmax_fit_transform_direct
-
-
-def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("preprocessing: null Float32 pointer")
-    return f32_ptr(addr)
 
 
 def fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
