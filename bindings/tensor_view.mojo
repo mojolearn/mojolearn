@@ -4,7 +4,7 @@
 # metadata helpers that read them, with no Python import: moved word for word
 # from bindings/optimizer_public_door.mojo (lane a6-device-x-family-classical,
 # 2026-11-09) so the one admission path (bindings/admitted_input.mojo
-# `AdmittedTyped`) and the optimizer door share them without the admission
+# `admitted_typed_once`) and the optimizer door share them without the admission
 # path importing the optimizer door.
 
 

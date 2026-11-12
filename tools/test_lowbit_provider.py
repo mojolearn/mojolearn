@@ -23,7 +23,7 @@ def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
     assert 'lin_connected_binding(context)' in source and 'lin_call(' in source
     assert 'neural_descriptor_connect' not in source and 'struct ' not in source
     assert 'linalg_ops_operation(' not in source
-    assert 'low_pack_admitted(input^' in source
+    assert 'low_pack_admitted(input, input_pin^' in source
     assert 'def low_binding(mut binding: PythonObject' in source
     assert source.count('lin_connected_binding(context)')==1
     assert 'if binding is None:' in source
@@ -34,7 +34,7 @@ def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
 
 def test_once_captured_foreign_metadata_retains_zero_copy_owner():
     source=(ROOT/'bindings/admitted_input.mojo').read_text()
-    section=source[source.index('struct AdmittedTyped'):]
+    section=source[source.index('struct AdmittedTypedPin'):]
     assert section.count('AdmittedBorrowedBuffer(value)')==1
     assert 'classical_admit_value(value, context)' in section
     assert 'PyMemoryView_FromMemory' in section
@@ -44,8 +44,8 @@ def test_once_captured_foreign_metadata_retains_zero_copy_owner():
     assert 'PythonObject(alloc=AdmittedBufferPin[](held_pin^))' in section
     assert 'py_setattr(array, "_pin", pin)' in section
     assert 'py_setattr(array, "_store", input.keep)' in section
-    assert 'return _typed_borrow_array(input^, typestr, context)' in section
-    assert 'admitted_typed_convert(input.view, typestr, result.addr, name)' in section
+    assert 'return _typed_borrow_array(view, input^, typestr, context)' in section
+    assert 'admitted_typed_convert(view, typestr, result.addr, name)' in section
 
 
 def test_sequence_target_preserves_direct_float_storage_and_other_callers():

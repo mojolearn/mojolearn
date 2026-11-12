@@ -13,9 +13,9 @@ from bindings.classical_arrays import classical_wrap_array
 from bindings.sequential_inputs import sequential_sequence_f32
 from bindings.linalg_ops_buffers import lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
-from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
+from bindings.admitted_input import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.linalg_ops_lowbit import lin_connected_binding, lin_lowbit, lin_call, lin_ints
-from bindings.tensor_view import base_format, shape_text
+from bindings.tensor_view import base_format, shape_text, TensorView
 from bindings.lowbit_weight_run import low_empty
 
 
@@ -73,20 +73,21 @@ def low_wrap(kind: Int, q: AdmittedBuf, e: PythonObject, context: PythonObject) 
 
 def low_admit(value: PythonObject, typestr: String, rank: Int, name: String,
               context: PythonObject, force_copy: Bool = False) raises -> AdmittedBuf:
-    var input = AdmittedTyped(value, context)
-    var code = base_format(input.view.fmt)
-    var valid = (typestr == "<u2" and code == "H" and input.view.itemsize == 2
-        or typestr == "<i1" and code == "b" and input.view.itemsize == 1
-        or typestr == "<i4" and (code == "i" or code == "l") and input.view.itemsize == 4)
-    if not valid or rank >= 0 and len(input.view.shape) != rank:
+    var input_pin = AdmittedTypedPin()
+    var input = admitted_typed_once(value, context, input_pin)
+    var code = base_format(input.fmt)
+    var valid = (typestr == "<u2" and code == "H" and input.itemsize == 2
+        or typestr == "<i1" and code == "b" and input.itemsize == 1
+        or typestr == "<i4" and (code == "i" or code == "l") and input.itemsize == 4)
+    if not valid or rank >= 0 and len(input.shape) != rank:
         if typestr == "<u2":
             raise Error("TypeError: mojolearn.lowbit.BF16Weight: bits must be a 2-D uint16 array")
         if typestr == "<i1":
             raise Error("TypeError: mojolearn.lowbit.Int8Weight: codes must be a 2-D int8 array")
         raise Error("TypeError: mojolearn.lowbit.Int8Weight: exponents must be int32 of shape (rows,)")
-    if input.view.count() == 0:
-        low_empty(name, input.view.shape)
-    return admitted_typed_c(input^, typestr, name, context, force_copy)
+    if input.count() == 0:
+        low_empty(name, input.shape)
+    return admitted_typed_c(input, input_pin^, typestr, name, context, force_copy)
 
 
 def low_exponents(value: PythonObject, rows: Int, context: PythonObject,
@@ -114,15 +115,15 @@ def low_materialize(value: PythonObject, mut binding: PythonObject, context: Pyt
     return result.keep
 
 
-def low_pack_admitted(var input: AdmittedTyped, fmt: String, name: String,
+def low_pack_admitted(input: TensorView, var input_pin: AdmittedTypedPin, fmt: String, name: String,
                       mut binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    if not lin_is_f32(input.view):
-        raise Error("TypeError: mojolearn.lowbit: " + name + " has dtype " + lin_dtype_name(input.keep, input.view) + "; pack takes float32")
-    if len(input.view.shape) != 2:
-        raise Error("mojolearn.lowbit: " + name + " must be 2-D to pack, got shape " + shape_text(input.view.shape))
-    if input.view.count() == 0:
-        low_empty(name, input.view.shape)
-    var a = admitted_typed_c(input^, "<f4", name, context, fmt == "float32")
+    if not lin_is_f32(input):
+        raise Error("TypeError: mojolearn.lowbit: " + name + " has dtype " + lin_dtype_name(input_pin.keep, input) + "; pack takes float32")
+    if len(input.shape) != 2:
+        raise Error("mojolearn.lowbit: " + name + " must be 2-D to pack, got shape " + shape_text(input.shape))
+    if input.count() == 0:
+        low_empty(name, input.shape)
+    var a = admitted_typed_c(input, input_pin^, "<f4", name, context, fmt == "float32")
     if fmt == "float32":
         return a.keep
     var q = admitted_zeros(a.shape, "<u2" if fmt == "bfloat16" else "<i1", context)
@@ -195,8 +196,9 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
     if operation == "family_low_materialize_one":
         return low_materialize(args[0], binding, context)
     if operation == "family_low_widen_bf16":
-        var input = AdmittedTyped(args[0], context)
-        var a = admitted_typed_c(input^, "<u2", "bits", context)
+        var input_pin = AdmittedTypedPin()
+        var input = admitted_typed_once(args[0], context, input_pin)
+        var a = admitted_typed_c(input, input_pin^, "<u2", "bits", context)
         if a.count() == 0:
             raise Error("mojolearn.linalg.from_bf16: bits has no elements")
         var result = admitted_zeros(a.shape, "<f4", context)
@@ -206,8 +208,9 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
     if operation == "family_low_pack_one":
         var fmt = low_format(args[1])
         var name = low_name(args[2])
-        var input = AdmittedTyped(args[0], context)
-        return low_pack_admitted(input^, fmt, name, binding, context)
+        var input_pin = AdmittedTypedPin()
+        var input = admitted_typed_once(args[0], context, input_pin)
+        return low_pack_admitted(input, input_pin^, fmt, name, binding, context)
     var b = native_loaded_module("builtins")
     if operation == "family_low_unpack":
         if py_type(args[0]) is not b.dict:
@@ -253,11 +256,12 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
                 classical_admit_value(value, context)
                 var sequence = sequential_sequence_f32(value, context)
                 value = classical_wrap_array(sequence[1], sequence[0], "<f4", "C", context)
-            var input = AdmittedTyped(value, context)
-            if fmt != "float32" and len(input.view.shape) == 2:
-                py_setitem(result, key, low_pack_admitted(input^, fmt, name, binding, context))
+            var input_pin = AdmittedTypedPin()
+            var input = admitted_typed_once(value, context, input_pin)
+            if fmt != "float32" and len(input.shape) == 2:
+                py_setitem(result, key, low_pack_admitted(input, input_pin^, fmt, name, binding, context))
             else:
                 py_setitem(result, key, value)
-                _ = input^
+                _ = input_pin^
         return result
     raise Error("RuntimeError: unknown lowbit storage operation " + operation)
