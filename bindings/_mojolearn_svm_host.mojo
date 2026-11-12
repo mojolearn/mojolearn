@@ -114,7 +114,6 @@ from svm.impl.svm_parameter import (
     check_rung1_scope,
 )
 from svm.host.finite_scan import check_finite_ptr
-from std.memory import unsafe_memcpy
 from svm.host.svm_host_impl import (
     IForestHostRun,
     if_host_resident_new_token,
@@ -130,6 +129,7 @@ from svm.host.svm_host_impl import (
 )
 
 
+from svm.host.svm_host_binding_run import iforest_host_outputs_run, iforest_host_resident_outputs_run
 from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
 from providers.python.svm_host_svc_ovo_host_pyapi import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
 
@@ -572,14 +572,9 @@ def iforest_run_binding(
                 raise e
             var held_token = held[0].token
             if_host_resident_put(held)
-            if want == IF_WANT_PREDICT:
-                unsafe_memcpy(dest=i32_ptr(out_i32_address), src=run.labels.unsafe_ptr(), count=n_query)
-            else:
-                unsafe_memcpy(dest=f32_ptr(out_f32_address), src=run.values.unsafe_ptr(), count=n_query)
-            ip[0] = run.offset_
-            ip[1] = Float64(run.max_samples_)
-            ip[2] = Float64(n_features)
-            ip[3] = Float64(held_token)
+            iforest_host_resident_outputs_run(
+                run, want, out_i32_address, out_f32_address, n_query, n_features, held_token, ip
+            )
             return PythonObject(n_query)
     with GILReleased(Python()):
         run = iforest_run_host(
@@ -588,15 +583,7 @@ def iforest_run_binding(
             max_features_mode, max_features_int, max_features_frac, bootstrap,
             random_state, contamination_auto, contamination, want,
         )
-    if want == IF_WANT_PREDICT:
-        var oi = i32_ptr(out_i32_address)
-        unsafe_memcpy(dest=oi, src=run.labels.unsafe_ptr(), count=n_query)
-    else:
-        var of = f32_ptr(out_f32_address)
-        unsafe_memcpy(dest=of, src=run.values.unsafe_ptr(), count=n_query)
-    ip[0] = run.offset_
-    ip[1] = Float64(run.max_samples_)
-    ip[2] = Float64(n_features)
+    iforest_host_outputs_run(run, want, out_i32_address, out_f32_address, n_query, n_features, ip)
     return PythonObject(n_query)
 
 
