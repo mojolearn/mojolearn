@@ -8,30 +8,17 @@ from bindings.family_common import family_type_name
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.optimizer_public_words import stash_python_error
 from core.kmeans_native_api import (
-    KMEANS_NATIVE_ABI, KMEANS_NATIVE_COUNT, KMEANS_MODE, KMEANS_CAPABILITIES,
+    KMEANS_NATIVE_ABI, KMEANS_NATIVE_COUNT,
     KMeansNativeDriver, KMeansFitRequest, KMeansFitResult, KMeansQueryRequest, KMeansQueryResult,
 )
+from x_cluster.kmeans_descriptor_boundary_run import kmeans_connection_index, kmeans_connection_add, kmeans_driver
+from bindings.py_provider_pins import ProviderPins, provider_word
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 
 
-@fieldwise_init
-struct KMeansConnection(Movable):
-    var provider: PythonObject
-    var driver: KMeansNativeDriver
-    var mode: Int
-    var capabilities: Int
-
-
-struct KMeansConnections(Defaultable, Movable):
-    var records: List[KMeansConnection]
-
-    def __init__(out self):
-        self.records = List[KMeansConnection]()
-
-
-comptime KMEANS_CONNECTIONS = SharedSlot[KMeansConnections, "MojolearnKMeansConnectionsV1"]
+comptime KMEANS_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnKMeansProviderPinsV1"]
 
 
 def kmeans_integer(value: PythonObject, host: Bool, context: PythonObject) raises -> Int:
@@ -54,28 +41,23 @@ def kmeans_integer(value: PythonObject, host: Bool, context: PythonObject) raise
 def kmeans_connection(binding: PythonObject) raises -> Int:
     var factory = neural_descriptor_entry(binding, "kmeans_native_api_v1")
     var provider = neural_descriptor_connect_factory_once(factory, String(KMEANS_NATIVE_ABI), KMEANS_NATIVE_COUNT)
-    var cache = KMEANS_CONNECTIONS.get_or_create_ptr()
-    for index in range(len(cache[].records)):  # driver-loop: connected extension images
-        if cache[].records[index].provider is provider:
-            return index
-    var driver = KMeansNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-    var mode = driver.metadata(KMEANS_MODE)
-    var capabilities = driver.metadata(KMEANS_CAPABILITIES)
-    if mode != 0 and mode != 1:
-        raise Error("KMeans native provider: unsupported compiled numeric mode")
-    var index = len(cache[].records)
-    cache[].records.append(KMeansConnection(provider, driver^, mode, capabilities))
+    var index = kmeans_connection_index(provider_word(provider))
+    if index >= 0:
+        return index
+    # The typed record and the door pin are appended together, under the GIL.
+    index = kmeans_connection_add(provider_word(provider),
+        KMeansNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+    KMEANS_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     return index
 
 
-def kmeans_capabilities(connection: Int) raises -> Int:
-    return KMEANS_CONNECTIONS.get_or_create_ptr()[].records[connection].capabilities
+def kmeans_provider(connection: Int) raises -> PythonObject:
+    return KMEANS_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
 
 
 def kmeans_run_fit(connection: Int, request: KMeansFitRequest) raises -> KMeansFitResult:
-    var cache = KMEANS_CONNECTIONS.get_or_create_ptr()
-    var pin = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var pin = kmeans_provider(connection)
+    var driver = kmeans_driver(connection)
     try:
         with GILReleased(Python()):
             return driver.fit(request)
@@ -84,9 +66,8 @@ def kmeans_run_fit(connection: Int, request: KMeansFitRequest) raises -> KMeansF
 
 
 def kmeans_run_query(connection: Int, request: KMeansQueryRequest) raises -> KMeansQueryResult:
-    var cache = KMEANS_CONNECTIONS.get_or_create_ptr()
-    var pin = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var pin = kmeans_provider(connection)
+    var driver = kmeans_driver(connection)
     try:
         with GILReleased(Python()):
             return driver.query(request)

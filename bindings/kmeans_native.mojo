@@ -43,8 +43,12 @@ from core.kmeans_native_api import (
     KMEANS_CAP_JOINT, KMEANS_CAP_RESIDENT, KMEANS_CAP_FOLD, KMEANS_CAP_HOST,
 )
 from bindings.kmeans_descriptor_boundary import (
-    kmeans_connection, kmeans_capabilities, kmeans_run_fit, kmeans_run_query, kmeans_integer,
+    kmeans_connection,
+    kmeans_run_fit,
+    kmeans_run_query,
+    kmeans_integer,
 )
+from x_cluster.kmeans_descriptor_boundary_run import kmeans_capabilities
 from bindings.kmeans_owner_boundary import (
     kmeans_owner_matching, kmeans_owner_handle, kmeans_owner_prepare,
     kmeans_owner_getstate, kmeans_owner_setstate,

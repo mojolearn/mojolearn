@@ -5,7 +5,8 @@ from bindings.native_owner_registry import borrowed_native_owner
 from std.python._cpython import GILReleased, ExternalFunction, PyObjectPtr
 from core.shared_slot import SharedSlot
 from core.kmeans_owner_state import KMeansResidentState
-from bindings.kmeans_descriptor_boundary import KMEANS_CONNECTIONS
+from bindings.kmeans_descriptor_boundary import kmeans_provider
+from x_cluster.kmeans_descriptor_boundary_run import kmeans_driver
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_fields, py_contains, py_setitem, py_type
 from bindings.native_loaded_module import native_loaded_module
@@ -83,9 +84,8 @@ def kmeans_owner_handle(value: PythonObject) raises -> Int:
 
 def kmeans_owner_prepare(model: PythonObject, centers: PythonObject, binding: PythonObject,
     connection: Int, address: Int, clusters: Int, features: Int) raises -> PythonObject:
-    var cache = KMEANS_CONNECTIONS.get_or_create_ptr()
-    var provider = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var provider = kmeans_provider(connection)
+    var driver = kmeans_driver(connection)
     var handle = -1
     try:
         with GILReleased(Python()):
