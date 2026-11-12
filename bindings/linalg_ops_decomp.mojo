@@ -4,25 +4,33 @@
 # TSQR, geqrf + orgqr, the round-robin Jacobi eigh, the QR + one-sided Jacobi
 # SVD and `_svd_tall`'s U) driven here on the same x_decomp cells and linalg
 # binding entries, with the same operands in the same order
-# (bindings/linalg_ops_kit.mojo is `_M` / `_Kit`). Same kernels, same words:
-# the bits do not move. The bindings are acquired the way the Python acquired
-# them: the linalg binding through `_load()`'s cache, the x_decomp binding of
-# the default mode, each only on the route that used it.
+# (bindings/linalg_ops_kit_run.mojo is `_M` / `_Kit`, typed). Same kernels,
+# same words: the bits do not move. The bindings are acquired the way the
+# Python acquired them: the linalg binding through `_load()`'s cache, the
+# x_decomp binding of the default mode, each only on the route that used it.
+#
+# Door shape (lane entangled-kits, 2026-11-12): UNPACK admits the operand and
+# resolves the x_decomp image's dispatch once (`_lin_kit`); the kit sequences
+# are RUN (typed, the GIL released around each, the admitted owners named
+# after it); PACK copies the kit's matrices into public Arrays (`_lin_out`).
 from std.memory import unsafe_memcpy, unsafe_memset_zero
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.estimator_binding_pyapi import estimator_binding
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
-from bindings.py_balanced import py_call, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_repr
 from bindings.linalg_ops_buffers import lin_truth
 from bindings.admitted_input import AdmittedBuf, admitted_zeros
 from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints, lin_connected_binding
 from providers.python.linalg_result_pyapi import linalg_result_new
-from bindings.linalg_ops_kit import LinKit, KIT_F32P, OP_MUL, OP_DIV, OP_ABS, OP_SCALE, OP_ADDS, OP_LE
+from bindings.kit_call import kit_connect, kit_capabilities, kit_entry_ref
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES
+from bindings.linalg_ops_kit_run import LinKit, KIT_F32P, lin_svd_tall_run, lin_svd_hermitian_run
 from bindings.linalg_ops_decomp_run import _lin_tsqr_on
 
 
@@ -32,9 +40,57 @@ def _lin_door(context: PythonObject) raises -> PythonObject:
     return lin_connected_binding(context)
 
 
-def _lin_xd(context: PythonObject) raises -> LinKit:
-    """The import-connected x_decomp provider selected natively for this call."""
-    return LinKit(estimator_binding(PythonObject(None), "_mojolearn_x_decomp", context), context)
+def _lin_xd(context: PythonObject) raises -> PythonObject:
+    """UNPACK: the import-connected x_decomp binding selected natively for
+    this call (an exact native module)."""
+    var binding = estimator_binding(PythonObject(None), "_mojolearn_x_decomp", context)
+    if py_type(binding) is not py_type(native_loaded_module("builtins")):
+        raise Error("TypeError: linalg decomposition requires an exact native provider module")
+    return binding
+
+
+def _lin_kit(binding: PythonObject) raises -> LinKit:
+    """UNPACK: the typed kit over the binding's x_decomp dispatch, connected
+    once per binding (bindings/kit_call.mojo) and read here as an EntryRef
+    and the image's capability word."""
+    var snapshot = kit_connect(binding, "x_decomp_native_api_v1", String(XD_ABI_NAME),
+                               XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES)
+    var kit = LinKit(kit_entry_ref(snapshot, XD_OPERATION_COUNT), kit_capabilities(snapshot))
+    _ = snapshot  # keep the snapshot alive through the reads above
+    return kit^
+
+
+def _lin_out(mut kit: LinKit, a: Int, context: PythonObject) raises -> PythonObject:
+    """PACK `_M.out()`: a public float32 Array (C order) of matrix a; a
+    device matrix is downloaded once (it moves), the GIL released."""
+    var rows = kit.r(a)
+    var cols = kit.c(a)
+    var result = admitted_zeros([rows, cols], "<f4", context).keep
+    _lin_copy_out(kit, a, result, rows * cols)
+    return result
+
+
+def _lin_out_vector(mut kit: LinKit, a: Int, length: Int, context: PythonObject) raises -> PythonObject:
+    """PACK `_M.out((length,))`."""
+    var result = admitted_zeros([length], "<f4", context).keep
+    _lin_copy_out(kit, a, result, length)
+    return result
+
+
+def _lin_copy_out(mut kit: LinKit, a: Int, result: PythonObject, count: Int) raises:
+    if count:
+        var src = 0
+        var py = Python()
+        with GILReleased(py):
+            src = kit.addr(a)
+        unsafe_memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))),
+                      src=KIT_F32P(unsafe_from_address=src), count=count)
+        _ = result  # keep the Python object alive through the copy above
+
+
+def _lin_rtol(context: PythonObject) raises -> Float64:
+    """UNPACK: `_SVD_NULL_RTOL_MODULE`, the rank cut `_svd_tall` reads."""
+    return Float64(py=lin_state(context)["_SVD_NULL_RTOL_MODULE"])
 
 
 def _lin_eq(a: PythonObject, b: String) raises -> Bool:
@@ -47,8 +103,8 @@ def _lin_named(cls: String, items: PythonObject, context: PythonObject) raises -
 
 
 def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> PythonObject:
-    """`_triu(h, r).out()`: the first r rows of h, everything below the
-    diagonal zeroed (pure data movement)."""
+    """PACK `_triu(h, r).out()`: the first r rows of h (a host factor),
+    everything below the diagonal zeroed (pure data movement)."""
     var c = kit.c(h)
     var out = admitted_zeros([r, c], "<f4", context).keep
     var dst = KIT_F32P(unsafe_from_address=Int(py=classical_address(out)))
@@ -64,76 +120,38 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> 
     return out
 
 
-def _lin_tsqr_release(mut kit: LinKit, context: PythonObject):
+def _lin_tsqr_release(binding: PythonObject, context: PythonObject):
     """`_tsqr_release`: drop the factorization the binding kept."""
     try:
         var one = admitted_zeros([1], "<f4", context)
-        _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(one.addr), PythonObject(one.addr), lin_ints(1, 1, 0))
+        _ = family_call(neural_descriptor_entry(binding, "x_decomp_tsqr_q"), PythonObject(one.addr),
+                        PythonObject(one.addr), lin_ints(1, 1, 0))
         _ = one  # keep the Python object alive through the native call above
     except:
         pass
 
 
-def _lin_tsqr_r(mut kit: LinKit, a: AdmittedBuf, rows: Int, cols: Int, keep: Bool, context: PythonObject) raises -> AdmittedBuf:
+def _lin_tsqr_r(binding: PythonObject, a: AdmittedBuf, rows: Int, cols: Int, keep: Bool,
+                context: PythonObject) raises -> AdmittedBuf:
     """`_tsqr_r`: R (cols x cols) of the TSQR of a; `keep` holds the
     factorization in the binding for one `_tsqr_q`."""
     var r = admitted_zeros([cols, cols], "<f4", context)
     # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
     # (m, d, nrhs, keep); b is not read when nrhs is 0
-    _ = family_call(kit.entry("x_decomp_tsqr_r"), PythonObject(a.addr), PythonObject(a.addr), PythonObject(r.addr),
-                    lin_ints(rows, cols, 0, 1 if keep else 0))
+    _ = family_call(neural_descriptor_entry(binding, "x_decomp_tsqr_r"), PythonObject(a.addr), PythonObject(a.addr),
+                    PythonObject(r.addr), lin_ints(rows, cols, 0, 1 if keep else 0))
     _ = r  # keep the Python object alive through the native call above
     return r^
 
 
-def _lin_tsqr_q(mut kit: LinKit, c_addr: Int, rows: Int, cols: Int, k: Int, context: PythonObject) raises -> AdmittedBuf:
+def _lin_tsqr_q(binding: PythonObject, c_addr: Int, rows: Int, cols: Int, k: Int,
+                context: PythonObject) raises -> AdmittedBuf:
     """`_tsqr_q`: Q C (rows x k) for the kept factorization; C is cols x k."""
     var out = admitted_zeros([rows, k], "<f4", context)
-    _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(c_addr), PythonObject(out.addr), lin_ints(rows, cols, k))
+    _ = family_call(neural_descriptor_entry(binding, "x_decomp_tsqr_q"), PythonObject(c_addr), PythonObject(out.addr),
+                    lin_ints(rows, cols, k))
     _ = out  # keep the Python object alive through the native call above
     return out^
-
-
-def _lin_svd_tall(mut kit: LinKit, a: Int, full: Bool, context: PythonObject, mut s_out: Int, mut vt_out: Int) raises -> Int:
-    """`_svd_tall(k, A, full)`: (U, S, Vt) of a tall A; returns U."""
-    var m = kit.r(a)
-    var n = kit.c(a)
-    var vt = 0
-    var s = kit.svd(a, vt)
-    s_out = s
-    vt_out = vt
-    var rtol = Float64(py=lin_state(context)["_SVD_NULL_RTOL_MODULE"])
-    var r = 0
-    if n:
-        # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
-        r = Int(py=family_call(native_loaded_module("builtins").int,
-                               family_call(kit.entry("x_decomp_rank_above"), kit.address(s), lin_ints(n), PythonObject(rtol))))
-        _ = s  # keep the Python object alive through the native call above
-    var av = kit.mm(a, vt, tb=True)
-    var num = kit.take_cols(av, 0, r) if r < n else av
-    var den = kit.take_cols(s, 0, r) if r < n else s
-    var ug = kit.ew(OP_DIV, num, den)
-    var width = m if full else n
-    if r == n and width == n:
-        var d = 0
-        var qo = kit.orth_diag(ug, d)
-        var zero = kit.zeros(1, 1)
-        var magnitude = kit.ew(OP_ABS, d)
-        var guarded = kit.ew(OP_LE, magnitude, zero)
-        if kit.total_word(guarded) == 0:
-            var column_signs = kit.neg_signs(d)
-            return kit.ew(OP_MUL, qo, column_signs)
-    if r == 0:
-        return kit.eye(m, width)
-    var tau = 0
-    var h = kit.geqrf(ug, tau)
-    var qc = kit.orgqr(h, tau, width)
-    var diagonal = kit.strided(h, r, r + 1, 0)
-    var sg = kit.neg_signs(diagonal)
-    if width > r:
-        var trailing = kit.constant(1.0, 1, width - r)
-        sg = kit.hstack2(sg, trailing)
-    return kit.ew(OP_MUL, qc, sg)
 
 
 # ---------------------------------------------------------------------------
@@ -148,11 +166,15 @@ def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject
     if rows < cols:
         # the singular values of a wide A are those of A^T, exactly: the
         # transpose is data movement
-        var kit = _lin_xd(context)
+        var kit = _lin_kit(_lin_xd(context))
         try:
-            var held = kit.borrow(a.keep, a.addr, rows, cols)
-            var t = kit.transpose(held)
-            var moved = kit.out(t)
+            var t = 0
+            var py = Python()
+            with GILReleased(py):
+                var held = kit.borrow(a.addr, rows, cols)
+                t = kit.transpose(held)
+            _ = a  # keep the admitted owner alive through the RUN above
+            var moved = _lin_out(kit, t, context)
             buf = AdmittedBuf(moved, Int(py=classical_address(moved)), [cols, rows])
             _ = moved  # keep the Python object alive through the native call above
         finally:
@@ -186,14 +208,16 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var lower = _lin_eq(args[1], "L")
     if not lower and not _lin_eq(args[1], "U"):
         raise Error("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
-    var kit = _lin_xd(context)
+    var kit = _lin_kit(_lin_xd(context))
     try:
         var v = 0
-        var held = kit.borrow(a.keep, a.addr, rows, rows)
-        _ = a  # keep the Python object alive through the native call above
-        var w = kit.eigh(held, 1 if lower else 2, v)
-        _ = a  # keep the Python object alive through the native call above
-        var result = Python.tuple(kit.out_vector(w, rows), kit.out(v))
+        var w = 0
+        var py = Python()
+        with GILReleased(py):
+            var held = kit.borrow(a.addr, rows, rows)
+            w = kit.eigh(held, 1 if lower else 2, v)
+        _ = a  # keep the admitted owner alive through the RUN above
+        var result = Python.tuple(_lin_out_vector(kit, w, rows, context), _lin_out(kit, v, context))
         _ = a^
         return result
     finally:
@@ -204,48 +228,56 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> Pyt
     """`_qr_q(a, mode)`: numpy.linalg.qr's 'reduced', 'complete' and 'raw'."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var kit = _lin_xd(context)
+    var binding = _lin_xd(context)
+    # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
+    # grid-fold geqrf / orgqr ahead of the TSQR); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
+    if mode == "reduced" and _lin_tsqr_on(rows, cols):
+        # `_qr_tsqr`: (Q, R), R's diagonal non-negative
+        var r = _lin_tsqr_r(binding, a, rows, cols, True, context)
+        var signs = admitted_zeros([cols, cols], "<f4", context)
+        var signed = False
+        try:
+            # R's rows signed so its diagonal is non-negative, and C the
+            # diagonal of those signs (x_decomp/api.mojo r_signs_py)
+            _ = family_call(neural_descriptor_entry(binding, "x_decomp_r_signs"), PythonObject(r.addr),
+                            PythonObject(signs.addr), lin_ints(cols))
+            _ = signs  # keep the Python object alive through the native call above
+            _ = r  # keep the Python object alive through the native call above
+            signed = True
+        finally:
+            if not signed:
+                _lin_tsqr_release(binding, context)
+        var q = _lin_tsqr_q(binding, signs.addr, rows, cols, cols, context)
+        _ = signs  # keep the Python object alive through the native call above
+        var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
+        _ = signs  # keep the Python object alive through the native call above
+        return _keep_ret_signs^
+    var kit = _lin_kit(binding)
     try:
-        # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
-        # grid-fold geqrf / orgqr ahead of the TSQR); code recoverable at b639a2bd2.
-        # Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
-        if mode == "reduced" and _lin_tsqr_on(rows, cols):
-            # `_qr_tsqr`: (Q, R), R's diagonal non-negative
-            var r = _lin_tsqr_r(kit, a, rows, cols, True, context)
-            var signs = admitted_zeros([cols, cols], "<f4", context)
-            var signed = False
-            try:
-                # R's rows signed so its diagonal is non-negative, and C the
-                # diagonal of those signs (x_decomp/api.mojo r_signs_py)
-                _ = family_call(kit.entry("x_decomp_r_signs"), PythonObject(r.addr), PythonObject(signs.addr), lin_ints(cols))
-                _ = signs  # keep the Python object alive through the native call above
-                _ = r  # keep the Python object alive through the native call above
-                signed = True
-            finally:
-                if not signed:
-                    _lin_tsqr_release(kit, context)
-            var q = _lin_tsqr_q(kit, signs.addr, rows, cols, cols, context)
-            _ = signs  # keep the Python object alive through the native call above
-            var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
-            _ = signs  # keep the Python object alive through the native call above
-            return _keep_ret_signs^
         var tau = 0
-        var held = kit.borrow(a.keep, a.addr, rows, cols)
-        var h = kit.geqrf(held, tau)
+        var h = 0
+        var factor = 0
         var kk = min(rows, cols)
+        var py = Python()
+        with GILReleased(py):
+            var held = kit.borrow(a.addr, rows, cols)
+            h = kit.geqrf(held, tau)
+            if mode == "raw":
+                # numpy returns geqrf's Fortran-ordered array seen in C order:
+                # the factored matrix transposed, (N, M); tau (K,)
+                factor = kit.transpose(h)
+            elif mode == "complete":
+                factor = kit.orgqr(h, tau, rows)
+            else:
+                factor = kit.orgqr(h, tau, kk)
+        _ = a  # keep the admitted owner alive through the RUN above
         if mode == "raw":
-            # numpy returns geqrf's Fortran-ordered array seen in C order: the
-            # factored matrix transposed, (N, M); tau (K,)
-            var transposed = kit.transpose(h)
-            var ht = kit.out(transposed)
-            return Python.tuple(ht, kit.out_vector(tau, kk))
-        if mode == "complete":
-            var full_q = kit.orgqr(h, tau, rows)
-            var q = kit.out(full_q)
-            return _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, rows, context)), context)
-        var reduced_q = kit.orgqr(h, tau, kk)
-        var q = kit.out(reduced_q)
-        return _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, kk, context)), context)
+            var ht = _lin_out(kit, factor, context)
+            return Python.tuple(ht, _lin_out_vector(kit, tau, kk, context))
+        var q = _lin_out(kit, factor, context)
+        var r_rows = rows if mode == "complete" else kk
+        return _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, r_rows, context)), context)
     finally:
         kit.close()
 
@@ -273,13 +305,15 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var cols = a.dim(1)
     if rows < cols:
         # a wide R (M x N, upper trapezoidal) is geqrf's; the TSQR route is tall only
-        var kit = _lin_xd(context)
+        var kit = _lin_kit(_lin_xd(context))
         try:
             var tau = 0
-            var held = kit.borrow(a.keep, a.addr, rows, cols)
-            _ = a  # keep the Python object alive through the native call above
-            var h = kit.geqrf(held, tau)
-            _ = a  # keep the Python object alive through the native call above
+            var h = 0
+            var py = Python()
+            with GILReleased(py):
+                var held = kit.borrow(a.addr, rows, cols)
+                h = kit.geqrf(held, tau)
+            _ = a  # keep the admitted owner alive through the RUN above
             var wide = _lin_triu(kit, h, rows, context)
             _ = a^
             return wide
@@ -306,14 +340,17 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
         return values
     var full = lin_truth(args[1])
     var hermitian = lin_truth(args[3])
-    var kit = _lin_xd(context)
+    var binding = _lin_xd(context)
+    var kit = _lin_kit(binding)
     try:
+        var py = Python()
         # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
         # CholeskyQR2 whole-matrix route ahead of the TSQR); code recoverable at b639a2bd2.
         # Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch; record in docs/TOMBSTONES.md.
         if not hermitian and not full and _lin_tsqr_on(rows, cols):
             # `_svd_tsqr`: the SVD of the TSQR's R, then U = Q U_R
-            var r = _lin_tsqr_r(kit, a, rows, cols, True, context)
+            var rtol = _lin_rtol(context)
+            var r = _lin_tsqr_r(binding, a, rows, cols, True, context)
             var s = 0
             var vt = 0
             var c_store = PythonObject(None)
@@ -322,70 +359,64 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
                 # Tried: the 2^-40 cut + Householder U_R branch here (qfix bit 1).
                 # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
-                var r_held = kit.borrow(r.keep, r.addr, cols, cols)
-                _ = r  # keep the Python object alive through the native call above
-                var ur = _lin_svd_tall(kit, r_held, False, context, s, vt)
-                _ = r  # keep the Python object alive through the native call above
-                c_store = kit.out(ur)
+                var ur = 0
+                with GILReleased(py):
+                    var r_held = kit.borrow(r.addr, cols, cols)
+                    ur = lin_svd_tall_run(kit, r_held, False, rtol, s, vt)
+                _ = r  # keep the Python object alive through the RUN above
+                c_store = _lin_out(kit, ur, context)
                 done = True
             finally:
                 if not done:
-                    _lin_tsqr_release(kit, context)
-            var u = _lin_tsqr_q(kit, Int(py=classical_address(c_store)), rows, cols, cols, context)
+                    _lin_tsqr_release(binding, context)
+            var u = _lin_tsqr_q(binding, Int(py=classical_address(c_store)), rows, cols, cols, context)
             _ = c_store  # keep the Python object alive through the native call above
-            var result = _lin_named("SVDResult", Python.tuple(u.keep, kit.out_vector(s, cols), kit.out(vt)), context)
+            var result = _lin_named("SVDResult", Python.tuple(u.keep, _lin_out_vector(kit, s, cols, context),
+                                                              _lin_out(kit, vt, context)), context)
             _ = c_store  # keep the Python object alive through the native call above
             _ = a^
             return result
-        var m = kit.borrow(a.keep, a.addr, rows, cols)
+        var m = kit.borrow(a.addr, rows, cols)
         if hermitian:
             if rows != cols:
                 raise Error("mojolearn.linalg.svd: hermitian=True needs a square matrix")
-            var v = 0
-            var w = kit.eigh(m, 1, v)
-            # numpy: argsort(|w|) (ascending) reversed, so equal magnitudes come
-            # higher index first: the stable ascending order of -|w| read back
-            # to front, on the kit
-            var rev = kit.zeros(1, rows)
-            var rp = kit.ptr(rev)
-            _ = rev  # keep the Python object alive through the native call above
-            for t in range(rows):  # driver-loop: over the index table n-1 .. 0 (matrix columns)
-                rp[t] = Float32(rows - 1 - t)
-                _ = rev  # keep the Python object alive through the native call above
-            var wr = kit.take_cols_m(w, rev, rows)
-            var wr_abs = kit.ew(OP_ABS, wr)
-            var keys = kit.ew(OP_SCALE, wr_abs, scalar=-1.0)
-            var o = kit.order_small(keys)
-            var o_row = kit.reshape(o, 1, rows)
-            var o_neg = kit.ew(OP_SCALE, o_row, scalar=-1.0)
-            var order = kit.ew(OP_ADDS, o_neg, scalar=Float64(rows - 1))
-            var w_abs = kit.ew(OP_ABS, w)
-            var s = kit.take_cols_m(w_abs, order, rows)
-            var u = kit.take_cols_m(v, order, rows)
-            var ut = kit.transpose(u)
-            var w_ordered = kit.take_cols_m(w, order, rows)
-            var w_signs = kit.neg_signs(w_ordered)
-            var signs = kit.reshape(w_signs, rows, 1)
-            var vt = kit.ew(OP_MUL, ut, signs)
-            var result = _lin_named("SVDResult", Python.tuple(kit.out(u), kit.out_vector(s, rows), kit.out(vt)), context)
+            var s = 0
+            var vt = 0
+            var u = 0
+            with GILReleased(py):
+                u = lin_svd_hermitian_run(kit, m, rows, s, vt)
+            _ = a  # keep the admitted owner alive through the RUN above
+            var result = _lin_named("SVDResult", Python.tuple(_lin_out(kit, u, context),
+                                                              _lin_out_vector(kit, s, rows, context),
+                                                              _lin_out(kit, vt, context)), context)
             _ = a^
             return result
+        var rtol = _lin_rtol(context)
         if rows >= cols:
             var s = 0
             var vt = 0
-            var u = _lin_svd_tall(kit, m, full, context, s, vt)
-            var result = _lin_named("SVDResult", Python.tuple(kit.out(u), kit.out_vector(s, cols), kit.out(vt)), context)
+            var u = 0
+            with GILReleased(py):
+                u = lin_svd_tall_run(kit, m, full, rtol, s, vt)
+            _ = a  # keep the admitted owner alive through the RUN above
+            var result = _lin_named("SVDResult", Python.tuple(_lin_out(kit, u, context),
+                                                              _lin_out_vector(kit, s, cols, context),
+                                                              _lin_out(kit, vt, context)), context)
             _ = a^
             return result
         var s = 0
-        var vt2 = 0
-        var mt = kit.transpose(m)
-        var u2 = _lin_svd_tall(kit, mt, full, context, s, vt2)
-        var v2 = kit.transpose(vt2)
-        var first = kit.out(v2)
-        var values = kit.out_vector(s, rows)
-        var u2t = kit.transpose(u2)
-        var last = kit.out(u2t)
+        var v2 = 0
+        var u2t = 0
+        with GILReleased(py):
+            var vt2 = 0
+            var mt = kit.transpose(m)
+            var u2 = lin_svd_tall_run(kit, mt, full, rtol, s, vt2)
+            v2 = kit.transpose(vt2)
+            u2t = kit.transpose(u2)
+        _ = a  # keep the admitted owner alive through the RUN above
+        var first = _lin_out(kit, v2, context)
+        var values = _lin_out_vector(kit, s, rows, context)
+        var last = _lin_out(kit, u2t, context)
         _ = a^
         return _lin_named("SVDResult", Python.tuple(first, values, last), context)
     finally:
