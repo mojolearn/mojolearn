@@ -16,7 +16,8 @@ CPU-only install through `_backend._HOST_MODULES`:
   `mamba2_forward`, `mamba2_decode_step`
         `mamba/checks/mamba2_oracle.mojo::mamba2_block_oracle` (the three
         piece state, the dt clamp, the open-chunk buffer).
-  `mamba3_forward`, `mamba3_forward_fresh`, `mamba3_decode_step`
+  `mamba3_forward_fresh` (the carried-state forward and decode step are
+        ops 4/5 of `mamba_state_api_v1` and the Mamba state table)
         `mamba/checks/mamba3_oracle.mojo::mamba3_block_oracle`.
   `mamba1_backward`, `mamba2_backward`, `mamba3_backward`
         the zero-state prefill VJPs over the device's own kernels
@@ -38,7 +39,8 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from std.os import abort
-from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE_MAMBA_HOST_STATE_API
+from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE_MAMBA_HOST_STATE_API, mamba_host_block_operation
+from core.mamba3_prefill_session import Mamba3PrefillHandle
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.python import Python, PythonObject
 from bindings.native_identity_type import native_identity_type
@@ -261,25 +263,6 @@ def mamba2_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     return PythonObject(0)
 
 
-def mamba3_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """25 addresses; params B, L, d_model, buf_len, pending."""
-    var a = _addrs(addrs, 25, String("mamba3_forward"))
-    if len(params) != 5:
-        raise Error(
-            "mamba3_forward: params must contain 5 values (B, L, d_model,"
-            " buf_len, pending), got " + String(len(params))
-        )
-    var b = Int(py=params[0])
-    var l = Int(py=params[1])
-    var dm = Int(py=params[2])
-    var q0 = Int(py=params[3])
-    var pend = Int(py=params[4])
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, l, dm, q0, pend, False)
-    return PythonObject(out_len)
-
-
 def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """15 addresses (x, nine weights, y, four reports); params B, L,
     d_model. A zero state whose resumption pieces are discarded."""
@@ -300,24 +283,6 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
     var out_len = 0
     with GILReleased(Python()):
         out_len = _mamba3_run(a, b, l, dm, 0, 0, True)
-    return PythonObject(out_len)
-
-
-def mamba3_decode_step_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The forward at L = 1; params B, d_model, buf_len, pending."""
-    var a = _addrs(addrs, 25, String("mamba3_decode_step"))
-    if len(params) != 4:
-        raise Error(
-            "mamba3_decode_step: params must contain 4 values (B,"
-            " d_model, buf_len, pending), got " + String(len(params))
-        )
-    var b = Int(py=params[0])
-    var dm = Int(py=params[1])
-    var q0 = Int(py=params[2])
-    var pend = Int(py=params[3])
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, 1, dm, q0, pend, False)
     return PythonObject(out_len)
 
 
@@ -359,11 +324,6 @@ def mamba_block_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
-def mamba_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    return PythonObject(Int(owner))
-
-
 def build__mojolearn_mamba_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
@@ -374,7 +334,6 @@ def build__mojolearn_mamba_host() -> PythonObject:
         native_identity_type(m)
         m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
-        m.def_function[mamba_native_session_handle_binding]("mamba_prefill_native_handle_v1")
         m.def_function[mamba_host_numeric_mode_binding]("mamba_host_numeric_mode")
         m.def_function[mamba_host_vendor_binding]("mamba_host_vendor")
         m.def_function[mamba_host_column_binding]("mamba_host_column")
@@ -388,21 +347,17 @@ def build__mojolearn_mamba_host() -> PythonObject:
         m.def_function[mamba2_forward_binding]("mamba2_forward")
         m.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
         m.def_function[mamba2_backward_binding]("mamba2_backward")
+        # The owned prefill session is a native registry handle of this image
+        # (core/mamba3_prefill_session.mojo, lane mamba3-prefill-handle):
+        # create/close/forward_owned/info/export/reports_optional,
+        # mamba3_state_owned, mamba_prefill_native_handle_v1, the
+        # _M3OwnedHostSession type, mamba3_forward and mamba3_decode_step are
+        # gone. Kept: the owned-weights answer the protected verify reads and
+        # the two B-arm entries of MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.
         m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
-        m.def_function[mamba3_owned_create_binding]("mamba3_prefill_session_create")
-        # mamba3_prefill_session_create returns PythonObject(alloc=M3OwnedHostSession()).
-        _ = m.add_type[M3OwnedHostSession]("_M3OwnedHostSession")
-        m.def_function[mamba3_owned_reports_optional_binding]("mamba3_prefill_session_reports_optional")
-        m.def_function[mamba3_owned_info_binding]("mamba3_prefill_session_info")
-        m.def_function[mamba3_owned_close_binding]("mamba3_prefill_session_close")
         m.def_function[mamba3_owned_install_binding]("mamba3_prefill_session_install_weights")
-        m.def_function[mamba3_owned_forward_binding]("mamba3_prefill_session_forward_owned")
-        m.def_function[mamba3_state_owned_binding]("mamba3_state_owned")
         m.def_function[mamba3_owned_backward_binding]("mamba3_prefill_session_backward_owned")
-        m.def_function[mamba3_owned_export_binding]("mamba3_prefill_session_export_weights")
-        m.def_function[mamba3_forward_binding]("mamba3_forward")
         m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
-        m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         m.def_function[mamba3_backward_binding]("mamba3_backward")
         m.def_function[mamba3_forward_tape_enabled_binding]("mamba3_forward_tape_enabled")
         return m.finalize()
@@ -418,153 +373,42 @@ def mamba3_owned_weights_enabled_binding() -> PythonObject:
     return PythonObject(NN40_OWNED_WEIGHTS)
 
 
-def mamba3_owned_create_binding() raises -> PythonObject:
-    return PythonObject(alloc=M3OwnedHostSession())
-
-
-def mamba3_owned_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    if owner[].busy:
-        raise Error("mamba3 owned host: session busy")
-    owner[].weights = None
-    owner[].usable = False
-    return PythonObject(0)
+def _m3_host_b_arm(session: PythonObject, op: Int, addrs: PythonObject, params: List[Int]) raises -> PythonObject:
+    """B arm of `-D MOJOLEARN_NEURAL_TABLE_ROUTE_OFF` (bindings/neural_block_public.mojo):
+    the pre-table Python entry around the same owned-session operation of
+    `mamba/host/native_block_dispatch.mojo` on the block's session handle owner
+    (core/mamba3_prefill_session.mojo; lane mamba3-prefill-handle). Reserve and
+    release run with the GIL held, the operation with it released."""
+    var word = session.downcast_value_ptr[Mamba3PrefillHandle]()[].word()
+    var a = List[Int]()
+    for i in range(len(addrs)):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
+        a.append(Int(py=addrs[i]))
+    var words: List[Int] = [word]
+    words.extend(params.copy())
+    var slot: List[Int] = [word]
+    _ = mamba_host_block_operation(0, List[Int](), slot, List[Float64]())
+    var result = 0
+    try:
+        with GILReleased(Python()):
+            result = mamba_host_block_operation(op, a, words, List[Float64]())
+    except error:
+        _ = mamba_host_block_operation(1, List[Int](), slot, List[Float64]())
+        raise error
+    _ = mamba_host_block_operation(1, List[Int](), slot, List[Float64]())
+    return PythonObject(result)
 
 
 def mamba3_owned_install_binding(session: PythonObject, addrs: PythonObject, d_model_obj: PythonObject) raises -> PythonObject:
-    comptime if not NN40_OWNED_WEIGHTS:
-        raise Error("mamba3 owned host: NN40 arm disabled")
-    var d_model = Int(py=d_model_obj)
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    if owner[].busy or not owner[].usable:
-        raise Error("mamba3 owned host: session busy or unusable")
-    var a = _addrs(addrs, 9, String("mamba3 owned install"))
-    var wa: List[Int] = [0]
-    wa.extend(a.copy())
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_owned_install_run(owner[], wa, d_model)
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(owner[].generation)
-
-
-def mamba3_owned_forward_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    var a = _addrs(addrs, 6, String("mamba3 owned forward"))
-    if len(params) != 4:
-        raise Error("mamba3 owned forward: expected B, L, d_model, generation")
-    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2]); var generation = Int(py=params[3])
-    _nn40_host_require(owner[], dm, generation)
-    if b <= 0 or l <= 0:
-        raise Error("mamba3 owned forward: positive B and L required")
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_owned_forward_run(owner[], a, b, l, dm)
-    except error:
-        owner[].busy = False
-        owner[].usable = False
-        raise error
-    owner[].busy = False
-    owner[].weight_reuses += 1
-    return PythonObject(0)
-
-
-def mamba3_state_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`mamba3_state_owned` (host column): `mamba3_forward` (step 0) or
-    `mamba3_decode_step` (step 1) on the installed owned snapshot; `addrs`
-    the same twenty-five as `mamba3_forward` (the nine weight slots are not
-    read); `params` = [B, L, d_model, buf_len, pending, generation, step].
-    Returns the post-call buf_len."""
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    var a = _addrs(addrs, 25, String("mamba3_state_owned"))
-    if len(params) != 7:
-        raise Error("mamba3_state_owned: params must contain 7 values (B, L, d_model, buf_len, pending, generation, step)")
-    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2])
-    var q0 = Int(py=params[3]); var pend = Int(py=params[4]); var generation = Int(py=params[5])
-    var step = Int(py=params[6])
-    _nn40_host_require(owner[], dm, generation)
-    if step != 0 and step != 1:
-        raise Error("mamba3_state_owned: step must be 0 or 1")
-    if step == 1 and l != 1:
-        raise Error("mamba3_state_owned: a decode step is one token (L = 1)")
-    owner[].busy = True
-    var out_len = 0
-    try:
-        with GILReleased(Python()):
-            out_len = _m3_owned_state_run(owner[], a, b, l, dm, q0, pend)
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    owner[].weight_reuses += 1
-    return PythonObject(out_len)
+    """B arm only: owned snapshot install (op 15) on the session handle owner."""
+    _ = _addrs(addrs, 9, String("mamba3 owned install"))
+    return _m3_host_b_arm(session, 15, addrs, [Int(py=d_model_obj)])
 
 
 def mamba3_owned_backward_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    var a = _addrs(addrs, 12, String("mamba3 owned backward"))
+    """B arm only: owned backward (op 9) on the session handle owner."""
     if len(params) != 4:
         raise Error("mamba3 owned backward: expected B, L, d_model, generation")
-    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2]); var generation = Int(py=params[3])
-    _nn40_host_require(owner[], dm, generation)
-    if b <= 0 or l <= 0:
-        raise Error("mamba3 owned backward: positive B and L required")
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_owned_backward_run(owner[], a, b, l, dm)
-    except error:
-        owner[].busy = False
-        owner[].usable = False
-        raise error
-    owner[].busy = False
-    owner[].weight_reuses += 1
-    owner[].backward_recomputes += 1
-    return PythonObject(0)
-
-
-def mamba3_owned_export_binding(session: PythonObject, addrs: PythonObject, generation_obj: PythonObject) raises -> PythonObject:
-    var generation = Int(py=generation_obj)
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    if not owner[].weights:
-        raise Error("mamba3 owned export: no snapshot")
-    var dm = owner[].weights.value().dims.d_model
-    _nn40_host_require(owner[], dm, generation)
-    var a = _addrs(addrs, 9, String("mamba3 owned export"))
-    var dims = owner[].weights.value().dims.copy()
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_owned_export_run(owner[], a, dm, dims)
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(generation)
-
-
-def mamba3_owned_reports_optional_binding() -> PythonObject:
-    """The host owner currently materializes every report. Advertising the
-    capability explicitly keeps Samba's discard-report probe callable."""
-    return PythonObject(False)
-
-
-def mamba3_owned_info_binding(session: PythonObject) raises -> PythonObject:
-    """Same six-field public metadata schema; host backward recomputes and
-    holds no saved stages. Counters report snapshot use, not device traffic."""
-    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
-    if owner[].busy:
-        raise Error("mamba3 owned host info: session busy")
-    var result = Python.list()
-    result.append(PythonObject(owner[].generation))
-    result.append(PythonObject(0))
-    result.append(PythonObject(owner[].weight_reuses))
-    result.append(PythonObject(0))
-    result.append(PythonObject(owner[].backward_recomputes))
-    result.append(PythonObject(0))
-    return result
+    var p = List[Int]()
+    for i in range(4):  # small-loop(four owned backward scalars)
+        p.append(Int(py=params[i]))
+    return _m3_host_b_arm(session, 9, addrs, p)
