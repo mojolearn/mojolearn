@@ -79,3 +79,11 @@ def gbdt_text_has_ctr(text: String) -> Bool:
         if ("\n" + names[i] + " ") in text or text.startswith(names[i] + " "):
             return True
     return False
+
+
+def _type_or_value(error: Error) -> Bool:
+    """A refusal Python's `except (TypeError, ValueError)` catches."""
+    var message = String(error)
+    return not (message.startswith("RuntimeError:") or message.startswith("ImportError:")
+                or message.startswith("AttributeError:") or message.startswith("IndexError:")
+                or message.startswith("NotImplementedError:") or message.startswith("OverflowError:"))
