@@ -95,6 +95,8 @@ FAMILIES = (
             "x_prep/user_host.mojo", "x_prep/folds.mojo", "x_prep/py2mojo.mojo", "x_prep/proba64.mojo", "checks/f64_words.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "x_prep_native_api_v1",
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
             "x_prep_run", "x_prep_numeric_mode", "x_prep_vendor",
             "x_prep_label_present", "x_prep_idn_int",

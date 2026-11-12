@@ -1793,7 +1793,7 @@ FAMILIES = (
             "full_reset_params_native_call", "linear_constructor_native_call", "mode_metadata_native_call",
             "neighbor_query_attribute_call", "neighbor_query_call", "params_metadata_native_call",
             "params_setter_native_call", "public_attribute_native_call", "public_attribute_generic_native_call",
-            "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call", "linear_entry_connection_v1",
+            "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
             "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
             "native_codec_call", "native_process_call", "native_transport_call",
             "parallel_byte_call", "parallel_causal_call",
@@ -2176,6 +2176,8 @@ FAMILIES = (
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "linear_svc_native_api_v1", "logistic_native_api_v1",
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
@@ -2422,6 +2424,8 @@ FAMILIES = (
             "isolation_forest/impl/rng/xorwow.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "svr_native_api_v1",
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
@@ -2746,6 +2750,8 @@ FAMILIES = (
             "hdbscan/impl/condensed_hierarchy.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "hdbscan_fit_native_api_v1", "hdbscan_query_native_api_v1",
             "hdbscan_host_numeric_mode", "hdbscan_host_vendor",
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
@@ -2826,6 +2832,8 @@ FAMILIES = (
             "hdbscan/host/hdbscan_host_oracle.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "hdbscan_query_native_api_v1",
             "hdbscan_infer_host_numeric_mode", "hdbscan_infer_host_vendor",
             "hdbscan_infer_host_column", "hdbscan_infer_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_approximate_predict",
@@ -3007,6 +3015,8 @@ FAMILIES = (
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "optimizer_native_api_v1",
             # Native C-entry registrations are part of the exported ABI too.
             "optimizer_door_accumulate", "optimizer_door_clip", "optimizer_door_io",
             "optimizer_door_load_state", "optimizer_door_state", "optimizer_door_state_set",
@@ -3461,6 +3471,8 @@ FAMILIES = (
         host_modules=("bindings/classical_native.mojo", "bindings/trees_lifetime.mojo",
                       "bindings/classical_door_routes.mojo"),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            'linear_entry_connection_v1',
             'classical_native_call',
             'classical_attribute_call',
             'classical_attribute_descriptor',

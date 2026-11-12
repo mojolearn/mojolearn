@@ -629,13 +629,7 @@ struct MKit(Movable):
         except:
             return String("")
 
-    def w4_flags(mut self) -> Int:
-        """`w4_flags()`: 0 on a binding without the entry."""
-        try:
-            var f = mk_required(self.fn_opt("x_decomp_w4_flags"), "x_decomp_w4_flags")
-            return Int(py=py_call(native_loaded_module("builtins").int, py_call(f)))
-        except:
-            return 0
+    # TOMBSTONE: x_decomp_w4_flags probe (DecompKit.w4_flags) deleted with its entry by 292b1af4e0; no caller left.
 
     def enable_lle_precision(mut self) raises:
         """The Apple FAST binding's ordered GEMM and LU for LLE's near-null

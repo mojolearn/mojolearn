@@ -29,6 +29,8 @@ FAMILIES = (
         host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo",
                       "x_neighbors/proba64_nc.mojo", "checks/f64_words.mojo"),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "ocsvm_resident_native_api_v1",
             # BEGIN GENERATED EXPORTS
             "x_neighbors_host_numeric_mode",
             "x_neighbors_host_vendor",

@@ -30,6 +30,12 @@ from training.parallel_byte_impl import (
     parallel_require_nonnegative_f32,
 )
 from core.shared_slot import SharedSlot
+from core.entry_table import EntryRef
+from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
+from training.byte_lm_glue_abi import (
+    BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX, BG_CONFIG_PROFILE,
+    byte_lm_glue_ref, byte_lm_glue_read_text, byte_lm_glue_read_int,
+)
 
 
 # The byte-LM schedule descriptor ABI (bindings/_mojolearn_byte_lm.mojo).
@@ -158,6 +164,26 @@ def _parallel_compiled(binding: PythonObject, name: String) raises -> PythonObje
     return entry
 
 
+def _parallel_glue(mode: String, vendor: String) raises -> EntryRef:
+    """The glue entry of the byte LM image of `mode` and `vendor` (the trainer
+    table key core/byte_lm_entry_table.mojo publishes); an image without a
+    published table refuses as the former Python suffix probe did."""
+    var vendor_word = byte_lm_vendor_text_word(vendor)
+    if vendor_word < 0 or (mode != "identical" and mode != "fast"):
+        raise Error("parallel: binding has no native arithmetic profile")
+    var key = ByteLmEntryKey(1 if mode == "identical" else 0, vendor_word)
+    if not byte_lm_table_published[BYTE_LM_TABLE_TRAINER](key, 1, String(BYTE_LM_GLUE_ABI), BG_OP_COUNT):
+        raise Error("parallel: binding has no native arithmetic profile")
+    return byte_lm_glue_ref(key)
+
+
+def _parallel_glue_text(gl: EntryRef, op: Int, var words: List[Int]) raises -> String:
+    var text = byte_lm_glue_read_text(gl, op, words^)
+    if not text:
+        raise Error("parallel: binding has no native arithmetic profile")
+    return text.value().copy()
+
+
 def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, modes: PythonObject, expected_vendor: String) raises:
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     p[].bi = Python.import_module("builtins")
@@ -187,26 +213,19 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
             raise Error("TypeError: parallel: mode names must be str")
         var binding = modes[mode]
         var table = p[].bi.dict()
-        var suffix = _parallel_compiled(binding, "byte_lm_arithmetic_suffix")
-        if suffix is None:
-            suffix = _parallel_compiled(binding, "byte_lm_host_arithmetic_suffix")
-        if suffix is None:
-            raise Error("parallel: binding has no native arithmetic profile")
-        py_setitem(table, "suffix", suffix())
-        # Resolve and prove the same mode/vendor/profile witness as _load;
-        # the connection-time host proxy is never retained as a runtime call.
-        for name in [String("numeric_mode"), String("vendor"), String("profile"), String("config_profile")]:  # driver-loop: over names: four profile entry names
-            var native_name = "byte_lm_" + name
-            if expected_vendor == "cpu":
-                native_name = "byte_lm_host_" + ("profile" if name == "config_profile" else name)
-            var entry = py_call(p[].bi.getattr, binding, native_name)
-            if py_type(entry) is not py_type(p[].bi.len):
-                raise Error("parallel: profile entry must be compiled native code")
-            py_setitem(table, "profile_" + name, entry)
-        if Int(py=table["profile_numeric_mode"]()) != (1 if String(mode) == "identical" else 0) or String(table["profile_vendor"]()) != expected_vendor:
+        # The mode/vendor/profile witness is read through the trainer table's
+        # glue entry (core/byte_lm_entry_table.mojo; published by both byte LM
+        # images at module init), the same read-back the trainer door's _load
+        # makes. The Python metadata entries it replaces were deleted from the
+        # device image by 1bdaa5e00f / 6890e9658f (lane calltable-byte-lm), so
+        # this import-time probe of `byte_lm_arithmetic_suffix` refused every
+        # GPU import ("parallel: binding has no native arithmetic profile").
+        var gl = _parallel_glue(String(mode), expected_vendor)
+        var suffix = _parallel_glue_text(gl, BG_SUFFIX, List[Int]())
+        py_setitem(table, "suffix", PythonObject(suffix))
+        if byte_lm_glue_read_int(gl, BG_NUMERIC_MODE, List[Int]()) != (1 if String(mode) == "identical" else 0) or _parallel_glue_text(gl, BG_VENDOR, List[Int]()) != expected_vendor:
             raise Error("parallel: native mode/vendor mismatch")
-        var default_profile = py_call(table["profile_profile"], py_ints([2, 32, 32, 4, 2, 8, 64, 2, 256])) if expected_vendor == "cpu" else table["profile_profile"]()
-        if String(default_profile) != "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1" + String(table["suffix"]):
+        if _parallel_glue_text(gl, BG_PROFILE, List[Int]()) != "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1" + suffix:
             raise Error("parallel: native default profile mismatch")
         # The private schedule descriptor table and its session factory. A
         # binding without them (the CPU host binding) keeps provider None and
@@ -651,7 +670,14 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
     if not py_contains(p[].modes, PythonObject(mode)):
         raise Error("Byte-LM numeric mode is not installed")
     var table = p[].modes[mode]
-    if String(py_call(table["profile_config_profile"], shape["dims"])) != String(shape["profile_base"]) + String(table["suffix"]):
+    var shape_words = List[Int]()
+    var dims = shape["dims"]
+    for i in range(len(dims)):  # small-loop(dims: nine or ten admitted shape words)
+        shape_words.append(Int(py=dims[i]))
+    if len(shape_words) == 9:
+        shape_words.append(0)  # the glue's tenth word: chunked head off
+    var gl = _parallel_glue(mode, p[].vendor)
+    if _parallel_glue_text(gl, BG_CONFIG_PROFILE, shape_words^) != String(shape["profile_base"]) + String(table["suffix"]):
         raise Error("Byte-LM native runtime shape/profile mismatch")
     if String(value["schema"]) != "mojolearn.small-byte-lm-state.v1" or String(value["profile"]) != String(shape["profile_base"]) + String(table["suffix"]):
         raise Error("Byte-LM state profile/registry/mode mismatch")
