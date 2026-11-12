@@ -22,7 +22,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.pca_exact import pca_copied
 from bindings.manifold_settings_native import ManifoldSettings
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from bindings.classical_validate import classical_view
 from bindings.umap_parameters_native import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
 from x_ann.mani_umap_run import (
@@ -107,17 +107,17 @@ def _umap_copy(shape: PythonObject, address: Int, count: Int, context: PythonObj
     return output
 
 
-def _umap_state(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
+def _umap_state(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     var view = classical_view(value, context, name)
     var shape = array_shape_once(view, context)
-    var snapshot = array_metadata_once(view, shape^, name, context)
+    var snapshot = array_metadata_once(view, shape^, name, context, pin)
     if len(snapshot.shape) != 2 or not snapshot.f32_c():
         raise Error("UMAP fitted " + name + " must be a C-order float32 matrix")
     return snapshot^
 
 
 def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int, seed: PythonObject,
-                  context: PythonObject) raises -> Optional[ArrayMetadata]:
+                  context: PythonObject, mut pin: ArrayPin) raises -> Optional[ArrayMetadata]:
     """`_initial(x, n, nc, seed)`: None for 'spectral'; 'random' uniform(-10,
     10) on the Philox stream; 'pca' umap-learn's PCA of the data scaled to
     max |coordinate| 10 plus N(0, 1e-4) noise; an array as given."""
@@ -148,13 +148,13 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
                 var ndim = len(x.shape)
                 with GILReleased(Python()):
                     start = umap_pca_start_run(run, k, hk, address, rows, cols, ndim, n, nc, seed_word)
-                _ = x  # the admitted X stays alive through the RUN above
-            return Optional(admit_family_meta(mk_out2(run, start, context), 2, "init", context))
+                _ = x  # the admitted X stays alive through the RUN above (the door's pin holds its storage)
+            return Optional(admit_family_meta(mk_out2(run, start, context), 2, "init", context, pin))
         finally:
             mk_finish(run, context)
-    var a = admit_family_meta(init, 2, "init", context)
+    var a = admit_family_meta(init, 2, "init", context, pin)
     if not umap_init_shape_matches(a.source.rows, a.source.cols, n, nc):
-        var refusal = umap_init_shape_refusal(family_repr(a.python_shape()), n, nc)
+        var refusal = umap_init_shape_refusal(family_repr(array_python_shape(a)), n, nc)
         raise refusal^
     umap_check_init_finite(a.source.addr, a.count)
     return Optional(a^)
@@ -176,7 +176,8 @@ def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises ->
     var shape = array_shape_once(y, context)
     if len(shape) != 1 or shape[0] != n:
         return PythonObject(None)
-    var meta = array_metadata_once(y, shape^, "y", context, allow_non_native=True, allow_unsupported=True)
+    var pin = ArrayPin()
+    var meta = array_metadata_once(y, shape^, "y", context, pin, allow_non_native=True, allow_unsupported=True)
     if not meta.castable or not meta.native_byte_order:
         return PythonObject(None)
     var kind = meta.source.kind
@@ -188,12 +189,12 @@ def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises ->
     if kind == CAST_KIND_FLOAT:
         var words = List[Float64]()
         var ok = label_words_f64(base, stride, item, n, words)
-        _ = meta.keep  # keep the source alive through the reads above
+        _ = pin^  # the door's pin held the source through the reads above
         if not ok:
             return PythonObject(None)
         return _umap_codes(words, context)
     var ints = label_words_i64(base, stride, kind, item, n)
-    _ = meta.keep  # keep the source alive through the reads above
+    _ = pin^  # the door's pin held the source through the reads above
     return _umap_codes(ints, context)
 
 
@@ -326,11 +327,12 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
                 _ = t  # keep the Python object alive through the native call above
         return Python.tuple(PythonObject(1), PythonObject(1), t, tk_kept, PythonObject(w), t, PythonObject(Int(tp)))
     if Bool(py=py_call(op.contains, Python.tuple(PythonObject("l2"), PythonObject("euclidean")), tm)):
-        var target = admit_family_meta(y, -1, "y", context)
+        var target_pin = ArrayPin()
+        var target = admit_family_meta(y, -1, "y", context, target_pin)
         var dims = umap_continuous_target_dims(len(target.shape), target.source.rows, target.source.cols, n,
                                                target.source.addr, target.count)
-        return Python.tuple(PythonObject(2), PythonObject(dims), target.keep, tk_kept, PythonObject(w),
-                            target.owner, PythonObject(target.source.addr))
+        return Python.tuple(PythonObject(2), PythonObject(dims), target_pin.keep, tk_kept, PythonObject(w),
+                            target_pin.owner, PythonObject(target.source.addr))
     raise Error("NotImplementedError: UMAP target_metric=" + family_repr(tm) + " is not implemented; "
                 + "'categorical' and 'l2' / 'euclidean' are")
 
@@ -344,7 +346,8 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var validated = umap_parameters_fields(settings.values, context)
     var config = validated[0]
     var extras = validated[1]
-    var x = admit_family_meta(source, 2, "X", context)
+    var x_pin = ArrayPin()
+    var x = admit_family_meta(source, 2, "X", context, x_pin)
     var b = native_loaded_module("builtins")
     var source_type = py_type(source)
     var copied = True
@@ -360,7 +363,8 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var d = x.source.cols
     var nc = Int(py=config[1])
     umap_check_neighbors(Int(py=config[0]), n)
-    var initial = _umap_initial(settings, x, n, nc, config[7], context)
+    var initial_pin = ArrayPin()
+    var initial = _umap_initial(settings, x, n, nc, config[7], context, initial_pin)
     umap_check_spectral_samples(True if initial else False, n, nc)
     var target = PythonObject(None)
     if not (y is None):
@@ -396,13 +400,15 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         _ = initial  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
     _ = initial^
+    _ = initial_pin^  # the door's pin held the start embedding through RUN
     _ = target^
     umap_check_embedding(columns == nc, embedding_address, n * nc)
     # Prepare all retained state before publishing a successful fit. Copies
     # prevent caller edits of X or embedding_ from changing transform's model.
-    var training = _umap_copy(x.python_shape(), x.source.addr, x.count, context)
+    var training = _umap_copy(array_python_shape(x), x.source.addr, x.count, context)
     var frozen = _umap_copy(Python.tuple(n, nc), embedding_address, n * nc, context)
     _ = x^
+    _ = x_pin^  # the door's pin held X through every RUN read and the copy
     py_setitem(settings.fields, "embedding_", embedding)
     py_setitem(settings.fields, "n_features_in_", PythonObject(d))
     py_setitem(settings.fields, "input_copied_", PythonObject(copied))
@@ -438,9 +444,12 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     # The fitted route is selected only after the live-mode/refit refusal,
     # so changing a fitted identical model to unavailable fast still says refit.
     var binding = spectral_umap_route(context, "metrics", fitted_mode)
-    var x = admit_family_meta(args[0], 2, "X", context)
-    var training = _umap_state(family_field(settings.values, "_transform_training"), "training", context)
-    var fitted_embedding = _umap_state(family_field(settings.values, "_transform_embedding"), "embedding", context)
+    var x_pin = ArrayPin()
+    var training_pin = ArrayPin()
+    var fitted_pin = ArrayPin()
+    var x = admit_family_meta(args[0], 2, "X", context, x_pin)
+    var training = _umap_state(family_field(settings.values, "_transform_training"), "training", context, training_pin)
+    var fitted_embedding = _umap_state(family_field(settings.values, "_transform_embedding"), "embedding", context, fitted_pin)
     var nq = x.source.rows
     var d = x.source.cols
     var nt = training.source.rows
@@ -450,7 +459,12 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     umap_check_transform_input(x.source.addr, x.count)
     # the C-order bytes compared (`x.tobytes() == training.tobytes()`)
     if umap_transform_reuses_fit(x.source.addr, training.source.addr, nq, nt, d):
-        return _umap_copy(fitted_embedding.python_shape(), fitted_embedding.source.addr, fitted_embedding.count, context)
+        var reused = _umap_copy(array_python_shape(fitted_embedding), fitted_embedding.source.addr,
+                                fitted_embedding.count, context)
+        _ = fitted_pin^
+        _ = training_pin^
+        _ = x_pin^
+        return reused
     var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with fitted mode")
     var output = family_array(Python.tuple(nq, nc), "<f4", context)
     var output_address = Int(py=classical_address(output))
@@ -473,6 +487,9 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     _ = x^
     _ = training^
     _ = fitted_embedding^
+    _ = x_pin^  # the door's pins held every input through RUN
+    _ = training_pin^
+    _ = fitted_pin^
     umap_check_transform_output(columns == nc, output_address, nq * nc)
     return output
 

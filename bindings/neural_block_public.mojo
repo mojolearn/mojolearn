@@ -31,12 +31,16 @@ from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_A
 from providers.python.operation_lock_pyapi import OperationLockLease, operation_lock_create
 from bindings.native_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi import (
-    neural_descriptor_reuse, neural_descriptor_reserved_execute, neural_descriptor_handle,
+    neural_descriptor_reuse,
 )
 from providers.python.transformer_block_session_pyapi import (
     transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
     transformer_block_session_close,
 )
+from providers.python.mamba3_prefill_session_pyapi import (
+    mamba3_prefill_caps, mamba3_prefill_session_ensure, mamba3_prefill_session_serves, mamba3_prefill_session_run,
+)
+from core.mamba_state_entry_table import Mamba3StateRoute
 from bindings.causal_lm_public import _causal_array_guard
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
 from core.neural_entry_table import (
@@ -44,9 +48,9 @@ from core.neural_entry_table import (
     NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_BLOCK_TRAIN, NEURAL_TABLE_MAMBA_TRAIN,
     NEURAL_BLOCK_RESERVE, NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_FORWARD_FRESH,
     NEURAL_BLOCK_SESSION_BACKWARD, NEURAL_BLOCK_FORWARD_FRESH, NEURAL_BLOCK_BACKWARD,
-    NEURAL_MAMBA_RESERVE, NEURAL_MAMBA_RELEASE, NEURAL_MAMBA1_BACKWARD, NEURAL_MAMBA2_BACKWARD,
+    NEURAL_MAMBA1_BACKWARD, NEURAL_MAMBA2_BACKWARD,
     NEURAL_MAMBA3_BACKWARD, NEURAL_MAMBA3_SESSION_BACKWARD, NEURAL_MAMBA3_OWNED_BACKWARD,
-    NEURAL_MAMBA3_OWNED_INSTALL,
+    NEURAL_MAMBA3_OWNED_INSTALL, MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_OWNED_WEIGHTS,
 )
 # Lane ne3-c-blocks-embedding (row N115): the one record table (lane
 # ne1-e-records contract, bindings/native_model_records.mojo).
@@ -153,32 +157,10 @@ def _neural_table_reserved(entry: EntryRef, handle: Int, reserve: Int, release: 
     return result
 
 
-def _neural_session_handle(mut mods: NativeModules, factory: PythonObject, session_owner: PythonObject) raises -> Int:
-    # call-table: owner handle (UNPACK). A session owner is a Python extension
-    # object of the sibling image; only that image's checked factory
-    # (`*_native_session_handle_v1` / `mamba_prefill_native_handle_v1`) may read
-    # its layout and turn it into the opaque handle the table's session
-    # operations take. The reserve operation re-checks busy/closed natively.
-    if factory is None:
-        raise Error("RuntimeError: the connected native binding has no session handle entry")
-    var handle = Int(py=py_call(factory, session_owner))
-    mods.released()
-    if handle == 0:
-        raise Error("native provider: state admission returned a null handle")
-    return handle
-
-
-def _neural_mamba_session_table(mut mods: NativeModules, entry: EntryRef, fields: PythonObject,
-    entries: PythonObject, operation: Int, addresses: List[Int], params: List[Int]) raises -> Int:
-    # A Mamba3 prefill-session operation (7 backward, 9 owned backward,
-    # 15 owned install) through the training image's table entry.
-    var session = fields["_prefill_session"]
-    var handle = _neural_session_handle(mods, _native_function(mods, entries, "mamba_prefill_native_handle_v1"), session)
-    var result = _neural_table_reserved(entry, handle, NEURAL_MAMBA_RESERVE,
-        NEURAL_MAMBA_RELEASE, operation, addresses, params, List[Float64]())
-    mods.released()
-    _ = session^
-    return result
+# The Mamba-3 prefill session's operations run through its owner
+# (providers/python/mamba3_prefill_session_pyapi.mojo, lane
+# mamba3-prefill-handle): the former `_neural_session_handle` factory call
+# (`mamba_prefill_native_handle_v1`) and `_neural_mamba_session_table` are gone.
 
 
 # A/B define (lane loops-trees-ab, 2026-11-11; perf audit 20261111 section 5):
@@ -884,7 +866,7 @@ def _neural_lengths(mut mods: NativeModules, value: PythonObject, b: Int, l: Int
             raise Error("TypeError: neural block lengths entries must be integers, not bool or float")
         var viewed = List[Int](length=b, fill=0)
         for i in range(b):
-            var n = view_int_at(view, i)
+            var n = view_int_at(view.layout, view.kind, i)
             if n < 1 or n > l:
                 raise Error("neural block: lengths must be in [1, L]")
             viewed[i] = n
@@ -1098,85 +1080,45 @@ def _neural_int_words(values: PythonObject) raises -> List[Int]:
     return result^
 
 
-def neural_mamba_session_call(mut mods: NativeModules, native: PythonObject, fields: PythonObject, entries: PythonObject,
-                              operation: Int, addresses: List[Int], params: List[Int]) raises -> Int:
-    # Retained for its unconverted callers (bindings/neural_prefill_native.mojo,
-    # bindings/samba_inference_native.mojo); this file's own Mamba3 session
-    # operations call the neural entry table (_neural_mamba_session_table).
-    # Operation admission only. The common provider pins this exact typed
-    # session and compiled image and reserves/releases under the GIL.
-    var session = fields["_prefill_session"]
-    var handle = neural_descriptor_handle(native,
-        _native_function(mods, entries, "mamba_prefill_native_handle_v1"), session)
-    mods.released()
-    var windowed_result9 = neural_descriptor_reserved_execute(native, session, handle, 0, 1, operation,
-        addresses, params, [])
-    mods.released()
-    return windowed_result9^
-
-
-def neural_mamba_session_call(native: PythonObject, fields: PythonObject, entries: PythonObject,
-                              operation: Int, addresses: List[Int], params: List[Int]) raises -> Int:
-    # Classical and other callers keep their per-call module checks.
-    var mods = NativeModules()
-    return neural_mamba_session_call(mods, native, fields, entries, operation, addresses, params)
-
-
 def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, weights: PythonObject,
-                          key: NeuralEntryKey) raises:
-    # `key`: the training image's neural entry table key (neural_training_selection).
+                          route: Mamba3StateRoute) raises:
+    # `route`: the block's Mamba-3 key (its training selection), which names
+    # the training image holding its prefill session (route.session_ref()).
+    # `entries` serves only the MOJOLEARN_NEURAL_TABLE_ROUTE_OFF B arm.
     if Bool(py=py_get(fields, "_owned_restore_pending", PythonObject(False))):
-        if not _native_has_entry(mods, entries, "mamba3_owned_weights_enabled") or not Bool(py=_native_function(mods, entries, "mamba3_owned_weights_enabled")()):
-            mods.released()
+        var entry = route.session_ref()
+        if (mamba3_prefill_caps(entry) & MAMBA3_CAP_OWNED_WEIGHTS) == 0:
             raise Error("RuntimeError: Mamba3 owned weights require the compiled owned-weight entry")
-        mods.released()
-        if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
-            py_setitem(fields, "_prefill_session", _native_function(mods, entries, "mamba3_prefill_session_create")())
-            mods.released()
-            py_setitem(fields, "_prefill_binding", entries.canonical)
+        var session = mamba3_prefill_session_ensure(fields, entry)
         var addresses = List[Int]()
         for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
             addresses.append(Int(py=weights[i]._addr))
-        # Owned snapshot install (op 15) through the training image's table
-        # entry; the former Python entry mamba3_prefill_session_install_weights
-        # and the env-gated provider arm ran the same install with these words.
+        # Owned snapshot install (op 15) on the block's session handle; the
+        # former Python entry mamba3_prefill_session_install_weights and the
+        # env-gated provider arm ran the same install with these words.
         var generation: Int
         comptime if _NEURAL_TABLE_ROUTE_OFF:
             generation = Int(py=py_call(_native_function(mods, entries, "mamba3_prefill_session_install_weights"),
-                fields["_prefill_session"], py_ints(addresses), fields["d_model"]))
-            mods.released()
+                session, py_ints(addresses), fields["d_model"]))
         else:
-            generation = _neural_mamba_session_table(mods, neural_ref[NEURAL_TABLE_MAMBA_TRAIN](key), fields, entries,
-                NEURAL_MAMBA3_OWNED_INSTALL,
+            generation = mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_INSTALL,
                 addresses, [Int(py=fields["d_model"])])
+        mods.released()
         _ = weights
+        _ = session^
         py_setitem(fields, "_owned_generation", PythonObject(generation))
-        # Retained for the unconverted readers in bindings/mamba_public_native.mojo.
-        py_setitem(fields, "_owned_native_provider", py_get(fields, "_native_mamba_block_provider_cache"))
         py_setitem(fields, "_owned_restore_pending", False)
     if py_get(fields, "_owned_generation") is not None:
-        if py_get(fields, "_prefill_binding") is not entries.canonical or getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":
+        if (not route.has_sessions() or getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1"
+                or not mamba3_prefill_session_serves(py_get(fields, "_prefill_session"), route.session_ref())):
             raise Error("RuntimeError: Mamba3 owned snapshot requires its installed binding/setup")
 
 
-def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
-    # Unconverted callers (bindings/neural_prefill_native.mojo) hold no table
-    # key: only a pending restore needs one, read from the binding's own
-    # vendor and numeric-mode answers.
-    var key = NeuralEntryKey(-1, -1)
-    if Bool(py=py_get(fields, "_owned_restore_pending", PythonObject(False))):
-        var vendor = String(_native_function(mods, entries, "mamba_vendor")())
-        mods.released()
-        var code = Int(py=_native_function(mods, entries, "mamba_numeric_mode")())
-        mods.released()
-        key = NeuralEntryKey(code, neural_entry_vendor(vendor))
-    neural_mamba3_restore(mods, fields, entries, weights, key)
-
-
-def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
+def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: PythonObject,
+                          route: Mamba3StateRoute) raises:
     # Classical and other callers keep their per-call module checks.
     var mods = NativeModules()
-    neural_mamba3_restore(mods, fields, entries, weights)
+    neural_mamba3_restore(mods, fields, entries, weights, route)
 
 
 comptime _NEURAL_SNAPSHOT_SLOT = "neural_block_snapshot_v1"
@@ -1450,33 +1392,37 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
             floats.append(Float64(py=limit[0]))
             floats.append(Float64(py=limit[1]))
         if kind == "mamba3":
-            neural_mamba3_restore(mods, fields, entries, weights, table_key)
+            var route = Mamba3StateRoute(table_key.mode, table_key.vendor, table_key.vendor == 0)
+            neural_mamba3_restore(mods, fields, entries, weights, route)
             var generation = py_get(fields, "_owned_generation")
-            var session = _native_has_entry(mods, entries, "mamba3_prefill_session_backward") and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+            var session = ((mamba3_prefill_caps(train_entry) & MAMBA3_CAP_SESSION_PREFILL) != 0
+                and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1")
             if generation is not None:
                 var owned_addresses: List[Int] = [addresses[0]]
                 for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots
                     owned_addresses.append(addresses[i])
                 params.append(Int(py=generation))
+                var owner = fields["_prefill_session"]
                 comptime if _NEURAL_TABLE_ROUTE_OFF:
                     _ = py_call(_native_function(mods, entries, "mamba3_prefill_session_backward_owned"),
-                                fields["_prefill_session"], py_ints(owned_addresses), py_ints(params))
-                    mods.released()
+                                owner, py_ints(owned_addresses), py_ints(params))
                 else:
-                    _ = _neural_mamba_session_table(mods, train_entry, fields, entries, NEURAL_MAMBA3_OWNED_BACKWARD,
-                        owned_addresses, params)
+                    _ = mamba3_prefill_session_run(owner, NEURAL_MAMBA3_OWNED_BACKWARD, owned_addresses, params)
+                mods.released()
+                _ = owner^
             elif session:
-                if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
-                    py_setitem(fields, "_prefill_session", _native_function(mods, entries, "mamba3_prefill_session_create")())
-                    mods.released()
-                    py_setitem(fields, "_prefill_binding", entries.canonical)
+                # The block's session: a native registry handle of the training
+                # image (core/mamba3_prefill_session.mojo, lane
+                # mamba3-prefill-handle); the former Python entry
+                # mamba3_prefill_session_create and the _prefill_binding check.
+                var owner = mamba3_prefill_session_ensure(fields, train_entry)
                 comptime if _NEURAL_TABLE_ROUTE_OFF:
                     _ = py_call(_native_function(mods, entries, "mamba3_prefill_session_backward"),
-                                fields["_prefill_session"], py_ints(addresses), py_ints(params))
-                    mods.released()
+                                owner, py_ints(addresses), py_ints(params))
                 else:
-                    _ = _neural_mamba_session_table(mods, train_entry, fields, entries, NEURAL_MAMBA3_SESSION_BACKWARD,
-                        addresses, params)
+                    _ = mamba3_prefill_session_run(owner, NEURAL_MAMBA3_SESSION_BACKWARD, addresses, params)
+                mods.released()
+                _ = owner^
             else:
                 comptime if _NEURAL_TABLE_ROUTE_OFF:
                     _ = py_call(_native_function(mods, entries, name), py_ints(addresses), py_ints(params))

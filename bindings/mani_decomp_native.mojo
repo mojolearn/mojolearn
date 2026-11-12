@@ -32,7 +32,7 @@ from bindings.admitted_family import admit_family_meta
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
 from bindings.manifold_scalar_native import manifold_number
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from bindings.metrics_native_support import metric_warn
 from bindings.family_common import family_repr, family_str, family_is_str, family_is_int, family_type_name, family_field
 from bindings.mani_kit import mk_image, mk_fitted, mk_keep, mk_owner, mk_out, mk_out2, mk_finish, mk_seed_word
@@ -252,10 +252,11 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         var seed = _mani_seed(family_field(fields, "random_state"))
         var init_arg = args[3]
         var init = family_field(fields, "init")
-        # the admitted `init` array stays alive (`init_meta`) through the RUN
+        # the admitted `init` array's storage stays pinned (`init_pin`) through the RUN
+        var init_pin = ArrayPin()
         var init_meta = Optional[ArrayMetadata]()
         if not (init_arg is None):
-            init_meta = Optional(admit_family_meta(init_arg, 2, "init", context, True))
+            init_meta = Optional(admit_family_meta(init_arg, 2, "init", context, init_pin, True))
             plan.init = MDS_INIT_ARRAY
             plan.init_address = init_meta.value().source.addr
             plan.init_rows = init_meta.value().source.rows
@@ -274,7 +275,8 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         var got = Tuple[Int, Float64, Int](-1, 0.0, 0)
         with GILReleased(Python()):
             got = mds_fit_run(run, k, dis, plan)
-        _ = init_meta^  # the admitted init stays alive through the RUN above
+        _ = init_meta^
+        _ = init_pin^  # the door's pin held the init storage through the RUN above
         _ = x  # the admitted X stays alive through the RUNs above
         # PACK
         var dissimilarity = mk_out2(run, dis, context)

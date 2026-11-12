@@ -2037,6 +2037,98 @@ def _bound_amd_memory_manager():
         os.environ.setdefault("MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE", str(1 << 30))
 
 
+#: name -> (path, check_vendor): the binaries `select()` chose for the
+#: canonical names, loaded on their first import by `_CanonicalFinder` (lane
+#: lazy-family-import, 2026-11-12). Before, `select()` loaded every one of
+#: them at package import, so `import mojolearn` initialized every unit.
+_CANONICAL_PATHS = {}
+
+
+class _CanonicalLoader(importlib.machinery.ExtensionFileLoader):
+    """One selected binding under its canonical name, with the checks
+    `select()` used to run at import: the vendor read-back and, for a binding
+    that registers Mojo-owned Python types, the one-tier-per-process refusal."""
+
+    def __init__(self, fullname, path, check):
+        super().__init__(fullname, path)
+        self._check = check
+
+    def create_module(self, spec):
+        # The extension initializes (and registers its types) in
+        # create_module, so the one-tier refusal runs before it.
+        leaf = self.name.rpartition(".")[2]
+        if leaf in _TYPE_REGISTERING:
+            real = os.path.realpath(self.path)
+            for other in _MODE_CODE:  # glue: the two tier namespaces
+                loaded = sys.modules.get(f"mojolearn._sets.{other}.{leaf}")
+                path = vars(loaded).get("__file__") if loaded is not None else None
+                if path and os.path.realpath(path) != real:
+                    raise ImportError(
+                        f"mojolearn: {leaf} registers Mojo-owned Python types, so one "
+                        f"process can hold only one tier of it, and another tier is "
+                        f"already loaded ({path}). Use one numeric_mode per process "
+                        "for this binding.")
+        return super().create_module(spec)
+
+    def exec_module(self, module):
+        leaf = self.name.rpartition(".")[2]
+        _exec_binding(importlib.machinery.ExtensionFileLoader(self.name, self.path), module)
+        if self._check:
+            # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN.
+            _check_vendor(module, leaf, self.path)
+        # The process metadata connection reads only loaded units; tell it.
+        public = sys.modules.get(__name__.rsplit(".", 1)[0] + "._native_backend_public")
+        refresh = vars(public).get("refresh") if public is not None else None
+        if refresh is not None:
+            refresh()
+
+
+class _CanonicalFinder:
+    """First on sys.meta_path: serves `mojolearn.<binding>` from the file
+    `select()` chose, so a stale fast binary beside the package can never
+    answer under the identical name (DEVIATION 869)."""
+
+    def find_spec(self, fullname, path, target=None):
+        parent, _, leaf = fullname.rpartition(".")
+        if parent != __name__.rsplit(".", 1)[0]:
+            return None
+        chosen = _CANONICAL_PATHS.get(leaf)
+        if chosen is None:
+            return None
+        loader = _CanonicalLoader(fullname, chosen[0], chosen[1])
+        return importlib.util.spec_from_file_location(fullname, chosen[0], loader=loader)
+
+
+_CANONICAL_FINDER = _CanonicalFinder()
+
+
+def canonical_loaded(name):
+    """The canonical binding `name` if it is loaded, else None (never loads)."""
+    return sys.modules.get(__name__.rsplit(".", 1)[0] + "." + name)
+
+
+def load_everything():
+    """Load every binding the selector and both tier sets used to load at
+    package import. `python -m mojolearn verify` and the worker processes call
+    this (through `_families.load_all`) so they run on the same loaded set as
+    before lazy family import."""
+    pkg = __name__.rsplit(".", 1)[0]
+    for name in tuple(_CANONICAL_PATHS):  # glue: the fixed selected binding inventory
+        importlib.import_module(pkg + "." + name)
+    for mode in _MODE_CODE:  # glue: the two tiers, as the metadata connection loaded them
+        try:
+            tier = load_set(mode)
+        except Exception:  # noqa: BLE001 - an absent tier stays absent, as before
+            continue
+        for name in tuple(vars(tier)["_deferred"]):  # glue: fixed member inventory
+            if name in _TYPE_REGISTERING:
+                continue  # never loaded eagerly, before or now
+            try:
+                getattr(tier, name)
+            except (ImportError, AttributeError, RuntimeError):
+                pass  # the member refuses by name on use, as its eager load did
+
+
 def select():
     """Install the requested binary set under the canonical module names.
     Called once from `mojolearn/__init__.py` before any submodule imports a
@@ -2044,6 +2136,8 @@ def select():
     global _SELECTED
     if _SELECTED is not None:
         return _SELECTED
+    if _CANONICAL_FINDER not in sys.meta_path:  # glue: the import finders
+        sys.meta_path.insert(0, _CANONICAL_FINDER)
     _bound_amd_memory_manager()
     mode = requested_mode()
     pkg_dir = _pkg_dir()
@@ -2110,15 +2204,11 @@ def select():
             merged = _merged.merged_file(pkg_dir, name)
             if merged is not None:
                 # The release layout: no own file, the member is served by the
-                # directory's merged file (`_merged.py`). Loaded here under the
-                # canonical name, exactly as `from . import <name>` would load
-                # its own file; the vendor is read back lazily as above.
-                loader = importlib.machinery.ExtensionFileLoader(full, merged)
-                spec = importlib.util.spec_from_loader(full, loader, origin=merged)
-                module = importlib.util.module_from_spec(spec)
-                _exec_binding(loader, module)
-                sys.modules[full] = module
-                setattr(pkg, name, module)
+                # directory's merged file (`_merged.py`). Served under the
+                # canonical name on its first import (`_CanonicalFinder`),
+                # exactly as `from . import <name>` would load its own file;
+                # the vendor is read back lazily as above.
+                _CANONICAL_PATHS[name] = (merged, False)
                 continue
             module = _MissingUpperTier(
                 full, os.path.join(pkg_dir, name + ".so"),
@@ -2154,13 +2244,14 @@ def select():
             missing.append(name)
             module = _MissingUpperTier(full, path, _build_script(name), mode)
         else:
-            loader = importlib.machinery.ExtensionFileLoader(full, path)
-            spec = importlib.util.spec_from_loader(full, loader, origin=path)
-            module = importlib.util.module_from_spec(spec)
-            _exec_binding(loader, module)
-            # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN. Raises on
-            # a vendor mismatch; see the module docstring.
-            _check_vendor(module, name, path)
+            # LOADED ON FIRST IMPORT, NOT HERE (lane lazy-family-import,
+            # 2026-11-12). The path is fixed now, under the canonical name,
+            # ahead of every other finder (`_CanonicalFinder`), so the first
+            # `from . import <name>` loads exactly this file and reads its
+            # vendor back (`_check_vendor`, which raises on a mismatch) at
+            # that moment. A family that is never used never loads its unit.
+            _CANONICAL_PATHS[name] = (path, True)
+            continue
         sys.modules[full] = module
         setattr(pkg, name, module)
     if len(missing) == len(_MODULES):
@@ -2238,8 +2329,11 @@ class _ModeSet:
             pass
         path = self._deferred.pop(name, None)
         if path is not None:
-            self._modules[name] = _load_member(self.mode, name, path)
-            return self._modules[name]
+            module = _load_member(self.mode, name, path)
+            if name == "_mojolearn_gbdt":
+                _check_tier_mode(module, self.mode, path)
+            self._modules[name] = module
+            return module
         if not _offers(name, self.mode):
             raise ImportError(
                 f"mojolearn: {name} has no {self.mode!r} tier. "
@@ -2283,6 +2377,13 @@ def _load_member(mode, name, path):
     # Python types twice and aborts. Share only the same resolved file;
     # other tiers/vendors retain their separate loading and validation.
     canonical = sys.modules.get(f"mojolearn.{name}")
+    chosen = _CANONICAL_PATHS.get(name)
+    if (canonical is None and chosen is not None
+            and os.path.realpath(chosen[0]) == os.path.realpath(path)):
+        # The selected binary itself, not loaded yet: load it once, under its
+        # canonical name, and share it (a second initialization of the same
+        # file would register its Mojo-owned types twice and abort).
+        canonical = importlib.import_module(f"mojolearn.{name}")
     canonical_path = vars(canonical).get('__file__') if canonical is not None else None
     if canonical_path and os.path.realpath(canonical_path) == os.path.realpath(path):
         _check_vendor(canonical, name, path)
@@ -2351,10 +2452,13 @@ def load_set(mode):
         if not os.path.exists(path):
             missing.append(name)
             continue
-        if name in _TYPE_REGISTERING:
-            deferred[name] = path
-            continue
-        modules[name] = _load_member(mode, name, path)
+        # EVERY MEMBER LOADS ON FIRST USE (lane lazy-family-import,
+        # 2026-11-12), not only the type-registering ones: `_ModeSet`
+        # loads, vendor-checks and (for gbdt) mode-checks one member when
+        # it is first asked for. The native binding resolver reads only
+        # members that an import-time connection resolved through
+        # `binding()` (providers/python/estimator_binding_pyapi.mojo).
+        deferred[name] = path
     if not modules and not deferred:
         raise ImportError(
             f"mojolearn: numeric_mode={mode!r} but no binary for that tier "
@@ -2362,19 +2466,22 @@ def load_set(mode):
             f"{'' if mode == 'fast' else 'MOJOLEARN_NUMERIC_MODE=' + mode + ' '}"
             "bash bindings/build*.sh"
         )
-    # READ THE TIER BACK OUT OF THE BINARY, never trust the directory. A .so
-    # in the wrong folder is the one failure this whole file exists to catch,
-    # and it is cheaper to catch here than in a results table.
-    gb = modules.get("_mojolearn_gbdt")
-    if gb is not None and hasattr(gb, "gbdt_numeric_mode"):
+    _SETS[mode] = _ModeSet(mode, modules, missing, deferred)
+    return _SETS[mode]
+
+
+def _check_tier_mode(gb, mode, path):
+    """READ THE TIER BACK OUT OF THE BINARY, never trust the directory. A .so
+    in the wrong folder is the one failure this whole file exists to catch,
+    and it is cheaper to catch here than in a results table. Run when the
+    tier's gbdt member loads (it used to run when the whole tier loaded)."""
+    if hasattr(gb, "gbdt_numeric_mode"):
         compiled = _CODE_MODE.get(gb.gbdt_numeric_mode(), "unknown")
         if compiled != mode:
             raise RuntimeError(
-                f"mojolearn: {tier_dir_}/_mojolearn_gbdt.so was compiled "
+                f"mojolearn: {path} (_mojolearn_gbdt) was compiled "
                 f"{compiled} but sits in the {mode} directory; rebuild it"
             )
-    _SETS[mode] = _ModeSet(mode, modules, missing, deferred)
-    return _SETS[mode]
 
 
 #: The tier used when a call names none. Starts at whatever the environment

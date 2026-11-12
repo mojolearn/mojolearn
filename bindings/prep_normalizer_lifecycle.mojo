@@ -17,6 +17,7 @@ from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_run
 from bindings.parallel_public_result import parallel_public_result
 from bindings.prep_entry_cache import prep_mode_checked
 from providers.python.prep_transform_pyapi import prep_transform_snapshot, prep_transform_values
+from providers.python.array_metadata_pyapi import ArrayPin
 from core.shared_slot import SharedSlot
 
 
@@ -328,7 +329,8 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
         var option = _instance_setting(model, fields, settings, setting_names, k, PythonObject(None))
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
     var sparse = _truth(py_get(tags, "sparse", False))
-    var snapshot = prep_transform_snapshot(source, name, validate, scan, context, sparse, not nested)
+    var pin = ArrayPin()
+    var snapshot = prep_transform_snapshot(source, name, validate, scan, context, pin, sparse, not nested)
     var numeric = (snapshot.dtype_number >= 0 and snapshot.dtype_number <= 13) or snapshot.dtype_number == 23 or snapshot.dtype_number == -103
     if validate and numeric and not precomputed and len(snapshot.shape) == 2:
         if py_type(fitted) is b.int and Int(py=fitted) != snapshot.source.cols:
@@ -343,7 +345,7 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
         # Preserve the former missing-field error at its original stage.
         mode = fields["numeric_mode_"]
     var entries = _native_entries(mode, context)
-    var values = prep_transform_values(snapshot, context)
+    var values = prep_transform_values(snapshot, pin, context)
     var n = snapshot.source.rows
     var d = snapshot.source.cols
     if py_type(fitted) is not b.int or Int(py=fitted) != d:
@@ -355,4 +357,5 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
     var result = _normalizer_apply(values, n, d, _normalizer_norm(norm), entries, context)
     _ = values^
     _ = snapshot^
+    _ = pin
     return parallel_public_result(result, "transform", PythonObject(None), context)

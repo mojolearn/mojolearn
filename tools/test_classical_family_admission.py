@@ -100,7 +100,7 @@ def test_guard_keeps_none_passive_subclasses_and_native_dictionary_boundary():
 
 
 def test_connections_follow_installers_and_refresh_only_on_new_module_import():
-    source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    source = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
     assert source.index('_connect_family_layouts(') > source.index('_connect_declared_constructors(_declared_constructor_setters)')
     assert source.index('_connect_family_layouts(') < source.index('_connect_estimator_defaults()')
     lazy = (ROOT / 'python/mojolearn/_expansion_sequence.py').read_text()

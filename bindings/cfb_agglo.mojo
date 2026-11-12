@@ -16,7 +16,7 @@ from bindings.family_common import (
 )
 from bindings.mode_metadata_native import _fields
 from bindings.metrics_native_support import metric_warn
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_metadata_once, array_shape_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_metadata_once, array_shape_once
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding_mode
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit
@@ -121,9 +121,9 @@ def _fast_mst(n_cols: Int) raises -> Bool:
     return mode == "fast" and String(py=native_loaded_module("sys").platform) == "darwin" and n_cols <= 64
 
 
-def _agglo_legacy(fields: PythonObject, settings: AggloSettings, options: AggloOptions, bindings: AggloBindings, x_snapshot: ArrayMetadata, context: PythonObject) raises:
+def _agglo_legacy(fields: PythonObject, settings: AggloSettings, options: AggloOptions, bindings: AggloBindings, x_snapshot: ArrayMetadata, x_pin: ArrayPin, context: PythonObject) raises:
     """cuML's single-linkage Boruvka route (`_mojolearn_solver.linkage_fit`)."""
-    var x = x_snapshot.keep
+    var x = x_pin.keep
     var n_rows = x_snapshot.shape[0]
     var n_cols = x_snapshot.shape[1]
     # the platform rule reads the environment only past the dense bound
@@ -157,7 +157,7 @@ def _agglo_legacy(fields: PythonObject, settings: AggloSettings, options: AggloO
     _ = info  # native scratch remains live through both result reads
     agglo_publish(fields, "n_features_in_", PythonObject(n_cols), context)
     var predicting = options.prediction_data
-    var fit_x = _fit_copy(x_snapshot, context) if predicting else PythonObject(None)
+    var fit_x = _fit_copy(x_snapshot, x_pin, context) if predicting else PythonObject(None)
     agglo_publish(fields, "_fit_X", fit_x, context)
     _ = x^
     agglo_fresh_holder(fields)
@@ -165,23 +165,23 @@ def _agglo_legacy(fields: PythonObject, settings: AggloSettings, options: AggloO
         agglo_mint(fields, bindings.estimators, fit_x, labels, Int(py=classical_address(fit_x)), labels_address, n_rows, n_cols, context)
 
 
-def _fit_copy(snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+def _fit_copy(snapshot: ArrayMetadata, pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     # A cast-created buffer is owned already. Caller-owned float32 Arrays and
     # ndarrays still copy, so writes after fit cannot move prediction references.
     if snapshot.copied:
-        return snapshot.keep
+        return pin.keep
     var result = agglo_array(snapshot.shape, "<f4", context)
     unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
            src=FAMILY_F32P(unsafe_from_address=snapshot.source.addr), count=snapshot.count)
     return result
 
 
-def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOptions, bindings: AggloBindings, x_snapshot: ArrayMetadata, context: PythonObject) raises:
+def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOptions, bindings: AggloBindings, x_snapshot: ArrayMetadata, x_pin: ArrayPin, context: PythonObject) raises:
     """The x_cluster route (`x_cluster/agglo.mojo`, ENTRY_AGGLO): every
     linkage, metric, connectivity matrix and the per-merge distances, with
     scikit-learn's `_fit` bookkeeping around it."""
     var b = native_loaded_module("builtins")
-    var x = x_snapshot.keep
+    var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var d = x_snapshot.shape[1]
     agglo_check_tree_rows(n)
@@ -257,7 +257,7 @@ def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOption
     var fit_x = PythonObject(None)
     var predicting = agglo_x_predicts(options)
     if predicting:
-        fit_x = _fit_copy(x_snapshot, context)
+        fit_x = _fit_copy(x_snapshot, x_pin, context)
     agglo_publish(fields, "_fit_X", fit_x, context)
     _ = x^
     agglo_fresh_holder(fields)
@@ -274,7 +274,7 @@ def _predicts(settings: AggloSettings, context: PythonObject) raises -> Bool:
     return agglo_predicts(3, metric)
 
 
-def _agglo_fit(fields: PythonObject, settings: AggloSettings, bindings: AggloBindings, x: ArrayMetadata, context: PythonObject) raises:
+def _agglo_fit(fields: PythonObject, settings: AggloSettings, bindings: AggloBindings, x: ArrayMetadata, x_pin: ArrayPin, context: PythonObject) raises:
     """`AgglomerativeClustering.fit(X)`."""
     var b = native_loaded_module("builtins")
     var options = _agglo_validate(settings, context)
@@ -288,33 +288,37 @@ def _agglo_fit(fields: PythonObject, settings: AggloSettings, bindings: AggloBin
     options.prediction_data = Bool(py=prediction_data)
     # Keep both existing numerical owners and their unchanged route predicate.
     if options.solver_route():
-        _agglo_legacy(fields, settings, options, bindings, x, context)
+        _agglo_legacy(fields, settings, options, bindings, x, x_pin, context)
     else:
-        _agglo_x(fields, settings, options, bindings, x, context)
+        _agglo_x(fields, settings, options, bindings, x, x_pin, context)
 
 
 def _agglo_predict(fields: PythonObject, settings: AggloSettings, binding: PythonObject,
-                   query: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+                   query: ArrayMetadata, query_pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     if not _predicts(settings, context):
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: only single linkage under the euclidean metric has a predict rule (DEVIATION 2740)")
     var refs_source = py_get(fields, "_fit_X")
     if refs_source is None:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not stored. Fit with AgglomerativeClustering(prediction_data=True)")
-    var refs = admit_family_meta(refs_source, 2, "fitted reference rows", context)
+    var refs_pin = ArrayPin()
+    var refs = admit_family_meta(refs_source, 2, "fitted reference rows", context, refs_pin)
     agglo_check_reference_width(refs.shape[1], query.shape[1])
     var labels = classical_view(fields["labels_"], context, "labels_")
     var labels_shape = array_shape_once(labels, context)
     agglo_check_label_rank(len(labels_shape))
-    var labels_snapshot = array_metadata_once(labels, labels_shape^, "labels_", context)
+    var labels_pin = ArrayPin()
+    var labels_snapshot = array_metadata_once(labels, labels_shape^, "labels_", context, labels_pin)
     agglo_check_label_words(labels_snapshot.source.kind, labels_snapshot.source.itemsize, labels_snapshot.c_order,
                             labels_snapshot.count, refs.shape[0])
     # p3-neighbors-cluster: the resident record is keyed by the STORED field
     # objects (`_fit_X`, `labels_`), the ones fit minted it for; the per-call
     # snapshot and view objects were new every call, so it never hit.
-    var result = agglo_reference_labels(fields, binding, refs_source, fields["labels_"], query.keep, refs.source.addr, labels_snapshot.source.addr,
+    var result = agglo_reference_labels(fields, binding, refs_source, fields["labels_"], query_pin.keep, refs.source.addr, labels_snapshot.source.addr,
                                            query.source.addr, refs.shape[0], query.shape[0], query.shape[1], context)
     _ = refs^
     _ = labels_snapshot^
+    _ = refs_pin^  # the door's pins hold the fitted rows and labels through RUN
+    _ = labels_pin^
     return result
 
 
@@ -363,12 +367,12 @@ def cfb_agglo_operation(model: PythonObject, operation: String, args: PythonObje
             var solver = args[1] if explicit else estimator_binding(PythonObject(None), "_mojolearn_solver", context)
             var cluster = args[2] if explicit else estimator_binding_mode(call.settings.numeric_mode, "_mojolearn_x_cluster", context)
             var neighbors = xn_admit(args[3] if explicit else estimator_binding_mode(call.settings.numeric_mode, "_mojolearn_x_neighbors", context))
-            agglo_publish(call.fields, "input_copied_", PythonObject(not (call.x.keep is call.source)), context)
+            agglo_publish(call.fields, "input_copied_", PythonObject(not (call.x_pin.keep is call.source)), context)
             var bindings = AggloBindings(estimators, solver, cluster, neighbors)
-            _agglo_fit(call.fields, call.settings, bindings, call.x, context)
+            _agglo_fit(call.fields, call.settings, bindings, call.x, call.x_pin, context)
             result = call.fields["labels_"] if operation == "family_cfb_agglo_fit_predict" else model
         else:
-            result = _agglo_predict(call.fields, call.settings, estimators, call.x, context)
+            result = _agglo_predict(call.fields, call.settings, estimators, call.x, call.x_pin, context)
     except error:
         var refused = hierarchy_public_refusal(error, call, model)
         raise refused^

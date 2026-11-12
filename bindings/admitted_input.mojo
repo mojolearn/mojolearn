@@ -890,19 +890,19 @@ def admit_weights(source: PythonObject, rows: Int, context: PythonObject,
 # ... any Array typestr) or in the dtype it already has (metrics, linalg ops,
 # low-bit weights, resampling):
 #
-#   AdmittedTyped(value, context, admitted)
+#   admitted_typed_once(value, context, mut hold, admitted) -> TensorView
 #                     metadata once: a mojolearn Array read off its
 #                     import-pinned slots (its storage owners retained), any
 #                     other native exporter pinned through one
 #                     PyObject_GetBuffer (AdmittedBorrowedBuffer) for the call
-#   admitted_typed_c(var input, typestr, name, context, force_copy) -> AdmittedBuf
+#   admitted_typed_c(view, var hold, typestr, name, context, force_copy) -> AdmittedBuf
 #                     borrow when the dtype and C order already match
 #                     (zero copy; a foreign exporter becomes a pinned Array
 #                     over the same memory), else ONE conversion into a new
 #                     C-order store, split across the host's cores
 #                     (core/admitted_convert.mojo: typed loads, Array.astype's
 #                     rules, the first failing element's refusal)
-#   admitted_typed_output(var input) -> AdmittedBuf
+#   admitted_typed_output(view, var hold) -> AdmittedBuf
 #                     a caller-supplied output, pinned for the call
 #   admit_typed(source, typestr, ndim, name, context, admitted) -> AdmittedBuf
 #                     the three above for one argument with the rank and
@@ -1074,78 +1074,94 @@ def admitted_typed_exporter(value: PythonObject, context: PythonObject, depth: I
     admit_native_buffer_exporter(value)
 
 
-struct AdmittedTyped(Movable):
-    # One operation-local metadata capture. Exact native exporter admission
-    # precedes PyObject_GetBuffer; the pin lives through the numerical call.
+struct AdmittedTypedPin(Movable):
+    """The door-side pin of one `admitted_typed_once` capture: `keep` is the
+    admitted object, `pin` the exported Py_buffer of a foreign exporter, and
+    `owner` the Array's storage owners read once off its slots. RUN code
+    never sees it: it reads the typed `TensorView` the capture returned. The
+    door holds the pin for the whole call and names it again (`_ = pin^`)
+    after the last read of the view's address."""
+    # Lane entangled-array-owner-2 (2026-11-12): the former `AdmittedTyped`
+    # (keep, view, pin, owner in one struct) split into this pin and the
+    # Python-free TensorView (bindings/tensor_view.mojo), the same out-pin
+    # shape as ArrayPin / ArrayMetadata.
     var keep: PythonObject
-    var view: TensorView
     var pin: Optional[AdmittedBorrowedBuffer]
     var owner: PythonObject
 
-    def __init__(out self, value: PythonObject, context: PythonObject, admitted: Bool = False) raises:
-        # `admitted`: the caller ran classical_admit_value over this very
-        # value in the same call (admit_typed, row N237).
-        if not admitted:
-            classical_admit_value(value, context)
-        self.keep = value
-        var view = TensorView()
+    def __init__(out self):
+        self.keep = PythonObject(None)
         self.pin = None
         self.owner = PythonObject(None)
-        if classical_is_array(value, context):
-            var slots = context["array_fields"]
-            var cls = context["array_class"]
-            # Keep the admitted storage owners themselves, so replacement of
-            # the input Array's slots while native code releases the GIL cannot
-            # free the captured address. Each slot is read once through its
-            # import-pinned native descriptor rather than a mutable class hook.
-            self.owner = array_owner_once(value, context)
-            var address = py_call(slots["_addr"], value, cls)
-            var item = py_call(slots["itemsize"], value, cls)
-            var readonly = py_call(slots["_readonly"], value, cls)
-            var dtype = py_call(slots["dtype"], value, cls)
-            var shape = py_call(slots["shape"], value, cls)
-            var strides = py_call(slots["strides"], value, cls)
-            if (py_type(address) is not py_type(PythonObject(0)) or py_type(item) is not py_type(PythonObject(0))
-                or py_type(readonly) is not py_type(PythonObject(True)) or py_type(dtype) is not py_type(PythonObject(""))
-                or py_type(shape) is not py_type(Python.tuple()) or py_type(strides) is not py_type(Python.tuple())):
-                raise Error("TypeError: Array metadata must contain native integer, boolean, string and tuple values")
-            if len(shape) != len(strides):
-                raise Error("TypeError: Array shape and stride ranks differ")
-            view.is_array = True
-            view.addr = Int(py=address)
-            view.itemsize = Int(py=item)
-            view.readonly = Bool(py=readonly)
-            view.dtype = String(py=dtype)
-            view.fmt = _array_code(view.dtype)
-            for axis in range(len(shape)):  # small-loop(Array rank metadata admitted once)
-                if py_type(shape[axis]) is not py_type(PythonObject(0)) or py_type(strides[axis]) is not py_type(PythonObject(0)):
-                    raise Error("TypeError: Array dimensions and strides must be native integers")
-                view.shape.append(Int(py=shape[axis]))
-                view.strides.append(Int(py=strides[axis]))
-            view.nbytes = view.count() * view.itemsize
-            view.has_strides = True
-            view.c_contig = _contiguous(view.shape, view.strides, True, view.itemsize)
-            self.view = view^
-            return
-        admitted_typed_exporter(value, context)
-        self.pin = AdmittedBorrowedBuffer(value)
-        ref layout = self.pin.value().layout.value()
-        view.addr = layout.address
-        view.itemsize = layout.itemsize
-        view.readonly = layout.readonly
-        view.nbytes = layout.count * layout.itemsize
-        view.shape = layout.shape.copy()
-        view.strides = layout.strides.copy()
-        view.has_strides = True
-        view.fmt = self.pin.value().format
-        if view.fmt.startswith(">") or view.fmt.startswith("!"):
-            raise Error("TypeError: mojolearn: big-endian buffers are not supported")
-        view.c_contig = _contiguous(view.shape, view.strides, True, layout.itemsize)
-        for axis in range(len(layout.suboffsets)):  # small-loop(buffer rank)
-            if layout.suboffsets[axis] >= 0:
-                raise Error("TypeError: mojolearn: indirect buffers are not supported")
 
-        self.view = view^
+
+def admitted_typed_once(value: PythonObject, context: PythonObject, mut hold: AdmittedTypedPin,
+                        admitted: Bool = False) raises -> TensorView:
+    """One operation-local metadata capture: the typed view RUN reads, with
+    its owners stored in the door's `hold`. Exact native exporter admission
+    precedes PyObject_GetBuffer; the pin lives through the numerical call."""
+    # `admitted`: the caller ran classical_admit_value over this very
+    # value in the same call (admit_typed, row N237).
+    if not admitted:
+        classical_admit_value(value, context)
+    hold.keep = value
+    var view = TensorView()
+    hold.pin = None
+    hold.owner = PythonObject(None)
+    if classical_is_array(value, context):
+        var slots = context["array_fields"]
+        var cls = context["array_class"]
+        # Keep the admitted storage owners themselves, so replacement of
+        # the input Array's slots while native code releases the GIL cannot
+        # free the captured address. Each slot is read once through its
+        # import-pinned native descriptor rather than a mutable class hook.
+        hold.owner = array_owner_once(value, context)
+        var address = py_call(slots["_addr"], value, cls)
+        var item = py_call(slots["itemsize"], value, cls)
+        var readonly = py_call(slots["_readonly"], value, cls)
+        var dtype = py_call(slots["dtype"], value, cls)
+        var shape = py_call(slots["shape"], value, cls)
+        var strides = py_call(slots["strides"], value, cls)
+        if (py_type(address) is not py_type(PythonObject(0)) or py_type(item) is not py_type(PythonObject(0))
+            or py_type(readonly) is not py_type(PythonObject(True)) or py_type(dtype) is not py_type(PythonObject(""))
+            or py_type(shape) is not py_type(Python.tuple()) or py_type(strides) is not py_type(Python.tuple())):
+            raise Error("TypeError: Array metadata must contain native integer, boolean, string and tuple values")
+        if len(shape) != len(strides):
+            raise Error("TypeError: Array shape and stride ranks differ")
+        view.is_array = True
+        view.addr = Int(py=address)
+        view.itemsize = Int(py=item)
+        view.readonly = Bool(py=readonly)
+        view.dtype = String(py=dtype)
+        view.fmt = _array_code(view.dtype)
+        for axis in range(len(shape)):  # small-loop(Array rank metadata admitted once)
+            if py_type(shape[axis]) is not py_type(PythonObject(0)) or py_type(strides[axis]) is not py_type(PythonObject(0)):
+                raise Error("TypeError: Array dimensions and strides must be native integers")
+            view.shape.append(Int(py=shape[axis]))
+            view.strides.append(Int(py=strides[axis]))
+        view.nbytes = view.count() * view.itemsize
+        view.has_strides = True
+        view.c_contig = _contiguous(view.shape, view.strides, True, view.itemsize)
+        return view^
+    admitted_typed_exporter(value, context)
+    hold.pin = AdmittedBorrowedBuffer(value)
+    ref layout = hold.pin.value().layout.value()
+    view.addr = layout.address
+    view.itemsize = layout.itemsize
+    view.readonly = layout.readonly
+    view.nbytes = layout.count * layout.itemsize
+    view.shape = layout.shape.copy()
+    view.strides = layout.strides.copy()
+    view.has_strides = True
+    view.fmt = hold.pin.value().format
+    if view.fmt.startswith(">") or view.fmt.startswith("!"):
+        raise Error("TypeError: mojolearn: big-endian buffers are not supported")
+    view.c_contig = _contiguous(view.shape, view.strides, True, layout.itemsize)
+    for axis in range(len(layout.suboffsets)):  # small-loop(buffer rank)
+        if layout.suboffsets[axis] >= 0:
+            raise Error("TypeError: mojolearn: indirect buffers are not supported")
+
+    return view^
 
 
 # One Python type per numeric mode: a process may load both builds of a binding.
@@ -1181,11 +1197,10 @@ def register_admitted_buffer_pin(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_AdmittedBufferPin", existing)
 
 
-def _typed_borrow_array(var input: AdmittedTyped, typestr: String, context: PythonObject) raises -> AdmittedBuf:
+def _typed_borrow_array(v: TensorView, var input: AdmittedTypedPin, typestr: String, context: PythonObject) raises -> AdmittedBuf:
     # Array.from_buffer's zero-copy ownership semantics from metadata already
     # admitted once. The public CPython raw-memory view does not ask the exporter
     # for its metadata again; the owned pin keeps storage valid for its lifetime.
-    var v = input.view.copy()
     var array = native_storage_allocate(context["array_class"])
     var held_pin = Optional[AdmittedBorrowedBuffer]()
     swap(held_pin, input.pin)
@@ -1220,36 +1235,36 @@ def _typed_borrow_array(var input: AdmittedTyped, typestr: String, context: Pyth
     return AdmittedBuf(array, v.addr, v.shape.copy())
 
 
-def admitted_typed_c(var input: AdmittedTyped, typestr: String, name: String,
+def admitted_typed_c(view: TensorView, var input: AdmittedTypedPin, typestr: String, name: String,
                      context: PythonObject, force_copy: Bool = False) raises -> AdmittedBuf:
     """The admitted input as C-order `typestr` words: borrowed when it
     already is (an Array as it is, a foreign exporter as a pinned Array over
     the same memory), else one parallel conversion into a new Array.
     `force_copy`: always the converted copy (an operation-private input)."""
     var item = 0
-    var kind = _typed_kind(input.view, item)
+    var kind = _typed_kind(view, item)
     var target_item = 0
     var target_kind = _typed_target(typestr, target_item)
-    if not force_copy and kind == target_kind and item == target_item and input.view.c_contig:
-        if input.view.is_array:
+    if not force_copy and kind == target_kind and item == target_item and view.c_contig:
+        if view.is_array:
             var held_pin = Optional[AdmittedBorrowedBuffer]()
             swap(held_pin, input.pin)
-            return AdmittedBuf(input.keep, input.view.addr, input.view.shape.copy(), held_pin^, input.owner)
-        return _typed_borrow_array(input^, typestr, context)
+            return AdmittedBuf(input.keep, view.addr, view.shape.copy(), held_pin^, input.owner)
+        return _typed_borrow_array(view, input^, typestr, context)
     # Every cell is written by the conversion; Array stores have no
     # uninitialised constructor, so the destination is the zeroed Array.
-    var result = admitted_zeros(input.view.shape, typestr, context)
-    admitted_typed_convert(input.view, typestr, result.addr, name)
+    var result = admitted_zeros(view.shape, typestr, context)
+    admitted_typed_convert(view, typestr, result.addr, name)
     _ = input^
     return result^
 
 
-def admitted_typed_output(var input: AdmittedTyped) -> AdmittedBuf:
+def admitted_typed_output(view: TensorView, var input: AdmittedTypedPin) -> AdmittedBuf:
     # Preserve the supplied output object's identity while its native buffer
     # export and Array storage owners stay pinned through the complete call.
     var pin = Optional[AdmittedBorrowedBuffer]()
     swap(pin, input.pin)
-    return AdmittedBuf(input.keep, input.view.addr, input.view.shape.copy(), pin^, input.owner)
+    return AdmittedBuf(input.keep, view.addr, view.shape.copy(), pin^, input.owner)
 
 
 def admit_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
@@ -1261,7 +1276,7 @@ def admit_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
     # no arbitrary Python conversion or buffer hook is a fallback here.
     # `admitted`: the family door already ran classical_admit_value over this
     # very argument. Row N237: the value is admitted once here (or by the
-    # door), not again by classical_view and AdmittedTyped; a view that
+    # door), not again by classical_view and admitted_typed_once; a view that
     # classical_view materialized is a new object and is still admitted.
     if not admitted:
         classical_admit_value(source, context)
@@ -1271,25 +1286,27 @@ def admit_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
             admitted_typed_exporter(source, context)
         except:
             prepared = classical_view(source, context, name, True)
-    var input = AdmittedTyped(prepared, context, prepared is source)
-    var nd = len(input.view.shape)
+    var hold = AdmittedTypedPin()
+    var input = admitted_typed_once(prepared, context, hold, prepared is source)
+    var nd = len(input.shape)
     if ndim >= 0 and nd != ndim:
         var hint = String("")
         if ndim == 2 and nd < 2:
             hint = ". " + String(RESHAPE_HINT)
         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
-                    + "-D shape " + shape_text(input.view.shape) + hint)
-    if input.view.count() == 0:
+                    + "-D shape " + shape_text(input.shape) + hint)
+    if input.count() == 0:
         var what = String("sample(s)")
-        if nd == 2 and input.view.shape[0] != 0:
+        if nd == 2 and input.shape[0] != 0:
             what = "feature(s)"
-        var shape = shape_text(input.view.shape)
+        var shape = shape_text(input.shape)
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
                     + " (shape=" + shape + ") while a minimum of 1 is required.")
-    return admitted_typed_c(input^, typestr, name, context)
+    return admitted_typed_c(input, hold^, typestr, name, context)
 
 
-def admit_view(source: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> AdmittedTyped:
+def admit_view(source: PythonObject, name: String, context: PythonObject, mut hold: AdmittedTypedPin,
+               admitted: Bool = False) raises -> TensorView:
     """One argument's capture at its own dtype, no conversion: the metadata
     (address, shape, byte strides, item size, format) and the pinned owners
     `admit_typed` reads, for a caller that casts the words itself
@@ -1307,7 +1324,7 @@ def admit_view(source: PythonObject, name: String, context: PythonObject, admitt
             admitted_typed_exporter(source, context)
         except:
             prepared = classical_view(source, context, name, True)
-    return AdmittedTyped(prepared, context, prepared is source)
+    return admitted_typed_once(prepared, context, hold, prepared is source)
 
 
 def admitted_view_kind(v: TensorView, name: String) raises -> Tuple[Int, Int]:
@@ -1382,7 +1399,7 @@ def _snapshot_array_alias(value: PythonObject, context: PythonObject) raises -> 
 def admitted_snapshot(value: PythonObject, memo: PythonObject,
                       context: PythonObject, depth: Int = 0) raises -> PythonObject:
     """An operation-private snapshot of a metric argument: an Array through
-    AdmittedTyped (a C-order one aliased with its storage owners retained, a
+    admitted_typed_once (a C-order one aliased with its storage owners retained, a
     strided one copied in its own dtype), array.array / bytearray / ndarray
     copied or viewed natively, containers walked with their aliases (`memo`)
     and scalar leaf dtypes kept."""
@@ -1403,19 +1420,20 @@ def admitted_snapshot(value: PythonObject, memo: PythonObject,
         return known
     var result = PythonObject(None)
     if array:
-        var input = AdmittedTyped(value, context)
-        if input.view.c_contig:
+        var hold = AdmittedTypedPin()
+        var input = admitted_typed_once(value, context, hold)
+        if input.c_contig:
             # Metrics only read their inputs. A private Array that shares the
             # admitted storage owners freezes the metadata (a caller replacing
             # its slots cannot change what later readers see, and the owners
             # keep the address alive); the data itself is not copied.
-            _ = input^
+            _ = hold^
             result = _snapshot_array_alias(value, context)
         else:
-            var dtype = input.view.dtype
+            var dtype = input.dtype
             # Copy the same dtype, with the original pin/slot owners retained until
             # copying finishes. Later readers see this private Array's metadata.
-            var output = admitted_typed_c(input^, dtype, "metric input", context, True)
+            var output = admitted_typed_c(input, hold^, dtype, "metric input", context, True)
             result = output.keep
             _ = output^
     elif native_array:

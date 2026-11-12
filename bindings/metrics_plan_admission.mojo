@@ -42,13 +42,5 @@ struct MetricPlanOpcodes(Movable):
         return self.codes[name]
 
 
-struct MetricArenaOwner(Copyable, Movable):
-    # Private completed program storage. The runner already admitted/allocated
-    # this owner and captured its base. No caller can resize it before reads;
-    # public outputs copy their result spans into separately owned arrays.
-    var store: PythonObject
-    var base: Int
-
-    def __init__(out self, store: PythonObject, base: Int):
-        self.store = store
-        self.base = base
+# MetricArenaOwner moved to bindings/arena_prog_run.mojo (native arena, no Python store; lane
+# entangled-programs, 2026-11-12).

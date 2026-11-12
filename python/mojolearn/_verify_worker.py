@@ -20,6 +20,12 @@ import sys
 import tempfile
 import time
 
+# Lazy family import (lane lazy-family-import): a worker runs on the loaded
+# set the package had before it, every family and unit, as its parent may hand
+# it any of them.
+from . import _families as _verify_families
+_verify_families.load_all()
+
 
 class WorkerFailure(RuntimeError):
     pass

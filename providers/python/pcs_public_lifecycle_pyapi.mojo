@@ -18,7 +18,7 @@ from core.host_finite_scan import host_all_finite_f32_strided
 from bindings.native_numpy_metadata import native_numpy_dtype
 from core.native_scalar_decode import native_scalar_real
 from core.cast_in import CAST_KIND_FLOAT
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.radius_public_lifecycle_pyapi import radius_target
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_feature_check
@@ -28,13 +28,16 @@ struct PCSPublicCall(Movable):
     var call: NeighborPublicCall
     var settings: PythonObject
     var x: ArrayMetadata
+    # The door's pin of `x`: held by this call record until the operation ends.
+    var x_pin: ArrayPin
     var target_owner: PythonObject
 
     def __init__(out self, var call: NeighborPublicCall, settings: PythonObject,
-                 var x: ArrayMetadata, target_owner: PythonObject):
+                 var x: ArrayMetadata, var x_pin: ArrayPin, target_owner: PythonObject):
         self.call = call^
         self.settings = settings
         self.x = x^
+        self.x_pin = x_pin^
         self.target_owner = target_owner
 
 
@@ -166,9 +169,10 @@ def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
         var learned = Python.tuple("indexHash_", "bitHash_", "n_features_in_")
         for i in range(len(learned)):  # small-loop(three fitted sketch input owners)
             py_setitem(settings, learned[i], _lookup(model, learned[i], fields, plan, attributes))
-    var x = admit_family_input(args[1], 2, "X", context, True)
+    var x_pin = ArrayPin()
+    var x = admit_family_input(args[1], 2, "X", context, x_pin, True)
     _pcs_check_finite(args[1], x, context)
-    admit_family_cast(x, "X", context)
+    admit_family_cast(x, x_pin, "X", context)
     var target = PythonObject(None)
     if Int(py=depth) == 0:
         if fitting:
@@ -180,7 +184,7 @@ def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
             estimator_feature_check(model, fields, args[1], context)
     var previous = estimator_fit_begin(fields) if fitting else Int(py=depth)
     var call = NeighborPublicCall(args, fields, args[1], method, fitting, estimator_outside(), previous, x.shape[0], x.shape[1])
-    return PCSPublicCall(call^, settings, x^, target)
+    return PCSPublicCall(call^, settings, x^, x_pin^, target)
 
 
 def pcs_feature_names(model: PythonObject, context: PythonObject) raises -> PythonObject:

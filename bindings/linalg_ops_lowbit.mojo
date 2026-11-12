@@ -21,7 +21,7 @@ from bindings.tensor_view import TensorView, shape_text
 from bindings.linalg_ops_buffers import lin_truth, lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.linalg_ops_lowbit_run import lin_op_code
-from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
+from bindings.admitted_input import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
 
 comptime OP_NN = 0
 comptime OP_NT = 1
@@ -234,16 +234,17 @@ def lin_operand(x: PythonObject, name: String, context: PythonObject, admitted: 
     in C order (a layout copy at most, never a cast)."""
     # `admitted`: the family door already admitted this very argument (row
     # N237: lin_lowbit_operation and lin_decomp_operation admit every
-    # operand before dispatch), so AdmittedTyped does not admit it again.
-    var input = AdmittedTyped(x, context, admitted)
-    return _lin_operand_admitted(input^, name, context)
+    # operand before dispatch), so admitted_typed_once does not admit it again.
+    var input_pin = AdmittedTypedPin()
+    var input = admitted_typed_once(x, context, input_pin, admitted)
+    return _lin_operand_admitted(input, input_pin^, name, context)
 
 
-def _lin_operand_admitted(var input: AdmittedTyped, name: String, context: PythonObject) raises -> AdmittedBuf:
+def _lin_operand_admitted(input: TensorView, var input_pin: AdmittedTypedPin, name: String, context: PythonObject) raises -> AdmittedBuf:
     var profile = lin_text(context, "PROFILE")
-    var v = input.view.copy()
+    var v = input.copy()
     if not lin_is_f32(v):
-        raise Error("TypeError: mojolearn.linalg: " + name + " has dtype " + lin_dtype_name(input.keep, v) + ", and "
+        raise Error("TypeError: mojolearn.linalg: " + name + " has dtype " + lin_dtype_name(input_pin.keep, v) + ", and "
                     + "only float32 is in this profile (" + profile + "; contract section 1 "
                     + "makes FP32 a hard requirement, and section 0.5 excludes FP16, "
                     + "BF16, TF32 and float64). Refused rather than cast, because a "
@@ -261,19 +262,20 @@ def _lin_operand_admitted(var input: AdmittedTyped, name: String, context: Pytho
                     + "but no gate in this tree has run them through the Python "
                     + "surface, so they are refused here rather than answered "
                     + "unchecked.")
-    return admitted_typed_c(input^, "<f4", name, context)
+    return admitted_typed_c(input, input_pin^, "<f4", name, context)
 
 
 def lin_operand_bits(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> AdmittedBuf:
     """`_operand_bits(x, name)`: a 2-D uint16 buffer of bf16 bits in C order."""
     # `admitted`: as lin_operand (row N237).
-    var input = AdmittedTyped(x, context, admitted)
-    return _lin_bits_admitted(input^, name, context)
+    var input_pin = AdmittedTypedPin()
+    var input = admitted_typed_once(x, context, input_pin, admitted)
+    return _lin_bits_admitted(input, input_pin^, name, context)
 
 
-def _lin_bits_admitted(var input: AdmittedTyped, name: String, context: PythonObject) raises -> AdmittedBuf:
-    var v = input.view.copy()
-    var dtype = lin_dtype_name(input.keep, v)
+def _lin_bits_admitted(input: TensorView, var input_pin: AdmittedTypedPin, name: String, context: PythonObject) raises -> AdmittedBuf:
+    var v = input.copy()
+    var dtype = lin_dtype_name(input_pin.keep, v)
     if dtype != "uint16":
         raise Error("TypeError: mojolearn.linalg: " + name + " has dtype " + dtype + "; the "
                     + "bf16 profile takes bf16 BITS in a uint16 buffer, which "
@@ -282,15 +284,16 @@ def _lin_bits_admitted(var input: AdmittedTyped, name: String, context: PythonOb
         raise Error("mojolearn.linalg: " + name + " must be 2-D, got " + String(len(v.shape)) + "-D")
     if v.count() == 0:
         raise Error("mojolearn.linalg: " + name + " has no elements")
-    return admitted_typed_c(input^, "<u2", name, context)
+    return admitted_typed_c(input, input_pin^, "<u2", name, context)
 
 
 def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> AdmittedBuf:
     """`_out_or_new(out, m, n, who)`."""
     if out_buf is None:
         return admitted_zeros([m, n], "<f4", context)
-    var input = AdmittedTyped(out_buf, context)
-    var v = input.view.copy()
+    var input_pin = AdmittedTypedPin()
+    var input = admitted_typed_once(out_buf, context, input_pin)
+    var v = input.copy()
     if not lin_is_f32(v):
         raise Error("TypeError: mojolearn.linalg." + who + ": out must be float32")
     if len(v.shape) != 2 or v.shape[0] != m or v.shape[1] != n:
@@ -298,7 +301,7 @@ def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonO
                     + String(m) + ", " + String(n) + ")")
     if not v.c_contig or v.readonly:
         raise Error("mojolearn.linalg." + who + ": out must be C-contiguous and writable")
-    return admitted_typed_output(input^)
+    return admitted_typed_output(input, input_pin^)
 
 
 # ---------------------------------------------------------------------------
@@ -342,8 +345,9 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
     if out_obj is None:
         out = admitted_zeros([m, n], "<f4", context)
     else:
-        var output = AdmittedTyped(out_obj, context)
-        var v = output.view.copy()
+        var output_pin = AdmittedTypedPin()
+        var output = admitted_typed_once(out_obj, context, output_pin)
+        var v = output.copy()
         if not lin_is_f32(v):
             raise Error("TypeError: mojolearn.linalg.matmul: out has dtype " + lin_dtype_name(out_obj, v)
                         + ", and the profile's output is float32 (contract section 1). Refused rather than cast on "
@@ -362,7 +366,7 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
                         + "write to it; the device writes `out` directly (contract "
                         + "section 2) and a read-only buffer handed to it is memory "
                         + "corruption, not an exception.")
-        out = admitted_typed_output(output^)
+        out = admitted_typed_output(output, output_pin^)
         _ = v  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_linalg.mojo::gemm_binding: the output
     # address first, then a and b; params (m, n, k, op).
@@ -540,9 +544,10 @@ def _lin_op_and_shape(a: AdmittedBuf, bb: AdmittedBuf, transpose_a: PythonObject
 
 def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var binding = args[0]
-    var input = AdmittedTyped(args[1], context)
-    var a_bits = lin_dtype_name(input.keep, input.view) == "uint16"
-    var a = _lin_bits_admitted(input^, "a", context) if a_bits else _lin_operand_admitted(input^, "a", context)
+    var input_pin = AdmittedTypedPin()
+    var input = admitted_typed_once(args[1], context, input_pin)
+    var a_bits = lin_dtype_name(input_pin.keep, input) == "uint16"
+    var a = _lin_bits_admitted(input, input_pin^, "a", context) if a_bits else _lin_operand_admitted(input, input_pin^, "a", context)
     var bb = lin_operand_bits(args[2], "b", context, True)
     var op = 0
     var m = 0

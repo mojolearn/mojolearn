@@ -1910,7 +1910,7 @@ FAMILIES = (
             "transformer_forward", "transformer_decode_step", "transformer_forward_int15",
             "mamba1_forward", "mamba1_decode_step",
             "mamba2_forward", "mamba2_decode_step",
-            "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
+            "mamba3_forward_fresh",
             "embedding_forward", "rms_norm_forward", "linear_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "neural_arithmetic_profile",
@@ -3145,17 +3145,17 @@ FAMILIES = (
             "mamba_host_sabotage", "mamba_vendor", "mamba_numeric_mode",
             "mamba1_forward", "mamba1_backward", "mamba1_decode_step",
             "mamba2_forward", "mamba2_decode_step", "mamba2_backward",
-            "mamba3_forward", "mamba3_forward_fresh", "mamba3_decode_step",
+            "mamba3_forward_fresh",
             "mamba3_backward",
-            # the carried-state forward on the owned snapshot (lane migrate-neural-2)
-            "mamba3_state_owned",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "mamba1_profile", "mamba3_owned_weights_enabled", "mamba3_prefill_session_create",
-            "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_info", "mamba3_prefill_session_close",
-            "mamba3_prefill_session_install_weights", "mamba3_prefill_session_forward_owned", "mamba3_prefill_session_backward_owned",
-            "mamba3_prefill_session_export_weights", "mamba3_forward_tape_enabled",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source.
+            # The owned prefill session is a native registry handle (lane
+            # mamba3-prefill-handle, 2026-11-12); only the verify's owned-weights
+            # answer and the two B-arm entries remain.
+            "mamba1_profile", "mamba3_owned_weights_enabled",
+            "mamba3_prefill_session_install_weights", "mamba3_prefill_session_backward_owned",
+            "mamba3_forward_tape_enabled",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
-            "mamba_block_api_v1", "mamba_prefill_native_handle_v1", "mamba_state_api_v1",
+            "mamba_block_api_v1", "mamba_state_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise

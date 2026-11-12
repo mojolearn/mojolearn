@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_contains
 from bindings.classical_validate import classical_view
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.pca_exact_impl import pca_check_state
 
 
@@ -14,14 +14,14 @@ from core.pca_exact_impl import pca_check_state
 
 
 def pca_state_snapshot(fields: PythonObject, name: String, expected: List[Int],
-                       context: PythonObject, finite: Bool = False,
+                       context: PythonObject, mut pin: ArrayPin, finite: Bool = False,
                        nonnegative: Bool = False) raises -> ArrayMetadata:
     if not py_contains(fields, name):
         raise Error("PCA fitted state is missing " + name)
     var source = fields[name]
     var view = classical_view(source, context, name)
     var shape = array_shape_once(view, context)
-    var captured = array_metadata_once(view, shape^, name, context,
+    var captured = array_metadata_once(view, shape^, name, context, pin,
                                       allow_non_native=True, allow_unsupported=True)
     var same_shape = len(captured.shape) == len(expected)
     if same_shape:
@@ -31,7 +31,7 @@ def pca_state_snapshot(fields: PythonObject, name: String, expected: List[Int],
     # contract requires the supplied fitted arrays themselves to be C f32.
     if not same_shape or not captured.castable or not captured.native_byte_order or not captured.f32_c():
         raise Error("PCA requires C-order float32 " + name + " with the fitted shape")
-    captured.owner = Python.tuple(source, captured.owner)
+    pin.owner = Python.tuple(source, pin.owner)
     if finite or nonnegative:
         pca_check_state(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=captured.source.addr),
                         captured.count, name, finite, nonnegative)

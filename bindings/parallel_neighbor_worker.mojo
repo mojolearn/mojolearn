@@ -14,6 +14,7 @@ from bindings.admitted_input import admit_ids
 from bindings.family_common import family_call, family_entry, family_array
 from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype, shard_item, shard_array
 from bindings.host_archive_native import host_archive_rbc_metric_object
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.neighbors_knn_native import (
     _nn_fit, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
     _clf_predict, _clf_predict_proba, _reg_predict, knn_door, _reduce,
@@ -87,7 +88,8 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     # dispatch address. In particular Jensen-Shannon must not recapture the
     # same converted Array merely to read its minimum. No metadata is cached
     # across public calls or shard requests; mutable/released inputs re-admit.
-    var query = knn_admit_x(source, model, context)
+    var query_pin = ArrayPin()
+    var query = knn_admit_x(source, model, context, query_pin)
     var rbc = String(fields["algorithm"]) == "rbc"
     var params = PythonObject(None)
     if not rbc:
@@ -135,6 +137,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
         # family_call may release the GIL or raise; keep the admitted source
         # owner alive until every consumer of its captured address has left.
         _ = query
+        _ = query_pin
     _ = index
     _ = dist
     var wide = _wide(ids, Python.tuple(nq, k), context)
@@ -175,14 +178,16 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
     var count_params = Python.list(index.shape[0], PythonObject(0), index.shape[1], r, fields["_metric_value"],
                                    fields["_metric_arg"])
     if source is not None:
-        var query = knn_admit_x(source, model, context)
-        q = query.keep
+        var query_pin = ArrayPin()
+        var query = knn_admit_x(source, model, context, query_pin)
+        q = query_pin.keep
         if not knn_x_tested(query, source, context):
             if knn_device_tests(binding):
                 _ = py_call(count_params.append, PythonObject(Int(status.unsafe_ptr())))
             else:
                 knn_host_finite(model, query)
         _ = query^
+        _ = query_pin
     if Int(py=q.shape[1]) != Int(py=index.shape[1]):
         raise Error("ValueError: input feature count differs from fit")
     var nq = Int(py=q.shape[0])

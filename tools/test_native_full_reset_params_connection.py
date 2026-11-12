@@ -73,7 +73,7 @@ def fixture():
     for name in ('_NATIVE_PUBLIC_CLASSES', '_NATIVE_PUBLIC_LOADERS'):
         declared = next(n.value for n in source.body
                         if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == name)
-        names = {node.attr for node in declared.elts}
+        names = set(ast.literal_eval(declared))
         inventories[name] = tuple(cls for cls in classes if cls.__name__ in names)
     ns.update({'__package__': package.__name__, '_CLASSES': tuple(classes), '_EVENTS': events,
           '_DEFERRED_MODULES': deferred,
@@ -330,8 +330,8 @@ def test_deferred_modules_are_exactly_the_numpy_backed_rows():
         for name in names:
             assert rows[name] == 'mojolearn.' + module, (name, rows[name])
     source = ast.parse(CONNECTOR.read_text())
-    eager = next(n.value for n in source.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CLASSES')
-    eager_names = [element.attr for element in eager.elts]
+    eager = next(n.value for n in source.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CLASS_SOURCES')
+    eager_names = list(ast.literal_eval(eager))
     assert not set(eager_names) & set(lazy)
     assert sorted(eager_names + lazy) == sorted(rows)
 
@@ -450,7 +450,7 @@ def test_deferred_module_schema_mismatch_refuses_before_any_setter():
 
 
 def test_full_reset_is_separate_from_existing19_and_all_layout_snapshots_follow_install():
-    source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    source = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
     ordered = ['_install_full_reset_params()', '_connect_mode_metadata_classes(', '_connect_public_attributes(',
                '_connect_native_cv(', '_connect_params_setter(', '_connect_params_metadata_classes(', '_connect_full_reset_params(']
     positions = [source.index(name) for name in ordered]

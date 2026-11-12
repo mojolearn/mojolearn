@@ -427,20 +427,21 @@ def exact_ndarray_view(obj: PythonObject, ndarray: PythonObject) raises -> Optio
         return None
 
 
-def view_kind_fits_i64(view: BufferView) -> Bool:
-    """True when every element of the view is exactly an int64 after
-    `as_i64_c`: signed integers of any width and unsigned integers of at
-    most four bytes (a uint64 above 2**63 - 1 would wrap)."""
-    return view.kind == BOUNDARY_KIND_INT or (view.kind == BOUNDARY_KIND_UINT and view.itemsize <= 4)
+def view_kind_fits_i64(layout: BufferLayout, kind: Int) -> Bool:
+    """True when every element of the typed view (a BufferView's `layout`
+    and `kind`; the door's BufferView stays the pin) is exactly an int64
+    after `as_i64_c`: signed integers of any width and unsigned integers of
+    at most four bytes (a uint64 above 2**63 - 1 would wrap)."""
+    return kind == BOUNDARY_KIND_INT or (kind == BOUNDARY_KIND_UINT and layout.itemsize <= 4)
 
 
-def view_kind_real(view: BufferView) -> Bool:
+def view_kind_real(layout: BufferLayout, kind: Int) -> Bool:
     """True for float32/float64 and integer storage, whose `as_f64_c`
     value is exactly `float(x)` of the element `tolist()` returned (bool
     and float16 storage excluded; a caller keeps its old route for them)."""
-    if view.kind == BOUNDARY_KIND_FLOAT:
-        return view.itemsize == 4 or view.itemsize == 8
-    return view.kind == BOUNDARY_KIND_INT or view.kind == BOUNDARY_KIND_UINT
+    if kind == BOUNDARY_KIND_FLOAT:
+        return layout.itemsize == 4 or layout.itemsize == 8
+    return kind == BOUNDARY_KIND_INT or kind == BOUNDARY_KIND_UINT
 
 
 def admitted_buffer_view(obj: PythonObject, writable: Bool = False) raises -> BufferView:
@@ -580,11 +581,12 @@ def pack_u8(src_address: Int, rows: Int, cols: Int, context: PythonObject) raise
 
 # ------------------------------------------------------------ element reads (lane loops-neural)
 
-def view_int_at(view: BufferView, index: Int) -> Int:
-    """Element `index` of a 1-D integer (or bool) buffer view as a word,
-    read natively through the view's byte stride. No CPython call; the
-    caller has checked `view.ndim == 1`, the bound and the element kind."""
-    return Int(_load_i64(view.layout.address + index * view.layout.strides[0], view.kind, view.itemsize))
+def view_int_at(layout: BufferLayout, kind: Int, index: Int) -> Int:
+    """Element `index` of a 1-D integer (or bool) typed view (a BufferView's
+    `layout` and `kind`, pinned by the door's BufferView) as a word, read
+    natively through the byte stride. No CPython call; the caller has
+    checked `ndim == 1`, the bound and the element kind."""
+    return Int(_load_i64(layout.address + index * layout.strides[0], kind, layout.itemsize))
 
 
 def read_exact_int_items(seq: PythonObject, count: Int, is_tuple: Bool, type_error: String,

@@ -11,7 +11,8 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
+from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights_array, admitted_array
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
@@ -108,7 +109,7 @@ def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: Py
         result.state.address = Int(result.state.values.unsafe_ptr())
         admitted_fill[DType.float32](FAMILY_F32P(unsafe_from_address=result.state.address), n, Float32(1.0))
     else:
-        result.input_pin = admit_family_weights(sample_weight, n, False, context).keep
+        result.input_pin = admit_family_weights_array(sample_weight, n, False, context)
         result.state.address = Int(py=classical_address(result.input_pin))
     if class_weight is None:
         return result^
@@ -185,9 +186,10 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
             and Bool(py=family_call(operator.lt, epsilon, family_call(svc_builtins().float, PythonObject("inf"))))):
         raise Error("mojolearn LinearSVR: epsilon must be finite and non-negative, got " + family_str(epsilon))
     _linear_check_common(model, fields)
-    var xc = admit_family_meta(args[1], 2, "X", context)
+    var xc_pin = ArrayPin()
+    var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
     py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(xc, args[1])))
-    var x = xc.keep
+    var x = xc_pin.keep
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     # `_target_1d`
@@ -199,7 +201,7 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var strengths = _linear_strengths_values(fields)
     var sw = PythonObject(None)
     if args[3] is not None:
-        sw = admit_family_weights(args[3], rows, False, context).keep
+        sw = admit_family_weights_array(args[3], rows, False, context)
     var tol = svc_float(svc_field(fields, "tol"))
     var loss = Int(py=svc_attr(model, "_LOSSES")[svc_field(fields, "loss")])
     var result = _linear_svr_fit_target(fields, binding, x, t, loss, strengths[0], strengths[1], tol, 0.1 * tol,
@@ -260,9 +262,10 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
     if Bool(py=family_call(operator.ne, multi_class, PythonObject("ovr"))):
         raise Error("mojolearn LinearSVC: multi_class must be 'ovr', got " + family_repr(multi_class))
     _linear_check_common(model, fields)
-    var xc = admit_family_meta(args[1], 2, "X", context)
+    var xc_pin = ArrayPin()
+    var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
     py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(xc, args[1])))
-    var x = xc.keep
+    var x = xc_pin.keep
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if len(svc_shape_of(args[2], context)) != 1:

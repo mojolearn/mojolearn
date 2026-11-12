@@ -4,6 +4,14 @@ switch read and the typed input/output range descriptors. No Python import
 (tools/python_free_dirs.sh). Lane rs-shared-infra-b (2026-11-12): moved word
 for word; descriptor lists of one program, nothing to split across cores."""
 from std.os import getenv
+from std.memory import unsafe_memcpy
+from core.metrics_program_plan import MetricProgramPlan
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_call import native_descriptor_call
+from x_metrics.descriptor_schema import MP_CAPABILITIES, MP_HAS_RANGES, MP_RUN, MP_RUN_OUT, MP_RUN_RANGES
+
+comptime _RUN_F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime _STAGE_WORDS = 16
 
 
 def _switch(name: String) -> Bool:
@@ -63,3 +71,83 @@ def _pad(var words: List[Int32], fill: List[Int32]) -> List[Int32]:
     if len(words) == 0:
         return fill.copy()
     return words^
+
+
+# ---------------------------------------------------------------- x_metrics, typed
+# Lane entangled-programs (2026-11-12): the RUN of a native metric program
+# (`_metrics_run_plan`'s execution). The door (bindings/arena_prog_native.mojo)
+# admits the inputs to (offset, address, words) records, keeps their Python
+# owners alive and releases the GIL around this call; the program runs through
+# the image's `metrics_program_native_api_v1` dispatch (x_metrics/
+# descriptor_schema.mojo) instead of the Python `x_metrics_run*` entries: the
+# same executors (descriptor_host / descriptor_device call the bodies the Python
+# entries called), the same words, the same route choice. The arena is a native
+# store owned by the result (was a Python `array.array`).
+
+
+@fieldwise_init
+struct MetricProgramInput(ImplicitlyCopyable, Movable):
+    """One admitted input of a metric program: its arena offset, the address
+    of its words (the door keeps the owner alive) and its word count."""
+    var offset: Int
+    var address: Int
+    var words: Int
+
+
+struct MetricArenaOwner(Copyable, Movable):
+    """A completed metric program's arena: zeroed float32 words (at least one,
+    as the Python store was), private to the operation. The base address is
+    read from the store itself, so a copy reads its own words."""
+    var words: List[Float32]
+
+    def __init__(out self, size: Int):
+        self.words = List[Float32](length=max(size, 1), fill=0.0)
+
+    def base(self) -> Int:
+        return Int(self.words.unsafe_ptr())
+
+
+def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, inputs: List[MetricProgramInput],
+                         ranges_on: Bool, output_ranges: Bool) raises -> MetricArenaOwner:
+    """RUN: copy the inputs into a fresh arena and run the plan's stages.
+    `ranges_on`: MOJOLEARN_ARENA_RANGES and the image has the range route
+    (device images; MP_CAPABILITIES is read here as well); `output_ranges`:
+    the image has the output-range route. No Python object is read."""
+    var arena = MetricArenaOwner(plan.size)
+    var base = arena.base()
+    var ins = List[Int32]()
+    for k in range(len(inputs)):  # driver-loop: over the program's input buffers
+        var record = inputs[k]
+        if record.words == 0:
+            continue
+        unsafe_memcpy(dest=_RUN_F32P(unsafe_from_address=base + 4 * record.offset),
+                      src=_RUN_F32P(unsafe_from_address=record.address), count=record.words)
+        _add_input(ins, record.offset, record.offset + record.words, -1)
+    var known = True
+    var merged = plan.download(known)
+    var nst = len(plan.stages) // _STAGE_WORDS
+    var pa = Int(plan.stages.unsafe_ptr())
+    var size = plan.size
+    var ranges = ranges_on and (native_descriptor_call(entry, MP_CAPABILITIES, [], [], []) & MP_HAS_RANGES) != 0
+    if ranges:
+        # the shared ranges runner (core/arena_io.mojo): only the inputs go
+        # up, only the outputs come back
+        var outs = merged.copy() if known else [Int32(0), Int32(size), Int32(-1), Int32(1)]
+        var n_in = len(ins) // 3
+        var n_out = len(outs) // 4
+        var ia = _pad(ins.copy(), [Int32(0), Int32(0), Int32(-1)])
+        var oa = _pad(outs^, [Int32(0), Int32(0), Int32(-1), Int32(1)])
+        _ = native_descriptor_call(entry, MP_RUN_RANGES, [base, pa, Int(ia.unsafe_ptr()), Int(oa.unsafe_ptr())],
+                                   [size, nst, n_in, n_out], [])
+        # The address words are not owners: keep both lists live past the call.
+        _ = ia^
+        _ = oa^
+    elif known and output_ranges:
+        var n_out = len(merged) // 4
+        var oa = _pad(merged.copy(), [Int32(0), Int32(0), Int32(-1), Int32(1)])
+        _ = native_descriptor_call(entry, MP_RUN_OUT, [base, pa, Int(oa.unsafe_ptr())], [size, nst, n_out], [])
+        _ = oa^
+    else:
+        _ = native_descriptor_call(entry, MP_RUN, [base, pa], [size, nst], [])
+    _ = ins^
+    return arena^

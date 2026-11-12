@@ -187,7 +187,7 @@ class PublicAttributeConnection(unittest.TestCase):
         for line in registration.splitlines():
             if 'module.def_py_c_function(' in line:
                 self.assertTrue(line.startswith('        '), line)
-        source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+        source = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
         self.assertLess(source.index('_connect_public_attributes('), source.index('_connect_native_cv('))
         self.assertLess(source.index('_connect_native_cv('), source.index('_connect_params_metadata_classes('))
         lazy = (ROOT / 'python/mojolearn/_expansion_sequence.py').read_text()

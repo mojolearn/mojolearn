@@ -40,15 +40,22 @@ def connect_generic_params():
 def connect_classes(context, package):
     # glue: called once after package classes and their native descriptors exist
     import sys
-    from . import _backend, _mode, _classical_host
-    from . import _forest_protocol, _hierarchy_impl, _tsa_impl
-    known = {
-        _mode.NumericModeMixin._bind: 'standard',
-        _forest_protocol.ForestProtocol._bind: 'forest',
-        _tsa_impl.ExponentialSmoothing._bind: 'standard',
-        _classical_host._HostBound._bind: 'host',
-        _classical_host.HostGaussianProcessClassifier._bind: 'host_gp',
-    }
+    from . import _backend, _mode
+    # The binding protocols of the loaded families only (lane
+    # lazy-family-import): a class's _bind comes from its own ancestry, so its
+    # protocol module is loaded whenever the class is. `_hierarchy_impl` adds
+    # no protocol of its own.
+    def loaded(name):
+        return sys.modules.get(package.__name__ + '.' + name)
+    known = {_mode.NumericModeMixin._bind: 'standard'}
+    forest, tsa, host = loaded('_forest_protocol'), loaded('_tsa_impl'), loaded('_classical_host')
+    if forest is not None:
+        known[forest.ForestProtocol._bind] = 'forest'
+    if tsa is not None:
+        known[tsa.ExponentialSmoothing._bind] = 'standard'
+    if host is not None:
+        known[host._HostBound._bind] = 'host'
+        known[host.HostGaussianProcessClassifier._bind] = 'host_gp'
     classes = set()
     for name, module in tuple(sys.modules.items()):  # glue: loaded package class metadata
         if name == package.__name__ or name.startswith(package.__name__ + '.'):
@@ -57,6 +64,8 @@ def connect_classes(context, package):
                                if type(value) is type and issubclass(value, _mode.NumericModeMixin))
     connected = {}
     for cls in classes:  # glue: fixed built-in readback routes, never a runtime resolver
+        if cls in context['plans']:
+            continue  # connected when its family first loaded
         mro = type.__dict__['__mro__'].__get__(cls)
         namespaces = tuple(type.__dict__['__dict__'].__get__(base) for base in mro)  # glue: native class dictionary metadata
         bind = next((row['_bind'] for row in namespaces if '_bind' in row), None)  # glue: import-time inherited binding method identity
@@ -65,12 +74,12 @@ def connect_classes(context, package):
             # A class without the protocol does not receive a guessed route.
             continue
         route = known[bind]
-        actual = _classical_host._HOST_BASENAMES.get(basename, basename) if route == 'host' else basename
+        actual = host._HOST_BASENAMES.get(basename, basename) if route == 'host' else basename
         if route == 'host_gp':
             import os
-            actual = (_classical_host._GPC_HOST_INFERENCE_BASENAME
-                      if os.path.exists(_backend.host_module_path(_classical_host._GPC_HOST_INFERENCE_BASENAME))  # import-time: import-time explicit HostGaussianProcessClassifier metadata, not a GPU fallback
-                      else _classical_host._GPC_HOST_BASENAME)
+            actual = (host._GPC_HOST_INFERENCE_BASENAME
+                      if os.path.exists(_backend.host_module_path(host._GPC_HOST_INFERENCE_BASENAME))  # import-time: import-time explicit HostGaussianProcessClassifier metadata, not a GPU fallback
+                      else host._GPC_HOST_BASENAME)
         modes = {}
         for mode in ('identical', 'fast'):  # glue: connect existing supported mode binaries, no new fast campaign
             key = (route in ('host', 'host_gp'), actual, mode)

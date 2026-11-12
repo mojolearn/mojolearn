@@ -7,12 +7,13 @@ from bindings.py_balanced import py_call, py_type
 from bindings.classical_pandas import _pd_class
 from bindings.pandas_arrow_native import _chunked, _arrow_typestr
 from bindings.pandas_arrow_run import _itemsize
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.prep_metadata_pyapi import _description
 from core.prep_boundary_impl import prep_arrow_finite
 
 
-def prep_arrow_target(raw: PythonObject, series: Bool, context: PythonObject) raises -> Tuple[ArrayMetadata, Int, Int, Bool]:
+def prep_arrow_target(raw: PythonObject, series: Bool, context: PythonObject,
+                      mut pin: ArrayPin) raises -> Tuple[ArrayMetadata, Int, Int, Bool]:
     var b = native_loaded_module("builtins")
     var chunked = _chunked(raw)
     var rows = len(chunked)
@@ -76,5 +77,5 @@ def prep_arrow_target(raw: PythonObject, series: Bool, context: PythonObject) ra
         width = 8
     var shape = List[Int]()
     shape.append(rows)
-    var result = _description(raw, shape^, number, Python.tuple(raw, chunked, owners))
+    var result = _description(raw, shape^, number, Python.tuple(raw, chunked, owners), pin)
     return (result^, number, width, finite)

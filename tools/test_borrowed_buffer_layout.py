@@ -18,7 +18,8 @@ def test_native_buffer_dependencies_resolve_and_layout_avoids_numeric_conversion
 def test_export_is_retained_and_released_on_error_and_destruction():
     source=(ROOT/'providers/python/borrowed_buffer_pyapi.mojo').read_text()
     assert source.count('"PyObject_GetBuffer"') == 1
-    assert 'self.owner = admitted_exporter' in source
+    # The Py_buffer's own `obj` reference retains the exporter; the pin holds no PythonObject.
+    assert 'self.owner' not in source.split('struct AdmittedBorrowedBuffer')[1]
     assert 'self.acquired = True' in source
     assert 'except problem:\n            self.release()' in source
     assert 'def __deinit__' in source and source.count('"PyBuffer_Release"') == 2

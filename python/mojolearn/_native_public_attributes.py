@@ -170,7 +170,7 @@ def connect_classes(package):
     # tables capture method identities; lazy imports admit only new classes.
     global _CONTEXT
     import sys
-    from . import _mode, _cholesky_impl, _svm_impl
+    from . import _mode
     from ._native_classical_bridge import _layout, _numpy_free_context
     from .tokenizer import _binding
 
@@ -182,11 +182,10 @@ def connect_classes(package):
         if any(type(value) is not BuiltinFunctionType for value in (entry, factory, finalizer)):  # glue: fixed native entry identities
             raise TypeError('public attributes require compiled native entries')
         context = _numpy_free_context()
+        # The Cholesky and SVM property schemas join when those families load
+        # (lane lazy-family-import); svm_owner is read only by an SVM property.
         context.update(native_module_type=ModuleType, plans={}, pending={}, missing=object(),
-                       property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet',
-                                         vars(_svm_impl.SVC)['coef_']: 'svm_svc_coef',
-                                         vars(_svm_impl.SVR)['coef_']: 'svm_svr_coef'},
-                       svm_owner=(_svm_impl._NATIVE, _svm_impl._NATIVE_CONTEXT),
+                       property_schemas={}, svm_owner=None,
                        stl_connected=False, archive_finalizer_entry=finalizer)
         context['descriptor'] = factory(MethodType(entry, context))
         _CONTEXT = context
@@ -200,6 +199,14 @@ def connect_classes(package):
         from ._native_loaded_modules import connect_module
         connect_module(__name__, sys.modules[__name__], ('_CONTEXT',))
     context = _CONTEXT
+    cholesky = sys.modules.get(package.__name__ + '._cholesky_impl')
+    if type(cholesky) is ModuleType:
+        context['property_schemas'].setdefault(vars(cholesky.Cholesky)['logdet_'], 'cholesky_logdet')
+    svm = sys.modules.get(package.__name__ + '._svm_impl')
+    if type(svm) is ModuleType and context['svm_owner'] is None:
+        context['property_schemas'].update({vars(svm.SVC)['coef_']: 'svm_svc_coef',
+                                            vars(svm.SVR)['coef_']: 'svm_svr_coef'})
+        context['svm_owner'] = (svm._NATIVE, svm._NATIVE_CONTEXT)
     from ._native_mode_properties import connect as connect_mode_properties
     connect_mode_properties(context, package)
     archives = _archive_finalizers(package)
@@ -208,10 +215,11 @@ def connect_classes(package):
     neighbor_availability.update(_hierarchy_availability(package))
     neighbor_availability.update(_density_availability(package))
     neighbor_availability.update(_linear_spectral_availability(package))
-    neighbor_availability[_svm_impl.SVC] = {
-        name: ((vars(vars(_svm_impl.SVC)[name])['check'],), 'svm_probability')
-        for name in ('predict_proba', 'predict_log_proba')  # glue: two fixed native availability schemas
-    }
+    if type(svm) is ModuleType:
+        neighbor_availability[svm.SVC] = {
+            name: ((vars(vars(svm.SVC)[name])['check'],), 'svm_probability')
+            for name in ('predict_proba', 'predict_log_proba')  # glue: two fixed native availability schemas
+        }
     neighbor_availability.update(_inherited_host_availability(
         package, neighbor_availability, context['missing']))
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')

@@ -10,13 +10,14 @@ interface records.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_entry_key, samba_primitive
 from core.entry_table import EntryRef, entry_ref_call
 from core.mamba_state_entry_table import Mamba3StateRoute, MAMBA3_STATE_FORWARD, MAMBA3_STATE_DECODE
+from core.neural_entry_table import NEURAL_MAMBA3_OWNED_STATE
+from providers.python.mamba3_prefill_session_pyapi import mamba3_prefill_session_serves, mamba3_prefill_session_run
 from core.samba_entry_table import (
     samba_ref,
     SambaEntryKey, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST, SAMBA_PRIM_EMBEDDING_FORWARD,
@@ -29,9 +30,9 @@ from core.samba_entry_table_programs import (
     SAMBA_PROGRAM_OPEN, SAMBA_PROGRAM_STATUS, SAMBA_PROGRAM_FORWARD,
 )
 from core.samba_program_handle import SambaProgramHandle
-from bindings.neural_block_public import neural_training_entries, neural_training_selection, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
+from bindings.neural_block_public import neural_training_entries, neural_training_selection, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths
 from bindings.neural_prefill_native import _prefill_mamba3
-from bindings.causal_lm_public import _native_function, _mutable, _writeback
+from bindings.causal_lm_public import _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.byte_perf_helpers import byte_view_bytes
@@ -128,13 +129,13 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var addresses: List[Int] = [generation_address(x, keep)]
-    var bi = native_loaded_module("builtins")
-    # an installed owned snapshot is read on the device (`mamba3_state_owned`)
+    # An installed owned snapshot is read on the device: op 16 on the
+    # block's Mamba-3 session handle, open in the image the block's route
+    # names (core/mamba3_prefill_session.mojo; lane mamba3-prefill-handle).
     var owned = py_get(fields, "_owned_generation")
-    var canonical = entries.canonical if Bool(py=py_call(bi.hasattr, entries, "canonical")) else entries
-    var on_session = (owned is not None and py_get(fields, "_prefill_session") is not None
-                      and py_get(fields, "_prefill_binding") is canonical
-                      and Bool(py=py_call(bi.hasattr, entries, "mamba3_state_owned")))
+    var session = py_get(fields, "_prefill_session")
+    var on_session = (owned is not None and route.has_sessions()
+                      and mamba3_prefill_session_serves(session, route.session_ref()))
     var weights = fields["_w"]
     for i in range(len(weights)):  # driver-loop: over existing Mamba3 parameter ABI slots
         if on_session:
@@ -155,13 +156,10 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var pending = 1 if Bool(py=slots["pending"]) else 0
     var updated = PythonObject(None)
     if on_session:
-        var owned_native = py_get(fields, "_native_mamba_block_provider_cache")
-        if neural_descriptor_matches(owned_native, canonical):
-            updated = PythonObject(neural_mamba_session_call(owned_native, fields, entries, 16,
-                addresses, [b, 1 if step else l, d, q, pending, Int(py=owned), 1 if step else 0]))
-        else:
-            updated = py_call(_native_function(entries, "mamba3_state_owned"), fields["_prefill_session"], py_ints(addresses),
-                              Python.list(b, 1 if step else l, d, q, pending, owned, 1 if step else 0))
+        # The former Python entry `mamba3_state_owned` and the env-gated
+        # provider arm ran this operation with these words.
+        updated = PythonObject(mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_STATE,
+            addresses, [b, 1 if step else l, d, q, pending, Int(py=owned), 1 if step else 0]))
         _ = output  # keep the Python object alive through the native call above
     else:
         # The image that serves this block's carried state, by the block's key
@@ -178,11 +176,6 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
                 addresses, ints, List[Float64]())
         updated = PythonObject(buffered)
         _ = output  # keep the Python object alive through the native call above
-    # OPEN (lane transformer-session-native, 2026-11-12): `mamba3_state_owned`
-    # above (an owned snapshot read through the block's Mamba-3 prefill
-    # session, a Python-allocated owner) still reaches the binding module when
-    # the block provider differs; it moves with the Mamba-3 prefill session's
-    # conversion to a registry handle.
     _writeback(copies)
     py_setitem(slots, "buffered_tokens", updated)
     py_setitem(slots, "pending", False)
@@ -534,7 +527,9 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             if String(config["layers"][i]) == "attention":
                 result = neural_block_forward_binding(block, hidden, PythonObject(None) if states is None else states[i], PythonObject(step), PythonObject(None), context["neural"])
             elif states is None:
-                result = _prefill_mamba3(block, hidden, _samba_block_entries(block, context))
+                var route = Mamba3StateRoute(1, 0, False)
+                var entries = _samba_block_entries(block, context, route)
+                result = _prefill_mamba3(block, hidden, entries, route)
             else:
                 result = _m3_state_forward(block, hidden, states[i], step, context)
             hidden = result

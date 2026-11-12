@@ -53,7 +53,7 @@ def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
     door = _source("bindings/mani_decomp_native.mojo")
     mds = door.split("def _mds_fit(", 1)[1].split("\ndef ", 1)[0]
     assert mds.count("admit_family_meta(") == 1
-    assert "_ = init_meta^" in mds
+    assert "_ = init_pin^" in mds
     run = _source("bindings/mani_kit_run.mojo")
     copy = run.split("    def host_snapshot(", 1)[1].split("    def from_snapshot(", 1)[0]
     for forbidden in (".shape[", ".ndim", "classical_address("):

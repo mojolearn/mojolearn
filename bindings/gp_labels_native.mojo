@@ -25,7 +25,7 @@ from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer
 from bindings.boundary_read import admitted_buffer_view
 from core.boundary_layout import BufferLayout, gather_i64, BOUNDARY_KIND_INT, BOUNDARY_KIND_UINT
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
-from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayPin, array_shape_once, array_metadata_once
 from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import (
@@ -210,7 +210,8 @@ def _gp_integer_storage_labels[S: _TextCodeStorage](y: PythonObject, base: Pytho
     var rank = len(shape)
     if rank == 0 or rank > 2:
         return None
-    var snapshot = array_metadata_once(y, shape^, "GP labels", context)
+    var pin = ArrayPin()
+    var snapshot = array_metadata_once(y, shape^, "GP labels", context, pin)
     var source = snapshot.source
     var dims = List[Int](length=1, fill=source.rows)
     var steps = List[Int](length=1, fill=source.s0)
@@ -224,8 +225,7 @@ def _gp_integer_storage_labels[S: _TextCodeStorage](y: PythonObject, base: Pytho
     layout = BufferLayout(source.addr, count * source.itemsize, source.itemsize, rank, dims^, steps^, True, count)
     var store = List[Int64](length=count, fill=0)
     gather_i64(layout, kind, Int(store.unsafe_ptr()))
-    _ = snapshot.keep  # the snapshot's owners hold the storage read above
-    _ = snapshot.owner
+    _ = pin^  # the door's pin holds the storage read above
     var result = _gp_prepare[S](Int(store.unsafe_ptr()), 3, count, False, base, context)
     _ = store^
     return result^

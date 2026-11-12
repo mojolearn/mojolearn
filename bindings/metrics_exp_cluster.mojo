@@ -12,7 +12,7 @@
 # each clustering into its own sorted classes are the encoder's codes
 # themselves (the Python `_codes(a, ca)` gathered the identity table). Same
 # kernels: the bits do not move.
-from bindings.metrics_exp_cluster_run import _generalized_average
+from bindings.metrics_exp_cluster_run import nmi_finish, ami_finish, contingency_dtype_code
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call
@@ -146,19 +146,10 @@ def _contingency_matrix(args: PythonObject, context: PythonObject) raises -> Pyt
         name = String(py=dtype)
     else:
         name = String(py=py_call(b.getattr, dtype, PythonObject("__name__"), py_call(b.str, dtype)))
-    var typestr: String
-    var code: Int
-    if name == "int32":
-        typestr = "<i4"
-        code = 0
-    elif name == "float64":
-        typestr = "<f8"
-        code = 1
-    elif name == "float32":
-        typestr = "<f4"
-        code = 2
-    else:
+    var code = contingency_dtype_code(name)
+    if code < 0:
         return counts
+    var typestr = String("<i4") if code == 0 else (String("<f8") if code == 1 else String("<f4"))
     var out = family_array(shape, typestr, context)
     mexp_cast_i64(FAMILY_I64P(unsafe_from_address=Int(py=classical_address(counts))), cells,
                   Int(py=classical_address(out)), code)
@@ -199,10 +190,7 @@ def _nmi(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if (ka == kb and kb == 1) or (ka == kb and kb == 0):
         return PythonObject(1.0)
     var r = _contingency(c, args[3], False, 0.0, True, False, context)
-    var mi = r.arena.f64(r.MI)
-    if mi == 0:
-        return PythonObject(0.0)
-    return PythonObject(mi / _generalized_average(r.arena.f64(r.E), r.arena.f64(r.E + 2), method))
+    return PythonObject(nmi_finish(r.arena.f64(r.MI), r.arena.f64(r.E), r.arena.f64(r.E + 2), method))
 
 
 def _ami(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -216,21 +204,8 @@ def _ami(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if ka == 1 or kb == 1:
         return PythonObject(0.0)
     var r = _contingency(c, args[3], False, 0.0, True, True, context)
-    var mi = r.arena.f64(r.MI)
-    var emi = r.arena.f64(r.EMI)
-    var norm = _generalized_average(r.arena.f64(r.E), r.arena.f64(r.E + 2), method)
-    var eps = 2.220446049250313e-16
-    var den = norm - emi
-    if den < 0:
-        den = -eps if -eps < den else den
-    else:
-        den = eps if eps > den else den
-    var num = mi - emi
-    if num < 0:
-        num = -eps if -eps < num else num
-    else:
-        num = eps if eps > num else num
-    return PythonObject(num / den)
+    return PythonObject(ami_finish(r.arena.f64(r.MI), r.arena.f64(r.EMI), r.arena.f64(r.E), r.arena.f64(r.E + 2),
+                                   method))
 
 
 def _cluster_score(args: PythonObject, caller: String, db: Bool, context: PythonObject) raises -> PythonObject:
