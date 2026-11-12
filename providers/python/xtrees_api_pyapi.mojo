@@ -101,18 +101,22 @@ def _xt_owned(var addrs: List[Int], params: PythonObject) raises -> XtOwned:
     glue ABI's two views (xtrees/glue_abi.mojo). A value with no integer (or
     float) conversion is flagged, and refused only where the run reads that
     view, as the former per-read `Int(py=)` / `Float64(py=)` did."""
-    var ints = List[Int]()
-    var floats = List[Float64]()
-    var bad = List[UInt8]()
-    for k in range(len(params)):  # driver-loop: over fixed call structure, small-loop(positional parameters of one glue call): Python unpack
+    var count = len(params)
+    var ints = List[Int](capacity=count)
+    var floats = List[Float64](capacity=count)
+    var bad = List[UInt8](capacity=count)
+    for k in range(count):  # driver-loop: over fixed call structure, small-loop(positional parameters of one glue call): Python unpack
         var flag = UInt8(0)
+        # perf-audit-3: the item is read once (one sequence read per
+        # parameter, not one per view).
+        var item = params[k]
         try:
-            ints.append(Int(py=params[k]))
+            ints.append(Int(py=item))
         except:
             ints.append(0)
             flag |= 1
         try:
-            floats.append(Float64(py=params[k]))
+            floats.append(Float64(py=item))
         except:
             floats.append(0.0)
             flag |= 2
