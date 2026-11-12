@@ -76,17 +76,17 @@ def _read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], m
     # Every label's code points; False when one is not a str. The C API
     # entries are resolved once per call, not once per label.
     ref cpy = Python().cpython()
-    var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
-    var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
-    var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
+    # perf-audit-3: the three C-API entries come from the process table
+    # (resolved once at import), not three dlsym lookups per call.
+    var cpt = cpython_table()
     for i in range(label_source_count[native](labels, pins)):  # api-bound-loop: over the caller's Python list of str labels, one read per label
         var value = label_source_value[native](labels, pins, i)
-        if (cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
+        if (cpt[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
             return False
-        var count = get_length(value._obj_ptr)
+        var count = cpt[].PyUnicode_GetLength(value._obj_ptr)
         if count < 0:
             raise cpy.unsafe_get_error()
-        var address = as_ucs4(value._obj_ptr)
+        var address = cpt[].PyUnicode_AsUCS4Copy(value._obj_ptr)
         if address == 0:
             raise cpy.unsafe_get_error()
         var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)
@@ -94,7 +94,7 @@ def _read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], m
         table.lengths.append(count)
         for k in range(count):  # native data loop, no CPython (not a driver loop): over one label's code points
             table.points.append(source[k])
-        mem_free(address)
+        cpt[].PyMem_Free(address)
     _ = pins
     _ = labels
     _ = pins
@@ -416,18 +416,18 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     # One reused one-label table and the C API entries resolved once: each
     # value used to build a Python list, a fresh table and four symbol
     # lookups.
-    var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
-    var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
-    var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
+    # perf-audit-3: the three C-API entries come from the process table
+    # (resolved once at import), not three dlsym lookups per call.
+    var cpt = cpython_table()
     var single = StrTable()
     for i in range(n):  # api-bound-loop: over the caller's Python list of str labels, one lookup per label
         var value = values[i]
         var found = -1
-        if (cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) != 0:
-            var length = get_length(value._obj_ptr)
+        if (cpt[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) != 0:
+            var length = cpt[].PyUnicode_GetLength(value._obj_ptr)
             if length < 0:
                 raise cpy.unsafe_get_error()
-            var ucs4 = as_ucs4(value._obj_ptr)
+            var ucs4 = cpt[].PyUnicode_AsUCS4Copy(value._obj_ptr)
             if ucs4 == 0:
                 raise cpy.unsafe_get_error()
             var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=ucs4)
@@ -438,7 +438,7 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
             single.lengths.append(length)
             for k in range(length):  # native data loop, no CPython (not a driver loop): over one label's code points
                 single.points.append(source[k])
-            mem_free(ucs4)
+            cpt[].PyMem_Free(ucs4)
             found = str_find(single, 0, table, lookup)
         if found < 0:
             count += 1
