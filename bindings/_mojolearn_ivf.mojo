@@ -69,7 +69,8 @@ from ivf.resident import (
     ivf_resident_release,
     ivf_resident_search,
 )
-from bindings.ivf_index_arrays import ivf_arrays_check_cells, ivf_arrays_extent
+from bindings.ivf_index_arrays import ivf_arrays_extent
+from ivf.ivf_index_arrays_run import ivf_arrays_check_cells
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER, IvfFlatBuildDevice
 from bindings.ivf_index_arrays import ivf_read_resident_filter, ivf_write_resident_result
 
