@@ -13,6 +13,7 @@ from training.samba_afn import (
     afn_embedding_backward_tied_host,
     afn_tail_train_host,
 )
+from training.training_samba_afn_run import _afn_f32, _afn_i32
 
 
 # ===========================================================================
@@ -48,14 +49,6 @@ def _afn_params(params: PythonObject, want: Int, name: String) raises:
             name + ": params must contain " + String(want) + " values, got "
             + String(len(params))
         )
-
-
-def _afn_f32(addr: Int) -> MutPointer[Float32, MutUntrackedOrigin]:
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-
-
-def _afn_i32(addr: Int) -> MutPointer[Int32, MutUntrackedOrigin]:
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
 # TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_afn_norm_head_forward_binding deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
