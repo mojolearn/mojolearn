@@ -3,7 +3,9 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_matches, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import (
+    neural_descriptor_matches, neural_descriptor_execute_id, neural_descriptor_provider_id,
+)
 from core.samba_ids_impl import samba_training_ids_into
 from core.samba_count_impl import samba_target_count
 from providers.python.samba_execution_pyapi_door import samba_provider_gradients
@@ -122,6 +124,11 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     var native = py_get(fields, "_native_primitives")
     if native is not None and not neural_descriptor_matches(native, py_call(bi.getattr, entries, "canonical", entries)):
         native = PythonObject(None)
+    # The provider id, unpacked once; `fields` keeps the provider pinned for
+    # the whole operation, so every layer call below is typed by id.
+    var native_id = 0
+    if native is not None:
+        native_id = neural_descriptor_provider_id(native)
     var d = Int(py=config["d_model"])
     var vocab = Int(py=config["vocab"])
     var ids = inputs if admitted else samba_ids(inputs, vocab, False, context)
@@ -155,7 +162,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     var offset = token_offset * d
     var hidden = generation_array([b, l, d])
     if native is not None:
-        _ = neural_descriptor_execute(native, 0, [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [rows, vocab, d], [])
+        _ = neural_descriptor_execute_id(native_id, 0, [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [rows, vocab, d], [])
     else:
         _ = samba_primitive(primitives, SAMBA_PRIM_EMBEDDING_FORWARD,
             [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [rows, vocab, d], [])
@@ -193,7 +200,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
             var normalized = generation_array([b, l, d])
             var norm_eps = Float64(py=config["norm_eps"])
             if native is not None:
-                _ = neural_descriptor_execute(native, 2, [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [norm_eps])
+                _ = neural_descriptor_execute_id(native_id, 2, [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [norm_eps])
             else:
                 _ = samba_primitive(primitives, SAMBA_PRIM_RMS_NORM_FORWARD,
                     [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [norm_eps])
@@ -214,7 +221,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
                 var logits = generation_array([rows, vocab])
                 var dlogits = generation_array([rows, vocab])
                 if native is not None:
-                    _ = neural_descriptor_execute(native, 4, [Int(py=logits._addr), Int(py=normalized._addr), Int(py=head._addr)], [rows, vocab, d], [])
+                    _ = neural_descriptor_execute_id(native_id, 4, [Int(py=logits._addr), Int(py=normalized._addr), Int(py=head._addr)], [rows, vocab, d], [])
                 else:
                     _ = samba_primitive(primitives, SAMBA_PRIM_LINEAR_FORWARD,
                         [Int(py=logits._addr), Int(py=normalized._addr), Int(py=head._addr)], [rows, vocab, d], [])
@@ -223,7 +230,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
                     [Int(py=loss._addr), Int(py=row_loss._addr), Int(py=dlogits._addr), Int(py=logits._addr), Int(py=y._addr)],
                     [rows, vocab, -100, 1, items, 1], [0.0])
                 if native is not None:
-                    _ = neural_descriptor_execute(native, 5, [Int(py=dnormalized._addr), Int(py=dhead._addr), Int(py=dlogits._addr), Int(py=normalized._addr), Int(py=head._addr)], [rows, vocab, d], [])
+                    _ = neural_descriptor_execute_id(native_id, 5, [Int(py=dnormalized._addr), Int(py=dhead._addr), Int(py=dlogits._addr), Int(py=normalized._addr), Int(py=head._addr)], [rows, vocab, d], [])
                 else:
                     _ = samba_primitive(primitives, SAMBA_PRIM_LINEAR_BACKWARD,
                         [Int(py=dnormalized._addr), Int(py=dhead._addr), Int(py=dlogits._addr), Int(py=normalized._addr), Int(py=head._addr)],
@@ -231,7 +238,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
                 _ = logits^
                 _ = dlogits^
             if native is not None:
-                _ = neural_descriptor_execute(native, 3, [Int(py=dh._addr), Int(py=dnorm._addr), Int(py=dnormalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [norm_eps])
+                _ = neural_descriptor_execute_id(native_id, 3, [Int(py=dh._addr), Int(py=dnorm._addr), Int(py=dnormalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [norm_eps])
             else:
                 _ = samba_primitive(primitives, SAMBA_PRIM_RMS_NORM_BACKWARD,
                     [Int(py=dh._addr), Int(py=dnorm._addr), Int(py=dnormalized._addr), Int(py=hidden._addr), Int(py=norm._addr)],
@@ -259,7 +266,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
             _ = py_call(_native_function(entries, "samba_afn_embedding_backward_tied"), Python.list(dembed._addr, dh._addr, ids._addr, dhead._addr), py_ints([rows, vocab, d]))
         else:
             if native is not None:
-                _ = neural_descriptor_execute(native, 1, [Int(py=dembed._addr), Int(py=dh._addr), Int(py=ids._addr)], [rows, vocab, d], [])
+                _ = neural_descriptor_execute_id(native_id, 1, [Int(py=dembed._addr), Int(py=dh._addr), Int(py=ids._addr)], [rows, vocab, d], [])
             else:
                 _ = samba_primitive(primitives, SAMBA_PRIM_EMBEDDING_BACKWARD,
                     [Int(py=dembed._addr), Int(py=dh._addr), Int(py=ids._addr)], [rows, vocab, d], [])
@@ -280,6 +287,8 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
         # until every one has returned.
         _ = dh^
         _ = dhead^
+        # The provider id does not retain the provider.
+        _ = native
         var ordered = bi.list()
         var names = fields["names"]
         for i in range(len(names)):  # driver-loop: over the complete ordered gradient registry
