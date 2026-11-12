@@ -69,11 +69,7 @@ from bindings.arima_host_predict import (
 # The typed fit body (lane thin-trees-metrics, 2026-10-21), moved word for
 # word out of `arima_fit_binding` with `_order` and `_refuse_shape`.
 from arima.host.arima_host_entries import arima_host_fit_into
-
-
-comptime ARIMA_METHOD_MLE = 0
-comptime ARIMA_METHOD_CSS = 1
-comptime ARIMA_METHOD_CSS_ML = 2
+from arima.host.mojolearn_arima_host_run import _refuse_method
 
 
 def arima_host_numeric_mode_binding() raises -> PythonObject:
@@ -151,32 +147,6 @@ def arima_numeric_mode_binding() raises -> PythonObject:
     """The build's tier as the `NUMERIC_*` code, which `_arima_impl.py`
     cross-checks against the mode the package asked for."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
-
-
-def _refuse_method(method: Int) raises:
-    """`arima/estimator.mojo::_refuse_method` (`:114-142`), its words."""
-    if method == ARIMA_METHOD_MLE:
-        return
-    if method == ARIMA_METHOD_CSS:
-        raise Error(
-            "ARIMA: method='css' is not implemented; the conditional sum of"
-            " squares log-likelihood (batched_arima.cu:271-391,"
-            " conditional_sum_of_squares and sum_of_squares_kernel) and its"
-            " `truncate` parameter have no implementation. Only MLE is offered;"
-            " refused by name (arima/NOT_IMPLEMENTED.tsv)"
-        )
-    if method == ARIMA_METHOD_CSS_ML:
-        raise Error(
-            "ARIMA: method='css-ml' is not implemented; it starts the maximum"
-            " likelihood fit from the CSS optimum, and the CSS"
-            " log-likelihood (batched_arima.cu:271-391) has no implementation. Only"
-            " MLE is offered; refused by name (arima/NOT_IMPLEMENTED.tsv)"
-        )
-    raise Error(
-        "ARIMA: method code " + String(method) + " is not one of MLE ("
-        + String(ARIMA_METHOD_MLE) + "), CSS (" + String(ARIMA_METHOD_CSS)
-        + ") or CSS-ML (" + String(ARIMA_METHOD_CSS_ML) + ")"
-    )
 
 
 def arima_fit_binding(
