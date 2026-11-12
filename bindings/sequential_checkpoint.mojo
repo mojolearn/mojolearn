@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete Sequential checkpoint/export and verification-sidecar operation.
 # The existing model checkpoint format and native model ABI remain unchanged.
-from std.collections.string import chr
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_loaded_module import NativeModules
@@ -11,14 +10,7 @@ from bindings.native_json import native_path
 from bindings.sequential_description import sequential_fields, sequential_append, sequential_program, sequential_table
 from bindings.sequential_execution import sequential_entries, sequential_forward
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_descriptor, sequential_curve
-
-
-def _quote(value: String) -> String:
-    var result = value.replace("\\", "\\\\").replace("\"", "\\\"")
-    var digits = "0123456789abcdef"
-    for k in range(32):  # small-loop(32: JSON control-character alphabet): report text encoding
-        result = result.replace(chr(k), "\\u00" + String(digits[byte=k // 16]) + String(digits[byte=k % 16]))
-    return "\"" + result + "\""
+from sequence.sequential_checkpoint_run import _quote
 
 
 def _report_array(value: PythonObject, name: String, input: Bool, entries: PythonObject) raises -> String:
