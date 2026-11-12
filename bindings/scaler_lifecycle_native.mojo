@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # StandardScaler's public lifecycle. The original preprocessing and x_prep
 # kernels, operation order, modes, and copy semantics remain unchanged.
-from std.memory import unsafe_memcpy, bitcast
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -29,9 +29,10 @@ from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input, scaler_snapshot_write_back
-from bindings.scaler_native import scaler_fit, _input, _ptr, _copy_row, _bool
+from bindings.scaler_native import scaler_fit, _input, _ptr, _copy_row, _bool, scaler_transform_calls
+from core.scaler_core import ScalerTransformSpec, scaler_transform_rows, scaler_transform_rows_valid
 from core.preprocessing_program import prep_program_stage as _stage
-from core.scaler_fit_impl import scaler_fill, scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices, scaler_counts_f32, scaler_counts_i64, scaler_equal_f32, scaler_equal_i64, scaler_counts_f64, scaler_merge_count_only, scaler_narrow_counts
+from core.scaler_fit_impl import scaler_counts_f32, scaler_counts_i64, scaler_equal_f32, scaler_equal_i64, scaler_counts_f64, scaler_merge_count_only, scaler_narrow_counts
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -147,27 +148,8 @@ def _statistic(value: PythonObject, d: Int, name: String, context: PythonObject)
     return value
 
 
-def _nan_fill(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
-    var st = n*d
-    var keep = st+6*d
-    var stat = keep+d
-    var dest = stat+d
-    var arena = List[Float32](length=dest+n*d, fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    unsafe_memcpy(dest=ap, src=_ptr(values), count=n*d)
-    scaler_feature_indices(ap+keep, d)
-    var program = List[Int32]()
-    _stage(program, 1, d, 0, n, d, st)
-    _stage(program, 24, n*d, 0, n, d, stat, dest, keep, d)
-    _run(arena, program, entries)
-    scaler_refuse_infinite_columns(ap, st, d)
-    var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
-    unsafe_memcpy(dest=_ptr(output), src=ap+dest, count=n*d)
-    _ = output  # keep the Python object alive through the native call above
-    _ = arena^
-    return output
+# TOMBSTONE: `_nan_fill` moved to core/scaler_core.mojo `scaler_nan_fill` (lane scaler-typed-core,
+# 2026-11-12); one copy for both scalers and the shard worker.
 
 
 comptime _STANDARD_ROWS_SLOT = "standard_transform_rows_v1"
@@ -185,7 +167,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _ = classical_not_fitted_class(context)
         raise Error("NotFittedError: StandardScaler is not fitted")
     var entries = _entries(fields["numeric_mode_"], context)
-    var direct = _direct(entries, "standard_transform_direct")
+    var calls = scaler_transform_calls(entries, context)
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
     var values = captured[].values
@@ -204,13 +186,14 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     # The derived and validated rows of the fitted statistics (the stage 264
-    # + 248 program, a separate crossing) are kept per model in the
-    # prepared-owner registry (weakly keyed, outside __dict__), keyed by the
-    # identity of mean_ and scale_ (or None), d, with_mean, with_std and the
-    # numeric mode (p3-prep). When the record is taken the fitted Arrays are
-    # made read-only (hazard class A): an in-place write through the public
-    # view raises NumPy's read-only error; replacing a statistic (refit,
-    # partial_fit, load, assignment) misses and rebuilds.
+    # + 248 program, core/scaler_core.mojo `scaler_transform_rows`) are kept
+    # per model in the prepared-owner registry (weakly keyed, outside
+    # __dict__), keyed by the identity of mean_ and scale_ (or None), d,
+    # with_mean, with_std and the numeric mode (p3-prep). When the record is
+    # taken the fitted Arrays are made read-only (hazard class A): an
+    # in-place write through the public view raises NumPy's read-only error;
+    # replacing a statistic (refit, partial_fit, load, assignment) misses and
+    # rebuilds.
     var mods = NativeModules()
     var mode_text = String(fields["numeric_mode_"])
     var held = prepared_get(mods, _STANDARD_ROWS_SLOT, model)
@@ -219,92 +202,33 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         unsafe_memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
         _ = held  # keep the Python object alive through the copy above
     else:
-        var mean_raw = mean
-        var scale_raw = scale
-        if mean is None:
-            mean = classical_typed(Python.tuple(d), "<f4", context["output_context"])
-        if scale is None:
-            scale = classical_typed(Python.tuple(d), "<f4", context["output_context"])
-            scaler_fill(_ptr(scale), d, 1)
-            _ = scale  # keep the Python object alive through the native call above
-        mean = _statistic(mean, d, "mean_", context)
-        scale = _statistic(scale, d, "scale_", context)
-        unsafe_memcpy(dest=ap, src=_ptr(mean), count=d)
-        _ = mean  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=ap+d, src=_ptr(scale), count=d)
-        _ = scale  # keep the Python object alive through the native call above
-        arena[7*d+4] = 1
-        var program = List[Int32]()
-        _stage(program, 264, d, 0, d, Int(with_mean), Int(with_std), 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
-        _stage(program, 248, 1, 4*d, d, 7*d)
-        _stage(program, 248, 1, 5*d, d, 7*d+1)
-        _stage(program, 248, 1, 6*d, d, 7*d+2)
-        _run(arena, program, entries)
-        if bitcast[DType.int32](arena[7*d+1]) == 0 and bitcast[DType.int32](arena[7*d+2]) == 0:
+        var center = 0
+        var spread = 0
+        if mean is not None:
+            mean = _statistic(mean, d, "mean_", context)
+            center = Int(py=classical_address(mean))
+        if scale is not None:
+            scale = _statistic(scale, d, "scale_", context)
+            spread = Int(py=classical_address(scale))
+        arena = scaler_transform_rows(calls, center, spread, d, with_mean, with_std)
+        ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+        _ = mean  # keep the Python objects alive through the native call above
+        _ = scale
+        if scaler_transform_rows_valid(ap, d):
             var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
             unsafe_memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
             _ = rows  # keep the Python object alive through the copy above
-            if mean_raw is not None:
-                py_setattr(mean_raw, "_readonly", PythonObject(True))
-            if scale_raw is not None:
-                py_setattr(scale_raw, "_readonly", PythonObject(True))
+            if mean is not None:
+                py_setattr(mean, "_readonly", PythonObject(True))
+            if scale is not None:
+                py_setattr(scale, "_readonly", PythonObject(True))
             prepared_put(mods, _STANDARD_ROWS_SLOT, model, Python.tuple(
-                mean_raw, scale_raw, rows, d, mode_text, PythonObject(with_mean), PythonObject(with_std)))
-    if bitcast[DType.int32](arena[7*d+1]) != 0:
-        raise Error("StandardScaler mean_ and scale_ must remain finite (NaN: a feature never seen)")
-    if bitcast[DType.int32](arena[7*d+2]) != 0:
-        raise Error("StandardScaler scale_ must remain positive")
-    var colnan = bitcast[DType.int32](arena[7*d]) != 0
+                mean, scale, rows, d, mode_text, PythonObject(with_mean), PythonObject(with_std)))
     var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
-    var params = Python.list(n,d,Int(inverse),Int(with_mean),Int(with_std))
-    var finite = True
-    if direct is not None:
-        var got = Int(py=py_call(direct, classical_address(values), Int(ap+2*d), Int(ap+3*d), classical_address(output), params))
-        _ = output  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-        if got == 0:
-            raise Error("StandardScaler transform overflowed in Float32")
-        _ = output  # keep the Python object alive through the native calls above
-        _ = values  # keep the Python object alive through the native calls above
-        finite = got == 1
-        _ = output  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-        if not finite:
-            var filled = _nan_fill(values, entries, context)
-            if Int(py=py_call(direct, classical_address(filled), Int(ap+2*d), Int(ap+3*d), classical_address(output), params)) != 1:
-                raise Error("StandardScaler transform overflowed in Float32")
-            _ = filled  # keep the Python object alive through the native calls above
-            _ = output  # keep the Python object alive through the native calls above
-            _ = filled^
-    else:
-        finite = scaler_all_finite(_ptr(values), n*d)
-        _ = values  # keep the Python object alive through the native call above
-        var filled = values if finite else _nan_fill(values, entries, context)
-        _ = py_call_typed(entries["standard_transform"], classical_address(filled), Int(ap+2*d), Int(ap+3*d), classical_address(output), params)
-        _ = filled  # keep the Python object alive through the native call above
-        _ = output  # keep the Python object alive through the native call above
-        if not scaler_all_finite(_ptr(output), n*d):
-            raise Error("StandardScaler transform overflowed in Float32")
-        _ = output  # keep the Python object alive through the native calls above
-        _ = filled^
-    if not finite or colnan:
-        var keep = List[Float32](length=3*n*d+2*d, fill=0)
-        var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
-        unsafe_memcpy(dest=kp, src=_ptr(values), count=n*d)
-        _ = values  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
-        _ = output  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
-        var restore = List[Int32]()
-        # c2_nan_sub publishes int32 words, while nan_keep reads numeric
-        # Float32 flags. Preserve the old _Prog.put_codes i2f stage: raw
-        # integer 1 is a subnormal float that Metal can flush to zero.
-        _stage(restore, 10, d, 2*n*d, 2*n*d+d)
-        _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
-        _run(keep, restore, entries)
-        unsafe_memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
-        _ = output  # keep the Python object alive through the native call above
-        _ = keep^
+    # RUN: the typed core (statistic refusals, kernel, NaN fill and restore,
+    # overflow refusal) on the borrowed input and the new output.
+    scaler_transform_core(calls, ScalerTransformSpec(False, inverse, with_mean, with_std, False, 0, 0),
+                          ap, _ptr(values), n, d, _ptr(output))
     _ = arena^
     _ = mean^
     _ = scale^

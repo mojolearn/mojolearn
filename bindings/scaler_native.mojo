@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # StandardScaler.fit owns admission, buffers, route selection, launches and
 # fitted-state publication here. The existing statistics kernels are unchanged.
-from std.memory import unsafe_memcpy, bitcast
+from std.memory import unsafe_memcpy
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -15,7 +15,7 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
 from core.scaler_fit_impl import scaler_cast, scaler_fill, scaler_counts
 from std.python._cpython import GILReleased
-from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from core.entry_table import entry_ref_call, entry_ref_unresolved
 from core.prep_entry_table import PrepEntryKey, scaler_ref, xp_transport_ref
 from core.scaler_native_api import (
     ScalerFitRequest, ScalerTransformRequest, MinMaxFitRequest, MinMaxTransformRequest, SCALER_OP_DIRECT,
