@@ -306,19 +306,18 @@ def _classical_getattribute_impl(mut mods: NativeModules, model: PythonObject, n
         if py_contains(stored, name):
             return _instance_result(name, stored[name], context)
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
-    var member = PythonObject(None)
-    var present = False
+    # Optional, not a PythonObject(None) sentinel: its presence is the old `present` flag (modular/modular#7546).
+    var member = Optional[PythonObject]()
     var mro = plan["mro"]
     for k in range(len(mro)):  # driver-loop: over native class attribute lookup order
         var fields = _type_fields(mro[k])
         if py_contains(fields, name):
             member = fields[name]
-            present = True
             break
+    var present = Bool(member)
     var binding = py_get(plan["bindings"], name)
-    var known = binding is not None and member is binding[0]
-    var member_type = py_type(member)
-    var kind = _descriptor_kind(mods, member_type) if present else 0
+    var known = binding is not None and present and member.value() is binding[0]
+    var kind = _descriptor_kind(mods, py_type(member.value())) if present else 0
     var descriptor = kind != 0
     var data_descriptor = kind == 3
     if data_descriptor:
@@ -334,7 +333,7 @@ def _classical_getattribute_impl(mut mods: NativeModules, model: PythonObject, n
         if not known:
             raise Error("TypeError: unconnected Python model descriptors are not accepted")
         return _classical_descriptor_get(binding, model, cls, plan)
-    return member
+    return member.value()
 
 
 def _connect_probe(mapping: PythonObject, key: StaticString) raises -> Int:
