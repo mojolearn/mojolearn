@@ -18,7 +18,14 @@ from bindings.native_json import native_path, native_path_exists
 from bindings.native_process_pool import process_pool_create, process_pool_start, process_pool_call, process_pool_close, process_worker_connect, process_worker_next, process_send
 from bindings.native_transport import transport_close, _transport_state
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.boundary_read import buffer_view
+from core.parallel_worker_request import (
+    WorkerRequest, worker_request_decode, parallel_causal_op_code, WORKER_NO_HANDLE,
+    PC_CONFIGURE, PC_BLOCK, PC_TENSORS, PC_EMBEDDING, PC_FINAL, PC_HEAD, PC_HEAD_INT15, PC_NORM, PC_ROUTE,
+    PC_ALLOCATE, PC_RELEASE, PC_STATE, PC_PUBLISH_STATE, PC_RUN_LAYERS, PC_PARAMETERS, PC_RUN, PC_BLOCK_FIELDS,
+)
 from core.shared_slot import SharedSlot
+from std.collections import Dict
 
 
 struct ParallelCausalBoundary(Defaultable, Movable):
@@ -318,12 +325,56 @@ def _parallel_causal_wire_plan(plan: PythonObject) raises -> PythonObject:
     return result
 
 
-def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject, operation: String, args: PythonObject) raises -> PythonObject:
+struct CausalWorkerRegistry(Movable):
+    """The worker's own handles: a layer index names a block holder and a
+    state token names a layer state, both valid only in this worker. A typed
+    request carries the id; nothing about the parent's model object crosses.
+    (Replaces the Python `world` dict and its "blocks"/"states"/"next_state"
+    entries; lane parallel-workers-typed-rpc.)"""
+    var plan: PythonObject
+    var top: PythonObject
+    var bindings: PythonObject
+    var blocks: Dict[Int, PythonObject]
+    var states: Dict[Int, PythonObject]
+    var state_layers: Dict[Int, Int]
+    var next_state: Int
+
+    def __init__(out self):
+        self.plan = PythonObject(None)
+        self.top = PythonObject(None)
+        self.bindings = PythonObject(None)
+        self.blocks = Dict[Int, PythonObject]()
+        self.states = Dict[Int, PythonObject]()
+        self.state_layers = Dict[Int, Int]()
+        self.next_state = 0
+
+
+def _registry_block(registry: CausalWorkerRegistry, index: Int) raises -> PythonObject:
+    if index not in registry.blocks:
+        raise Error("ParallelCausalLM: layer not initialized in this worker")
+    return registry.blocks.get(index, PythonObject(None))
+
+
+def _registry_state(registry: CausalWorkerRegistry, token: Int, layer: Int = WORKER_NO_HANDLE) raises -> PythonObject:
+    """The state `token` names; with `layer`, it must belong to that layer."""
+    if token not in registry.states:
+        raise Error("ParallelCausalLM: state released")
+    if layer != WORKER_NO_HANDLE and registry.state_layers.get(token, WORKER_NO_HANDLE) != layer:
+        raise Error("ParallelCausalLM: state belongs to another layer")
+    return registry.states.get(token, PythonObject(None))
+
+
+def _parallel_causal_worker_request(mut mods: NativeModules, mut registry: CausalWorkerRegistry, request: WorkerRequest,
+                                    args: PythonObject) raises -> PythonObject:
+    # RUN of one typed request: `request` is the decoded struct (operation
+    # code, handle id, words); `args` is only the tensor or structural payload
+    # that rides beside it (None for handle-only operations).
     var p = PARALLEL_CAUSAL.get_or_create_ptr()
     var bi = p[].bi
     var context = p[].context
-    if operation == "configure":
-        if py_get(world, "top") is not None:
+    var op = request.op
+    if op == PC_CONFIGURE:
+        if registry.top is not None:
             raise Error("ParallelCausalLM: worker already configured")
         var route = PythonObject("cpu" if String(context["selected_vendor"]) == "cpu" else "gpu")
         if Bool(py=args[0]["device"] != route):
@@ -345,23 +396,20 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         py_setitem(entries, "entry_mode", bindings["entry_mode"])
         py_setitem(entries, "entry_vendor", bindings["entry_vendor"])
         py_setattr(top, "_native_entries", entries)
-        py_setitem(world, "plan", plan)
-        py_setitem(world, "top", top)
-        py_setitem(world, "bindings", bindings)
-        py_setitem(world, "blocks", bi.dict())
-        py_setitem(world, "states", bi.dict())
-        py_setitem(world, "next_state", 0)
+        registry.plan = plan
+        registry.top = top
+        registry.bindings = bindings
         return PythonObject(True)
-    var top = py_get(world, "top")
+    var top = registry.top
     if top is None:
         raise Error("ParallelCausalLM: worker was not told its route")
-    if operation == "block":
-        var index = args[0]
-        if py_contains(world["blocks"], index):
+    if op == PC_BLOCK:
+        var index = request.handle
+        if index in registry.blocks:
             raise Error("ParallelCausalLM: layer already initialized")
-        var block = _model_block(mods, args[1], world["plan"], top.numeric_profile, top.device, world["bindings"], context)
+        var block = _model_block(mods, args, registry.plan, top.numeric_profile, top.device, registry.bindings, context)
         var holder = neural_block_owner(mods, block, context)
-        py_setitem(world["blocks"], index, holder)
+        registry.blocks[index] = holder
         var result = bi.dict()
         py_setitem(result, "weight_format", _parallel_causal_fields(block)["weight_format"])
         py_setitem(result, "weight_names", holder._native_entries["weight_names"])
@@ -369,7 +417,7 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         py_setitem(result, "numeric_mode", holder._native_numeric_mode)
         py_setitem(result, "mamba1_profile", py_get(holder._native_entries, "mamba1_profile", 1))
         return result
-    if operation == "tensors":
+    if op == PC_TENSORS:
         var fields = _parallel_causal_fields(top)
         var keys = py_call(bi.list, args)
         for i in range(len(keys)):  # driver-loop: over the embedding and final-head tensor owners
@@ -378,26 +426,26 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
                 raise Error("ParallelCausalLM: unknown top-level tensor")
             py_setitem(fields, "_" + name, args[keys[i]])
         if py_contains(args, "head") and String(top.numeric_profile) == "fixed15_v1":
-            py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, causal_entry_key(world["bindings"])))
+            py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, causal_entry_key(registry.bindings)))
         return top._head_int15
-    if operation == "embedding":
+    if op == PC_EMBEDDING:
         var windowed_result12 = causal_model_embedding(top, args)
         mods.released()
         return windowed_result12^
-    if operation == "final" or operation == "head" or operation == "head_int15":
+    if op == PC_FINAL or op == PC_HEAD or op == PC_HEAD_INT15:
         # Generation head admission reads only a captured native namespace
         # (generation_metadata_pyapi._generation_fields), never a live model
         # owner. Capture the worker's private top-level fields per operation,
         # as the single-process path captures its model.
         var captured_top = _causal_namespace(mods, _parallel_causal_fields(top))
-        if operation == "final":
+        if op == PC_FINAL:
             var windowed_result11 = causal_model_head(captured_top, args)
             mods.released()
             return windowed_result11^
-        var windowed_result10 = causal_model_head(captured_top, args, False, operation == "head_int15")
+        var windowed_result10 = causal_model_head(captured_top, args, False, op == PC_HEAD_INT15)
         mods.released()
         return windowed_result10^
-    if operation == "norm":
+    if op == PC_NORM:
         var x = args[0]
         var dims = List[Int]()
         for i in range(len(x.shape)):  # driver-loop: over activation shape metadata
@@ -410,29 +458,32 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         mods.released()
         _ = keep^
         return out
-    if operation == "route":
+    if op == PC_ROUTE:
         if Bool(py=args != top.device):
             raise Error("ParallelCausalLM: worker already owns a different route")
         return PythonObject(True)
-    if operation == "allocate":
-        var holder = world["blocks"][args[0]]
-        var state = neural_block_allocate_binding(mods, holder._blocks[0], args[1], args[2], context)
-        var token = Int(py=world["next_state"])
-        py_setitem(world, "next_state", token + 1)
-        py_setitem(world["states"], token, Python.list(args[0], state))
+    if op == PC_ALLOCATE:
+        # words: [batch, capacity or -1 for none]
+        var holder = _registry_block(registry, request.handle)
+        var capacity = PythonObject(None) if request.words[1] < 0 else PythonObject(request.words[1])
+        var state = neural_block_allocate_binding(mods, holder._blocks[0], PythonObject(request.words[0]), capacity, context)
+        var token = registry.next_state
+        registry.next_state = token + 1
+        registry.states[token] = state
+        registry.state_layers[token] = request.handle
         return PythonObject(token)
-    if operation == "release":
-        _ = py_call(world["states"].pop, args, PythonObject(None))
+    if op == PC_RELEASE:
+        # A token this worker no longer holds is a quiet success, as before.
+        if request.handle in registry.states:
+            _ = registry.states.pop(request.handle)
+            _ = registry.state_layers.pop(request.handle)
         return PythonObject(True)
-    if operation == "state" or operation == "publish_state":
-        var token = args if operation == "state" else args[0]
-        if not py_contains(world["states"], token):
-            raise Error("ParallelCausalLM: state released")
-        var state = world["states"][token][1]
+    if op == PC_STATE or op == PC_PUBLISH_STATE:
+        var state = _registry_state(registry, request.handle)
         var fields = _parallel_causal_fields(state)
-        if operation == "state":
+        if op == PC_STATE:
             return py_call(bi.dict, fields)
-        var supplied = args[1]
+        var supplied = args
         if Bool(py=py_call(bi.set, supplied) != py_call(bi.set, fields)):
             raise Error("ParallelCausalLM: restored state fields differ")
         var keys = py_call(bi.list, fields)
@@ -446,63 +497,69 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
                 raise Error("ParallelCausalLM: restored state metadata type differs")
         _ = py_call(fields.update, supplied)
         return PythonObject(True)
-    if operation == "run_layers":
+    if op == PC_RUN_LAYERS:
         # Lane p3-msel-parallel-and-process-pool (audit B worst path 9): one
         # request runs this worker's consecutive layers for a token batch,
         # with the embedding when the batch starts here and the final head
-        # when it ends here. args: ([(layer index, state token)], method, x,
-        # ids or None, final flag). The same entries in the same order as the
-        # per-layer requests: no bits change.
-        var items = args[0]
-        var step = PythonObject(String(args[1]) == "step")
-        var x = args[2]
-        if args[3] is not None:
-            x = causal_model_embedding(top, args[3])
+        # when it ends here. words: [step, has ids, final, n, (layer index,
+        # state token or -1) * n]; args: (x, ids or None). The same entries in
+        # the same order as the per-layer requests: no bits change.
+        var count = request.words[3]
+        if count < 0 or len(request.words) != 4 + 2 * count:
+            raise Error("ParallelCausalLM: malformed run_layers request")
+        var step = PythonObject(request.words[0] != 0)
+        var x = args[0]
+        if request.words[1] != 0:
+            x = causal_model_embedding(top, args[1])
             mods.released()
-        for i in range(len(items)):  # driver-loop: over this worker's consecutive layers
-            var item = items[i]
-            var layer_holder = world["blocks"][item[0]]
+        for i in range(count):  # driver-loop: over this worker's consecutive layers
+            var index = request.words[4 + 2 * i]
+            var token = request.words[5 + 2 * i]
+            var layer_holder = _registry_block(registry, index)
             var layer_state = PythonObject(None)
-            if item[1] is not None:
-                if not py_contains(world["states"], item[1]):
-                    raise Error("ParallelCausalLM: state released")
-                var saved = world["states"][item[1]]
-                if Bool(py=saved[0] != item[0]):
-                    raise Error("ParallelCausalLM: state belongs to another layer")
-                layer_state = saved[1]
+            if token != WORKER_NO_HANDLE:
+                layer_state = _registry_state(registry, token, index)
             x = neural_block_forward_binding(mods, layer_holder._blocks[0], x, layer_state, step, PythonObject(None), context)
-        if Bool(py=args[4]):
+        if request.words[2] != 0:
             var head_top = _causal_namespace(mods, _parallel_causal_fields(top))
             x = causal_model_head(head_top, x)
             mods.released()
         return x
-    var holder = world["blocks"][args if operation == "parameters" else args[0]]
+    var holder = _registry_block(registry, request.handle)
     var block = holder._blocks[0]
-    if operation == "parameters":
+    if op == PC_PARAMETERS:
         var fields = _parallel_causal_fields(block)
         var result = bi.dict()
         var names = holder._native_entries["weight_names"]
         for i in range(len(names)):  # driver-loop: over the original block parameter registry
             py_setitem(result, names[i], fields["_w"][i])
         return result
-    if operation == "run":
+    if op == PC_RUN:
+        # words: [step, state token or -1]; args: x
         var state = PythonObject(None)
-        if args[3] is not None:
-            if not py_contains(world["states"], args[3]):
-                raise Error("ParallelCausalLM: state released")
-            var saved = world["states"][args[3]]
-            if Bool(py=saved[0] != args[0]):
-                raise Error("ParallelCausalLM: state belongs to another layer")
-            state = saved[1]
-        return neural_block_forward_binding(mods, block, args[2], state, PythonObject(String(args[1]) == "step"), PythonObject(None), context)
-    if operation == "block_fields":
+        if request.words[1] != WORKER_NO_HANDLE:
+            state = _registry_state(registry, request.words[1], request.handle)
+        return neural_block_forward_binding(mods, block, args, state, PythonObject(request.words[0] != 0), PythonObject(None), context)
+    if op == PC_BLOCK_FIELDS:
         var fields = _parallel_causal_fields(block)
         var result = bi.dict()
         for key in [String("_w"), String("_wopt"), String("_int15"), String("_opts_tail"), String("n_heads"), String("n_kv_heads"), String("window"), String("dt_limit"), String("weight_format")]:  # driver-loop: over serializable parameter/fingerprint metadata
             if py_contains(fields, key):
                 py_setitem(result, key, fields[key])
         return result
-    raise Error("ParallelCausalLM: unknown worker operation " + operation)
+    raise Error("ParallelCausalLM: unknown worker operation code " + String(op))
+
+
+def _parallel_causal_decode(envelope: PythonObject) raises -> WorkerRequest:
+    """UNPACK in the worker: the typed request from its wire bytes, one
+    buffer export of the received `bytes`."""
+    if py_type(envelope) is not PARALLEL_CAUSAL.get_or_create_ptr()[].bi.bytes:
+        raise Error("ParallelCausalLM: worker request must be a typed request")
+    var view = buffer_view(envelope)
+    var request = worker_request_decode(view.address(), view.count() * view.itemsize)
+    view.release()
+    _ = envelope
+    return request^
 
 
 def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
@@ -511,7 +568,7 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
         _ = model_string(mods, argv[i])
     var socket = process_worker_connect(argv)
     mods.released()
-    var world = PARALLEL_CAUSAL.get_or_create_ptr()[].bi.dict()
+    var registry = CausalWorkerRegistry()
     try:
         while True:  # driver-loop: over native remote model/layer/state requests
             var request = process_worker_next(socket)
@@ -520,7 +577,9 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
                 break
             var sequence = Int(py=request[0]["sequence"])
             try:
-                var result = _parallel_causal_worker_request(mods, world, String(request[1][0]), request[1][1])
+                var envelope = request[1]
+                var typed = _parallel_causal_decode(envelope[0])
+                var result = _parallel_causal_worker_request(mods, registry, typed, envelope[1])
                 process_send(socket, "result", sequence, result)
                 mods.released()
             except error:
@@ -565,7 +624,74 @@ def _parallel_pool_publish(mut mods: NativeModules, fields: PythonObject, worker
         py_setitem(live, name, pool[name])
 
 
-def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: PythonObject, operation: String, args: PythonObject,
+struct CausalRpc(Movable):
+    """One worker request after UNPACK: the typed struct and the tensor or
+    structural payload that rides beside it."""
+    var request: WorkerRequest
+    var payload: PythonObject
+
+    def __init__(out self, var request: WorkerRequest, payload: PythonObject):
+        self.request = request^
+        self.payload = payload
+
+
+def _parallel_causal_wire(request: WorkerRequest, payload: PythonObject) raises -> PythonObject:
+    """PACK for the transport: the request's wire bytes (one bytes object)
+    and its payload. No Python model object crosses."""
+    var wire = request.encode()
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(wire.unsafe_ptr().bitcast[UInt8](), len(wire) * 8)
+    if not raw:
+        var failure = cpy.unsafe_get_error()
+        raise failure^
+    var header = PythonObject(from_owned=raw)
+    _ = wire^
+    return Python.list(header, payload)
+
+
+def _parallel_causal_typed(mut mods: NativeModules, name: String, args: PythonObject) raises -> CausalRpc:
+    """UNPACK of the private by-name entry points (`ParallelCausalLM._rpc`,
+    `_RemoteBlock.call`, the primitives): the legacy argument shape of
+    `name` read once into a typed request."""
+    var op = parallel_causal_op_code(name)
+    var request = WorkerRequest(op)
+    var payload = args
+    if op == PC_BLOCK:
+        request.handle = _parallel_word(args[0])
+        payload = args[1]
+    elif op == PC_ALLOCATE:
+        request.handle = _parallel_word(args[0])
+        request.words.append(_parallel_word(args[1]))
+        request.words.append(WORKER_NO_HANDLE if args[2] is None else _parallel_word(args[2]))
+        payload = PythonObject(None)
+    elif op == PC_RELEASE or op == PC_STATE or op == PC_PARAMETERS:
+        request.handle = _parallel_word(args)
+        payload = PythonObject(None)
+    elif op == PC_BLOCK_FIELDS:
+        request.handle = _parallel_word(args[0])
+        payload = PythonObject(None)
+    elif op == PC_PUBLISH_STATE:
+        request.handle = _parallel_word(args[0])
+        payload = args[1]
+    elif op == PC_RUN:
+        request.handle = _parallel_word(args[0])
+        request.words.append(1 if model_string(mods, args[1]) == "step" else 0)
+        request.words.append(WORKER_NO_HANDLE if args[3] is None else _parallel_word(args[3]))
+        payload = args[2]
+    elif op == PC_RUN_LAYERS:
+        var items = args[0]
+        request.words.append(1 if model_string(mods, args[1]) == "step" else 0)
+        request.words.append(0 if args[3] is None else 1)
+        request.words.append(1 if _parallel_flag(args[4]) else 0)
+        request.words.append(len(items))
+        for i in range(len(items)):  # driver-loop: over the layers of one worker's run
+            request.words.append(_parallel_word(items[i][0]))
+            request.words.append(WORKER_NO_HANDLE if items[i][1] is None else _parallel_word(items[i][1]))
+        payload = Python.list(args[2], args[3])
+    return CausalRpc(request^, payload)
+
+
+def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: PythonObject, request: WorkerRequest, payload: PythonObject,
                          captured: PythonObject) raises -> PythonObject:
     var fields = _parallel_captured(mods, owner, captured)
     _parallel_causal_usable(fields)
@@ -577,7 +703,7 @@ def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: P
     var result = PythonObject(None)
     var started = len(pool["workers"]) != 0
     try:
-        result = process_pool_call(pool, index, Python.list(PythonObject(operation), args))
+        result = process_pool_call(pool, index, _parallel_causal_wire(request, payload))
         mods.released()
     except error:
         mods.released()
@@ -592,8 +718,8 @@ def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: P
     return result
 
 
-def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: PythonObject, operation: String, args: PythonObject) raises -> PythonObject:
-    return _parallel_causal_rpc(mods, owner, device, operation, args, _parallel_owner_snapshot(mods, owner))
+def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: PythonObject, request: WorkerRequest, payload: PythonObject) raises -> PythonObject:
+    return _parallel_causal_rpc(mods, owner, device, request, payload, _parallel_owner_snapshot(mods, owner))
 
 
 def _parallel_causal_close(mut mods: NativeModules, owner: PythonObject) raises:
@@ -624,7 +750,7 @@ def _parallel_causal_block(mut mods: NativeModules, owner: PythonObject, index: 
                            captured: PythonObject) raises -> PythonObject:
     var p = PARALLEL_CAUSAL.get_or_create_ptr()
     var fields = _parallel_captured(mods, owner, captured)
-    var metadata = _parallel_causal_rpc(mods, owner, fields["layer_devices"][index], "block", Python.list(index, weights), captured)
+    var metadata = _parallel_causal_rpc(mods, owner, fields["layer_devices"][index], WorkerRequest(PC_BLOCK, index), weights, captured)
     model_dict(mods, metadata)
     var format = model_string(mods, metadata["weight_format"])
     if format != model_string(mods, fields["weight_format"]):
@@ -723,17 +849,17 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
             py_setitem(metadata, key, fields[key])
         var wire_plan = _parallel_causal_wire_plan(plan)
         for i in range(len(unique)):  # driver-loop: worker initialization before constructing layers
-            _ = _parallel_causal_rpc(mods, owner, unique[i], "configure", Python.list(metadata, wire_plan), captured)
+            _ = _parallel_causal_rpc(mods, owner, unique[i], WorkerRequest(PC_CONFIGURE), Python.list(metadata, wire_plan), captured)
         for i in range(_parallel_word(plan["n_layers"])):  # driver-loop: each model layer is built only by its assigned worker
             _ = py_call(blocks.append, _parallel_causal_block(mods, owner, i, weights["layers"][i], captured))
             _model_construction_set(mods, live, fields, "_blocks", blocks)
         var first = Python.dict()
         py_setitem(first, "embed", fields["_embed"])
-        _ = _parallel_causal_rpc(mods, owner, devices[0], "tensors", first, captured)
+        _ = _parallel_causal_rpc(mods, owner, devices[0], WorkerRequest(PC_TENSORS), first, captured)
         var last = Python.dict()
         py_setitem(last, "norm", fields["_norm"])
         py_setitem(last, "head", fields["_head"])
-        var packed = _parallel_causal_rpc(mods, owner, devices[len(devices) - 1], "tensors", last, captured)
+        var packed = _parallel_causal_rpc(mods, owner, devices[len(devices) - 1], WorkerRequest(PC_TENSORS), last, captured)
         model_dict(mods, live)
         py_setitem(live, "_head_int15", packed)
     except error:
@@ -834,7 +960,8 @@ def _parallel_causal_release_token(mut mods: NativeModules, block: PythonObject,
     var fields = causal_snapshot_fields(mods, captured)
     if not _parallel_flag(fields["_closed"]) and not _parallel_flag(fields["_failed"]):
         var layer = causal_snapshot_fields(mods, _parallel_find_block(mods, block, captured))
-        _ = _parallel_causal_rpc(mods, fields["_causal_original"], fields["layer_devices"][layer["index"]], "release", token, captured)
+        _ = _parallel_causal_rpc(mods, fields["_causal_original"], fields["layer_devices"][layer["index"]],
+                                WorkerRequest(PC_RELEASE, _parallel_word(token)), PythonObject(None), captured)
 
 
 def _parallel_causal_attach_fields(fields: PythonObject, layer: PythonObject, token: PythonObject) raises:
@@ -858,13 +985,13 @@ def _parallel_causal_allocate(mut mods: NativeModules, owner: PythonObject, inde
     var blocks = fields["_native_parallel_blocks"]
     if index < 0 or index >= len(blocks):
         raise Error("ParallelCausalLM: layer allocation index outside model")
-    _ = _parallel_word(batch)
-    if capacity is not None:
-        _ = _parallel_word(capacity)
+    var allocate = WorkerRequest(PC_ALLOCATE, index)
+    allocate.words.append(_parallel_word(batch))
+    allocate.words.append(WORKER_NO_HANDLE if capacity is None else _parallel_word(capacity))
     var result = py_call(p[].bi.object.__new__, p[].classes["state"])
     var destination = _parallel_state_fields(mods, result)
     var original = causal_snapshot_fields(mods, blocks[index])["_causal_original"]
-    var token = _parallel_causal_rpc(mods, owner, fields["layer_devices"][index], "allocate", Python.list(index, batch, capacity), captured)
+    var token = _parallel_causal_rpc(mods, owner, fields["layer_devices"][index], allocate, PythonObject(None), captured)
     _parallel_causal_attach_fields(destination, original, token)
     return result
 
@@ -882,7 +1009,8 @@ def _parallel_causal_release(mut mods: NativeModules, remote: PythonObject, capt
     var owner = causal_snapshot_fields(mods, model)
     var block = causal_snapshot_fields(mods, fields["_native_parallel_block"])
     if not _parallel_flag(owner["_closed"]) and not _parallel_flag(owner["_failed"]):
-        _ = _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][block["index"]], "release", token, model)
+        _ = _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][block["index"]],
+                                WorkerRequest(PC_RELEASE, _parallel_word(token)), PythonObject(None), model)
     # Preserve the old failure contract: a failed release keeps the token and
     # lifetime live, allowing an explicit retry or later native destruction.
     py_setitem(fields, "token", PythonObject(None))
@@ -906,7 +1034,8 @@ def _parallel_causal_snapshot(mut mods: NativeModules, remote: PythonObject, cap
     var model = source["_native_parallel_model"]
     var owner = causal_snapshot_fields(mods, model)
     var block = causal_snapshot_fields(mods, source["_native_parallel_block"])
-    var fields = _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][block["index"]], "state", source["token"], model)
+    var fields = _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][block["index"]],
+                                     WorkerRequest(PC_STATE, _parallel_word(source["token"])), PythonObject(None), model)
     var state = py_call(p[].bi.object.__new__, p[].context["generation_classes"][2][owner["kind"]])
     _ = py_call(_parallel_causal_fields(state).update, fields)
     return state
@@ -919,17 +1048,20 @@ def _parallel_causal_snapshot(mut mods: NativeModules, remote: PythonObject) rai
 def _parallel_causal_block_run(mut mods: NativeModules, block: PythonObject, method: PythonObject, x: PythonObject, state: PythonObject,
                                captured_model: PythonObject, captured_block: PythonObject,
                                captured_state: PythonObject) raises -> PythonObject:
-    _ = model_string(mods, method)
+    var method_name = model_string(mods, method)
     var owner = causal_snapshot_fields(mods, captured_model)
     var layer = _parallel_captured(mods, block, captured_block)
-    var token = PythonObject(None)
+    var token = WORKER_NO_HANDLE
     if state is not None:
         var fields = _parallel_captured(mods, state, captured_state)
         if fields["layer"] is not block or fields["token"] is None:
             raise Error("ParallelCausalLM: state belongs to another layer or has been released")
-        token = fields["token"]
+        token = _parallel_word(fields["token"])
     var index = layer["index"]
-    return _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][index], "run", Python.list(index, method, x, token), captured_model)
+    var run = WorkerRequest(PC_RUN, _parallel_word(index))
+    run.words.append(1 if method_name == "step" else 0)
+    run.words.append(token)
+    return _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][index], run, x, captured_model)
 
 
 def _parallel_find_block(mut mods: NativeModules, block: PythonObject, model: PythonObject) raises -> PythonObject:
@@ -973,21 +1105,29 @@ def _parallel_causal_block_run(mut mods: NativeModules, block: PythonObject, met
     return _parallel_causal_block_run(mods, block, method, x, state, model, _parallel_find_block(mods, block, model), captured)
 
 
+@fieldwise_init
+struct LayerItem(ImplicitlyCopyable, Movable):
+    """One layer of a "run_layers" request: its index and its state token
+    (WORKER_NO_HANDLE when it runs without a state)."""
+    var index: Int
+    var token: Int
+
+
 def _parallel_layer_item(mut mods: NativeModules, captured_block: PythonObject, captured_state: PythonObject,
-                         captured_model: PythonObject) raises -> PythonObject:
+                         captured_model: PythonObject) raises -> LayerItem:
     """(layer index, state token) of one layer of a "run_layers" request,
     with the checks `_parallel_causal_block_run` makes for a "run"."""
     var block = causal_snapshot_fields(mods, captured_block)["_causal_original"]
     var state = causal_snapshot_fields(mods, captured_state)["_causal_original"]
     _ = causal_snapshot_fields(mods, captured_model)
     var layer = _parallel_captured(mods, block, captured_block)
-    var token = PythonObject(None)
+    var token = WORKER_NO_HANDLE
     if state is not None:
         var fields = _parallel_captured(mods, state, captured_state)
         if fields["layer"] is not block or fields["token"] is None:
             raise Error("ParallelCausalLM: state belongs to another layer or has been released")
-        token = fields["token"]
-    return Python.tuple(layer["index"], token)
+        token = _parallel_word(fields["token"])
+    return LayerItem(_parallel_word(layer["index"]), token)
 
 
 def parallel_causal_call(mut mods: NativeModules, operation: String, args: PythonObject) raises -> PythonObject:
@@ -1005,7 +1145,8 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
     elif operation == "load" or operation == "load_with_worker":
         return _parallel_causal_load(mods, args[0], args[1], args[2], args[3], child if operation == "load" else model_string(mods, args[4]))
     elif operation == "rpc":
-        return _parallel_causal_rpc(mods, args[0], args[1], model_string(mods, args[2]), args[3])
+        var typed = _parallel_causal_typed(mods, model_string(mods, args[2]), args[3])
+        return _parallel_causal_rpc(mods, args[0], args[1], typed.request, typed.payload)
     elif operation == "capture_model":
         return _parallel_capture_model(mods, args[0], args[1]) if len(args) > 1 else _parallel_capture_model(mods, args[0])
     elif operation == "capture_state":
@@ -1026,7 +1167,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var captured = args[2] if len(args) > 2 else _parallel_owner_snapshot(mods, args[0])
         var fields = _parallel_captured(mods, args[0], captured)
         var index = _parallel_word(args[1])
-        return _parallel_causal_rpc(mods, args[0], fields["layer_devices"][index], "block_fields", Python.list(index), captured)
+        return _parallel_causal_rpc(mods, args[0], fields["layer_devices"][index], WorkerRequest(PC_BLOCK_FIELDS, index), PythonObject(None), captured)
     elif operation == "allocate_layer":
         var captured = args[4] if len(args) > 4 else _parallel_owner_snapshot(mods, args[0])
         return _parallel_causal_allocate(mods, args[0], _parallel_word(args[1]), args[2], args[3], captured)
@@ -1040,7 +1181,8 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var captured = _parallel_owner_snapshot(mods, original)
         var fields = causal_snapshot_fields(mods, captured)
         var block = causal_snapshot_fields(mods, _parallel_find_block(mods, args[0], captured))
-        return _parallel_causal_rpc(mods, fields["_causal_original"], fields["layer_devices"][block["index"]], model_string(mods, args[1]), args[2], captured)
+        var typed = _parallel_causal_typed(mods, model_string(mods, args[1]), args[2])
+        return _parallel_causal_rpc(mods, fields["_causal_original"], fields["layer_devices"][block["index"]], typed.request, typed.payload, captured)
     elif operation == "block_init":
         var destination = _parallel_block_fields(mods, args[0])
         var created = _parallel_causal_block(mods, args[1], _parallel_word(args[2]), args[3])
@@ -1061,7 +1203,8 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var model = fields["_native_parallel_model"]
         var owner = causal_snapshot_fields(mods, model)
         var block = causal_snapshot_fields(mods, fields["_native_parallel_block"])
-        return _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][block["index"]], "publish_state", Python.list(fields["token"], _parallel_causal_fields(args[1])), model)
+        return _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][block["index"]],
+                                    WorkerRequest(PC_PUBLISH_STATE, _parallel_word(fields["token"])), _parallel_causal_fields(args[1]), model)
     elif operation == "state_close" or operation == "state_close_quiet":
         _parallel_causal_release(mods, args[0])
     elif operation == "release_layers":
@@ -1091,7 +1234,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var layers = state_fields["layers"]
         # The legacy parallel API used each block's dedicated decode entry
         # after prefill. Preserve that route independently of ordinary CausalLM.
-        var method = PythonObject("step" if _parallel_flag(args[3]) else "forward")
+        var step = 1 if _parallel_flag(args[3]) else 0
         # Lane p3-msel-parallel-and-process-pool (audit B worst path 9: one
         # request per layer plus the embedding and the head, n_layers + 2 per
         # token batch): consecutive layers on one device go in ONE
@@ -1104,23 +1247,24 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var x = PythonObject(None)
         var embedded = False
         if nb == 0:
-            x = _parallel_causal_rpc(mods, owner, embed_device, "embedding", ids, args[4])
+            x = _parallel_causal_rpc(mods, owner, embed_device, WorkerRequest(PC_EMBEDDING), ids, args[4])
             embedded = True
         var i = 0
         var result = PythonObject(None)
         var finished = False
         while i < nb:  # driver-loop: over runs of consecutive layers on one device
-            var items = Python.list()
+            var items = List[Int]()
             # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
             var run_device = Optional[PythonObject]()
             var j = i
             while j < nb:  # driver-loop: over the layers of this device run
                 var item = _parallel_layer_item(mods, blocks[j], layers[j], args[4])
-                var layer_device = model_fields["layer_devices"][item[0]]
+                var layer_device = model_fields["layer_devices"][item.index]
                 if j > i and Bool(py=layer_device != run_device.value()):
                     break
                 run_device = layer_device
-                _ = py_call(items.append, item)
+                items.append(item.index)
+                items.append(item.token)
                 j += 1
             # The run holds at least layer i (i < nb), so the device is set.
             var device = run_device.value()
@@ -1129,17 +1273,23 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
                 if Bool(py=device == embed_device):
                     first_ids = ids
                 else:
-                    x = _parallel_causal_rpc(mods, owner, embed_device, "embedding", ids, args[4])
+                    x = _parallel_causal_rpc(mods, owner, embed_device, WorkerRequest(PC_EMBEDDING), ids, args[4])
                 embedded = True
             var last = j == nb and Bool(py=device == head_device)
-            x = _parallel_causal_rpc(mods, owner, device, "run_layers",
-                                     Python.list(items, method, x, first_ids, PythonObject(last)), args[4])
+            var run = WorkerRequest(PC_RUN_LAYERS)
+            run.words.append(step)
+            run.words.append(0 if first_ids is None else 1)
+            run.words.append(1 if last else 0)
+            run.words.append(len(items) // 2)
+            for k in range(len(items)):  # small-loop(two words per layer of this device run)
+                run.words.append(items[k])
+            x = _parallel_causal_rpc(mods, owner, device, run, Python.list(x, first_ids), args[4])
             if last:
                 result = x
                 finished = True
             i = j
         if not finished:
-            result = _parallel_causal_rpc(mods, owner, head_device, "final", x, args[4])
+            result = _parallel_causal_rpc(mods, owner, head_device, WorkerRequest(PC_FINAL), x, args[4])
         py_setitem(state_fields, "positions", _parallel_word(state_fields["positions"]) + length)
         return result
     elif operation == "close" or operation == "close_quiet" or operation == "exit":
@@ -1159,7 +1309,8 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var devices = causal_snapshot_fields(mods, captured)["layer_devices"]
         var name = model_string(mods, args[1])
         var device = devices[0 if name == "embedding" else len(devices) - 1]
-        return _parallel_causal_rpc(mods, owner, device, name, args[2], captured)
+        var typed = _parallel_causal_typed(mods, name, args[2])
+        return _parallel_causal_rpc(mods, owner, device, typed.request, typed.payload, captured)
     elif operation == "resident":
         # Existing remote layer handles cannot enter the single-process
         # resident token loop. The shared native generation loop owns tokens.
