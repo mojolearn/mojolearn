@@ -578,7 +578,7 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
                     can_mirror = False
     var connection = GPConnection(ext)
     var lease = -1
-    if (connection.capabilities & 4) == 4:
+    if (connection.native.capabilities & 4) == 4:
         lease = 0
         if can_mirror:
             lease = gp_resident_lease(model, _GPC_RESIDENT_SLOT, connection, mirrors)

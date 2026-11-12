@@ -7,7 +7,8 @@
 from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest, GP_CAP_GRADIENT, GP_CAP_OPTIMIZE, GP_CAP_SAMPLE, GP_CAP_THETA, GP_CAP_COVARIANCE
 from core.gp_native_storage import GPRFitScratch, GPRGradientScratch, GPRGradientResult, GPOptimizerScratch, GPFreeParameters
 from bindings.gp_score_boundary import GPRPredictionRoom, gpr_score_result
-from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word, gp_require
+from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word
+from gaussian_process.gp_native_boundary_run import gp_require
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.gp_argument_pins import GPArgumentPins
@@ -186,7 +187,7 @@ def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObje
     var fields = py_fields(model)
     var ext = _gpr_ext(model, binding, context)
     var connection = GPConnection(ext)
-    gp_require(connection, GP_CAP_GRADIENT, "gpr_lml_grad")
+    gp_require(connection.native, GP_CAP_GRADIENT, "gpr_lml_grad")
     var view = gp_kernel_view(arrays)
     var request = GPRGradientRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
         Int(free.flags.unsafe_ptr()), Int(scratch.gradient.unsafe_ptr()), Int(scratch.scalars.unsafe_ptr()),
@@ -222,7 +223,7 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     var bits = gp_seed_word(family_call(b.int, seed))
     var ext = _gpr_ext(model, binding, context)
     var connection = GPConnection(ext)
-    gp_require(connection, GP_CAP_OPTIMIZE, "gpr_optimize")
+    gp_require(connection.native, GP_CAP_OPTIMIZE, "gpr_optimize")
     var kernel = gp_kernel_view(arrays)
     var request = GPROptimizeRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
         Int(free.flags.unsafe_ptr()), Int(free.bounds.unsafe_ptr()), Int(scratch.theta.unsafe_ptr()),
@@ -303,7 +304,7 @@ def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
         # n_train, n_features, n_nodes, n_ls, alpha
         var request = GPRFitRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
             Int(py=classical_address(l_out)), Int(py=classical_address(dual)), scratch.address(),
-            n_rows, n_cols, kernel.copy(), alpha, (connection.capabilities & 2) == 2)
+            n_rows, n_cols, kernel.copy(), alpha, (connection.native.capabilities & 2) == 2)
         info = gp_run(connection, request)
         lifecycle_admit_fields(fields)
         _ = targets  # keep the Python object alive through the native call above
@@ -411,7 +412,7 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
     _gpr_fitted(fields, "call fit() first (the unfitted-prior arm of sklearn's predict is not implemented)")
     var ext = _gpr_ext(model, binding, context)
     var connection = GPConnection(ext)
-    var caps = connection.capabilities
+    var caps = connection.native.capabilities
     var resident = (caps & 4) == 4
     var gq = _gpr_query(fields, source, context, resident)
     var q = gq.q
@@ -514,7 +515,7 @@ def _gpr_predict_cov(model: PythonObject, args: GPArgumentPins, context: PythonO
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     var ext = _gpr_ext(model, args[0], context)
     var connection = GPConnection(ext)
-    gp_require(connection, GP_CAP_COVARIANCE, "gpr_predict_cov")
+    gp_require(connection.native, GP_CAP_COVARIANCE, "gpr_predict_cov")
     # n_star >= 1 (as_f32_c refuses an empty X), so max(n, 1) is n.
     var mean = family_array(Python.tuple(n_star), "<f4", context)
     var cov = family_array(Python.tuple(n_star, n_star), "<f4", context)
@@ -580,7 +581,7 @@ def _gpr_sample_y(model: PythonObject, args: GPArgumentPins, context: PythonObje
     var normalization = _gpr_normalization(fields)
     # Admit the actual native provider capability at this boundary position.
     var connection = GPConnection(ext)
-    gp_require(connection, GP_CAP_SAMPLE, "gpr_sample_y")
+    gp_require(connection.native, GP_CAP_SAMPLE, "gpr_sample_y")
     var kernel = gp_kernel_view(arrays)
     var request = GPRSampleRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
         Int(py=classical_address(dual)), Int(py=classical_address(q)), Int(py=classical_address(out)),
@@ -647,7 +648,7 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: GPArgumentPins, cont
                         + "kernel_ has " + String(n_dims) + " free hyperparameters")
         var ext = _gpr_ext(model, args[0], context)
         var connection = GPConnection(ext)
-        gp_require(connection, GP_CAP_THETA, "gp_theta_params")
+        gp_require(connection.native, GP_CAP_THETA, "gp_theta_params")
         var params = List[Float64](length=len(theta), fill=0.0)
         var request = GPThetaRequest(Int(theta.unsafe_ptr()), Int(params.unsafe_ptr()), len(theta))
         _ = gp_run(connection, request)

@@ -79,16 +79,16 @@ def gp_resident_lease(model: PythonObject, slot: String, connection: GPConnectio
         retained.append(mirrors[i])
     # Lease creation only mutates native registry metadata; keep the GIL as
     # the previous opener did, with no extra release/reacquire boundary.
-    var handle = connection.driver.lease_open()
+    var handle = connection.native.driver.lease_open()
     var state = GPLeaseState(handle, Int(connection.image._obj_ptr), generation, identities^)
-    var owner = GPPreparedLease(state^, connection.driver, connection.image, retained^)
+    var owner = GPPreparedLease(state^, connection.native.driver, connection.image, retained^)
     var packed: PythonObject
     try:
         packed = PythonObject(alloc=owner^)
     except error:
         # Closing is idempotent if allocation unwinding already dropped owner.
         try:
-            connection.driver.lease_close(handle)
+            connection.native.driver.lease_close(handle)
         except:
             pass
         raise error

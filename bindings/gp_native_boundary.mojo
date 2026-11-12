@@ -7,10 +7,10 @@ from bindings.py_balanced import py_type, py_get, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.classical_arrays import classical_address
-from core.entry_table import EntryRef
-from core.gp_entry_table import GPEntryKey, gp_table_resolve
+from core.gp_entry_table import GPEntryKey
+from gaussian_process.gp_native_boundary_run import GPNative, gp_native_run
 from core.gp_native_api import (
-    GP_CAPABILITIES, GPDriver, GPKernelView,
+    GPKernelView,
     GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest,
     GPRGradientRequest, GPROptimizeRequest, GPCFitRequest, GPCFitAllRequest,
     GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest, GPThetaRequest,
@@ -35,31 +35,14 @@ def gp_entry_key(binding: PythonObject) raises -> GPEntryKey:
 struct GPConnection(Movable):
     # `image` pins the connected module (and so the published entry's code)
     # for the public call; its address is the lease identity of
-    # bindings/gp_resident_boundary.mojo. RUN reads only `driver`, `mode`
-    # and `capabilities`. The mode is the published key's tier (the image's
-    # GLOBAL_NUMERIC_MODE, the word GP_MODE answered); the capability word is
-    # one native metadata call through the resolved entry.
+    # bindings/gp_resident_boundary.mojo. RUN reads only the typed `native`
+    # connection (gaussian_process/gp_native_boundary_run.mojo).
     var image: PythonObject
-    var entry: EntryRef
-    var driver: GPDriver
-    var mode: Int
-    var capabilities: Int
+    var native: GPNative
 
     def __init__(out self, binding: PythonObject) raises:
-        var key = gp_entry_key(binding)
-        var entry = gp_table_resolve(key)
-        var driver = GPDriver(entry.call)
-        var capabilities = driver.metadata(GP_CAPABILITIES)
+        self.native = GPNative(gp_entry_key(binding))
         self.image = binding
-        self.entry = entry
-        self.driver = driver^
-        self.mode = key.mode
-        self.capabilities = capabilities
-
-
-def gp_require(connection: GPConnection, capability: Int, entry: String) raises:
-    if (connection.capabilities & capability) == 0:
-        raise Error("ImportError: the connected GP provider does not support " + entry)
 
 
 def gp_kernel_view(arrays: PythonObject) raises -> GPKernelView:
@@ -85,7 +68,7 @@ def gp_seed_word(seed: PythonObject) raises -> UInt64:
 def gp_run(connection: GPConnection, request: GPRFitRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpr_fit(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -93,7 +76,7 @@ def gp_run(connection: GPConnection, request: GPRFitRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPRQueryRequest) raises -> GPQueryResult:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpr_query(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -101,7 +84,7 @@ def gp_run(connection: GPConnection, request: GPRQueryRequest) raises -> GPQuery
 def gp_run(connection: GPConnection, request: GPRCovarianceRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpr_covariance(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -109,7 +92,7 @@ def gp_run(connection: GPConnection, request: GPRCovarianceRequest) raises -> In
 def gp_run(connection: GPConnection, request: GPRSampleRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpr_sample(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -117,7 +100,7 @@ def gp_run(connection: GPConnection, request: GPRSampleRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPRGradientRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpr_gradient(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -125,7 +108,7 @@ def gp_run(connection: GPConnection, request: GPRGradientRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPROptimizeRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpr_optimize(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -133,7 +116,7 @@ def gp_run(connection: GPConnection, request: GPROptimizeRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPCFitRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpc_fit(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -141,7 +124,7 @@ def gp_run(connection: GPConnection, request: GPCFitRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPCFitAllRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpc_fit_all(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -149,7 +132,7 @@ def gp_run(connection: GPConnection, request: GPCFitAllRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPCQueryRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpc_query(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -157,7 +140,7 @@ def gp_run(connection: GPConnection, request: GPCQueryRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPCQueryAllRequest) raises -> GPQueryResult:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpc_query_all(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -165,7 +148,7 @@ def gp_run(connection: GPConnection, request: GPCQueryAllRequest) raises -> GPQu
 def gp_run(connection: GPConnection, request: GPCCombineRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.gpc_combine(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection
 
@@ -173,6 +156,6 @@ def gp_run(connection: GPConnection, request: GPCCombineRequest) raises -> Int:
 def gp_run(connection: GPConnection, request: GPThetaRequest) raises -> Int:
     try:
         with GILReleased(Python()):
-            return connection.driver.theta(request)
+            return gp_native_run(connection.native, request)
     finally:
         _ = connection

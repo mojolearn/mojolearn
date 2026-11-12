@@ -48,7 +48,7 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     var b = native_loaded_module("builtins")
     var want = gp_mode_wanted(model, context)
     var connection = GPConnection(binding)
-    var got = connection.mode
+    var got = connection.native.mode
     if got >= 0:
         var wanted = py_get(context["family_gp_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
@@ -60,15 +60,15 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
 
 def gp_caps(binding: PythonObject) raises -> Int:
     var connection = GPConnection(binding)
-    return connection.capabilities
+    return connection.native.capabilities
 
 
 def gp_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     var connection = GPConnection(binding)
-    var code = PythonObject(connection.mode)
+    var code = PythonObject(connection.native.mode)
     var table = context["backend_fields"]["_CODE_MODE"]
     if not py_contains(table, code):
-        raise Error("RuntimeError: Mojolearn: GP provider returned unknown numeric mode " + String(connection.mode))
+        raise Error("RuntimeError: Mojolearn: GP provider returned unknown numeric mode " + String(connection.native.mode))
     return table[code]
 
 
