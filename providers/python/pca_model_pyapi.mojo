@@ -14,6 +14,7 @@ from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.native_model_records import records_open, model_generation
 from bindings.pca_descriptor_boundary import pca_connection, pca_connection_matches, pca_mode_name
 from core.pca_query_state import PCAQueryState
+from x_decomp.pca_model_run import _pca_query_decoded
 from providers.python.pca_query_cache_pyapi import PCAQueryPins, PCAQueryAdmission, PCAQueryCache
 
 
@@ -106,12 +107,6 @@ def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation
 # paths. Buffer shape/dtype/finiteness and mutable scalar storage are still
 # admitted on every call; only immutable decoded settings are reusable.
 comptime _PCA_QUERY_SLOT = "pca_query_native_v2"
-
-
-def _pca_query_decoded(name: String) -> Bool:
-    # The six fields whose value (not only type) the query decodes.
-    return (name == "_mojolearn_fitted" or name == "_mojolearn_fitting" or name == "n_samples_"
-            or name == "n_features_in_" or name == "n_components_" or name == "whiten")
 
 
 def _pca_query_plain(value: PythonObject, ndarray: PythonObject, decoded: Bool) raises -> Bool:
