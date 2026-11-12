@@ -2854,7 +2854,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
         raise Error(cover)
     var fold = admitted_vector(n, "<i4", context)
     var fp = I32P(unsafe_from_address=labels_address(fold))
-    for i in range(n):  # cpu-route: the row -> fold table the user splits fill (rows)
+    for i in range(n):  # native data loop (not a driver loop): the row -> fold table cleared to -1 before the user splits fill it (no CPython call)
         fp[i] = -1
     var trains = List[IndexI64]()
     for k in range(F):  # api-bound-loop: over the folds the user's cv splitter yielded (public type: iterable of (train, test) pairs); one tuple unpack and one native index read per fold
