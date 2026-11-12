@@ -911,3 +911,14 @@ If Mojo or Modular does not support something yet, do not build a workaround for
 toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. One authorized repair
 (owner, 2026-10-25): the native CPython dictionary API for instance-field lookup in `get_params` and public
 attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
+
+
+## 2026-11-12: measurement timing (replaced in AGENTS.md "Fix everything before a release")
+
+Previous wording (Andrew, 2026-11-08): "Measure before the release: time the measurement build on NVIDIA and AMD
+against the last release and the paper baseline, fix every regression found, and measure again. Only a candidate
+with no open regression is frozen. Order: all code in, one compile, measure, fix, measure again until clean,
+freeze, the one verification, publish." Replaced by: measure before the release only when the release is about
+speed; otherwise measure the published wheel after the release, and broadcast only published-wheel numbers.
+Same day the bits rule was restated: bits must be consistent across vendors within one version; bits may change
+between versions.

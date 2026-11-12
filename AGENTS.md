@@ -99,8 +99,9 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
 
 - **The contract (Andrew, 2026-10-13).** In `identical` mode the same bits come out on Apple, NVIDIA and AMD GPUs
   within one version. Identity is decided by the output hash each run already stores.
-- **Bits may change between versions (Andrew, 2026-11-05, restated 2026-11-08).** Matching across GPU vendors within
-  one version is the only bits requirement. Never hold a performance fix, a correctness fix, a smaller fixture, a
+- **Bits may change between versions (Andrew, 2026-11-05, restated 2026-11-08 and 2026-11-12).** Bits must be
+  consistent across VENDORS within one version. That is the whole bits rule: nothing is ever held, compared or
+  re-verified for matching an older version's bits. Never hold a performance fix, a correctness fix, a smaller fixture, a
   better fold order, a refactor or a cleanup because it changes an older version's bits. "Keeps the old bits" is
   never a reason to keep a duplicate path, a slower kernel or a serial fold. Change every vendor column and the host
   column together, then record the new reference in the release's one verification.
@@ -141,9 +142,13 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
 
 - We fix everything we can before a release. We do not release while there is more work to incorporate: known
   regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
-- Measure before the release: time the measurement build on NVIDIA and AMD against the last release and the paper
-  baseline, fix every regression found, and measure again. Only a candidate with no open regression is frozen.
-- Order: all code in, one compile, measure, fix, measure again until clean, freeze, the one verification, publish.
+- When to measure (Andrew, 2026-11-12): measure BEFORE the release only when the release's purpose is improving
+  speed; then time the measurement build on NVIDIA and AMD against the last release and the paper baseline, fix
+  every regression found, and measure again before freezing. Otherwise measure AFTER the release, on the
+  published PyPI wheel, and those numbers are what the boards, the paper and the site broadcast. A claim about
+  speed is only ever made from a published wheel's measurement.
+- Order: all code in, one compile, (measure, fix, measure again when the release is about speed), freeze, the one
+  cross-vendor verification, publish, then measure the published wheel.
 - A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
   release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
   measured clean (Andrew, 2026-11-09).
