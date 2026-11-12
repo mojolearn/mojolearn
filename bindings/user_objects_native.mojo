@@ -39,6 +39,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_setitem, py_get
 from bindings.boundary_read import admitted_buffer_view
+from core.boundary_layout import gather_i64, gather_f64
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
@@ -263,13 +264,13 @@ def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
     if _ndarray_vector(values, True):
         # ONE buffer read (bindings/boundary_read.mojo), the int64 words
         # copied natively; list(values) made one NumPy scalar per entry.
+        # PERF FIX (perf-audit-3, 2026-11-11): gathered straight into the
+        # store (one memcpy for C-order int64, one native widening pass
+        # otherwise); `as_i64_c` + memcpy copied a non-int64 input twice.
         var view = admitted_buffer_view(values)
         var count = view.count()
-        var source = view.as_i64_c()
         var packed = env.store("q", count, 8)
-        if count > 0:
-            unsafe_memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(packed)),
-                src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source), count=count)
+        gather_i64(view.layout, view.kind, _address(packed))
         view.release()
         return packed
     var vals = _as_list(env, values)
@@ -291,13 +292,11 @@ def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
 def _floats(env: _Env, values: PythonObject) raises -> PythonObject:
     if _ndarray_vector(values, False):
         # ONE buffer read, the float64 words widened natively.
+        # PERF FIX (perf-audit-3): gathered straight into the store, as `_ints`.
         var view = admitted_buffer_view(values)
         var count = view.count()
-        var source = view.as_f64_c()
         var packed = env.store("d", count, 8)
-        if count > 0:
-            unsafe_memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_address(packed)),
-                src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=source), count=count)
+        gather_f64(view.layout, view.kind, _address(packed))
         view.release()
         return packed
     var vals = _as_list(env, values)
