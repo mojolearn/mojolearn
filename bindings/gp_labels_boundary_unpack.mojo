@@ -2,7 +2,7 @@
 """GP label provider image pins around the existing typed label descriptor."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.labels_native_api import LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT, LabelsNativeDriver, LabelsPrepareRequest, LabelsGatherRequest
 
 
@@ -12,7 +12,7 @@ struct GPLabelsConnection(Movable):
 
     def __init__(out self, base: PythonObject) raises:
         self.provider = neural_descriptor_connect_once(base, LABELS_NATIVE_FACTORY, String(LABELS_NATIVE_ABI_NAME), LABELS_NATIVE_OPERATION_COUNT)
-        self.driver = LabelsNativeDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = LabelsNativeDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
 
 
 def gp_labels_prepare(connection: GPLabelsConnection, request: LabelsPrepareRequest) raises -> Int:

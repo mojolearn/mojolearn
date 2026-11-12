@@ -5,7 +5,7 @@ from std.python._cpython import GILReleased
 from std.os import getenv
 from core.gp_native_score import GPRScoreValues, gpr_score_prepare, gp_r2_value
 from bindings.arena_prog_native_door import _family_entries
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 from bindings.family_common_pack import family_array
 from bindings.classical_arrays_door import classical_address
@@ -50,7 +50,7 @@ def gpr_score_result(values: GPRScoreValues, target: PythonObject,
     var entries = _family_entries(PythonObject(None), "x_metrics", prog_context)
     var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"
     var result = Float64(0.0)
     var py = Python()

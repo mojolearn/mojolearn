@@ -9,7 +9,7 @@ from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit
 from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.neighbors_native_driver import XnDriver
 from core.pcs_native_api import PCSNativeDriver, PCSDrawRequest, PCSQueryRequest, pcs_seed_word
@@ -28,7 +28,7 @@ struct PCSConnection(Movable):
                 String(XN_ABI_NAME), XN_OPERATION_COUNT)
         else:
             provider = binding.downcast_value_ptr[CompiledBindingSnapshot]()[].provider
-        var native = XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        var native = XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         self.driver = PCSNativeDriver(native^)
         self.provider = provider
         _ = module

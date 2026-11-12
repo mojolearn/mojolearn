@@ -11,7 +11,7 @@ from bindings.neural_block_admission_door import neural_array_snapshot
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
-from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.os import getenv

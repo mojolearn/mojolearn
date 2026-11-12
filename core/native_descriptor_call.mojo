@@ -80,7 +80,7 @@ def native_descriptor_leased_call(
     ABI output and its error storage are the retained scratch, reused across
     calls; a nested or concurrent call that finds it busy gets a private one.
     The one lease-and-call body of the provider route
-    (providers/python/neural_descriptor_pyapi.mojo `neural_descriptor_execute`)
+    (providers/python/neural_descriptor_pyapi_door.mojo `neural_descriptor_execute`)
     and the Python-free door route (sequence/xseq_neural_run.mojo
     `xseq_neural_run_call`). The caller keeps every addressed buffer alive."""
     var loan = NativeCallWorkspaceLease(workspace)

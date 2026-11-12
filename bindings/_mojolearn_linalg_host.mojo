@@ -39,7 +39,7 @@ header, THE SABOTAGE).
 """
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from gemm.host.linalg_dispatch import LINALG_NATIVE_TABLE
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module

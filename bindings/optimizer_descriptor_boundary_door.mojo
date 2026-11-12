@@ -2,7 +2,7 @@
 """Optimizer descriptor UNPACK: exact factories and lifetime pins stay here."""
 from std.python import PythonObject
 from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     _neural_descriptor_function_owner,
     NeuralDescriptorProvider, neural_descriptor_connect_once, neural_descriptor_connect_factory_once,
 )
@@ -49,7 +49,7 @@ def _optimizer_connection(provider: PythonObject) raises -> Int:
     # raise before anything is appended); the pin append that follows cannot
     # raise, so the record and pin lists keep the same length.
     index = optimizer_connection_add(provider_word(provider),
-        provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     OPTIMIZER_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     return index
 

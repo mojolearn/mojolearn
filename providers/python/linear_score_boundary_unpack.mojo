@@ -11,7 +11,7 @@ from bindings.sequential_description_unpack import sequential_fields
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from core.linear_score_run import linear_score_run, linear_r2_run, linear_r2_check_target
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_decomp.descriptor_schema import xd_vendor_code
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 

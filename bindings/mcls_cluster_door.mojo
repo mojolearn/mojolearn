@@ -25,7 +25,7 @@ from bindings.family_common_pack import (
 )
 from bindings.metrics_reg_native import _mean_error, _r2_options
 from bindings.metrics_native_inputs_door import metric_shape
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.mcls_common import (
     mc_b, mc_len, mc_float, mc_int, mc_is_str, mc_entry, mc_shape_of, mc_rank, mc_dim,
     mc_i32_1d, mc_f32_1d, mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store,

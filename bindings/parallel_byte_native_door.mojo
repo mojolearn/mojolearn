@@ -20,7 +20,7 @@ from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_set
 from bindings.native_json_door import native_json_parse
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_transport_door import _transport_json, transport_initialize
-from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect, neural_descriptor_execute
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from training.parallel_byte_impl import (
     _parallel_span,

@@ -9,7 +9,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.admitted_call_door import AdmittedCall
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.mode_metadata_native_door import _fields
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.x_neighbors_admission_pyapi_door import xn_admit_checked
 from core.shared_slot import SharedSlot
 

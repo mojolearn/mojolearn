@@ -4,7 +4,7 @@ from check_generation_native_boundary import audit
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = (ROOT / 'transformer/native_block_dispatch.mojo').read_text()
-PROVIDER = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
+PROVIDER = (ROOT / 'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
 PUBLIC = (ROOT / 'bindings/neural_block_public_door.mojo').read_text()
 
 

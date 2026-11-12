@@ -8,7 +8,7 @@ from core.linear_svc_native_api import (
 )
 from core.logistic_native_api import QnQueryRequest, QnFitRequest
 from core.qn_single_fit import QnSingleFitPlan
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 
@@ -32,7 +32,7 @@ def linear_svc_connection(binding: PythonObject) raises -> LinearSvcConnection:
     var provider = neural_descriptor_connect_factory_once(factory,
         String(LINEAR_SVC_NATIVE_ABI), LINEAR_SVC_NATIVE_COUNT)
     return LinearSvcConnection(provider,
-        LinearSvcDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+        LinearSvcDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
 
 
 def linear_svc_run_fit(connection: LinearSvcConnection, request: LinearSvcFitRequest,

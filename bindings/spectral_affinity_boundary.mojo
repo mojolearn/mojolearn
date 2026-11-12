@@ -8,7 +8,7 @@ from core.spectral_affinity_plan import SpectralRBFRequest, spectral_rbf_affinit
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, XD_CAPABILITIES, XD_CAP_RESIDENT
 from bindings.classical_arrays_door import classical_address
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 
 
 struct SpectralAffinityRoom(Movable):
@@ -38,7 +38,7 @@ def spectral_rbf_run(binding: PythonObject, source: PythonObject, destination: S
     # The import-time decomp connection retains its exact owning extension.
     var provider = neural_descriptor_connect_once(binding, "x_decomp_native_api_v1",
         String(XD_ABI_NAME), XD_OPERATION_COUNT)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var a: Array[Int, 0] = []
     var p: Array[Int, 0] = []
     var f: Array[Float64, 0] = []

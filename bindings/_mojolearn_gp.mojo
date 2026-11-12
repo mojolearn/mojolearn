@@ -89,7 +89,7 @@ from core.gp_entry_table import GPEntryKey, GP_COLUMN_DEVICE, gp_entry_vendor, g
 from bindings.py_balanced import py_setattr
 from core.gp_native_device import GPDeviceKernels
 from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets

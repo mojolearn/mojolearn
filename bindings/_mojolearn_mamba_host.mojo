@@ -41,7 +41,7 @@ from std.sys.compile import is_defined
 from std.os import abort
 from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE_MAMBA_HOST_STATE_API, mamba_host_block_operation
 from core.mamba3_prefill_session import Mamba3PrefillHandle
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.python import Python, PythonObject
 from bindings.native_identity_type_unpack import native_identity_type
 from std.python._cpython import GILReleased

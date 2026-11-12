@@ -34,7 +34,7 @@ from core.scaler_native_api import ScalerProviderAPI
 from core.scaler_native_host import ScalerHostKernels
 from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
 from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 from core.hostptr import copy_f32, f32_ptr, read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name

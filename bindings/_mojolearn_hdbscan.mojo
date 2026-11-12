@@ -38,7 +38,7 @@ from hdbscan.mojolearn_hdbscan_run import (
     hdbscan_all_points_batches_run,
 )
 from hdbscan.native_fit_device import HDBSCAN_FIT_DEVICE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from hdbscan.impl.hdbscan_door_impl import hdbscan_fit_door_run, prediction_data_door_run
 
 

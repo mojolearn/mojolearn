@@ -19,7 +19,7 @@ from bindings.labels_descriptor_boundary_run import (
     labels_prepare_run, labels_reduce_run, labels_threshold_run, labels_argmax_run, labels_gather_run,
     labels_ratio_run,
 )
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 
@@ -50,7 +50,7 @@ def _labels_route(context: PythonObject) raises -> Int:
         raise Error(String(base))
     var factory = neural_descriptor_entry(base, LABELS_NATIVE_FACTORY)
     var provider = neural_descriptor_connect_factory_once(factory, String(LABELS_NATIVE_ABI_NAME), LABELS_NATIVE_OPERATION_COUNT)
-    var driver = LabelsNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = LabelsNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     # RUN checks the compiled mode and capabilities before anything is stored;
     # the pin is stored first so the published device route always has it.
     labels_route_check(driver)

@@ -19,7 +19,7 @@ from bindings.native_instance_item_pack import native_instance_find_admitted
 from bindings.native_mode_recipe_pack import mode_recipe_call
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.host_inference_scalars_door import host_inference_scalar
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 
 
 def _string_keys(fields: PythonObject) raises:

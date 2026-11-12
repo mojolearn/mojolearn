@@ -4,7 +4,7 @@
 # ideas-cpu-per-call-cost.md). A kit that drives a device algorithm as a
 # sequence of primitive operations connects its binding's `<family>_native_api_v1`
 # capsule ONCE per binding module (the process-wide connection and snapshot
-# records of providers/python/neural_descriptor_pyapi.mojo and
+# records of providers/python/neural_descriptor_pyapi_door.mojo and
 # compiled_binding_snapshot_pyapi.mojo, keyed by module and live factory entry)
 # and then calls one `abi("C")` dispatch function per operation:
 #
@@ -20,7 +20,7 @@
 # neural_descriptor_entry / neural_descriptor_connect exactly as for the other
 # descriptor families.
 from std.python import PythonObject
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, NeuralDescriptorProvider,
 )
 from core.entry_table import EntryRef, entry_ref_word
@@ -62,6 +62,6 @@ def kit_entry_ref(snapshot: PythonObject, operation_count: Int) raises -> EntryR
     object (lane entangled-kits, 2026-11-12). The image is never unloaded, so
     the pointer outlives the call."""
     var provider = kit_provider(snapshot)
-    var call = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var call = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     _ = provider  # keep the provider alive through the read above
     return EntryRef(call, entry_ref_word(kit_mode(snapshot), KIT_VENDOR_UNRECORDED, operation_count))

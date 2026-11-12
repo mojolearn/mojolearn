@@ -4,7 +4,7 @@
 # inverse_transform and fit_transform is one call into prep_encode_c, which
 # checks the parameters, builds the x_prep program the Python `_Prog` built
 # (the same stages, operands and order, so the same bits), runs it through
-# the shared transport (bindings/x_prep_native_owner.mojo `xprep_run`) and
+# the shared transport (bindings/x_prep_native_owner_door.mojo `xprep_run_records`) and
 # stores the fitted attributes under the names, types and dtypes the Python
 # set. fit_transform converts X once and hands the converted X to the
 # transform program.
@@ -31,7 +31,8 @@ from bindings.scaler_native_door import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
-from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records
+from bindings.prep_encode_prog_run import EncProgram, OUT_MIN_WORDS, OUT_MARK
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -152,19 +153,6 @@ comptime IDN_STATS_BLOCKED = 1
 comptime ROW_BLOCK = 2048
 # `_II_CH`: the most chunks of a chunk-parallel p2m selection.
 comptime SEL_CHUNKS = 1024
-# `_Prog.output`: below this many words the output is plain arena words.
-comptime OUT_MIN_WORDS = 134217728
-# The stage word of a program's one device output region, resolved when the
-# program runs (past the host arena and the scratch, as `_Prog.output`).
-comptime OUT_MARK = -2147483647
-# Device scratch word k is the stage word SCRATCH_BASE + k (`_Scratch`, so an
-# offset added to a scratch word stays one), resolved past the host arena when
-# the program runs. Stage parameters are never below -3, and the span keeps
-# the words clear of them; a program needing more scratch keeps the rest as
-# arena words (where a word lives moves no bit).
-comptime SCRATCH_BASE = -1073741824
-comptime SCRATCH_SPAN = 1073740800
-comptime INT32_MAX = 2147483647
 # `_CAT_CAP`, `_CAT_R`, `_CAT_CH` (x_prep/cat_cls2.mojo): the packed distinct
 # values' host region (words), the presence flags per column, flags per chunk.
 comptime CAT_CAP = 65536
@@ -174,78 +162,55 @@ comptime CAT_CH = 64
 
 # ---------------------------------------------------------------- programs
 struct EncProg(Movable):
-    """One x_prep program: its arena layout (host words, then device
-    scratch), the inputs copied into it, its stages and at most one device
-    output region (`_Prog.output`)."""
-    var host: Int
-    var scratch_size: Int
-    var work_on: Bool
-    var program: List[Int32]
-    var inputs: PythonObject
-    var out_words: Int
-    var inout_ranges: List[Int]
+    """The door of one x_prep program (lane encprog-typed, 2026-11-12): the
+    typed program (bindings/prep_encode_prog_run.mojo `EncProgram`: layout,
+    stages, input records, native parameter lists) and the Python owner of
+    each caller-buffer input record, held for the run. `run` is UNPACK (each
+    owner's address, resident slot or DeviceRows fields), the typed run with
+    the GIL released (bindings/x_prep_native_owner_run.mojo `xprep_execute`),
+    then the arena read back by the callers (PACK)."""
+    var prog: EncProgram
+    var owners: List[PythonObject]
 
     def __init__(out self) raises:
-        self.host = 0
-        self.scratch_size = 0
-        self.work_on = xprep_r3("work")
-        self.program = List[Int32]()
-        self.inputs = Python.list()
-        self.out_words = 0
-        self.inout_ranges = List[Int]()
+        self.prog = EncProgram(xprep_r3("work"))
+        self.owners = List[PythonObject]()
 
     def alloc(mut self, words: Int) -> Int:
-        # `_Prog.alloc`: host arena words.
-        var offset = self.host
-        self.host += max(words, 0)
-        return offset
+        return self.prog.alloc(words)
 
     def scratch(mut self, words: Int) -> Int:
-        # `_Prog.scratch`: device-only words a stage writes before any reads.
-        if self.scratch_size + max(words, 0) >= SCRATCH_SPAN:
-            return self.alloc(words)
-        var offset = self.scratch_size
-        self.scratch_size += max(words, 0)
-        return SCRATCH_BASE + offset
+        return self.prog.scratch(words)
 
     def work(mut self, words: Int) -> Int:
-        # `_Prog.work`: device scratch under the `work` change, else arena words.
-        if not self.work_on:
-            return self.alloc(words)
-        return self.scratch(words)
+        return self.prog.work(words)
 
     def output(mut self, words: Int, entries: PythonObject) raises -> Int:
         # Below OUT_MIN_WORDS, or on a binding without an output region
         # (the host column; MOJOLEARN_XPREP_OUT=0), the output is host words.
-        if words < OUT_MIN_WORDS or py_get(entries, "x_prep_run_out") is None or String(getenv("MOJOLEARN_XPREP_OUT", "1")) == "0":
-            return self.alloc(words)
-        if self.out_words > 0:
-            raise Error("x_prep: one output region per program")
-        self.out_words = words
-        return OUT_MARK
+        var region = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+        return self.prog.output(words, region)
+
+    def _record(mut self, record: PythonObject, words: Int) -> Int:
+        self.owners.append(record)
+        return self.prog.input(words, len(self.owners) - 1)
 
     def put(mut self, value: PythonObject, words: Int) raises -> Int:
         # A float32 (or int32-word) contiguous buffer of `words` words.
-        var offset = self.alloc(words)
-        if words > 0:
-            _ = py_call(self.inputs.append, Python.tuple(offset, Python.tuple(0, value, PythonObject(None), words, 1)))
-        return offset
+        if words <= 0:
+            return self.prog.alloc(words)
+        return self._record(Python.tuple(0, value, PythonObject(None), words, 1), words)
 
     def put_inout(mut self, value: PythonObject, words: Int) raises -> Int:
         # `_Prog.put(arr, inout=True)`: a stage rewrites these words and the
         # caller reads them after the run, so they come back from the device.
         var offset = self.put(value, words)
-        if words > 0:
-            self.inout_ranges.append(offset)
-            self.inout_ranges.append(offset + words)
+        self.prog.inout(offset, words)
         return offset
 
     def put_x(mut self, values: PythonObject) raises -> Int:
         # X as `xprep_values` converted it (host words or device rows).
-        var words = Int(py=values[3]) * Int(py=values[4])
-        var offset = self.alloc(words)
-        _ = py_call(self.inputs.append, Python.tuple(offset, values))
-        return offset
+        return self._record(values, Int(py=values[3]) * Int(py=values[4]))
 
     def put_array2(mut self, value: PythonObject) raises -> Int:
         # A float32 C-order (n, d) Array this owner produced (the C08 inverse).
@@ -264,34 +229,27 @@ struct EncProg(Movable):
         return self.put(flat[1], Int(py=flat[2]))
 
     def put_floats(mut self, values: List[Float64], context: PythonObject) raises -> Int:
-        # `_Prog.put_list`: the values rounded to float32 ([0.0] when empty).
-        return self.put(_floats(values, context), max(len(values), 1))
+        # `_Prog.put_list`: the values rounded to float32 ([0.0] when empty),
+        # program-owned native words.
+        return self.prog.put_floats(values)
 
     def put_ints(mut self, values: List[Int], context: PythonObject) raises -> Int:
-        # `_Prog.put_ints`: int32 words ([0] when empty).
-        return self.put(_int_words(values, context), max(len(values), 1))
+        # `_Prog.put_ints`: int32 words ([0] when empty), program-owned.
+        return self.prog.put_ints(values)
 
     def run(mut self, entries: PythonObject, context: PythonObject) raises -> PythonObject:
         """`_Prog.run`: the output region (when there is one) past the host
         arena and the scratch, then the scratch past the host arena; returns
         (arena, output store)."""
-        var host = self.host
-        var scratch = self.scratch_size
-        if host + scratch + self.out_words > INT32_MAX:
-            raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
-        var program = self.program.copy()
-        for i in range(len(program) // 16):  # driver-loop: over the program's stages
-            for k in range(2, 16):  # small-loop(params: the fixed fourteen-word stage ABI)
-                var word = Int(program[i * 16 + k])
-                if word == OUT_MARK:
-                    program[i * 16 + k] = Int32(host + scratch)
-                elif word >= SCRATCH_BASE and word < SCRATCH_BASE + SCRATCH_SPAN:
-                    program[i * 16 + k] = Int32(host + word - SCRATCH_BASE)
+        self.prog.check_bound()
+        var host = self.prog.host
+        var scratch = self.prog.scratch_size
+        var out_words = self.prog.out_words
         var device_scratch = scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
         var arena = xprep_storage(host + (0 if device_scratch else scratch), context)
-        var store = xprep_storage(self.out_words, context) if self.out_words > 0 else PythonObject(None)
-        xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words,
-                  self.inout_ranges.copy())
+        var store = xprep_storage(out_words, context) if out_words > 0 else PythonObject(None)
+        xprep_run_records(arena, host, scratch, store, out_words, self.prog.stage_words(), self.prog.inputs,
+                          self.owners, entries, context, out_words, self.prog.inout_ranges)
         return Python.tuple(arena, store)
 
 
@@ -323,17 +281,6 @@ def _floats(values: List[Float64], context: PythonObject) raises -> PythonObject
     _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over a program's parameter words
         dest[i] = Float32(values[i])
-        _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _int_words(values: List[Int], context: PythonObject) raises -> PythonObject:
-    # int32 words in a 4-byte store (the arena copies words as they are).
-    var out = classical_typed(Python.tuple(max(len(values), 1)), "<f4", context["output_context"])
-    var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(len(values)):  # driver-loop: over a program's int32 parameter words
-        dest[i] = Int32(values[i])
         _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -386,14 +333,14 @@ def _cs(mut p: EncProg, mode: PythonObject, entries: PythonObject, xo: Int, n: I
     if blocked and (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0:
         var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
         var part = p.work(5 * nb * d)
-        _stage(p.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-        _stage(p.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
+        _stage(p.prog.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
+        _stage(p.prog.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
         if variance:
             var ss = p.work(nb * d)
-            _stage(p.program, OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
-            _stage(p.program, OP_COLB_VAR, d, ss, nb, d, out_buf)
+            _stage(p.prog.program, OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
+            _stage(p.prog.program, OP_COLB_VAR, d, ss, nb, d, out_buf)
     else:
-        _stage(p.program, OP_COL_STATS, d, xo, n, d, out_buf)
+        _stage(p.prog.program, OP_COL_STATS, d, xo, n, d, out_buf)
 
 
 def _sel_chunks(n: Int) -> Tuple[Int, Int]:
@@ -411,9 +358,9 @@ def _sel(mut p: EncProg, xo: Int, n: Int, d: Int, mode: Int, dst: Int) -> Int:
     var nch = chunks[1]
     var cnt = p.alloc(d * nch)
     var tot = p.alloc(d)
-    _stage(p.program, OP_SEL_COUNT, d * nch, xo, n, d, ch, nch, mode, cnt)
-    _stage(p.program, OP_SEL_SCAN, d, cnt, nch, tot)
-    _stage(p.program, OP_SEL_WRITE, d * nch, xo, n, d, ch, nch, mode, cnt, dst)
+    _stage(p.prog.program, OP_SEL_COUNT, d * nch, xo, n, d, ch, nch, mode, cnt)
+    _stage(p.prog.program, OP_SEL_SCAN, d, cnt, nch, tot)
+    _stage(p.prog.program, OP_SEL_WRITE, d * nch, xo, n, d, ch, nch, mode, cnt, dst)
     return tot
 
 
@@ -422,7 +369,7 @@ def _bad_rows_stages(mut p: EncProg, codes: Int, n: Int, d: Int, bad: Int, stric
     # column whose `strict` word is nonzero, when given).
     var flags = p.alloc(n)
     var rows = p.alloc(n)
-    _stage(p.program, OP_ROWFLAG, n, codes, n, d, bad, strict, flags)
+    _stage(p.prog.program, OP_ROWFLAG, n, codes, n, d, bad, strict, flags)
     return (rows, _sel(p, flags, n, 1, 1, rows))
 
 
@@ -536,7 +483,7 @@ def _mark_missing(mut p: EncProg, xo: Int, count: Int, missing: PythonObject, co
     words.append(_float(missing))
     var value = p.put_floats(words, context)
     var out = p.alloc(count)
-    _stage(p.program, OP_MARK_MISSING, count, xo, count, value, out)
+    _stage(p.prog.program, OP_MARK_MISSING, count, xo, count, value, out)
     return out
 
 
@@ -587,14 +534,14 @@ def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObjec
     halves.append(0.5)
     var half = p.put_floats(halves, context)
     if sorts:
-        _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 0)
+        _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 0)
     _cs(p, mode, entries, xo, n, d, st, False)
     if name == "median" and qsel:
-        _stage(p.program, OP_QUANTILE, d, xo, n, d, half, 1, med, st, 1)
+        _stage(p.prog.program, OP_QUANTILE, d, xo, n, d, half, 1, med, st, 1)
     elif name == "median":
-        _stage(p.program, OP_QUANTILE, d, so, n, d, half, 1, med, st)
+        _stage(p.prog.program, OP_QUANTILE, d, so, n, d, half, 1, med, st)
     if name == "most_frequent":
-        _stage(p.program, OP_MODE_COLS, d, so, n, d, mf, NONE)
+        _stage(p.prog.program, OP_MODE_COLS, d, so, n, d, mf, NONE)
     var src = 0
     var fv = NONE
     if konst:
@@ -609,7 +556,7 @@ def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObjec
         src = mf
     var so2 = p.alloc(d)
     var fo2 = p.alloc(d)
-    _stage(p.program, OP_IMP_STATS, d, st, src, d, 1 if _truth(fields["keep_empty_features"]) else 0, 1 if konst else 0, fv, so2, fo2)
+    _stage(p.prog.program, OP_IMP_STATS, d, st, src, d, 1 if _truth(fields["keep_empty_features"]) else 0, 1 if konst else 0, fv, so2, fo2)
     var ran = p.run(entries, context)
     var counts = List[Int]()
     var any_empty = False
@@ -672,15 +619,15 @@ def _imputer_transform(model: PythonObject, values: PythonObject, context: Pytho
     var so = p.put_fitted(model, "_fill", fields["_fill"], context)
     var ko = p.put_floats(_to_floats(keep), context)
     var out = p.alloc(n * dout)
-    _stage(p.program, OP_FILL, n * dout, xo, n, d, so, out, ko, dout)
+    _stage(p.prog.program, OP_FILL, n * dout, xo, n, d, so, out, ko, dout)
     var m = len(indicator)
     var hc = 0
     if m > 0:
         var io = p.put_floats(_to_floats(indicator), context)
         var mo = p.alloc(n * m)
-        _stage(p.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
+        _stage(p.prog.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
         hc = p.output(n * (dout + m), entries)
-        _stage(p.program, OP_HCAT, n * (dout + m), out, dout, mo, m, hc)
+        _stage(p.prog.program, OP_HCAT, n * (dout + m), out, dout, mo, m, hc)
     var ran = p.run(entries, context)
     if m == 0:
         return _take2(ran, out, n, dout, context)
@@ -832,13 +779,13 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         var bp = p.work(nbk)
         var ro = p.alloc(draws)
         var xs = p.alloc(draws * d)
-        _stage(p.program, OP_WBLK, nbk, wo, n, bs)
-        _stage(p.program, OP_WSCAN, 1, bs, nbk, bp)
+        _stage(p.prog.program, OP_WBLK, nbk, wo, n, bs)
+        _stage(p.prog.program, OP_WSCAN, 1, bs, nbk, bp)
         var seed_at = p.put_ints(_seed_words(seed_lo, seed_hi), context)
         _ = seed_lo  # keep the Python object alive through the native call above
-        _stage(p.program, OP_WDRAW, draws, wo, n, bs, bp, nbk, seed_at, ro)
+        _stage(p.prog.program, OP_WDRAW, draws, wo, n, bs, bp, nbk, seed_at, ro)
         _ = seed_lo  # keep the Python object alive through the native call above
-        _stage(p.program, OP_RGATHER, draws * d, xo, d, ro, xs)
+        _stage(p.prog.program, OP_RGATHER, draws * d, xo, d, ro, xs)
         xo = xs
         n = draws
     elif plain_draw:
@@ -846,9 +793,9 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         _ = seed_lo  # keep the Python object alive through the native call above
         var ro = p.alloc(draws)
         var xs = p.alloc(draws * d)
-        _stage(p.program, OP_SMROWS, draws, so_seed, n, ro)
+        _stage(p.prog.program, OP_SMROWS, draws, so_seed, n, ro)
         _ = seed_lo  # keep the Python object alive through the native call above
-        _stage(p.program, OP_RGATHER, draws * d, xo, d, ro, xs)
+        _stage(p.prog.program, OP_RGATHER, draws * d, xo, d, ro, xs)
         xo = xs
         n = draws
     var so = p.work(n * d) if not weighted else p.alloc(n * d)
@@ -860,8 +807,8 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     var cen = p.alloc(d * nbmax) if strat == 3 else 0
     _cs(p, mode, entries, xo, n, d, st)
     if not weighted:
-        _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 0)
-        _stage(p.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
+        _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 0)
+        _stage(p.prog.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
     else:
         # The weights go up once for every stage that reads them, and the
         # weighted groups read the X input already in the arena (the Python
@@ -877,35 +824,35 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
                 var ro = p.alloc(n)
                 _ = _sel(p, wo, n, 1, 1, ro)
                 var xz = p.alloc(m * d)
-                _stage(p.program, OP_RGATHER, m * d, xo, d, ro, xz)
+                _stage(p.prog.program, OP_RGATHER, m * d, xo, d, ro, xz)
                 _cs(p, mode, entries, xz, m, d, stw)
             else:
                 stw = st
         if strat == 0:
-            _stage(p.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
+            _stage(p.prog.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
         else:
             # `_weighted_groups`: every column's distinct values and summed weights
             var gs = p.work(n * d)
             var ug = p.alloc(2 * n * d)
             var ucnt = p.alloc(d)
             var codes = p.alloc(n * d)
-            _stage(p.program, OP_SORT_COLS, d, x_orig, n, d, gs, 1)
-            _stage(p.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
-            _stage(p.program, OP_LOOKUP, n * d, x_orig, n, d, ug, n, ucnt, codes)
+            _stage(p.prog.program, OP_SORT_COLS, d, x_orig, n, d, gs, 1)
+            _stage(p.prog.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
+            _stage(p.prog.program, OP_LOOKUP, n * d, x_orig, n, d, ug, n, ucnt, codes)
             if wo < 0:
                 wo = p.put(w.value(), n)
-            _stage(p.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
+            _stage(p.prog.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
             if strat == 3:
-                _stage(p.program, OP_KBINS_WKM, d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
+                _stage(p.prog.program, OP_KBINS_WKM, d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
             else:
                 # `_weighted_levels`: the percent levels i * (100 / b) (c2_grid KIND 0)
                 var stride = nbmax + 1
                 var lv = p.alloc(d * stride)
                 var grid_nb = p.put_floats(_to_floats(nb), context)
-                _stage(p.program, OP_GRID, d * stride, grid_nb, stride, 0, lv)
+                _stage(p.prog.program, OP_GRID, d * stride, grid_nb, stride, 0, lv)
                 var wq_nb = p.put_floats(_to_floats(nb), context)
-                _stage(p.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nbmax, lv, 1 if strat == 1 else 0, edges)
-            _stage(p.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
+                _stage(p.prog.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nbmax, lv, 1 if strat == 1 else 0, edges)
+            _stage(p.prog.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
     var ran = p.run(entries, context)
     var output = context["output_context"]
     var bin_edges = Python.list()
@@ -952,7 +899,7 @@ def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonO
     var eo = p.put_fitted(model, "_edges", fields["_edges"], context)
     var no = p.put_fitted(model, "_ne", fields["_ne"], context)
     var codes = p.alloc(n * d)
-    _stage(p.program, OP_KBINS_CODES, n * d, xo, n, d, eo, stride, no, codes)
+    _stage(p.prog.program, OP_KBINS_CODES, n * d, xo, n, d, eo, stride, no, codes)
     var encode = fields["encode"]
     if _is_str(encode) and String(encode) == "ordinal":
         var ran = p.run(entries, context)
@@ -963,7 +910,7 @@ def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonO
         W += widths[j]
     var so = p.put_floats(_prefix(widths), context)
     var out = p.output(n * W, entries)
-    _stage(p.program, OP_ONEHOT, n * d, codes, n, d, so, NONE, W, out)
+    _stage(p.prog.program, OP_ONEHOT, n * d, codes, n, d, so, NONE, W, out)
     var ran = p.run(entries, context)
     return _take2(ran, out, n, W, context)
 
@@ -993,7 +940,7 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
         var eo = p.put_floats(zeros, context)
         var uo = p.put_floats(zeros, context)
         var wo = p.put_floats(_to_floats(widths), context)
-        _stage(p.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 0, uo, wo, codes)
+        _stage(p.prog.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 0, uo, wo, codes)
         bad_code = -2
         why = "hold codes that name no bin"
     else:
@@ -1007,12 +954,12 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
         var so = p.put_floats(_prefix(widths), context)
         var wo = p.put_floats(_to_floats(widths), context)
         codes = p.alloc(n * d)
-        _stage(p.program, OP_BLOCK_ARGMAX, n * d, xo, n, W, d, so, wo, NONE, 1, codes)
+        _stage(p.prog.program, OP_BLOCK_ARGMAX, n * d, xo, n, W, d, so, wo, NONE, 1, codes)
         bad_code = -1
         why = "can not be inverted because they contain all zeros"
     var out = p.output(n * d, entries)
     var eo2 = p.put_fitted(model, "_edges", fields["_edges"], context)
-    _stage(p.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
+    _stage(p.prog.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
     var staged = _bad_rows_stages(p, codes, n, d, bad_code, NONE)
     var ran = p.run(entries, context)
     var bad = _bad_rows(ran, staged, 10)
@@ -1053,9 +1000,9 @@ def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, count
     for c in range(d):  # driver-loop: stages one device scan per column (feature count)
         var cnt = p.work(nch)
         var off = p.work(nch)
-        _stage(p.program, OP_PRES_COUNT if presence else OP_UNIQ_COUNT, nch, base + c * stride, rows, ch, cnt)
-        _stage(p.program, OP_UNIQ_SCAN, 1, cnt, nch, off, counts + c)
-        _stage(p.program, OP_PRES_WRITE if presence else OP_UNIQ_WRITE, nch, base + c * stride, rows, ch, off, out_buf + c * stride)
+        _stage(p.prog.program, OP_PRES_COUNT if presence else OP_UNIQ_COUNT, nch, base + c * stride, rows, ch, cnt)
+        _stage(p.prog.program, OP_UNIQ_SCAN, 1, cnt, nch, off, counts + c)
+        _stage(p.prog.program, OP_PRES_WRITE if presence else OP_UNIQ_WRITE, nch, base + c * stride, rows, ch, off, out_buf + c * stride)
 
 
 def _fit_categories_cls2(values: PythonObject, mode: PythonObject, entries: PythonObject, bits: Int, context: PythonObject) raises -> PythonObject:
@@ -1073,16 +1020,16 @@ def _fit_categories_cls2(values: PythonObject, mode: PythonObject, entries: Pyth
         bad = p.alloc(d)
         var fl = p.work(d * CAT_R)
         var uo = p.work(d * CAT_R)
-        _stage(p.program, OP_CAT_ZERO, d * CAT_R, fl)
-        _stage(p.program, OP_CAT_PRESENT, n * d, xo, n, d, CAT_R, fl, bad)
+        _stage(p.prog.program, OP_CAT_ZERO, d * CAT_R, fl)
+        _stage(p.prog.program, OP_CAT_PRESENT, n * d, xo, n, d, CAT_R, fl, bad)
         _uniq_scans(p, fl, CAT_R, d, CAT_R, co, uo, True)
-        _stage(p.program, OP_CAT_PACK, d * CAT_R, uo, CAT_R, d, co, cap, pk)
+        _stage(p.prog.program, OP_CAT_PACK, d * CAT_R, uo, CAT_R, d, co, cap, pk)
     else:
         var so = p.work(n * d)
         var uo = p.work(n * d)
-        _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 1)
+        _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 1)
         _uniq_scans(p, so, n, d, n, co, uo, False)
-        _stage(p.program, OP_CAT_PACK, n * d, uo, n, d, co, cap, pk)
+        _stage(p.prog.program, OP_CAT_PACK, n * d, uo, n, d, co, cap, pk)
     var ran = p.run(entries, context)
     if bad >= 0:
         for j in range(d):  # driver-loop: over the per-column overflow flags (feature metadata)
@@ -1118,11 +1065,11 @@ def _fit_categories(values: PythonObject, mode: PythonObject, entries: PythonObj
     var so = p.work(n * d)
     var uo = p.alloc(n * d)
     var co = p.alloc(d)
-    _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 1)
+    _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 1)
     if _fast_unique(mode, entries):
         _uniq_scans(p, so, n, d, n, co, uo, False)
     else:
-        _stage(p.program, OP_UNIQUE_COLS, d, so, n, d, uo, co)
+        _stage(p.prog.program, OP_UNIQUE_COLS, d, so, n, d, uo, co)
     var ran = p.run(entries, context)
     var out = Python.list()
     for c in range(d):  # driver-loop: slices the per-column category outputs (feature count)
@@ -1141,8 +1088,8 @@ def _fit_categories_with_codes(values: PythonObject, entries: PythonObject, cont
     var dictionary = p.alloc(n * d)
     var counts = p.alloc(d)
     var inverse = p.alloc(n * d)
-    _stage(p.program, OP_SORT_COLS, d, xo, n, d, sorted, 1)
-    _stage(p.program, OP_UNIQUE_INVERSE, d, sorted, n, d, dictionary, counts, xo, inverse)
+    _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, sorted, 1)
+    _stage(p.prog.program, OP_UNIQUE_INVERSE, d, sorted, n, d, dictionary, counts, xo, inverse)
     var ran = p.run(entries, context)
     var out = Python.list()
     for c in range(d):  # driver-loop: over the features' fitted category dictionaries (model metadata per feature)
@@ -1367,11 +1314,11 @@ def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, conte
     var block = (p.put(record[2], Int(py=record[6])), Int(py=record[3]))
     var co = p.put(record[5], max(len(record[4]), 1))
     var codes = p.scratch(n * d) if device_only else p.alloc(n * d)
-    _stage(p.program, OP_LOOKUP, n * d, xo, n, d, block[0], block[1], co, codes)
+    _stage(p.prog.program, OP_LOOKUP, n * d, xo, n, d, block[0], block[1], co, codes)
     if device_only:
         return (codes, -1)
     var neg = p.alloc(d)
-    _stage(p.program, OP_COUNT_NEG, d, codes, n, d, neg)
+    _stage(p.prog.program, OP_COUNT_NEG, d, codes, n, d, neg)
     return (codes, neg)
 
 
@@ -1512,10 +1459,10 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObjec
     var mp = p.alloc(d * kmax)
     var max_categories = fields["max_categories"]
     var maxc = -1 if max_categories is None else Int(py=py_call(native_loaded_module("builtins").int, max_categories))
-    _stage(p.program, OP_CODE_COUNTS, d, codes, n, d, kmax, cnt)
-    _stage(p.program, OP_INF_M0, d * kmax, cnt, kc, kmax, _infrequent_threshold(n, fields["min_frequency"], context), m0)
-    _stage(p.program, OP_INF_M1, d * kmax, cnt, kc, kmax, m0, maxc, m1)
-    _stage(p.program, OP_INF_MAP, d * kmax, kc, kmax, m1, mp)
+    _stage(p.prog.program, OP_CODE_COUNTS, d, codes, n, d, kmax, cnt)
+    _stage(p.prog.program, OP_INF_M0, d * kmax, cnt, kc, kmax, _infrequent_threshold(n, fields["min_frequency"], context), m0)
+    _stage(p.prog.program, OP_INF_M1, d * kmax, cnt, kc, kmax, m0, maxc, m1)
+    _stage(p.prog.program, OP_INF_MAP, d * kmax, kc, kmax, m1, mp)
     var ran = p.run(entries, context)
     var infrequent = Python.list()
     var grouping = Python.list()
@@ -1589,7 +1536,7 @@ def _grouping_table(mut p: EncProg, grouping: PythonObject, inverse: Bool, conte
 
 def _remap(mut p: EncProg, codes: Int, n: Int, d: Int, table: Tuple[Int, Int, Int], neg: Int) -> Int:
     var out = p.alloc(n * d)
-    _stage(p.program, OP_REMAP_CODES, n * d, codes, n * d, d, table[0], table[1], table[2], neg, out)
+    _stage(p.prog.program, OP_REMAP_CODES, n * d, codes, n * d, d, table[0], table[1], table[2], neg, out)
     return out
 
 
@@ -1597,7 +1544,7 @@ def _gather_categories(mut p: EncProg, codes: Int, n: Int, d: Int, categories: P
                        owner: PythonObject) raises -> Int:
     var block = _category_block(p, categories, context, owner)
     var out = p.alloc(n * d)
-    _stage(p.program, OP_CAT_GATHER, n * d, codes, n, d, block[0], block[1], out)
+    _stage(p.prog.program, OP_CAT_GATHER, n * d, codes, n, d, block[0], block[1], out)
     return out
 
 
@@ -1697,7 +1644,7 @@ def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: Pytho
     else:
         codes = p.put_array2(inverse)
         neg = p.alloc(d)
-        _stage(p.program, OP_COUNT_NEG, d, codes, n, d, neg)
+        _stage(p.prog.program, OP_COUNT_NEG, d, codes, n, d, neg)
     var out = codes
     if fields["_grouping"] is not None:
         var table = _grouping_table(p, fields["_grouping"], False, context)
@@ -1708,7 +1655,7 @@ def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: Pytho
         var val = _scalar(p, _float(fields["unknown_value"]), context)
         var src = out
         out = p.alloc(n * d)
-        _stage(p.program, OP_WHERE_NEG, n * d, src, n * d, val, out)
+        _stage(p.prog.program, OP_WHERE_NEG, n * d, src, n * d, val, out)
     var missing = _index_list(fields["_missing"])
     var any_missing = False
     for j in range(len(missing)):  # driver-loop: checks for a NaN category slot (per-column NaN category slots)
@@ -1718,7 +1665,7 @@ def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: Pytho
         out = p.alloc(n * d)
         var mo = p.put_floats(_to_floats(missing), context)
         var eo = _scalar(p, _float(fields["encoded_missing_value"]), context)
-        _stage(p.program, OP_WHERE_CODE, n * d, codes, n, d, mo, eo, src, out)
+        _stage(p.prog.program, OP_WHERE_CODE, n * d, codes, n, d, mo, eo, src, out)
     var ran = p.run(entries, context)
     if handle_text == "error":
         var bad = _unknown_columns(ran, neg, d)
@@ -1755,7 +1702,7 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
     var uo = _scalar(p, _float(fields["unknown_value"]) if encoded else Float64(0.0), context)
     var no = p.put_floats(_to_floats(ncat), context)
     var codes = p.alloc(n * d)
-    _stage(p.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 1 if encoded else 0, uo, no, codes)
+    _stage(p.prog.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 1 if encoded else 0, uo, no, codes)
     if grouped:
         codes = _remap(p, codes, n, d, back, NONE)
     var out = _gather_categories(p, codes, n, d, cats, context, model)
@@ -1970,7 +1917,7 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
     else:
         codes = p.put_array2(inverse)
         neg = p.alloc(d)
-        _stage(p.program, OP_COUNT_NEG, d, codes, n, d, neg)
+        _stage(p.prog.program, OP_COUNT_NEG, d, codes, n, d, neg)
     var groups = fields["_grouping"]
     if groups is not None:
         # `_unknown_to`: the grouped code an unknown value takes
@@ -1988,7 +1935,7 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
     var so = p.put_floats(_prefix(widths), context)
     var do = p.put_floats(_to_floats(drops), context)
     var out = p.output(n * W, entries)
-    _stage(p.program, OP_ONEHOT, n * d, codes, n, d, so, do, W, out)
+    _stage(p.prog.program, OP_ONEHOT, n * d, codes, n, d, so, do, W, out)
     var ran = p.run(entries, context)
     var dropping = fields["drop"] is not None
     if handle_text == "error":
@@ -2033,7 +1980,7 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
     var wo = p.put_floats(_to_floats(widths), context)
     var dro = p.put_floats(_to_floats(drops), context)
     var codes = p.alloc(n * d)
-    _stage(p.program, OP_BLOCK_ARGMAX, n * d, xo, n, W, d, so, wo, dro, 1, codes)
+    _stage(p.prog.program, OP_BLOCK_ARGMAX, n * d, xo, n, W, d, so, wo, dro, 1, codes)
     var grouped = codes
     var groups = fields["_grouping"]
     if groups is not None:
@@ -2084,7 +2031,7 @@ def _target_transform(model: PythonObject, values: PythonObject, context: Python
     var enc = p.put_fitted(model, "_enc", fields["_enc"], context)
     var meta = p.put_fitted(model, "_meta", fields["_meta"], context)
     var out = p.output(n * d * T, entries)
-    _stage(p.program, OP_TE_APPLY, n * d * T, codes, n, d, T, NONE, enc, cmax, meta, 0, out)
+    _stage(p.prog.program, OP_TE_APPLY, n * d * T, codes, n, d, T, NONE, enc, cmax, meta, 0, out)
     var ran = p.run(entries, context)
     return _take2(ran, out, n, d * T, context)
 
@@ -2103,12 +2050,12 @@ def _col_stats_blocked(mut p: EncProg, xo: Int, n: Int, d: Int, out_buf: Int) ra
     # `_col_stats(..., var=False)`: the blocked order whenever
     # MOJOLEARN_XPREP_BLOCKED is on, else one thread per column.
     if String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) == "0":
-        _stage(p.program, OP_COL_STATS, d, xo, n, d, out_buf)
+        _stage(p.prog.program, OP_COL_STATS, d, xo, n, d, out_buf)
         return
     var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
     var part = p.work(5 * nb * d)
-    _stage(p.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-    _stage(p.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
+    _stage(p.prog.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
+    _stage(p.prog.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
 
 
 def _extrapolation(value: PythonObject) raises -> Int:
@@ -2274,9 +2221,9 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
             var levels = List[Float64]()
             levels.append(Float64(nk - 1))
             var lo = p.put_floats(levels, context)
-            _stage(p.program, OP_GRID, nk, lo, nk, 1, qf)
-            _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 0)
-            _stage(p.program, OP_QUANTILE, d * nk, so, n, d, qf, nk, base, st)
+            _stage(p.prog.program, OP_GRID, nk, lo, nk, 1, qf)
+            _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 0)
+            _stage(p.prog.program, OP_QUANTILE, d * nk, so, n, d, qf, nk, base, st)
         else:
             # `_weighted_groups` over the X input already in the arena, then
             # `_weighted_levels` at the levels c2_grid KIND 2 writes
@@ -2284,19 +2231,19 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
             var ug = p.alloc(2 * n * d)
             var ucnt = p.alloc(d)
             var codes = p.alloc(n * d)
-            _stage(p.program, OP_SORT_COLS, d, xo, n, d, gs, 1)
-            _stage(p.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
-            _stage(p.program, OP_LOOKUP, n * d, xo, n, d, ug, n, ucnt, codes)
+            _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, gs, 1)
+            _stage(p.prog.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
+            _stage(p.prog.program, OP_LOOKUP, n * d, xo, n, d, ug, n, ucnt, codes)
             var wo = p.put(w, n)
-            _stage(p.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
+            _stage(p.prog.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
             var nb = List[Int]()
             for _ in range(d):  # driver-loop: one level row per column
                 nb.append(nk - 1)
             var lv = p.alloc(d * nk)
             var grid_nb = p.put_floats(_to_floats(nb), context)
-            _stage(p.program, OP_GRID, d * nk, grid_nb, nk, 2, lv)
+            _stage(p.prog.program, OP_GRID, d * nk, grid_nb, nk, 2, lv)
             var wq_nb = p.put_floats(_to_floats(nb), context)
-            _stage(p.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nk - 1, lv, 0, base)
+            _stage(p.prog.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nk - 1, lv, 0, base)
     else:
         base = p.alloc(d * nk)
         uniform = 1
@@ -2307,16 +2254,16 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
             var ro = p.alloc(n)
             _ = _sel(p, wo, n, 1, 1, ro)
             var xz = p.alloc(wl * d)
-            _stage(p.program, OP_RGATHER, wl * d, xo, d, ro, xz)
+            _stage(p.prog.program, OP_RGATHER, wl * d, xo, d, ro, xz)
             _cs(p, mode, entries, xz, wl, d, kst, False)
-    _stage(p.program, OP_SPLINE_KNOTS, d, base, nk, d, k, knots, uniform, kst, 1 if periodic else 0)
+    _stage(p.prog.program, OP_SPLINE_KNOTS, d, base, nk, d, k, knots, uniform, kst, 1 if periodic else 0)
     var nspl = nk - 1 if periodic else nk + k - 1
     var bias = _truth(fields["include_bias"])
     var W = d * (nspl if bias else nspl - 1)
     var out = 0
     if fuse:
         out = p.output(n * W, entries)
-        _stage(p.program, OP_SPLINE_APPLY, n * d, xo, n, d, knots, nk, k, extrap, W, 1 if bias else 0, out)
+        _stage(p.prog.program, OP_SPLINE_APPLY, n * d, xo, n, d, knots, nk, k, extrap, W, 1 if bias else 0, out)
     var ran = p.run(entries, context)
     _no_nan(fields, ran, st, d, n)
     var output = context["output_context"]
@@ -2368,13 +2315,13 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
             _col_stats_blocked(p, xo, n, d, st)
         else:
             _cs(p, mode, entries, xo, n, d, st, False)
-    _stage(p.program, OP_SPLINE_APPLY, n * d, xo, n, d, ko, Int(py=fields["_nk"]), Int(py=fields["_k"]), extrap, W,
+    _stage(p.prog.program, OP_SPLINE_APPLY, n * d, xo, n, d, ko, Int(py=fields["_nk"]), Int(py=fields["_k"]), extrap, W,
            1 if _truth(fields["include_bias"]) else 0, out)
     var fo = 0
     var transposed = fortran and n * W > 0
     if transposed:
         fo = p.output(n * W, entries)
-        _stage(p.program, OP_TRANSPOSE, n * W, out, n, W, fo)
+        _stage(p.prog.program, OP_TRANSPOSE, n * W, out, n, W, fo)
     var ran = p.run(entries, context)
     if check:
         _no_nan(fields, ran, st, d, n)
@@ -2498,8 +2445,8 @@ def _all_integral(view: PythonObject, vector: Bool, context: PythonObject) raise
     var cnt = p.alloc(nch)
     var tot = p.alloc(1)
     var wo = p.put(words, n * per)
-    _stage(p.program, OP_INTEGRAL, nch, wo, kind, n, ch, cnt)
-    _stage(p.program, OP_ISUM, 1, cnt, nch, tot)
+    _stage(p.prog.program, OP_INTEGRAL, nch, wo, kind, n, ch, cnt)
+    _stage(p.prog.program, OP_ISUM, 1, cnt, nch, tot)
     var ran = p.run(entries, context)
     return _iword(ran, tot) == 0
 
@@ -2589,7 +2536,7 @@ def _put_codes(mut p: EncProg, codes: PythonObject) raises -> Int:
     var count = Int(py=codes.size)
     var bits = p.put(codes, count)
     var out = p.alloc(count)
-    _stage(p.program, OP_I2F, count, bits, out)
+    _stage(p.prog.program, OP_I2F, count, bits, out)
     return out
 
 
@@ -2601,7 +2548,7 @@ def _stage_folds(mut p: EncProg, n: Int, n_folds: Int, lo: Int, hi: Int, shuffle
     var fo = p.alloc(max(n, 1))
     if codes == NONE:
         var seed = p.put_ints(_seed_words(lo, hi), context)
-        _stage(p.program, OP_KFOLD, n, seed, n, n_folds, 1 if shuffle else 0, fo)
+        _stage(p.prog.program, OP_KFOLD, n, seed, n, n_folds, 1 if shuffle else 0, fo)
         return (fo, -1)
     var K = n_classes
     var chunks = _class_rows_chunks(n, K)
@@ -2609,18 +2556,18 @@ def _stage_folds(mut p: EncProg, n: Int, n_folds: Int, lo: Int, hi: Int, shuffle
     var nch = chunks[1]
     var cnt = p.alloc(nch * K)
     var tot = p.alloc(K)
-    _stage(p.program, OP_CCOUNT, nch, codes, n, K, ch, cnt)
-    _stage(p.program, OP_CSCAN, K, cnt, nch, K, tot)
+    _stage(p.prog.program, OP_CCOUNT, nch, codes, n, K, ch, cnt)
+    _stage(p.prog.program, OP_CSCAN, K, cnt, nch, K, tot)
     var start = p.alloc(K)
     var ro = p.alloc(n)
-    _stage(p.program, OP_CSTART, 1, tot, K, start, NONE)
-    _stage(p.program, OP_CWRITE, nch, codes, n, K, ch, cnt, start, ro)
+    _stage(p.prog.program, OP_CSTART, 1, tot, K, start, NONE)
+    _stage(p.prog.program, OP_CWRITE, nch, codes, n, K, ch, cnt, start, ro)
     var meta = p.alloc(2 * K)
     var flag = p.alloc(1)
-    _stage(p.program, OP_STRAT_META, K, start, tot, ro, K, meta)
-    _stage(p.program, OP_STRAT_FLAG, 1, tot, K, n_folds, flag)
+    _stage(p.prog.program, OP_STRAT_META, K, start, tot, ro, K, meta)
+    _stage(p.prog.program, OP_STRAT_FLAG, 1, tot, K, n_folds, flag)
     var seed = p.put_ints(_seed_words(lo, hi), context)
-    _stage(p.program, OP_STRAT_FOLD, n, ro, start, tot, codes, meta, n_folds, seed, 1 if shuffle else 0, fo)
+    _stage(p.prog.program, OP_STRAT_FOLD, n, ro, start, tot, codes, meta, n_folds, seed, 1 if shuffle else 0, fo)
     return (fo, flag)
 
 
@@ -2673,7 +2620,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c
         co = _put_codes(p, info.target)
         yo = p.alloc(n * T)
-        _stage(p.program, OP_LABEL_BINARIZE, n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
+        _stage(p.prog.program, OP_LABEL_BINARIZE, n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
     var fo = 0
     var flag = -1
     if folds is None and F > 0:
@@ -2695,10 +2642,10 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
     var smooth = fields["smooth"]
     var smo = _scalar(p, Float64(-1.0) if (_is_str(smooth) and String(smooth) == "auto") else _float(smooth), context)
     var enc = p.alloc((F + 1) * d * cmax * T)
-    _stage(p.program, OP_TE_GLOBAL, (F + 1) * T, yo, n, T, fo, meta)
+    _stage(p.prog.program, OP_TE_GLOBAL, (F + 1) * T, yo, n, T, fo, meta)
     if py_get(entries, "x_prep_host_column") is not None:
         # the host binding groups te_enc its own way
-        _stage(p.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
+        _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
     else:
         # each category's rows, ascending: te_enc walks one bucket, not every row
         var bstart = 0
@@ -2707,7 +2654,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
             bstart = p.scratch(d * (cmax + 1))
             brows = p.scratch(n * d)
             # te_gather also visits unused bucket tails: keep their zero row indices
-            _stage(p.program, OP_CAT_ZERO, n * d, brows)
+            _stage(p.prog.program, OP_CAT_ZERO, n * d, brows)
         else:
             bstart = p.alloc(d * (cmax + 1))
             brows = p.alloc(n * d)
@@ -2715,24 +2662,24 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
             var ch = max(1, min(256, (n + 4095) // 4096))
             var hh = p.scratch(d * ch * cmax)
             var tot = p.scratch(d * cmax)
-            _stage(p.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
-            _stage(p.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
-            _stage(p.program, OP_TE_HSTART, d, cmax, bstart, tot)
-            _stage(p.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
+            _stage(p.prog.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
+            _stage(p.prog.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
+            _stage(p.prog.program, OP_TE_HSTART, d, cmax, bstart, tot)
+            _stage(p.prog.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
         else:
-            _stage(p.program, OP_TE_BUCKET, d, codes, n, d, cmax, bstart, brows)
+            _stage(p.prog.program, OP_TE_BUCKET, d, codes, n, d, cmax, bstart, brows)
         if String(getenv("MOJOLEARN_XPREP_TE_GATHER", "1")) != "0":
             var gb = p.scratch(n * d * (1 + T))
-            _stage(p.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
-            _stage(p.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+            _stage(p.prog.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
+            _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
                    bstart + 1, brows, gb + 1)
         else:
-            _stage(p.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+            _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
                    bstart + 1, brows)
     var out = NONE
     if apply:
         out = p.output(n * d * T, entries)
-        _stage(p.program, OP_TE_APPLY, n * d * T, codes, n, d, T, fo, enc, cmax, meta, F, out)
+        _stage(p.prog.program, OP_TE_APPLY, n * d * T, codes, n, d, T, fo, enc, cmax, meta, F, out)
     var ran = p.run(entries, context)
     if flag >= 0 and _word(ran, flag) != 0:
         raise Error("mojolearn: n_splits=" + String(F) + " cannot be greater than the number of members in "
@@ -2944,22 +2891,22 @@ def _scores_classif(mut p: EncProg, values: PythonObject, y: PythonObject, chi: 
         var pc = p.work(nb * K * d)
         var cn = p.work(K * d)
         if (fam & IDN_CLASS_ONEPASS) != 0:
-            _stage(p.program, OP_CSB1_PART, nb * d, xo, n, d, yo, K, ps, pc, nb, NONE, NONE, NONE)
+            _stage(p.prog.program, OP_CSB1_PART, nb * d, xo, n, d, yo, K, ps, pc, nb, NONE, NONE, NONE)
         else:
-            _stage(p.program, OP_CSB_PART, nb * K * d, xo, n, d, yo, K, ps, pc, nb, NONE)
-        _stage(p.program, OP_CSB_FOLD, K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, NONE)
+            _stage(p.prog.program, OP_CSB_PART, nb * K * d, xo, n, d, yo, K, ps, pc, nb, NONE)
+        _stage(p.prog.program, OP_CSB_FOLD, K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, NONE)
     else:
-        _stage(p.program, OP_CLASS_STATS, K * d, xo, n, d, yo, K, cnt, mean, NONE, sums)
+        _stage(p.prog.program, OP_CLASS_STATS, K * d, xo, n, d, yo, K, cnt, mean, NONE, sums)
     if chi:
         _cs(p, mode, entries, xo, n, d, st, False)
-        _stage(p.program, OP_CHI2, d, sums, K, d, cnt, n, sc, pv)
+        _stage(p.prog.program, OP_CHI2, d, sums, K, d, cnt, n, sc, pv)
         return (sc, pv, st)
     if blocked and (fam & IDN_SELECT_BLOCKED) != 0:
         var ps = p.work(nb * d)
-        _stage(p.program, OP_FCB_PART, nb * d, xo, n, d, yo, mean, ps, nb)
-        _stage(p.program, OP_FCB_FIN, d, ps, n, d, nb, K, cnt, mean, sc, pv)
+        _stage(p.prog.program, OP_FCB_PART, nb * d, xo, n, d, yo, mean, ps, nb)
+        _stage(p.prog.program, OP_FCB_FIN, d, ps, n, d, nb, K, cnt, mean, sc, pv)
     else:
-        _stage(p.program, OP_F_CLASSIF, d, xo, n, d, yo, K, cnt, mean, sc, pv)
+        _stage(p.prog.program, OP_F_CLASSIF, d, xo, n, d, yo, K, cnt, mean, sc, pv)
     return (sc, pv, -1)
 
 
@@ -2992,15 +2939,15 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
             var psy = p.work(nb)
             mx = p.work(d)
             my = p.work(1)
-            _stage(p.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
-            _stage(p.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
+            _stage(p.prog.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
+            _stage(p.prog.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
         var pxy = p.work(nb * d)
         var pxx = p.work(nb * d)
         var pyy = p.work(nb)
-        _stage(p.program, OP_FRB_PART2, nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
-        _stage(p.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
+        _stage(p.prog.program, OP_FRB_PART2, nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
+        _stage(p.prog.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
     else:
-        _stage(p.program, OP_F_REGRESSION, d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
+        _stage(p.prog.program, OP_F_REGRESSION, d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
     _ = target^
     return (sc, pv, co)
 
@@ -3050,8 +2997,8 @@ def _topk_stages(mut p: EncProg, words: PythonObject, kind: Int, d: Int, k: Int)
     var key = p.work(2 * d)
     var mask = p.alloc(d)
     var wo = p.put(words, Int(py=words.size))
-    _stage(p.program, OP_KEY64, d, wo, kind, key)
-    _stage(p.program, OP_TOPK, d, key, d, k, mask)
+    _stage(p.prog.program, OP_KEY64, d, wo, kind, key)
+    _stage(p.prog.program, OP_TOPK, d, key, d, k, mask)
     return mask
 
 
@@ -3103,8 +3050,8 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
         if not keep_all and k_ok:
             var key = p.work(2 * d)
             mo = p.alloc(d)
-            _stage(p.program, OP_KEY64, d, score_at, 0, key)
-            _stage(p.program, OP_TOPK, d, key, d, k, mo)
+            _stage(p.prog.program, OP_KEY64, d, score_at, 0, key)
+            _stage(p.prog.program, OP_TOPK, d, key, d, k, mo)
         var ran = p.run(entries, context)
         if name == "chi2":
             for j in range(d):  # driver-loop: over the per-column minima (feature metadata)

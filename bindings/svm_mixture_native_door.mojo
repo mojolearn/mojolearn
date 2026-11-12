@@ -10,7 +10,7 @@ from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_raw_attr_unpack import family_raw_has
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.classical_arrays_door import classical_address
 from bindings.linear_svc_boundary_unpack import LinearSvcConnection, linear_svc_connection, linear_svc_run_query

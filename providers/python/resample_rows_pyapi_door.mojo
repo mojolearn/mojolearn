@@ -12,7 +12,7 @@ from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.admitted_input import AdmittedTypedPin, admitted_typed_once, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.resample_rows_gather import resample_gather_rows
 from core.host_parallel import host_parallelize

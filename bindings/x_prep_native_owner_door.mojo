@@ -3,10 +3,8 @@
 # stream synchronization remain in the same x_prep exported implementations.
 from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
-from std.memory import unsafe_memcpy
 from std.os import getenv
-from bindings.x_prep_native_owner_run import xprep_r3
-from bindings.arena_prog_run import _merge_pairs
+from bindings.x_prep_native_owner_run import xprep_r3, XprepInput, XprepRunInput, XprepRoute, xprep_execute, xprep_release
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
@@ -25,9 +23,8 @@ from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from core.entry_table import EntryRef
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from x_prep.transport_abi import (
-    XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, xp_vendor_word,
+    XP_DEV_PUT, XP_DEV_FREE, xp_vendor_word,
 )
-comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def xprep_key(entries: PythonObject) raises -> EntryRef:
@@ -370,42 +367,50 @@ def xprep_drop_resident(values: List[PythonObject], entries: PythonObject, conte
         return "resident in-out drop: "+String(error)
 
 
-def _release_owned(owned: List[Int], key: EntryRef) -> String:
-    # `key` is the run's transport entry, resolved once by `xprep_run`
-    # (perf-audit-2: was one table resolution per released slot).
-    var failures = String()
-    for i in range(len(owned)):  # driver-loop: attempt every gather/direct release even when an earlier free raises
-        var slot = owned[len(owned)-1-i]
-        try:
-            _ = xprep_call(key, XP_DEV_FREE, List[Int](), [slot])
-        except error:
-            failures += ("" if failures.byte_length() == 0 else "; ")+"slot "+String(slot)+": "+String(error)
-    return failures
-
-
 def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
               var program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
               logical_output: Int = 0, inout_ranges: List[Int] = List[Int]()) raises:
-    # `inout`: [lo, hi) pairs of inputs a stage rewrites and the caller reads
-    # after the run (`_Prog.put(..., inout=True)`): they are copied up from
-    # the host (never a resident or direct slot) and come back like outputs.
+    """`xprep_run_records` of a Python input list: each item is
+    `(offset, (kind, value, indices, rows, cols))` (the stateless owners)."""
+    var records = List[XprepInput](capacity=len(inputs))
+    var owners = List[PythonObject](capacity=len(inputs))
+    for k in range(len(inputs)):  # driver-loop: over the program's input records
+        var record = inputs[k][1]
+        records.append(XprepInput(Int(py=inputs[k][0]), Int(py=record[3]) * Int(py=record[4]), 0, k))
+        owners.append(record)
+    xprep_run_records(storage, host, scratch, output, out_words, program^, records, owners, entries, context,
+                      logical_output, inout_ranges)
+
+
+def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
+                      var program: List[Int32], records: List[XprepInput], owners: List[PythonObject],
+                      entries: PythonObject, context: PythonObject,
+                      logical_output: Int, inout_ranges: List[Int]) raises:
+    """One x_prep program run (lane encprog-typed, 2026-11-12: UNPACK, typed
+    RUN, then cleanup). UNPACK resolves each input once: its buffer address,
+    its resident cache slot, its DeviceRows fields, and the selected image's
+    route words. RUN is `xprep_execute` (bindings/x_prep_native_owner_run.mojo)
+    with the GIL released: the same puts, gathers, copies, ranges and run call
+    the loop here made, so no bit moves.
+    `inout_ranges`: [lo, hi) pairs of inputs a stage rewrites and the caller
+    reads after the run (`_Prog.put(..., inout=True)`): they are copied up
+    from the host (never a resident or direct slot) and come back like
+    outputs."""
     var profile = String(getenv("MOJOLEARN_XPREP_PROFILE","0")) == "1"
     var start = Int(perf_counter_ns()) if profile else 0
     var kernel_start = start
     var arena = Int(py=storage[1])
     var op = 0 if out_words == 0 else Int(py=output[1])
-    var device_scratch = scratch > 0 and (py_get(entries,"x_prep_run_out") is not None or py_get(entries,"x_prep_run_scratch") is not None)
+    var has_out = py_get(entries,"x_prep_run_out") is not None
+    var device_scratch = scratch > 0 and (has_out or py_get(entries,"x_prep_run_scratch") is not None)
     var ranges = xprep_ranges(entries,scratch)
-    # The transport entry, resolved once per run (lane entry-table-zero-alloc):
-    # the per-input row gathers and the run below call through it.
+    # The transport entry, resolved once per run (lane entry-table-zero-alloc).
     var key = xprep_key(entries)
-    var ins = List[Int32]()
-    var outs = List[Int32]()
     # Each input can own at most a direct base and a gathered selection.
     # Reserve before acquisition so recording a successful put/take cannot
     # allocate and strand a slot on List growth failure.
-    var owned = List[Int](capacity=2*len(inputs))
-    var last = 0
+    var owned = List[Int](capacity=2*len(records))
+    var run_inputs = List[XprepRunInput](capacity=len(records))
     # Per run, not per input (perf2-prep): the resident scope admission
     # (thread-local key walk, scope class layout), the resident cache's state
     # admission (class layout, entries, every stored key) and the direct-put
@@ -421,13 +426,25 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
     var direct_on = String(getenv("MOJOLEARN_XPREP_DIRECT","1").strip()) != "0"
     var dev_put_on = py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None
     try:
-        for k in range(len(inputs)):  # driver-loop: admitted input regions and their native owners
-            var offset = Int(py=inputs[k][0])
-            var record = inputs[k][1]
+        # UNPACK
+        for k in range(len(records)):  # driver-loop: over the program's input records
+            var item = records[k]
+            var offset = item.offset
+            var words = item.words
+            if item.owner < 0:
+                # a program-owned parameter list: copied into the arena
+                run_inputs.append(XprepRunInput(offset, words, item.address, -1, False, 0, False, 0, 0, 0))
+                continue
+            var record = owners[item.owner]
             var rows = Int(py=record[0]) == 1
             var value = record[1]
-            var words = Int(py=record[3])*Int(py=record[4])
             var source = -1
+            var put = False
+            var put_words = 0
+            var address = 0
+            var indices = 0
+            var n_rows = 0
+            var cols = 0
             var is_inout = False
             for j in range(len(inout_ranges) // 2):  # driver-loop: over the program's in-out input ranges
                 if inout_ranges[2 * j] == offset and inout_ranges[2 * j + 1] == offset + words:
@@ -444,73 +461,33 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                         cache_state = _cache_state(cache,entries,context)
                     source = _cached_slot_in(cache_state.value(),value,entries)
                 elif dev_put_on and (rows or (words >= 1048576 and direct_on)):
-                    # The run's resolved transport entry (perf-audit-2: `_store_put`
-                    # resolved the table again per input).
-                    var put_src: List[Int] = [Int(py=classical_address(value))]
-                    source = xprep_call(key, XP_DEV_PUT, put_src, [Int(py=value.size)])
-                    owned.append(source)
+                    put = True
+                    put_words = Int(py=value.size)
                 if rows:
-                    var idx: List[Int] = [Int(py=classical_address(record[2]))]
-                    source = xprep_call(key, XP_DEV_TAKE_ROWS, idx, [source, Int(py=record[4]), Int(py=record[3])])
-                    owned.append(source)
-            if source < 0:
-                unsafe_memcpy(dest=F32P(unsafe_from_address=arena+4*offset),src=F32P(unsafe_from_address=Int(py=classical_address(value))),count=words)
-            if ranges:
-                if source < 0 and len(ins) >= 3 and ins[len(ins)-1] < 0 and Int(ins[len(ins)-2]) == offset:
-                    ins[len(ins)-2] = Int32(offset+words)
-                else:
-                    ins.append(Int32(offset))
-                    ins.append(Int32(offset+words))
-                    ins.append(Int32(source))
-                if offset > last:
-                    outs.append(Int32(last))
-                    outs.append(Int32(offset))
-                    outs.append(-1)
-                    outs.append(1)
-                last = offset+words
-        if ranges and last < host:
-            outs.append(Int32(last))
-            outs.append(Int32(host))
-            outs.append(-1)
-            outs.append(1)
-        if ranges and len(inout_ranges) > 0:
-            # the in-out input ranges come back too
-            var pairs = List[Int]()
-            for i in range(len(outs) // 4):  # driver-loop: over the program's output ranges
-                pairs.append(Int(outs[4 * i]))
-                pairs.append(Int(outs[4 * i + 1]))
-            for j in range(len(inout_ranges)):  # driver-loop: over the program's in-out input ranges
-                pairs.append(inout_ranges[j])
-            outs = _merge_pairs(pairs^)
-        var nst = len(program)//16
-        var pa = Int(program.unsafe_ptr())
+                    indices = Int(py=classical_address(record[2]))
+                    n_rows = Int(py=record[3])
+                    cols = Int(py=record[4])
+            if put or (source < 0 and not rows):
+                address = Int(py=classical_address(value))
+            run_inputs.append(XprepRunInput(offset, words, address, source, put, put_words, rows, indices, n_rows, cols))
         kernel_start = Int(perf_counter_ns()) if profile else 0
-        var sc = scratch if device_scratch else 0
-        if ranges:
-            var addresses: List[Int] = [arena, pa, op, Int(ins.unsafe_ptr()), Int(outs.unsafe_ptr())]
-            _ = xprep_call(key, XP_RUN_RANGES, addresses, [host, sc, out_words, nst, len(ins)//3, len(outs)//4])
-        elif out_words > 0 or (device_scratch and py_get(entries,"x_prep_run_out") is not None):
-            var addresses: List[Int] = [arena, pa, op]
-            _ = xprep_call(key, XP_RUN_OUT, addresses, [host, sc, out_words, nst])
-        elif device_scratch:
-            var addresses: List[Int] = [arena, pa]
-            _ = xprep_call(key, XP_RUN_SCRATCH, addresses, [host, scratch, nst])
-        else:
-            var addresses: List[Int] = [arena, pa]
-            _ = xprep_call(key, XP_RUN, addresses, [host+scratch, nst])
-        # The address words above are not owners: keep both descriptor
-        # buffers live until the native call returns.
-        _ = ins^
-        _ = outs^
+        # RUN
+        var route = XprepRoute(ranges, device_scratch, has_out)
+        with GILReleased(Python()):
+            xprep_execute(key, arena, host, scratch, op, out_words, program, run_inputs, inout_ranges, route, owned)
     except error:
-        var cleanup = _release_owned(owned,key)
+        var cleanup = String()
+        with GILReleased(Python()):
+            cleanup = xprep_release(key, owned)
         var dropped = xprep_drop_resident(inout_values,entries,context)
         if dropped.byte_length() > 0:
             cleanup += ("" if cleanup.byte_length() == 0 else "; ")+dropped
         if cleanup.byte_length() > 0:
             raise Error("RuntimeError: x_prep operation failed: "+String(error)+"; cleanup also failed: "+cleanup)
         raise error
-    var cleanup = _release_owned(owned,key)
+    var cleanup = String()
+    with GILReleased(Python()):
+        cleanup = xprep_release(key, owned)
     var dropped = xprep_drop_resident(inout_values,entries,context)
     if dropped.byte_length() > 0:
         cleanup += ("" if cleanup.byte_length() == 0 else "; ")+dropped

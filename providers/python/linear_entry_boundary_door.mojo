@@ -8,7 +8,7 @@ from bindings.native_owner_registry_pack import borrowed_native_owner
 from bindings.py_balanced import py_type, py_call
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, _neural_descriptor_dictionary,
     _neural_descriptor_function_owner, neural_descriptor_connect_factory_once,
 )
@@ -105,7 +105,7 @@ def linear_entry_connect(family_source: PythonObject, mode_entry: PythonObject,
     var key = LinearEntryKey(Int(py=mode_value), linear_vendor_code(String(vendor_value)))
     var provider = neural_descriptor_connect_factory_once(factory, schema, count)
     var native = provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    var published = native[].entry
+    var published = native[].record[0].entry
     if family == LINEAR_TABLE_ESTIMATORS:
         published = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 0, schema, count)
     elif family == LINEAR_TABLE_X_LINEAR:
@@ -114,7 +114,7 @@ def linear_entry_connect(family_source: PythonObject, mode_entry: PythonObject,
         published = linear_table_entry[LINEAR_TABLE_DECOMP](key, 0, schema, count)
     else:
         published = linear_table_entry[LINEAR_TABLE_METRICS](key, 0, schema, count)
-    if native[].module is not module or not entry_table_same_call(published, native[].entry):
+    if native[].module is not module or not entry_table_same_call(published, native[].record[0].entry):
         raise Error("TypeError: linear entry image differs from the published native endpoint")
     var owner = PythonObject(alloc=LinearEntryOwner(key^, family, module))
     _ = provider

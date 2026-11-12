@@ -60,7 +60,7 @@ from solver.ops_entry_host import SOLVER_OPS_HOST_API, solver_ops_host_v1
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hierarchy.solver_descriptor_host import HIERARCHY_SOLVER_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (

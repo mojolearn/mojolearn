@@ -36,7 +36,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.p3_array_arena_records_unpack import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 from bindings.arena_prog_run import _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricProgramInput, metrics_plan_execute
 from std.python._cpython import GILReleased
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -440,7 +440,7 @@ def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode:
     var entries = _family_entries(mode, "x_metrics", context)
     var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
     var output_ranges = py_get(entries, "x_metrics_run_out") is not None
     if len(inputs) != plan.buffer_inputs():

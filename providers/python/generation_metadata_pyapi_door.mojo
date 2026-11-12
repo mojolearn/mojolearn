@@ -356,7 +356,7 @@ struct GenerationOperationSnapshot(Copyable, Movable):
 # boundary owns token/layer execution.
 from bindings.py_balanced import py_setitem
 from bindings.generation_buffers_door import generation_mutable
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
 from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open, transformer_block_session_handle
 from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
 from providers.python.native_execution_pyapi_door import AdmittedNativeExecution

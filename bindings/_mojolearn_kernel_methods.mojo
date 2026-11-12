@@ -91,7 +91,7 @@ from kernel_methods.kernel_methods_binding_run import (
     nystroem_transform_model_run,
     nystroem_transform_ptr_run,
 )
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 def kernel_methods_api_v1_binding() raises -> PythonObject:

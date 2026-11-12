@@ -32,7 +32,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_fit_begin, estimator_fit_end
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.native_owner_lifetime_door import native_release_admit
 
 

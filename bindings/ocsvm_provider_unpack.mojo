@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from core.neighbors_native_driver import XnDriver
 from core.ocsvm_resident_api import OcResidentDriver, OCSVM_RESIDENT_ABI, OCSVM_RESIDENT_COUNT
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
@@ -31,7 +31,7 @@ struct OcConnection(Movable):
                     String(XN_ABI_NAME), XN_OPERATION_COUNT)
             else:
                 self.provider = self.binding.downcast_value_ptr[CompiledBindingSnapshot]()[].provider
-            self.connected = Optional(XnDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+            self.connected = Optional(XnDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
             _ = module
         return self.connected.value().copy()
 
@@ -41,6 +41,6 @@ struct OcConnection(Movable):
             self.resident_provider = neural_descriptor_connect_once(module, "ocsvm_resident_native_api_v1",
                 String(OCSVM_RESIDENT_ABI), OCSVM_RESIDENT_COUNT)
             self.resident_connected = Optional(OcResidentDriver(
-                self.resident_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+                self.resident_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
             _ = module
         return self.resident_connected.value().copy()

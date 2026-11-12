@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type
 from bindings.native_loaded_module_door import native_loaded_module
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute,
 )
 from providers.python.compiled_binding_snapshot_pyapi_door import (

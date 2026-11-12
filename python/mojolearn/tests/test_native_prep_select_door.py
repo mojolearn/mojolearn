@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """RFE and the mutual-information functions are one native call each
-(bindings/prep_select_native.mojo, through the family door). The former
+(bindings/prep_select_native_door.mojo, through the family door). The former
 Python routines are kept here as the oracle: the native door must return the
 same bits and set the same attributes.
 

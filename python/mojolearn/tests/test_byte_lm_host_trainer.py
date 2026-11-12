@@ -71,7 +71,7 @@ def trainer(**kwargs):
 # The trainer's native owner (bindings/byte_lm_host_trainer_native_door.mojo) reads
 # the host binding connected at import into `_HOST_TRAIN_CONTEXT` and admits
 # only compiled entries owned by that module
-# (providers/python/neural_descriptor_pyapi.mojo, `neural_descriptor_entry`).
+# (providers/python/neural_descriptor_pyapi_door.mojo, `neural_descriptor_entry`).
 # A Python stand-in planted in `sys.modules` is therefore never called, so the
 # wiring tests below run one real step of the shipped host binding and read
 # its public state; the arithmetic itself is still the gate's business.

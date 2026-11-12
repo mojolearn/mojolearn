@@ -8,7 +8,7 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
 from providers.python.autograd_program_arrays_pyapi_door import program_admission_context
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_entry,
     neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_adopt,
 )
@@ -295,7 +295,7 @@ def ops_owned_program_call_py(owner: PythonObject, operation: PythonObject, args
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
     var provider = resource[].provider
     var descriptor = provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    if descriptor[].name != OWNED_PROGRAM_ABI_NAME or len(resource[].context) != 2 or resource[].context[0] != admitted[1]:
+    if descriptor[].record[0].name != OWNED_PROGRAM_ABI_NAME or len(resource[].context) != 2 or resource[].context[0] != admitted[1]:
         raise Error("TypeError: captured program resource belongs to another native owner")
     var handle = admitted[0]["_id"]
     if py_type(handle) is not py_type(PythonObject(0)) or Int(py=handle) != resource[].handle or resource[].handle == 0:

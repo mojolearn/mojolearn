@@ -15,7 +15,7 @@ from bindings.native_array_storage_door import native_array_zeros
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.dbscan_native_boundary_door import DBSCANConnection
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from providers.python.hierarchy_solver_descriptor_pyapi_pack import hierarchy_solver_admit
 from providers.python.hierarchy_cluster_descriptor_pyapi_pack import hierarchy_cluster_admit
 from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module
@@ -47,7 +47,7 @@ struct AggloSolverConnection(Movable):
     def __init__(out self, binding: PythonObject) raises:
         self.provider = hierarchy_solver_admit(binding)
         var native = self.provider.downcast_value_ptr[CompiledBindingSnapshot]()[].provider
-        self.driver = AggloSolverDriver(native.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = AggloSolverDriver(native.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
 
 
 struct AggloClusterConnection(Movable):
@@ -57,7 +57,7 @@ struct AggloClusterConnection(Movable):
     def __init__(out self, binding: PythonObject) raises:
         self.provider = hierarchy_cluster_admit(binding)
         var native = self.provider.downcast_value_ptr[CompiledBindingSnapshot]()[].provider
-        self.driver = AggloClusterDriver(native.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = AggloClusterDriver(native.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
 
 
 struct AggloZeroRowsConnection(Movable):
@@ -72,7 +72,7 @@ struct AggloZeroRowsConnection(Movable):
                 String(XN_ABI_NAME), XN_OPERATION_COUNT)
         else:
             provider = binding.downcast_value_ptr[CompiledBindingSnapshot]()[].provider
-        self.driver = AggloZeroRowsDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+        self.driver = AggloZeroRowsDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
         self.provider = provider
         _ = module
         _ = binding
