@@ -840,14 +840,25 @@ def causal_prepared_layer(mut mods: NativeModules, block_fields: PythonObject, k
 def _causal_layer_run_prepared(mut mods: NativeModules,
     e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
+    layer_entry: Optional[EntryRef] = None,
 ) raises -> PythonObject:
-    return _causal_layer_run_bound(mods, e, kind, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed)
+    return _causal_layer_run_bound(mods, e, kind, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed, layer_entry)
+
+
+def _layer_entry[family: Int](e: PythonObject, held: Optional[EntryRef]) raises -> EntryRef:
+    # The layer's table entry: the one a model snapshot resolved once
+    # (`GenerationOperationSnapshot.layer_entry`, held across a session's
+    # steps), else resolved here (a standalone one-layer call).
+    if held:
+        return held.value()
+    return causal_ref[family](causal_entry_key(e))
 
 
 def _causal_layer_run_bound(mut mods: NativeModules,
     e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
     block_override: PythonObject, profile_override: PythonObject, profile_changed_override: Bool,
+    layer_entry: Optional[EntryRef] = None,
 ) raises -> PythonObject:
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
@@ -891,7 +902,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             # 33). The former Python-entry arms (transformer_forward,
             # transformer_decode_step at L = 1, transformer_forward_int15) ran
             # the same _run_forward with the same words.
-            py_setattr(st, "cached_tokens", PythonObject(_causal_table_call(causal_ref[CAUSAL_TABLE_BLOCK](causal_entry_key(e)),
+            py_setattr(st, "cached_tokens", PythonObject(_causal_table_call(_layer_entry[CAUSAL_TABLE_BLOCK](e, layer_entry),
                 CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD, a_words, p_words, [])))
             mods.released()
         elif device15 and block_provider is not None:
@@ -978,7 +989,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             # one route for every tier and profile (the provider-capsule and
             # Python-entry arms ran this same mamba_state operation; both
             # refuse the 17-word affine profile by the same arity rule).
-            _ = _causal_table_call(causal_ref[CAUSAL_TABLE_MAMBA](causal_entry_key(e)),
+            _ = _causal_table_call(_layer_entry[CAUSAL_TABLE_MAMBA](e, layer_entry),
                 CAUSAL_MAMBA1_DECODE if step else CAUSAL_MAMBA1_FORWARD, m_addresses, m_params, [])
             mods.released()
             _ = y  # keep the Python object alive through the native call above
@@ -1001,7 +1012,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
             var m_params: List[Int] = [b, d, Int(py=st.buffered_tokens)] if step else [b, l, d, Int(py=st.buffered_tokens)]
-            py_setattr(st, "buffered_tokens", PythonObject(_causal_table_call(causal_ref[CAUSAL_TABLE_MAMBA](causal_entry_key(e)),
+            py_setattr(st, "buffered_tokens", PythonObject(_causal_table_call(_layer_entry[CAUSAL_TABLE_MAMBA](e, layer_entry),
                 CAUSAL_MAMBA2_DECODE if step else CAUSAL_MAMBA2_FORWARD,
                 m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
             mods.released()
@@ -1688,6 +1699,7 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
             for i in range(len(model._blocks)):  # driver-loop: capture layer owners once per operation
                 blocks.append(_block(mods, model, i))
             snapshot = GenerationOperationSnapshot(model, entries, blocks)
+            snapshot.value().bind_layer_entry()
             mods.released()
         var out = _run_snapshot(mods, snapshot.value(), ids, state, b, l, output)
         if read_plan:
@@ -1708,7 +1720,8 @@ def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot
     mods.released()
     for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
         x = _causal_layer_run_prepared(mods, snapshot.entries, snapshot.kind, snapshot.width, b, l,
-            snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False)
+            snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False,
+            snapshot.layer_entry)
     var out = _causal_model_head_prepared(snapshot.head, x, b, l, False, output)
     mods.released()
     _ = snapshot  # pins model and all captured weight owners until computation finishes

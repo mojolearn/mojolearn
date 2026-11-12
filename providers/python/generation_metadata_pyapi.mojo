@@ -19,6 +19,8 @@ from bindings.causal_model_config import model_dict, model_plain, model_string, 
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.generation_metadata import GenerationLayerWords
+from core.entry_table import EntryRef
+from core.causal_lm_entry_table import CausalEntryKey, causal_ref, CAUSAL_TABLE_BLOCK, CAUSAL_TABLE_MAMBA
 
 
 comptime _GENERATION_STATE_SLOT = "generation_state_class_fields_v1"
@@ -313,6 +315,12 @@ struct GenerationOperationSnapshot(Copyable, Movable):
     var embedding: GenerationWeightSnapshot
     var head: GenerationHeadSnapshot
     var layers: List[GenerationLayerSnapshot]
+    # The layers' CausalLM table entry (block for a CPU Transformer, mamba
+    # state for Mamba), resolved once per snapshot (a generation session
+    # holds it across every step); None where the layer run calls no table
+    # entry (a device Transformer). round2-fixes-2: the layer run read the
+    # entry key and resolved the table per layer per step (perf audit 3).
+    var layer_entry: Optional[EntryRef]
 
     def __init__(out self, model: PythonObject, entries: PythonObject, blocks: List[PythonObject]) raises:
         self.model = model
@@ -329,6 +337,18 @@ struct GenerationOperationSnapshot(Copyable, Movable):
         self.layers = List[GenerationLayerSnapshot]()
         for i in range(len(blocks)):  # driver-loop: capture stable layer metadata once per operation
             self.layers.append(GenerationLayerSnapshot(blocks[i], self.kind, self.planes))
+        self.layer_entry = None
+
+    def bind_layer_entry(mut self) raises:
+        """Resolve `layer_entry` once, for a snapshot that runs its layers
+        (bindings/causal_lm_public.mojo `_run_snapshot`); the engine
+        admission never runs them and never resolves it."""
+        if self.kind != "transformer":
+            self.layer_entry = causal_ref[CAUSAL_TABLE_MAMBA](
+                CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"])))
+        elif Bool(py=self.entries["cpu"]):
+            self.layer_entry = causal_ref[CAUSAL_TABLE_BLOCK](
+                CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"])))
 
 
 # This admission is an operation-state consumer of the common descriptor and
