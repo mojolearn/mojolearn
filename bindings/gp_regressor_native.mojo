@@ -25,7 +25,8 @@ from bindings.classical_arrays import classical_address
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
-from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
+from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_scan
+from gaussian_process.gp_query_x_run import gp_query_refuse
 # thin-unpack-kit (2026-11-11): one C-API read per scalar parameter in place
 # of a call of the builtin bool/int/float (same semantics and exceptions).
 from bindings.boundary_read import read_bool, read_int_like, read_float_like
@@ -474,7 +475,7 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
     var answer = gp_run(connection, request)
     lifecycle_admit_fields(fields)
     if resident:
-        gp_query_refuse(answer.finite, answer.range_status, gq, "GaussianProcessRegressor")
+        gp_query_refuse(answer.finite, answer.range_status, gq.store, "GaussianProcessRegressor")
     var n_clamped = answer.value
     _ = dual  # keep the Python object alive through the native call above
     _ = lf  # keep the Python object alive through the native call above

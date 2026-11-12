@@ -12,8 +12,9 @@
 #   gp_query_scan(query, est, context)
 #       the finite test of a query the door did not test, for a route whose
 #       entry returns no status word (one parallel host pass)
-#   gp_query_refuse(finite, in_range, query, est)
-#       the refusal of a query an entry flagged
+#   gp_query_refuse(finite, in_range, query.store, est)
+#       the refusal of a query an entry flagged (typed RUN:
+#       gaussian_process/gp_query_x_run.mojo)
 #
 # Every route refuses in the one wording 'Input X contains NaN or infinity
 # (<est>).' (admitted_finite_refuse / door_rows_refuse); the GP entries'
@@ -22,8 +23,8 @@
 from std.python import PythonObject
 from bindings.admitted_family import admit_family
 from bindings.classical_arrays import classical_address
-from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse
-from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
+from bindings.admitted_input import admit_x_unrecorded
+from bindings.device_rows_door import door_is_device_rows
 from bindings.device_rows_door_run import DoorRowsStore
 from bindings.gp_svm_gp_state import gp_x_known, gp_x_deferred
 
@@ -79,11 +80,3 @@ def gp_query_scan(query: GpQuery, est: String, context: PythonObject) raises:
         return
     _ = admit_family(query.q, 2, "X", context, finite=True,
                      refusal="Input X contains NaN or infinity (" + est + ").")
-
-
-def gp_query_refuse(finite: Int, in_range: Int, query: GpQuery, est: String) raises:
-    """The refusal of a query the entry flagged (its status words)."""
-    if query.store.active():
-        door_rows_refuse(finite, in_range, est, query.store.base_rows)
-    else:
-        admitted_finite_refuse(finite, est)

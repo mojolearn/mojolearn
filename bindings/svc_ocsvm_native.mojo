@@ -36,6 +36,7 @@ from bindings.gp_svm_gp_state import gp_x_known
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_float, svc_int, svc_truthy, svc_prefix, svc_scalar_array,
 )
+from svm.svc_ocsvm_native_run import _f32_scalar
 
 def _oc_float(value: PythonObject, context: PythonObject) raises -> Float64:
     oc_scalar_admit[True](value, context)
@@ -49,12 +50,6 @@ def _oc_int(value: PythonObject, context: PythonObject) raises -> Int:
 
 def _a(value: PythonObject) raises -> PythonObject:
     return classical_address(value)
-
-
-def _f32_scalar(value: Float64) -> Float64:
-    """A Python double rounded once to float32."""
-    return Float64(Float32(value))
-
 
 def _fast_tier_native(mut connection: OcConnection, binding: PythonObject, context: PythonObject) raises -> Bool:
     if not xn_is_module(binding):

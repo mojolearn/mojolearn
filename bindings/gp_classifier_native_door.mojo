@@ -37,7 +37,8 @@ from core.gp_native_fit_summary import GPCFitSummary
 from bindings.gp_common_native import gp_extension, gp_caps, gp_kernel_arrays, gp_f32, gp_fit_owned
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
-from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
+from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_scan
+from gaussian_process.gp_query_x_run import gp_query_refuse
 from bindings.fitted_resident_door import fitted_resident_drop
 from bindings.gp_resident_boundary import gp_resident_lease
 from bindings.gp_score_labels_boundary import gpc_score_result
@@ -592,7 +593,7 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
         gq.store.base_rows if gq.store.active() else 0, gq.store.index_id if gq.store.active() else -1)
     var answer = gp_run(connection, request)
     lifecycle_admit_fields(fields)
-    gp_query_refuse(answer.finite, answer.range_status, gq, "GaussianProcessClassifier")
+    gp_query_refuse(answer.finite, answer.range_status, gq.store, "GaussianProcessClassifier")
     _ = tables
     _ = kept
     _ = xt

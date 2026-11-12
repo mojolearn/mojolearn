@@ -10,13 +10,7 @@ from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_item
 from bindings.decomp_scalar_compare import decomp_equal_admitted
-
-
-@fieldwise_init
-struct GPScalarBucket(ImplicitlyCopyable, Movable):
-    var first: Int
-    var last: Int
-
+from gaussian_process.gp_mixed_label_boundary_run import GPScalarBucket
 
 struct GPScalarIndex(Movable):
     # The retained values are observable class identities, not algorithm state.
