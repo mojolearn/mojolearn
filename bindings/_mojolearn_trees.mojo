@@ -63,6 +63,8 @@ from core.forest_inference_model import resident_release
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
 from std.sys.compile import is_defined
 from forest_export_binding_unpack import (forest_export_py_list_f64, forest_export_py_list_i64,)
+from core.forest_export_run import (ForestExportRegistry,)
+from core.forest_export_binding_impl import (validate_forest_export_destinations, copy_forest_export_leaves,)
 from forest_export_binding_pack import (forest_export_descriptor_py,)
 from core.mojolearn_trees_host_impl import et_export_into, et_forest_lists
 from extratrees.mojolearn_trees_run import (

@@ -3,6 +3,8 @@
 from std.python import Python
 from std.memory import bitcast
 from forest_export_binding_unpack import (forest_export_insert_py,)
+from core.forest_export_run import (ForestExportRegistry,)
+from core.forest_export_binding_impl import (validate_forest_export_destinations, copy_forest_export_leaves,)
 from core.forest_export_binding_impl import validate_forest_export_counts
 
 
