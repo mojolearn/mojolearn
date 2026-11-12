@@ -24,7 +24,7 @@ from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 from bindings.py_balanced import py_call, py_type
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once, neural_descriptor_connect_once,
 )
 
@@ -88,8 +88,8 @@ def kpca_near_connection(mode: String, context: PythonObject) raises -> Int:
     if index < 0:
         # The typed record and the door pins are appended together, under the GIL.
         index = kpca_near_add(provider_word(provider), provider_word(metadata),
-            KPCANativeDriver(metadata.downcast_value_ptr[NeuralDescriptorProvider]()[].entry),
-            KPCANeighborDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)))
+            KPCANativeDriver(metadata.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry),
+            KPCANeighborDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)))
         var pins = KPCA_PROVIDER_PINS.get_or_create_ptr()
         pins[].near_providers.append(provider)
         pins[].near_metadata.append(metadata)
@@ -109,8 +109,8 @@ def kpca_decomp_connection(mode: String, context: PythonObject) raises -> Int:
     if index < 0:
         # The typed record and the door pins are appended together, under the GIL.
         index = kpca_decomp_add(provider_word(provider), provider_word(reduction),
-            KPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry),
-            reduction.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+            KPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry),
+            reduction.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         var pins = KPCA_PROVIDER_PINS.get_or_create_ptr()
         pins[].decomp_providers.append(provider)
         pins[].decomp_reductions.append(reduction)

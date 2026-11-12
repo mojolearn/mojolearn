@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-# Setup/ownership boundary for explicitly named native execution ABIs. No
-# unwrapping of arbitrary Python functions, extension layouts or signatures.
+# Setup/ownership boundary (door) for explicitly named native execution ABIs.
+# No unwrapping of arbitrary Python functions, extension layouts or signatures.
+# The Python pins (module, capsule, factory) live here; the typed record they
+# keep valid (table entry, ABI name, call counts, workspace) and every call on
+# it live in providers/python/neural_descriptor_run.mojo, reached by the
+# provider id word (`neural_descriptor_provider_id`).
 from std.ffi import c_int
 from std.collections import Dict
-from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.native_owner_registry_pack import borrowed_native_owner
@@ -13,38 +16,44 @@ from bindings.native_loaded_module_door import native_loaded_module, native_name
 from bindings.py_cpython_table import cpython_table
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit, class_watch_ready
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call_spans, native_descriptor_leased_call
-from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
 from core.shared_slot import SharedSlot
+from providers.python.neural_descriptor_run import (
+    NeuralDescriptorRecord, neural_descriptor_record_admit,
+    neural_descriptor_record_call, neural_descriptor_reserved_begin, neural_descriptor_reserved_operation,
+    neural_descriptor_reserved_end, neural_descriptor_admitted_find, neural_descriptor_admitted_store,
+    NEURAL_DESCRIPTOR_ADMITTED_HIT,
+)
 
 
 struct NeuralDescriptorProvider(Movable, Writable):
+    # Door-side pins only: the compiled module, its capsule (which borrows the
+    # table) and the factory entry. `record` holds the typed record in a
+    # one-element heap list, so its address (the provider id word) is stable
+    # while this provider is alive.
     var module: PythonObject
     var capsule: PythonObject
     var factory: PythonObject
-    var name: String
-    var entry: NativeDescriptorCall
-    var calls: List[Int]
-    var workspace: List[NativeCallWorkspace]
+    var record: List[NeuralDescriptorRecord]
 
     def __init__(out self, module: PythonObject, capsule: PythonObject, factory: PythonObject, var name: String, entry: NativeDescriptorCall, operation_count: Int = 6):
         self.module = module
         self.capsule = capsule
         self.factory = factory
-        self.name = name^
-        self.entry = entry
-        self.calls = List[Int](length=operation_count, fill=0)
-        # Retain heap-backed ABI output and session-prefix capacity with this
-        # admitted provider. Its exclusive lease handles concurrent/reentrant
-        # calls without sharing writable scratch or waiting while holding GIL.
-        self.workspace = List[NativeCallWorkspace]()
-        self.workspace.append(NativeCallWorkspace())
+        self.record = List[NeuralDescriptorRecord]()
+        self.record.append(NeuralDescriptorRecord(name^, entry, operation_count))
 
     def write_to(self, mut writer: Some[Writer]):
-        writer.write("NeuralDescriptorProvider(", self.name, ", calls=", self.calls, ")")
+        writer.write("NeuralDescriptorProvider(", self.record[0].name, ", calls=", self.record[0].calls, ")")
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
+
+
+def neural_descriptor_provider_id(provider: PythonObject) raises -> Int:
+    """The provider id word: the address of the typed record
+    (neural_descriptor_run.mojo) inside this pinned provider. Valid while the
+    caller keeps `provider` alive; RUN code executes on it with no Python."""
+    return Int(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record.unsafe_ptr())
 
 
 def neural_descriptor_capsule(mut name: String, entries: List[NativeDescriptorCall]) raises -> PythonObject:
@@ -116,23 +125,6 @@ def _neural_descriptor_function_owner(function: PythonObject) raises -> PyObject
     return owner
 
 
-struct NeuralDescriptorAdmitted(Defaultable, Movable):
-    # Binding modules whose whole namespace was admitted (every key an exact
-    # string), as (module address, dictionary address, dictionary size). Plain
-    # integers only: no Python reference outlives the interpreter here.
-    var modules: List[Int]
-    var dicts: List[Int]
-    var sizes: List[Int]
-
-    def __init__(out self):
-        self.modules = List[Int]()
-        self.dicts = List[Int]()
-        self.sizes = List[Int]()
-
-
-comptime NEURAL_DESCRIPTOR_ADMITTED = SharedSlot[NeuralDescriptorAdmitted, "MojolearnNeuralDescriptorAdmittedV2"]
-
-
 def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject) raises -> PythonObject:
     # The module dictionary, with its key walk done once per module identity:
     # a primitive operation resolves its entry on every call, and walking the
@@ -160,26 +152,11 @@ def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject
     var module_address = Int(module._obj_ptr)
     var dict_address = Int(raw)
     var size = len(fields)
-    var record = NEURAL_DESCRIPTOR_ADMITTED.get_or_create_ptr()
-    var slot = -1
-    for i in range(len(record[].modules)):  # small-loop(record: admitted binding modules): a few compiled extension modules per process, never data
-        if record[].modules[i] == module_address:
-            if record[].dicts[i] == dict_address and record[].sizes[i] == size:
-                return fields
-            slot = i
-            break
+    var slot = neural_descriptor_admitted_find(module_address, dict_address, size)
+    if slot == NEURAL_DESCRIPTOR_ADMITTED_HIT:
+        return fields
     _neural_descriptor_keys(fields, bi.str)
-    if slot >= 0:
-        record[].dicts[slot] = dict_address
-        record[].sizes[slot] = size
-    else:
-        if len(record[].modules) >= 64:
-            record[].modules.clear()
-            record[].dicts.clear()
-            record[].sizes.clear()
-        record[].modules.append(module_address)
-        record[].dicts.append(dict_address)
-        record[].sizes.append(size)
+    neural_descriptor_admitted_store(slot, module_address, dict_address, size)
     return fields
 
 
@@ -357,8 +334,10 @@ struct NeuralDescriptorConnections(Defaultable, Movable):
 
 
 # The named global may be shared by every Mojo extension in the process:
-# bump the name's version whenever NeuralDescriptorConnections' layout changes.
-comptime NEURAL_DESCRIPTOR_CONNECTIONS = SharedSlot[NeuralDescriptorConnections, "MojolearnNeuralDescriptorConnectionsV2"]
+# bump the name's version whenever NeuralDescriptorConnections' layout, or the
+# layout of the NeuralDescriptorProvider it holds, changes (V3: typed record
+# split out of the provider).
+comptime NEURAL_DESCRIPTOR_CONNECTIONS = SharedSlot[NeuralDescriptorConnections, "MojolearnNeuralDescriptorConnectionsV3"]
 
 
 def neural_descriptor_connect_once(module: PythonObject, factory_name: String, var name: String,
@@ -457,7 +436,7 @@ def neural_descriptor_reuse(previous: PythonObject, factory: PythonObject, name:
     # module must reconnect, even if the facade/canonical module did not change.
     if previous is not None:
         var held = previous.downcast_value_ptr[NeuralDescriptorProvider]()
-        if held[].factory is factory and held[].module._obj_ptr == _neural_descriptor_function_owner(factory) and held[].name == name and len(held[].calls) == operation_count:
+        if held[].factory is factory and held[].module._obj_ptr == _neural_descriptor_function_owner(factory) and held[].record[0].name == name and len(held[].record[0].calls) == operation_count:
             return previous
     return neural_descriptor_connect(factory, name, operation_count)
 
@@ -533,24 +512,30 @@ def neural_descriptor_execute(
     provider: PythonObject, operation: Int, addresses: List[Int], ints: List[Int], floats: List[Float64],
     release_gil: Bool = True,
 ) raises -> Int:
-    var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    if operation < 0 or operation >= len(owner[].calls):
-        raise Error("neural native ABI: unknown operation")
-    owner[].calls[operation] += 1
-    var workspace = Int(owner[].workspace.unsafe_ptr())
+    var provider_id = neural_descriptor_provider_id(provider)
     try:
-        var result = 0
-        if release_gil:
-            with GILReleased(Python()):
-                result = native_descriptor_leased_call(owner[].entry, workspace, operation, addresses, ints, floats)
-        else:
-            # Native resource registry admission/finalization whose ownership
-            # requires the admission lock uses this branch; computation keeps True.
-            result = native_descriptor_leased_call(owner[].entry, workspace, operation, addresses, ints, floats)
-        return result
+        return neural_descriptor_execute_id(provider_id, operation, addresses, ints, floats, release_gil)
     finally:
-        # The workspace pointer does not retain the provider.
+        # The id word does not retain the provider.
         _ = provider
+
+
+def neural_descriptor_execute_id(
+    provider_id: Int, operation: Int, addresses: List[Int], ints: List[Int], floats: List[Float64],
+    release_gil: Bool = True,
+) raises -> Int:
+    """`neural_descriptor_execute` for a caller that unpacked the provider id
+    once (`neural_descriptor_provider_id`) and keeps the provider pinned."""
+    neural_descriptor_record_admit(provider_id, operation)
+    var result = 0
+    if release_gil:
+        with GILReleased(Python()):
+            result = neural_descriptor_record_call(provider_id, operation, addresses, ints, floats)
+    else:
+        # Native resource registry admission/finalization whose ownership
+        # requires the admission lock uses this branch; computation keeps True.
+        result = neural_descriptor_record_call(provider_id, operation, addresses, ints, floats)
+    return result
 
 
 def neural_descriptor_reserved_execute(
@@ -561,36 +546,18 @@ def neural_descriptor_reserved_execute(
     # Common provider ownership/GIL boundary for named tables with native
     # reservation operations. The caller obtained handle from that table's
     # checked native admission entry; no Python extension layout is inspected.
-    var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    var count = len(owner[].calls)
-    if reserve < 0 or reserve >= count or release < 0 or release >= count or operation < 0 or operation >= count:
-        raise Error("neural native ABI: unknown operation")
-    var loan = NativeCallWorkspaceLease(Int(owner[].workspace.unsafe_ptr()))
-    var scratch = loan.pointer()
+    # Reserve and release run under the GIL; the operation runs without it.
+    var provider_id = neural_descriptor_provider_id(provider)
+    var loan = neural_descriptor_reserved_begin(provider_id, handle, reserve, release, operation, ints)
     try:
-        # One exclusive vector supplies both the session-only reserve/release
-        # span and the full prefixed operation span. Refresh every launch word;
-        # only allocation capacity survives calls, never argument values.
-        scratch[].words.resize(len(ints) + 1, 0)
-        scratch[].words[0] = handle
-        if len(ints) > 0:
-            unsafe_memcpy(dest=scratch[].words.unsafe_ptr() + 1, src=ints.unsafe_ptr(), count=len(ints))
-        var words = Int(scratch[].words.unsafe_ptr())
-        owner[].calls[reserve] += 1
-        _ = native_descriptor_call_spans(owner[].entry, reserve, 0, 0, words, 1, 0, 0, scratch[].output)
         var result = 0
         try:
-            owner[].calls[operation] += 1
             with GILReleased(Python()):
-                result = native_descriptor_call_spans(owner[].entry, operation,
-                    Int(addresses.unsafe_ptr()), len(addresses), words, len(ints) + 1,
-                    Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+                result = neural_descriptor_reserved_operation(provider_id, loan, operation, addresses, floats)
         except problem:
-            owner[].calls[release] += 1
-            _ = native_descriptor_call_spans(owner[].entry, release, 0, 0, words, 1, 0, 0, scratch[].output)
+            neural_descriptor_reserved_end(provider_id, loan, release)
             raise problem
-        owner[].calls[release] += 1
-        _ = native_descriptor_call_spans(owner[].entry, release, 0, 0, words, 1, 0, 0, scratch[].output)
+        neural_descriptor_reserved_end(provider_id, loan, release)
         return result
     finally:
         loan.release()
@@ -606,9 +573,9 @@ def neural_descriptor_info(provider: PythonObject) raises -> PythonObject:
     # executor itself. Counts record attempts, including refused native calls.
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var counts = Python.list()
-    for value in owner[].calls:  # small-loop(the admitted table's named native operations)
+    for value in owner[].record[0].calls:  # small-loop(the admitted table's named native operations)
         _ = py_call(counts.append, value)
-    return Python.tuple(PythonObject(owner[].name), counts)
+    return Python.tuple(PythonObject(owner[].record[0].name), counts)
 
 
 struct NativeDescriptorResource(Movable, Writable):

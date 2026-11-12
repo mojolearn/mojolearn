@@ -59,7 +59,7 @@ def _host_owner(binding):
     # `_HostBinding` facade. Its entries belong to the host extension module,
     # so a `_capture` copy would not own `x_decomp_native_api_v1` and the
     # manifold kit's provider admission
-    # (providers/python/neural_descriptor_pyapi.mojo `neural_descriptor_entry`)
+    # (providers/python/neural_descriptor_pyapi_door.mojo `neural_descriptor_entry`)
     # refuses it. Resolve the facade to its exact host module at import, as
     # _native_family_bridge.connect_bindings does.
     from . import _backend

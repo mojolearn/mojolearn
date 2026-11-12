@@ -201,7 +201,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.labels_native_api import LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
 from core.labels_native_device import LabelsDeviceKernels
 from core.labels_admission import labels_argmax_shape, labels_gather_shape, labels_ratio_shape

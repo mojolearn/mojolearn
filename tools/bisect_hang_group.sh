@@ -101,7 +101,7 @@ bindings/neighbors_semi_native_door.mojo
 bindings/pca_fit_native_door.mojo
 bindings/prep_classify_native_door.mojo
 bindings/prep_composition_lifecycle_door.mojo
-bindings/prep_labels_native.mojo
+bindings/prep_labels_native_door.mojo
 bindings/prep_lda_admission_door.mojo
 bindings/prep_stateless_native_door.mojo
 bindings/trees_bagging_members_native_pack.mojo

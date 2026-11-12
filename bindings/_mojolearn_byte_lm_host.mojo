@@ -46,7 +46,7 @@ from training.byte_lm_host_execution import byte_host_logits_native, byte_host_n
 from training.byte_lm_host_dispatch import BYTE_HOST_NATIVE_TABLE
 from providers.python.byte_lm_host_compat_pyapi_door import register
 from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from training.byte_lm_host_io import (
     all_finite_f32_scan,
     all_finite_f64_scan,

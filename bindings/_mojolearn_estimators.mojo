@@ -21,7 +21,7 @@ from core.mojolearn_estimators_run import (
     _publish_linear_entry_table, _publish_estimators_qn_table,
 )
 from glm.linear_svc_native_device import LINEAR_SVC_DEVICE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
 from core.dbscan_native_api import DBSCANFitRequest
 from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels

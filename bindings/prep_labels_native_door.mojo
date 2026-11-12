@@ -27,8 +27,9 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.x_prep_native_owner_door import xprep_values
-from bindings.prep_encode_native import (
-    EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
+from bindings.prep_encode_native_door import (
+    EncProg, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
+from bindings.prep_encode_prog_run import OUT_MARK
 from bindings.str_labels_native_door import str_lookup, _read, str_unique_into, str_codes_into
 from bindings.str_labels_native_run import StrTable, str_classes
 from bindings.boundary_read_door import text_buffer_view, read_text_rows_into, pack_ucs4_str, admitted_buffer_view
@@ -231,7 +232,7 @@ def _label_load(mut p: EncProg, lb: LabelBuf) raises -> Int:
     # `_label_load`: the float32 word of each label (NaN when float32 cannot hold it).
     var x = p.work(lb.n)
     var wo = p.put(lb.words, lb.nw)
-    _stage(p.program, OP_LAB_LOAD, lb.n, wo, lb.kind, x)
+    _stage(p.prog.program, OP_LAB_LOAD, lb.n, wo, lb.kind, x)
     return x
 
 
@@ -239,16 +240,16 @@ def _label_unique(mut p: EncProg, x: Int, n: Int) -> Tuple[Int, Int]:
     """`_label_unique`: the sorted distinct words of x (sort_cols and a
     chunked run scan). Returns (U offset, count offset)."""
     var s = p.work(n)
-    _stage(p.program, OP_SORT_COLS, 1, x, n, 1, s, 1)
+    _stage(p.prog.program, OP_SORT_COLS, 1, x, n, 1, s, 1)
     var ch = _label_chunk(n)
     var nch = (n + ch - 1) // ch
     var cnt = p.work(nch)
     var off = p.work(nch)
     var u = p.alloc(n)
     var k = p.alloc(1)
-    _stage(p.program, OP_UNIQ_COUNT, nch, s, n, ch, cnt)
-    _stage(p.program, OP_UNIQ_SCAN, 1, cnt, nch, off, k)
-    _stage(p.program, OP_UNIQ_WRITE, nch, s, n, ch, off, u)
+    _stage(p.prog.program, OP_UNIQ_COUNT, nch, s, n, ch, cnt)
+    _stage(p.prog.program, OP_UNIQ_SCAN, 1, cnt, nch, off, k)
+    _stage(p.prog.program, OP_UNIQ_WRITE, nch, s, n, ch, off, u)
     return (u, k)
 
 
@@ -301,17 +302,17 @@ def _label_fit_present(entries: PythonObject, lb: LabelBuf, codes: Bool, context
     var nch = (CAT_R + CAT_CH - 1) // CAT_CH
     var cnt = p.work(nch)
     var off = p.work(nch)
-    _stage(p.program, OP_CAT_ZERO, CAT_R, fl)
-    _stage(p.program, OP_CAT_PRESENT, n, x, n, 1, CAT_R, fl, bad)
-    _stage(p.program, OP_PRES_COUNT, nch, fl, CAT_R, CAT_CH, cnt)
-    _stage(p.program, OP_UNIQ_SCAN, 1, cnt, nch, off, k)
-    _stage(p.program, OP_PRES_WRITE, nch, fl, CAT_R, CAT_CH, off, u)
+    _stage(p.prog.program, OP_CAT_ZERO, CAT_R, fl)
+    _stage(p.prog.program, OP_CAT_PRESENT, n, x, n, 1, CAT_R, fl, bad)
+    _stage(p.prog.program, OP_PRES_COUNT, nch, fl, CAT_R, CAT_CH, cnt)
+    _stage(p.prog.program, OP_UNIQ_SCAN, 1, cnt, nch, off, k)
+    _stage(p.prog.program, OP_PRES_WRITE, nch, fl, CAT_R, CAT_CH, off, u)
     var out = NONE
     if codes:
         var c = p.work(n)
-        _stage(p.program, OP_LOOKUP, n, x, n, 1, u, CAT_R, k, c)
+        _stage(p.prog.program, OP_LOOKUP, n, x, n, 1, u, CAT_R, k, c)
         out = p.output(n, entries)
-        _stage(p.program, OP_F2I, n, c, out)
+        _stage(p.prog.program, OP_F2I, n, c, out)
     var ran = p.run(entries, context)
     if _iword(ran, bad) != 0:
         return None
@@ -339,9 +340,9 @@ def _label_fit_device(mode: PythonObject, lb: LabelBuf, codes: Bool, context: Py
     var out = NONE
     if codes:
         var c = p.work(n)
-        _stage(p.program, OP_LOOKUP, n, x, n, 1, uk[0], n, uk[1], c)
+        _stage(p.prog.program, OP_LOOKUP, n, x, n, 1, uk[0], n, uk[1], c)
         out = p.output(n, entries)
-        _stage(p.program, OP_F2I, n, c, out)
+        _stage(p.prog.program, OP_F2I, n, c, out)
     var ran = p.run(entries, context)
     var got = _label_classes_of(ran, lb, uk[0], uk[1], context)
     if not got:
@@ -362,7 +363,7 @@ def _label_codes_device(mut p: EncProg, lb: LabelBuf, cats: PythonObject, contex
     var size = List[Float64]()
     size.append(Float64(K))
     var ko = p.put_floats(size, context)
-    _stage(p.program, OP_LOOKUP, lb.n, x, lb.n, 1, uo, K, ko, c)
+    _stage(p.prog.program, OP_LOOKUP, lb.n, x, lb.n, 1, uo, K, ko, c)
     return c
 
 
@@ -517,8 +518,8 @@ def _stage_class_gather(mut p: EncProg, codes: Int, n: Int, cats: PythonObject, 
     var bad = p.work(n)
     var neg = p.alloc(1)
     var co = p.put_array(cats, context)
-    _stage(p.program, OP_F2_CODE_GATHER, n, codes, Int(py=cats.size), co, 0 if ints else 1, out, bad)
-    _stage(p.program, OP_COUNT_NEG, 1, bad, n, 1, neg)
+    _stage(p.prog.program, OP_F2_CODE_GATHER, n, codes, Int(py=cats.size), co, 0 if ints else 1, out, bad)
+    _stage(p.prog.program, OP_COUNT_NEG, 1, bad, n, 1, neg)
     return (out, neg)
 
 
@@ -898,11 +899,11 @@ def _le_transform_device(mode: PythonObject, lb: LabelBuf, cats: PythonObject, c
     var p = EncProg()
     var codes = _label_codes_device(p, lb, cats, context)
     var out = p.output(n, entries)
-    _stage(p.program, OP_F2I, n, codes, out)
+    _stage(p.prog.program, OP_F2I, n, codes, out)
     var ch = _label_chunk(n)
     var nch = (n + ch - 1) // ch
     var neg = p.alloc(nch)
-    _stage(p.program, OP_CHUNK_NEG, nch, codes, n, ch, neg)
+    _stage(p.prog.program, OP_CHUNK_NEG, nch, codes, n, ch, neg)
     var ran = p.run(entries, context)
     for i in range(nch):  # driver-loop: over the per-chunk unknown flags
         if _iword(ran, neg + i) != 0:
@@ -971,7 +972,7 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
     var p = EncProg()
     var lc = _label_codes(p, words, cats, context)
     var out = p.alloc(n)
-    _stage(p.program, OP_F2I, n, lc[0], out)
+    _stage(p.prog.program, OP_F2I, n, lc[0], out)
     var ran = p.run(entries, context)
     if _word(ran, lc[1]) > 0:
         raise Error(UNSEEN)
@@ -1056,7 +1057,7 @@ def _lb_transform_indicator(mode: PythonObject, arr: PythonObject, classes: Pyth
     var p = EncProg()
     var out = p.output(n * K, entries)
     var io = p.put(arr, n * K)
-    _stage(p.program, OP_INDICATOR, n * K, io, n * K, 0, NONE, neg, pos, out)
+    _stage(p.prog.program, OP_INDICATOR, n * K, io, n * K, 0, NONE, neg, pos, out)
     var ran = p.run(entries, context)
     return _take_i32(ran, out, n, K, context)
 
@@ -1069,7 +1070,7 @@ def _lb_transform_device(mode: PythonObject, lb: LabelBuf, cats: PythonObject, K
     var p = EncProg()
     var codes = _label_codes_device(p, lb, cats, context)
     var out = p.output(n * W, entries)
-    _stage(p.program, OP_LABEL_BINARIZE, n * W, codes, n, K, 1 if W == 1 else 0, neg, pos, W, out)
+    _stage(p.prog.program, OP_LABEL_BINARIZE, n * W, codes, n, K, 1 if W == 1 else 0, neg, pos, W, out)
     var ran = p.run(entries, context)
     return _take_i32(ran, out, n, W, context)
 
@@ -1133,7 +1134,7 @@ def _lb_binarize(mut p: EncProg, var codes: Int, n: Int, K: Int, W: Int, neg: In
     if K == 1:
         codes = p.put_floats(List[Float64](length=n, fill=-1.0), context)
     var out = p.output(n * W, entries)
-    _stage(p.program, OP_LABEL_BINARIZE, n * W, codes, n, K, 1 if K <= 2 else 0, neg, pos, W, out)
+    _stage(p.prog.program, OP_LABEL_BINARIZE, n * W, codes, n, K, 1 if K <= 2 else 0, neg, pos, W, out)
     var ran = p.run(entries, context)
     return _take_i32(ran, out, n, W, context)
 
@@ -1150,7 +1151,7 @@ def _block_argmax(mut p: EncProg, values: PythonObject, K: Int, context: PythonO
     widths.append(Float64(K))
     var wo = p.put_floats(widths, context)
     var codes = p.alloc(n)
-    _stage(p.program, OP_BLOCK_ARGMAX, n, xo, n, W, 1, so, wo, NONE, 0, codes)
+    _stage(p.prog.program, OP_BLOCK_ARGMAX, n, xo, n, W, 1, so, wo, NONE, 0, codes)
     return codes
 
 
@@ -1187,7 +1188,7 @@ def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, c
         var out = p.alloc(n * W)
         var xo = p.put_x(values)
         var to = p.put_floats(_one_float(t), context)
-        _stage(p.program, OP_INDICATOR, n * W, xo, n * W, 1, to, 0, 1, out)
+        _stage(p.prog.program, OP_INDICATOR, n * W, xo, n * W, 1, to, 0, 1, out)
         var ran_ml = p.run(entries, context)
         return _take_i32(ran_ml, out, n, W, context)
     var codes = NONE
@@ -1203,7 +1204,7 @@ def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, c
         codes = p.alloc(n)
         var xo = p.put_x(values)
         var to = p.put_floats(_one_float(t), context)
-        _stage(p.program, OP_C2_BIN_CODE, n, xo, n, W, to, codes)
+        _stage(p.prog.program, OP_C2_BIN_CODE, n, xo, n, W, to, codes)
     if cats is None:
         # str classes: the codes come back for the explicit object-label decode
         var ran_obj = p.run(entries, context)
@@ -1330,7 +1331,7 @@ def _mlb_transform_flat(model: PythonObject, fl: MLBFlat, context: PythonObject)
     var codes = _label_codes_device(p, fl.lb, fields["_cats"], context)
     var offs = p.put(fl.offs, n + 1)
     var out = p.output(n * max(K, 1), entries)
-    _stage(p.program, OP_ROW_ONES, n, codes, offs, K, out)
+    _stage(p.prog.program, OP_ROW_ONES, n, codes, offs, K, out)
     var ran = p.run(entries, context)
     return _take_i32(ran, out, n, K, context)
 
@@ -1442,7 +1443,7 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
         codes = _label_codes(p, words, cats, context)[0]
     var ro = p.put_floats(owner, context)
     var out = p.output(n * max(K, 1), entries)
-    _stage(p.program, OP_SCATTER_ONES, m, codes, ro, K, out)
+    _stage(p.prog.program, OP_SCATTER_ONES, m, codes, ro, K, out)
     var ran = p.run(entries, context)
     return _take_i32(ran, out, n, K, context)
 

@@ -9,7 +9,7 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.autograd_import_metadata_pyapi_door import _fields
 from providers.python.autograd_program_arrays_pyapi_door import program_admission_context
 from providers.python.autograd_program_pyapi_door import _integer
-from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, NeuralDescriptorProvider
+from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResource, NeuralDescriptorProvider
 from autograd.model_descriptor import MODEL_ABI_NAME
 from sequence.neural_model_dispatch import SESSION_CLOSE
 
@@ -50,7 +50,7 @@ def _release_session(value: PythonObject, context: PythonObject) raises:
             native_release_weakrefs(item, context)
             var resource = item.downcast_value_ptr[NativeDescriptorResource]()
             var provider = resource[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
-            if (not _retained(resource[].provider, context) or provider[].name != MODEL_ABI_NAME
+            if (not _retained(resource[].provider, context) or provider[].record[0].name != MODEL_ABI_NAME
                     or resource[].close_operation != SESSION_CLOSE):
                 raise Error("TypeError: Program replacement requires its connected native Session lifetime")
         else:

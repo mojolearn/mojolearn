@@ -6,7 +6,7 @@ from std.python import PythonObject
 from providers.python.compiled_binding_snapshot_pyapi_door import (
     CompiledBindingSnapshot, compiled_binding_retained, compiled_binding_retain,
 )
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute,
 )
 from hierarchy.solver_descriptor_schema import (

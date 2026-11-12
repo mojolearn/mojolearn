@@ -128,7 +128,7 @@ def test_byte_lm_stateless_owner_and_locked_finalization_share_transport():
     assert '_table_execute(key, 9, finalize,' in stateless
     assert 'byte_lm_session_new(key)' in stateless and 'byte_lm_session_free(key, session)' in stateless
     assert '_entry(binding' not in stateless and 'neural_descriptor' not in stateless
-    common=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    common=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     assert 'release_gil: Bool = True' in common
     assert '_neural_descriptor_admit_entry(provider, factory)' in common
 
@@ -139,7 +139,7 @@ def test_native_metadata_readback_reuses_admission_snapshot():
     assert 'fields["_admitted_binding_metadata"]' in runtime
     assert 'byte_lm_numeric_mode' not in runtime
     assert 'sha256_file(' in runtime
-    common=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    common=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     entry=common.split('def neural_descriptor_entry(')[1].split('def neural_descriptor_connect(')[0]
     assert 'py_get(_neural_descriptor_module_fields(module, bi), name)' in entry
     assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in entry

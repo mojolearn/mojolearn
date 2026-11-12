@@ -2,7 +2,7 @@
 """Native label and id words of the Python doors (lane i3-move-data-loops,
 2026-11-09): the loops over label, id and code words that lanes P1/P2/P3
 wrote in the binding shells (bindings/mani_umap_native.mojo,
-bindings/trees_public_gbdt_fit.mojo, bindings/prep_labels_native.mojo),
+bindings/trees_public_gbdt_fit.mojo, bindings/prep_labels_native_door.mojo),
 moved here word for word. The shells keep only the unpack (a buffer
 address, a length, a word kind) and the pack. No Python here.
 

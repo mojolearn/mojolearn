@@ -36,7 +36,7 @@ from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter
 from bindings.neural_prefill_native_door import _prefill_mamba3_reports
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_handle, neural_descriptor_reserved_execute,
     neural_descriptor_execute, neural_descriptor_reuse,
 )

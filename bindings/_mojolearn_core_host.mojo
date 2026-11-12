@@ -214,7 +214,7 @@ from core.shared_slot import SharedSlot
 # wave 8 run split: the int-type slot, the host KMeans table and the host
 # KMeans fit body live in core/mojolearn_core_host_run.mojo.
 from core.mojolearn_core_host_run import _CORE_HOST_INT_TYPE, KMEANS_NATIVE_TABLE, kmeans_fit_host_run
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 #: Reported by `core_host_sabotage()`. The helpers move bytes and fold

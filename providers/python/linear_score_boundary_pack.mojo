@@ -13,7 +13,7 @@ from bindings.sequential_description_unpack import sequential_fields
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from core.linear_score_run import linear_score_run, linear_r2_run, linear_r2_check_target
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_decomp.descriptor_schema import xd_vendor_code
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
@@ -35,7 +35,7 @@ def classical_r2_score(prediction: PythonObject, target_source: PythonObject,
     var target_address = Int(py=classical_address(target))
     var prediction_address = Int(py=classical_address(prediction))
     var provider = _linear_metrics_provider(context)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))
     var mode = 1 if String(context["backend_fields"]["_DEFAULT_MODE"]) == "identical" else 0
     var result = Float64(0.0)

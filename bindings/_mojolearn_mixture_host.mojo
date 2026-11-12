@@ -28,7 +28,7 @@ from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from mixture.host.gmm_native_host import GMM_NATIVE_HOST_API
 
 from checks.kernel_matrix import (

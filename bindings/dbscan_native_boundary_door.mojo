@@ -10,7 +10,7 @@ from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.classical_arrays_door import classical_address, classical_wrap_layout
 from bindings.native_array_storage_door import native_array_zeros
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.dbscan_native_api import (
     DBSCAN_NATIVE_ABI, DBSCAN_NATIVE_COUNT, DBSCAN_CAPABILITIES, DBSCAN_CAP_RESIDENT, DBSCANNativeDriver,
@@ -27,7 +27,7 @@ struct DBSCANConnection(Movable):
 
     def __init__(out self, binding: PythonObject) raises:
         self.provider = neural_descriptor_connect_once(binding, "dbscan_native_api_v1", String(DBSCAN_NATIVE_ABI), DBSCAN_NATIVE_COUNT)
-        self.driver = DBSCANNativeDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = DBSCANNativeDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         self.capabilities = self.driver.metadata(DBSCAN_CAPABILITIES)
 
 

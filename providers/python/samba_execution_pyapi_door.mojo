@@ -19,7 +19,7 @@ from core.neural_entry_table import (
 from providers.python.mamba3_prefill_session_pyapi_door import (
     mamba3_prefill_caps, mamba3_prefill_session_open, mamba3_prefill_session_serves, mamba3_prefill_session_handle,
 )
-from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct, neural_descriptor_execute
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.native_execution_pyapi_door import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi_door import OperationLockLease

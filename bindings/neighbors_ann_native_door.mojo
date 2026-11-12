@@ -23,7 +23,7 @@ from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classical_validate_unpack import classical_view, classical_refuse_sparse, classical_estimator_name
 from providers.python.estimator_binding_pyapi_door import estimator_arguments, estimator_binding_mode
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from bindings.family_common_unpack import (

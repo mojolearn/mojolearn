@@ -14,7 +14,7 @@ from x_cluster.variants_host import KMEANS_VARIANTS_HOST_API
 from x_cluster.centroid_fit_host import CENTROID_FIT_HOST_API
 from x_cluster.optics_fit_host import OPTICS_FIT_HOST_API
 from x_cluster.bgmm_native_host import BGMM_NATIVE_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE

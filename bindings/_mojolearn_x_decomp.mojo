@@ -68,7 +68,7 @@ from providers.python.x_decomp_s_linalg_fast_pyapi_pack import (
 
 
 from x_decomp.descriptor_device import X_DECOMP_DEVICE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 from core.shared_slot import SharedSlot

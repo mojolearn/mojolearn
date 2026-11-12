@@ -23,7 +23,7 @@ from bindings.ocsvm_output_boundary_unpack import OcOutput
 from bindings.ocsvm_scalar_boundary_door import oc_dictionary, oc_name, oc_kernel_admit, oc_parameter_repr, oc_mode_value, oc_scalar_admit, oc_precomputed
 from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import _loaded_fields
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.py_balanced import py_type, py_get, py_setitem, py_fields
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy

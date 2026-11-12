@@ -18,7 +18,7 @@
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
 # outputs of 64 MB or more, same zeros and the same bits) is not consulted.
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
-from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from x_neighbors.descriptor_schema import xn_operation_id
 from std.python import Python, PythonObject

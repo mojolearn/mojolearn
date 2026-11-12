@@ -39,7 +39,7 @@ from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, pr
 from bindings.py_model_records import model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.py_balanced import py_call, py_type
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 
 
 def _owns_store(value: PythonObject) raises -> Bool:

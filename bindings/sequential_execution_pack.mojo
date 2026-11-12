@@ -9,7 +9,7 @@ from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT
 from autograd.model_execution import model_counts_native
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT, MODEL_FIT_LABELS, MODEL_PREDICT, MODEL_PREDICT_LABELS, model_descriptor_words
 from providers.python.autograd_pyapi_door import _ints, model_float64_words, model_admit_addresses
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute
 from bindings.sequential_description_unpack import sequential_fields, SequentialDescription, _integer
 from bindings.sequential_description_pack import sequential_sample_shape, sequential_native_description
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x_snapshot, sequential_curve

@@ -5,7 +5,7 @@
 # existing native operation owners decide where execution can release it.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_entry,
     neural_descriptor_connect, neural_descriptor_execute,
 )

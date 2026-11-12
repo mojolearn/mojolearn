@@ -5,7 +5,7 @@ from std.python import PythonObject
 from bindings.py_balanced import py_call
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from svm.operation_metadata import SVC_ABI_NAME
-from providers.python.neural_descriptor_pyapi import neural_descriptor_execute, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute, neural_descriptor_entry
 
 
 

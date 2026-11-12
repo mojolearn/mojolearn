@@ -12,7 +12,7 @@ from core.hdbscan_query_api import (
     HDBSCAN_QUERY_ABI, HDBSCAN_QUERY_COUNT, HDBSCAN_QUERY_HOST,
     HdbscanQueryDriver, HdbscanQueryDimensions, HdbscanQueryRequest, HdbscanQueryPlan,
 )
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 
@@ -27,7 +27,7 @@ struct HdbscanQueryConnection(Movable):
 def hdbscan_query_connection(binding: PythonObject) raises -> HdbscanQueryConnection:
     var factory = neural_descriptor_entry(binding, "hdbscan_query_native_api_v1")
     var provider = neural_descriptor_connect_factory_once(factory, String(HDBSCAN_QUERY_ABI), HDBSCAN_QUERY_COUNT)
-    var driver = HdbscanQueryDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = HdbscanQueryDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     var host = driver.metadata(HDBSCAN_QUERY_HOST)
     if host != 0 and host != 1:
         raise Error("HDBSCAN query provider: invalid host snapshot capability")

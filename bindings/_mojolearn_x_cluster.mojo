@@ -17,7 +17,7 @@ from x_cluster.variants_device import KMEANS_VARIANTS_DEVICE_API
 from x_cluster.centroid_fit_device import CENTROID_FIT_DEVICE_API
 from x_cluster.optics_fit_device import OPTICS_FIT_DEVICE_API
 from x_cluster.bgmm_native_device import BGMM_NATIVE_DEVICE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr
 from checks.numerics import GLOBAL_NUMERIC_MODE

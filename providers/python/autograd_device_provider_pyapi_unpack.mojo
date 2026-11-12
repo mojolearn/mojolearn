@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_fields, py_type, py_get
 from bindings.native_loaded_module_door import native_loaded_module
 from providers.python.autograd_program_arrays_pyapi_door import program_admit_value
-from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResource, NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_entry
 from sequence.neural_model_dispatch import PROGRAM_DEVICE_RUN
 from autograd.autograd_device_provider_run import _descriptor_kind
 

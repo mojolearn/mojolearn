@@ -30,7 +30,7 @@ from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.operation_lock_pyapi_door import OperationLockLease, operation_lock_create
 from bindings.py_model_records import bump_model_generation
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_reuse,
 )
 from providers.python.transformer_block_session_pyapi_door import (

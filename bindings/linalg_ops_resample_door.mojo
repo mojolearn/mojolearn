@@ -21,7 +21,7 @@ from core.native_scalar_decode import NativeRealBits, native_scalar_real
 from bindings.mode_metadata_native_door import _fields
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.resample_public_pyapi_pack import resample_arguments, resample_result_initialize, resample_result_layout
 from providers.python.resample_rows_operation_pyapi_pack import resample_rows_operation
 from bindings.classical_attributes_door import classical_connect_numpy

@@ -40,7 +40,7 @@ from core.pca_native_fold import PCA_FOLD_API
 from core.tsvd_native_fold import TSVD_FOLD_API
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_query
 from core.logistic_native_api import QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_PROBA
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from cluster.kmeans_fold import kmeans_query_fold
 from core.msel_device_run import _mdx_f32_ptr, _mdx_u32_ptr, kmeans_fit_fold_run, pca_fit_fold_run
 

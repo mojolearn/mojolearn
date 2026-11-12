@@ -151,7 +151,7 @@ def test_native_plans_preserve_posterior_and_weight_semantics(plans):
 
 
 def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks():
-    source = (ROOT / "bindings/prep_select_native.mojo").read_text()
+    source = (ROOT / "bindings/prep_select_native_door.mojo").read_text()
     assert source.count("y, fit_params, context)") == 2
     assert 'context, fit_params)' in source
     assert 'len(fit_params) != 0' not in source
@@ -162,7 +162,7 @@ def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks()
 
 
 def test_posterior_is_native_prediction_and_existing_draw_algorithm():
-    source = (ROOT / "bindings/prep_iterimp_native.mojo").read_text()
+    source = (ROOT / "bindings/prep_iterimp_native_door.mojo").read_text()
     assert 'prep_estimator_call(est, "predict_std"' in source
     assert 'truncnorm_draws_binding(' in source
     assert 'inspect.signature' not in source

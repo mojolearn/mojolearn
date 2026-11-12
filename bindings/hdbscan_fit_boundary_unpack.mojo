@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from std.memory import unsafe_memcpy
 from core.hdbscan_fit_api import HDBSCAN_FIT_ABI, HDBSCAN_FIT_COUNT, HDBSCAN_FIT_HOST, HdbscanFitDriver
 from core.kmeans_variants_api import VariantsSpan
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 from bindings.family_common_unpack import FAMILY_I32P
@@ -22,7 +22,7 @@ struct HdbscanFitConnection(Movable):
 def hdbscan_fit_connection(binding: PythonObject) raises -> HdbscanFitConnection:
     var factory = neural_descriptor_entry(binding, "hdbscan_fit_native_api_v1")
     var provider = neural_descriptor_connect_factory_once(factory, String(HDBSCAN_FIT_ABI), HDBSCAN_FIT_COUNT)
-    var driver = HdbscanFitDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = HdbscanFitDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     var host = driver.metadata(HDBSCAN_FIT_HOST)
     if host != 0 and host != 1:
         raise Error("HDBSCAN native provider: invalid host snapshot capability")

@@ -21,7 +21,7 @@ from bindings.admitted_family_door import admit_family, admit_family_weights
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setattr, py_setitem
 from bindings.classical_arrays_door import classical_address

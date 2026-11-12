@@ -15,7 +15,7 @@ from x_linear.ops_entry_device import (
     xl_decision_device_run, xl_decision_codes_device_run, xl_decision_rows_device_run, xl_huber_out_device_run,
     xl_class_prep_device_run, xl_spearman_device_run, xl_best_alpha_run,
 )
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort

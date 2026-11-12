@@ -28,7 +28,7 @@ def test_native_session_registry_cannot_import_provider_or_python():
 
 
 def test_generic_resource_pins_provider_and_closes_with_admitted_context():
-    source = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     resource = source.split('struct NativeDescriptorResource(', 1)[1]
     assert 'var provider: PythonObject' in resource
     assert 'self.handle = 0' in resource

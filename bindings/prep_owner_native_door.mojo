@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # The public door of the x_prep family (registered as prep_encode_native_call).
 # Every public preprocessing operation is one call here. The classes the
-# encode owner serves (bindings/prep_encode_native.mojo) go on to
-# prep_encode_c unchanged; the label encoders (bindings/prep_labels_native.mojo),
-# IterativeImputer (bindings/prep_iterimp_native.mojo), RFE and the
-# mutual-information functions (bindings/prep_select_native.mojo) and the
+# encode owner serves (bindings/prep_encode_native_door.mojo) go on to
+# prep_encode_c unchanged; the label encoders (bindings/prep_labels_native_door.mojo),
+# IterativeImputer (bindings/prep_iterimp_native_door.mojo), RFE and the
+# mutual-information functions (bindings/prep_select_native_door.mojo) and the
 # univariate score functions (below) are dispatched by the model's class
 # (`prep_owner_kinds`) or, for a module-level function (model None), by the
 # operation name. Each owner builds the x_prep programs the Python built (the
@@ -18,10 +18,10 @@ from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimiz
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.prep_encode_native import prep_encode_c, prep_encode_scores_call
-from bindings.prep_labels_native import prep_labels_call
-from bindings.prep_iterimp_native import prep_iterimp_call
-from bindings.prep_select_native import prep_rfe_call, prep_mutual_info_call
+from bindings.prep_encode_native_door import prep_encode_c, prep_encode_scores_call
+from bindings.prep_labels_native_door import prep_labels_call
+from bindings.prep_iterimp_native_door import prep_iterimp_call
+from bindings.prep_select_native_door import prep_rfe_call, prep_mutual_info_call
 from bindings.prep_composition_lifecycle_door import composition_before, composition_after_fit
 from bindings.parallel_public_result_door import parallel_public_result
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result

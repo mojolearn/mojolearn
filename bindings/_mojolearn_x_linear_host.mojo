@@ -5,7 +5,7 @@ HOST ONLY: the GPU binding's export names and address contract, running the
 same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
 from x_linear.ridge_descriptor_host import RIDGE_FIT_HOST_API
 from x_linear.x_linear_host_binding_run import _publish_linear_entry_table
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from x_linear.ops_entry_host import (
     xl_x_status_host, xl_class_prep_host_run, xl_spearman_host_run,
     xl_best_alpha_host_run,

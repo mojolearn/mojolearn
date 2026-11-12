@@ -31,7 +31,7 @@ from bindings.native_loaded_module_door import NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.native_buffer_owner_pack import native_storage_allocate, native_buffer_view
 from providers.python.lowbit_weight_pyapi_door import low_materialize, low_formats
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.small_mlp_items_door import small_mlp_items, SMALL_MLP_ITEMS_PENDING

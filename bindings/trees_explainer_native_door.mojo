@@ -24,7 +24,7 @@ def _check_rank(view: PythonObject, rank: Int, name: String) raises:
     if Int(py=view.ndim) != rank:
         raise Error("mojolearn: " + name + " must be " + String(rank) + "-D, got " + String(Int(py=view.ndim)) + "-D")
 from providers.python.array_metadata_pyapi_door import array_owner_once
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 
 comptime _I32 = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]

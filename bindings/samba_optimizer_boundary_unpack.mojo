@@ -7,7 +7,7 @@ from bindings.optimizer_owner_boundary_unpack import OptimizerOwner
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from core.samba_optimizer_plan import SambaOptimizerPlan, samba_optimizer_run
 from training.optimizer_native_api import OPTIMIZER_NATIVE_ABI, OPT_NATIVE_COUNT
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
 def samba_optimizer_provider(entries: PythonObject) raises -> PythonObject:
@@ -24,7 +24,7 @@ def samba_optimizer_primitives(entries: PythonObject) raises -> PythonObject:
 
 def samba_optimizer_execute(provider: PythonObject, operation: Int, addresses: List[Int],
     plan: SambaOptimizerPlan, handle: Int, io: Int) raises -> Int:
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var result = 0
     try:
         with GILReleased(Python()):

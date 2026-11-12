@@ -2,7 +2,7 @@
 # Dispatch only after imported_program_snapshot admitted exact passive storage.
 # The request retains prepared graph/input/output owners for the whole call.
 from std.python import PythonObject
-from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResource, neural_descriptor_execute
 from sequence.neural_model_dispatch import PROGRAM_HOST_RUN
 from autograd.program_host_request import NativeProgramHostRun
 
