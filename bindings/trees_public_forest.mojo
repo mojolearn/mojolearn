@@ -241,9 +241,9 @@ def _criterion_code(criterion: PythonObject, table: PythonObject, unsupported: P
     """`randomforest._criterion_code`."""
     var b = trees_builtins()
     if py_contains(table, criterion):
-        return table[criterion]
+        return py_get(table, criterion)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
     if py_contains(unsupported, criterion):
-        _refuse("criterion=" + _repr(criterion), String(unsupported[criterion]))
+        _refuse("criterion=" + _repr(criterion), String(py_get(unsupported, criterion)))
     raise Error("criterion=" + _repr(criterion) + " is not a " + who + " criterion here; accepted are "
                 + _repr(py_call(b.sorted, table)))
 

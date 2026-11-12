@@ -493,6 +493,13 @@ them for you.
   keyword length/fill, or explicit appends. Positional `List[T](a, b, ...)` is not supported.
   A one-element native shape uses `List[Int](length=1, fill=n)`; `List[Int](n)` is not a
   one-element list. Never pass the compiler-internal `__list_literal__` keyword directly.
+- Never return a std `PythonObject` subscript or call directly (`return fields[key]`,
+  `return obj(args)`) when an argument is a borrowed `PythonObject` (2026-11-12). Mojo 1.2.0 emits
+  such a return-position variadic-pack call as an LLVM `tail call`, which lets LLVM drop the
+  borrowed key's stack store; the callee then reads a stale pointer and segfaults (RandomForest
+  fit and every schema save did). Read through the C API (`py_get`, `py_call`, `py_setitem` in
+  `bindings/py_balanced.mojo`) or copy the key into a local first. Evidence and reproducer:
+  `~/mojolearn-evidence/verify-20261112/ROOT_CAUSE_tail_call_pack.md`.
 - `PyObjectPtr` is an opaque CPython wrapper, not a `Pointer`; it has no
   `unsafe_from_address` initializer. Native owner inspectors use
   `borrowed_native_owner` in `bindings/native_owner_registry.mojo`, which uses

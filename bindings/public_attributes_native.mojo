@@ -241,7 +241,7 @@ def _availability_member(mut mods: NativeModules, cls: PythonObject, name: Pytho
     for i in range(len(ancestry)):  # driver-loop: raw descriptor protocol metadata only
         var fields = _class_fields(mods, ancestry[i])
         if py_contains(fields, name):
-            return fields[name]
+            return py_get(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
     return missing
 
 

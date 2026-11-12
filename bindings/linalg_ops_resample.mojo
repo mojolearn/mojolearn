@@ -76,7 +76,7 @@ def rs_code(table_name: String, value: PythonObject, name: String, where: String
         if not lin_truth(py_call(py_attr(table, "__contains__"), value)):
             raise Error("mojolearn " + where + ": " + name + " must be one of "
                         + family_repr(py_call(b.sorted, table)) + ", got " + family_repr(value))
-        return table[value]
+        return py_get(table, value)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
     if not _rs_is_int(value):
         raise Error("TypeError: mojolearn " + where + ": " + name + " must be a name or its code")
     return family_call(b.int, value)

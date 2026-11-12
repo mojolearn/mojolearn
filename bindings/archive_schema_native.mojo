@@ -217,7 +217,7 @@ def _schema_index(value: PythonObject, index: PythonObject) raises -> PythonObje
             raise Error("TypeError: saved sequence indices require exact integers")
     else:
         raise Error("TypeError: saved field paths require exact native containers")
-    return value[index]
+    return py_get(value, index)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
 
 
 def _schema_float(value: PythonObject, context: PythonObject) raises -> Float64:
@@ -283,7 +283,7 @@ def _schema_field(fields: PythonObject, key: PythonObject, name: String) raises 
         raise Error("TypeError: saved field names require exact strings")
     if not py_contains(fields, key):
         raise Error("AttributeError: '" + name + "' object has no attribute '" + String(key) + "'")
-    return fields[key]
+    return py_get(fields, key)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
 
 
 def _schema_has(fields: PythonObject, path: PythonObject) raises -> Bool:

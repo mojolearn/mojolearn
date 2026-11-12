@@ -235,7 +235,7 @@ def _default(use: PythonObject, fields: PythonObject, context: PythonObject) rai
                 var what = String(fields["ENV"])
                 value = _available(_canonical(env, what, fields), what, PythonObject("inference"), fields)
         py_setitem(defaults, use, value)
-    return defaults[use]
+    return py_get(defaults, use)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
 
 
 def _profiles(fields: PythonObject) raises -> PythonObject:

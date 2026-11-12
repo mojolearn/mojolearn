@@ -95,7 +95,7 @@ def cache_binding_attribute(binding: PythonObject, name: PythonObject,
         var fields = PythonObject(from_borrowed=pointer)
         _string_keys(fields,context)
         if py_contains(fields,name):
-            return fields[name]
+            return py_get(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
         # The connected CPU facades deliberately use AttributeError for
         # unknown dunder names; hasattr therefore returns false, even on a
         # missing family that raises ImportError for ordinary entry names.
