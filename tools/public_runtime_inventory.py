@@ -196,7 +196,7 @@ class Mod:
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         self.aliases[target.id] = node.value
-                        if target.id in ("_LAZY_EXPORTS", "_CPU_INFERENCE", "_DEPRECATED_ALIASES"):
+                        if target.id in ("_LAZY_EXPORTS", "_CPU_INFERENCE", "_LAZY_NAMES", "_DEPRECATED_ALIASES"):
                             try:
                                 value = ast.literal_eval(node.value)
                             except (ValueError, TypeError):
@@ -405,7 +405,7 @@ class Index:
             kind, target = mod.lazy[name]
             if kind == "_LAZY_EXPORTS" and isinstance(target, (tuple, list)) and len(target) == 2:
                 return self.resolve_name(self.package + "." + target[0].lstrip("."), target[1], depth + 1)
-            if kind == "_CPU_INFERENCE":
+            if kind in ("_CPU_INFERENCE", "_LAZY_NAMES"):  # name -> ".module" or None (a submodule)
                 if target is None:
                     return ("module", modname + "." + name)
                 return self.resolve_name(_relative(modname, mod.is_pkg, target), name, depth + 1)
