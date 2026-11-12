@@ -18,7 +18,7 @@ from core.parallel_entry_table import (
     parallel_table_publish,
 )
 from core.shared_slot import SharedSlot
-from bindings.array_helpers import shard_topk_merge_f32_host_run
+from core.array_helpers_run import shard_topk_merge_f32_host_run
 from bindings.msel_host import msel_rebase_offsets_i32_host_run
 
 

@@ -22,17 +22,10 @@ from core.array_helpers_impl import (
     ragged_rows_bytes,
     row_means_f64,
     row_stds_f64,
-    shard_topk_merge_f32,
     strided_copy_bytes,
     strided_total,
 )
-
-
-@always_inline
-def _addr_ptr[dt: DType](addr: Int) raises -> MutPointer[Scalar[dt], MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null buffer address")
-    return MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=addr)
+from core.array_helpers_run import _addr_ptr
 
 
 def strided_copy_bytes_binding(
@@ -191,27 +184,3 @@ def class_ratio_f64_host_binding(
     var cp = _addr_ptr[DType.int64](Int(py=counts_addr))
     var op = _addr_ptr[DType.float64](Int(py=out_addr))
     return PythonObject(class_ratio_f64(cp, op, kk, nn, m))
-
-
-def shard_topk_merge_f32_host_run(ta: Int, s_count: Int, nq: Int, kk: Int, od: Int, oi: Int) raises -> Int:
-    """`parallel_neighbors_reference._merge` (lane pyglue-sweep: out of the
-    Python per-query loop): per query row, every reference shard's
-    candidates as composite keys (neighbors/checks/select_radix_identical
-    `composite_key`: twiddled float32 distance bits << 32 | global index),
-    the k smallest keys, then estimator.mojo's host insertion sort on the
-    float distance (ties by index). `table` is int64[5 * n_shards]: per
-    shard the float32 distance address, the int64 local-id address, the
-    first and end global rows and the width (columns per query row).
-    Writes the winning float bits and uint32 global indices. Returns 0,
-    1 when a local id is outside its shard, 2 for fewer than k candidates.
-    Reached through the core host image's parallel table entry
-    (bindings/parallel_base_entry_host.mojo); the Python door had no caller
-    left (lane calltable-parallel-archive, 2026-11-11)."""
-    if s_count < 1 or nq < 0 or kk < 1:
-        raise Error("shard_topk_merge_f32: bad dimensions")
-    if nq == 0:
-        return 0
-    var tp = _addr_ptr[DType.int64](ta)
-    var dp = _addr_ptr[DType.uint32](od)
-    var ip = _addr_ptr[DType.uint32](oi)
-    return shard_topk_merge_f32(tp, dp, ip, s_count, nq, kk)
