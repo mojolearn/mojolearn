@@ -22,7 +22,7 @@ from cluster.dbscan_door_run import (
 )
 from core.dbscan_native_state import dbscan_method_accepts
 from bindings.cluster_native import _reference_queries
-from bindings.dbscan_native_boundary import (
+from bindings.dbscan_native_boundary_door import (
     DBSCANConnection, dbscan_array, dbscan_publish, dbscan_run_fit, dbscan_run_count, dbscan_run_gather,
     dbscan_fresh_holder, dbscan_mint, dbscan_reference_labels,
 )
@@ -176,7 +176,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     _ = x^
     _ = labels
     # p3-neighbors-cluster: the core rows behind predict's resident device
-    # copy (native identity key, bindings/dbscan_native_boundary.mojo) are read-only.
+    # copy (native identity key, bindings/dbscan_native_boundary_door.mojo) are read-only.
     _ = fitted_freeze(indices, context)
     _ = fitted_freeze(components, context)
     _ = fitted_freeze(core_labels, context)

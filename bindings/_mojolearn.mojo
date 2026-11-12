@@ -1951,7 +1951,7 @@ def _publish_neighbors_ops(module: PythonObject) raises:
     # (bindings/neighbors_knn_native.mojo) calls this entry with plain values
     # and reads the key from the module attribute `neighbors_native_key`.
     # The `knn_*` Python exports remain for the unconverted callers:
-    # bindings/parallel_neighbor_worker.mojo, bindings/host_knn_predict_native.mojo
+    # bindings/parallel_neighbor_worker_door.mojo, bindings/host_knn_predict_native.mojo
     # and python/mojolearn/_native_parallel_shard.py. A build with no GPU
     # vendor ("none") publishes nothing and records no key.
     var word = neighbors_vendor_word(COMPILED_VENDOR)

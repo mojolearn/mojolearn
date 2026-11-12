@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.sequence_layers_native import sequence_layers_operation
-from bindings.training_extra_native import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
+from bindings.training_extra_native_door import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
 from bindings.samba_head_native import training_samba_head_loss
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -17,7 +17,7 @@ from bindings.optimizer_public_door import (
     door_ready, owner_kind, refuse_kwargs, OptimizerRegistryPrepared, optimizer_prepare_registry, optimizer_publish_registry, new_array, TensorView, tensor_view,
     door_step, door_io, optimizer_io, optimizer_pack_io, optimizer_load_buffers, optimizer_export_state, door_state, door_state_set, door_zero, door_clip, door_accumulate,
 )
-from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_driver
+from bindings.optimizer_descriptor_boundary_door import optimizer_provider_entries, optimizer_native_mode, optimizer_driver
 from core.linear_metadata import linear_mode_name
 from bindings.optimizer_serialization_boundary import optimizer_restore_state
 from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_new, optimizer_owner_value, optimizer_owner_close, optimizer_owner_idle, optimizer_owner_admit_replacement
@@ -34,10 +34,10 @@ from core.classical_pandas_impl import pd_raw_at, _pd_double
 from bindings.sequence_device_native import sequence_device_operation, sequence_device_finalize
 from bindings.sequence_optimizer_native import sequence_optimizer_operation
 from bindings.optimizer_schedule_native import schedule_operation
-from bindings.optimizer_device_native import device_operation, device_new, device_entries, device_finalize, device_adopt
+from bindings.optimizer_device_native_door import device_operation, device_new, device_entries, device_finalize, device_adopt
 from bindings.training_linear_native import training_linear_operation
 from bindings.training_rms_native import training_rms_operation
-from bindings.training_embedding_native import training_embedding_operation
+from bindings.training_embedding_native_door import training_embedding_operation
 from bindings.training_cross_entropy_native import training_cross_entropy
 from bindings.training_metadata_native import training_metadata
 from bindings.native_model_records import bump_model_generation

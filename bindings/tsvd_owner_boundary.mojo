@@ -7,7 +7,7 @@ from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.native_model_records import model_generation
 from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
-from bindings.tsvd_descriptor_boundary import tsvd_provider
+from bindings.tsvd_descriptor_boundary_door import tsvd_provider
 from x_decomp.tsvd_descriptor_boundary_run import tsvd_driver
 
 comptime TSVD_RESIDENT_SLOT = "tsvd_resident_native_v2"

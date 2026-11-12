@@ -21,7 +21,7 @@ from bindings.neighbors_knn_native import (
     knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status,
 )
 from bindings.admitted_input import admitted_finite_refuse
-from bindings.neighbors_kde_native import _kde_scores, _kde_release
+from bindings.neighbors_kde_native_door import _kde_scores, _kde_release
 from bindings.neighbors_ann_native import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars import host_inference_scalar
 from core.shared_slot import SharedSlot

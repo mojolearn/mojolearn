@@ -19,7 +19,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
-from bindings.scaler_native import _ptr, _input
+from bindings.scaler_native_door import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
 from x_prep.prep_stateless_native_run import (
     F32P,

@@ -30,7 +30,7 @@ from bindings.classical_labels import labels_accuracy, classical_score_from_code
 from bindings.label_admission_native import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.p3_labels_metrics_native import p3_decode_list
-from bindings.labels_descriptor_boundary import labels_gather
+from bindings.labels_descriptor_boundary_door import labels_gather
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call, family_entry,
     family_array, family_shape_repr,

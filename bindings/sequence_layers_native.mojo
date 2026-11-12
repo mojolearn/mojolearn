@@ -10,7 +10,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields
 from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary import native_shape_pack
-from bindings.optimizer_device_native import device_shape, shape_count
+from bindings.optimizer_device_native_door import device_shape, shape_count
 from bindings.optimizer_admission import opt_scalar
 from bindings.sequence_optimizer_native import seq_binding
 from bindings.sequence_device_native import seq_device_make

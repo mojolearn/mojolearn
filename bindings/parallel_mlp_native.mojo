@@ -18,7 +18,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.cpython_table import cpython_table
 from bindings.parallel_byte_native import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
 from bindings.native_transport import _transport_json
-from bindings.native_json import native_json_parse
+from bindings.native_json_door import native_json_parse
 from bindings.small_mlp_native import (
     small_mlp_call, small_mlp_from_state, small_mlp_grads_open, small_mlp_grads_close, small_mlp_grads_rows,
 )

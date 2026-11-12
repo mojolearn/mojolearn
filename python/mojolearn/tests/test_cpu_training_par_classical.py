@@ -67,7 +67,7 @@ def test_python_sharded_drivers_are_native_pools():
             assert f"{entry}('{op}'" in text, f"{op} is not one native call in {rel}"
     owner = _read("bindings/parallel_shard_native.mojo")
     common = _read("bindings/parallel_shard_common.mojo")
-    forecast = _read("bindings/parallel_forecast_native.mojo")
+    forecast = _read("bindings/parallel_forecast_native_door.mojo")
     # one worker process per device index, never a cooperative pool, every
     # worker admitted by its own identity before it receives work
     assert "var pool = process_pool_create(devices, False, child)" in common
@@ -94,7 +94,7 @@ def test_python_sharded_drivers_are_native_pools():
     trainer = _read("python/mojolearn/parallel_training.py")
     assert 'return _native_parallel_neural("init", (self, model, devices, logical_shards))' in trainer
     assert 'return _native_parallel_neural("train", (self, shards))' in trainer
-    coordinator = _read("bindings/parallel_neural_native.mojo")
+    coordinator = _read("bindings/parallel_neural_native_door.mojo")
     assert 'operation = "mlp_gradient"' in coordinator
     assert 'operation = "samba_gradient"' in coordinator
     assert 'process_pool_create(devices, False, child_module)' in coordinator
@@ -234,7 +234,7 @@ def test_sharded_samba_publishes_the_ordered_sum_of_its_shard_gradients_when_bui
     lane/cpu-verifier-par-samba).
 
     Since 2e09ef628 ParallelNeuralTrainer is a native coordinator over the
-    compiled process pool (bindings/parallel_neural_native.mojo), so the old
+    compiled process pool (bindings/parallel_neural_native_door.mojo), so the old
     spy on the Python `DevicePool._send/_receive` sees no request. The shard
     gradients are now taken independently: the same starting model trained
     on each shard alone (logical_shards=1 publishes that shard's gradient).

@@ -29,7 +29,7 @@ from bindings.classical_exceptions import classical_require_fitted
 from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
 from providers.python.array_metadata_pyapi import ArrayPin, array_shape_once, array_metadata_once
-from providers.python.arima_buffer_pyapi import ArimaBuffer, arima_buffer
+from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
 from core.cast_in import NPY_DOUBLE
 from providers.python.forecast_initialize_pyapi import forecast_initialize
 from providers.python.forecast_matrix_pyapi import forecast_matrix

@@ -8,7 +8,7 @@ from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute,
 )
-from providers.python.compiled_binding_snapshot_pyapi import (
+from providers.python.compiled_binding_snapshot_pyapi_door import (
     CompiledBindingSnapshot, compiled_binding_retained, compiled_binding_retain,
 )
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT, XN_MODE_OPERATION, xn_operation_id

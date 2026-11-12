@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed JSON byte scans moved from bindings/native_json.mojo. Each scan reads the
+"""Typed JSON byte scans moved from bindings/native_json_door.mojo. Each scan reads the
 document bytes and returns the new offset; the shell builds the Python containers."""
 
 

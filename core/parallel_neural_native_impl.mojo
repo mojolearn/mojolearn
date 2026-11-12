@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed SambaStack token-id conversion moved from bindings/parallel_neural_native.mojo."""
+"""Typed SambaStack token-id conversion moved from bindings/parallel_neural_native_door.mojo."""
 from std.memory import bitcast
 
 

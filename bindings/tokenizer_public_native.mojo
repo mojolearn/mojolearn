@@ -13,7 +13,7 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.cpython_table import cpython_table
 from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
-from bindings.native_json import native_json_read, native_json_parse, native_path, native_path_exists
+from bindings.native_json_door import native_json_read, native_json_parse, native_path, native_path_exists
 from bindings.native_error_class import error_without_class
 from bindings.native_array_storage import native_array_zeros
 from bindings.neural_block_admission import neural_array_snapshot

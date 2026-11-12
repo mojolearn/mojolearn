@@ -8,7 +8,7 @@ from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_caller import classical_caller_outside
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_inference_state import host_inference_state
-from bindings.host_logistic_native import host_logistic_classes, host_logistic_inference
+from bindings.host_logistic_native_door import host_logistic_classes, host_logistic_inference
 
 
 def host_logistic_operation(model: PythonObject, fields: PythonObject, operation: String,

@@ -144,7 +144,7 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # One native call (bindings/parallel_forecast_native.mojo `fit_arima`):
+    # One native call (bindings/parallel_forecast_native_door.mojo `fit_arima`):
     # whole series in `series_per_shard` ranges, each shard fitted by the
     # plain native fit in a worker process per device (shard i on device
     # i % len(devices)), every fitted array placed at its series offset.

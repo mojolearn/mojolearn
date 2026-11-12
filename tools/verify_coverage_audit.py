@@ -1508,15 +1508,15 @@ ANNOTATIONS = {
                                   "byte_lm_session_next_bytes", "byte_lm_session_open",
                                   "byte_lm_session_rollback", "byte_lm_session_step")},
     "knn_classify_neighbors": ("covered", ["par-reference-knn"],
-                               "run by bindings/parallel_neighbor_worker.mojo reference_vote; "
+                               "run by bindings/parallel_neighbor_worker_door.mojo reference_vote; "
                                "par-* lanes run on two-device boxes"),
     "knn_regress_neighbors": ("covered", ["par-reference-knn-reg"],
-                              "run by bindings/parallel_neighbor_worker.mojo reference_vote"),
+                              "run by bindings/parallel_neighbor_worker_door.mojo reference_vote"),
     "fold_pair_f32": ("covered", ["cross-vendor-fold"],
                       "no Python door since lane calltable-parallel-archive: the native fold calls the base "
                       "image's parallel table entry (core/parallel_entry_table.mojo PB_FOLD_PAIR_F32); "
                       "every ordered_fold and fold_pair runs it"),
-    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run by bindings/parallel_neighbor_worker.mojo ivf_search"),
+    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run by bindings/parallel_neighbor_worker_door.mojo ivf_search"),
     "ivf_finalize_distances": ("covered", ["par-ivf"],
                                "run by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
                                "`ivf_search`) on a cosine index through the IVF image's parallel table entry "

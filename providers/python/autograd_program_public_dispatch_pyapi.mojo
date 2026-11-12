@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_setitem
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
 from autograd.control_checkpoint import control_save

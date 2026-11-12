@@ -9,7 +9,7 @@ from bindings.optimizer_admission import opt_value, opt_scalar
 from bindings.optimizer_public_door import new_array, TensorView, tensor_view
 from bindings.optimizer_container_boundary import OptimizerInputOwners
 from bindings.optimizer_scalar_boundary import optimizer_integer
-from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_driver, optimizer_device_available
+from bindings.optimizer_descriptor_boundary_door import optimizer_provider_entries, optimizer_driver, optimizer_device_available
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.native_buffer_owner import native_storage_allocate
 from training.optimizer_input_plan import optimizer_contiguous_address

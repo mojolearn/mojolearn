@@ -40,12 +40,12 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classifier_public_lifecycle import classifier_after_fit
 from bindings.scaler_lifecycle_native import _public_result, _entries, scaler_standard_rows
-from bindings.scaler_native import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
+from bindings.scaler_native_door import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
 from bindings.minmax_native import minmax_rows, minmax_fit_publish, _configuration as minmax_configuration
 from bindings.minmax_metadata import _flag as _minmax_flag, minmax_range_pair
 from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core, scaler_transform_core
 from bindings.parallel_public_result import parallel_public_result
-from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
+from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common import family_call
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
@@ -68,7 +68,7 @@ from bindings.parallel_shard_common import (
     shard_resolve_stored,
 )
 from bindings.kernel_methods_native import _rbf_transform
-from bindings.gp_classifier_native import (
+from bindings.gp_classifier_native_door import (
     gpc_validate, gpc_worker_fit, gpc_worker_latent, _gpc_binary_result, GPCFitPublication, _gpc_set_fitted, _gpc_ovr_combine,
 )
 from bindings.gp_common_native import gp_kernel_arrays_transport
@@ -1426,7 +1426,7 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         return _scaler_worker(operation, state, args, context)
     # The GPC sites call the GP table entry (core/gp_entry_table.mojo) of the
     # connected identical binding with plain arrays and words
-    # (bindings/gp_classifier_native.mojo gpc_worker_fit/gpc_worker_latent).
+    # (bindings/gp_classifier_native_door.mojo gpc_worker_fit/gpc_worker_latent).
     if operation == "gpc_class_fit":
         var fields = gpc_worker_fit(_worker_binding("_mojolearn_gp"), args[0], args[1], state[0], Int(py=state[1]),
                                     Int(py=args[2]), context)

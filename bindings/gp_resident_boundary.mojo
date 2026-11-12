@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Prepared GP lease owner: native state plus mandatory storage/image pins."""
 from std.python import Python, PythonObject
-from bindings.gp_native_boundary import GPConnection
+from bindings.gp_native_boundary_door import GPConnection
 from bindings.native_loaded_module import NativeModules, native_interpreter_finalizing
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.native_model_records import model_generation

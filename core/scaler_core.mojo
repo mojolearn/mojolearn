@@ -2,7 +2,7 @@
 """The typed scaler cores (lane scaler-typed-core, 2026-11-12).
 
 StandardScaler and MinMaxScaler fit and transform on plain pointers, dims and
-flags, shared by the public scaler doors (bindings/scaler_native.mojo,
+flags, shared by the public scaler doors (bindings/scaler_native_door.mojo,
 bindings/scaler_lifecycle_native.mojo, bindings/minmax_native.mojo) and the
 parallel shard worker (bindings/parallel_shard_native.mojo). The kernel and
 x_prep program calls go through `ScalerCalls`; `ScalerTableCalls` is the

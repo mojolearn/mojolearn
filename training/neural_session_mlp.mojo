@@ -12,7 +12,7 @@ the DEFAULT route of `mlp_inference_sessions` and
 `SmallMLPTrainer.predict_sessions`: lane m2-neural-leftovers had replaced it
 with one packed forward of the small-MLP program without a measurement
 against it. The packed program forward is the A/B arm
--D MOJOLEARN_MLP_SESSIONS_PACKED (bindings/training_extra_native.mojo,
+-D MOJOLEARN_MLP_SESSIONS_PACKED (bindings/training_extra_native_door.mojo,
 bindings/small_mlp_native.mojo); RUN OWED: mlp-infer sessions, NVIDIA + AMD.
 The pack arm that lived here (MOJOLEARN_NN64_SESSION_PACK, never measured,
 default off) stays removed. The bias launches are `_mlp_kernel`'s body

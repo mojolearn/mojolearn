@@ -3,7 +3,7 @@
 SkewedChi2Sampler door RUN: typed checks, the x_neighbors operation requests
 and the decoding of their info words.
 
-`bindings/neighbors_semi_native.mojo` is the UNPACK/PACK side: it reads the
+`bindings/neighbors_semi_native_door.mojo` is the UNPACK/PACK side: it reads the
 estimator's fields and the inputs, allocates the public arrays, calls these
 checks at the point the public method made them (so the refusal order and
 wording are unchanged) and hands each request to the bound x_neighbors

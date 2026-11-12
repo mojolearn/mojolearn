@@ -12,7 +12,7 @@ from providers.python.autograd_distributed_pyapi import distributed_devices, dis
 from providers.python.autograd_partition_pyapi import partition_open, partition_load
 from providers.python.autograd_program_pyapi import _integer
 from providers.python.autograd_program_arrays_pyapi import program_native_input
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 
 
 def owned_program_create_envelope[KIND: Int](

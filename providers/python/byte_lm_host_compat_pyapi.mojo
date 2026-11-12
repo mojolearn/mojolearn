@@ -14,7 +14,7 @@ from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 from training.byte_lm_config_run import _config
 from bindings.sha256_door import sha256_hexdigest
 from core.sha256_file import sha256_file
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 
 
 def _int(value: PythonObject) raises -> Int:

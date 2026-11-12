@@ -5,7 +5,7 @@ from bindings.native_owner_registry import borrowed_native_owner
 from std.python._cpython import GILReleased, ExternalFunction, PyObjectPtr
 from core.shared_slot import SharedSlot
 from core.kmeans_owner_state import KMeansResidentState
-from bindings.kmeans_descriptor_boundary import kmeans_provider
+from bindings.kmeans_descriptor_boundary_door import kmeans_provider
 from x_cluster.kmeans_descriptor_boundary_run import kmeans_driver
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_fields, py_contains, py_setitem, py_type

@@ -583,7 +583,7 @@ def op_lp_iterate_knn(
     n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
 ) raises:
     """The CPU column of the resident kNN-graph loop: the loop the binding
-    door ran on a host binary (bindings/neighbors_semi_native.mojo `_lp_fit`,
+    door ran on a host binary (bindings/neighbors_semi_native_door.mojo `_lp_fit`,
     one `xn_*` crossing per op per iteration), now inside one call. Each
     iteration runs the same host ops in the same order with the same words:
     `op_absdiff_sum` (the part / fin fold items), the float64 compare of

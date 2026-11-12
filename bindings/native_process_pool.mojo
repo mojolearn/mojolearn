@@ -17,7 +17,7 @@ from bindings.native_transport import (
     transport_sleep, _transport_json,
 )
 from bindings.native_codec import codec_pack_owned, codec_unpack
-from bindings.native_json import native_json_parse
+from bindings.native_json_door import native_json_parse
 from bindings.native_process_wire import WireOutgoing, wire_send, wire_receive
 from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type

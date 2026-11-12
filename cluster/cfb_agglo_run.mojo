@@ -4,7 +4,7 @@ fit requests.
 
 `bindings/cfb_agglo.mojo` is the UNPACK/PACK side: it reads the estimator's
 fields, admits the arrays, allocates and publishes the results and pins the
-public owners; `bindings/agglo_native_boundary.mojo` connects the typed
+public owners; `bindings/agglo_native_boundary_door.mojo` connects the typed
 requests to the compiled modules. The door calls these checks at the point the
 public method made them, so the refusal order and wording are unchanged. A
 refusal whose wording quotes the caller's value takes that text from the

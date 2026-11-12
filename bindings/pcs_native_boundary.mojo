@@ -8,7 +8,7 @@ from bindings.native_array_storage import native_array_zeros
 from providers.python.estimator_binding_pyapi import estimator_binding
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit
 from providers.python.x_neighbors_admission_pyapi import xn_is_module, xn_module
-from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
+from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.neighbors_native_driver import XnDriver

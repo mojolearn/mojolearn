@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type
 from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import optimizer_contiguous_address
-from bindings.optimizer_device_native import shape_count
+from bindings.optimizer_device_native_door import shape_count
 from bindings.training_scalar_native import training_scalar_float
 
 

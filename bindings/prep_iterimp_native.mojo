@@ -20,7 +20,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_typed, classical_wrap_array
 from bindings.admitted_input import classical_view
 from bindings.classical_arrays import classical_dtype_str, classical_address
-from bindings.scaler_native import _ptr
+from bindings.scaler_native_door import _ptr
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values

@@ -12,7 +12,7 @@ from providers.python.autograd_program_arrays_pyapi import mapped_byte_array
 from autograd.program_io import ProgramInput
 from providers.python.autograd_program_pyapi import program_input, _integer
 from providers.python.autograd_pyapi import ops_load_weights_py
-from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
+from bindings.native_json_door import native_json_parse, native_json_read, native_path, native_path_exists
 from autograd.autograd_weight_frontend_run import _dtype
 
 

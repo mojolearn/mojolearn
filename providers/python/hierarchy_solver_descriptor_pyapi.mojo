@@ -3,7 +3,7 @@
 # Only capsule admission uses the extension door; linkage executes by the
 # native descriptor, with no numerical CPython fallback or runtime mode switch.
 from std.python import PythonObject
-from providers.python.compiled_binding_snapshot_pyapi import (
+from providers.python.compiled_binding_snapshot_pyapi_door import (
     CompiledBindingSnapshot, compiled_binding_retained, compiled_binding_retain,
 )
 from providers.python.neural_descriptor_pyapi import (

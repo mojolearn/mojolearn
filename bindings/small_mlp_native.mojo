@@ -37,7 +37,7 @@ from bindings.sequential_admission import sequential_admit_value
 from bindings.small_mlp_items import small_mlp_items, SMALL_MLP_ITEMS_PENDING
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
-from bindings.native_json import native_json_parse, native_json_parse_unique, native_path
+from bindings.native_json_door import native_json_parse, native_json_parse_unique, native_path
 from bindings.native_transport import _transport_json
 from core.parallel_mlp_native_impl import mlp_targets_into
 from core.small_mlp_state_impl import (

@@ -9,8 +9,8 @@ from bindings.optimizer_admission import opt_value, opt_numpy
 from bindings.optimizer_public_door import tensor_view, new_array, refuse_kwargs
 from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import optimizer_contiguous_address
-from bindings.optimizer_device_native import device_entries, device_shape, device_allocate, shape_count
-from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_native_call, embedding_int_list
+from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, shape_count
+from bindings.training_embedding_native_door import embedding_indices, embedding_leaves, embedding_native_call, embedding_int_list
 from bindings.training_scalar_native import training_scalar_number, training_scalar_float
 from bindings.training_loss_options import loss_truth, loss_reduction
 from bindings.native_numpy_metadata import native_numpy_type

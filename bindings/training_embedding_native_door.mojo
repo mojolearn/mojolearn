@@ -12,7 +12,7 @@ from bindings.tensor_view import TensorView
 from training.optimizer_input_plan import optimizer_contiguous_address
 from providers.python.array_layout_boundary import native_shape_pack
 from std.memory import unsafe_memcpy
-from bindings.optimizer_device_native import shape_count
+from bindings.optimizer_device_native_door import shape_count
 from bindings.training_rms_native import rms_host_view
 from bindings.training_scalar_native import training_scalar_number
 from bindings.native_numpy_metadata import native_numpy_type

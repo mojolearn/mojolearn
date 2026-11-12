@@ -19,7 +19,7 @@ from core.linear_metadata import (
     linear_public_fitted_key, linear_fitted_names,
 )
 from core.linear_model_state import LinearModelState, linear_state_is_fitted
-from providers.python.linear_state_boundary import linear_state_clear
+from providers.python.linear_state_boundary_door import linear_state_clear
 
 
 def _linear_dict_items(value: PythonObject) raises -> Tuple[List[PythonObject], List[PythonObject]]:

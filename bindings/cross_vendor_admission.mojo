@@ -2,7 +2,7 @@
 """Exact native types at the distributed transport boundary; no protocols."""
 from std.math import isfinite
 from std.python import Python, PythonObject
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from bindings.py_balanced import py_call, py_type, py_get
 from core.shared_slot import SharedSlot
 

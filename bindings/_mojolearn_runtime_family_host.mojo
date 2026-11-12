@@ -24,11 +24,11 @@ from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.gp_kernel_cache_boundary import GPPreparedKernel
 from bindings.gp_state_cache_boundary import GPPreparedState
 from bindings.gp_class_table_boundary import GPPreparedClassTable
-from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
+from bindings.kmeans_owner_boundary_door import KMeansResidentOwner, kmeans_resident_owner_pins
 from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
-from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
+from bindings.dbscan_native_boundary_door import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
 from bindings.native_owner_registry import register_native_owner_type
-from bindings.agglo_native_boundary import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
+from bindings.agglo_native_boundary_door import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
 from bindings.kde_admission_boundary import KDEAdmissionOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()

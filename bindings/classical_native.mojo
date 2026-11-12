@@ -34,7 +34,7 @@ from bindings.admitted_call import AdmittedCall
 from core.linear_fit_types import LF_MODE, LF_VENDOR
 from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
 from providers.python.linear_execution_boundary import linear_execution_word
-from providers.python.linear_entry_boundary import linear_entry_identity
+from providers.python.linear_entry_boundary_door import linear_entry_identity
 
 
 def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:

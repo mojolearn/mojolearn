@@ -40,7 +40,7 @@ from bindings.classical_labels import (
     labels_cast, classical_encode_labels,
     labels_decode_i32_codes, classical_accuracy,
 )
-from bindings.labels_descriptor_boundary import labels_class_ratio_f64
+from bindings.labels_descriptor_boundary_door import labels_class_ratio_f64
 from bindings.nearest_centroid_provider import NcConnection
 from bindings.lof_provider import LofConnection
 from core.lof_plan import LofLabelsPlan, lof_f32_address, lof_offset

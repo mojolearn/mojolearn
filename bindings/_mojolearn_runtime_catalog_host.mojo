@@ -14,7 +14,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.native_transport import transport_initialize
 from bindings.model_catalog_native import catalog_public_c
-from bindings.lm_corpus_public_native import lm_corpus_public_c
+from bindings.lm_corpus_public_native_door import lm_corpus_public_c
 
 comptime RUNTIME_CATALOG_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 

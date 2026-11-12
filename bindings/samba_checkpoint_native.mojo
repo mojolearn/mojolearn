@@ -2,7 +2,7 @@
 """Native, bounded streaming for the existing Samba v2 checkpoint format."""
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_json import native_path, native_path_exists, native_json_parse
+from bindings.native_json_door import native_path, native_path_exists, native_json_parse
 from bindings.native_transport import _transport_json
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.causal_checkpoint import checkpoint_array

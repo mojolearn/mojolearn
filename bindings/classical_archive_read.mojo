@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call, _archive_class_name_unpack
 from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str
-from bindings.classical_archive_input import ArchiveReadInput, archive_input_unpack
+from bindings.classical_archive_input_door import ArchiveReadInput, archive_input_unpack
 from bindings.classical_archive_output import archive_members_pack, archive_events_pack
 from bindings.classical_archive_linear import archive_class_names_unpack, archive_print_mode_unpack, archive_linear_pack
 from core.native_archive_linear import native_archive_string, native_linear_archive_plan

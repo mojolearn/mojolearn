@@ -9,7 +9,7 @@ from core.sha256 import Sha256
 from autograd.model_verify import verify_file_sha256
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_instance_item import native_instance_item
-from bindings.native_json import native_json_read, native_path, native_path_exists
+from bindings.native_json_door import native_json_read, native_path, native_path_exists
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.causal_model_config import model_dict, model_plain, model_string, model_sequence, model_integer

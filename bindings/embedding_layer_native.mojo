@@ -36,8 +36,8 @@ from bindings.optimizer_public_door import new_array, door_ready
 from bindings.tensor_view import base_format
 from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary import native_shape_pack
-from bindings.optimizer_device_native import shape_count, device_shape
-from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
+from bindings.optimizer_device_native_door import shape_count, device_shape
+from bindings.training_embedding_native_door import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
 from bindings.sequence_device_native import seq_device_make, sequence_device_operation
 from bindings.sequence_optimizer_native import seq_device_get
 from bindings.optimizer_admission import opt_value, opt_scalar, opt_guards, opt_exact, opt_numpy

@@ -14,7 +14,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.causal_checkpoint import checkpoint_open_binding, checkpoint_close_binding
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
-from bindings.native_json import native_path, native_path_exists
+from bindings.native_json_door import native_path, native_path_exists
 from bindings.native_process_pool import process_pool_create, process_pool_start, process_pool_request, process_pool_close, process_worker_connect
 from bindings.native_process_wire import WireOutgoing, wire_unpack, wire_append, wire_key, wire_text, wire_send, wire_receive
 from bindings.native_transport import transport_close, _transport_state

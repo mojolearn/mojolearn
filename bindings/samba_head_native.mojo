@@ -15,9 +15,9 @@ from bindings.py_balanced import py_call, py_type
 from bindings.optimizer_admission import opt_value
 from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView, shape_text
-from bindings.optimizer_device_native import shape_count
-from bindings.training_embedding_native import embedding_indices
-from bindings.training_extra_native import _c32
+from bindings.optimizer_device_native_door import shape_count
+from bindings.training_embedding_native_door import embedding_indices
+from bindings.training_extra_native_door import _c32
 
 
 def training_samba_head_loss(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:

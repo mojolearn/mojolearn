@@ -12,7 +12,7 @@ from std.sys.info import CompilationTarget
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.native_error_class import error_without_class
 from std.math import isfinite
-from bindings.native_json import native_json_parse
+from bindings.native_json_door import native_json_parse
 from bindings.native_idna import idna_initialize, idna_encode
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields

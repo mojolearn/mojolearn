@@ -9,14 +9,14 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.lm_corpus_metadata import (corpus_context, corpus_connect, corpus_int, corpus_dict,
     corpus_plain, corpus_fields, corpus_new, corpus_empty, corpus_mapped, corpus_ids_snapshot, corpus_batch_base)
-from bindings.lm_corpus_files import (corpus_path, corpus_path_object, corpus_read, corpus_write,
+from bindings.lm_corpus_files_door import (corpus_path, corpus_path_object, corpus_read, corpus_write,
     corpus_hash_bytes, corpus_hash_file, corpus_read_json, corpus_write_json, corpus_exists,
     corpus_atomic_begin, corpus_atomic_commit, corpus_atomic_abort, corpus_seconds, corpus_file_size)
 from bindings.tokenizer_public_native import (tokenizer_bpe_identity_file, tokenizer_bpe_identity_text,
     tokenizer_bpe_encode_corpus, tokenizer_bpe_train_corpus, tokenizer_bpe_export, tokenizer_bpe_for,
     tokenizer_bpe_identity, tokenizer_trained_info, tokenizer_gather_rows_native)
 from std.os import getenv
-from bindings.native_json import native_json_parse
+from bindings.native_json_door import native_json_parse
 from core.sha256 import sha256_hex_addr
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.parallel_byte_native import parallel_byte_shard_words, parallel_byte_step_shards

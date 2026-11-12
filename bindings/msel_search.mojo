@@ -24,7 +24,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.arena_materialize_native import _cast
-from bindings.msel_parameter_grid import parameter_grid_dicts, PreparedParameterGrid
+from bindings.msel_parameter_grid_door import parameter_grid_dicts, PreparedParameterGrid
 from bindings.family_common import (
     FAMILY_I64P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
     family_type_name,

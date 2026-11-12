@@ -1485,7 +1485,7 @@ def gp_native_api_v1_binding() raises -> PythonObject:
 
 def _publish_gp_table(module: PythonObject) raises:
     # The device column of the GP table (core/gp_entry_table.mojo): the GP
-    # owners (bindings/gp_native_boundary.mojo) and the GPC shard worker read
+    # owners (bindings/gp_native_boundary_door.mojo) and the GPC shard worker read
     # the key from the module attribute `gp_native_key` and call this entry
     # with plain values.
     var key = GPEntryKey(Int(GLOBAL_NUMERIC_MODE), gp_entry_vendor(COMPILED_VENDOR), GP_COLUMN_DEVICE)

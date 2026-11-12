@@ -31,7 +31,7 @@ class PathConnections(unittest.TestCase):
         self.assertFalse(any(ForeignPath is cls for cls in self.connection.PATH_TYPES + self.connection.PATH_BASES))
 
     def test_both_native_paths_use_shared_identities_and_preserve_descriptor_refusal(self):
-        native = (ROOT / 'bindings/native_json.mojo').read_text().split('def native_path(value:')[1].split('def native_path_exists')[0]
+        native = (ROOT / 'bindings/native_json_door.mojo').read_text().split('def native_path(value:')[1].split('def native_path_exists')[0]
         archive = (ROOT / 'bindings/classical_archive.mojo').read_text().split('def _archive_path(')[1].split('def ', 1)[0]
         connection = (ROOT / 'python/mojolearn/_native_classical_bridge.py').read_text()
         self.assertIn('native_loaded_module("mojolearn._native_loaded_modules")', native)

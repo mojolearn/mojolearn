@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Frozen b32103c00 Python paths of LabelPropagation / LabelSpreading and the
 chi2 samplers' public methods, used only as an independent test oracle for
-their one-call native doors (bindings/neighbors_semi_native.mojo). Each
+their one-call native doors (bindings/neighbors_semi_native_door.mojo). Each
 function takes the estimator in place of `self`; the primitives
 (`_op`, `_knn_sq`, `_kernel`, `_matmul`, `_unary`) are the package's own."""
 import struct

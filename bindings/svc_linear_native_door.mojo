@@ -21,7 +21,7 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
     family_array,
 )
-from bindings.svm_mixture_native import _qn_scores, _qn_scores_native
+from bindings.svm_mixture_native_door import _qn_scores, _qn_scores_native
 from core.admitted_weights import admitted_fill
 from bindings.class_weight_boundary import CLASS_WEIGHT_SVC
 from bindings.class_weight_rows_boundary import class_weight_plan_admitted
@@ -34,14 +34,14 @@ from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, Li
 from core.qn_single_fit import QnSingleFitPlan
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_MULTICLASS_AVAILABLE
 from core.labels_native_api import LabelsThresholdRequest
-from bindings.labels_descriptor_boundary import labels_threshold, labels_argmax_rows
+from bindings.labels_descriptor_boundary_door import labels_threshold, labels_argmax_rows
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy,
     svc_mode, svc_binding, svc_shape_of, svc_labels_1d, svc_sorted_classes,
     svc_decode, svc_r2_sums,
 )
 
-from bindings.svc_score_boundary import svc_decode_score, svc_accuracy_native
+from bindings.svc_score_boundary_door import svc_decode_score, svc_accuracy_native
 
 comptime _PY2MOJO_ROWS = 2
 

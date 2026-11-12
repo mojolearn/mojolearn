@@ -37,7 +37,7 @@ from x_linear.door_run import (
     xl_run_parts, xl_parts_total, xl_block_dims, xl_run_block, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats,
     XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run,
 )
-from providers.python.linear_entry_boundary import linear_entry_connection
+from providers.python.linear_entry_boundary_door import linear_entry_connection
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class

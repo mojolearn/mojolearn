@@ -12,7 +12,7 @@ from bindings.optimizer_public_door import tensor_view
 from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary import native_shape_pack
-from bindings.optimizer_device_native import device_shape, shape_count
+from bindings.optimizer_device_native_door import device_shape, shape_count
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.classical_arrays import classical_input, classical_typed, classical_address, classical_is_array, classical_cast_kind
 from bindings.classical_attributes import classical_connect_numpy

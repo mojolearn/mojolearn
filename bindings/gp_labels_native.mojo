@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # `_labels.encode_labels` and `_labels.decode_labels` for the Gaussian process
-# classifier's owner (bindings/gp_classifier_native.mojo), under the ORDER RULE
+# classifier's owner (bindings/gp_classifier_native_door.mojo), under the ORDER RULE
 # python/mojolearn/_labels.py states. A numeric label vector (a C-ordered Array
 # or ndarray of a native dtype, or a flat list of exact ints or exact floats) is
 # encoded by ONE call of the base binding's `prepare_targets` (the device encoder

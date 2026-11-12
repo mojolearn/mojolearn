@@ -9,7 +9,7 @@ from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import optimizer_contiguous_address
 from providers.python.array_layout_boundary import native_shape_pack
-from bindings.optimizer_device_native import device_entries, device_shape, device_allocate, shape_count
+from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, shape_count
 from training.training_linear_run import linear_dimensions
 
 

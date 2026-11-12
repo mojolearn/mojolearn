@@ -75,9 +75,9 @@ DRIVERS = (
      "bindings/_mojolearn_rf.mojo"),
     ("parallel_ensemble", "ParallelForestPredictor.predict_proba", "family_par_run",
      "bindings/family_native.mojo", "bindings/_mojolearn_trees.mojo"),
-    ("parallel_classical", "fit_arima", "fit_arima", "bindings/parallel_forecast_native.mojo", None),
+    ("parallel_classical", "fit_arima", "fit_arima", "bindings/parallel_forecast_native_door.mojo", None),
     ("parallel_classical", "fit_exponential_smoothing", "fit_exponential_smoothing",
-     "bindings/parallel_forecast_native.mojo", None),
+     "bindings/parallel_forecast_native_door.mojo", None),
     ("parallel_classical", "transform_rbf_sampler", "transform_rbf_sampler", "bindings/parallel_shard_native.mojo",
      None),
     ("parallel_preprocessing", "fit_scaler", "fit_scaler", "bindings/parallel_shard_native.mojo", None),
@@ -186,7 +186,7 @@ def test_sharded_drivers_keep_the_partition_and_the_negative_control():
     assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE"' in shift and '"MOJOLEARN_HOST_ALLOW_SABOTAGE"' in shift
     ranges = common[common.index("def shard_ranges("):common.index("def shard_devices(")]
     assert "out.append(min(i + w, count))" in ranges and "i += w" in ranges
-    forecast = _read("bindings/parallel_forecast_native.mojo")
+    forecast = _read("bindings/parallel_forecast_native_door.mojo")
     shard = _read("bindings/parallel_shard_native.mojo")
     for source, driver, read in ((forecast, "_fit_arima", "shard_rows(data, lo - shift, hi - shift, context)"),
                                  (forecast, "_fit_hw", "shard_rows(data, lo - shift, hi - shift, context)"),

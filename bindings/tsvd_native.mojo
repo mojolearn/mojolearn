@@ -36,7 +36,7 @@ from core.tsvd_native_api import (
     TSVD_RANDOMIZED, TSVD_TSQR, TSVD_FOLD, TSVD_CAP_FUSED, TSVD_CAP_RANDOMIZED,
     TSVD_CAP_TSQR, TSVD_CAP_RESIDENT,
 )
-from bindings.tsvd_descriptor_boundary import (
+from bindings.tsvd_descriptor_boundary_door import (
     tsvd_factory,
     tsvd_connect,
     tsvd_connection,

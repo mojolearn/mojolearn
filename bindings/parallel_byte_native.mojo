@@ -17,7 +17,7 @@ from std.memory import bitcast, unsafe_memcpy
 from std.math import isfinite
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
-from bindings.native_json import native_json_parse
+from bindings.native_json_door import native_json_parse
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_transport import _transport_json, transport_initialize
 from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_execute

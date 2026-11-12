@@ -13,8 +13,8 @@ from core.shared_slot import SharedSlot
 from bindings.classical_arrays import classical_address, classical_wrap_layout
 from bindings.native_array_storage import native_array_zeros
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
-from bindings.dbscan_native_boundary import DBSCANConnection
-from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
+from bindings.dbscan_native_boundary_door import DBSCANConnection
+from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
 from providers.python.hierarchy_solver_descriptor_pyapi import hierarchy_solver_admit
 from providers.python.hierarchy_cluster_descriptor_pyapi import hierarchy_cluster_admit

@@ -339,7 +339,7 @@ class AgglomerativeClustering(ParamsMixin):
         return _NATIVE(self, "family_cfb_agglo_predict", (None, X), _NATIVE_CONTEXT)
 
     # The training rows of a `prediction_data=True` fit stay on the device
-    # under its native opaque `_resident_holder` (bindings/agglo_native_boundary.mojo),
+    # under its native opaque `_resident_holder` (bindings/agglo_native_boundary_door.mojo),
     # released on refit and by the native finalizer connected below.
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle; the copy uploads

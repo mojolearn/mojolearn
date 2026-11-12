@@ -18,7 +18,7 @@ from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCAScratch, KPCADenseFit,
     KPCAFitPrepareRequest, KPCAAlphaRequest, KPCAQueryRequest, KPCA_PRECOMPUTED, kpca_shape,
 )
-from bindings.kpca_descriptor_boundary import (
+from bindings.kpca_descriptor_boundary_door import (
     kpca_near_connection,
     kpca_decomp_connection,
     kpca_run_prepare,

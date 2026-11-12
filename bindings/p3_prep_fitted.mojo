@@ -9,7 +9,7 @@
 # an in-place write into the statistic is always seen (no copy is kept).
 from std.python import PythonObject
 from bindings.py_balanced import py_type
-from bindings.scaler_native import _input
+from bindings.scaler_native_door import _input
 
 
 def prep_fitted_vector(value: PythonObject, context: PythonObject) raises -> PythonObject:

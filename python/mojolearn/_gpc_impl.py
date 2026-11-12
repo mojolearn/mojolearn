@@ -91,7 +91,7 @@ _NAME = "mojolearn GaussianProcessClassifier"
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled owner of the public methods, connected once at import: fit,
 # predict, predict_proba and latent_mean_and_variance are one native call
-# each (bindings/gp_classifier_native.mojo). fit and predict also hand over
+# each (bindings/gp_classifier_native_door.mojo). fit and predict also hand over
 # the base binding, whose label entries encode and decode the classes.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.connect_bindings("_mojolearn_gp", "_mojolearn")

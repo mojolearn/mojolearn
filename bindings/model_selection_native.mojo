@@ -22,7 +22,7 @@ from bindings.msel_search import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
     msel_learning_curve, msel_permutation_test_score, _search_index,
 )
-from bindings.msel_parameter_grid import PreparedParameterGrid
+from bindings.msel_parameter_grid_door import PreparedParameterGrid
 from bindings.msel_public_metadata import msel_splitter_repr, msel_scorer_repr, msel_estimator_classes
 from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
 from bindings.msel_split import (

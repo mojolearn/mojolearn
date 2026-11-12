@@ -271,7 +271,7 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # C-order snapshot as `_kde_scores` would have rebuilt it
         # (`admit_family(...).array` is this same snapshot's `keep`). A KDE fit keeps
         # its own capture and copy report; a sparse query keeps its exact
-        # densification (bindings/neighbors_kde_native.mojo `_kde_dense`).
+        # densification (bindings/neighbors_kde_native_door.mojo `_kde_dense`).
         py_setitem(values, PythonObject(first), pin.keep)
     if fitting and Int(py=depth) == 0:
         var target_index = 2

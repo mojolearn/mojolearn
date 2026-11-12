@@ -21,7 +21,7 @@ from x_decomp.ipca_run import _state_name
 from bindings.public_lifecycle_owner import lifecycle_end, lifecycle_admit_fields
 from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPrevious, IPCAQueryRequest, IPCAFitResult, IPCAStateIds
 from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
-from bindings.ipca_descriptor_boundary import (
+from bindings.ipca_descriptor_boundary_door import (
     ipca_connection,
     ipca_run_fit,
     ipca_run_partial,

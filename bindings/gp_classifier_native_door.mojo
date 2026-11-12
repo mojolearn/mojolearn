@@ -15,7 +15,7 @@ from core.native_label_codes import NativeLabelCodes
 from core.gp_native_storage import GPCQueryScratch
 from core.gp_native_storage import GPCMemberTables, GPCQueryTables
 from bindings.gp_score_boundary import GPCPredictionCodes
-from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run
+from bindings.gp_native_boundary_door import GPConnection, gp_kernel_view, gp_run
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from std.python import Python, PythonObject
 from bindings.gp_argument_pins import GPArgumentPins

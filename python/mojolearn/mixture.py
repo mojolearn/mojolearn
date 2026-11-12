@@ -24,7 +24,7 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 # The compiled family owners, connected once at import: fit, fit_predict,
 # predict, predict_proba, score_samples, score, bic and aic of
 # GaussianMixture and BayesianGaussianMixture (bindings/mixture_native.mojo)
-# and `sample` (bindings/svm_mixture_native.mojo) are one native call each,
+# and `sample` (bindings/svm_mixture_native_door.mojo) are one native call each,
 # with binding selection owned by native code. The covariance-type and init tables
 # are the option-parity solver's codes (x_cluster/entries.mojo::bgmm_entry).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()

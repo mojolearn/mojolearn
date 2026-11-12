@@ -19,11 +19,11 @@ from bindings.family_common import family_field
 from providers.python.radius_public_lifecycle_pyapi import radius_fit, radius_refusals
 from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release
 from bindings.neighbors_local_native import neighbors_local_operation
-from bindings.neighbors_semi_native import neighbors_semi_operation, schi2_public_weights, schi2_public_set_weights
+from bindings.neighbors_semi_native_door import neighbors_semi_operation, schi2_public_weights, schi2_public_set_weights
 from providers.python.neighbors_feature_names_pyapi import neighbors_feature_names
-from bindings.neighbors_graph_native import neighbors_graph_operation
+from bindings.neighbors_graph_native_door import neighbors_graph_operation
 from bindings.neighbors_ann_native import neighbors_ann_operation
-from bindings.neighbors_kde_native import neighbors_kde_operation
+from bindings.neighbors_kde_native_door import neighbors_kde_operation
 
 
 def _pcs_int(value: PythonObject, name: String) raises -> Int:

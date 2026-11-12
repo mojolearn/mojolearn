@@ -73,7 +73,7 @@
    "230e8acb6c7562e561592597bb463c71ea51f6fad192e3353c7e1d6546340703"
   ],
   [
-   "bindings/byte_checkpoint_native.mojo",
+   "bindings/byte_checkpoint_native_door.mojo",
    "0dcef429c2303bd0424d3cfd4363b30190fff157893432f467377800207c4d40"
   ],
   [
@@ -193,7 +193,7 @@
    "51cc766e7099859a7346bf34ddfc66072220d268f68943d39e759a563370db9d"
   ],
   [
-   "bindings/gp_classifier_native.mojo",
+   "bindings/gp_classifier_native_door.mojo",
    "761f488a015393ecc950a58f54e4625c2596fb14975c8cd790680012d93da160"
   ],
   [
@@ -305,7 +305,7 @@
    "0c5e683f4f7bdd7a1abf8365aa89354dbc0c242849f856b50d008878d00bbe29"
   ],
   [
-   "bindings/native_json.mojo",
+   "bindings/native_json_door.mojo",
    "8d39d463d449aef6b0fb0d01adbb9468ea2e4f9b77e4d27a05e45c3c89451e97"
   ],
   [
@@ -353,7 +353,7 @@
    "83331982196583d6c1a8d343ee7598d3754cca012a4e7784e3e6b864cd9c73c2"
   ],
   [
-   "bindings/neighbors_kde_native.mojo",
+   "bindings/neighbors_kde_native_door.mojo",
    "a00e26feeb251f8fd5b9143fa22540fd8b3d9f653411051c843a764db31e8fdd"
   ],
   [
@@ -373,7 +373,7 @@
    "9c4deaaf5a920d1ee79504fad19f45df67737cab9102c96638d5d93c40b1943a"
   ],
   [
-   "bindings/optimizer_device_native.mojo",
+   "bindings/optimizer_device_native_door.mojo",
    "de43309367e70c3fc28f245aafc8eb9fb0449a3cda8e31fe0815d54076891173"
   ],
   [
@@ -409,7 +409,7 @@
    "b0471994c26f6224245285d2441dc1852f5e217ae198a66d1599717d6d130295"
   ],
   [
-   "bindings/parallel_forecast_native.mojo",
+   "bindings/parallel_forecast_native_door.mojo",
    "ef84cc3305bd7137b4286a8897793ce1d6a8a1a25b76a4468235b27094cd01d1"
   ],
   [
@@ -417,7 +417,7 @@
    "4028292639fee41939a8911a34d56c5eeed8c3712c414bde732fac5d472762f4"
   ],
   [
-   "bindings/parallel_neighbor_worker.mojo",
+   "bindings/parallel_neighbor_worker_door.mojo",
    "ef8435496af785a1c692a1731276f1ff0ddb6d0934de78b15c68e52b4ab572ed"
   ],
   [
@@ -425,7 +425,7 @@
    "850bdaef9dd0a127dfdb8bef0205d163e0d31f0499c9f9fabbd915a2e0fb9216"
   ],
   [
-   "bindings/parallel_neural_native.mojo",
+   "bindings/parallel_neural_native_door.mojo",
    "9c1a1cb1099528d173161d7062be3e6bbaab372df73a6345c740aab6a7a315f7"
   ],
   [
@@ -525,7 +525,7 @@
    "f741c1fdfd19de3a18e3089d407b767c129c4d840bc23dff038aef8ff8f9d2f6"
   ],
   [
-   "bindings/scaler_native.mojo",
+   "bindings/scaler_native_door.mojo",
    "a05efc8dba3dc546d369c246287791e0879dd038e11abe46ceadd6b9bbb122e0"
   ],
   [
@@ -593,11 +593,11 @@
    "bed8b7544cefb94dbe076fd92760df516bbbb829b037c49ce663d782960ddc3b"
   ],
   [
-   "bindings/training_embedding_native.mojo",
+   "bindings/training_embedding_native_door.mojo",
    "169df21d6444523010271c9e76c7a667029de2c574e3a4508ad9f428dd95c681"
   ],
   [
-   "bindings/training_extra_native.mojo",
+   "bindings/training_extra_native_door.mojo",
    "35c5f3ca018205488734188a7873ed7954a1feeb43905f9fddbff0109337c34e"
   ],
   [

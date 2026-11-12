@@ -34,7 +34,7 @@ from bindings.logistic_config_boundary import (
     logistic_scalar_text, logistic_integer, logistic_validate_configuration,
     logistic_configuration_strengths, logistic_configuration_tolerance,
 )
-from bindings.logistic_descriptor_boundary import (
+from bindings.logistic_descriptor_boundary_door import (
     logistic_compiled_mode, logistic_multiclass_available, logistic_run_fit,
     logistic_run_query, logistic_run_fold_fit, logistic_run_fold_query,
 )

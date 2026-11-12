@@ -2,12 +2,12 @@
 # The compiled owner of GaussianProcessRegressor/Classifier public methods and the parallel_gaussian_process functions (python/mojolearn/_gp_impl.py, _gpc_impl.py, parallel_gaussian_process.py): one native call per public method,
 # reached from bindings/family_native.mojo for every `family_gp_*` operation.
 # The regressor's operations are bindings/gp_regressor_native.mojo's, the
-# classifier's bindings/gp_classifier_native.mojo's.
+# classifier's bindings/gp_classifier_native_door.mojo's.
 from std.python import PythonObject
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
 from bindings.gp_argument_pins import GPArgumentPins
 from bindings.gp_regressor_native import gp_regressor_operation
-from bindings.gp_classifier_native import gp_classifier_operation
+from bindings.gp_classifier_native_door import gp_classifier_operation
 from bindings.gp_kernel_public_native import gp_kernel_operation
 from providers.python.gp_public_lifecycle_pyapi import gp_public_operation
 

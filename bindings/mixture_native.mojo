@@ -42,7 +42,7 @@ from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_array_view import native_array_ndarray_view
-from bindings.svm_mixture_native import svm_mixture_operation
+from bindings.svm_mixture_native_door import svm_mixture_operation
 from providers.python.estimator_binding_pyapi import estimator_binding, _estimator_mode_word
 from bindings.cluster_side_records import (
     cluster_is_subclass, cluster_refuse_fit_callbacks, cluster_record_key, cluster_record_get,
@@ -60,7 +60,7 @@ from core.mixture_native_api import (
     MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_NATIVE_PREDICT_PROBA, MIXTURE_NATIVE_PREDICT,
     MIXTURE_NATIVE_SCORE_BIC_AIC, GmmDriver, GmmFitRequest, GmmScoreRequest,
 )
-from bindings.kmeans_variants_boundary import variants_span
+from bindings.kmeans_variants_boundary_door import variants_span
 from bindings.boundary_read import read_int_like, read_float_like, read_bool, pack_room
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal

@@ -17,7 +17,7 @@ from bindings.host_tree_native import host_tree_constructor_fields
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
 from bindings.host_array_native import host_archive_typed
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.host_logistic_native import host_logistic_classes
+from bindings.host_logistic_native_door import host_logistic_classes
 from core.scaler_fit_impl import scaler_cast
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
 from core.admitted_input import admitted_check_weights_f32

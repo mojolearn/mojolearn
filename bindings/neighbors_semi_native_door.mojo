@@ -18,7 +18,7 @@
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.x_neighbors_admission_pyapi import xn_capabilities
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, neural_descriptor_execute
-from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
+from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.pcs_rng_pyapi import pcs_seed, _pcs_connect
 from x_neighbors.descriptor_schema import xn_operation_id
 from std.python import Python, PythonObject

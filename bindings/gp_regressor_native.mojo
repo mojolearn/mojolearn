@@ -7,7 +7,7 @@
 from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest, GP_CAP_GRADIENT, GP_CAP_OPTIMIZE, GP_CAP_SAMPLE, GP_CAP_THETA, GP_CAP_COVARIANCE
 from core.gp_native_storage import GPRFitScratch, GPRGradientScratch, GPRGradientResult, GPOptimizerScratch, GPFreeParameters
 from bindings.gp_score_boundary import GPRPredictionRoom, gpr_score_result
-from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word
+from bindings.gp_native_boundary_door import GPConnection, gp_kernel_view, gp_run, gp_seed_word
 from gaussian_process.gp_native_boundary_run import gp_require
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject

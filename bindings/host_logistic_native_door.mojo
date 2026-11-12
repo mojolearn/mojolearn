@@ -6,7 +6,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from core.logistic_native_api import QnQueryRequest, QN_NATIVE_BINARY, QN_NATIVE_DECISION, QN_NATIVE_PROBA
 from core.logistic_query_state import logistic_query_integer_width
-from bindings.logistic_descriptor_boundary import logistic_run_query, logistic_run_log
+from bindings.logistic_descriptor_boundary_door import logistic_run_query, logistic_run_log
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_type_fields
 from bindings.sequential_admission import _one_of, _ordinary_torch

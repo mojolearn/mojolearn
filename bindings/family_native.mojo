@@ -16,7 +16,7 @@ from bindings.linalg_native import linalg_operation
 from bindings.neighbors_native import neighbors_operation
 from bindings.metrics_reg_native import metrics_reg_operation
 from bindings.cluster_native import cluster_operation
-from bindings.svm_mixture_native import svm_mixture_operation
+from bindings.svm_mixture_native_door import svm_mixture_operation
 from bindings.svc_native import svc_operation
 from bindings.gp_native import gp_operation
 from bindings.metrics_cls_native import metrics_cls_operation

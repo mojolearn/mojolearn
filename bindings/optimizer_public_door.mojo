@@ -54,7 +54,7 @@ from training.optimizer_public_common import (
     GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut, zero_tensors,
 )
 from core.shared_slot import SharedSlot
-from bindings.optimizer_descriptor_boundary import optimizer_provider, optimizer_driver
+from bindings.optimizer_descriptor_boundary_door import optimizer_provider, optimizer_driver
 from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_truth, optimizer_integer
 from bindings.optimizer_container_boundary import optimizer_sequence_items, optimizer_pack_list, OptimizerInputOwners, OptimizerBufferLease
 from training.optimizer_input_plan import (

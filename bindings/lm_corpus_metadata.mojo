@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot, neural_native_scalar
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
-from bindings.lm_corpus_files import corpus_files_initialize
+from bindings.lm_corpus_files_door import corpus_files_initialize
 from bindings.lm_corpus_scalars import corpus_numeric_base
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, connect_native_mmap_exporter
 from core.shared_slot import SharedSlot

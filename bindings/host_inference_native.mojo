@@ -16,7 +16,7 @@ from bindings.host_svr_native import host_svr_admit_state, host_svr_predict
 from bindings.host_svc_native import host_svc_admit_state, host_svc_inference
 from bindings.host_kde_native import host_kde_admit_state, host_kde_inference
 from bindings.host_iforest_native import host_iforest_admit_option, host_iforest_admit_state, host_iforest_inference
-from bindings.host_logistic_native import host_logistic_classes
+from bindings.host_logistic_native_door import host_logistic_classes
 from bindings.host_logistic_query_boundary import host_logistic_operation
 from bindings.host_inference_state import host_inference_state
 from bindings.native_torch_admission import native_torch_numpy

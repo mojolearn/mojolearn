@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from core.neighbors_native_driver import XnDriver
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
-from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
+from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.x_neighbors_admission_pyapi import xn_is_module, xn_module
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
 

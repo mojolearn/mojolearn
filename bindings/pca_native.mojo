@@ -13,7 +13,7 @@ from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.pca_metadata import pca_dictionary, pca_fields, pca_initialize, pca_get_params, pca_set_params, pca_entries
-from bindings.pca_fit_native import pca_fit_operation
+from bindings.pca_fit_native_door import pca_fit_operation
 from bindings.pca_query_native import pca_query_operation
 from x_decomp.pca_descriptor_boundary_run import pca_mode, pca_vendor
 from bindings.pca_archive import pca_archive_save, pca_archive_load

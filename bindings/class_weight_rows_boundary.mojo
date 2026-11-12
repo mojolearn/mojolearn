@@ -11,7 +11,7 @@ from bindings.class_weight_boundary import (
     CLASS_WEIGHT_CLASSICAL, CLASS_WEIGHT_SVC, CLASS_WEIGHT_TREES, class_weight_dictionary_values,
 )
 from bindings.label_weights_boundary import label_weights_run
-from bindings.labels_descriptor_boundary import labels_class_ratio_f64
+from bindings.labels_descriptor_boundary_door import labels_class_ratio_f64
 from core.admitted_cast_elements import admitted_cast_elements
 from core.class_weight_plan import ClassWeightInputs, ClassWeightPlan
 from bindings.class_weight_rows_run import class_weight_rows_plan

@@ -7,7 +7,7 @@ from bindings.admitted_input import admitted_finite_refuse
 from bindings.classical_validate_run import classical_check_width
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.pca_exact_run import pca_refusal
-from bindings.pca_descriptor_boundary import pca_fold_connection, pca_run_query
+from bindings.pca_descriptor_boundary_door import pca_fold_connection, pca_run_query
 from x_decomp.pca_descriptor_boundary_run import pca_mode, pca_whiten_capability
 from core.pca_native_api import PCAQueryRequest, PCAFoldStore
 from providers.python.pca_model_pyapi import pca_query_admitted
