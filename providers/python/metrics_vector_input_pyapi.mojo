@@ -5,9 +5,9 @@ from bindings.py_balanced import py_type, py_get
 from bindings.classical_arrays import classical_is_array
 from bindings.admitted_input import AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.tensor_view import base_format
-from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I32P, FAMILY_I64P
+from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I64P
 from core.host_finite_scan import host_all_finite_f32
-from core.admitted_ids import admitted_ids_i32
+from metrics.metrics_vector_input_run import metric_i32_narrow
 
 
 def metric_vector_exact(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -22,13 +22,6 @@ def _metric_vector_shape(input: AdmittedTyped, name: String) raises -> Int:
     if shape[0] == 0:
         raise Error("mojolearn metrics: " + name + " is empty")
     return shape[0]
-
-
-def _metric_i32_range(name: String) raises:
-    raise Error("mojolearn metrics: " + name + " does not fit in int32; the implemented "
-                + "kernels are the int32 instantiation (the int64 overload of "
-                + "adjusted_rand_index is the same code at a wider type and is "
-                + "not instantiated, metrics/NOT_IMPLEMENTED.tsv)")
 
 
 def metric_i32_vector(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -48,9 +41,7 @@ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject) 
     # admit_ids: one parallel read narrowed to int32 in the same pass (it was
     # a serial int64 read into a zero-filled store, then a serial narrowing).
     var output = admitted_zeros([count], "<i4", context)
-    if not admitted_ids_i32(view.addr, view.strides[0], 0, count, 1, view.itemsize, signed, False,
-                            FAMILY_I32P(unsafe_from_address=output.addr)):
-        _metric_i32_range(name)
+    metric_i32_narrow(view.addr, view.strides[0], count, view.itemsize, signed, output.addr, name)
     var result = output.keep
     _ = input^
     _ = output^
