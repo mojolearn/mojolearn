@@ -11,6 +11,9 @@ from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import ScalerProviderAPI
 from core.scaler_native_device import ScalerDeviceKernels
+from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
+from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
+from x_prep.transport_abi import xp_vendor_word
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -285,6 +288,19 @@ def scaler_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def publish_scaler_table_device() raises:
+    """Publish this image's scaler kernel entry in the prep entry table
+    (family PREP_TABLE_SCALER) at module init, keyed like the x_prep
+    transport (x_prep/transport_device.mojo): a build with no GPU vendor
+    word publishes nothing, so the host image owns vendor word 0."""
+    var word = xp_vendor_word(String(COMPILED_VENDOR))
+    if word <= 0:
+        return
+    var api = SCALER_DEVICE_NATIVE_API.get_or_create_ptr()
+    prep_table_publish[PREP_TABLE_SCALER](PrepEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api),
+        [String(SCALER_NATIVE_ABI)], [SCALER_OP_COUNT], api[].entries)
+
+
 def build__mojolearn_preprocessing() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
@@ -306,6 +322,8 @@ def build__mojolearn_preprocessing() -> PythonObject:
         m.def_function[minmax_fit_transform_binding]("minmax_fit_transform")
         m.def_function[numeric_mode_binding]("preprocessing_numeric_mode")
         m.def_function[vendor_binding]("preprocessing_vendor")
-        return m.finalize()
+        var published_module = m.finalize()
+        publish_scaler_table_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_preprocessing: ",e))

@@ -11,6 +11,13 @@ image's compiled mode and vendor words (read once per binding,
 `bindings/prep_entry_cache.mojo`) and calls the pointer with plain spans; no
 Python object crosses.
 
+Family 1 (lane scaler-typed-core, 2026-11-12) is the scaler kernel entry
+`scaler_native_v1` (core/scaler_native_api.mojo, SCALER_OP_COUNT operations:
+StandardScaler and MinMaxScaler fit and transform), published by
+`_mojolearn_preprocessing` (vendor words 1-3) and
+`_mojolearn_preprocessing_host` (vendor word 0) at module init; the typed
+scaler cores (core/scaler_core.mojo) call it through `scaler_ref`.
+
 Extending a table's layout requires a new V suffix, never a new loader.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
@@ -18,8 +25,10 @@ numerical work to split.
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
 from x_prep.transport_abi import XP_TRANSPORT_ABI, XP_OP_COUNT
+from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
 
 comptime PREP_TABLE_X_PREP = 0
+comptime PREP_TABLE_SCALER = 1
 
 
 @fieldwise_init
@@ -35,71 +44,131 @@ def _prep_entry_key_check(key: PrepEntryKey) raises:
 
 def prep_table_publish[family: Int](key: PrepEntryKey, publisher: Int,
     schemas: List[String], operations: List[Int], entries: List[NativeDescriptorCall]) raises:
-    comptime assert family == PREP_TABLE_X_PREP, "unknown prep table family"
+    comptime assert family == PREP_TABLE_X_PREP or family == PREP_TABLE_SCALER, "unknown prep table family"
     _prep_entry_key_check(key)
-    if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalCPUV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
-    if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastCPUV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
-    if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalMetalV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
-    if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastMetalV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
-    if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalCUDAV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
-    if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastCUDAV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
-    if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalHIPV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
-    if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastHIPV1"
-        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
-        return
+    comptime if family == PREP_TABLE_X_PREP:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+    comptime if family == PREP_TABLE_SCALER:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+            return
     raise Error("native prep entries: unsupported execution key")
 
 
 def prep_table_entry[family: Int](key: PrepEntryKey, index: Int,
     schema: String, operations: Int) raises -> NativeDescriptorCall:
-    comptime assert family == PREP_TABLE_X_PREP, "unknown prep table family"
+    comptime assert family == PREP_TABLE_X_PREP or family == PREP_TABLE_SCALER, "unknown prep table family"
     _prep_entry_key_check(key)
-    if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalCPUV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastCPUV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalMetalV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastMetalV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalCUDAV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastCUDAV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesXPrepIdenticalHIPV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesXPrepFastHIPV1"
-        return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+    comptime if family == PREP_TABLE_X_PREP:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesXPrepIdenticalHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesXPrepFastHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+    comptime if family == PREP_TABLE_SCALER:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesScalerIdenticalHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesScalerFastHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     raise Error("native prep entries: unsupported execution key")
 
 
@@ -119,3 +188,10 @@ def xp_transport_call(entry: EntryRef, operation: Int, addresses: List[Int], int
     _ = addresses
     _ = ints
     return result
+
+
+def scaler_ref(key: PrepEntryKey) raises -> EntryRef:
+    """The scaler kernel entry (`scaler_native_v1`) of the preprocessing image
+    `key` names, resolved once per operation; the table refusals raise here."""
+    return EntryRef(prep_table_entry[PREP_TABLE_SCALER](key, 0, String(SCALER_NATIVE_ABI), SCALER_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, SCALER_OP_COUNT))
