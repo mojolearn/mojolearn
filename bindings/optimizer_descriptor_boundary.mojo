@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from core.native_descriptor_call import native_descriptor_call
 from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi import (, _neural_descriptor_function_owner
     NeuralDescriptorProvider, neural_descriptor_connect_once, neural_descriptor_connect_factory_once,
 )
 from training.optimizer_native_api import (
@@ -36,8 +36,18 @@ def optimizer_provider(module: PythonObject) raises -> PythonObject:
 
 
 def optimizer_provider_entries(entries: PythonObject) raises -> PythonObject:
-    var provider = neural_descriptor_connect_factory_once(entries["optimizer_native_api_v1"], String(OPTIMIZER_NATIVE_ABI), OPT_NATIVE_COUNT)
-    if provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not entries["module"]:
+    var factory = entries["optimizer_native_api_v1"]
+    var provider = neural_descriptor_connect_factory_once(factory, String(OPTIMIZER_NATIVE_ABI), OPT_NATIVE_COUNT)
+    # The provider's module is the compiled owner of the factory function
+    # (PyCFunction self). The bridge's `entries["module"]` is the public
+    # binding module, which since the merged-binding layout re-exports the
+    # host unit's functions (`mojolearn._mojolearn_training` ->
+    # `mojolearn._host._mojolearn_training_host`), so an identity test against
+    # it refused every optimizer endpoint (verify 2026-11-12: 84 public API
+    # failures, training-mlp-sessions). Accept the admitted module or the
+    # factory's own compiled owner; anything else is a foreign descriptor.
+    ref owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
+    if owner is not entries["module"] and owner._obj_ptr != _neural_descriptor_function_owner(factory):
         raise Error("TypeError: optimizer descriptor must belong to its connected native extension")
     return provider
 
