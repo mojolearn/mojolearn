@@ -13,3 +13,38 @@
 core/*_entry_table*.mojo
 # RUN modules (also built into the script).
 *_run.mojo
+
+# The flipped fence (tools/python_free_dirs.sh third check): inside bindings/ and
+# providers/python/ only bindings/_mojolearn*.mojo, bindings/entry/*.mojo,
+# bindings/py_*.mojo, *_unpack.mojo, *_pack.mojo and *_door.mojo may import Python.
+# An `allow:` line admits one file that still violates because its RUN work sits behind a
+# Python-holding construct that needs a design change. Each line is dated and names the
+# owner; the list only shrinks: the owning lane deletes the line when the file is split.
+allow: bindings/admitted_input.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/admitted_registry.mojo  # 2026-11-12 lane resident-pin-tables (to open): AdmittedRegistry: Python pins inside the typed LRU registry (design)
+allow: bindings/classical_labels.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/cluster_resident_table.mojo  # 2026-11-12 lane resident-pin-tables (to open): CresTable/CresHeld: Python pins inside typed resident eviction (design)
+allow: bindings/logistic_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/mcls_classify.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
+allow: bindings/mcls_common.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
+allow: bindings/mcls_ranking.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
+allow: bindings/metrics_exp_cls.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
+allow: bindings/metrics_exp_common.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
+allow: bindings/metrics_exp_curve.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
+allow: bindings/metrics_exp_rank.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot; _Proba
+allow: bindings/metrics_reg_native.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): _Reg y/p/w refs + _Prog owners + MetricPlanOpcodes snapshot
+allow: bindings/native_model_records.mojo  # 2026-11-12 lane resident-pin-tables (to open): RecordPayloads/ModelEntry: Python pins inside typed record tables (design)
+allow: bindings/nmf_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/prep_encode_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
+allow: bindings/prep_iterimp_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
+allow: bindings/prep_labels_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
+allow: bindings/prep_select_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
+allow: bindings/spectral_affinity_boundary.mojo  # 2026-11-12 lane entangled-mkit follow-up (to open): SpectralAffinityRoom public_array pin (entangled-mkit follow-up)
+allow: bindings/trees_public_boost.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/trees_public_forest.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/trees_public_gbdt_fit.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/trees_public_inputs.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/trees_public_meta.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: bindings/trees_resident_table.mojo  # 2026-11-12 lane resident-pin-tables (to open): TreesResidentEntry: Python pins inside typed resident eviction (design)
+allow: bindings/x_linear_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
+allow: providers/python/neural_descriptor_pyapi.mojo  # 2026-11-12 lane neural-descriptor-pins (to open): NeuralDescriptorConnections: Python modules inside typed descriptor execution (design)
