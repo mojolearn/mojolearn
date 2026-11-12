@@ -41,7 +41,7 @@ from bindings.classical_labels import ClassicalLabels, labels_address, labels_ca
 from bindings.admitted_input import admit_c_view, admitted_dtype, admit_f32, admit_ids, admitted_vector
 from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f64
-from bindings.py_optional import py_present
+from bindings.py_optional import py_or_none, py_present
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
