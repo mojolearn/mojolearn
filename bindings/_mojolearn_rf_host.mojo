@@ -106,8 +106,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import rf_host_predict, rf_host_trees
 from bindings.forest_host_strict_binding import (
     forest_strict_prepare_host_binding, forest_strict_predict_host_binding, forest_strict_release_host_binding,
-    forest_strict_prepare_host_native, forest_strict_predict_host_native, forest_strict_release_host_native,
+    forest_strict_predict_host_native,
 )
+from core.forest_host_strict_run import forest_strict_prepare_host_native, forest_strict_release_host_native
 from bindings.forest_host_groves_binding import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
