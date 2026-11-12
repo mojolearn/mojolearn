@@ -172,7 +172,7 @@ def _pred_f64(v: PythonObject, context: PythonObject) raises -> List[Float64]:
                 var step = Int(py=view.strides[0])
                 var addr = Int(py=classical_address(view))
                 var wide = t == "<f8"
-                for i in range(size):  # driver-loop: typed widening of the native prediction buffer (no CPython call)
+                for i in range(size):  # unpack: typed widening of the native prediction buffer, one per row (data; no CPython call)
                     if wide:
                         out[i] = F64P(unsafe_from_address=addr + i * step)[0]
                     else:
