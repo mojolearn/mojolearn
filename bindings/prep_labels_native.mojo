@@ -558,19 +558,23 @@ def _class_seq(classes: PythonObject, list_only: Bool) raises -> PythonObject:
     return py_call(b.list, classes)
 
 
-def _class_list(classes: PythonObject, codes: List[Int], context: PythonObject) raises -> PythonObject:
+def _class_list(fitted: PythonObject, codes: List[Int], context: PythonObject) raises -> PythonObject:
     """`_classes_array([classes[i] for i in codes])` with no Python call per
     label: the codes range-checked natively (a negative index from the end,
     IndexError out of range, as the list indexing did), the result kind
     (`labels_label_kind` of the taken labels) read from the USED classes,
     each class read once; int / real classes gathered as int64 / float64
     words into ONE Array, any other class objects placed by ONE presized
-    list (`p3_decode_list`, new references filled in C)."""
+    list (`p3_decode_list`, new references filled in C). Classes that are
+    not an exact list or tuple (an Array restored from an archive) are
+    listed once (`_class_seq`), as the former `_take_classes` indexed them."""
     var b = _builtins()
+    # round2-fixes-2: a restored non-list `_classes` was refused here with
+    # "TypeError: class labels require an exact native list or tuple"
+    # (perf audit 2-b, refusal 6).
+    var classes = _class_seq(fitted, False)
     var k = len(classes)
     var n = len(codes)
-    if py_type(classes) is not b.list and py_type(classes) is not b.tuple:
-        raise Error("TypeError: class labels require an exact native list or tuple")
     var is_tuple = py_type(classes) is b.tuple
     var slots = List[Int64](length=n, fill=0)
     var used = List[Bool](length=k, fill=False)
