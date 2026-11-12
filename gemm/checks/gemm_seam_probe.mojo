@@ -21,7 +21,7 @@ native FMA; it changes no shipped line.
 WHAT IT PRINTS, per triple set, five lanes:
   shipped   `_tuned_step(ftz(a), ftz(b), ftz(acc))`, the column's shipped seam
   fma       `identical_mul_add(...)`, the column's native FMA, NO flush after
-  hwftz     NVIDIA: `llvm.nvvm.fma.rn.ftz.f`; other columns: the `fma` lane again
+  hwftz     NVIDIA: PTX `fma.rn.ftz.f32`; other columns: the `fma` lane again
   swrtf     `ftz(identical_mul_add(...))`, the software round-then-flush spelling
   class     post-round AMD class flush; software spelling on other columns
   nativefix `rtf_fix(fma(...))` with NO software flush (lane/apple-seam-repair,
@@ -49,7 +49,7 @@ from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add, nv_fma_rn_ftz_f32
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_AMD, column_name
 from checks.rtf_seam import rtf_fix, RTF_REPAIR
 from gemm.checks.gemm_identical import _tuned_step, _ftz_class, TUNED_HW_FTZ_FMA, TUNED_CLASS_FLUSH
@@ -102,9 +102,7 @@ def mode_seam_kernel(
 @always_inline
 def _native_ftz_fma(a: Float32, b: Float32, c: Float32) -> Float32:
     comptime if TUNED_HW_FTZ_FMA:
-        return llvm_intrinsic[
-            "llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False
-        ](a, b, c)
+        return nv_fma_rn_ftz_f32(a, b, c)
     return identical_mul_add(a, b, c)
 
 

@@ -52,7 +52,6 @@ from core.classical_distance import direct_squared_distance
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for, knn_distance_rows_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
@@ -63,6 +62,8 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
     identical_sqrt,
+    nv_fma_rn_f32,
+    nv_mul_rn_ftz_f32,
 )
 
 
@@ -191,8 +192,8 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         # Match the corrected GEMM seam: rounding occurs BEFORE the hardware
         # input/output FTZ on multiplication by exactly one. Bare fma.ftz is
         # deliberately excluded because it fails at the minnormal boundary.
-        var rounded = llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
-        return llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](rounded, Float32(1.0))
+        var rounded = nv_fma_rn_f32(a, b, acc)
+        return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
     var result = ftz(identical_mul_add(a, b, acc))
     comptime if knn_distance_zero_fma_repair_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
         if (bitcast[DType.uint32](result) & 0x7fffffff) == 0:
@@ -220,7 +221,7 @@ def _rt_step_exact(a: Float32, b: Float32, acc: Float32) -> Float32:
     bits."""
     var r: Float32
     comptime if knn_distance_hardware_flush_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
-        r = llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
+        r = nv_fma_rn_f32(a, b, acc)
     else:
         r = identical_mul_add(a, b, acc)
     comptime if is_defined["MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE"]():

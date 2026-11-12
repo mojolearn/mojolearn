@@ -174,6 +174,8 @@ from checks.numerics import (
     identical_exp,
     identical_fmax,
     identical_mul_add,
+    nv_fma_rn_f32,
+    nv_mul_rn_ftz_f32,
 )
 from core.shared_slot import SharedSlot
 
@@ -2162,12 +2164,8 @@ def _step(a: Float32, b: Float32, acc: Float32) -> Float32:
     numerical audit.
     """
     comptime if FUSED_HW_FTZ_FMA:
-        var rounded = llvm_intrinsic[
-            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
-        ](ftz(a), ftz(b), acc)
-        return llvm_intrinsic[
-            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
-        ](rounded, Float32(1.0))
+        var rounded = nv_fma_rn_f32(ftz(a), ftz(b), acc)
+        return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
     return ftz(identical_mul_add(ftz(a), ftz(b), acc))
 
 
@@ -2175,12 +2173,8 @@ def _step(a: Float32, b: Float32, acc: Float32) -> Float32:
 def _step_preflushed(a: Float32, b: Float32, acc: Float32) -> Float32:
     """Ascending RN-then-flush chain on operands already flushed on staging."""
     comptime if FUSED_HW_FTZ_FMA:
-        var rounded = llvm_intrinsic[
-            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
-        ](a, b, acc)
-        return llvm_intrinsic[
-            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
-        ](rounded, Float32(1.0))
+        var rounded = nv_fma_rn_f32(a, b, acc)
+        return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
     return ftz(identical_mul_add(a, b, acc))
 
 
