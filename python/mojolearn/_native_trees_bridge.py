@@ -139,8 +139,6 @@ def _bindings():
                 per_mode[name] = _entries(_backend.binding(name, mode))
             except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
                 per_mode[name] = _refusal(error)
-            if name == "_mojolearn_x_trees" and isinstance(per_mode[name], dict):
-                _native_key(per_mode[name])
             if name == "_mojolearn_estimators" and isinstance(per_mode[name], dict):
                 _estimators_native_key(per_mode[name])
             if name in _NATIVE_KEYED and isinstance(per_mode[name], dict):
