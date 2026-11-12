@@ -7,6 +7,7 @@ from core.shared_slot import SharedSlot
 from core.native_scalar_decode import NativeRealBits, native_scalar_real, _scalar_ieee
 from core.native_array_layout import native_array_itemsize
 from core.logistic_query_state import LogisticQueryWidth, logistic_width_integer
+from core.logistic_query_boundary_run import logistic_torch_width_run
 from core.sequence_array_cast import SEQ_CAST_OVERFLOW
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get
@@ -160,23 +161,7 @@ def logistic_query_width(value: PythonObject, context: PythonObject) raises -> L
             var unpacked = native_torch_scalar(current)
             var result = _logistic_width_builtin(unpacked[0], context)
             var dtype = unpacked[1].copy()
-            if result.kind == 3:
-                result.kind = 0  # the tensor dtype controls weak scalar conversion
-            if dtype == "torch.float16" or dtype == "torch.complex32":
-                result.precision = 16
-            elif dtype == "torch.bfloat16":
-                result.precision = 8
-            elif dtype == "torch.float32" or dtype == "torch.complex64":
-                result.precision = 32
-            elif dtype == "torch.float64" or dtype == "torch.complex128":
-                result.precision = 64
-            elif dtype == "torch.uint8" or dtype == "torch.uint16" or dtype == "torch.uint32" or dtype == "torch.uint64":
-                result.integer_bits = 8 if dtype == "torch.uint8" else (16 if dtype == "torch.uint16" else (32 if dtype == "torch.uint32" else 64))
-            elif dtype == "torch.int8" or dtype == "torch.int16" or dtype == "torch.int32" or dtype == "torch.int64":
-                result.integer_bits = 8 if dtype == "torch.int8" else (16 if dtype == "torch.int16" else (32 if dtype == "torch.int32" else 64))
-                result.integer_signed = True
-            elif dtype != "torch.bool":
-                raise Error("TypeError: LogisticRegression feature metadata requires a primitive numeric Tensor")
+            result = logistic_torch_width_run(result, dtype)
             _ = unpacked^
             return result
         var array = cls is py_get(context, "ndarray")
