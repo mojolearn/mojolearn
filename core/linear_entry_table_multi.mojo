@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The multi-output Ridge table of the linear family: the
 `_mojolearn_estimators` entries `MultiOutputRegressor`'s one-program ridge
-(`bindings/trees_public_meta.mojo::_multioutput_ridge_fit` and its
+(`bindings/trees_public_meta_door.mojo::_multioutput_ridge_fit` and its
 predict) reaches, as one native entry (lane calltable-base-helpers,
 2026-11-11).
 

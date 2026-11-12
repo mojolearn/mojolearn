@@ -68,7 +68,7 @@ from training.neural_session_mlp_host import nn_mlp_sessions_host
 from std.os import abort
 from training.host.native_primitive_dispatch import NATIVE_HOST_TRAINING_PRIMITIVE_API
 from core.samba_entry_table_training_host import publish_samba_training_host_primitives
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from training.host.optimizer_native import OPTIMIZER_NATIVE_HOST_API
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module

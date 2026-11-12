@@ -15,7 +15,7 @@ from x_linear.ops_entry_device import (
     xl_decision_device_run, xl_decision_codes_device_run, xl_decision_rows_device_run, xl_huber_out_device_run,
     xl_class_prep_device_run, xl_spearman_device_run, xl_best_alpha_run,
 )
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
@@ -63,7 +63,7 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
                 ip: PythonObject, fp: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     # The Python door of XL_OP_FIT (x_linear/ops_entry_device.mojo), kept for
     # the Python surface (_surface_linear.py, _expansion_linear.py); the
-    # native owner bindings/x_linear_native.mojo calls the table.
+    # native owner bindings/x_linear_native_door.mojo calls the table.
     var ipl = _int32_words(ip, Int(py=dims[7]))
     var fpl = _float32_words(fp, Int(py=dims[8]))
     var a = Int(py=algo)

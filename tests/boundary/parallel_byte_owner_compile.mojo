@@ -9,7 +9,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.parallel_byte_native_door import parallel_byte_c, ParallelByteOwner
 from bindings.cross_vendor_native_door import cross_vendor_c
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, NativeDescriptorResource
 
 
 @export

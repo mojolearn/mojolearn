@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The Python routes of LabelEncoder, LabelBinarizer and MultiLabelBinarizer
-as they stood before the native label owner (bindings/prep_labels_native.mojo),
+as they stood before the native label owner (bindings/prep_labels_native_door.mojo),
 kept verbatim as the oracle of tests/test_native_prep_labels_door.py: the
 native door must return the same bits and fitted attributes. Test-only code;
 the package never imports it."""

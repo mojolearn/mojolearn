@@ -17,13 +17,13 @@
 # context, where the module put them at its import.
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.x_neighbors_admission_pyapi_door import xn_capabilities
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry, neural_descriptor_execute
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.pcs_rng_pyapi_pack import pcs_seed, _pcs_connect
 from x_neighbors.descriptor_schema import xn_operation_id
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
-from bindings.admitted_input import admitted_finite_refuse
+from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays_door import classical_address
@@ -42,7 +42,7 @@ from bindings.family_common_pack import (
     family_field,
 )
 from providers.python.estimator_binding_pyapi_door import estimator_arguments
-from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
+from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, classical_accuracy
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal

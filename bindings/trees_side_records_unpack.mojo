@@ -15,7 +15,7 @@
 # rebuilds it on first use.
 #
 # Storage (lane ne1-e-records, 2026-11-06): the records live in the TREES
-# family slot of bindings/native_model_records.mojo (one weak entry per
+# family slot of bindings/py_model_records.mojo (one weak entry per
 # object for every family); this module keeps the tree family's key walks.
 #
 # A record is valid while its key matches: the identities of every object
@@ -25,7 +25,7 @@
 # or other Python protocol runs. A record never holds its own model.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import NativeModules
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     records_get, records_put, records_drop, records_key_append, records_key_same_exact,
     records_stamped_get, records_stamped_put, records_stampable, ContentRecord, content_value, RECORDS_TREES,
 )
@@ -174,7 +174,7 @@ def trees_admit_parameters(model: PythonObject, fields: PythonObject, names: Pyt
     in-place container edit changes the key and the full admission runs, in
     the original order, with its original refusals."""
     # Generation fast path (lane ne1-e-records, row N255): while the model's
-    # generation word (bindings/native_model_records.mojo: its watched
+    # generation word (bindings/py_model_records.mojo: its watched
     # instance dictionary, class and explicit bumps) and the native content
     # words of its container parameters are unchanged, the key below would
     # match again: no key list is built and only the residual values are

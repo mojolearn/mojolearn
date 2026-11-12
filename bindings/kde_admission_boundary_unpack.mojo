@@ -5,7 +5,7 @@ from bindings.py_balanced import py_type, py_get, py_contains, py_fields, py_cal
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_address
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     ContentRecord, content_value, records_stamped_get, records_stamped_put, records_drop, RECORDS_PREPARED,
 )
 from core.kde_native_state import KDEAdmissionWords

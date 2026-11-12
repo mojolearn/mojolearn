@@ -25,7 +25,7 @@ from bindings.decomp_public_lifecycle_unpack import decomp_public_begin
 from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
-from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
+from bindings.nmf_native_door import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
 
 comptime _DECOMP_FAMILY_SLOT = "decomp_family_class_v1"

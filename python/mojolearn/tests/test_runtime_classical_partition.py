@@ -69,7 +69,7 @@ def test_tree_resident_type_comes_from_the_single_classical_owner():
                               random_state=13, numeric_mode='identical').assert_native()
     audit_native_call(model.fit, x, y).assert_native()
     # The snapshot lives in the classical owner's native resident table
-    # (bindings/trees_resident_table.mojo), never in the model's __dict__.
+    # (bindings/trees_resident_table_run.mojo), never in the model's __dict__.
     from mojolearn import _native_trees_bridge
     entry, context = _native_trees_bridge.connect()
     kept_before = entry(None, 'trees_resident_stats', (), context)[0]

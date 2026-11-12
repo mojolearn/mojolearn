@@ -4,7 +4,7 @@ from std.python import PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.classical_arrays_door import classical_address
 from bindings.native_loaded_module_door import native_loaded_module
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 from providers.python.x_cluster_out_pyapi_pack import _py_array
@@ -25,7 +25,7 @@ struct KMeansVariantsConnection(Movable):
 def variants_connection(binding: PythonObject) raises -> KMeansVariantsConnection:
     var factory = neural_descriptor_entry(binding, "kmeans_variants_native_api_v1")
     var provider = neural_descriptor_connect_factory_once(factory, String(KMEANS_VARIANTS_ABI), KMEANS_VARIANTS_COUNT)
-    var driver = KMeansVariantsDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = KMeansVariantsDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     var mode = driver.metadata(VARIANTS_MODE)
     if mode != 0 and mode != 1:
         raise Error("KMeans variants native provider: unsupported compiled numeric mode")

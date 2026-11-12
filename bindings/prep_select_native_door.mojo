@@ -15,7 +15,7 @@
 # `ClsProg`, the classifier owner's context `select_context`) because the
 # support mask and the ranking are in-out inputs, as `_Prog.put(inout=True)`
 # made them. The mutual-information programs and the selector transform run
-# on the encode owner's transport (bindings/prep_encode_native.mojo `EncProg`).
+# on the encode owner's transport (bindings/prep_encode_native_door.mojo `EncProg`).
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -24,19 +24,19 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_typed, classical_input
-from bindings.admitted_input import admit_x
-from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end
+from bindings.admitted_input_unpack import admit_x
+from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end
 from bindings.admitted_meta_scope_unpack import admitted_hold_array_f32
 from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_labels import classical_encode_labels
-from bindings.admitted_input import admit_f32, admitted_vector
+from bindings.classical_labels_door import classical_encode_labels
+from bindings.admitted_input_unpack import admit_f32, admitted_vector
 from bindings.scaler_native_door import _ptr
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.x_prep_native_owner_door import xprep_values
 from bindings.prep_stateless_native_door import _select_transform, _select_gather, _support_columns, _words
-from bindings.prep_encode_native import (
+from bindings.prep_encode_native_door import (
     EncProg, _cs, _codes, _fit_categories, _take1, _take2, _word, _iword, _put_codes, _default_mode,
     _seed64, _score_words)
 from bindings.prep_classify_prog_door import ClsProg, f32_array
@@ -502,7 +502,7 @@ def _gather_enc(values: PythonObject, cols: List[Int], entries: PythonObject, co
         fl.append(Float64(cols[i]))
     var ko = p.put_floats(fl, context)
     var out = p.alloc(n * k)
-    _stage(p.program, OP_GATHER_COLS, n * k, xo, n, d, ko, k, out)
+    _stage(p.prog.program, OP_GATHER_COLS, n * k, xo, n, d, ko, k, out)
     var ran = p.run(entries, context)
     return Python.tuple(0, _take2(ran, out, n, k, context), PythonObject(None), n, k)
 
@@ -518,8 +518,8 @@ def _class_counts(codes: PythonObject, n: Int, K: Int, entries: PythonObject, co
     var nch = max(1, (n + ch - 1) // ch)
     var cnt = p.alloc(nch * K)
     var tot = p.alloc(K)
-    _stage(p.program, OP_P2M_CCOUNT, nch, co, n, K, ch, cnt)
-    _stage(p.program, OP_P2M_CSCAN, K, cnt, nch, K, tot)
+    _stage(p.prog.program, OP_P2M_CCOUNT, nch, co, n, K, ch, cnt)
+    _stage(p.prog.program, OP_P2M_CSCAN, K, cnt, nch, K, tot)
     var ran = p.run(entries, context)
     var out = List[Int]()
     for i in range(K):  # driver-loop: over the class counts (class count)
@@ -609,8 +609,8 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
         z = _work(p, n * dc, scratch)
         zs = _work(p, n * dc, scratch)
         _cs(p, mode, entries, xo, n, dc, st)
-        _stage(p.program, OP_MI_COLSCALE, dc, xo, n, dc, st, sc, ma)
-        _stage(p.program, OP_MI_NOISE, n * dc, xo, n, dc, sc, ma, 2 * seed, z, zs + 1)
+        _stage(p.prog.program, OP_MI_COLSCALE, dc, xo, n, dc, st, sc, ma)
+        _stage(p.prog.program, OP_MI_NOISE, n * dc, xo, n, dc, sc, ma, 2 * seed, z, zs + 1)
     var zy = -1
     var zys = -1
     if not discrete_target:
@@ -621,18 +621,18 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
         zy = _work(p, n, scratch)
         zys = _work(p, n, scratch)
         _cs(p, mode, entries, yo, n, 1, sty)
-        _stage(p.program, OP_MI_COLSCALE, 1, yo, n, 1, sty, scy, may)
-        _stage(p.program, OP_MI_NOISE, n, yo, n, 1, scy, may, 2 * seed + 1, zy, zys + 1)
+        _stage(p.prog.program, OP_MI_COLSCALE, 1, yo, n, 1, sty, scy, may)
+        _stage(p.prog.program, OP_MI_NOISE, n, yo, n, 1, scy, may, 2 * seed + 1, zy, zys + 1)
     var outc = -1
     if dc > 0:
         var term = _work(p, n * dc, scratch)
         outc = p.alloc(dc)
         if discrete_target:
-            _stage(p.program, OP_MI_CD, n * dc, z, n, dc, yo, lc, k, term, zs + 1)
-            _stage(p.program, OP_MI_REDUCE, dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
+            _stage(p.prog.program, OP_MI_CD, n * dc, z, n, dc, yo, lc, k, term, zs + 1)
+            _stage(p.prog.program, OP_MI_REDUCE, dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
         else:
-            _stage(p.program, OP_MI_CC, n * dc, z, n, dc, zy, k, term, zs + 1, zys + 1)
-            _stage(p.program, OP_MI_REDUCE, dc, term, n, dc, 0, k, n, outc)
+            _stage(p.prog.program, OP_MI_CC, n * dc, z, n, dc, zy, k, term, zs + 1, zys + 1)
+            _stage(p.prog.program, OP_MI_REDUCE, dc, term, n, dc, 0, k, n, outc)
     var dd = len(disc)
     var outd = -1
     if dd > 0:
@@ -659,15 +659,15 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
             for c in range(dd):  # driver-loop: over the per-column category counts (discrete feature count)
                 fl.append(Float64(kx[c]))
             var kxo = p.put_floats(fl, context)
-            _stage(p.program, OP_MI_DD, dd, xc, n, dd, yo, ky, kxo, tb, stride, outd)
+            _stage(p.prog.program, OP_MI_DD, dd, xc, n, dd, yo, ky, kxo, tb, stride, outd)
         else:
             var cnti = p.alloc(dd * kmax)
             var cntf = p.alloc(dd * kmax)
             var term = _work(p, n * dd, scratch)
-            _stage(p.program, OP_CODE_COUNTS, dd, xc, n, dd, kmax, cnti)
-            _stage(p.program, OP_I2F, dd * kmax, cnti, cntf)
-            _stage(p.program, OP_MI_DC, n * dd, zy, n, dd, xc, cntf, kmax, k, term, zys + 1)
-            _stage(p.program, OP_MI_REDUCE, dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
+            _stage(p.prog.program, OP_CODE_COUNTS, dd, xc, n, dd, kmax, cnti)
+            _stage(p.prog.program, OP_I2F, dd * kmax, cnti, cntf)
+            _stage(p.prog.program, OP_MI_DC, n * dd, zy, n, dd, xc, cntf, kmax, k, term, zys + 1)
+            _stage(p.prog.program, OP_MI_REDUCE, dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
     var ran = p.run(entries, context)
     _ = target^
     if dd == 0:

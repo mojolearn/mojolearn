@@ -17,10 +17,10 @@ from std.memory import unsafe_memcpy
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
-from bindings.admitted_input import admit_ids
+from bindings.admitted_input_unpack import admit_ids
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from bindings.host_sparse_native_door import host_sparse_format
 from bindings.classical_validate_unpack import classical_view
 from core.decomp_native_impl import decomp_piv_valid

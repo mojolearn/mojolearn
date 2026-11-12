@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The x_linear operations table: every native entry the linear expansion
-estimators' owner (bindings/x_linear_native.mojo) calls in `_mojolearn_x_linear`
+estimators' owner (bindings/x_linear_native_door.mojo) calls in `_mojolearn_x_linear`
 (device) or `_mojolearn_x_linear_host` (CPU), as one `NativeDescriptorCall`
 dispatching on its operation id.
 

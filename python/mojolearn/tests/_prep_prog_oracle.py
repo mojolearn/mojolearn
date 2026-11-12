@@ -5,8 +5,8 @@ the TEST ORACLE of the native prep owners (lane pyout-small-families,
 
 Every prep public method is one native call: the native owners build the
 program and the shared runner runs it (bindings/prep_classify_prog_door.mojo
-`ClsProg`, bindings/prep_encode_native.mojo `_category_block` / `_codes`,
-bindings/prep_select_native.mojo, bindings/prep_labels_native.mojo,
+`ClsProg`, bindings/prep_encode_native_door.mojo `_category_block` / `_codes`,
+bindings/prep_select_native_door.mojo, bindings/prep_labels_native_door.mojo,
 bindings/arena_prog_native_door.mojo). These Python copies had no product caller,
 only the door tests that compare the native bits against them, so they left
 `mojolearn/_expansion_prep.py` for here (tests never ship in the wheel).
@@ -641,7 +641,7 @@ def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None
 # the label, which sends the call back to the old route), the device sort, a
 # chunked run scan, and for fit_transform the codes in the same program.
 # The old route stays for labels no numeric buffer holds (str, bool, lists).
-# The label encoders' routes live in bindings/prep_labels_native.mojo; this
+# The label encoders' routes live in bindings/prep_labels_native_door.mojo; this
 # buffer view remains for preprocessing.py's integer counts.
 _LABEL_KIND = {"<f4": (0, 1), "<i4": (1, 1), "<u4": (2, 1), "<i8": (3, 2), "<f8": (4, 2)}
 

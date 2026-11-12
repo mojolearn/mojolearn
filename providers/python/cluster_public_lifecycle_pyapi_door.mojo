@@ -17,7 +17,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_arrays_door import classical_kind
 from bindings.classical_validate_unpack import classical_check_x, classical_view, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from bindings.classical_labels import labels_shape_of
+from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.native_array_view_pack import native_array_ndarray_view

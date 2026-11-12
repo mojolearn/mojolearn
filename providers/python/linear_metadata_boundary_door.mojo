@@ -9,7 +9,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description_unpack import sequential_fields

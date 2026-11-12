@@ -7,7 +7,7 @@
 A fit records the notices it raised as a bit mask on its result
 (`RandomForestMetaData.notices`, `RfHostForest.notices`). The bindings set
 `notices_to_stderr=False`, carry the mask out as the third fit metadata
-word, and `bindings/trees_public_forest.mojo` raises each as a Python
+word, and `bindings/trees_public_forest_door.mojo` raises each as a Python
 UserWarning through the native warnings path
 (`bindings/classical_warnings.mojo`). A caller with no Python layer (a Mojo
 program calling `fit_forest`/`rf_host_fit` directly) keeps the default and

@@ -17,10 +17,10 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.trees_public_inputs import trees_table, trees_entry
-from bindings.trees_public_forest import forest_effective_mode, forest_kind, _engine, _ordered_export
+from bindings.trees_public_inputs_door import trees_table, trees_entry
+from bindings.trees_public_forest_door import forest_effective_mode, forest_kind, _engine, _ordered_export
 from bindings.py_optional import py_present
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_TREES,
 )
 
@@ -36,7 +36,7 @@ def _member_table(member: PythonObject, cols: Int, context: PythonObject) raises
     Calibrated, Bagging and AdaBoost predict walked each member's class
     ancestry (one table probe per ancestor) and re-resolved its mode, engine
     and binary exports, only to count members per binary. The answer is
-    stamped with the member's generation word (bindings/native_model_records.mojo,
+    stamped with the member's generation word (bindings/py_model_records.mojo,
     lane ne1-e-records): its class and every field the answer reads
     (`_offsets`, `n_features_in_`, `numeric_mode`, `_fit_numeric_mode`,
     `inference_engine`) live in its instance dictionary, so a refit, a

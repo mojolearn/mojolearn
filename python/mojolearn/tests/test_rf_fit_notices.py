@@ -5,7 +5,7 @@
 0.8.63 printed cuML's three fit notices ("WARN: ...") to stdout from the
 native fit, which corrupted any caller's own stdout (it broke
 `verify --self-test --json`). The fit now records them as a bit mask
-(`ensemble/rf_notices.mojo`) and `bindings/trees_public_forest.mojo` raises
+(`ensemble/rf_notices.mojo`) and `bindings/trees_public_forest_door.mojo` raises
 each through the native warnings path (`bindings/classical_warnings_unpack.mojo`).
 """
 

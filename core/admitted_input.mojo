@@ -5,7 +5,7 @@
 Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2, lane A0
 (consol-a0-admission, 2026-11-08). Every public door that turns a caller's
 X, y or sample_weight into float32 (or float64) words reaches these through
-`bindings/admitted_input.mojo` (`admit_x`, `admit_y`, `admit_weights`); no
+`bindings/admitted_input_unpack.mojo` (`admit_x`, `admit_y`, `admit_weights`); no
 family keeps its own cast loop or finiteness scan.
 
     admitted_raw_word(address, item)          one little-endian item, typed load

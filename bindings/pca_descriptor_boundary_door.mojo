@@ -15,7 +15,7 @@ from x_decomp.pca_descriptor_boundary_run import (
 from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
 )
 
@@ -38,7 +38,7 @@ def _pca_connect(factory: PythonObject, context: PythonObject, mode: Int) raises
     if index < 0:
         # The typed record and the door pin are appended together, under the GIL.
         index = pca_connection_add(provider_word(provider),
-            PCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+            PCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
         PCA_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     if pca_vendor(index) != String(context["vendor"]):
         raise Error("RuntimeError: PCA native vendor differs from selected execution")

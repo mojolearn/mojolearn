@@ -7,7 +7,7 @@ units on the CPU."""
 from core.experiment_guards_base import BASE_GUARDS_OK
 from x_metrics.mojolearn_x_metrics_run import _publish_linear_entry_table
 from x_metrics.descriptor_device import METRICS_PROGRAM_DEVICE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

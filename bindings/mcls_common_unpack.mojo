@@ -24,7 +24,7 @@
 # are bindings/mcls_common_run.mojo; code recoverable at 4f5a5ae6d8.
 from bindings.admitted_family_door import admit_family
 from bindings.mcls_common_run import MC_NONE, MC_INT32_MAX, mc_view_kind
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.metrics_native_support_door import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
 from bindings.metrics_native_inputs_door import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
 from bindings.classical_pandas_door import classical_admit_value

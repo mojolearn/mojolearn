@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the shared native label, weight and score steps
-(bindings/classical_labels.mojo) that the classical owners call inside their
+(bindings/classical_labels_door.mojo) that the classical owners call inside their
 one native operation: the GPU base binding whose label provider they
 connect (or False on an install without one), the metrics binding of both
 numeric modes and fixed type metadata. Nothing here
@@ -70,7 +70,7 @@ def _metrics():
 
 
 def label_context():
-    """The context entries bindings/classical_labels.mojo reads, connected
+    """The context entries bindings/classical_labels_door.mojo reads, connected
     once; each owner's bridge merges them into its own context."""
     if not _LABEL_CONTEXT:
         import numbers

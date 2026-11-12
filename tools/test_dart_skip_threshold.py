@@ -1,7 +1,7 @@
 """Scalar argument encoding tests without requiring a compiled binding.
 
 The DART skip_drop threshold moved from `_DARTBase._dart_thr` (Python) into the
-native public DART fit, bindings/trees_public_boost.mojo `_dart_thr`
+native public DART fit, bindings/trees_public_boost_door.mojo `_dart_thr`
 (6ea508cd2: one native call per public method). This test reads that Mojo
 function's body, restates it statement by statement as Python, and checks it
 against the exact counter comparison."""
@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).parents[1]
-MOJO = ROOT / 'bindings/trees_public_boost.mojo'
+MOJO = ROOT / 'bindings/trees_public_boost_door.mojo'
 PY = ROOT / 'python/mojolearn/_expansion_trees.py'
 
 

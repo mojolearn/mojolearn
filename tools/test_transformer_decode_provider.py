@@ -90,7 +90,7 @@ def test_decode_session_keeps_native_handle_and_binding_words():
     assert 'transformer_resident_decode_call(' not in source
     words=source.split('def _transformer_decode_words(')[1].split('comptime _TRANSFORMER_DECODE_STEP')[0]
     assert 'g[].vendor_entries[i] is vendor_entry and g[].mode_entries[i] is mode_entry' in words
-    provider=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    provider=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     cached=provider.split('def neural_descriptor_value_handle(')[1].split('def neural_descriptor_matches(')[0]
     assert cached.index('_neural_descriptor_admit_entry(provider, factory)') < cached.index('py_call(factory, value)')
     assert "g[].types.get(address, 0) == cls and g[].factories.get(address, 0) == entry" in cached

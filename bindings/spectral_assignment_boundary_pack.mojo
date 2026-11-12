@@ -14,7 +14,7 @@ from bindings.spectral_umap_routes_unpack import spectral_umap_entry
 from bindings.native_array_storage_door import native_array_zeros
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.classical_arrays_door import classical_wrap_layout
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
 )
 

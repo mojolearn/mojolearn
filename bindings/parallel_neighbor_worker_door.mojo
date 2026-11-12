@@ -9,8 +9,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_labels import labels_cast, labels_reshape, classical_decode_labels
-from bindings.admitted_input import admit_ids
+from bindings.classical_labels_door import labels_cast, labels_reshape, classical_decode_labels
+from bindings.admitted_input_unpack import admit_ids
 from bindings.family_common_pack import family_call, family_entry, family_array
 from bindings.parallel_shard_common_door import shard_model, shard_rows, shard_dtype, shard_array
 from bindings.parallel_shard_common_run import shard_item
@@ -21,7 +21,7 @@ from bindings.neighbors_knn_native_door import (
     _clf_predict, _clf_predict_proba, _reg_predict, knn_door, _reduce,
     knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status,
 )
-from bindings.admitted_input import admitted_finite_refuse
+from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.neighbors_kde_native_door import _kde_scores, _kde_release
 from bindings.neighbors_ann_native_door import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars_door import host_inference_scalar

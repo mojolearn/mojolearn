@@ -23,7 +23,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_typed, classical_address
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from bindings.decomp_public_lifecycle_unpack import decomp_public_begin, decomp_coder_width
 from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method

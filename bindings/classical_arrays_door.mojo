@@ -256,7 +256,7 @@ def classical_f64(value: PythonObject, index: Int) raises -> Float64:
 
 # TOMBSTONE: classical_host_f32 (superseded by the one admission path) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. Its body is
-# bindings/admitted_input.mojo `admit_x(source, ndim, name, context, ...)`, same signature.
+# bindings/admitted_input_unpack.mojo `admit_x(source, ndim, name, context, ...)`, same signature.
 
 
 def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
@@ -268,6 +268,6 @@ def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
 
 # TOMBSTONE: classical_host_weights (zero callers) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. sample_weight is admitted by
-# bindings/admitted_input.mojo `admit_weights`.
+# bindings/admitted_input_unpack.mojo `admit_weights`.
 # TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_entries_orphan_functions.patch

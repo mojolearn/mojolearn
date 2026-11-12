@@ -45,7 +45,7 @@ from bindings.tsa_hw_native_door import tsa_array
 from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers_pack import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
-from bindings.native_model_records import records_get, records_put, RECORDS_PREPARED
+from bindings.py_model_records import records_get, records_put, RECORDS_PREPARED
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
 from core.byte_lm_entry_table_sessions import byte_lm_sessions_published, byte_lm_resident_run
 from bindings.byte_lm_session_owner_pack import byte_lm_session_owner_new
@@ -119,7 +119,7 @@ comptime _SHAPE_RECORD = "byte_lm_admitted_shape_v1"
 def _admitted_shape(mut mods: NativeModules, trainer: PythonObject, state: PythonObject) raises -> _Shape:
     """`_shape_of(state)`, admitted once per trainer (plan row N100).
 
-    The record (bindings/native_model_records.mojo, keyed by the trainer's
+    The record (bindings/py_model_records.mojo, keyed by the trainer's
     identity, never in its `__dict__`) holds the admitted `model_shape`
     dict, its size, its keys, the very value objects read and the shape
     words. A call reuses the words only while `model_shape` is the same dict

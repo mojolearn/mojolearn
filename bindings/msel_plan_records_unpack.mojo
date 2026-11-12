@@ -31,10 +31,10 @@ covers the protected-name refusal.
 from std.python import PythonObject
 from bindings.native_class_admission_door import dict_keys_admit, dict_keys_admitted
 from bindings.native_loaded_module_door import shared_dict_epoch, shared_dict_stamped
-from bindings.native_model_records import records_live, records_open, records_slot_msel_plan
+from bindings.py_model_records import records_live, records_open, records_slot_msel_plan, records_pin_msel_plan
 
 # Storage (lane ne1-e-records, 2026-11-06): the record lives in the model's
-# MSEL_PLAN slot of bindings/native_model_records.mojo, keyed by the MODEL
+# MSEL_PLAN slot of bindings/py_model_records.mojo, keyed by the MODEL
 # through a weak reference, so it is released when the model dies. The old
 # map was keyed by dictionary address and kept one entry per model ever
 # admitted (bounded only by a 4096-entry clear).
@@ -55,7 +55,8 @@ def msel_fields_admitted(model: PythonObject, fields: PythonObject, plan: Python
     if not slot[].admitted:
         return False
     var address = Int(fields._obj_ptr)
-    if slot[].fields_address != address or not (slot[].plan is plan):
+    # The slot holds the plan's id() word; the records store pins the plan.
+    if slot[].fields_address != address or slot[].plan != Int(plan._obj_ptr):
         return False
     return slot[].fields_epoch == shared_dict_epoch(address)
 
@@ -84,9 +85,10 @@ def msel_fields_admit(model: PythonObject, fields: PythonObject, plan: PythonObj
     var address = Int(fields._obj_ptr)
     var epoch = shared_dict_epoch(address)
     var slot = records_slot_msel_plan(key)
-    var previous = slot[].plan
-    slot[].plan = plan
+    slot[].plan = Int(plan._obj_ptr)
     slot[].fields_address = address
     slot[].fields_epoch = epoch
     slot[].admitted = True
-    _ = previous^
+    # Pin the plan the slot's word names (the replaced plan is released after
+    # the new one is held; `slot` is not used past this call).
+    records_pin_msel_plan(key, plan)

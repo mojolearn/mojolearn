@@ -2,7 +2,7 @@
 """Connection and public result exporters for the original MeanShift/AP entries."""
 from std.python import PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 from providers.python.x_cluster_out_pyapi_pack import _py_array
@@ -20,7 +20,7 @@ struct CentroidFitConnection(Movable):
 def centroid_fit_connection(binding: PythonObject) raises -> CentroidFitConnection:
     var factory = neural_descriptor_entry(binding, "cluster_centroid_fit_native_api_v1")
     var provider = neural_descriptor_connect_factory_once(factory, String(CENTROID_FIT_ABI), CENTROID_FIT_COUNT)
-    var driver = CentroidFitDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = CentroidFitDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     var mode = driver.mode()
     if mode != 0 and mode != 1:
         raise Error("cluster centroid native provider: unsupported compiled numeric mode")

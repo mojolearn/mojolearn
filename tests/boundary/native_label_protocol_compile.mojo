@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.classical_labels import (
+from bindings.classical_labels_door import (
     _label_list, _flatten_labels, _sorted_classes, labels_label_kind,
     classical_encode_labels, labels_decode_labels, _classification_labels, labels_class_weight_rows,
 )

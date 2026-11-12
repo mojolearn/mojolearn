@@ -12,7 +12,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_arrays_door import classical_address, classical_array
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_exceptions_door import classical_not_fitted_class
 

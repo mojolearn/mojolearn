@@ -13,7 +13,7 @@ from core.native_descriptor_call import native_descriptor_call_spans, native_des
 from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
 from core.native_execution import NativeExecutionEndpoint
 from core.operation_lock import operation_lock_acquire, operation_lock_release
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
 from bindings.native_execution_pyapi_run import NativeExecutionLease, _native_execution_finish
 
 def _native_execution_run(lease: NativeExecutionLease, operation: Int,
@@ -101,7 +101,7 @@ struct AdmittedNativeExecution(Movable):
         var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
         if (reserve < 0) != (release < 0) or (reserve >= 0 and session == 0):
             raise Error("native execution: reservation needs an admitted session and both operations")
-        if reserve >= len(owner[].calls) or release >= len(owner[].calls):
+        if reserve >= len(owner[].record[0].calls) or release >= len(owner[].record[0].calls):
             raise Error("native execution: reservation is outside the admitted table")
         self.provider = provider
         self.session_owner = session_owner
@@ -115,7 +115,7 @@ struct AdmittedNativeExecution(Movable):
         self.endpoint_workspace.append(NativeCallWorkspace())
         self.session_word = List[Int](length=1, fill=session)
         self.lease = List[NativeExecutionLease]()
-        self.lease.append(NativeExecutionLease(owner[].entry, Int(owner[].calls.unsafe_ptr()), len(owner[].calls),
+        self.lease.append(NativeExecutionLease(owner[].record[0].entry, Int(owner[].record[0].calls.unsafe_ptr()), len(owner[].record[0].calls),
             session, reserve, release, lock, release_gil, Int(self.call_workspace.unsafe_ptr()), Int(self.session_word.unsafe_ptr())))
 
     def endpoint(mut self) -> NativeExecutionEndpoint:

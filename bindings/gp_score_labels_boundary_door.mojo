@@ -21,7 +21,7 @@ from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type
 from bindings.arena_prog_native_door import _family_entries
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
 
@@ -172,7 +172,7 @@ def gpc_score_result(truth: PythonObject, prediction: GPDecodedScoreLabels,
     var entries = _family_entries(PythonObject(None), "x_metrics", context["family_metrics_prog_context"])
     var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"
     var result = Float64(0.0)
     var py = Python()

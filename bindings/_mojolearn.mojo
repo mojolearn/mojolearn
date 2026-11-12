@@ -201,7 +201,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.labels_native_api import LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
 from core.labels_native_device import LabelsDeviceKernels
 from core.labels_admission import labels_argmax_shape, labels_gather_shape, labels_ratio_shape
@@ -2058,7 +2058,7 @@ def build__mojolearn() -> PythonObject:
         # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
         # doors; their Python exports below remain for the Python package
         # (`_buffer._native` users) and the doors not yet converted
-        # (bindings/trees_public_gbdt_fit.mojo, trees_public_forest.mojo and the
+        # (bindings/trees_public_gbdt_fit_door.mojo, trees_public_forest.mojo and the
         # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         m.def_function[cast_elements_binding]("cast_elements")
         m.def_function[reduce_stat_binding]("reduce_stat")

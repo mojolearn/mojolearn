@@ -435,6 +435,6 @@ _native_archive_bridge.register(ElasticNet, _CD_FORMAT, _CD_SCHEMA)
 _native_archive_bridge.register(Lasso, _CD_FORMAT, _CD_SCHEMA)
 
 # fit, predict and score are one call each into the native owner
-# (bindings/x_linear_native.mojo: `cd_fit` / `cd_predict` on the solver
+# (bindings/x_linear_native_door.mojo: `cd_fit` / `cd_predict` on the solver
 # binding imported above, R^2 by the x_metrics program), connected once.
 _CD_CALL, _CD_CONTEXT = _native_x_linear_bridge.connect({"cd_selection": _SELECTION_SHUFFLE}, _mojolearn_solver)

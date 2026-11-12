@@ -16,10 +16,13 @@ from bindings.p3_labels_metrics_native_door import p3_item
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.classical_labels import (
-    _native_classification_input, _classification_labels, _encode_code,
-    _refuse_multilabel, _accuracy_context,
+from bindings.classical_labels_door import (
+    _native_classification_input,
+    _classification_labels,
+    _refuse_multilabel,
+    _accuracy_context,
 )
+from bindings.classical_labels_run import _encode_code
 from bindings.label_admission_native_unpack import LabelTypeKinds
 from bindings.label_admission_native_pack import classifier_label_list
 from bindings.label_input_sources_unpack import LABELS_LIST_INT
@@ -34,7 +37,7 @@ from core.gp_native_accuracy import GPCAccuracyProgram
 from bindings.arena_prog_native_door import _family_entries
 from bindings.arena_prog_run import _switch
 from bindings.x_prep_native_owner_door import _resident_scope
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
 
@@ -273,7 +276,7 @@ def svc_accuracy_native(truth: PythonObject, prediction: SvcDecodedScore,
     var entries = _family_entries(PythonObject(None), "x_metrics", prog_context)
     var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var program = GPCAccuracyProgram(prediction.rows, class_count,
         Int(true_codes.unsafe_ptr()), Int(pred_codes.unsafe_ptr()))
     _ = true_codes

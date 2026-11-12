@@ -14,7 +14,7 @@ from bindings.sequential_description_unpack import sequential_fields
 from bindings.sequential_description_pack import sequential_program, sequential_table
 from bindings.sequential_execution_pack import sequential_entries
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_input
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 
 
 def _exact_mapping(value: PythonObject, mapping_types: PythonObject) raises -> Bool:

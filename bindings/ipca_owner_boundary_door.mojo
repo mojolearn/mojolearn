@@ -6,7 +6,7 @@ from core.ipca_native_state import IPCAResidentState
 from bindings.py_balanced import py_call, py_setattr
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
-from bindings.native_model_records import model_generation, records_open
+from bindings.py_model_records import model_generation, records_open
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.ipca_descriptor_boundary_door import ipca_provider, ipca_run_free
 from x_decomp.ipca_descriptor_boundary_run import ipca_driver

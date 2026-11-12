@@ -29,8 +29,8 @@ from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.operation_lock_pyapi_door import OperationLockLease, operation_lock_create
-from bindings.native_model_records import bump_model_generation
-from providers.python.neural_descriptor_pyapi import (
+from bindings.py_model_records import bump_model_generation
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_reuse,
 )
 from providers.python.transformer_block_session_pyapi_door import (
@@ -53,8 +53,8 @@ from core.neural_entry_table import (
     NEURAL_MAMBA3_OWNED_INSTALL, MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_OWNED_WEIGHTS,
 )
 # Lane ne3-c-blocks-embedding (row N115): the one record table (lane
-# ne1-e-records contract, bindings/native_model_records.mojo).
-from bindings.native_model_records import (
+# ne1-e-records contract, bindings/py_model_records.mojo).
+from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_stamped_get, records_stamped_put,
 )
 
@@ -460,7 +460,7 @@ def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weig
 
 
 def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(block)
     var bi = mods.module("builtins")

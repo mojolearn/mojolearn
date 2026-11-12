@@ -35,7 +35,7 @@ from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.arena_resident_plan_unpack import ArenaResidentPlan
-from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_hold_rows_of, admitted_is_held
+from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_hold_rows_of, admitted_is_held
 from bindings.admitted_meta_scope_unpack import admitted_hold_array_f32_deferred
 from bindings.metrics_native_support_door import metric_float
 from bindings.msel_json_pack import msel_canonical

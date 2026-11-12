@@ -8,8 +8,8 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.msel_fixed_owner_unpack import fixed_owner_context, fixed_owner_fields
 from bindings.msel_fixed_owner_pack import fixed_owner_set_params
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.trees_resident_table import trees_resident_stats
-from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh
+from bindings.py_trees_resident import trees_resident_stats
+from bindings.trees_public_forest_door import forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh
 from bindings.trees_constructor_native_pack import forest_construct
 from bindings.trees_boost_constructor_native_pack import dart_construct
 from bindings.trees_public_lifecycle_native_door import forest_public_operation
@@ -17,19 +17,19 @@ from bindings.trees_public_score_door import forest_score
 from bindings.trees_public_iforest_door import iforest_operation
 from bindings.iforest_public_lifecycle_pack import iforest_public_operation
 from bindings.trees_bagging_members_native_pack import bagging_members, bagging_members_set
-from bindings.trees_public_boost import boost_operation
+from bindings.trees_public_boost_door import boost_operation
 from providers.python.tree_boost_public_lifecycle_pyapi_pack import tree_boost_public_operation
 from bindings.trees_public_auxiliary_door import embedding_apply, tree_export_state
 from bindings.trees_public_state_pack import tree_is_fitted
 from bindings.trees_gbdt_adapter_lifecycle_door import gbdt_adapter_public_operation, gbdt_model_public_operation
 from bindings.trees_gbdt_parameters_pack import gbdt_adapter_construct, gbdt_adapter_set_params
-from bindings.trees_public_meta import meta_operation
+from bindings.trees_public_meta_door import meta_operation
 from bindings.trees_public_meta_lifecycle_pack import meta_public_operation
 from bindings.trees_public_mixin_score_unpack import gbdt_adapter_score
 from bindings.trees_public_mixin_score_pack import boost_score
 from bindings.trees_explainer_native_door import trees_explainer_operation
 from bindings.trees_agnostic_native_door import trees_agnostic_operation
-from bindings.trees_public_gbdt_fit import (
+from bindings.trees_public_gbdt_fit_door import (
     gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
     adapter_regressor_fit, gbdt_ordered_construct, gbdt_feature_freq_construct,
 )

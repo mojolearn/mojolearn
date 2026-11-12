@@ -11,7 +11,7 @@ from bindings.native_owner_lifetime_door import native_release_admit, native_rel
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 from bindings.mode_metadata_native_door import _fields, _class_fields, instance_protocol_override
 from bindings.params_metadata_native_door import _read, _resolved
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
@@ -183,7 +183,7 @@ def _set(model: PythonObject, params: PythonObject, context: PythonObject) raise
     try:
         var result = _set_inner(model, params, context)
         cpython_table()[].Py_LeaveRecursiveCall()
-        # Generation word (bindings/native_model_records.mojo): nested
+        # Generation word (bindings/py_model_records.mojo): nested
         # `a__b` parameters change a member's dictionary, not this one's.
         _ = bump_model_generation(model)
         return result

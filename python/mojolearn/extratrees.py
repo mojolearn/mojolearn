@@ -105,7 +105,7 @@ _MODEL_FORMAT = "mojolearn-extratrees-1"
 # loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled tree-ensemble owner: `fit`, `predict` and `predict_proba` are
-# one native call each (bindings/trees_public_forest.mojo).
+# one native call each (bindings/trees_public_forest_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 # estimator.mojo's max_features sentinels, same values in the same words.

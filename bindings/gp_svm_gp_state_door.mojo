@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.gp_svm_records_door import gpsvm_side_get, gpsvm_side_put, gpsvm_side_drop
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     records_stampable, ContentRecord, content_fields, content_object, content_same, model_generation,
 )
 from bindings.py_balanced import py_type, py_get, py_fields

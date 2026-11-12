@@ -3,7 +3,7 @@
 # numerical implementation: this file only admits fixed private ABI words.
 from std.python import PythonObject
 from bindings.py_balanced import py_get, py_setitem
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_reuse, neural_descriptor_execute,
     neural_descriptor_info,
 )

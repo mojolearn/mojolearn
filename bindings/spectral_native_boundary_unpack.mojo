@@ -9,7 +9,7 @@ from core.spectral_native_api import (
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_pack import family_array
 from bindings.spectral_umap_routes_unpack import spectral_umap_entry
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
 )
 
@@ -39,7 +39,7 @@ struct SpectralConnection(Movable):
         var factory = spectral_umap_entry(binding, "spectral_native_api_v1", context)
         var provider = neural_descriptor_connect_factory_once(factory,
             String(SPECTRAL_NATIVE_ABI), SPECTRAL_NATIVE_COUNT)
-        self.driver = SpectralDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = SpectralDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         self.capabilities = self.driver.metadata(SPECTRAL_CAPABILITIES)
         self.provider = provider
 

@@ -14,7 +14,7 @@ from core.neural_entry_table import (
 from providers.python.mamba3_prefill_session_pyapi_door import (
     mamba3_prefill_caps, mamba3_prefill_session_ensure, mamba3_prefill_session_run,
 )
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_execute, neural_descriptor_construct, neural_descriptor_handle,
     neural_descriptor_reserved_execute,
 )

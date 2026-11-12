@@ -6,7 +6,9 @@ arbitrary Python callbacks are refused before state mutation.
 """
 from providers.python.samba_execution_pyapi_door import samba_provider_accumulated_gradients
 from providers.python.samba_resident_pyapi_door import samba_resident_provider, samba_resident_native_step
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_execute_id, neural_descriptor_provider_id,
+)
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -278,6 +280,11 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
         if resident is not None:
             return resident
     var provider = samba_resident_provider(fields, entries)
+    # The provider id, unpacked once for the per-parameter calls below; the
+    # provider stays pinned by its use after them.
+    var provider_id = 0
+    if provider is not None:
+        provider_id = neural_descriptor_provider_id(provider)
     var stream = generator_next(fields["generator"]) if Float64(py=config["dropout"]) > 0.0 else PythonObject(None)
     var completed = samba_provider_accumulated_gradients(fields, config, entries, provider, ids, y, stream, a, count, context["neural"])
     var gradient = PythonObject(None)
@@ -326,7 +333,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
         if a > 1:
             gradient = generation_array([n])
             if provider is not None:
-                _ = neural_descriptor_execute(provider, 9, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
+                _ = neural_descriptor_execute_id(provider_id, 9, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
             else:
                 # Primitive op 9 (the former `accumulate` entry), resolved for the admitted key.
                 _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"])),
@@ -335,7 +342,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
             _ = stacked  # keep the Python object alive through the native call above
             var total = generation_array([1])
             if provider is not None:
-                _ = neural_descriptor_execute(provider, 9, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
+                _ = neural_descriptor_execute_id(provider_id, 9, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
             else:
                 _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"])),
                     SAMBA_PRIM_ACCUMULATE, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])

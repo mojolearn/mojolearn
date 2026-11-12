@@ -29,10 +29,10 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
-from bindings.native_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_PREPARED
+from bindings.py_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_PREPARED
 
 
-# The registry itself lives in bindings/native_model_records.mojo (lane
+# The registry itself lives in bindings/py_model_records.mojo (lane
 # ne1-e-records, 2026-11-06): one weak entry per object for every family, the
 # prepared records in its RECORDS_PREPARED payloads. The weakref callback,
 # token and recycled-address check moved there unchanged.

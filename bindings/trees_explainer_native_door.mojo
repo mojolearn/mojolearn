@@ -13,8 +13,8 @@ from bindings.classical_attributes_door import classical_check_layout
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
 from bindings.trees_public_state_unpack import _release_tree_values
-from bindings.trees_public_inputs import trees_table, trees_call, trees_cast, trees_full_f32, trees_address, trees_reshape
-from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype, classical_view
+from bindings.trees_public_inputs_door import trees_table, trees_call, trees_cast, trees_full_f32, trees_address, trees_reshape
+from bindings.admitted_input_unpack import admitted_array, admitted_vector, admit_c_view, admitted_dtype, classical_view
 from bindings.classical_arrays_door import classical_address, classical_c_order
 # TOMBSTONE: trees_view / trees_check_rank / trees_empty / trees_vector uses (the trees admission aliases; the serial strided element copy of _snapshot) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -24,7 +24,7 @@ def _check_rank(view: PythonObject, rank: Int, name: String) raises:
     if Int(py=view.ndim) != rank:
         raise Error("mojolearn: " + name + " must be " + String(rank) + "-D, got " + String(Int(py=view.ndim)) + "-D")
 from providers.python.array_metadata_pyapi_door import array_owner_once
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 
 comptime _I32 = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]

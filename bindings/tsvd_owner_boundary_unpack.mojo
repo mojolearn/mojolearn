@@ -5,7 +5,7 @@ from std.python._cpython import GILReleased
 from core.tsvd_owner_state import TSVDLeaseState
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
-from bindings.native_model_records import model_generation
+from bindings.py_model_records import model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.tsvd_descriptor_boundary_door import tsvd_provider
 from x_decomp.tsvd_descriptor_boundary_run import tsvd_driver

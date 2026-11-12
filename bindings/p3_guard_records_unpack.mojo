@@ -18,10 +18,10 @@ payload is a plain int and never retains the class.
 from std.python import PythonObject
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_class_admission_door import _class_arm, _class_epoch, class_watch_ready
-from bindings.native_model_records import records_live, records_open, records_slot_guard
+from bindings.py_model_records import records_live, records_open, records_slot_guard
 
 # Storage (lane ne1-e-records, 2026-11-06): the rows live in the GUARD slot
-# of the class's entry in bindings/native_model_records.mojo (released if the
+# of the class's entry in bindings/py_model_records.mojo (released if the
 # class dies), with the class epoch at admission; validity is unchanged.
 
 

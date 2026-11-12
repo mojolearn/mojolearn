@@ -6,7 +6,7 @@ Each gbdt image (`_mojolearn_gbdt`, `_mojolearn_gbdt_host`) publishes one
 entry (`gbdt_gpu_entry_v1` / `gbdt_host_entry_v1` in its binding file) under its tier/vendor key: the
 fit, its outcome transfer, the row-major capability, the compiled tier and
 the model dimension (ABI in `gbdt/fit_request.mojo`). The GBDT doors
-(`bindings/trees_public_gbdt_fit.mojo`) read the slot of the image the
+(`bindings/trees_public_gbdt_fit_door.mojo`) read the slot of the image the
 trees owner connected for the estimator's tier (the bridge records the key
 as `gbdt_native_key`) and call the pointer with plain spans. Modeled on
 `core/trees_entry_table.mojo`; separate slot names.

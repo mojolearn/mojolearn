@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The native per-model records (bindings/native_model_records.mojo).
+"""The native per-model records (bindings/py_model_records.mojo).
 
 A recorded model (one whose public call already stored its admission records
 and generation stamps) must behave exactly like a twin that has no record (a

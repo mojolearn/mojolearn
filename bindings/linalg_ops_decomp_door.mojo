@@ -20,13 +20,13 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.estimator_binding_pyapi_door import estimator_binding
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_unpack import family_repr
 from bindings.family_common_pack import family_call
 from bindings.linalg_ops_buffers_unpack import lin_truth
-from bindings.admitted_input import AdmittedBuf, admitted_zeros
+from bindings.admitted_input_unpack import AdmittedBuf, admitted_zeros
 from bindings.linalg_ops_lowbit_door import lin_operand, lin_state, lin_ints, lin_connected_binding
 from providers.python.linalg_result_pyapi_door import linalg_result_new
 from bindings.kit_call_unpack import kit_capabilities, kit_entry_ref

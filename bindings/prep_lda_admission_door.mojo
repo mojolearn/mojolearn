@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.classical_labels import _flatten_labels, labels_shape_of
+from bindings.classical_labels_door import _flatten_labels, labels_shape_of
 from bindings.classical_exceptions_door import classical_not_fitted_class
 from providers.python.linear_metadata_boundary_door import classical_is_fitted
 from bindings.optimizer_public_words_unpack import stash_python_error
@@ -18,7 +18,7 @@ from bindings.label_input_sources_unpack import labels_storage_source, labels_li
 from bindings.native_typed_context_pack import native_typed_context
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_key_add, prepared_key_same
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, records_key_same_exact, ContentRecord,
     content_value, RECORDS_PREPARED,
 )
@@ -26,7 +26,7 @@ from bindings.py_balanced import py_fields
 from bindings.native_class_admission_door import class_record, class_admit, class_watch_ready
 from bindings.label_admission_native_unpack import _labels_class as native_labels_class
 from bindings.py_attr import py_attr
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -254,7 +254,7 @@ def lda_native_get_params(fields: PythonObject, context: PythonObject) raises ->
 
 def lda_native_set_params(model: PythonObject, fields: PythonObject, values: PythonObject,
                           context: PythonObject) raises -> PythonObject:
-    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(model)
     if py_type(values) is not py_type(Python.dict()):

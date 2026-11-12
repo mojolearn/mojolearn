@@ -7,7 +7,7 @@ from bindings.classical_attributes_door import classical_connect_numpy, classica
 from bindings.classical_metadata import classical_initialize, classical_set_params
 from bindings.classical_ridge import classical_ridge_fit
 from bindings.classical_ols import classical_ols_fit
-from bindings.logistic_native import logistic_c
+from bindings.logistic_native_door import logistic_c
 
 @export
 def classical_lifetime_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

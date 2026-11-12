@@ -20,7 +20,7 @@ from bindings.params_setter_native_door import _set as _linear_set, _constructor
 from bindings.declared_params_native_door import _assign as _declared_set, _release as _declared_release
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 from bindings.py_optional import py_present
 
 
@@ -180,7 +180,7 @@ def _merge(model: PythonObject, params: PythonObject, values: PythonObject,
 
 
 def _reset(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
-    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")

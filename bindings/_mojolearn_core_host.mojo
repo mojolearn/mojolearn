@@ -179,7 +179,7 @@ from core.dense_coo import (
 from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
 # unique_inverse / prepare_targets (the host column) live in
 # bindings/labels_host_ops.mojo (lane s1), the one host copy, so the label path
-# (bindings/classical_labels.mojo) runs the same host body in-process on a
+# (bindings/classical_labels_door.mojo) runs the same host body in-process on a
 # CPU-only install instead of calling back into this module through Python.
 from bindings.labels_host_ops_unpack import unique_inverse_binding, prepare_targets_binding
 from core.labels_native_host_provider import LabelsHostNativeAPI
@@ -214,7 +214,7 @@ from core.shared_slot import SharedSlot
 # wave 8 run split: the int-type slot, the host KMeans table and the host
 # KMeans fit body live in core/mojolearn_core_host_run.mojo.
 from core.mojolearn_core_host_run import _CORE_HOST_INT_TYPE, KMEANS_NATIVE_TABLE, kmeans_fit_host_run
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 #: Reported by `core_host_sabotage()`. The helpers move bytes and fold
@@ -1194,7 +1194,7 @@ def build__mojolearn_core_host() -> PythonObject:
         # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
         # doors; their Python exports below remain for the Python package
         # (`_buffer._native` users) and the doors not yet converted
-        # (bindings/trees_public_gbdt_fit.mojo, trees_public_forest.mojo and the
+        # (bindings/trees_public_gbdt_fit_door.mojo, trees_public_forest.mojo and the
         # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         module.def_function[cast_elements_binding]("cast_elements")
         module.def_function[reduce_stat_binding]("reduce_stat")

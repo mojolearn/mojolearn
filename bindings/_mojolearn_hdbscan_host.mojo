@@ -33,7 +33,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hdbscan.native_query_host import HDBSCAN_QUERY_HOST_API
 from hdbscan.native_fit_host import HDBSCAN_FIT_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (

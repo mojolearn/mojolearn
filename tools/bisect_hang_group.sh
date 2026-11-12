@@ -91,7 +91,7 @@ bindings/classical_pandas_door.mojo
 bindings/family_native_door.mojo
 bindings/gp_classifier_native_door.mojo
 bindings/host_inference_native_unpack.mojo
-bindings/logistic_native.mojo
+bindings/logistic_native_door.mojo
 bindings/mcd_native_door.mojo
 bindings/mcls_cluster_door.mojo
 bindings/mcls_common_unpack.mojo
@@ -101,11 +101,11 @@ bindings/neighbors_semi_native_door.mojo
 bindings/pca_fit_native_door.mojo
 bindings/prep_classify_native_door.mojo
 bindings/prep_composition_lifecycle_door.mojo
-bindings/prep_labels_native.mojo
+bindings/prep_labels_native_door.mojo
 bindings/prep_lda_admission_door.mojo
 bindings/prep_stateless_native_door.mojo
 bindings/trees_bagging_members_native_pack.mojo
-bindings/trees_public_meta.mojo
+bindings/trees_public_meta_door.mojo
 bindings/trees_public_native_door.mojo
 providers/python/estimator_lifecycle_pyapi_unpack.mojo
 providers/python/pca_input_pyapi_unpack.mojo"

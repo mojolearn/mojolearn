@@ -758,7 +758,7 @@ from core.kpca_native_api import KPCAProviderAPI
 from core.ocsvm_resident_api import OcResidentAPI
 from core.kpca_native_info import KPCANeighborInfo
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

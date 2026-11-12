@@ -17,12 +17,12 @@ from bindings.neural_block_admission_door import neural_record_fields, neural_bl
 from bindings.transformer_public_native_door import _transformer_fields, _transformer_state_words, _transformer_configuration, _transformer_same_words
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.generation_metadata_pyapi_door import GenerationLayerSnapshot
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
 from bindings.py_cpython_table import cpython_table
-from bindings.native_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
+from bindings.py_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
 from core.shared_slot import SharedSlot
 
 

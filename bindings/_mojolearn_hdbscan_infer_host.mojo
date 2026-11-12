@@ -22,7 +22,7 @@ from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from hdbscan.native_query_host import HDBSCAN_QUERY_INFER_HOST_API
 
 from bindings.hdbscan_host_predict_pack import (

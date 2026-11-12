@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
 from sequence.model_device_dispatch import NATIVE_MODEL_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from providers.python.autograd_python_errors_pyapi_unpack import graph_python_error
 from providers.python.autograd_session_public_request_pyapi_unpack import ops_session_public_connect_py
 from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py

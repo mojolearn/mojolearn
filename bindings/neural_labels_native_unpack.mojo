@@ -19,10 +19,11 @@ from bindings.str_labels_native_door import _read, str_unique_into
 from bindings.str_labels_native_run import StrTable
 from bindings.native_buffer_address_unpack import native_buffer_address
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
-from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_LABELS
 from core.cast_in import cast_in_kind
-from bindings.admitted_input import AdmittedTypedPin, admit_view, admitted_view_kind
+from bindings.admitted_input_unpack import AdmittedTypedPin, admit_view
+from bindings.admitted_input_run import admitted_view_kind
 from bindings.tensor_view import TensorView
 from bindings.tensor_view import base_format
 

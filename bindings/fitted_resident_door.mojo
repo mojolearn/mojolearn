@@ -18,7 +18,7 @@ carry it and the model's death drops it. The record holds:
 - `owner` is the binding's native lease object; dropping the record drops
   it, and that frees the device copies (no Python code runs).
 - `generation` is the model's generation word
-  (bindings/native_model_records.mojo `model_generation`): `fit`,
+  (bindings/py_model_records.mojo `model_generation`): `fit`,
   `set_params`, `__setstate__` and the family's setters bump it, so a record
   of an older state is never reused.
 - `mirrors` are the fitted array OBJECTS the copies mirror. The record keeps
@@ -36,10 +36,10 @@ Nothing here computes on data.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
-from bindings.native_model_records import model_generation
+from bindings.py_model_records import model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.py_balanced import py_call, py_type
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 
 
 def _owns_store(value: PythonObject) raises -> Bool:

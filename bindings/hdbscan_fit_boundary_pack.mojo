@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.memory import unsafe_memcpy
 from core.hdbscan_fit_api import HDBSCAN_FIT_ABI, HDBSCAN_FIT_COUNT, HDBSCAN_FIT_HOST, HdbscanFitDriver
 from core.kmeans_variants_api import VariantsSpan
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 from bindings.family_common_unpack import FAMILY_I32P

@@ -21,10 +21,11 @@ from bindings.str_labels_native_door import _read, str_unique_into
 from bindings.str_labels_native_run import StrTable
 from bindings.native_buffer_address_unpack import native_buffer_address
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
-from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_LABELS
 from core.cast_in import cast_in_kind
-from bindings.admitted_input import AdmittedTypedPin, admit_view, admitted_view_kind
+from bindings.admitted_input_unpack import AdmittedTypedPin, admit_view
+from bindings.admitted_input_run import admitted_view_kind
 from bindings.tensor_view import TensorView
 from bindings.tensor_view import base_format
 
@@ -32,7 +33,7 @@ from bindings.tensor_view import base_format
 
 
 # TOMBSTONE: _numeric's own capture (sequential_input + AdmittedBorrowedBuffer of the materialized array; superseded by
-# the one admission, bindings/admitted_input.mojo admit_view) deleted 2026-11-09 by lane/m1-followups-misc; code
+# the one admission, bindings/admitted_input_unpack.mojo admit_view) deleted 2026-11-09 by lane/m1-followups-misc; code
 # recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/NEURAL_LABELS_OWN_ADMISSION.patch
 def _numeric(v: TensorView, var captured: AdmittedTypedPin, entries: PythonObject, context: PythonObject) raises -> PythonObject:

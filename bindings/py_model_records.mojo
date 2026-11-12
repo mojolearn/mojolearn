@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""One native record table per object: model identity, generation word, family slots.
+"""One native record table per object: model identity, generation word, family slots (door side).
 
 Every per-model record of the native doors lives here (plan
 docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md, workstream E; lessons 8 and 9):
@@ -36,18 +36,16 @@ Accessor list (the ne1 contract; other lanes code against exactly these):
   Native content records (what a generation alone does not prove)
     ContentRecord, content_value, content_fields, content_object, content_same
     records_key_append(key, value) raises          PyList_Append, no bound method
-  Family slots (native words; valid until the next records_open of ANY object
-  or records_release of this one: read or write them at once, never keep the
-  pointer across a call that can run Python code)
-    records_slot_prepared(model_key) raises -> UnsafePointer[PreparedSlot, MutAnyOrigin]
-    records_slot_trees(model_key) raises -> UnsafePointer[TreesSlot, MutAnyOrigin]
-    records_slot_cluster(model_key) raises -> UnsafePointer[ClusterSlot, MutAnyOrigin]
-    records_slot_gp_svm(model_key) raises -> UnsafePointer[GpSvmSlot, MutAnyOrigin]
+  Family slots (typed words in bindings/native_model_records_run.mojo, re-exported;
+  valid until the next records_open of ANY object or the release of this one:
+  read or write them at once, never keep the pointer across a call that can
+  run Python code)
     records_slot_msel_plan(model_key) raises -> UnsafePointer[MselPlanSlot, MutAnyOrigin]
     records_slot_array_arena(model_key) raises -> UnsafePointer[ArrayArenaSlot, MutAnyOrigin]
     records_slot_guard(model_key) raises -> UnsafePointer[GuardSlot, MutAnyOrigin]
-    records_slot_resident(model_key) raises -> UnsafePointer[ResidentSlot, MutAnyOrigin]
     (each raises when `model_key` has no entry: call records_open first)
+    records_pin_msel_plan(model_key, plan) / records_pin_arena_extra(model_key, extra)
+                                                   pin the object a slot's id() word names
   Family codes: RECORDS_PREPARED, RECORDS_TREES, RECORDS_CLUSTER, RECORDS_GP_SVM.
 
 Dead-key ring (2026-11-07, replaces the 2026-11-06 release hooks): a family
@@ -92,6 +90,14 @@ never holds its own object. A recycled address cannot match a dead entry:
 every access confirms the weak referent is the object itself.
 
 Nothing here computes on data or changes an arithmetic or fold order.
+
+Split (lane resident-pin-tables, 2026-11-12): the typed table (tokens, class
+and dictionary words, generation words, typed family slots) is RUN in
+bindings/native_model_records_run.mojo; this module is the door-side pin
+store keyed by the same model key (the weak reference, the named payload
+records, the msel plan and the arena `extra` objects) plus the UNPACK reads
+of Python facts (weak referents, classes, instance dictionaries). An entry
+is opened and released in both places together, under the GIL.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -110,13 +116,28 @@ from core.records_death_ring import (
     records_dead_keys_since,
 )
 from core.shared_slot import SharedSlot
-
-
-# Family codes of the named payload records.
-comptime RECORDS_PREPARED = 0
-comptime RECORDS_TREES = 1
-comptime RECORDS_CLUSTER = 2
-comptime RECORDS_GP_SVM = 3
+from bindings.native_model_records_run import (
+    RECORDS_PREPARED,
+    RECORDS_TREES,
+    RECORDS_CLUSTER,
+    RECORDS_GP_SVM,
+    MselPlanSlot,
+    ArrayArenaSlot,
+    GuardSlot,
+    records_run_has,
+    records_run_new_token,
+    records_run_insert,
+    records_run_remove,
+    records_run_token_key,
+    records_run_watched,
+    records_run_dict_address,
+    records_run_sync,
+    records_run_generation,
+    records_run_bump,
+    records_slot_msel_plan,
+    records_slot_array_arena,
+    records_slot_guard,
+)
 
 
 # ------------------------------------------------------------------ records
@@ -145,169 +166,62 @@ struct RecordPayloads(Defaultable, Movable):
         self.stamped = Dict[String, StampedRecord]()
 
 
-struct PreparedSlot(Defaultable, Movable):
-    """The prepared-owner records (bindings/native_prepared_owner.mojo) and
-    the per-class records of bindings/native_class_admission.mojo."""
-    var payloads: RecordPayloads
-
-    def __init__(out self):
-        self.payloads = RecordPayloads()
-
-
-struct TreesSlot(Defaultable, Movable):
-    """Tree family records (bindings/trees_side_records.mojo users)."""
-    var payloads: RecordPayloads
-
-    def __init__(out self):
-        self.payloads = RecordPayloads()
-
-
-struct ClusterSlot(Defaultable, Movable):
-    """Cluster family records (bindings/cluster_side_records.mojo users)."""
-    var payloads: RecordPayloads
-
-    def __init__(out self):
-        self.payloads = RecordPayloads()
-
-
-struct GpSvmSlot(Defaultable, Movable):
-    """GP, SVM and kernel-method records (bindings/gp_svm_records.mojo users)."""
-    var payloads: RecordPayloads
-
-    def __init__(out self):
-        self.payloads = RecordPayloads()
-
-
-struct MselPlanSlot(Defaultable, Movable):
-    """`msel_estimator_plan` instance admission (bindings/msel_plan_records.mojo):
-    the admitted dictionary's address and watch epoch, and the plan it was
-    admitted for (held, so its address cannot be recycled)."""
-    var admitted: Bool
-    var fields_address: Int
-    var fields_epoch: Int
-    var plan: PythonObject
-
-    def __init__(out self):
-        self.admitted = False
-        self.fields_address = 0
-        self.fields_epoch = 0
-        self.plan = PythonObject(None)
-
-
-struct ArrayArenaSlot(Defaultable, Movable):
-    """Class layout admissions of the Array / arena owners, kept on the
-    CLASS's entry (bindings/p3_array_arena_records.mojo): triples (kind,
-    index into `extras`, class epoch at admission). The `extra` context
-    objects are held so their addresses cannot be recycled."""
-    var words: List[Int]
-    var extras: List[PythonObject]
-
-    def __init__(out self):
-        self.words = List[Int]()
-        self.extras = List[PythonObject]()
-
-
-struct GuardSlot(Defaultable, Movable):
-    """Layout-guard row admissions, kept on the CLASS's entry
-    (bindings/p3_guard_records.mojo): per `family + index` name the admitted
-    row's address and the class epoch at admission."""
-    var rows: Dict[String, Int]
-    var epochs: Dict[String, Int]
-
-    def __init__(out self):
-        self.rows = Dict[String, Int]()
-        self.epochs = Dict[String, Int]()
-
-
-struct ResidentSlot(Defaultable, Movable):
-    """Device-resident fitted state (workstream A lanes). `generation` is the
-    owner's generation when the handles were taken; `handles` are the
-    family's native handle words, `bytes` their device size. A lane that
-    needs more fields adds them here (bump MODEL_RECORDS' name)."""
-    var generation: Int
-    var handles: List[Int]
-    var bytes: Int
-
-    def __init__(out self):
-        self.generation = 0
-        self.handles = List[Int]()
-        self.bytes = 0
-
-
-struct ModelEntry(Movable):
+struct ModelPins(Movable):
+    """The Python pins of one entry: its weak reference, the named payload
+    records of each family, the msel plan and the arena `extra` objects whose
+    id() words the typed slots hold."""
     var weak: PythonObject
-    var token: Int
-    var type_address: Int
-    var dict_address: Int
-    var dict_epoch: Int
-    var watched: Bool
-    var generation: Int
-    var prepared: PreparedSlot
-    var trees: TreesSlot
-    var cluster: ClusterSlot
-    var gp_svm: GpSvmSlot
-    var msel_plan: MselPlanSlot
-    var array_arena: ArrayArenaSlot
-    var guard: GuardSlot
-    var resident: ResidentSlot
+    var prepared: RecordPayloads
+    var trees: RecordPayloads
+    var cluster: RecordPayloads
+    var gp_svm: RecordPayloads
+    var msel_plan: PythonObject
+    var arena_extras: List[PythonObject]
 
-    def __init__(out self, weak: PythonObject, token: Int, type_address: Int, dict_address: Int,
-                 dict_epoch: Int, watched: Bool):
+    def __init__(out self, weak: PythonObject):
         self.weak = weak
-        self.token = token
-        self.type_address = type_address
-        self.dict_address = dict_address
-        self.dict_epoch = dict_epoch
-        self.watched = watched
-        self.generation = 1
-        self.prepared = PreparedSlot()
-        self.trees = TreesSlot()
-        self.cluster = ClusterSlot()
-        self.gp_svm = GpSvmSlot()
-        self.msel_plan = MselPlanSlot()
-        self.array_arena = ArrayArenaSlot()
-        self.guard = GuardSlot()
-        self.resident = ResidentSlot()
+        self.prepared = RecordPayloads()
+        self.trees = RecordPayloads()
+        self.cluster = RecordPayloads()
+        self.gp_svm = RecordPayloads()
+        self.msel_plan = PythonObject(None)
+        self.arena_extras = List[PythonObject]()
 
 
-struct ModelRecords(Defaultable, Movable):
-    var entries: Dict[Int, ModelEntry]
-    var owners: Dict[Int, Int]      # token -> object address
-    var next_token: Int
+struct ModelRecordPins(Defaultable, Movable):
+    var pins: Dict[Int, ModelPins]
     var cleanup_module: PythonObject
     var cleanup_function: PythonObject
 
     def __init__(out self):
-        self.entries = Dict[Int, ModelEntry]()
-        self.owners = Dict[Int, Int]()
-        self.next_token = 1
+        self.pins = Dict[Int, ModelPins]()
         self.cleanup_module = PythonObject(None)
         self.cleanup_function = PythonObject(None)
 
 
 # Shared by every Mojo extension in the process: bump the name's version
 # whenever a field is added, removed or reordered in any struct above.
-comptime MODEL_RECORDS = SharedSlot[ModelRecords, "MojolearnModelRecordsV2"]
+comptime MODEL_RECORD_PINS = SharedSlot[ModelRecordPins, "MojolearnModelRecordPinsV1", 1]
 
 
 # ------------------------------------------------------------------ lifetime
 
 
 def records_release(model_key: Int):
-    """Drop the entry of `model_key` and every family slot it holds, then
+    """Drop the entry of `model_key` (its words and every pin it holds), then
     post the key on the dead-key ring (records_dead_keys_since)."""
     try:
-        var g = MODEL_RECORDS.get_or_create_ptr()
-        if model_key not in g[].entries:
+        var had = records_run_remove(model_key)
+        var g = MODEL_RECORD_PINS.get_or_create_ptr()
+        if model_key in g[].pins:
+            # Move the pins OUT before any Python reference is released: its
+            # payloads may free buffers or fire another object's weakref
+            # callback, and that reentrant release must see updated maps and
+            # no live Dict borrow.
+            var released = g[].pins.pop(model_key)
+            _ = released^
+        elif not had:
             return
-        # Move the entry OUT before any Python reference is released: its
-        # payloads may free buffers or fire another object's weakref
-        # callback, and that reentrant release must see updated maps and no
-        # live Dict borrow.
-        var released = g[].entries.pop(model_key)
-        if released.token in g[].owners:
-            _ = g[].owners.pop(released.token)
-        _ = released^
     except:
         return
     # The families' resident stores keyed by this model poll the ring at
@@ -316,15 +230,10 @@ def records_release(model_key: Int):
 
 
 def _records_release_token(token: Int) raises:
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    if token not in g[].owners:
-        return
-    var address = g[].owners[token]
-    if address in g[].entries and g[].entries[address].token == token:
-        records_release(address)
-    elif token in g[].owners:
-        # A stale callback never erases a replacement entry (new token).
-        _ = g[].owners.pop(token)
+    var key = records_run_token_key(token)
+    if key != 0:
+        records_release(key)
+
 
 
 def _records_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -347,7 +256,7 @@ def _records_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
 
 
 def _records_cleanup_function() raises -> PythonObject:
-    var g = MODEL_RECORDS.get_or_create_ptr()
+    var g = MODEL_RECORD_PINS.get_or_create_ptr()
     if g[].cleanup_function is None:
         # The standard builder owns the method definition and creates the
         # native C callable; the finalized module stays alive in this global
@@ -370,15 +279,17 @@ def model_identity_key(model: PythonObject) raises -> Int:
     """The record key of `model`: its object address."""
     return Int(model._obj_ptr)
 
-
 def records_live(model: PythonObject) raises -> Bool:
     """True when `model` has a live entry. A dead entry left at a recycled
     address (a callback that could not run) is released here."""
-    var g = MODEL_RECORDS.get_or_create_ptr()
     var key = Int(model._obj_ptr)
-    if key not in g[].entries:
+    if not records_run_has(key):
         return False
-    var weak = g[].entries[key].weak
+    var g = MODEL_RECORD_PINS.get_or_create_ptr()
+    if key not in g[].pins:
+        records_release(key)
+        return False
+    var weak = g[].pins[key].weak
     ref cpy = Python().cpython()
     # The weak reference is an exact weakref.ref made by PyWeakref_NewRef:
     # calling it with no arguments is CPython's own C referent read (a new
@@ -401,11 +312,7 @@ def records_open(model: PythonObject) raises -> Int:
         return Int(model._obj_ptr)
     ref cpy = Python().cpython()
     var function = _records_cleanup_function()
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    if g[].next_token == 9223372036854775807:
-        raise Error("model record table exhausted native tokens")
-    var token = g[].next_token
-    g[].next_token += 1
+    var token = records_run_new_token()
     var token_object = PythonObject(token)
     # Documented public APIs: PyMethod_New binds an object without running
     # it; PyWeakref_NewRef runs the native callback promptly on owner death.
@@ -434,41 +341,27 @@ def records_open(model: PythonObject) raises -> Int:
         # holds records but its generation proves nothing (word 0).
         watched = False
     var key = Int(model._obj_ptr)
-    g = MODEL_RECORDS.get_or_create_ptr()
-    g[].entries[key] = ModelEntry(weak, token, type_address, dict_address, dict_epoch, watched)
-    g[].owners[token] = key
+    records_run_insert(key, token, type_address, dict_address, dict_epoch, watched)
+    var g = MODEL_RECORD_PINS.get_or_create_ptr()
+    g[].pins[key] = ModelPins(weak)
     return key
+
 
 
 def _records_sync(model: PythonObject, key: Int) raises:
     """Fold dictionary, dictionary-address and class changes since the last
-    read into the generation word. Python facts are read before the entry is
-    borrowed (no Dict borrow is live while CPython runs)."""
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    if not g[].entries[key].watched:
+    read into the generation word. The Python facts are read here (UNPACK);
+    the typed table folds them (records_run_sync)."""
+    if not records_run_watched(key):
         return
     var type_address = Int(py_type(model)._obj_ptr)
     var fields = py_fields(model)
     var current = Int(fields._obj_ptr)
     var rewatch = False
-    if current != g[].entries[key].dict_address:
+    if current != records_run_dict_address(key):
         rewatch = _is_exact_dict(fields) and shared_dict_watch(fields._obj_ptr)
     var epoch = shared_dict_epoch(current)
-    g = MODEL_RECORDS.get_or_create_ptr()
-    ref e = g[].entries[key]
-    if current != e.dict_address:
-        e.generation += 1
-        if rewatch:
-            e.dict_address = current
-            e.dict_epoch = epoch
-        else:
-            e.watched = False
-    elif epoch != e.dict_epoch:
-        e.generation += 1
-        e.dict_epoch = epoch
-    if type_address != e.type_address:
-        e.generation += 1
-        e.type_address = type_address
+    records_run_sync(key, type_address, current, rewatch, epoch)
 
 
 def model_generation(model: PythonObject) raises -> Int:
@@ -480,10 +373,7 @@ def model_generation(model: PythonObject) raises -> Int:
         return 0
     var key = Int(model._obj_ptr)
     _records_sync(model, key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    if not g[].entries[key].watched:
-        return 0
-    return g[].entries[key].generation
+    return records_run_generation(key)
 
 
 def bump_model_generation(model: PythonObject) raises -> Int:
@@ -493,11 +383,7 @@ def bump_model_generation(model: PythonObject) raises -> Int:
     if key == 0:
         return 0
     _records_sync(model, key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    g[].entries[key].generation += 1
-    if not g[].entries[key].watched:
-        return 0
-    return g[].entries[key].generation
+    return records_run_bump(key)
 
 
 def records_stampable(owner: PythonObject) raises -> Bool:
@@ -509,73 +395,42 @@ def records_stampable(owner: PythonObject) raises -> Bool:
     return model_generation(owner) != 0
 
 
-# ------------------------------------------------------------------ slots
+
+# ------------------------------------------------------------------ slot pins
 
 
-def _need(model_key: Int) raises:
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    if model_key not in g[].entries:
-        raise Error("model record slot requested for an object without an entry (call records_open)")
+def records_pin_msel_plan(model_key: Int, plan: PythonObject) raises:
+    """Pin `plan`, whose id() word the entry's MselPlanSlot now holds. The
+    replaced plan is released only after the map holds the new one."""
+    var g = MODEL_RECORD_PINS.get_or_create_ptr()
+    if model_key not in g[].pins:
+        raise Error("model record pin requested for an object without an entry (call records_open)")
+    var previous = g[].pins[model_key].msel_plan
+    g[].pins[model_key].msel_plan = plan
+    _ = previous^
 
 
-def records_slot_prepared(model_key: Int) raises -> UnsafePointer[PreparedSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].prepared).unsafe_origin_cast[MutAnyOrigin]()
-
-
-def records_slot_trees(model_key: Int) raises -> UnsafePointer[TreesSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].trees).unsafe_origin_cast[MutAnyOrigin]()
-
-
-def records_slot_cluster(model_key: Int) raises -> UnsafePointer[ClusterSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].cluster).unsafe_origin_cast[MutAnyOrigin]()
-
-
-def records_slot_gp_svm(model_key: Int) raises -> UnsafePointer[GpSvmSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].gp_svm).unsafe_origin_cast[MutAnyOrigin]()
-
-
-def records_slot_msel_plan(model_key: Int) raises -> UnsafePointer[MselPlanSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].msel_plan).unsafe_origin_cast[MutAnyOrigin]()
-
-
-def records_slot_array_arena(model_key: Int) raises -> UnsafePointer[ArrayArenaSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].array_arena).unsafe_origin_cast[MutAnyOrigin]()
-
-
-def records_slot_guard(model_key: Int) raises -> UnsafePointer[GuardSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].guard).unsafe_origin_cast[MutAnyOrigin]()
-
-
-def records_slot_resident(model_key: Int) raises -> UnsafePointer[ResidentSlot, MutAnyOrigin]:
-    _need(model_key)
-    var g = MODEL_RECORDS.get_or_create_ptr()
-    return UnsafePointer(to=g[].entries[model_key].resident).unsafe_origin_cast[MutAnyOrigin]()
+def records_pin_arena_extra(model_key: Int, extra: PythonObject) raises:
+    """Pin `extra`, whose id() word was just appended to the entry's
+    ArrayArenaSlot `extras`."""
+    var g = MODEL_RECORD_PINS.get_or_create_ptr()
+    if model_key not in g[].pins:
+        raise Error("model record pin requested for an object without an entry (call records_open)")
+    g[].pins[model_key].arena_extras.append(extra)
 
 
 def _payloads(model_key: Int, family: Int) raises -> UnsafePointer[RecordPayloads, MutAnyOrigin]:
-    var g = MODEL_RECORDS.get_or_create_ptr()
+    var g = MODEL_RECORD_PINS.get_or_create_ptr()
+    if model_key not in g[].pins:
+        raise Error("model record payloads requested for an object without an entry (call records_open)")
     if family == RECORDS_PREPARED:
-        return UnsafePointer(to=g[].entries[model_key].prepared.payloads).unsafe_origin_cast[MutAnyOrigin]()
+        return UnsafePointer(to=g[].pins[model_key].prepared).unsafe_origin_cast[MutAnyOrigin]()
     if family == RECORDS_TREES:
-        return UnsafePointer(to=g[].entries[model_key].trees.payloads).unsafe_origin_cast[MutAnyOrigin]()
+        return UnsafePointer(to=g[].pins[model_key].trees).unsafe_origin_cast[MutAnyOrigin]()
     if family == RECORDS_CLUSTER:
-        return UnsafePointer(to=g[].entries[model_key].cluster.payloads).unsafe_origin_cast[MutAnyOrigin]()
+        return UnsafePointer(to=g[].pins[model_key].cluster).unsafe_origin_cast[MutAnyOrigin]()
     if family == RECORDS_GP_SVM:
-        return UnsafePointer(to=g[].entries[model_key].gp_svm.payloads).unsafe_origin_cast[MutAnyOrigin]()
+        return UnsafePointer(to=g[].pins[model_key].gp_svm).unsafe_origin_cast[MutAnyOrigin]()
     raise Error("unknown model record family")
 
 

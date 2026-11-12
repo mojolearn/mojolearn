@@ -100,7 +100,7 @@ def tree_shap_binding(forest: PythonObject, tscale: PythonObject, cover: PythonO
 # ---- DART, host twin: no Python entries since lane calltable-gbdt-forest-dart
 # (2026-11-11). The round (under DART_HOST) and the predict run through this
 # image's native DART entry (xtrees/dart_runs_host.mojo, published at init
-# below; callers in bindings/trees_public_boost.mojo). Removed with them: the
+# below; callers in bindings/trees_public_boost_door.mojo). Removed with them: the
 # x_trees_dart_{open,step,add,close,predict} Python entries and their
 # parameter-list unpacking.
 

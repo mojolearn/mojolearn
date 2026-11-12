@@ -26,7 +26,7 @@ from core.agglo_native_state import agglo_metric_code
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field_pack import native_fitted_get
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
-from bindings.cluster_resident_table import (
+from bindings.py_cluster_resident import (
     cres_variant_lookup, cres_variant_store,
 )
 from bindings.kmeans_variants_boundary_door import (

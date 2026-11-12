@@ -27,19 +27,19 @@ from bindings.parallel_public_result_door import parallel_public_result
 from bindings.metrics_native_support_door import metric_warn
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_check
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
-from bindings.admitted_input import admit_x
-from bindings.admitted_input import admit_f32
+from bindings.admitted_input_unpack import admit_x
+from bindings.admitted_input_unpack import admit_f32
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.sequential_admission_door import _one_of
 from bindings.classifier_public_lifecycle_door import _feature_names
-from bindings.admitted_input import admit_x_unrecorded, classical_view
+from bindings.admitted_input_unpack import admit_x_unrecorded, classical_view
 from bindings.classical_arrays_door import classical_kind
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from providers.python.array_metadata_pyapi_door import array_shape_once, array_metadata_once
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.decomp_kit_native_door import (
     DecompDoor, decomp_int, decomp_float, decomp_entries, decomp_is_a, decomp_class_attr, decomp_kit_unpack,
     decomp_kit_publish, decomp_kit_out_shape, decomp_door_snapshot, decomp_door_tested, decomp_door_resident_hit,
@@ -144,7 +144,7 @@ def _pls_input(source: PythonObject, name: String, context: PythonObject, mut pi
 def _pls_input_deferred(source: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin, ndim: Int,
                         public_name: String,
                         public_target: Bool, sparse_allowed: Bool, defer: Bool, mut deferred: Bool) raises -> ArrayMetadata:
-    """A PLS operand through the one admission (bindings/admitted_input.mojo):
+    """A PLS operand through the one admission (bindings/admitted_input_unpack.mojo):
     the public X by admit_x_unrecorded (scikit-learn's refusals and wording),
     a target or fitted operand of rank `ndim` (-1: 1-D or 2-D) by admit_f32;
     then its captured metadata (array_metadata_once) for the typed kit. A

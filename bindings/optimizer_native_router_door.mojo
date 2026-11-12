@@ -41,7 +41,7 @@ from bindings.training_rms_native_unpack import training_rms_operation
 from bindings.training_embedding_native_door import training_embedding_operation
 from bindings.training_cross_entropy_native_door import training_cross_entropy
 from bindings.training_metadata_native_pack import training_metadata
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:

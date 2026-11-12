@@ -16,7 +16,7 @@ from bindings.sequential_description_unpack import sequential_fields
 from bindings.sequential_description_pack import sequential_program, sequential_table
 from bindings.sequential_execution_pack import sequential_entries
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_input
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 
 
 from bindings.sequential_weights_unpack import (
@@ -37,7 +37,7 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
 
 
 def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")

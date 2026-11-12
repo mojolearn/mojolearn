@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of LogisticRegression's native owner
-(bindings/logistic_native.mojo) and its fixed ABI."""
+(bindings/logistic_native_door.mojo) and its fixed ABI."""
 
 _ESTIMATOR_ENTRIES = ("logistic_native_api_v1",)
 _X_TREES_ENTRIES = ("label_weights_native_api_v1",)

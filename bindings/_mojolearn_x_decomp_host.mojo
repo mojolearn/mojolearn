@@ -43,7 +43,7 @@ def x_decomp_host_sabotage_binding() raises -> PythonObject:
 
 
 from x_decomp.descriptor_host import X_DECOMP_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 from core.shared_slot import SharedSlot

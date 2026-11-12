@@ -8,11 +8,11 @@ from bindings.mode_metadata_native_door import _fields
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_attributes_door import classical_check_layout
-from bindings.trees_public_forest import forest_kind, forest_effective_mode, _check_mode
-from bindings.trees_public_inputs import (
+from bindings.trees_public_forest_door import forest_kind, forest_effective_mode, _check_mode
+from bindings.trees_public_inputs_door import (
     trees_builtins, trees_address, trees_table, trees_need,
 )
-from bindings.admitted_input import admit_f32, admitted_array, classical_view, admitted_dtype
+from bindings.admitted_input_unpack import admit_f32, admitted_array, classical_view, admitted_dtype
 from bindings.classical_arrays_door import classical_address, classical_c_order
 # TOMBSTONE: trees_f32 / trees_view / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.

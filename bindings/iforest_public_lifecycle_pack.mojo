@@ -12,10 +12,11 @@ from bindings.native_class_admission_door import class_record, class_admit
 from bindings.classical_attributes_door import _type_mro
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.trees_side_records_unpack import trees_finite_mark, trees_finite_clear
-from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admitted_finite_entry_refuse
+from bindings.admitted_input_unpack import admit_x_unrecorded, admitted_finite_refuse
+from bindings.admitted_input_run import admitted_finite_entry_refuse
 from bindings.classical_validate_unpack import classical_check_x, classical_estimator_name, classical_view
 from bindings.classical_validate_run import classical_check_width
-from bindings.classical_labels import labels_shape_of
+from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_array_view_pack import native_array_ndarray_view
@@ -126,7 +127,7 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     var name = classical_estimator_name(model)
     var source = args[0]
     # A matrix the running meta-estimator holds is taken as it is
-    # (bindings/admitted_registry.mojo, consulted by admit_x_unrecorded);
+    # (bindings/py_admitted_registry.mojo, consulted by admit_x_unrecorded);
     # anything else is admitted once.
     # Lane a1b (part 2): a fit defers the finite test of a borrowed X to the
     # iforest fit entry's device scan (`iforest_device_scan`; the CPU

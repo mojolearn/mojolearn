@@ -33,7 +33,7 @@ from bindings.arena_materialize_native_door import _prepared_info, _slot
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from bindings.msel_inputs_unpack import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission_door import _one_of
-from bindings.classical_labels import _label_list, classical_encode_labels
+from bindings.classical_labels_door import _label_list, classical_encode_labels
 from bindings.label_input_sources_unpack import labels_list_scalar_kind, labels_text_storage, LABELS_LIST_OTHER
 from bindings.native_typed_context_pack import native_typed_context
 from bindings.classical_attributes_door import classical_connect_numpy

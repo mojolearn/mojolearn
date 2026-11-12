@@ -61,12 +61,12 @@ from bindings.family_common_pack import (
     family_array,
     family_field,
 )
-from bindings.classical_labels import (
+from bindings.classical_labels_door import (
     labels_cast, labels_reduce_stat, labels_prepare_targets,
     classical_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
     classical_encode_words,
 )
-from bindings.admitted_input import admit_c_view, admitted_dtype, admitted_finite_refuse
+from bindings.admitted_input_unpack import admit_c_view, admitted_dtype, admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows, door_rows_store, door_rows_refuse
 from bindings.device_rows_door_run import DoorRowsStore
@@ -762,7 +762,7 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
     `prepare_targets` found (`_all_finite`, then `_integral`)."""
     if not _is_float_buffer(y, context):
         return False
-    # The labels in their own dtype, C order (bindings/admitted_input.mojo
+    # The labels in their own dtype, C order (bindings/admitted_input_unpack.mojo
     # admit_c_view; lane a1b: was two labels_view reads of the same y).
     var view = admit_c_view(y, "y", context)
     var typestr = admitted_dtype(view, context)

@@ -11,7 +11,7 @@ from bindings.native_json_door import native_path
 from providers.python.autograd_import_metadata_pyapi_door import _fields
 from providers.python.autograd_session_frontend_pyapi_door import ops_session_fields
 from providers.python.autograd_program_arrays_pyapi_door import program_admission_context
-from providers.python.neural_descriptor_pyapi import neural_descriptor_resource_handle
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_resource_handle
 
 
 def _save_fields(program: PythonObject, context: PythonObject) raises -> PythonObject:

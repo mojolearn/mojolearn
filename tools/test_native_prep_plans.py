@@ -151,7 +151,7 @@ def test_native_plans_preserve_posterior_and_weight_semantics(plans):
 
 
 def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks():
-    source = (ROOT / "bindings/prep_select_native.mojo").read_text()
+    source = (ROOT / "bindings/prep_select_native_door.mojo").read_text()
     assert source.count("y, fit_params, context)") == 2
     assert 'context, fit_params)' in source
     assert 'len(fit_params) != 0' not in source
@@ -162,7 +162,7 @@ def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks()
 
 
 def test_posterior_is_native_prediction_and_existing_draw_algorithm():
-    source = (ROOT / "bindings/prep_iterimp_native.mojo").read_text()
+    source = (ROOT / "bindings/prep_iterimp_native_door.mojo").read_text()
     assert 'prep_estimator_call(est, "predict_std"' in source
     assert 'truncnorm_draws_binding(' in source
     assert 'inspect.signature' not in source
@@ -182,7 +182,7 @@ def test_posterior_is_native_prediction_and_existing_draw_algorithm():
 
 
 def test_meta_owners_do_not_call_member_methods_or_python_constructors():
-    source = (ROOT / 'bindings/trees_public_meta.mojo').read_text()
+    source = (ROOT / 'bindings/trees_public_meta_door.mojo').read_text()
     forbidden = ('py_call(member.fit', 'py_call(e.fit', '.predict,', '.predict_proba,',
                  '.decision_function,', 'est.get_params', 'c.split,', 'est._validate_params',
                  'py_call(_import(', '_call_kw(r2,', 'target.tolist', 'col.tolist',
@@ -195,7 +195,7 @@ def test_meta_owners_do_not_call_member_methods_or_python_constructors():
     assert '"family_mcls_r2"' in source
     assert 'native_estimator_defaults' in source
     assert 'native_estimator_entry=model_selection._NATIVE' in (PACKAGE / '__init__.py').read_text()
-    linear = (ROOT / 'bindings/x_linear_native.mojo').read_text()
+    linear = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
     assert 'py_call(cv.split' not in linear
     assert 'prep_native_split(cv, x_source, y_source, context)' in linear
 

@@ -19,7 +19,7 @@ from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type
 from bindings.decomp_owner_common_unpack import decomp_attr
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
 comptime IPCA_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnIPCAProviderPinsV1"]
@@ -56,7 +56,7 @@ def ipca_connection(model: PythonObject, fields: PythonObject, context: PythonOb
     if index < 0:
         # The typed record and the door pin are appended together, under the GIL.
         index = ipca_connection_add(provider_word(provider),
-            IPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+            IPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
         IPCA_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     if pca_vendor_name(ipca_vendor(index)) != String(context["vendor"]):
         raise Error("RuntimeError: IPCA native vendor differs from selected execution")

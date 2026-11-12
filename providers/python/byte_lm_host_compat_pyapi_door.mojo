@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.py_balanced import py_type, py_call
 from bindings.native_loaded_module_door import native_loaded_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from training.byte_lm_host_session import ByteHostSession, host_optimizer
 from training.byte_lm_host_trainer_dispatch import BYTE_HOST_TRAINER_TABLE, host_trainer_operation
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix

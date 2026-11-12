@@ -14,7 +14,7 @@ from std.os import getenv
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.host_inference_scalars_door import host_inference_scalar
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info, neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
 from bindings.family_common_unpack import family_repr, family_str, family_type_name, family_isinstance
 from bindings.family_common_pack import family_call
@@ -22,7 +22,7 @@ from bindings.tensor_view import TensorView, shape_text
 from bindings.linalg_ops_buffers_unpack import lin_truth, lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.linalg_ops_lowbit_run import lin_op_code
-from bindings.admitted_input import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
+from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
 
 comptime OP_NN = 0
 comptime OP_NT = 1

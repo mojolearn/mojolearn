@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays_door import classical_is_array, classical_address
 from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact
-from bindings.classical_labels import _pandas_values
+from bindings.classical_labels_door import _pandas_values
 from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.native_scalar_decode_unpack import NativeScalarBuffer
 from core.native_scalar_decode import NativeRealBits, native_scalar_real

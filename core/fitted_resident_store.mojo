@@ -17,7 +17,7 @@ lease object (a Python object built with `alloc=...`, the family's own small str
 `__deinit__` calls `fitted_lease_close`). The public door keeps that object
 in the model's prepared-owner record (bindings/native_prepared_owner.mojo,
 outside the model's `__dict__`), together with the model's generation word
-(bindings/native_model_records.mojo) and the identities of the fitted arrays
+(bindings/py_model_records.mojo) and the identities of the fitted arrays
 the copies mirror (bindings/fitted_resident_door.mojo). A refit, a
 `set_params`, a `__setstate__`, a replaced fitted array or a new binding
 makes the record stale: the door mints a new lease, and replacing the record

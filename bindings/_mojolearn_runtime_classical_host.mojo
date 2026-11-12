@@ -23,14 +23,14 @@ from std.sys.compile import is_defined
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.trees_lifetime_door import TreesResident, trees_resident_pins
-from bindings.trees_resident_table import TreesResidentDeath
+from bindings.py_trees_resident import TreesResidentDeath
 from bindings.trees_explainer_native_door import TreeShapOwner
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from bindings.classical_native_pack import classical_c
 from bindings.classical_attributes_door import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.host_archive_lifetime_door import host_archive_finalize_c
 from providers.python.preprocessing_input_pyapi_door import register_scaler_snapshot
-from bindings.admitted_input import register_admitted_buffer_pin
+from bindings.admitted_input_unpack import register_admitted_buffer_pin
 from providers.python.linear_entry_boundary_door import register_linear_entry_owner, register_linear_entry_owner_identity, linear_entry_connect
 from providers.python.linear_state_boundary_door import register_linear_state_owner, register_linear_state_owner_identity
 

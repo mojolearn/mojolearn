@@ -7,7 +7,7 @@
 # the UNPACK half is `providers/python/autograd_session_public_request_pyapi_unpack.mojo`.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_entry,
     neural_descriptor_connect, neural_descriptor_execute,
 )
@@ -29,7 +29,7 @@ def ops_session_public_call_py(session: PythonObject, operation: PythonObject,
     var lifetime = fields["_lifetime"]
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
     var model_owner = resource[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    if public_owner[].name != SESSION_PUBLIC_ABI_NAME or public_owner[].module is not model_owner[].module:
+    if public_owner[].record[0].name != SESSION_PUBLIC_ABI_NAME or public_owner[].module is not model_owner[].module:
         raise Error("TypeError: Session public provider differs from its native registry owner")
     # Stable native storage across the synchronous image boundary; each field
     # keeps its original owner alive until the completed result is returned.

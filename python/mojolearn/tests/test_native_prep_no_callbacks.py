@@ -42,7 +42,7 @@ def _source(name):
 
 
 def test_iterimp_door_has_no_python_method_calls():
-    src = _source("prep_iterimp_native.mojo")
+    src = _source("prep_iterimp_native_door.mojo")
     for needle in ('_method(', '"get_params"', 'import_module("inspect")', 'deepcopy', '"predict", Python.tuple(xm), keywords',
                    'def _user_call', 'def _clone'):
         assert needle not in src, needle
@@ -52,7 +52,7 @@ def test_iterimp_door_has_no_python_method_calls():
 
 
 def test_rfe_door_has_no_python_method_calls():
-    src = _source("prep_select_native.mojo")
+    src = _source("prep_select_native_door.mojo")
     for needle in ('_attr(_clone(', '_attr(est, "get_params")', '_attr(_attr(model, "estimator_"), operation)',
                    'def _clone', 'def _admit_estimator'):
         assert needle not in src, needle
@@ -62,7 +62,7 @@ def test_rfe_door_has_no_python_method_calls():
 
 
 def test_encode_door_calls_no_user_callable():
-    src = _source("prep_encode_native.mojo")
+    src = _source("prep_encode_native_door.mojo")
     for needle in ("py_call_typed(strategy", "py_call(b.callable, strategy)", "py_call_typed(score_func",
                    "py_call(cv.split"):
         assert needle not in src, needle

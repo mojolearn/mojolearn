@@ -3,19 +3,27 @@
 # the order and with the wording the public estimators have always raised:
 # sparse, complex, rank and empty X; a missing, complex, column or non-finite
 # y; inconsistent lengths; the sample_weight shape. The checks themselves are
-# the one admission path, bindings/admitted_input.mojo; these are its
+# the one admission path, bindings/admitted_input_unpack.mojo; these are its
 # classical names.
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.admitted_call_door import AdmittedCall
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 # The one admission path (lane consol-a0-admission): the X, y and
-# sample_weight checks live in bindings/admitted_input.mojo; these names are
+# sample_weight checks live in bindings/admitted_input_unpack.mojo; these names are
 # re-exported here for the doors that import them from this module.
-from bindings.admitted_input import (
-    AdmittedX, admit_x, admit_x_unrecorded, admit_y, admit_weights, RESHAPE_HINT, classical_view,
-    classical_refuse_sparse, classical_weight_refusal, _cast_x,
+from bindings.admitted_input_unpack import (
+    AdmittedX,
+    admit_x,
+    admit_x_unrecorded,
+    admit_y,
+    admit_weights,
+    classical_view,
+    classical_refuse_sparse,
+    classical_weight_refusal,
+    _cast_x,
 )
+from bindings.admitted_input_run import RESHAPE_HINT
 
 
 def classical_estimator_name(model: PythonObject) raises -> String:
@@ -41,7 +49,7 @@ def classical_check_x(source: PythonObject, est: String, context: PythonObject,
 def classical_check_x(mut call: AdmittedCall, source: PythonObject, est: String, context: PythonObject,
                       position: Int, admitted: Bool = False) raises -> PythonObject:
     """As above, recording the checked X on the door's admission record at
-    `position` (bindings/admitted_input.mojo `admit_x`)."""
+    `position` (bindings/admitted_input_unpack.mojo `admit_x`)."""
     var x = admit_x(call, source, est, context, position, admitted)
     return x.array
 

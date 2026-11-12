@@ -5,7 +5,7 @@
 Lane ne2-i-j (2026-11-07; docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md
 section 2I). The "check once" records (native_class_admission
 `class_record` / `dict_keys_admitted`, the module-connection stamp and the
-model generation word of native_model_records, all through
+model generation word of py_model_records, all through
 native_loaded_module `shared_dict_watch` / `shared_dict_epoch`) key on
 CPython 3.12's type and dictionary watchers. The wheels declare
 `python_requires >= 3.10`, so 3.10 and 3.11 ran the full check on every call.

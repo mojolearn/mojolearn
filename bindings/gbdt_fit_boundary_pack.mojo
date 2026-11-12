@@ -10,7 +10,7 @@ keeps both readings the former body made of it: an integer where
 for a reading that failed, so the body's read of that slot refuses as it
 did. `gbdt_fit_outcome_py` packs the outcome as the former result list.
 Used by both gbdt bindings' Python entries and by the GBDT door
-(bindings/trees_public_gbdt_fit.mojo), which then calls the fit natively.
+(bindings/trees_public_gbdt_fit_door.mojo), which then calls the fit natively.
 """
 # The PACK half of the former `bindings/gbdt_fit_boundary.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/gbdt_fit_boundary_unpack.mojo`.

@@ -12,7 +12,7 @@ from bindings.classifier_public_lifecycle_door import _feature_names
 from bindings.metrics_native_support_door import metric_warn
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.prep_native_estimator_door import prep_estimator_admit
-from bindings.prep_select_native import rfe_support_cached
+from bindings.prep_select_native_door import rfe_support_cached
 from bindings.x_prep_native_inputs_door import _dense_values, _target
 
 

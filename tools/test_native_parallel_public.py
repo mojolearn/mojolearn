@@ -202,7 +202,7 @@ def test_bindings_are_the_exact_compiled_modules(connected):
         for mode, module in modes.items():
             assert type(module) is types.ModuleType
             assert module.__name__ == name + ':' + mode
-    source = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     assert 'native provider requires an exact compiled module' in source
     assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in source
     assert len(meta['plans']) == 27

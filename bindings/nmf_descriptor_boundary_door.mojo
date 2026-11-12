@@ -14,7 +14,7 @@ from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type
 from bindings.decomp_owner_common_unpack import decomp_attr
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
 comptime NMF_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnNMFProviderPinsV1"]
@@ -50,7 +50,7 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
     if index < 0:
         # The typed record and the door pin are appended together, under the GIL.
         index = nmf_connection_add(provider_word(provider),
-            NMFNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+            NMFNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
         NMF_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     if pca_vendor_name(nmf_vendor(index)) != String(context["vendor"]):
         raise Error("RuntimeError: NMF native vendor differs from selected execution")

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the linear expansion
-estimators and the coordinate-descent pair (bindings/x_linear_native.mojo)
+estimators and the coordinate-descent pair (bindings/x_linear_native_door.mojo)
 and its fixed ABI. Nothing here runs when a public method is called."""
 
 #: The base binding's fold, index and score helpers the cv fits call

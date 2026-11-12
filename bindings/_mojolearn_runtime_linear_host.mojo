@@ -13,8 +13,8 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.qn_native_door import qn_c
-from bindings.logistic_native import logistic_c
-from bindings.x_linear_native import x_linear_c
+from bindings.logistic_native_door import logistic_c
+from bindings.x_linear_native_door import x_linear_c
 
 comptime RUNTIME_LINEAR_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 

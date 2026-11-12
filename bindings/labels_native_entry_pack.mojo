@@ -21,7 +21,7 @@
 # dense int32 code per label; other kinds are refused. The sources read are
 # the ones bindings/label_input_sources.mojo admits (exact ndarray, Array, flat
 # list or tuple, a numpy-backed pandas Series, '<U' ndarrays) plus the ORDER
-# RULE walk for everything else (bindings/classical_labels.mojo
+# RULE walk for everything else (bindings/classical_labels_door.mojo
 # `classical_encode_labels`).
 #
 # The context is the classical shared admission context merged with the label
@@ -34,7 +34,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type
 from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_labels import (
+from bindings.classical_labels_door import (
     classical_encode_labels, classical_decode_labels, classical_union_encode, classical_score_from_codes,
     labels_class_weight_rows, ClassicalLabels, _flatten_labels, _sorted_classes)
 
