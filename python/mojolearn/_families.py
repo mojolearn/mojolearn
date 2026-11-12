@@ -150,6 +150,7 @@ _FINDER = _FamilyFinder()
 def install(package):
     """Called once at the end of `__init__.py`: record the core, install the
     first-touch finder and connect the core's classes."""
+    from . import _mode  # noqa: F401 - the shared mixins are core, not a family
     _CORE.update(_package_modules())
     _CORE.add(__name__)
     if _FINDER not in sys.meta_path:  # glue: the import finders
@@ -192,8 +193,9 @@ def _hub_needed():
         module = sys.modules[name]
         if name.startswith(_PKG + ".tests"):
             continue
-        for value in tuple(vars(module).values()):  # glue: exact class identities
-            if type(value) is type and any("get_params" in vars(base) for base in type.__dict__["__mro__"].__get__(value)):
+        for value in tuple(vars(module).values()):  # glue: exact class identities defined by this module
+            if (type(value) is type and vars(value).get("__module__") == name
+                    and any("get_params" in vars(base) for base in type.__dict__["__mro__"].__get__(value))):
                 return True
     return False
 
