@@ -20,7 +20,7 @@ from core.parallel_entry_table import (
 )
 from core.shard_merge_device import device_shard_topk_merge_f32
 from core.shared_slot import SharedSlot
-from bindings.hotpath_device import fold_pair_f32_device_run
+from core.hotpath_device_run import fold_pair_f32_device_run
 from core.msel_device_run import msel_rebase_offsets_i32_device_run
 
 #: The GPU base binding's ONE process-lifetime DeviceContext

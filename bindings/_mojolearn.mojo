@@ -149,11 +149,10 @@ from bindings.hotpath_device import (
     bincount2_i32_binding,
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
-    hpdev_try_cast_f64_to_f32,
     # lane cpu2-l1-input: the input helpers on the device (no _OFF arm; the
     # host loops below and in bindings/array_helpers.mojo are the host column
-    # and the fallback for what a twin does not cover)
-    hpdev_try_transpose_to_f32,
+    # and the fallback for what a twin does not cover); the typed device
+    # tries (hpdev_try_*) are imported from core/hotpath_device_run.mojo
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
@@ -162,6 +161,7 @@ from bindings.hotpath_device import (
     normal_init_f32_binding,
     cast_elements_binding,
 )
+from core.hotpath_device_run import hpdev_try_cast_f64_to_f32, hpdev_try_transpose_to_f32
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_device.mojo).
@@ -1333,7 +1333,12 @@ def cast_f64_to_f32_binding(
         return PythonObject(0)
     # lane cpu2-l1-input: the device narrowing is the default (it was the
     # fam2-shared candidate arm); False means the host loop below runs.
-    if hpdev_try_cast_f64_to_f32(Int(py=src_addr), Int(py=dst_addr), count):
+    var cast_src = Int(py=src_addr)
+    var cast_dst = Int(py=dst_addr)
+    var cast_done = False
+    with GILReleased(Python()):
+        cast_done = hpdev_try_cast_f64_to_f32(cast_src, cast_dst, count)
+    if cast_done:
         return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
@@ -1372,7 +1377,12 @@ def cast_colmajor_f64_to_f32_binding(
     if nr == 0 or nc == 0:
         return PythonObject(0)
     # lane cpu2-l1-input: the fused cast-and-transpose on the device.
-    if hpdev_try_transpose_to_f32(Int(py=src_addr), Int(py=dst_addr), nr, nc, True):
+    var tr_src = Int(py=src_addr)
+    var tr_dst = Int(py=dst_addr)
+    var tr_done = False
+    with GILReleased(Python()):
+        tr_done = hpdev_try_transpose_to_f32(tr_src, tr_dst, nr, nc, True)
+    if tr_done:
         return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
@@ -1410,7 +1420,12 @@ def transpose_f32_binding(
     if nr == 0 or nc == 0:
         return PythonObject(0)
     # lane cpu2-l1-input: the transpose on the device.
-    if hpdev_try_transpose_to_f32(Int(py=src_addr), Int(py=dst_addr), nr, nc, False):
+    var tr_src = Int(py=src_addr)
+    var tr_dst = Int(py=dst_addr)
+    var tr_done = False
+    with GILReleased(Python()):
+        tr_done = hpdev_try_transpose_to_f32(tr_src, tr_dst, nr, nc, False)
+    if tr_done:
         return PythonObject(0)
     var sp = _f32_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))

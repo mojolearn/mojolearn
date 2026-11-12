@@ -83,37 +83,23 @@ from bindings.hotpath_helpers import (
     uniform_init_f32_binding as host_uniform_init_f32_binding,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.hotpath_impl_rows import fold_pair_f32
 from core.hotpath_device import (
-    HPD_F32,
-    HPD_F64,
-    HPD_I32,
-    HPD_I64,
     HPD_MAX_N,
-    HPD_U32,
-    HPD_U8,
-    device_cast_f64_to_f32,
-    device_encode_labels,
-    device_fold_pair_f32,
-    device_gather_u64,
     device_normal_init_f32,
     device_uniform_init_f32,
 )
 from core.input_device import (
     IND_MAX_N,
-    device_all_finite,
     device_check_lengths,
     device_ragged_rows,
-    device_strided_copy,
-    device_transpose_to_f32,
 )
+from core.hotpath_device_run import hpdev_strided_copy_run
 from core.neural_context import process_ctx
 from core.label_device_steps import (
     LABELS_DEVICE_BASE as _HPDEV_BASE, LABELS_DEVICE_ELEM as IDN_HPDEV_ELEM,
     LABELS_DEVICE_REDUCE as IDN_HPDEV_REDUCE, LABELS_DEVICE_ISUM as IDN_HPDEV_ISUM,
     LABELS_DEVICE_CAST as IDN_HPDEV_CAST, LABELS_DEVICE_INPUT as _HPDEV_INPUT,
     LABELS_DEVICE_CONTEXT as _HPDEV_SLOT, labels_device_reduce, labels_device_cast,
-    labels_device_try_finite,
     labels_device_threshold, labels_device_threshold_eligible,
 )
 from bindings.labels_stat_boundary import labels_stat_pack
@@ -132,7 +118,7 @@ from core.msel_helpers_device import (
 )
 
 
-comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_LABELS_OFF"]()
+# IDN_HPDEV_LABELS lives in core/hotpath_device_run.mojo beside hpdev_try_encode_labels.
 # IDN_HPDEV_FOLDS lives in core/base_helpers_device.mojo (imported above),
 # beside the typed runs the base helper table publishes.
 comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
@@ -188,26 +174,6 @@ def gather_i32_binding(table_addr: PythonObject, n_table: PythonObject, codes_ad
     with GILReleased(Python()):
         result = msel_gather_device_run(0, table, classes, codes, count, dst)
     return PythonObject(result)
-
-
-def hpdev_try_gather_u64(
-    table_addr: Int, nt: Int, codes_addr: Int, n: Int, dst_addr: Int,
-) raises -> Bool:
-    """The device `gather_i64` / `gather_f64` for the base binding (64-bit
-    table words, int64 codes): True when the device wrote `dst`; False when
-    it did not (switch off, a size it does not cover, a code out of range)
-    and the caller runs its host loop, whose refusal is the definition."""
-    comptime if IDN_HPDEV_ELEM:
-        if n < 1 or n > HPD_MAX_N or nt < 1 or nt > HPD_MAX_N:
-            return False
-        if table_addr == 0 or codes_addr == 0 or dst_addr == 0:
-            return False
-        var ctx = process_ctx[_HPDEV_SLOT]()
-        var ok = False
-        with GILReleased(Python()):
-            ok = device_gather_u64(ctx, table_addr, nt, codes_addr, n, dst_addr)
-        return ok
-    return False
 
 
 def threshold_labels_i64_binding(
@@ -282,59 +248,9 @@ def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> Py
     return PythonObject(c)
 
 
-def fold_pair_f32_device_run(d: Int, s: Int, count: Int) raises -> Int:
-    """`fold_pair_f32`, on the device when the switch covers the call, else
-    the host kernel (core/hotpath_impl_rows.mojo), which raises its own
-    words. The GPU base image's parallel table entry
-    (bindings/parallel_base_entry_device.mojo) calls it with the GIL
-    released by its caller; the former Python door `fold_pair_f32` had no
-    caller left once cross_vendor's fold read the table (lane
-    calltable-parallel-archive, 2026-11-11)."""
-    comptime if IDN_HPDEV_ELEM:
-        if count >= 1 and count <= HPD_MAX_N and d != 0 and s != 0:
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            device_fold_pair_f32(ctx, d, s, count)
-            return 0
-    return fold_pair_f32(d, s, count)
-
-
 # ---------------------------------------------------------------------------
 # IDN_HPDEV_LABELS
 # ---------------------------------------------------------------------------
-
-
-def hpdev_try_encode_labels[dt: DType](
-    src_addr: Int, n: Int, classes_addr: Int, max_classes: Int, codes_addr: Int,
-) raises -> Int:
-    """The device `encode_labels_<dt>` for the base binding's
-    `_encode_labels_binding[dt]`: the class count when the device encoded
-    the labels, or -1 when it did not (switch off, a size it does not cover,
-    more than `max_classes` classes, a NaN label): the caller then runs its
-    host encoder, whose answer or refusal is the definition."""
-    comptime if IDN_HPDEV_LABELS:
-        var code = -1
-        comptime if dt == DType.float32:
-            code = HPD_F32
-        comptime if dt == DType.float64:
-            code = HPD_F64
-        comptime if dt == DType.int32:
-            code = HPD_I32
-        comptime if dt == DType.int64:
-            code = HPD_I64
-        comptime if dt == DType.uint32:
-            code = HPD_U32
-        comptime if dt == DType.uint8:
-            code = HPD_U8
-        if code < 0 or n < 1 or n > HPD_MAX_N or max_classes < 1:
-            return -1
-        if src_addr == 0 or classes_addr == 0 or codes_addr == 0:
-            return -1
-        var ctx = process_ctx[_HPDEV_SLOT]()
-        var k = -1
-        with GILReleased(Python()):
-            k = device_encode_labels(ctx, src_addr, code, n, classes_addr, max_classes, codes_addr)
-        return k
-    return -1
 
 
 # ---------------------------------------------------------------------------
@@ -648,41 +564,6 @@ def cast_elements_binding(src_addr: PythonObject, src_code: PythonObject, dst_ad
 # ---------------------------------------------------------------------------
 
 
-def hpdev_try_cast_f64_to_f32(src_addr: Int, dst_addr: Int, n: Int) raises -> Bool:
-    """The device `cast_f64_to_f32` for the base binding: True when the
-    device wrote `dst`, False when the caller must run its host loop (a
-    sabotage build, or a size the twin does not cover)."""
-    comptime if _HPDEV_INPUT:
-        if n < 1 or n > HPD_MAX_N or src_addr == 0 or dst_addr == 0:
-            return False
-        var ctx = process_ctx[_HPDEV_SLOT]()
-        with GILReleased(Python()):
-            device_cast_f64_to_f32(ctx, src_addr, dst_addr, n)
-        return True
-    return False
-
-
-def hpdev_try_all_finite(addr: Int, n: Int, is_f64: Bool) raises -> Int:
-    with GILReleased(Python()):
-        return labels_device_try_finite(addr, n, is_f64)
-
-
-def hpdev_try_transpose_to_f32(
-    src_addr: Int, dst_addr: Int, nr: Int, nc: Int, is_f64: Bool,
-) raises -> Bool:
-    """The device `transpose_f32` (float32 in) / `cast_colmajor_f64_to_f32`
-    (float64 in, the `cast_f64_to_f32` narrowing per element): True when the
-    device wrote `dst`, False when the caller must run its host loop."""
-    comptime if _HPDEV_INPUT:
-        if nr < 1 or nc < 1 or nr > IND_MAX_N // nc or src_addr == 0 or dst_addr == 0:
-            return False
-        var ctx = process_ctx[_HPDEV_SLOT]()
-        with GILReleased(Python()):
-            device_transpose_to_f32(ctx, src_addr, dst_addr, nr, nc, is_f64)
-        return True
-    return False
-
-
 def strided_copy_bytes_binding(
     src_addr: PythonObject, dst_addr: PythonObject, dims_addr: PythonObject,
     ndim: PythonObject, itemsize: PythonObject,
@@ -697,25 +578,11 @@ def strided_copy_bytes_binding(
         var dims = Int(py=dims_addr)
         var src = Int(py=src_addr)
         var dst = Int(py=dst_addr)
-        if nd >= 1 and nd <= 64 and dims != 0 and src != 0 and dst != 0 and (
-            isz == 1 or isz == 2 or isz == 4 or isz == 8
-        ):
-            var dp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=dims)
-            var total = 1
-            var valid = True
-            for k in range(nd):  # small-loop(nd: at most 64 array dimensions): shape product, not data
-                var e = Int(dp[k])
-                if e < 1 or total > IND_MAX_N // e:
-                    valid = False
-                    break
-                total *= e
-            if valid:
-                var ctx = process_ctx[_HPDEV_SLOT]()
-                var done = False
-                with GILReleased(Python()):
-                    done = device_strided_copy(ctx, src, dst, dims, nd, isz, total)
-                if done:
-                    return PythonObject(total)
+        var total = -1
+        with GILReleased(Python()):
+            total = hpdev_strided_copy_run(src, dst, dims, nd, isz)
+        if total >= 0:
+            return PythonObject(total)
     return host_strided_copy_bytes_binding(src_addr, dst_addr, dims_addr, ndim, itemsize)
 
 
