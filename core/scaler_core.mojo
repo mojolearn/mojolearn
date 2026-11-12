@@ -349,7 +349,7 @@ def scaler_transform_core[C: ScalerCalls](calls: C, spec: ScalerTransformSpec, r
     refusal, then the per-column NaN restore (stages 10, 103)."""
     var name = String("MinMaxScaler") if spec.minmax else String("StandardScaler")
     if bitcast[DType.int32](rows[7 * d + 1]) != 0:
-        raise Error(name + (" min_" if spec.minmax else " mean_") + " and scale_ must remain finite (NaN: a feature never seen)")
+        raise Error(name + (String(" min_") if spec.minmax else String(" mean_")) + " and scale_ must remain finite (NaN: a feature never seen)")
     if bitcast[DType.int32](rows[7 * d + 2]) != 0:
         raise Error(name + " scale_ must remain positive")
     var colnan = bitcast[DType.int32](rows[7 * d]) != 0
