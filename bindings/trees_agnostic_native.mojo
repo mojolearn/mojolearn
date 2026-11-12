@@ -21,13 +21,11 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.trees_public_forest import forest_effective_mode, _engine, _ordered_export, _resident, _family
 from bindings.trees_public_boost import _seed
 from bindings.trees_explainer_native import _get, _int, _entry, _snapshot, _replace, _tree_mode
-from core.shared_slot import SharedSlot
+from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS, _chunk
 
 comptime _I64 = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 
-#: xtrees/agnostic.mojo AGN_BUDGET: synthetic words per explainer chunk.
-comptime _AGN_BUDGET = 1 << 25
 #: MOJOLEARN_IDN_PSHAP_RESIDENT: 2^28 float32 words (1 GiB of synthetic rows
 #: on the device), a memory bound that fits every supported GPU.
 comptime _AGN_BUDGET_RESIDENT = 1 << 28
@@ -50,24 +48,6 @@ comptime _AGN_IDN_DEVICE_MODEL = 64
 def _b() raises -> PythonObject:
     return native_loaded_module("builtins")
 
-
-def _name(permutation: Bool) -> String:
-    return "PermutationExplainer" if permutation else "KernelExplainer"
-
-
-struct _SwitchFacts(Defaultable, Movable):
-    """`x_trees_fast_switches()` of each loaded x_trees binary, keyed on the
-    compiled entry's address (its connected table holds it for the life of
-    the process). The bits are compile-time constants; every shap_values
-    call (twice on the permutation path) called the entry again (N252,
-    ne1-a-trees, 2026-11-06)."""
-    var answers: Dict[Int, Int]
-
-    def __init__(out self):
-        self.answers = Dict[Int, Int]()
-
-
-comptime _SWITCH_FACTS = SharedSlot[_SwitchFacts, "MojolearnTreesAgnosticSwitchFactsV2"]
 
 
 def _switches(table: PythonObject) raises -> Int:
@@ -97,13 +77,6 @@ def _ints(*values: Int) raises -> PythonObject:
     for i in range(len(values)):  # driver-loop: fixed binding parameter words
         _ = py_call(out.append, PythonObject(values[i]))
     return out
-
-
-def _chunk(per_row: Int, n: Int) -> Int:
-    """Rows per chunk: as many as keep a chunk's synthetic matrix under the
-    budget (xtrees/agnostic.mojo AGN_BUDGET words), at least one."""
-    return max(1, min(n, _AGN_BUDGET // max(1, per_row)))
-
 
 def _class_value(model: PythonObject, name: String) raises -> PythonObject:
     """A class attribute found on the model's MRO namespaces (no descriptor
