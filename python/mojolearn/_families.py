@@ -47,6 +47,8 @@ EAGER_BEFORE = (
     "parallel_preprocessing", "_expansion_linear", "_expansion_cluster", "_expansion_neighbors",
     "_expansion_decomp", "_expansion_prep", "_expansion_sequence", "_expansion_trees",
     "_expansion_cnn", "_expansion_ann", "_expansion_metrics",
+    # imported by the package's class connections before this lane
+    "tree", "_gbdt_adapters", "_forest_protocol", "_classical_host", "_umap_impl",
 )
 
 #: The expansion doors (host_surface.EXPANSION_LANES order). Each one's
