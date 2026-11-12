@@ -29,6 +29,7 @@ from bindings.device_rows_door import door_rows_refuse
 from bindings.decomp_inputs import decomp_admit, decomp_input_copied
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
+from x_decomp.tsvd_run import _too_small
 from core.pca_native_api import PCAFoldStore
 from core.tsvd_native_api import (
     TSVDFitRequest, TSVDQueryRequest, TSVD_GRAM, TSVD_FUSED, TSVD_EXPLAINED,
@@ -133,15 +134,6 @@ def _host_connection(model: PythonObject, fields: PythonObject, context: PythonO
 
 def _decomp(mode: String, context: PythonObject) raises -> PythonObject:
     return tsvd_factory(context, "tsvd_decomp", mode)
-
-
-def _too_small(rows: Int, cols: Int) -> String:
-    # scikit-learn's check_array wording for a block below 2 x 2.
-    if rows < 2:
-        return ("Found array with " + String(rows) + " sample(s) (shape=(" + String(rows) + ", " + String(cols)
-                + ")) while a minimum of 2 is required by TruncatedSVD.")
-    return ("Found array with " + String(cols) + " feature(s) (shape=(" + String(rows) + ", " + String(cols)
-            + ")) while a minimum of 2 is required by TruncatedSVD.")
 
 
 def _components(fields: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> Int:
