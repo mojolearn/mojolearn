@@ -55,7 +55,7 @@ from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.family_common import family_array, family_repr
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from core.admitted_input import admitted_cast_f32, admitted_cast_f64
 from core.admitted_weights import (
     admitted_fill, admitted_weight_status, WEIGHTS_NONFINITE, WEIGHTS_NEGATIVE, WEIGHTS_ALL_ZERO,
@@ -140,7 +140,7 @@ def admit_family_refuse_empty(name: String, shape: List[Int]) raises:
                 + " (shape=" + text + ") while a minimum of 1 is required.")
 
 
-def admit_family_input(source: PythonObject, ndim: Int, name: String, context: PythonObject,
+def admit_family_input(source: PythonObject, ndim: Int, name: String, context: PythonObject, mut pin: ArrayPin,
                        dense: Bool = False, admitted: Bool = False, empty: Bool = False) raises -> ArrayMetadata:
     """The exporter's metadata, read once, with `_buffer._as_typed`'s rank,
     emptiness and rank-above-2 refusals in their wording, before any cast
@@ -172,7 +172,8 @@ def admit_family_input(source: PythonObject, ndim: Int, name: String, context: P
         admit_family_refuse_empty(name, shape)
     if nd > 2:
         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
-    var snapshot = array_metadata_once(view, shape^, name, context)
+    # `pin` (the caller's) holds `view` and its storage owners for the call.
+    var snapshot = array_metadata_once(view, shape^, name, context, pin)
     _ = view^
     _ = prepared^
     return snapshot^
@@ -193,12 +194,12 @@ def _fold_rows(source: PythonObject, name: String, context: PythonObject, refusa
         raise error^
 
 
-def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: PythonObject,
+def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: PythonObject, mut pin: ArrayPin,
                       dense: Bool = False, finite: Bool = False, admitted: Bool = False,
                       empty: Bool = False, refusal: String = "",
                       defer_finite: Bool = False) raises -> ArrayMetadata:
     """The admitted float32 C-order words of a family door's array input, as
-    its metadata record: `keep` is the input itself when it already is
+    its typed metadata record; `pin.keep` (the door's pin) is the input itself when it already is
     float32 in C order (borrowed, never written), otherwise one cast copy
     (`copied`). `finite` refuses a NaN or an infinity ("Input <name>
     contains NaN or infinity", which a caller may reword); without it the
@@ -218,19 +219,19 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
         # once; this door neither downloads it nor scans it again. Its rows
         # are float32 C-order, so the snapshot below borrows them.
         var fold = _fold_rows(source, name, context, refusal, finite)
-        var rows = admit_family_input(fold.array, ndim, name, context, False, True, empty)
-        admit_family_cast(rows, name, context)
+        var rows = admit_family_input(fold.array, ndim, name, context, pin, False, True, empty)
+        admit_family_cast(rows, pin, name, context)
         return rows^
-    var snapshot = admit_family_input(source, ndim, name, context, dense, admitted, empty)
-    admit_family_cast(snapshot, name, context, finite, refusal, defer_finite)
+    var snapshot = admit_family_input(source, ndim, name, context, pin, dense, admitted, empty)
+    admit_family_cast(snapshot, pin, name, context, finite, refusal, defer_finite)
     return snapshot^
 
 
-def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: PythonObject, finite: Bool = False,
+def admit_family_cast(mut snapshot: ArrayMetadata, mut pin: ArrayPin, name: String, context: PythonObject, finite: Bool = False,
                       refusal: String = "", defer_finite: Bool = False) raises:
     """The second step of `admit_family_meta` on an `admit_family_input`
     record: borrow a float32 C-order input, else cast it once (row tasks
-    across the host's cores) into an owned Array recorded on `snapshot`;
+    across the host's cores) into an owned Array held by `pin`;
     `finite` refuses a NaN or an infinity, from the cast's own verdict (or
     one parallel scan of a borrowed input)."""
     var ok = True
@@ -243,22 +244,23 @@ def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: Python
         # The destination is an owned mojolearn Array (the type the family
         # outputs and fitted fields always had), uninitialised: the cast
         # writes every word.
-        var result = admitted_array(snapshot.python_shape(), "<f4", context)
+        var result = admitted_array(array_python_shape(snapshot), "<f4", context)
         var address = Int(py=classical_address(result))
         # parallel: one typed cast over row tasks, the finiteness verdict in the same pass
         ok = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
                                _AF_F32P(unsafe_from_address=address))
-        snapshot.replace_f32(result, address)
+        snapshot.replace_f32(address)
+        pin.keep = result
     if finite and not ok:
         if refusal.byte_length() > 0:
             raise Error(refusal)
         raise Error("Input " + name + " contains NaN or infinity")
 
 
-def admitted_family_x(snapshot: ArrayMetadata, source: PythonObject, finite: Bool) -> AdmittedX:
-    """The AdmittedX of an admitted family snapshot."""
+def admitted_family_x(snapshot: ArrayMetadata, pin: ArrayPin, source: PythonObject, finite: Bool) -> AdmittedX:
+    """The AdmittedX of an admitted family snapshot and its door pin."""
     var borrowed = not snapshot.copied
-    var x = AdmittedX(snapshot.keep, source, snapshot.source.addr, snapshot.source.rows, snapshot.source.cols,
+    var x = AdmittedX(pin.keep, source, snapshot.source.addr, snapshot.source.rows, snapshot.source.cols,
                       len(snapshot.shape), borrowed)
     x.finite = finite
     return x^
@@ -271,17 +273,19 @@ def admit_family(source: PythonObject, ndim: Int, name: String, context: PythonO
     C-order array the kernels read, `.borrowed` when it is the input's own
     storage. Under `defer_finite` a borrowed X has `.finite` False (its
     door tests it)."""
-    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty, refusal,
+    var pin = ArrayPin()
+    var snapshot = admit_family_meta(source, ndim, name, context, pin, dense, finite, admitted, empty, refusal,
                                      defer_finite)
-    return admitted_family_x(snapshot, source, finite and not (defer_finite and not snapshot.copied))
+    # AdmittedX.array takes `pin.keep` (the words the kernels read).
+    return admitted_family_x(snapshot, pin, source, finite and not (defer_finite and not snapshot.copied))
 
 
 def admit_family_fold_meta(rows: Int, cols: Int) raises -> ArrayMetadata:
     """The shape record of a cross-validation fold a device kernel entry
     gathers itself (no host words: address 0), for a family door's shape
     and refusal reads (lanes a7a, a8a). Never read its words."""
-    return ArrayMetadata(PythonObject(None), [rows, cols], CastIn(0, CAST_KIND_FLOAT, 4, rows, cols, cols * 4, 4),
-                         rows * cols, NPY_FLOAT, True, True, False, PythonObject(None), False)
+    return ArrayMetadata([rows, cols], CastIn(0, CAST_KIND_FLOAT, 4, rows, cols, cols * 4, 4),
+                         rows * cols, NPY_FLOAT, True, True, False, False)
 
 
 def admit_family_copied(snapshot: ArrayMetadata, source: PythonObject) raises -> Bool:
@@ -321,21 +325,21 @@ def admit_family_f64(view: PythonObject, name: String, context: PythonObject) ra
     return result
 
 
-def admit_family_owned(value: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+def admit_family_owned(value: ArrayMetadata, pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     """An admitted float32 array the model may keep: the admitted array
     itself when this call owns it (the cast result, or an Array the exporter
     made and nobody else holds), else one parallel copy of the caller's
     words, so a caller editing its array after fit changes nothing."""
     if value.owned_writable:
-        return value.keep
-    var result = admitted_array(value.python_shape(), "<f4", context)
+        return pin.keep
+    var result = admitted_array(array_python_shape(value), "<f4", context)
     # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
     host_parallel_copy_bytes(Int(py=classical_address(result)), value.source.addr, value.count * 4)
     _ = result
     return result
 
 
-def admit_family_owned_finite(value: ArrayMetadata, est: String, context: PythonObject) raises -> PythonObject:
+def admit_family_owned_finite(value: ArrayMetadata, pin: ArrayPin, est: String, context: PythonObject) raises -> PythonObject:
     """`admit_family_owned` of a snapshot admitted with `finite=True,
     defer_finite=True`, the finite test made ONCE, in the pass that makes
     the owned copy (lane a8b-device-x-neighbors-rest: a fitted index that
@@ -345,14 +349,14 @@ def admit_family_owned_finite(value: ArrayMetadata, est: String, context: Python
     float32 (the same bits), whose verdict refuses. The refusal is
     `admitted_finite_wording(est)`."""
     if value.copied:
-        return admit_family_owned(value, context)
+        return admit_family_owned(value, pin, context)
     var src = value.source
     if value.owned_writable:
         # parallel: one finiteness scan of the owned input across host cores
         if not host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols):
             raise Error(admitted_finite_wording(est, "X"))
-        return value.keep
-    var result = admitted_array(value.python_shape(), "<f4", context)
+        return pin.keep
+    var result = admitted_array(array_python_shape(value), "<f4", context)
     var address = Int(py=classical_address(result))
     # parallel: the owned copy over row tasks, the finiteness verdict in the same pass
     var ok = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
@@ -377,7 +381,7 @@ def admit_family_owned(value: PythonObject, context: PythonObject) raises -> Pyt
     return result
 
 
-def _weight_scalar(value: Float64, n: Int, wide: Bool, context: PythonObject) raises -> ArrayMetadata:
+def _weight_scalar(value: Float64, n: Int, wide: Bool, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     var item = 8 if wide else 4
     var weights = admitted_array(Python.tuple(n), "<f8" if wide else "<f4", context)
     var address = Int(py=classical_address(weights))
@@ -386,11 +390,12 @@ def _weight_scalar(value: Float64, n: Int, wide: Bool, context: PythonObject) ra
     else:
         admitted_fill[DType.float32](_AF_F32P(unsafe_from_address=address), n, Float32(value))
     var descriptor = CastIn(address, CAST_KIND_FLOAT, item, n, 1, item, 0)
-    return ArrayMetadata(weights, List[Int]([n]), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
-                         True, True, True, weights, True)
+    pin = ArrayPin(weights, weights)
+    return ArrayMetadata(List[Int]([n]), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
+                         True, True, True, True)
 
 
-def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObject) raises -> ArrayMetadata:
+def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     # Admit supported native storage before reading any user attributes. One
     # shape and dtype/stride snapshot is retained through validation and use.
     var view = classical_view(source, context, "sample_weight")
@@ -406,7 +411,8 @@ def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObje
         # widening cast (never float(Array)).
         if py_type(source) is py_type(PythonObject(True)):
             raise Error("Sample weights must be 1D array or scalar")
-        var scalar = array_metadata_once(view, shape^, "sample_weight", context, True)
+        var scalar_pin = ArrayPin()
+        var scalar = array_metadata_once(view, shape^, "sample_weight", context, scalar_pin, True)
         var one = family_array(Python.tuple(1), "<f8", context)
         var ptr = _AF_F64P(unsafe_from_address=Int(py=classical_address(one)))
         var raw = scalar.source
@@ -418,8 +424,9 @@ def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObje
             admitted_reverse_word(raw.addr, Int(py=classical_address(reversed)), raw.itemsize)
             scalar_address = Int(py=classical_address(reversed))
         admitted_cast_f64(scalar_address, 0, 0, 1, 1, raw.itemsize, raw.kind, ptr)
-        var result = _weight_scalar(ptr[0], n, wide, context)
+        var result = _weight_scalar(ptr[0], n, wide, context, pin)
         _ = scalar
+        _ = scalar_pin^
         _ = one
         _ = reversed
         return result^
@@ -427,7 +434,7 @@ def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObje
         raise Error("Sample weights must be 1D array or scalar")
     if shape[0] != n:
         raise Error("sample_weight.shape == " + family_repr(_shape_tuple(shape)) + ", expected (" + String(n) + ",)!")
-    var snapshot = array_metadata_once(view, shape^, "sample_weight", context)
+    var snapshot = array_metadata_once(view, shape^, "sample_weight", context, pin)
     var ready = snapshot.c_order and snapshot.dtype_number == (NPY_DOUBLE if wide else NPY_FLOAT)
     if not ready:
         var weights = admitted_array(Python.tuple(n), "<f8" if wide else "<f4", context)
@@ -436,26 +443,28 @@ def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObje
         if wide:
             admitted_cast_f64(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
                               _AF_F64P(unsafe_from_address=address))
-            snapshot.replace_f64(weights, address)
+            snapshot.replace_f64(address)
+            pin.keep = weights
         else:
             _ = admitted_cast_f32(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
                                   _AF_F32P(unsafe_from_address=address))
-            snapshot.replace_f32(weights, address)
+            snapshot.replace_f32(address)
+            pin.keep = weights
     return snapshot^
 
 
 def admit_family_weights(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject,
-                         wide: Bool = False) raises -> ArrayMetadata:
+                         mut pin: ArrayPin, wide: Bool = False) raises -> ArrayMetadata:
     """sample_weight as `n` float32 (or, `wide`, float64) words: an int or a
     float fills every row; prepare_targets' refusals in their order (NaN or
-    infinity, a negative weight unless `allow_negative`, all zero). `.keep`
-    is the weight array the kernels read."""
+    infinity, a negative weight unless `allow_negative`, all zero).
+    `pin.keep` is the weight array the kernels read."""
     var b = native_loaded_module("builtins")
     var snapshot: ArrayMetadata
     if py_type(source) is b.int or py_type(source) is b.float:
-        snapshot = _weight_scalar(Float64(py=source), n, wide, context)
+        snapshot = _weight_scalar(Float64(py=source), n, wide, context, pin)
     else:
-        snapshot = _weight_buffer(source, n, wide, context)
+        snapshot = _weight_buffer(source, n, wide, context, pin)
     var address = snapshot.source.addr
     var status: Int
     if wide:
@@ -469,3 +478,12 @@ def admit_family_weights(source: PythonObject, n: Int, allow_negative: Bool, con
     if status == WEIGHTS_ALL_ZERO:
         raise Error(FAMILY_ZERO_WEIGHTS)
     return snapshot^
+
+
+def admit_family_weights_array(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject,
+                               wide: Bool = False) raises -> PythonObject:
+    """`admit_family_weights` for a door that needs only the weight array
+    the kernels read (`pin.keep`): the array itself holds its words."""
+    var pin = ArrayPin()
+    _ = admit_family_weights(source, n, allow_negative, context, pin, wide)
+    return pin.keep

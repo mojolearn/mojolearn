@@ -29,7 +29,7 @@ from bindings.family_common import family_array
 from core.admitted_input import admitted_cast_f64
 from core.host_finite_scan import host_all_finite_f32
 from core.cast_in import CAST_KIND_FLOAT
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_python_shape
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from bindings.native_class_admission import class_record, class_admit
 from bindings.trees_side_records import trees_key_same
@@ -335,13 +335,15 @@ def kernel_public_result(result: PythonObject, prediction: Bool, outside: Bool,
                              MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(widened))))
         _ = result
         return native_array_ndarray_view(widened, context)
-    var value = admit_family_meta(result, -1, "prediction", context)
-    var wide = family_array(value.python_shape(), "<f8", context)
+    var pin = ArrayPin()
+    var value = admit_family_meta(result, -1, "prediction", context, pin)
+    var wide = family_array(array_python_shape(value), "<f8", context)
     var source = value.source
     admitted_cast_f64(source.addr, source.s0, source.s1, source.rows, source.cols,
                          source.itemsize, source.kind,
                          MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(wide))))
     _ = value^
+    _ = pin^  # the door's pin held the prediction through the cast
     return native_array_ndarray_view(wide, context)
 
 

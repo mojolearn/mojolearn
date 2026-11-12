@@ -17,7 +17,7 @@ from bindings.classifier_public_lifecycle import _feature_names
 from bindings.py_balanced import py_type, py_call, py_setitem, py_get
 from bindings.native_loaded_module import native_loaded_module
 from bindings.sequence_array_native import sequence_array_release
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from bindings.manifold_errors_native import manifold_error
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end
 
@@ -60,7 +60,8 @@ def manifold_operation(model: PythonObject, operation: String, args: PythonObjec
     var name = String(py_type(model).__name__)
     var tsne = operation.startswith("family_mani_tsne_")
     var source = args[2]
-    var x = manifold_input(source, name, not tsne, context)
+    var x_pin = ArrayPin()
+    var x = manifold_input(source, name, not tsne, context, x_pin)
     var names = _feature_names(source, context)
     if method == "transform":
         manifold_check_width(settings, x, names, name, context)
@@ -73,7 +74,7 @@ def manifold_operation(model: PythonObject, operation: String, args: PythonObjec
     var result: PythonObject
     try:
         if tsne:
-            result = tsne_operation(model, settings, operation, args, x, context)
+            result = tsne_operation(model, settings, operation, args, x, x_pin, context)
         else:
             result = mani_decomp_operation(model, settings, operation, args, Optional(x.copy()), context)
     except error:
@@ -81,4 +82,5 @@ def manifold_operation(model: PythonObject, operation: String, args: PythonObjec
         raise refined^
     _ = source
     _ = x
+    _ = x_pin^  # the door's pin held X through every RUN read
     return manifold_finish(settings, result, method, names, context)

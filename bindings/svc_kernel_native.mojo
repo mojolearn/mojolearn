@@ -89,7 +89,7 @@ from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, 
 from core.host_finite_scan import host_all_finite_f32_strided
 from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from bindings.py_optional import py_or_none
@@ -394,9 +394,10 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var sw_owner = PythonObject(None)
     var sw_address = 0
     if sample_weight is not None:
-        var weights = admit_family_weights(sample_weight, n_rows, False, context, True)
-        sw = weights.keep
-        sw_owner = Python.tuple(weights.keep, weights.owner)
+        var weights_pin = ArrayPin()
+        var weights = admit_family_weights(sample_weight, n_rows, False, context, weights_pin, True)
+        sw = weights_pin.keep
+        sw_owner = Python.tuple(weights_pin.keep, weights_pin.owner)
         sw_address = weights.source.addr
     var codes = PythonObject(None)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
@@ -633,7 +634,7 @@ def _svm_fit_entry(binding: PythonObject, native: PythonObject) raises -> Bool:
 
 
 def _svm_fit_admit(source: PythonObject, est: String, entry: Bool, context: PythonObject,
-                   mut fold: DoorRowsStore) raises -> ArrayMetadata:
+                   mut fold: DoorRowsStore, mut pin: ArrayPin) raises -> ArrayMetadata:
     """The fit X of a kernel SVM (lane a8a). With the device-X entry
     (`entry`) a model-selection fold stays on the device (admit_x
     `device_x`: `fold` receives its store ids, the record has no host
@@ -646,15 +647,15 @@ def _svm_fit_admit(source: PythonObject, est: String, entry: Bool, context: Pyth
         if fx.store.active():
             fold = fx.store
             return admit_family_fold_meta(fx.rows, fx.cols)
-        return admit_family_meta(fx.array, 2, "X", context, True)
-    return admit_family_meta(source, 2, "X", context, True)
+        return admit_family_meta(fx.array, 2, "X", context, pin, True)
+    return admit_family_meta(source, 2, "X", context, pin, True)
 
 
-def _svm_fit_host_rows(source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+def _svm_fit_host_rows(source: PythonObject, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     """A fold's host rows for a fit route that reads host words (one-vs-one,
     Platt, kernel='precomputed'), gathered in parallel out of model
     selection's host base; untested (the door tests them)."""
-    return admit_family_meta(admit_rows_host_unchecked(source, context), 2, "X", context, True)
+    return admit_family_meta(admit_rows_host_unchecked(source, context), 2, "X", context, pin, True)
 
 
 def _svm_x_scan(x_meta: ArrayMetadata, est: String) raises:
@@ -1136,10 +1137,11 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     # other route tests the host words here (`_svm_x_scan`). One wording.
     var entry = _svm_fit_entry(binding, native)
     var fold = DoorRowsStore.none()
-    var x_meta = _svm_fit_admit(args[1], "SVC", entry, context, fold)
+    var x_pin = ArrayPin()
+    var x_meta = _svm_fit_admit(args[1], "SVC", entry, context, fold, x_pin)
     py_setitem(fields, PythonObject("input_copied_"),
                PythonObject(True if fold.active() else admit_family_copied(x_meta, args[1])))
-    var x = x_meta.keep
+    var x = x_pin.keep
     var y = args[2]
     var parsed = _as_labels(y, context)
     var labels = parsed[0]
@@ -1160,8 +1162,8 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var device_x = (entry and labels is not None and not precomputed
                     and not svc_truthy(svc_field(fields, "_hp_probability")))
     if fold.active() and not device_x:
-        x_meta = _svm_fit_host_rows(args[1], context)
-        x = x_meta.keep
+        x_meta = _svm_fit_host_rows(args[1], context, x_pin)
+        x = x_pin.keep
         fold = DoorRowsStore.none()
     var gamma = 1.0
     var scale_gamma = False
@@ -1180,6 +1182,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         _svc_publish_dispatch(fields, native, context)
         _ = x^
         _ = x_meta  # retain captured storage owners through the last native use
+        _ = x_pin
         _ = c_rows^
         return
     if py_contains(fields, PythonObject("_pairs")):
@@ -1229,6 +1232,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     _svc_publish_dispatch(fields, native, context)
     _ = x^
     _ = x_meta  # retain captured storage owners through the last native use
+    _ = x_pin
     _ = labels^
     _ = c_rows^
 
@@ -1272,9 +1276,11 @@ def _svm_query(source: PythonObject, est: String, context: PythonObject, entry_t
     if entry_tests and door_is_device_rows(source, context):
         var x = admit_x_unrecorded(source, est, context, device_x=True, finite=False)
         return _SvmQuery(x.array, x.source, x.address, x.rows, x.cols, x.store)
-    var q = admit_family_meta(source, 2, "X", context, True, finite=not entry_tests,
+    var q_pin = ArrayPin()
+    var q = admit_family_meta(source, 2, "X", context, q_pin, True, finite=not entry_tests,
                               refusal="Input X contains NaN or infinity (" + est + ").")
-    return _SvmQuery(q.keep, q.owner, q.source.addr, q.shape[0], q.shape[1], DoorRowsStore.none())
+    # _SvmQuery is the door's record: it takes over the pin's two owners.
+    return _SvmQuery(q_pin.keep, q_pin.owner, q.source.addr, q.shape[0], q.shape[1], DoorRowsStore.none())
 
 
 def _svm_query_refuse(finite: Int, range_word: Int, q: _SvmQuery, est: String) raises:
@@ -1555,10 +1561,11 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     # every other route tests the host words here. One wording.
     var entry = _svm_fit_entry(binding, native)
     var fold = DoorRowsStore.none()
-    var x_meta = _svm_fit_admit(args[1], "SVR", entry, context, fold)
+    var x_pin = ArrayPin()
+    var x_meta = _svm_fit_admit(args[1], "SVR", entry, context, fold, x_pin)
     py_setitem(fields, PythonObject("input_copied_"),
                PythonObject(True if fold.active() else admit_family_copied(x_meta, args[1])))
-    var x = x_meta.keep
+    var x = x_pin.keep
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]
     # `_as_targets`: y refused non-finite here, in scikit-learn's wording.
@@ -1575,8 +1582,8 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
     var device_x = entry and not precomputed
     if fold.active() and not device_x:
-        x_meta = _svm_fit_host_rows(args[1], context)
-        x = x_meta.keep
+        x_meta = _svm_fit_host_rows(args[1], context, x_pin)
+        x = x_pin.keep
         fold = DoorRowsStore.none()
     var gamma = 1.0
     var scale_gamma = False
@@ -1649,6 +1656,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     _ = connection
     _ = x^
     _ = x_meta  # retain captured storage owners through the last native use
+    _ = x_pin
     _ = targets^
     _ = c_rows^
 
@@ -1742,12 +1750,12 @@ def _svr_score(model: PythonObject, fields: PythonObject, binding: PythonObject,
     return PythonObject(1.0 - ss_res / ss_tot)
 
 
-def _coef_snapshot(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
+def _coef_snapshot(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     if py_type(value) is not context["array_class"] and py_type(value) is not py_get(context, "ndarray"):
         raise Error("TypeError: " + name + " requires an admitted native array")
     classical_admit_value(value, context)
     var shape = array_shape_once(value, context)
-    var captured = array_metadata_once(value, shape^, name, context)
+    var captured = array_metadata_once(value, shape^, name, context, pin)
     if len(captured.shape) != 2 or not captured.f32_c() or not captured.native_byte_order:
         raise Error("TypeError: " + name + " requires a contiguous native float32 matrix")
     return captured^
@@ -1774,6 +1782,7 @@ def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
     var count = len(pairs) if pairs is not None else 1
     var duals = List[ArrayMetadata]()
     var supports = List[ArrayMetadata]()
+    var pins = List[ArrayPin]()  # the door's pins of every captured buffer, held through the GEMVs
     for row in range(count):  # driver-loop: capture each fitted buffer exactly once before execution
         var pair = pairs[row] if pairs is not None else fields
         if py_type(pair) is not b.dict:
@@ -1782,12 +1791,16 @@ def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
         for i in range(len(keys)):  # driver-loop: reject key equality/hash hooks before field lookups
             if py_type(keys[i]) is not b.str:
                 raise Error("TypeError: SVM fitted state requires exact string keys")
-        var dual = _coef_snapshot(pair["dual" if pairs is not None else "dual_coef_"], "dual_coef_", context)
-        var sv = _coef_snapshot(pair["sv" if pairs is not None else "support_vectors_"], "support_vectors_", context)
+        var dual_pin = ArrayPin()
+        var sv_pin = ArrayPin()
+        var dual = _coef_snapshot(pair["dual" if pairs is not None else "dual_coef_"], "dual_coef_", context, dual_pin)
+        var sv = _coef_snapshot(pair["sv" if pairs is not None else "support_vectors_"], "support_vectors_", context, sv_pin)
         if dual.shape[0] != 1 or dual.shape[1] != sv.shape[0] or sv.shape[1] != d:
             raise Error("ValueError: SVM coefficient and support-vector shapes disagree")
         duals.append(dual^)
         supports.append(sv^)
+        pins.append(dual_pin^)
+        pins.append(sv_pin^)
     var out = family_array(Python.tuple(count, d), "<f4", context)
     var address = Int(py=classical_address(out))
     var entry = neural_descriptor_entry(binding, "svc_dual_gemv", False) if native is None else PythonObject(None)
@@ -1802,6 +1815,7 @@ def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
                     Python.list(n, d, 1 if pairs is not None else 0), PythonObject(address + 4 * row * d))
     _ = duals
     _ = supports
+    _ = pins^
     return out
 
 

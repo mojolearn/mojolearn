@@ -6,7 +6,7 @@ from bindings.py_balanced import py_call
 from bindings.p3_labels_metrics_native import p3_array_numbers
 from bindings.native_scalar_decode import NativeScalarBuffer
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 
 
 def _label_word(snapshot: ArrayMetadata, offset: Int) raises -> PythonObject:
@@ -50,11 +50,11 @@ def _label_axis(snapshot: ArrayMetadata, axis: Int, offset: Int) raises -> Pytho
 
 def label_array_list(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var shape = array_shape_once(value, context)
-    var snapshot = array_metadata_once(value, shape^, "labels", context, allow_unsupported=True)
+    var pin = ArrayPin()
+    var snapshot = array_metadata_once(value, shape^, "labels", context, pin, allow_unsupported=True)
     # Higher rank metadata is admission-only for numerical CastIn. This label
     # decoder uses captured address/width/strides and declared dtype directly;
     # it never consumes the placeholder CastIn.kind when castable is false.
     var result = _label_axis(snapshot, 0, 0)
-    _ = snapshot.keep
-    _ = snapshot.owner
+    _ = pin^  # the door's pin holds the label storage through the decode
     return result

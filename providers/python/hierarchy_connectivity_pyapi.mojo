@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.admitted_family import admit_family_meta
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_arrays import classical_address
@@ -101,11 +102,12 @@ def hierarchy_connectivity(source: PythonObject, n: Int, context: PythonObject) 
     var b = native_loaded_module("builtins")
     var format = host_sparse_format(source)
     if format.byte_length() == 0:
-        var snapshot = admit_family_meta(source, 2, "connectivity", context)
+        var pin = ArrayPin()
+        var snapshot = admit_family_meta(source, 2, "connectivity", context, pin)
         if snapshot.shape[0] != n or snapshot.shape[1] != n:
             raise Error("Wrong shape for connectivity matrix when X has " + String(n) + " samples")
-        var dense = HierarchyConnectivity(source, snapshot.keep, snapshot.source.addr, snapshot.count, snapshot.count, 1)
-        dense.snapshot_owner = snapshot.owner
+        var dense = HierarchyConnectivity(source, pin.keep, snapshot.source.addr, snapshot.count, snapshot.count, 1)
+        dense.snapshot_owner = pin.owner
         return dense^
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(source))
     for i in range(len(ancestry)):  # boundary admission: refuse finalizers before storage acquisition

@@ -11,7 +11,7 @@ from bindings.native_instance_item import native_instance_item
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.sequential_admission import _one_of
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, cast_w64_bits
 
 comptime UMAP_F32_MAX = 3.4028234663852886e+38
@@ -31,11 +31,11 @@ def _scalar_admitted(value: PythonObject, context: PythonObject) raises -> Bool:
     return _one_of(cls, context["scalar_types"])
 
 
-def _scalar_array(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
+def _scalar_array(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     var shape = array_shape_once(value, context)
     if len(shape) != 0:
         raise Error("TypeError: UMAP " + name + " must be a scalar")
-    return array_metadata_once(value, shape^, name, context, True)
+    return array_metadata_once(value, shape^, name, context, pin, True)
 
 
 def _scalar_word(value: ArrayMetadata) -> UInt64:
@@ -49,12 +49,12 @@ def _scalar_word(value: ArrayMetadata) -> UInt64:
 
 
 def _parameter_array(value: PythonObject, name: String, integer: Bool,
-                     context: PythonObject) raises -> ArrayMetadata:
+                     context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     # The former constructor translated index/float failures to its own
     # ValueError. Preserve that public error for exact ndarrays without ever
     # invoking object elements' conversion protocols.
     try:
-        return _scalar_array(value, name, context)
+        return _scalar_array(value, name, context, pin)
     except:
         var detail = " must be an integer" if integer else " must be a finite float32 value"
         raise Error("ValueError: UMAP " + name + detail)
@@ -68,8 +68,10 @@ def umap_integer(value: PythonObject, name: String, minimum: Int, maximum: Int,
     # Exact integer identities admit the native NumPy scalar variants while
     # refusing user __index__/__int__ and bool, before their protocols run.
     if cls is py_get(context, "ndarray"):
-        var scalar = _parameter_array(value, name, True, context)
+        var pin = ArrayPin()
+        var scalar = _parameter_array(value, name, True, context, pin)
         var word = _scalar_word(scalar)
+        _ = pin^  # the door's pin held the scalar storage through the read
         var signed = scalar.source.kind == CAST_KIND_SIGNED
         if not signed and scalar.source.kind != CAST_KIND_UNSIGNED:
             raise Error("ValueError: UMAP " + name + " must be an integer")
@@ -96,8 +98,10 @@ def umap_scalar(value: PythonObject, name: String, context: PythonObject) raises
     classical_connect_numpy(context)
     var result: Float64
     if py_type(value) is py_get(context, "ndarray"):
-        var scalar = _parameter_array(value, name, False, context)
+        var pin = ArrayPin()
+        var scalar = _parameter_array(value, name, False, context, pin)
         var word = _scalar_word(scalar)
+        _ = pin^  # the door's pin held the scalar storage through the read
         if scalar.source.kind == CAST_KIND_FLOAT:
             result = bitcast[DType.float64](word)
         elif scalar.source.kind == CAST_KIND_SIGNED:
@@ -150,8 +154,10 @@ def umap_extras_fields(fields: PythonObject, context: PythonObject) raises -> Py
     classical_connect_numpy(context)
     var dense_flag = False
     if kind is py_get(context, "ndarray"):
-        var scalar = _scalar_array(densmap, "densmap", context)
+        var pin = ArrayPin()
+        var scalar = _scalar_array(densmap, "densmap", context, pin)
         var word = _scalar_word(scalar)
+        _ = pin^  # the door's pin held the scalar storage through the read
         dense_flag = bitcast[DType.float64](word) != 0.0 if scalar.source.kind == CAST_KIND_FLOAT else word != 0
     elif (kind is not b.bool and kind is not b.int and kind is not b.float and kind is not b.str
             and kind is not b.list and kind is not b.tuple and kind is not b.dict
