@@ -201,20 +201,31 @@ def _validate_search_options(fields: PythonObject, model: PythonObject, context:
     var score = _field(fields, model, "score_function")
     var rs = _field(fields, model, "random_strength")
     var strength = gbdt_nan()
-    var strength_str = String("")
+    var real = False
     if rs is not None and not _is_bool(rs) and Bool(py=py_call(_b().isinstance, rs, context["trees_real_type"])):
+        real = True
         try:
             strength = _float(rs)
         except:
             strength = gbdt_nan()
-        strength_str = _str(PythonObject(strength))
+    # The texts (two reprs and one str) are only a refusal's: they are built
+    # when the check refuses, then the check runs again to raise its own
+    # sentence (round2-fixes; perf audit 2 A pattern 9: the door split built
+    # them on every fit, the old code only on the refusing branch).
     var facts = GbdtSearchFacts(
         _truthy(_field(fields, model, "use_pointwise_searcher")),
-        _eq(grow, "SymmetricTree"), _repr(grow),
-        _eq(score, "L2") or _eq(score, "NewtonL2"), _repr(score),
-        rs is None, strength, strength_str,
+        _eq(grow, "SymmetricTree"), String(""),
+        _eq(score, "L2") or _eq(score, "NewtonL2"), String(""),
+        rs is None, strength, String(""),
         _float(t["catboost_random_strength"]), _float(t["legacy_random_strength"]))
-    return gbdt_validate_search_options(facts)
+    try:
+        return gbdt_validate_search_options(facts)
+    except:
+        facts.grow_repr = _repr(grow)
+        facts.score_repr = _repr(score)
+        if real:
+            facts.strength_str = _str(PythonObject(strength))
+        return gbdt_validate_search_options(facts)
 
 
 def _f(value: PythonObject) raises -> PythonObject:
