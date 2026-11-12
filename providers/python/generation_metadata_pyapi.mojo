@@ -376,7 +376,7 @@ def _generation_weight_in_place(layout: BorrowedBufferLayout) -> Bool:
 
 
 def _generation_engine_weights(snapshot: GenerationWeightSnapshot,
-    mut pins: List[AdmittedBorrowedBuffer], mut storage: List[List[Float32]],
+    mut storage: List[List[Float32]],
     mut layouts: List[BorrowedBufferLayout], mut destinations: List[Int]) raises -> List[Int]:
     # The snapshot's private memoryviews already pin each foreign exporter.
     # Reuse its captured layout, preserving the old per-use byte refresh point.
@@ -467,13 +467,13 @@ struct GenerationEngineAdmission(Movable):
             batch, snapshot.width, snapshot.vocab, model_integer(self.state["positions"]), model_integer(self.state["max_tokens"]),
             limited, model_integer(model_limit) if limited else 0)
         try:
-            var embedding = _generation_engine_weights(snapshot.embedding, self.pins, self.storage,
+            var embedding = _generation_engine_weights(snapshot.embedding, self.storage,
                 self.native.embedding_refresh, self.native.embedding_targets)
             self.native.embedding = embedding[0]
         except problem:
             self.native.embedding_failure = String(problem)
         try:
-            var head = _generation_engine_weights(snapshot.head.weights, self.pins, self.storage,
+            var head = _generation_engine_weights(snapshot.head.weights, self.storage,
                 self.native.head_refresh, self.native.head_targets)
             self.native.norm = head[0]
             self.native.head = head[1]
@@ -516,9 +516,9 @@ struct GenerationEngineAdmission(Movable):
                     var cache_count = layer.words.cache_count(batch, capacity)
                     var key = fields["k_cache"]
                     var value = fields["v_cache"]
-                    var weights = _generation_engine_weights(layer.weights, self.pins, self.storage,
+                    var weights = _generation_engine_weights(layer.weights, self.storage,
                         native_layer.refresh_layouts, native_layer.refresh_addresses)
-                    var optional = _generation_engine_weights(layer.optional, self.pins, self.storage,
+                    var optional = _generation_engine_weights(layer.optional, self.storage,
                         native_layer.refresh_layouts, native_layer.refresh_addresses)
                     var key_address = _generation_engine_state(key, [cache_count], "k_cache",
                         self.pins, self.storage, self.buffers, native_layer)
@@ -552,7 +552,7 @@ struct GenerationEngineAdmission(Movable):
                     native_layer.addresses = addresses^
                     native_layer.parameters = layer.words.transformer_params(batch, length, capacity, cached)
                 else:
-                    var weights = _generation_engine_weights(layer.weights, self.pins, self.storage,
+                    var weights = _generation_engine_weights(layer.weights, self.storage,
                         native_layer.refresh_layouts, native_layer.refresh_addresses)
                     var addresses: List[Int] = [0]
                     for address in weights:  # driver-loop: fixed Mamba weight descriptor vector

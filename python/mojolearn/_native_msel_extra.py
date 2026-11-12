@@ -3,12 +3,26 @@
 
 
 def connect(context, register, registry):
-    # glue: called once after package classes and their compiled doors exist
-    from . import _expansion_prep as prep
+    # glue: called after package classes and their compiled doors exist; each
+    # block connects a LOADED family once (lane lazy-family-import)
+    import sys
     from ._native_classical_bridge import _layout
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     from ._labels import ClassLabels
+    prep = sys.modules.get(__package__ + '._expansion_prep')
+    if prep is not None and prep.LinearDiscriminantAnalysis not in registry:
+        _connect_lda(prep, register, _layout, BuiltinFunctionType, MethodType, _binding, ClassLabels)
+    linear_model = sys.modules.get(__package__ + '.linear_model')
+    if linear_model is not None and linear_model.LogisticRegression not in registry:
+        _connect_logistic(linear_model, register)
+
+    from ._native_msel_more import connect as connect_more
+    connect_more(context, register, registry)
+
+
+def _connect_lda(prep, register, _layout, BuiltinFunctionType, MethodType, _binding, ClassLabels):
+    # glue: the LDA owner's fixed schema, once, when the prep family loads
     cls = prep.LinearDiscriminantAnalysis
     parameters = ('solver', 'shrinkage', 'priors', 'n_components', 'store_covariance', 'tol',
                   'covariance_estimator')
@@ -48,7 +62,9 @@ def connect(context, register, registry):
                            '_rank', '_max_components', '_scal_full', '_mojolearn_fitted', '_mojolearn_fitting'),
     )
 
-    from . import linear_model
+
+def _connect_logistic(linear_model, register):
+    # glue: the logistic owner's fixed schema, once, when the linear family loads
     from ._native_logistic_bridge import connect_public, _PARAMETERS
     cls = linear_model.LogisticRegression
     owner = connect_public(cls, linear_model._LR_CONTEXT)
@@ -62,6 +78,3 @@ def connect(context, register, registry):
         'get_params': ('get_params', (('constant', False),)),
         'set_params': ('set_params', (('arg', 0),)),
     })
-
-    from ._native_msel_more import connect as connect_more
-    connect_more(context, register, registry)

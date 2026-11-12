@@ -10,7 +10,7 @@ from bindings.native_owner_lifetime import native_release_admit
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_is_array
 from bindings.classical_pandas import classical_admit_value
-from bindings.admitted_input import AdmittedTyped, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
+from bindings.admitted_input import AdmittedTypedPin, admitted_typed_once, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from core.borrowed_buffer import BorrowedBufferLayout
@@ -64,7 +64,7 @@ struct ResampleRows(Movable):
     var sequence: PythonObject
     var dtype: PythonObject
     var pin: Optional[AdmittedBorrowedBuffer]
-    var array_owner: Optional[AdmittedTyped]
+    var array_owner: AdmittedTypedPin
     var layout: BorrowedBufferLayout
     var is_array: Bool
     var has_objects: Bool
@@ -78,7 +78,7 @@ struct ResampleRows(Movable):
         self.sequence = PythonObject(None)
         self.dtype = PythonObject(None)
         self.pin = None
-        self.array_owner = None
+        self.array_owner = AdmittedTypedPin()
         self.layout = BorrowedBufferLayout(0, 1, False, [0], [1], [-1])
         self.is_array = False
         self.has_objects = False
@@ -119,8 +119,7 @@ struct ResampleRows(Movable):
         elif classical_is_array(source, context):
             if py_get(context, "ndarray") is None:
                 raise Error("ImportError: mojolearn: resample requires optional NumPy support for Array outputs")
-            self.array_owner = AdmittedTyped(source, context)
-            ref view = self.array_owner.value().view
+            var view = admitted_typed_once(source, context, self.array_owner)
             self.layout = BorrowedBufferLayout(view.addr, view.itemsize, view.readonly,
                 view.shape.copy(), view.strides.copy(), List[Int](length=len(view.shape), fill=-1))
             self.dtype = py_call(native_numpy_dtype(context), view.dtype)

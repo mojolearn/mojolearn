@@ -111,14 +111,19 @@ def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:
 
 
 struct AdmittedBorrowedBuffer(Movable):
-    var owner: PythonObject
+    # The door's pin of one exported Py_buffer. It holds no Python object:
+    # PyObject_GetBuffer stores a strong reference to the exporter in the
+    # Py_buffer's `obj` word (exported[1]) until PyBuffer_Release, so the
+    # exporter outlives every read of `layout`. RUN code takes the typed
+    # `layout` (core/borrowed_buffer.mojo BorrowedBufferLayout) and `format`.
+    # The former `owner: PythonObject` field (a second reference nothing read)
+    # was deleted 2026-11-12 by lane entangled-array-owner-2.
     var exported: List[Int]
     var acquired: Bool
     var format: String
     var layout: Optional[BorrowedBufferLayout]
 
     def __init__(out self, admitted_exporter: PythonObject, writable: Bool = False) raises:
-        self.owner = admitted_exporter
         self.exported = List[Int](length=10, fill=0)
         self.acquired = False
         self.format = String("")

@@ -37,6 +37,7 @@ from bindings.family_common import (
 )
 from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
 from core.host_finite_scan import host_all_finite_f32
+from bindings.svc_common_run import svc_r2_check
 
 comptime SVC_NONE = -1
 # cm_epi COUNT (x_metrics/cm_epi.mojo), `_expansion_metrics._CM_COUNT`.
@@ -384,15 +385,7 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     var p = admit_family(pred, 1, "predictions", context).array
     var n = Int(py=t.size)
     var m = Int(py=p.size)
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t))), n):
-        raise Error("mojolearn score: y_true contains NaN or infinity")
-    _ = t  # keep the Python object alive through the native calls above
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(p))), m):
-        raise Error("mojolearn score: y_pred contains NaN or infinity")
-    _ = p  # keep the Python object alive through the native calls above
-    if n != m:
-        raise Error("mojolearn score: y_true and y_pred have different shapes (" + String(n) + ", 1) and ("
-                    + String(m) + ", 1)")
+    svc_r2_check(Int(py=classical_address(t)), n, Int(py=classical_address(p)), m)
     var r = _Reg(t, p, n, 1, PythonObject(None), "uniform_average", PythonObject(None), context["family_metrics_ops"])
     var sq = Int(py=context["family_metrics_terms"]["sq"])
     r.program(0.0, context)

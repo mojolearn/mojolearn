@@ -361,7 +361,7 @@ def _fold_rows_run(mut prog: _Prog, n: Int, k: Int, code: Int, order: Int, conte
             unsafe_memcpy(dest=msel_p64(train), src=FAMILY_I64P(unsafe_from_address=base + 4 * (at + 2 * c)), count=n - c)
             _ = train  # keep the Python object alive through the native call above
         _ = py_call(res.append, Python.tuple(train, test))
-    _ = arena  # count words and copied row addresses remain owned through the final fold
+    _ = arena^  # count words and copied row addresses remain owned through the final fold
     return res
 
 

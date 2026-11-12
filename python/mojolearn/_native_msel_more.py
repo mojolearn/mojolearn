@@ -3,9 +3,12 @@
 
 
 def connect(context, register, registry):
-    # glue: fixed built-in schemas and native owner metadata, once at import
-    from . import _gbdt_adapters as boosting, _expansion_prep as prep
+    # glue: fixed built-in schemas and native owner metadata, once per loaded
+    # family (lane lazy-family-import)
+    import sys
     from ._native_classical_bridge import _layout
+    boosting = sys.modules.get(__package__ + '._gbdt_adapters')
+    prep = sys.modules.get(__package__ + '._expansion_prep')
 
     def owner_for(cls, source, names, consumed, reset):
         # glue: private context copy leaves other families' owner metadata intact
@@ -17,6 +20,14 @@ def connect(context, register, registry):
             admission={'classical_public_layouts': {cls: layout}, 'classical_public_installed': True})
         return owner
 
+    if boosting is not None and boosting.GradientBoostingRegressor not in registry:
+        _connect_boosting(boosting, register, owner_for, _layout)
+    if prep is not None and prep.GaussianNB not in registry:
+        _connect_naive_bayes(prep, register, owner_for)
+
+
+def _connect_boosting(boosting, register, owner_for, _layout):
+    # glue: both boosting adapters' fixed schemas, once, when the family loads
     cls = boosting.GradientBoostingRegressor
     names = boosting._TREES_CONTEXT['trees_gbdt_adapter_tables']['names']
     owner = owner_for(cls, boosting._TREES_CONTEXT, names,
@@ -55,6 +66,9 @@ def connect(context, register, registry):
         'set_params': ('trees_gbdt_adapter_set_params', (('arg', 0),)),
     })
 
+
+def _connect_naive_bayes(prep, register, owner_for):
+    # glue: GaussianNB's fixed schema, once, when the prep family loads
     cls = prep.GaussianNB
     names = ('priors', 'var_smoothing')
     owner = owner_for(cls, prep._CLS_CONTEXT, names,

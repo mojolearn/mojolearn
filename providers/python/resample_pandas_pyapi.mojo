@@ -22,6 +22,7 @@ from bindings.msel_inputs import _pandas_empty_rows
 from bindings.sequential_arrays import sequential_address
 from bindings.sequential_inputs import _promote
 from core.classical_pandas_impl import pd_raw_at, _pd_double
+from core.resample_pandas_layout import RPLayout as _RPLayout
 from core.cast_in import cast_in_kind, cast_w64_bits, _top_bit
 from core.sequence_array_cast import sequence_store_word
 from core.host_parallel import host_parallelize
@@ -111,19 +112,13 @@ def _rp_cell_entries(kind: String, context: PythonObject) raises -> PythonObject
 
 
 struct _RPArray(Movable):
+    """The door's capture of one pandas block array: `layout` is the typed
+    view RUN routines read (core/resample_pandas_layout.mojo, composed once
+    here); the other fields are the owners that keep `layout.address` valid
+    and the scalar boxing entries the door's Python-object cells use."""
+    var layout: _RPLayout
     var owner: PythonObject
     var dtype: PythonObject
-    var code: String
-    var kind: String
-    var item: Int
-    var rank: Int
-    var rows: Int
-    var cols: Int
-    var row_stride: Int
-    var col_stride: Int
-    var address: Int
-    var native: Bool
-    var number: Int
     var api_owner: PythonObject
     var scalar_box: _RPScalarBox
     # lane ne2-b-rounds (N047): the operation's pandas missing values and
@@ -135,6 +130,7 @@ struct _RPArray(Movable):
     var time_from: PythonObject
 
     def __init__(out self, value: PythonObject, context: PythonObject) raises:
+        self.layout = _RPLayout()
         if py_type(value) is not context["ndarray"]:
             raise Error("TypeError: pandas storage requires an exact native ndarray")
         var snapshots = context["resample_pandas_array_snapshots"]
@@ -143,21 +139,21 @@ struct _RPArray(Movable):
             if snapshot[0] is value:
                 self.owner = snapshot[1]
                 self.dtype = snapshot[2]
-                self.code = String(snapshot[3])
-                self.kind = String(snapshot[4])
-                self.item = Int(py=snapshot[5])
-                self.rank = Int(py=snapshot[6])
-                self.rows = Int(py=snapshot[7])
-                self.cols = Int(py=snapshot[8])
-                self.row_stride = Int(py=snapshot[9])
-                self.col_stride = Int(py=snapshot[10])
-                self.address = Int(py=snapshot[11])
-                self.native = Bool(py=snapshot[12])
-                self.number = Int(py=snapshot[13])
+                self.layout.code = String(snapshot[3])
+                self.layout.kind = String(snapshot[4])
+                self.layout.item = Int(py=snapshot[5])
+                self.layout.rank = Int(py=snapshot[6])
+                self.layout.rows = Int(py=snapshot[7])
+                self.layout.cols = Int(py=snapshot[8])
+                self.layout.row_stride = Int(py=snapshot[9])
+                self.layout.col_stride = Int(py=snapshot[10])
+                self.layout.address = Int(py=snapshot[11])
+                self.layout.native = Bool(py=snapshot[12])
+                self.layout.number = Int(py=snapshot[13])
                 self.api_owner = snapshot[14]
                 var table = Int(py=self.api_owner[2])
                 self.scalar_box = MutPointer[_RPScalarBox, MutUntrackedOrigin](unsafe_from_address=table + 60 * size_of[Int]())[0]
-                var cell_entries = _rp_cell_entries(self.kind, context)
+                var cell_entries = _rp_cell_entries(self.layout.kind, context)
                 self.na = cell_entries[0]
                 self.nat = cell_entries[1]
                 self.time_from = cell_entries[2]
@@ -172,38 +168,35 @@ struct _RPArray(Movable):
             admitted_dtype = admitted_dtype or py_type(self.dtype) is classes[i]
         if not admitted_dtype:
             raise Error("TypeError: pandas storage cannot invoke custom dtype metadata or scalar hooks")
-        self.kind = String(self.dtype.kind)
-        self.number = Int(py=self.dtype.num)
+        self.layout.kind = String(self.dtype.kind)
+        self.layout.number = Int(py=self.dtype.num)
         self.api_owner = context["resample_pandas_scalar_api"]
         var table = Int(py=self.api_owner[2])
         self.scalar_box = MutPointer[_RPScalarBox, MutUntrackedOrigin](unsafe_from_address=table + 60 * size_of[Int]())[0]
-        self.item = Int(py=self.dtype.itemsize)
+        self.layout.item = Int(py=self.dtype.itemsize)
         # No custom dtype getitem/cast, structured-descr Python helpers, or
         # reference-bearing user dtype can enter raw storage copies.
-        if self.dtype.fields is not None or self.dtype.subdtype is not None or (self.number < 0 or self.number > 23):
+        if self.dtype.fields is not None or self.dtype.subdtype is not None or (self.layout.number < 0 or self.layout.number > 23):
             raise Error("TypeError: pandas resample storage requires a built-in scalar dtype")
-        if self.kind != "O" and Bool(py=self.dtype.hasobject):
+        if self.layout.kind != "O" and Bool(py=self.dtype.hasobject):
             raise Error("TypeError: pandas resample storage has unsupported object-bearing dtype")
-        self.code = String(self.dtype.str)
-        self.native = Bool(py=self.dtype.isnative)
-        self.rank = Int(py=self.owner.ndim)
+        self.layout.code = String(self.dtype.str)
+        self.layout.native = Bool(py=self.dtype.isnative)
+        self.layout.rank = Int(py=self.owner.ndim)
         var shape = self.owner.shape
         var strides = self.owner.strides
-        if self.rank != 1 and self.rank != 2:
+        if self.layout.rank != 1 and self.layout.rank != 2:
             raise Error("ValueError: pandas block rank must be one or two")
-        self.rows = Int(py=shape[self.rank - 1])
-        self.cols = 1 if self.rank == 1 else Int(py=shape[0])
-        self.row_stride = Int(py=strides[self.rank - 1])
-        self.col_stride = 0 if self.rank == 1 else Int(py=strides[0])
-        self.address = Int(py=sequential_address(self.owner))
-        var cell_entries = _rp_cell_entries(self.kind, context)
+        self.layout.rows = Int(py=shape[self.layout.rank - 1])
+        self.layout.cols = 1 if self.layout.rank == 1 else Int(py=shape[0])
+        self.layout.row_stride = Int(py=strides[self.layout.rank - 1])
+        self.layout.col_stride = 0 if self.layout.rank == 1 else Int(py=strides[0])
+        self.layout.address = Int(py=sequential_address(self.owner))
+        var cell_entries = _rp_cell_entries(self.layout.kind, context)
         self.na = cell_entries[0]
         self.nat = cell_entries[1]
         self.time_from = cell_entries[2]
-        py_call(snapshots.append, Python.tuple(value, self.owner, self.dtype, self.code, self.kind, self.item, self.rank, self.rows, self.cols, self.row_stride, self.col_stride, self.address, self.native, self.number, self.api_owner))
-
-    def at(self, row: Int, col: Int = 0) -> Int:
-        return self.address + row * self.row_stride + col * self.col_stride
+        py_call(snapshots.append, Python.tuple(value, self.owner, self.dtype, self.layout.code, self.layout.kind, self.layout.item, self.layout.rank, self.layout.rows, self.layout.cols, self.layout.row_stride, self.layout.col_stride, self.layout.address, self.layout.native, self.layout.number, self.api_owner))
 
 
 def _rp_new(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -223,7 +216,7 @@ def _rp_object(destination: Int, value: PythonObject) raises:
     _ = value
 
 
-def _rp_number(source: _RPArray, address: Int, imaginary: Bool = False) raises -> Float64:
+def _rp_number(source: _RPLayout, address: Int, imaginary: Bool = False) raises -> Float64:
     var kind = source.kind
     var size = source.item
     var offset = 0
@@ -241,14 +234,14 @@ def _rp_number(source: _RPArray, address: Int, imaginary: Bool = False) raises -
 
 
 def _rp_box(source: _RPArray, address: Int) raises -> PythonObject:
-    if source.kind == "O":
+    if source.layout.kind == "O":
         var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=address)[0]
         return PythonObject(from_borrowed=raw) if raw else PythonObject(None)
-    if source.kind == "b":
-        return PythonObject(pd_raw_at(address, 0, source.item, source.native) != 0)
-    if source.kind == "i" or source.kind == "u":
-        var tag = 1 if source.kind == "i" else 0
-        var raw = cast_w64_bits(pd_raw_at(address, 0, source.item, source.native), tag, source.item)
+    if source.layout.kind == "b":
+        return PythonObject(pd_raw_at(address, 0, source.layout.item, source.layout.native) != 0)
+    if source.layout.kind == "i" or source.layout.kind == "u":
+        var tag = 1 if source.layout.kind == "i" else 0
+        var raw = cast_w64_bits(pd_raw_at(address, 0, source.layout.item, source.layout.native), tag, source.layout.item)
         if tag == 1:
             return PythonObject(bitcast[DType.int64](raw))
         ref cpy = Python().cpython()
@@ -256,36 +249,36 @@ def _rp_box(source: _RPArray, address: Int) raises -> PythonObject:
         if not result:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=result)
-    if source.number == 13 or source.number == 16:
+    if source.layout.number == 13 or source.layout.number == 16:
         var raw = source.scalar_box(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), source.dtype._obj_ptr, source.owner._obj_ptr)
         if not raw:
             raise Python().cpython().unsafe_get_error()
         _ = source.api_owner
         _ = source.owner
         return PythonObject(from_owned=raw)
-    if source.kind == "f":
-        return PythonObject(_rp_number(source, address))
-    if source.kind == "c":
+    if source.layout.kind == "f":
+        return PythonObject(_rp_number(source.layout, address))
+    if source.layout.kind == "c":
         ref cpy = Python().cpython()
-        var result = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(_rp_number(source, address), _rp_number(source, address, True))
+        var result = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(_rp_number(source.layout, address), _rp_number(source.layout, address, True))
         if not result:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=result)
-    if source.kind == "S" or source.kind == "V":
-        var count = source.item
+    if source.layout.kind == "S" or source.layout.kind == "V":
+        var count = source.layout.item
         var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
-        while source.kind == "S" and count > 0 and bytes[count - 1] == 0:  # driver-loop: trim fixed-width byte-string padding only
+        while source.layout.kind == "S" and count > 0 and bytes[count - 1] == 0:  # driver-loop: trim fixed-width byte-string padding only
             count -= 1
         ref cpy = Python().cpython()
         var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(bytes, count)
         if not raw:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=raw)
-    if source.kind == "U":
-        var count = source.item // 4
+    if source.layout.kind == "U":
+        var count = source.layout.item // 4
         var words = List[UInt32](length=count, fill=0)
         for i in range(count):  # driver-loop: native endian normalization of fixed-width Unicode storage
-            words[i] = UInt32(pd_raw_at(address, i * 4, 4, source.native))
+            words[i] = UInt32(pd_raw_at(address, i * 4, 4, source.layout.native))
         while count > 0 and words[count - 1] == 0:  # driver-loop: trim fixed-width Unicode padding only
             count -= 1
         ref cpy = Python().cpython()
@@ -294,7 +287,7 @@ def _rp_box(source: _RPArray, address: Int) raises -> PythonObject:
             raise cpy.unsafe_get_error()
         _ = words^
         return PythonObject(from_owned=raw)
-    if source.kind == "M" or source.kind == "m":
+    if source.layout.kind == "M" or source.layout.kind == "m":
         return _rp_time_box(source, address, PythonObject(None))
     raise Error("TypeError: pandas object promotion requires native scalar boxing for this dtype")
 
@@ -309,19 +302,19 @@ def _rp_scalar_array(value: PythonObject, context: PythonObject) raises -> Pytho
         raise Error("TypeError: pandas fill storage requires an exact native NumPy scalar")
     var result = _rp_new(Python.tuple(1), value.dtype, context)
     var target = _RPArray(result, context)
-    if target.kind != "b" and target.kind != "i" and target.kind != "u" and target.kind != "f" and target.kind != "c" and target.kind != "M" and target.kind != "m" and target.kind != "S" and target.kind != "U" and target.kind != "V":
+    if target.layout.kind != "b" and target.layout.kind != "i" and target.layout.kind != "u" and target.layout.kind != "f" and target.layout.kind != "c" and target.layout.kind != "M" and target.layout.kind != "m" and target.layout.kind != "S" and target.layout.kind != "U" and target.layout.kind != "V":
         raise Error("TypeError: pandas scalar byte storage requires a native builtin scalar dtype")
     var api = context["resample_pandas_scalar_api"]
     var extract = MutPointer[_RPScalarBytes, MutUntrackedOrigin](unsafe_from_address=Int(py=api[2]) + 62 * size_of[Int]())[0]
-    if target.kind == "S" or target.kind == "U" or target.kind == "V":
+    if target.layout.kind == "S" or target.layout.kind == "U" or target.layout.kind == "V":
         var address = Int(0)
         extract(value._obj_ptr, MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=address))))
-        if target.item > 0:
+        if target.layout.item > 0:
             if address == 0:
                 raise Error("TypeError: native flexible scalar has no stored bytes")
-            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target.address), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=target.item)
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target.layout.address), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=target.layout.item)
     else:
-        extract(value._obj_ptr, MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target.address))
+        extract(value._obj_ptr, MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target.layout.address))
     _ = value
     _ = api^
     return result
@@ -345,7 +338,7 @@ def _rp_wide_word(destination: Int, low: UInt64, high: UInt64, native: Bool):
         out[byte if native else 15 - byte] = UInt8(word >> UInt64((byte % 8) * 8))
 
 
-def _rp_widen(source: _RPArray, address: Int, destination: Int, imaginary: Bool, native: Bool) raises:
+def _rp_widen(source: _RPLayout, address: Int, destination: Int, imaginary: Bool, native: Bool) raises:
     if imaginary and source.kind != "c":
         _rp_wide_word(destination, 0, 0, native)
         return
@@ -399,31 +392,31 @@ def _rp_widen(source: _RPArray, address: Int, destination: Int, imaginary: Bool,
         _rp_wide_word(destination, low, high, native)
 
 def _rp_copy(source: _RPArray, address: Int, destination: Int, target: _RPArray) raises:
-    if target.kind == "O":
+    if target.layout.kind == "O":
         _rp_object(destination, _rp_box(source, address))
         return
-    if source.code == target.code:
+    if source.layout.code == target.layout.code:
         unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
-               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=source.item)
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=source.layout.item)
         return
-    if (target.kind == "M" or target.kind == "m") and source.kind == target.kind:
-        var delta = _rp_time_unit(target.code) - _rp_time_unit(source.code)
+    if (target.layout.kind == "M" or target.layout.kind == "m") and source.layout.kind == target.layout.kind:
+        var delta = _rp_time_unit(target.layout.code) - _rp_time_unit(source.layout.code)
         if delta < 0:
             raise Error("ValueError: pandas common temporal dtype must retain the finest resolution")
-        var word = pd_raw_at(address, 0, 8, source.native)
+        var word = pd_raw_at(address, 0, 8, source.layout.native)
         if word != UInt64(1) << 63:
             for i in range(delta):  # driver-loop: storage unit scaling to the common finest temporal dtype
                 word *= UInt64(1000)
-        sequence_store_word(destination, word, 8, target.native)
+        sequence_store_word(destination, word, 8, target.layout.native)
         return
-    if target.kind == "f" or target.kind == "c":
-        var components = 2 if target.kind == "c" else 1
-        var size = target.item // components
+    if target.layout.kind == "f" or target.layout.kind == "c":
+        var components = 2 if target.layout.kind == "c" else 1
+        var size = target.layout.item // components
         for component in range(components):  # driver-loop: native ABI scalar conversion, no NumPy conversion calls
             if size == 16:
-                _rp_widen(source, address, destination + component * size, component == 1, target.native)
+                _rp_widen(source.layout, address, destination + component * size, component == 1, target.layout.native)
                 continue
-            var value = _rp_number(source, address, component == 1)
+            var value = _rp_number(source.layout, address, component == 1)
             var word = UInt64(0)
             if size == 8:
                 word = bitcast[DType.uint64](value)
@@ -433,18 +426,18 @@ def _rp_copy(source: _RPArray, address: Int, destination: Int, target: _RPArray)
                 word = UInt64(bitcast[DType.uint16](Float16(value)))
             else:
                 raise Error("TypeError: mixed pandas floating widths above float64 need native conversion support")
-            sequence_store_word(destination + component * size, word, size, target.native)
+            sequence_store_word(destination + component * size, word, size, target.layout.native)
         return
-    if (target.kind == "i" or target.kind == "u" or target.kind == "b") and (source.kind == "i" or source.kind == "u" or source.kind == "b"):
-        var word = cast_w64_bits(pd_raw_at(address, 0, source.item, source.native), 1 if source.kind == "i" else 0, source.item)
-        if target.kind == "b":
+    if (target.layout.kind == "i" or target.layout.kind == "u" or target.layout.kind == "b") and (source.layout.kind == "i" or source.layout.kind == "u" or source.layout.kind == "b"):
+        var word = cast_w64_bits(pd_raw_at(address, 0, source.layout.item, source.layout.native), 1 if source.layout.kind == "i" else 0, source.layout.item)
+        if target.layout.kind == "b":
             word = UInt64(1) if word != 0 else UInt64(0)
-        sequence_store_word(destination, word, target.item, target.native)
+        sequence_store_word(destination, word, target.layout.item, target.layout.native)
         return
     raise Error("TypeError: pandas blocks require unsupported native dtype promotion")
 
 
-def _rp_missing_numeric(destination: Int, target: _RPArray) raises:
+def _rp_missing_numeric(destination: Int, target: _RPLayout) raises:
     var width = target.item // 2 if target.kind == "c" else target.item
     if width == 16 and (target.kind == "f" or target.kind == "c"):
         comptime if CompilationTarget.is_x86():
@@ -513,27 +506,27 @@ def _rp_masked(values: PythonObject, force_object: Bool, distinguish: Bool, cont
     var source = _RPArray(py_get(fields, "_data"), context)
     var mask = _RPArray(py_get(fields, "_mask"), context)
     var cls = py_type(values)
-    if (cls is _pd_class("pandas.core.arrays.integer", "IntegerArray") and source.kind != "i" and source.kind != "u") or (cls is _pd_class("pandas.core.arrays.floating", "FloatingArray") and source.kind != "f") or (cls is _pd_class("pandas.core.arrays.boolean", "BooleanArray") and source.kind != "b"):
+    if (cls is _pd_class("pandas.core.arrays.integer", "IntegerArray") and source.layout.kind != "i" and source.layout.kind != "u") or (cls is _pd_class("pandas.core.arrays.floating", "FloatingArray") and source.layout.kind != "f") or (cls is _pd_class("pandas.core.arrays.boolean", "BooleanArray") and source.layout.kind != "b"):
         raise Error("TypeError: pandas nullable dtype and native storage disagree")
-    if source.rank != 1 or mask.rank != 1 or mask.rows != source.rows or mask.kind != "b":
+    if source.layout.rank != 1 or mask.layout.rank != 1 or mask.layout.rows != source.layout.rows or mask.layout.kind != "b":
         raise Error("ValueError: pandas nullable data and mask metadata disagree")
     var missing = False
-    for row in range(mask.rows):  # driver-loop: capture missing-value presence from the admitted native mask
-        missing = missing or pd_raw_at(mask.at(row), 0, 1, True) != 0
-    var objects = force_object or (missing and (source.kind == "b" or distinguish))
-    var dtype = PythonObject("O") if objects else (PythonObject("f8") if missing and (source.kind == "i" or source.kind == "u") else source.dtype)
-    var result = _rp_new(Python.tuple(source.rows), dtype, context)
+    for row in range(mask.layout.rows):  # driver-loop: capture missing-value presence from the admitted native mask
+        missing = missing or pd_raw_at(mask.layout.at(row), 0, 1, True) != 0
+    var objects = force_object or (missing and (source.layout.kind == "b" or distinguish))
+    var dtype = PythonObject("O") if objects else (PythonObject("f8") if missing and (source.layout.kind == "i" or source.layout.kind == "u") else source.dtype)
+    var result = _rp_new(Python.tuple(source.layout.rows), dtype, context)
     var target = _RPArray(result, context)
     var na = _rp_na()
-    for row in range(source.rows):  # driver-loop: native masked storage copy and finished scalar boxing
-        var dst = target.at(row)
-        if pd_raw_at(mask.at(row), 0, 1, True) != 0:
+    for row in range(source.layout.rows):  # driver-loop: native masked storage copy and finished scalar boxing
+        var dst = target.layout.at(row)
+        if pd_raw_at(mask.layout.at(row), 0, 1, True) != 0:
             if objects:
                 _rp_object(dst, na)
             else:
-                sequence_store_word(dst, UInt64(0x7ff8000000000000) if target.item == 8 else UInt64(0x7fc00000), target.item, target.native)
+                sequence_store_word(dst, UInt64(0x7ff8000000000000) if target.layout.item == 8 else UInt64(0x7fc00000), target.layout.item, target.layout.native)
         else:
-            _rp_copy(source, source.at(row), dst, target)
+            _rp_copy(source, source.layout.at(row), dst, target)
     _ = values
     return result
 
@@ -572,17 +565,17 @@ def _rp_timezone(tz: PythonObject) raises:
 
 
 def _rp_time_box(source: _RPArray, address: Int, tz: PythonObject) raises -> PythonObject:
-    var value = bitcast[DType.int64](pd_raw_at(address, 0, 8, source.native))
+    var value = bitcast[DType.int64](pd_raw_at(address, 0, 8, source.layout.native))
     if value == Int64.MIN:
         var nat = source.nat
         if nat is None:
             nat = _rp_item("pandas._libs.tslibs.nattype", "NaT")
         return nat
-    var unit = _rp_time_unit(source.code)
+    var unit = _rp_time_unit(source.layout.code)
     # the boxing classmethod was bound once per operation (N047); the MRO
     # walk below runs only for an array built outside the operation context
     var boxer = source.time_from
-    if source.kind == "M":
+    if source.layout.kind == "M":
         if boxer is None:
             boxer = _rp_native_method(_pd_class("pandas._libs.tslibs.timestamps", "Timestamp"), "_from_value_and_reso")
         return py_call(boxer, PythonObject(value), unit, tz)
@@ -677,12 +670,12 @@ def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, conte
             var valid = type_id != 0
             if addresses[0] != 0:
                 valid = valid and ((MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addresses[0])[index >> 3] >> UInt8(index & 7)) & UInt8(1)) != 0
-            var dst = target.at(position + row)
+            var dst = target.layout.at(position + row)
             if not valid:
                 if objects:
                     _rp_object(dst, na)
                 else:
-                    sequence_store_word(dst, UInt64(0x7ff8000000000000) if target.item == 8 else (UInt64(0x7fc00000) if target.item == 4 else UInt64(0x7e00)), target.item, target.native)
+                    sequence_store_word(dst, UInt64(0x7ff8000000000000) if target.layout.item == 8 else (UInt64(0x7fc00000) if target.layout.item == 4 else UInt64(0x7e00)), target.layout.item, target.layout.native)
             elif text or binary:
                 if (index + 2) * offset_size > sizes[1]:
                     raise Error("ValueError: pandas Arrow string offsets exceed their buffer")
@@ -706,7 +699,7 @@ def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, conte
                     sequence_store_word(dst, UInt64(bit), 1, True)
             else:
                 ref source = numeric_sources[0]
-                _rp_copy(source, source.at(row), dst, target)
+                _rp_copy(source, source.layout.at(row), dst, target)
         position += length
         _ = numeric^
         _ = views^
@@ -730,8 +723,8 @@ def _rp_index_values(categories: PythonObject, context: PythonObject) raises -> 
             raise Error("TypeError: categorical RangeIndex requires native range storage")
         category_values = _rp_new(Python.tuple(len(stored_range)), PythonObject("i8"), context)
         var range_array = _RPArray(category_values, context)
-        for i in range(range_array.rows):  # driver-loop: materialize the native categorical range metadata
-            sequence_store_word(range_array.at(i), UInt64(Int(py=stored_range[i])), 8, True)
+        for i in range(range_array.layout.rows):  # driver-loop: materialize the native categorical range metadata
+            sequence_store_word(range_array.layout.at(i), UInt64(Int(py=stored_range[i])), 8, True)
     else:
         category_values = py_get(_pd_fields(categories), "_data")
     return category_values
@@ -765,51 +758,51 @@ def _rp_category_logical(record: PythonObject, context: PythonObject) raises -> 
     return record[4]
 
 def _rp_comparison_scalar(source: _RPArray, address: Int) raises -> PythonObject:
-    if source.kind == "f":
-        return PythonObject(_rp_number(source, address))
-    if source.kind == "c":
+    if source.layout.kind == "f":
+        return PythonObject(_rp_number(source.layout, address))
+    if source.layout.kind == "c":
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(_rp_number(source, address), _rp_number(source, address, True))
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(_rp_number(source.layout, address), _rp_number(source.layout, address, True))
         if not raw:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=raw)
     return _rp_box(source, address)
 
 def _rp_category_cell_equal(left: _RPArray, li: Int, right: _RPArray, ri: Int) raises -> Bool:
-    var la = left.at(li)
-    var ra = right.at(ri)
-    if left.kind == "O" or right.kind == "O":
+    var la = left.layout.at(li)
+    var ra = right.layout.at(ri)
+    if left.layout.kind == "O" or right.layout.kind == "O":
         # The common exported dtype is object for either object category
         # table regardless of dictionary equality. Never compare its objects.
         return True
-    if (left.kind == "M" or left.kind == "m") or (right.kind == "M" or right.kind == "m"):
-        if left.kind != right.kind:
+    if (left.layout.kind == "M" or left.layout.kind == "m") or (right.layout.kind == "M" or right.layout.kind == "m"):
+        if left.layout.kind != right.layout.kind:
             return False
-        var lv = bitcast[DType.int64](pd_raw_at(la, 0, 8, left.native))
-        var rv = bitcast[DType.int64](pd_raw_at(ra, 0, 8, right.native))
-        var delta = _rp_time_unit(left.code) - _rp_time_unit(right.code)
+        var lv = bitcast[DType.int64](pd_raw_at(la, 0, 8, left.layout.native))
+        var rv = bitcast[DType.int64](pd_raw_at(ra, 0, 8, right.layout.native))
+        var delta = _rp_time_unit(left.layout.code) - _rp_time_unit(right.layout.code)
         var value = rv if delta > 0 else lv
         for i in range(abs(delta)):  # driver-loop: ordered temporal category equality compares exact common-resolution instants
             if value > Int64.MAX // 1000 or value < -(Int64.MAX // 1000):
                 return False
             value *= 1000
         return lv == value if delta > 0 else value == rv
-    if left.kind == "V" or right.kind == "V":
-        if left.code != right.code:
+    if left.layout.kind == "V" or right.layout.kind == "V":
+        if left.layout.code != right.layout.code:
             return False
         var lp = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=la)
         var rp = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=ra)
-        for byte in range(left.item):  # driver-loop: opaque native category storage equality
+        for byte in range(left.layout.item):  # driver-loop: opaque native category storage equality
             if lp[byte] != rp[byte]:
                 return False
         return True
-    if (left.kind == "f" and left.item > 8) or (right.kind == "f" and right.item > 8) or (left.kind == "c" and left.item > 16) or (right.kind == "c" and right.item > 16):
-        var components = 2 if left.kind == "c" or right.kind == "c" else 1
+    if (left.layout.kind == "f" and left.layout.item > 8) or (right.layout.kind == "f" and right.layout.item > 8) or (left.layout.kind == "c" and left.layout.item > 16) or (right.layout.kind == "c" and right.layout.item > 16):
+        var components = 2 if left.layout.kind == "c" or right.layout.kind == "c" else 1
         for component in range(components):  # driver-loop: ordered numerical categories compare after exact native widening
             var lbytes = Array[UInt8, 16](uninitialized=True)
             var rbytes = Array[UInt8, 16](uninitialized=True)
-            _rp_widen(left, la, Int(lbytes.unsafe_ptr()), component == 1, True)
-            _rp_widen(right, ra, Int(rbytes.unsafe_ptr()), component == 1, True)
+            _rp_widen(left.layout, la, Int(lbytes.unsafe_ptr()), component == 1, True)
+            _rp_widen(right.layout, ra, Int(rbytes.unsafe_ptr()), component == 1, True)
             var equal = True
             var lzero = True
             var rzero = True
@@ -850,14 +843,14 @@ def _rp_categories_equal(left: PythonObject, right: PythonObject, distinguish: B
         return False
     var ldata = _RPArray(lrecord[4], context)
     var rdata = _RPArray(rrecord[4], context)
-    if ldata.kind == "O" or rdata.kind == "O":
+    if ldata.layout.kind == "O" or rdata.layout.kind == "O":
         return True
-    if ldata.rank != 1 or rdata.rank != 1 or ldata.rows != rdata.rows:
+    if ldata.layout.rank != 1 or rdata.layout.rank != 1 or ldata.layout.rows != rdata.layout.rows:
         return False
     if not ordered_left:
         var ll = _RPArray(_rp_category_logical(lrecord, context), context)
         var rl = _RPArray(_rp_category_logical(rrecord, context), context)
-        if ll.code != rl.code:
+        if ll.layout.code != rl.layout.code:
             return False
         var ls = py_type(lrecord[3]) is _pd_class("pandas.core.arrays.sparse.array", "SparseArray")
         var rs = py_type(rrecord[3]) is _pd_class("pandas.core.arrays.sparse.array", "SparseArray")
@@ -865,10 +858,10 @@ def _rp_categories_equal(left: PythonObject, right: PythonObject, distinguish: B
             return False
         if ls and not _rp_sparse_fills_equal(_rp_sparse_record(lrecord[3], context)[5], _rp_sparse_record(rrecord[3], context)[5], context):
             return False
-    for i in range(ldata.rows):  # driver-loop: common categorical dtype depends on dictionary values, not object equality hooks
+    for i in range(ldata.layout.rows):  # driver-loop: common categorical dtype depends on dictionary values, not object equality hooks
         var found = False
         var first = i if ordered_left else 0
-        var last = i + 1 if ordered_left else rdata.rows
+        var last = i + 1 if ordered_left else rdata.layout.rows
         for j in range(first, last):  # driver-loop: unordered native category dictionaries require a bijection
             if _rp_category_cell_equal(ldata, i, rdata, j):
                 found = True
@@ -898,7 +891,7 @@ def _rp_sparse_record(values: PythonObject, context: PythonObject) raises -> Pyt
     var points = _rp_sparse_field(index, "npoints")
     var source = _RPArray(py_get(fields, "_sparse_values"), context)
     var subtype = py_get(dtype_fields, "_dtype")
-    if py_type(subtype) is not py_type(source.dtype) or String(subtype.str) != source.code:
+    if py_type(subtype) is not py_type(source.dtype) or String(subtype.str) != source.layout.code:
         raise Error("TypeError: pandas sparse logical subtype and stored values disagree")
     var record = Python.tuple(values, fields, py_get(fields, "_sparse_values"), dtype, dtype_fields, fill, index, rows, points)
     py_call(records.append, record)
@@ -923,7 +916,7 @@ def _rp_sparse_field(value: PythonObject, name: String) raises -> PythonObject:
     raise Error("TypeError: pandas sparse metadata field is unavailable")
 
 
-def _rp_sparse_index_word(source: _RPArray, index: Int) raises -> Int:
+def _rp_sparse_index_word(source: _RPLayout, index: Int) raises -> Int:
     if source.rank != 1 or source.kind != "i" or source.item != 4:
         raise Error("TypeError: pandas sparse index requires one-dimensional native int32 storage")
     return Int(bitcast[DType.int64](cast_w64_bits(pd_raw_at(source.at(index), 0, 4, source.native), 1, 4)))
@@ -995,7 +988,7 @@ def _rp_temporal_scalar_array(value: PythonObject, context: PythonObject) raises
                     word -= Int64(py=_rp_sparse_field(offset, "days")) * 86400000000 + Int64(py=_rp_sparse_field(offset, "seconds")) * 1000000 + Int64(py=_rp_sparse_field(offset, "microseconds"))
     var result = _rp_new(Python.tuple(1), PythonObject(kind + "8[" + unit + "]"), context)
     var target = _RPArray(result, context)
-    sequence_store_word(target.address, bitcast[DType.uint64](word), 8, target.native)
+    sequence_store_word(target.layout.address, bitcast[DType.uint64](word), 8, target.layout.native)
     _ = value
     return result
 
@@ -1042,9 +1035,9 @@ def _rp_sparse_fill_array(value: PythonObject, context: PythonObject) raises -> 
         return _rp_scalar_array(value, context)
     var result = _rp_new(Python.tuple(1), PythonObject(dtype), context)
     var target = _RPArray(result, context)
-    sequence_store_word(target.address, real, 1 if dtype == "b1" else 8, target.native)
+    sequence_store_word(target.layout.address, real, 1 if dtype == "b1" else 8, target.layout.native)
     if dtype == "c16":
-        sequence_store_word(target.address + 8, imaginary, 8, target.native)
+        sequence_store_word(target.layout.address + 8, imaginary, 8, target.layout.native)
     _ = value
     return result
 
@@ -1087,16 +1080,16 @@ def _rp_numpy_temporal_box(source: _RPArray, address: Int) raises -> PythonObjec
     # boxing: ns and finer stay integers, NaT becomes None, coarse dates and
     # times use native CPython datetime values. See NumPy C API datetime.c,
     # convert_datetime_to_pyobject / convert_timedelta_to_pyobject.
-    var raw = bitcast[DType.int64](pd_raw_at(address, 0, 8, source.native))
+    var raw = bitcast[DType.int64](pd_raw_at(address, 0, 8, source.layout.native))
     if raw == Int64.MIN:
         return PythonObject(None)
-    var code = source.code
+    var code = source.layout.code
     if code.endswith("[ns]") or code.endswith("[ps]") or code.endswith("[fs]") or code.endswith("[as]"):
         return PythonObject(raw)
     var years = code.endswith("[Y]")
     var months = code.endswith("[M]")
     if years or months:
-        if source.kind == "m":
+        if source.layout.kind == "m":
             return PythonObject(raw)
         var year = Int64(0)
         var month = Int64(1)
@@ -1142,7 +1135,7 @@ def _rp_numpy_temporal_box(source: _RPArray, address: Int) raises -> PythonObjec
         days -= 1
         rest += per_day
     var usec = rest * microseconds
-    if source.kind == "m":
+    if source.layout.kind == "m":
         if days < -999999999 or days > 999999999:
             return PythonObject(raw)
         return py_call(_rp_datetime_type("timedelta"), PythonObject(days), PythonObject(usec // 1000000), PythonObject(usec % 1000000))
@@ -1169,9 +1162,9 @@ def _rp_sparse_object_fill(value: PythonObject, context: PythonObject) raises ->
     for i in range(len(scalars)):  # driver-loop: exact NumPy scalar fills use native storage-to-object boxing
         if py_type(value) is scalars[i]:
             var source = _RPArray(_rp_scalar_array(value, context), context)
-            if source.kind == "M" or source.kind == "m":
-                return _rp_numpy_temporal_box(source, source.address)
-            return _rp_box(source, source.address)
+            if source.layout.kind == "M" or source.layout.kind == "m":
+                return _rp_numpy_temporal_box(source, source.layout.address)
+            return _rp_box(source, source.layout.address)
     return value
 
 
@@ -1182,9 +1175,9 @@ def _rp_sparse_fill_missing(value: PythonObject, context: PythonObject) raises -
     if kind != "f" and kind != "c" and kind != "M" and kind != "m":
         return False
     var source = _RPArray(_rp_sparse_fill_array(value, context), context)
-    if source.kind == "c":
-        var width = source.item // 2
-        return (sequence_string_nan_raw(source.address, width) & 1) != 0 or (sequence_string_nan_raw(source.address + width, width) & 1) != 0
+    if source.layout.kind == "c":
+        var width = source.layout.item // 2
+        return (sequence_string_nan_raw(source.layout.address, width) & 1) != 0 or (sequence_string_nan_raw(source.layout.address + width, width) & 1) != 0
     return _rp_interval_missing(source, 0)
 
 
@@ -1238,7 +1231,7 @@ def _rp_sparse_fills_equal(left: PythonObject, right: PythonObject, context: Pyt
     return _rp_category_cell_equal(ldata, 0, rdata, 0)
 
 
-def _rp_float_integer_fill(source: _RPArray, destination: Int, target: _RPArray) raises:
+def _rp_float_integer_fill(source: _RPLayout, destination: Int, target: _RPLayout) raises:
     var negative = False
     var exponent = 0
     var high = UInt64(0)
@@ -1308,32 +1301,32 @@ def _rp_float_integer_fill(source: _RPArray, destination: Int, target: _RPArray)
     sequence_store_word(destination, word, target.item, target.native)
 
 def _rp_sparse_fill_copy(source: _RPArray, destination: Int, target: _RPArray) raises:
-    if source.kind == "f" and (target.kind == "i" or target.kind == "u" or target.kind == "b"):
-        _rp_float_integer_fill(source, destination, target)
+    if source.layout.kind == "f" and (target.layout.kind == "i" or target.layout.kind == "u" or target.layout.kind == "b"):
+        _rp_float_integer_fill(source.layout, destination, target.layout)
         return
-    if (source.kind == "i" or source.kind == "u" or source.kind == "b") and (target.kind == "i" or target.kind == "u"):
-        var word = cast_w64_bits(pd_raw_at(source.address, 0, source.item, source.native), 1 if source.kind == "i" else 0, source.item)
-        var negative = source.kind == "i" and (word >> 63) != 0
+    if (source.layout.kind == "i" or source.layout.kind == "u" or source.layout.kind == "b") and (target.layout.kind == "i" or target.layout.kind == "u"):
+        var word = cast_w64_bits(pd_raw_at(source.layout.address, 0, source.layout.item, source.layout.native), 1 if source.layout.kind == "i" else 0, source.layout.item)
+        var negative = source.layout.kind == "i" and (word >> 63) != 0
         var magnitude = (~word + UInt64(1)) if negative else word
-        var limit = UInt64.MAX if target.item == 8 else (UInt64(1) << UInt64(target.item * 8)) - 1
-        if target.kind == "i":
-            limit = UInt64(1) << UInt64(target.item * 8 - 1)
+        var limit = UInt64.MAX if target.layout.item == 8 else (UInt64(1) << UInt64(target.layout.item * 8)) - 1
+        if target.layout.kind == "i":
+            limit = UInt64(1) << UInt64(target.layout.item * 8 - 1)
             if not negative:
                 limit -= 1
-        if (negative and target.kind == "u") or magnitude > limit:
+        if (negative and target.layout.kind == "u") or magnitude > limit:
             raise Error("OverflowError: pandas sparse fill is outside the selected integer dtype")
     # A scalar's actual unit can be finer than the sparse dtype even though
     # its TYPE in result_type is a generic datetime64/timedelta64 descriptor.
-    if (target.kind == "M" or target.kind == "m") and source.kind == target.kind:
-        var delta = _rp_time_unit(target.code) - _rp_time_unit(source.code)
+    if (target.layout.kind == "M" or target.layout.kind == "m") and source.layout.kind == target.layout.kind:
+        var delta = _rp_time_unit(target.layout.code) - _rp_time_unit(source.layout.code)
         if delta < 0:
-            var value = bitcast[DType.int64](pd_raw_at(source.address, 0, 8, source.native))
+            var value = bitcast[DType.int64](pd_raw_at(source.layout.address, 0, 8, source.layout.native))
             if value != Int64.MIN:
                 for i in range(-delta):  # driver-loop: native scalar assignment uses floor when reducing temporal resolution
                     value = value // 1000
-            sequence_store_word(destination, bitcast[DType.uint64](value), 8, target.native)
+            sequence_store_word(destination, bitcast[DType.uint64](value), 8, target.layout.native)
             return
-    _rp_copy(source, source.address, destination, target)
+    _rp_copy(source, source.layout.address, destination, target)
 
 
 def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
@@ -1341,7 +1334,7 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
     var record = _rp_sparse_record(values, context)
     var fields = record[1]
     var source = _RPArray(record[2], context)
-    if source.rank != 1:
+    if source.layout.rank != 1:
         raise Error("ValueError: pandas sparse values require one-dimensional storage")
     var dtype = record[3]
     var dtype_fields = record[4]
@@ -1350,17 +1343,17 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
     var integer_index = py_type(index) is _pd_class("pandas._libs.sparse", "IntIndex")
     var rows = Int(py=record[7])
     var points = Int(py=record[8])
-    if rows < 0 or points < 0 or points > rows or points != source.rows:
+    if rows < 0 or points < 0 or points > rows or points != source.layout.rows:
         raise Error("ValueError: pandas sparse length and stored point count disagree")
     var positions = List[Int](capacity=points)
     var owners = Python.list()
     if integer_index:
         var placed = _RPArray(_rp_sparse_field(index, "indices"), context)
-        if placed.rows != points:
+        if placed.layout.rows != points:
             raise Error("ValueError: pandas sparse IntIndex count differs from stored values")
         var previous = -1
         for i in range(points):  # driver-loop: admit every sorted sparse position before allocating output
-            var position = _rp_sparse_index_word(placed, i)
+            var position = _rp_sparse_index_word(placed.layout, i)
             if position <= previous or position >= rows:
                 raise Error("ValueError: pandas sparse positions overlap or exceed row bounds")
             positions.append(position)
@@ -1370,12 +1363,12 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
         var starts = _RPArray(_rp_sparse_field(index, "blocs"), context)
         var lengths = _RPArray(_rp_sparse_field(index, "blengths"), context)
         var blocks = Int(py=_rp_sparse_field(index, "nblocks"))
-        if blocks != starts.rows or blocks != lengths.rows:
+        if blocks != starts.layout.rows or blocks != lengths.layout.rows:
             raise Error("ValueError: pandas sparse BlockIndex metadata lengths disagree")
         var end = 0
         for i in range(blocks):  # driver-loop: expand native block placement without SparseIndex methods
-            var start = _rp_sparse_index_word(starts, i)
-            var length = _rp_sparse_index_word(lengths, i)
+            var start = _rp_sparse_index_word(starts.layout, i)
+            var length = _rp_sparse_index_word(lengths.layout, i)
             if start < end or start < 0 or length <= 0 or length > rows - start or length > points - len(positions):
                 raise Error("ValueError: pandas sparse blocks overlap or exceed row bounds")
             for j in range(length):  # driver-loop: one native output position per stored sparse point
@@ -1393,17 +1386,17 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
         var fill_type = _rp_sparse_fill_type(fill, context)
         var fill_kind = String(fill_type[0])
         var fill_size = Int(py=fill_type[1])
-        nat_datetime_fill = source.kind == "M" and fill is _rp_item("pandas._libs.tslibs.nattype", "NaT")
-        if nat_datetime_fill or ((source.kind == "M" or source.kind == "m") and fill_kind == source.kind):
+        nat_datetime_fill = source.layout.kind == "M" and fill is _rp_item("pandas._libs.tslibs.nattype", "NaT")
+        if nat_datetime_fill or ((source.layout.kind == "M" or source.layout.kind == "m") and fill_kind == source.layout.kind):
             target_dtype = source.dtype
-        elif source.kind == "O" or fill_kind == "O":
+        elif source.layout.kind == "O" or fill_kind == "O":
             target_dtype = PythonObject("O")
-        elif (source.kind == "b" or source.kind == "i" or source.kind == "u" or source.kind == "f" or source.kind == "c") and (fill_kind == "b" or fill_kind == "i" or fill_kind == "u" or fill_kind == "f" or fill_kind == "c"):
-            var complex_values = source.kind == "c" or fill_kind == "c"
-            var kind = "f" if source.kind == "c" else source.kind
-            var size = source.item // 2 if source.kind == "c" else source.item
+        elif (source.layout.kind == "b" or source.layout.kind == "i" or source.layout.kind == "u" or source.layout.kind == "f" or source.layout.kind == "c") and (fill_kind == "b" or fill_kind == "i" or fill_kind == "u" or fill_kind == "f" or fill_kind == "c"):
+            var complex_values = source.layout.kind == "c" or fill_kind == "c"
+            var kind = "f" if source.layout.kind == "c" else source.layout.kind
+            var size = source.layout.item // 2 if source.layout.kind == "c" else source.layout.item
             _rp_promote(kind, size, "f" if fill_kind == "c" else fill_kind, fill_size // 2 if fill_kind == "c" else fill_size)
-            var extended = source.number == 13 or source.number == 16 or py_type(fill) is py_call(context["resample_pandas_dtype_factory"], "g").type or py_type(fill) is py_call(context["resample_pandas_dtype_factory"], "G").type
+            var extended = source.layout.number == 13 or source.layout.number == 16 or py_type(fill) is py_call(context["resample_pandas_dtype_factory"], "g").type or py_type(fill) is py_call(context["resample_pandas_dtype_factory"], "G").type
             target_dtype = PythonObject(("G" if complex_values else "g") if extended else (("c" if complex_values else kind) + String(size * (2 if complex_values else 1))))
         else:
             target_dtype = PythonObject("O")
@@ -1414,17 +1407,17 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
     var result = _rp_new(Python.tuple(rows), target_dtype, context)
     var target = _RPArray(result, context)
     if points < rows:
-        if target.kind == "O":
+        if target.layout.kind == "O":
             var boxed_fill = _rp_sparse_object_fill(fill, context)
             for row in range(rows):  # driver-loop: retain arbitrary objects and box exact native scalar fills as pandas does
-                _rp_object(target.at(row), boxed_fill)
+                _rp_object(target.layout.at(row), boxed_fill)
             _ = boxed_fill
         elif nat_datetime_fill:
             for row in range(rows):  # driver-loop: native missing datetime fill has the iNaT representation
-                sequence_store_word(target.at(row), UInt64(1) << 63, 8, target.native)
+                sequence_store_word(target.layout.at(row), UInt64(1) << 63, 8, target.layout.native)
         else:
-            var component_width = target.item // 2 if target.kind == "c" else target.item
-            if component_width > 8 and (target.kind == "f" or target.kind == "c") and py_type(fill) is py_type(PythonObject(0)):
+            var component_width = target.layout.item // 2 if target.layout.kind == "c" else target.layout.item
+            if component_width > 8 and (target.layout.kind == "f" or target.layout.kind == "c") and py_type(fill) is py_type(PythonObject(0)):
                 # The ordinary scalar helper can route a larger Python int
                 # through float64. Never silently narrow a wide floating fill;
                 # arbitrary-precision integer encoding remains an explicit gap.
@@ -1439,12 +1432,12 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
                     raise Error("TypeError: extended sparse fills beyond native 64-bit integer storage require native arbitrary-precision encoding")
             var fill_source = _RPArray(_rp_sparse_fill_array(fill, context), context)
             for row in range(rows):  # driver-loop: native scalar storage assignment; no NumPy full/astype
-                _rp_sparse_fill_copy(fill_source, target.at(row), target)
+                _rp_sparse_fill_copy(fill_source, target.layout.at(row), target)
     for i in range(points):  # driver-loop: scatter stored sparse values; fill owner remains retained on overwrite
-        if target.kind == "O" and (source.kind == "M" or source.kind == "m"):
-            _rp_object(target.at(positions[i]), _rp_numpy_temporal_box(source, source.at(i)))
+        if target.layout.kind == "O" and (source.layout.kind == "M" or source.layout.kind == "m"):
+            _rp_object(target.layout.at(positions[i]), _rp_numpy_temporal_box(source, source.layout.at(i)))
         else:
-            _rp_copy(source, source.at(i), target.at(positions[i]), target)
+            _rp_copy(source, source.layout.at(i), target.layout.at(positions[i]), target)
     _ = owners^
     _ = index
     _ = fill
@@ -1473,20 +1466,20 @@ def _rp_interval_constructor() raises -> PythonObject:
 
 
 def _rp_interval_missing(source: _RPArray, row: Int) raises -> Bool:
-    var address = source.at(row)
-    if source.kind == "M" or source.kind == "m":
-        return pd_raw_at(address, 0, 8, source.native) == UInt64(1) << 63
-    if source.kind == "f":
-        if source.native:
-            return (sequence_string_nan_raw(address, source.item) & 1) != 0
-        var native = List[UInt8](length=source.item, fill=0)
+    var address = source.layout.at(row)
+    if source.layout.kind == "M" or source.layout.kind == "m":
+        return pd_raw_at(address, 0, 8, source.layout.native) == UInt64(1) << 63
+    if source.layout.kind == "f":
+        if source.layout.native:
+            return (sequence_string_nan_raw(address, source.layout.item) & 1) != 0
+        var native = List[UInt8](length=source.layout.item, fill=0)
         var input = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
-        for i in range(source.item):  # driver-loop: normalize admitted floating storage before bit classification
-            native[i] = input[source.item - 1 - i]
-        var missing = (sequence_string_nan_raw(Int(native.unsafe_ptr()), source.item) & 1) != 0
+        for i in range(source.layout.item):  # driver-loop: normalize admitted floating storage before bit classification
+            native[i] = input[source.layout.item - 1 - i]
+        var missing = (sequence_string_nan_raw(Int(native.unsafe_ptr()), source.layout.item) & 1) != 0
         _ = native^
         return missing
-    if source.kind == "O":
+    if source.layout.kind == "O":
         var value = _rp_box(source, address)
         if value is None:
             return True
@@ -1552,21 +1545,21 @@ def _rp_interval(values: PythonObject, distinguish: Bool, context: PythonObject,
     var right_owner = py_get(fields, "_right")
     var left = _RPArray(_rp_storage(left_owner, False, distinguish, context, depth + 1), context)
     var right = _RPArray(_rp_storage(right_owner, False, distinguish, context, depth + 1), context)
-    if left.rank != 1 or right.rank != 1 or left.rows != right.rows:
+    if left.layout.rank != 1 or right.layout.rank != 1 or left.layout.rows != right.layout.rows:
         raise Error("ValueError: pandas interval endpoints require matching one-dimensional storage")
     var constructor = _rp_interval_constructor()
-    var result = _rp_new(Python.tuple(left.rows), PythonObject("O"), context)
+    var result = _rp_new(Python.tuple(left.layout.rows), PythonObject("O"), context)
     var target = _RPArray(result, context)
     var nan = _rp_nan()
-    for row in range(left.rows):  # driver-loop: native Interval scalar boxing and missing-value placement
+    for row in range(left.layout.rows):  # driver-loop: native Interval scalar boxing and missing-value placement
         if _rp_interval_missing(left, row):
-            _rp_object(target.at(row), nan)
+            _rp_object(target.layout.at(row), nan)
         else:
-            var lo = _rp_box(left, left.at(row))
-            var hi = _rp_box(right, right.at(row))
+            var lo = _rp_box(left, left.layout.at(row))
+            var hi = _rp_box(right, right.layout.at(row))
             _rp_interval_scalar(lo, context)
             _rp_interval_scalar(hi, context)
-            _rp_object(target.at(row), py_call(constructor, lo, hi, closed))
+            _rp_object(target.layout.at(row), py_call(constructor, lo, hi, closed))
     _ = constructor
     _ = left_owner
     _ = right_owner
@@ -1604,36 +1597,36 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
             if category_na is None:
                 category_na = _rp_na()
         var source = _RPArray(record[4], context)
-        if source.kind == "M" or source.kind == "m":
+        if source.layout.kind == "M" or source.layout.kind == "m":
             category_na = _rp_item("pandas._libs.tslibs.nattype", "NaT")
-        if source.rank != 1 or codes.rank != 1 or codes.kind != "i":
+        if source.layout.rank != 1 or codes.layout.rank != 1 or codes.layout.kind != "i":
             raise Error("ValueError: pandas categorical requires one-dimensional values and signed codes")
         var missing = False
-        for row in range(codes.rows):  # driver-loop: categorical code validation precedes allocation
-            var code = Int(bitcast[DType.int64](cast_w64_bits(pd_raw_at(codes.at(row), 0, codes.item, codes.native), 1, codes.item)))
-            if code < -1 or code >= source.rows:
+        for row in range(codes.layout.rows):  # driver-loop: categorical code validation precedes allocation
+            var code = Int(bitcast[DType.int64](cast_w64_bits(pd_raw_at(codes.layout.at(row), 0, codes.layout.item, codes.layout.native), 1, codes.layout.item)))
+            if code < -1 or code >= source.layout.rows:
                 raise Error("ValueError: pandas categorical code exceeds its category storage")
             missing = missing or code == -1
         var output_dtype = source.dtype
-        if force_object or (missing and source.kind == "b") or (missing and distinguish and category_na is _rp_na()):
+        if force_object or (missing and source.layout.kind == "b") or (missing and distinguish and category_na is _rp_na()):
             output_dtype = PythonObject("O")
-        elif missing and (source.kind == "i" or source.kind == "u"):
+        elif missing and (source.layout.kind == "i" or source.layout.kind == "u"):
             output_dtype = PythonObject("f8")
-        var result = _rp_new(Python.tuple(codes.rows), output_dtype, context)
+        var result = _rp_new(Python.tuple(codes.layout.rows), output_dtype, context)
         var target = _RPArray(result, context)
-        for row in range(codes.rows):  # driver-loop: categorical gather preserves category object identity
-            var code = Int(bitcast[DType.int64](cast_w64_bits(pd_raw_at(codes.at(row), 0, codes.item, codes.native), 1, codes.item)))
+        for row in range(codes.layout.rows):  # driver-loop: categorical gather preserves category object identity
+            var code = Int(bitcast[DType.int64](cast_w64_bits(pd_raw_at(codes.layout.at(row), 0, codes.layout.item, codes.layout.native), 1, codes.layout.item)))
             if code >= 0:
-                if target.kind == "O" and (source.kind == "M" or source.kind == "m") and category_type is _pd_class("pandas.core.arrays.sparse.array", "SparseArray"):
-                    _rp_object(target.at(row), _rp_numpy_temporal_box(source, source.at(code)))
+                if target.layout.kind == "O" and (source.layout.kind == "M" or source.layout.kind == "m") and category_type is _pd_class("pandas.core.arrays.sparse.array", "SparseArray"):
+                    _rp_object(target.layout.at(row), _rp_numpy_temporal_box(source, source.layout.at(code)))
                 else:
-                    _rp_copy(source, source.at(code), target.at(row), target)
-            elif target.kind == "O":
-                _rp_object(target.at(row), category_na)
-            elif target.kind == "M" or target.kind == "m":
-                sequence_store_word(target.at(row), UInt64(1) << 63, 8, target.native)
+                    _rp_copy(source, source.layout.at(code), target.layout.at(row), target)
+            elif target.layout.kind == "O":
+                _rp_object(target.layout.at(row), category_na)
+            elif target.layout.kind == "M" or target.layout.kind == "m":
+                sequence_store_word(target.layout.at(row), UInt64(1) << 63, 8, target.layout.native)
             else:
-                _rp_missing_numeric(target.at(row), target)
+                _rp_missing_numeric(target.layout.at(row), target.layout)
         _ = source.owner
         _ = values
         return result
@@ -1644,19 +1637,19 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
             var tz = py_get(_pd_fields(dtype), "_tz")
             _rp_timezone(tz)
             var source = _RPArray(data, context)
-            if source.kind != "M" or source.item != 8:
+            if source.layout.kind != "M" or source.layout.item != 8:
                 raise Error("TypeError: pandas timezone storage requires native datetime64 words")
             var result = _rp_new(data.shape, PythonObject("O"), context)
             var target = _RPArray(result, context)
-            for col in range(source.cols):  # driver-loop: native timezone-preserving Timestamp storage boxing
-                for row in range(source.rows):  # driver-loop: one stored temporal value per object slot
-                    _rp_object(target.at(row, col), _rp_time_box(source, source.at(row, col), tz))
+            for col in range(source.layout.cols):  # driver-loop: native timezone-preserving Timestamp storage boxing
+                for row in range(source.layout.rows):  # driver-loop: one stored temporal value per object slot
+                    _rp_object(target.layout.at(row, col), _rp_time_box(source, source.layout.at(row, col), tz))
             _ = values
             return result
         return data
     if cls is _pd_class("pandas.core.arrays.period", "PeriodArray"):
         var source = _RPArray(_pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", values), context)
-        if source.kind != "i" or source.item != 8:
+        if source.layout.kind != "i" or source.layout.item != 8:
             raise Error("TypeError: pandas period storage requires native signed int64 ordinals")
         var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", values)
         if py_type(dtype) is not _pd_class("pandas.core.dtypes.dtypes", "PeriodDtype"):
@@ -1676,11 +1669,11 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
         var nat = source.nat
         if nat is None:
             nat = _rp_item("pandas._libs.tslibs.nattype", "NaT")
-        for col in range(source.cols):  # driver-loop: native period metadata boxing
-            for row in range(source.rows):  # driver-loop: preserve stored ordinals and NaT
-                var ordinal = bitcast[DType.int64](pd_raw_at(source.at(row, col), 0, 8, source.native))
+        for col in range(source.layout.cols):  # driver-loop: native period metadata boxing
+            for row in range(source.layout.rows):  # driver-loop: preserve stored ordinals and NaT
+                var ordinal = bitcast[DType.int64](pd_raw_at(source.layout.at(row, col), 0, 8, source.layout.native))
                 var boxed = nat if ordinal == Int64.MIN else py_call(entry, PythonObject(ordinal), freq)
-                _rp_object(target.at(row, col), boxed)
+                _rp_object(target.layout.at(row, col), boxed)
         _ = values
         return result
     if cls is _pd_class("pandas.core.arrays.arrow.array", "ArrowExtensionArray") or cls is _pd_class("pandas.core.arrays.string_arrow", "ArrowStringArray"):
@@ -1781,11 +1774,11 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
         var mixed_sparse = len(blocks) > 1 and py_type(raw_owners[k]) is _pd_class("pandas.core.arrays.sparse.array", "SparseArray")
         var sparse = _rp_sparse_record(raw_owners[k], context) if mixed_sparse else PythonObject(None)
         var data = _RPArray(sparse[2] if mixed_sparse else _rp_storage(raw_owners[k], force_object, distinguish, context), context)
-        var actual_rows = Int(py=sparse[7]) if mixed_sparse else data.rows
-        if (rows >= 0 and actual_rows != rows) or (series and data.rank != 1):
+        var actual_rows = Int(py=sparse[7]) if mixed_sparse else data.layout.rows
+        if (rows >= 0 and actual_rows != rows) or (series and data.layout.rank != 1):
             raise Error("ValueError: pandas blocks disagree on row dimensions")
         rows = actual_rows
-        cols += data.cols
+        cols += data.layout.cols
         var logical_owner = data.owner
         var sparse_logical = sparse if mixed_sparse and not has_categorical else PythonObject(None)
         if len(blocks) > 1 and py_type(raw_owners[k]) is _pd_class("pandas.core.arrays.categorical", "Categorical"):
@@ -1795,9 +1788,9 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
                 sparse_logical = _rp_sparse_record(record[3], context)
         py_call(logical_sparse.append, sparse_logical)
         logical.append(_RPArray(logical_owner, context))
-        ref promotion = logical[k]
+        ref promotion = logical[k].layout
         var positions = Python.tuple(0) if series else _pd_locations(blocks[k], context)
-        if len(positions) != data.cols:
+        if len(positions) != data.layout.cols:
             raise Error("ValueError: pandas block placement and storage widths disagree")
         py_call(placements.append, positions)
         if k == 0:
@@ -1834,21 +1827,21 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
     if force_object:
         dtype = PythonObject("O")
     elif not same:
-        var temporal = logical[0].kind == "M" or logical[0].kind == "m"
+        var temporal = logical[0].layout.kind == "M" or logical[0].layout.kind == "m"
         var finest = 7
         var numeric = True
         for k in range(len(logical)):  # driver-loop: classify common native dtype without Python promotion hooks
-            var kind = logical[k].kind
-            temporal = temporal and kind == logical[0].kind
+            var kind = logical[k].layout.kind
+            temporal = temporal and kind == logical[0].layout.kind
             numeric = numeric and (kind == "b" or kind == "i" or kind == "u" or kind == "f" or kind == "c")
             if kind == "M" or kind == "m":
-                finest = max(finest, _rp_time_unit(logical[k].code))
+                finest = max(finest, _rp_time_unit(logical[k].layout.code))
         if use_sparse_promotion and (temporal or not numeric):
             force_object = True
             dtype = PythonObject("O")
         elif temporal:
             var units = Python.tuple("s", "ms", "us", "ns")
-            dtype = PythonObject(logical[0].kind + "8[" + String(units[finest - 7]) + "]")
+            dtype = PythonObject(logical[0].layout.kind + "8[" + String(units[finest - 7]) + "]")
         elif numeric:
             if common_size == 0:
                 raise Error("TypeError: pandas numeric promotion requires an implemented native scalar width")
@@ -1876,19 +1869,19 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
         # `_rp_copy` loop below
         var plan = List[Int]()
         var serial = List[Int]()
-        for col in range(source.cols):  # driver-loop: validate column placement before native cell copies
+        for col in range(source.layout.cols):  # driver-loop: validate column placement before native cell copies
             var dest = Int(py=positions[col])
             if dest < 0 or dest >= cols or seen[dest]:
                 raise Error("ValueError: pandas block columns overlap or exceed output shape")
             seen[dest] = True
-            if _rp_plan_column(source, target, dest, plan) == _RP_CELL_SERIAL:
+            if _rp_plan_column(source.layout, target.layout, dest, plan) == _RP_CELL_SERIAL:
                 serial.append(col)
-        _rp_copy_block(source, target, rows, cols, plan)
+        _rp_copy_block(source.layout, target.layout, rows, cols, plan)
         for s in range(len(serial)):  # driver-loop: over the block columns that keep the serial cell copy
             var col = serial[s]
             var dest = plan[col * _RP_PLAN_WORDS + 1]
             for row in range(rows):  # driver-loop: native dtype-preserving storage copy, not model computation
-                _rp_copy(source, source.at(row, col), target.address + (row * cols + dest) * target.item, target)
+                _rp_copy(source, source.layout.at(row, col), target.layout.address + (row * cols + dest) * target.layout.item, target)
         _ = plan^
         _ = serial^
     _ = owned^
@@ -1914,7 +1907,7 @@ comptime _RP_CELL_FLOAT = 3
 comptime _RP_CELL_INT = 4
 
 
-def _rp_cell_code(source: _RPArray, target: _RPArray, mut delta: Int) raises -> Int:
+def _rp_cell_code(source: _RPLayout, target: _RPLayout, mut delta: Int) raises -> Int:
     """The `_rp_copy` branch a (source, target) pair takes, as a cell code;
     `delta` receives the temporal unit steps. Raises where `_rp_copy` raises
     before touching a cell (the temporal resolution refusal)."""
@@ -1983,7 +1976,7 @@ def _rp_cell(plan: MutPointer[Int, MutUntrackedOrigin], address: Int, destinatio
         sequence_store_word(destination, word, plan[3], target_native)
 
 
-def _rp_plan_column(source: _RPArray, target: _RPArray, dest: Int, mut plan: List[Int]) raises -> Int:
+def _rp_plan_column(source: _RPLayout, target: _RPLayout, dest: Int, mut plan: List[Int]) raises -> Int:
     """Append one column's plan words: code, dest, delta, then per code
     (float: components, size, component bytes, tag, item, complex source;
     int: target item, target is bool, signed tag, source item). Returns the code."""
@@ -2016,7 +2009,7 @@ def _rp_plan_column(source: _RPArray, target: _RPArray, dest: Int, mut plan: Lis
     return code
 
 
-def _rp_copy_block(source: _RPArray, target: _RPArray, rows: Int, cols: Int, plan: List[Int]) raises:
+def _rp_copy_block(source: _RPLayout, target: _RPLayout, rows: Int, cols: Int, plan: List[Int]) raises:
     """Every planned (non-serial) column of one block, the rows split across
     the host's cores."""
     var ncols = len(plan) // _RP_PLAN_WORDS

@@ -30,7 +30,8 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.classical_pandas import classical_admit_value
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.tsa_admission import tsa_hw_fields, tsa_hw_class, tsa_scalar, tsa_component_index
-from bindings.admitted_input import admit_view, admitted_view_kind, AdmittedTyped
+from bindings.admitted_input import admit_view, admitted_view_kind, AdmittedTypedPin
+from bindings.tensor_view import TensorView
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.classical_attributes import classical_connect_numpy
@@ -134,22 +135,23 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
 
 def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_check_dims(ts_input)`: (C-ordered float32 (ts_num, n) data, n)."""
-    var value = admit_view(source, "endog", context)
-    var kind = admitted_view_kind(value.view, "endog")
-    var rank = len(value.view.shape)
+    var value_pin = AdmittedTypedPin()
+    var value = admit_view(source, "endog", context, value_pin)
+    var kind = admitted_view_kind(value, "endog")
+    var rank = len(value.shape)
     var ts_num = Int(py=fields["ts_num"])
     if rank != 1 and rank != 2:
         raise Error("ValueError: " + _HW + "data input must have 1 or 2 dimensions")
-    var rows = 1 if rank == 1 else value.view.shape[0]
-    var n = value.view.shape[0] if rank == 1 else value.view.shape[1]
+    var rows = 1 if rank == 1 else value.shape[0]
+    var n = value.shape[0] if rank == 1 else value.shape[1]
     if ts_num != rows:
         raise Error("ValueError: " + _HW + "initialized series count disagrees with data")
     if rows * n == 0:
         raise Error("ValueError: " + _HW + "endog is empty")
     var out = admitted_array_f32(Python.tuple(rows, n), rows * n, context)
-    _ = admitted_cast_nd_f32(value.view.addr, value.view.shape, value.view.strides, kind[1],
+    _ = admitted_cast_nd_f32(value.addr, value.shape, value.strides, kind[1],
                  kind[0], _F32P(unsafe_from_address=Int(py=classical_address(out))))
-    _ = value^
+    _ = value_pin^
     _ = out
     return Python.tuple(out, n)
 
@@ -356,12 +358,14 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     var held = _hw_held(model, fields)
     if _hw_matches(held, entries, n, b, period):
         return _shaped(fields, _hw_query(entries, held, fields, start, end, b, context), 0, steps, index, context)
-    var packed = _packed(fields["_comps"], 3 * (n - period) * b, context)
-    var comps = packed.keep
-    var minted = _hw_mint(model, fields, entries, n, b, period, packed.view.addr)
+    var packed_pin = AdmittedTypedPin()
+    var packed = _packed(fields["_comps"], 3 * (n - period) * b, context, packed_pin)
+    var comps = packed_pin.keep
+    var minted = _hw_mint(model, fields, entries, n, b, period, packed.addr)
     if minted is not None:
         var whole = _hw_query(entries, minted, fields, start, end, b, context)
         _ = comps
+        _ = packed_pin^
         return _shaped(fields, whole, 0, steps, index, context)
     if start >= n:
         var fc = tsa_array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
@@ -369,6 +373,7 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
                           Python.list(n, b, period, end - n), fields["seasonal"])
         _ = fc  # keep the Python object alive through the native call above
         _ = comps  # keep the Python object alive through the native call above
+        _ = packed_pin^
         return _shaped(fields, fc, (start - n) * b, steps, index, context)
     var out = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
     var k_in = min(end, n) - start
@@ -383,6 +388,7 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
                           PythonObject(base + 4 * k_in * b), Python.list(n, b, period, end - n), fields["seasonal"])
         _ = comps  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
+    _ = packed_pin^
     return _shaped(fields, out, 0, steps, index, context)
 
 
@@ -399,11 +405,10 @@ def hw_score(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("IndexError: " + _HW + "index input: " + String(Int(py=index))
                     + " outside of range [0, " + String(b) + ")")
     # `self.sse_[index]`: the float32 word, as a Python float
-    var packed = _packed(fields["sse_"], b, context)
-    var sse = packed.keep
-    var value = _F32P(unsafe_from_address=packed.view.addr)[Int(py=index)]
-    _ = sse  # keep the Python object alive through the native call above
-    _ = sse^
+    var packed_pin = AdmittedTypedPin()
+    var packed = _packed(fields["sse_"], b, context, packed_pin)
+    var value = _F32P(unsafe_from_address=packed.addr)[Int(py=index)]
+    _ = packed_pin^  # keep the pinned owners alive through the read above
     return PythonObject(Float64(value))
 
 
@@ -478,10 +483,11 @@ def hw_initialize(model: PythonObject, args: PythonObject, context: PythonObject
     return PythonObject(None)
 
 
-def _packed(value: PythonObject, count: Int, context: PythonObject) raises -> AdmittedTyped:
-    var result = admit_view(value, "Holt-Winters fitted storage", context)
-    var kind = admitted_view_kind(result.view, "Holt-Winters fitted storage")
-    if kind[0] != CAST_KIND_FLOAT or kind[1] != 4 or not result.view.c_contig or result.view.count() != count:
+def _packed(value: PythonObject, count: Int, context: PythonObject, mut hold: AdmittedTypedPin) raises -> TensorView:
+    # The typed view RUN reads; `hold` (the door's) pins the owners.
+    var result = admit_view(value, "Holt-Winters fitted storage", context, hold)
+    var kind = admitted_view_kind(result, "Holt-Winters fitted storage")
+    if kind[0] != CAST_KIND_FLOAT or kind[1] != 4 or not result.c_contig or result.count() != count:
         raise Error("ValueError: " + _HW + "fitted storage must be contiguous float32 with the fitted extent")
     return result^
 
@@ -512,19 +518,20 @@ def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject) 
         var hit_entries = _hw_entries(model, fields, context)
         if _hw_matches(held, hit_entries, n, b, period):
             return _shaped(fields, _hw_query(hit_entries, held, fields, n, n + h, b, context), 0, h, index, context)
-    var comps = _packed(fields["_comps"], 3 * (n - period) * b, context)
+    var comps_pin = AdmittedTypedPin()
+    var comps = _packed(fields["_comps"], 3 * (n - period) * b, context, comps_pin)
     if h > 9223372036854775807 // 4 // b:
         raise Error("ValueError: Holt-Winters forecast extent exceeds native indexing bounds")
     var out = tsa_array("f", "<f4", Python.tuple(h * b), h * b, 4, context)
     var entries = _hw_entries(model, fields, context)
-    var minted = _hw_mint(model, fields, entries, n, b, period, comps.view.addr)
+    var minted = _hw_mint(model, fields, entries, n, b, period, comps.addr)
     if minted is not None:
         var whole = _hw_query(entries, minted, fields, n, n + h, b, context)
-        _ = comps
+        _ = comps_pin^
         return _shaped(fields, whole, 0, h, index, context)
     _ = py_call_typed(_entry(entries, "holtwinters_forecast"),
-        PythonObject(comps.view.addr), classical_address(out), Python.list(n, b, period, h), fields["seasonal"])
-    _ = comps
+        PythonObject(comps.addr), classical_address(out), Python.list(n, b, period, h), fields["seasonal"])
+    _ = comps_pin^
     _ = out
     return _shaped(fields, out, 0, h, index, context)
 
@@ -556,20 +563,22 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
         raise Error("IndexError: " + _HW + "index outside series range")
     var cached = py_get(fields, name)
     if not attribute and cached is not None and (index is not None or b == 1):
-        var stored = _packed(cached, b * rows, context)
-        return _block(stored.keep, 0 if index is None else Int(py=index) * rows,
+        var cached_pin = AdmittedTypedPin()
+        _ = _packed(cached, b * rows, context, cached_pin)
+        return _block(cached_pin.keep, 0 if index is None else Int(py=index) * rows,
                       rows, "f", "<f4", Python.tuple(rows), context)
-    var comps = _packed(fields["_comps"], 3 * rows * b, context)
+    var comps_pin = AdmittedTypedPin()
+    var comps = _packed(fields["_comps"], 3 * rows * b, context, comps_pin)
     if not attribute and index is not None:
-        return _shaped(fields, comps.keep, which * rows * b, rows, index, context)
+        return _shaped(fields, comps_pin.keep, which * rows * b, rows, index, context)
     var out = tsa_array("f", "<f4", Python.tuple(b, rows), b * rows, 4, context)
     var base = Int(py=classical_address(out))
-    hw_component_gather(comps.view.addr, base, which, rows, b)
+    hw_component_gather(comps.addr, base, which, rows, b)
     if cached is None:
         var updates = Python.dict()
         py_setitem(updates, name, out)
         _commit(live, updates, context)
-    _ = comps
+    _ = comps_pin^
     if attribute:
         return out
     if b == 1:
@@ -582,8 +591,9 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
         if py_type(keys[i]) is not _b().str:
             raise Error("TypeError: Holt-Winters component keys must be native strings")
     var names = Python.tuple("level", "trend", "season")
-    var stored = _packed(time_major[names[which]], rows * b, context)
-    return stored.keep
+    var stored_pin = AdmittedTypedPin()
+    _ = _packed(time_major[names[which]], rows * b, context, stored_pin)
+    return stored_pin.keep
 
 
 def hw_save(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -603,17 +613,19 @@ def hw_save(model: PythonObject, args: PythonObject, context: PythonObject) rais
         raise Error("ValueError: cannot save invalid numeric_mode")
     var values = Python.dict(format="mojolearn-holtwinters-1", estimator="ExponentialSmoothing",
         numeric_mode=mode, seasonal=fields["seasonal"], initialization_method=fields["initialization_method"])
-    var components = _packed(fields["_comps"], 3 * (n - period) * b, context)
-    py_setitem(values, "components", components.keep)
+    var components_pin = AdmittedTypedPin()
+    _ = _packed(fields["_comps"], 3 * (n - period) * b, context, components_pin)
+    py_setitem(values, "components", components_pin.keep)
     var names = Python.tuple("sse", "alpha", "beta", "gamma", "n_iter", "criterion")
     for i in range(len(names)):  # driver-loop: snapshot all six saved native statistics before opening the archive
         var name = String(names[i])
-        var stored = admit_view(fields[name + "_"], name, context)
-        var skind = admitted_view_kind(stored.view, name)
+        var stored_pin = AdmittedTypedPin()
+        var stored = admit_view(fields[name + "_"], name, context, stored_pin)
+        var skind = admitted_view_kind(stored, name)
         var want = CAST_KIND_FLOAT if i < 4 else CAST_KIND_SIGNED
-        if stored.view.count() != b or not stored.view.c_contig or skind[1] != 4 or skind[0] != want:
+        if stored.count() != b or not stored.c_contig or skind[1] != 4 or skind[0] != want:
             raise Error("ValueError: Holt-Winters archive statistics have invalid dtype or extent")
-        py_setitem(values, names[i], stored.keep)
+        py_setitem(values, names[i], stored_pin.keep)
     var meta = tsa_array("q", "<i8", Python.tuple(4), 4, 8, context)
     var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(meta)))
     words[0] = Int64(n)
@@ -624,5 +636,5 @@ def hw_save(model: PythonObject, args: PythonObject, context: PythonObject) rais
     MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(eps)))[0] = Float64(py=fields["eps"])
     py_setitem(values, "meta", meta)
     py_setitem(values, "eps", eps)
-    _ = components^
+    _ = components_pin^
     return classical_archive_write(args[0], values, context)

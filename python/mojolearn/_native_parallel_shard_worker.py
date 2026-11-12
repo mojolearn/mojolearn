@@ -12,6 +12,11 @@ if os.name == 'posix':
     import signal
     faulthandler.register(signal.SIGUSR1, all_threads=True)
 
+# Lazy family import (lane lazy-family-import): a worker runs on the loaded
+# set the package had before it, every family and unit, as its parent may hand
+# it any of them.
+from . import _families as _worker_families
+_worker_families.load_all()
 from . import parallel_classical, parallel_preprocessing, parallel_gaussian_process, parallel_ensemble  # noqa: F401
 from . import parallel_neighbors, parallel_neighbors_reference, parallel_ivf  # noqa: F401
 from ._native_parallel_shard import _native_parallel_shard

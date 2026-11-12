@@ -28,7 +28,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run_plan
-from bindings.py_cpython_table import cpython_table
+from bindings.arena_prog_run import MetricArenaOwner
 from bindings.metrics_plan_admission import MetricPlanOpcodes
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.family_common import (
@@ -96,12 +96,9 @@ struct _Prog(Movable):
         return self.plan.want(off, n, -1, 1)
 
 
-def _f32_scalar_array(value: Float64, context: PythonObject) raises -> PythonObject:
-    """`Array.from_list([_f32(value)], "<f4")`."""
-    var one = family_array(Python.tuple(1), "<f4", context)
-    FAMILY_F32P(unsafe_from_address=Int(py=classical_address(one)))[0] = Float32(value)
-    _ = one  # keep the Python object alive through the native call above
-    return one
+# TOMBSTONE: `_f32_scalar_array` (a one-word Python Array per program scalar) deleted 2026-11-12 by lane
+# entangled-programs: scalars are program-owned words (`MetricProgramPlan.input_f32`); code recoverable at
+# e561a66d6b.
 
 
 struct _Reg(Movable):
@@ -154,7 +151,7 @@ struct _Reg(Movable):
         the one-group key and the weight total."""
         self.y_off = self.prog.put(self.y)
         self.p_off = self.prog.put(self.p)
-        self.s_off = self.prog.put(_f32_scalar_array(scalar, context))
+        self.s_off = self.prog.plan.input_f32(scalar)
         if self.w is not None:
             self.w_off = self.prog.put(self.w)
         self.key = self.prog.scratch(self.n)
@@ -194,7 +191,7 @@ struct _Reg(Movable):
         var d = self.d
         var order = self.prog.scratch(n * d)
         self.prog.stage("col_sort", d, [v, n, d, order])
-        var r = self.prog.put(_f32_scalar_array(rank, context))
+        var r = self.prog.plan.input_f32(rank)
         var out = self.prog.scratch(d)
         var cdf = self.prog.scratch(n * d)
         self.prog.stage("wpercentile", d, [v, n, d, order, self.w_off, r, 1, out, cdf])
@@ -229,11 +226,12 @@ struct _Reg(Movable):
         elif self.mo == "custom":
             mode = _RE_CUSTOM
             # `_words64`: the binary64 weights as their Int32 word pairs, low first.
-            var words = family_array(Python.tuple(2 * d), "<i4", context)
-            unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
+            # (program-owned words; was a Python Array per call)
+            var words = List[Int32](length=2 * d, fill=0)
+            unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(words.unsafe_ptr())),
                    src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(self.custom))), count=d)
-            _ = words  # keep the Python object alive through the native call above
-            w = self.prog.put_i32(words)
+            _ = self.custom  # keep the Python object alive through the native copy above
+            w = self.prog.plan.input_words(words^)
         var dst = self.prog.alloc(2)
         self.prog.stage("reg_epi", 1, [_RE_AVG, d, vals, mode, w, dst, 1 if nan_rule else 0])
         return self.prog.want(dst, 2)
@@ -247,46 +245,38 @@ struct _Reg(Movable):
         return scores
 
 
-def _reg_run(prog: _Prog, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+def _reg_run(prog: _Prog, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
     """`_run(prog, numeric_mode)`: the program handed to the shared runner's
-    native plan entry (the one call the Python `_run` made); returns the
-    arena store."""
+    native plan entry (UNPACK + typed RUN, bindings/arena_prog_native.mojo);
+    returns the native arena (lane entangled-programs, 2026-11-12: was the
+    Python store, read through a CPython buffer export per word read)."""
     var prog_context = context["family_metrics_prog_context"]
-    var owner = _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
-    return owner.store
+    return _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
 
 
-def _arena_base(arena: PythonObject) raises -> Int:
-    # p3-labels-metrics: the store's address through one C buffer export
-    # (the process-wide table), not a Python `buffer_info()` call, attribute
-    # lookup and tuple per word read. The caller holds `arena` across reads.
-    ref cpy = Python().cpython()
-    var storage = List[Int](length=10, fill=0)
-    var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpython_table()[].PyObject_GetBuffer(arena._obj_ptr, pointer, Int32(0)) != 0:
-        raise cpy.unsafe_get_error()
-    var address = storage[0]
-    cpython_table()[].PyBuffer_Release(pointer)
-    _ = storage^
-    return address
+def _arena_base(arena: MetricArenaOwner) -> Int:
+    # Lane entangled-programs (2026-11-12): the native arena's base (was one
+    # CPython buffer export of the Python arena store per read). The caller
+    # holds `arena` across every read through the address.
+    return arena.base()
 
 
-def _arena_double(arena: PythonObject, off: Int) raises -> Float64:
+def _arena_double(arena: MetricArenaOwner, off: Int) raises -> Float64:
     """The binary64 value whose words are arena[off], arena[off + 1], low first."""
-    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)
+    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)
     return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
 
 
-def _arena_float(arena: PythonObject, off: Int) raises -> Float32:
+def _arena_float(arena: MetricArenaOwner, off: Int) raises -> Float32:
     """The binary32 value at arena[off], read while `arena` is borrowed."""
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0]
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0]
 
 
-def _arena_int(arena: PythonObject, off: Int) raises -> Int:
-    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0])
+def _arena_int(arena: MetricArenaOwner, off: Int) raises -> Int:
+    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0])
 
 
-def _reg_result(r: _Reg, out_buf: Int, arena: PythonObject, context: PythonObject) raises -> PythonObject:
+def _reg_result(r: _Reg, out_buf: Int, arena: MetricArenaOwner, context: PythonObject) raises -> PythonObject:
     """`_Reg.result`'s answer: a float, or the per-output float64 Array for raw_values."""
     if r.mo == "raw_values":
         var values = family_array(Python.tuple(r.d), "<f8", context)
@@ -294,10 +284,9 @@ def _reg_result(r: _Reg, out_buf: Int, arena: PythonObject, context: PythonObjec
         # The completed arena is private to this operation. Resolve its
         # storage once, keeping the existing low-word-first binary64 decoding
         # without a Python/CPython address lookup for each reported output.
-        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * out_buf)
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * out_buf)
         for i in range(r.d):  # driver-loop: over the metric's outputs
             dst[i] = bitcast[DType.float64](UInt64(words[2 * i]) | (UInt64(words[2 * i + 1]) << 32))
-        _ = arena
         _ = values
         return values
     return PythonObject(_arena_double(arena, out_buf))
@@ -492,8 +481,8 @@ def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject
     var arena = _reg_run(prog, args[2], context)
     # Read through the helper: `arena` is the only owner of the store, and
     # Mojo releases a local at its last named use, so a pointer taken from
-    # `_arena_base(arena)` here would read freed words (different max_error
-    # bits run to run on CUDA).
+    # `arena.base()` here would read freed words (different max_error bits
+    # run to run on CUDA).
     return PythonObject(Float64(_arena_float(arena, out)))
 
 
@@ -529,7 +518,7 @@ def _tweedie_power(power: PythonObject, context: PythonObject) raises -> Float64
     return Float64(py=family_call(native_loaded_module("builtins").float, power))
 
 
-def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, arena: PythonObject) raises:
+def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, arena: MetricArenaOwner) raises:
     """`_tweedie_domain`'s check, after the run."""
     var msg = "Mean Tweedie deviance error with power=" + shown + " can only be used on "
     var y_neg = _arena_int(arena, flags_y) != 0

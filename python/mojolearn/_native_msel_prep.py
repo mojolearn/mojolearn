@@ -6,11 +6,21 @@ def connect(context, register, registry):
     # glue: fixed owner ABIs and constructor metadata, resolved once at import.
     # No signature inspection, binding lookup or Python constructor runs inside
     # a composed estimator operation.
+    # Re-run when a family loads (lane lazy-family-import, 2026-11-12): each
+    # block registers the classes of a LOADED family once (`add` keeps an
+    # already registered plan); no family is imported here.
     import inspect
-    from . import _backend, _expansion_linear as linear, _solver_impl as cd
-    from . import _svm_impl as svm, svm as linear_svm, _gp_impl as gp
-    from . import kernel_methods as km, neighbors, linear_model, _expansion_trees as trees
-    from . import model_selection as ms, _metrics_impl as metrics
+    import sys
+    from . import _backend
+
+    def loaded(name):
+        return sys.modules.get(__package__ + '.' + name)
+
+    linear, cd, svm, linear_svm = loaded('_expansion_linear'), loaded('_solver_impl'), loaded('_svm_impl'), loaded('svm')
+    gp, km, neighbors, linear_model = loaded('_gp_impl'), loaded('kernel_methods'), loaded('neighbors'), loaded('linear_model')
+    trees, ms, metrics = loaded('_expansion_trees'), loaded('model_selection'), loaded('_metrics_impl')
+    cluster, mixture, decomposition = loaded('cluster'), loaded('mixture'), loaded('decomposition')
+    xcluster, xdecomp, spectral = loaded('_expansion_cluster'), loaded('_expansion_decomp'), loaded('_spectral_impl')
 
     arg = lambda n: ('arg', n)
     constant = lambda value: ('constant', value)
@@ -19,6 +29,8 @@ def connect(context, register, registry):
 
     def add(cls, entry, owner, methods, *, initial=None, parameters=None):
         # glue: constructor names are copied from the exact built-in class.
+        if cls in registry:
+            return registry[cls]  # connected when its family first loaded
         names = tuple(inspect.signature(cls).parameters) if parameters is None else parameters
         register(cls, entry, owner, names, None, methods)
         plan = registry[cls]
@@ -32,223 +44,240 @@ def connect(context, register, registry):
     # Restore every linear expansion that accepts a matrix and exposes a
     # supervised fit. IsotonicRegression accepts a vector, so was never a
     # supported RFE/IterativeImputer estimator; SGDOneClassSVM has no target.
-    for name, fit, classifier, weighted in (  # glue: fixed ABI metadata connected once during package import
-        ('SGDClassifier', 'fit_sgd_classifier', True, True),
-        ('SGDRegressor', 'fit_sgd_regressor', False, True),
-        ('PoissonRegressor', 'fit_glm', False, True),
-        ('GammaRegressor', 'fit_glm', False, True),
-        ('TweedieRegressor', 'fit_glm', False, True),
-        ('HuberRegressor', 'fit_huber', False, True),
-        ('BayesianRidge', 'fit_bayes', False, True),
-        ('ARDRegression', 'fit_ard', False, False),
-        ('Lars', 'fit_lars', False, False),
-        ('LassoLars', 'fit_lasso_lars', False, False),
-        ('QuantileRegressor', 'fit_quantile', False, True),
-        ('Perceptron', 'fit_perceptron', True, True),
-        ('PassiveAggressiveClassifier', 'fit_pa_classifier', True, False),
-        ('PassiveAggressiveRegressor', 'fit_pa_regressor', False, False),
-        ('RidgeClassifier', 'fit_ridge_classifier', True, True),
-        ('RidgeCV', 'fit_ridge_cv', False, True),
-        ('LassoCV', 'fit_lasso_cv', False, True),
-        ('ElasticNetCV', 'fit_elastic_net_cv', False, True),
-        ('LogisticRegressionCV', 'fit_logistic_cv', True, True),
-    ):
-        methods = {
-            'fit': (fit, (arg(0), arg(1)) + ((keyword('sample_weight'),) if weighted else ())),
-            'predict': ('classifier_predict' if classifier else 'regressor_predict', (arg(0),)),
-            'score': ('classifier_score' if classifier else 'linear_regressor_score', (arg(0), arg(1))),
-        }
-        if classifier:
-            methods['decision_function'] = ('decision_function', (arg(0),))
-        if name in ('SGDClassifier', 'LogisticRegressionCV'):
-            methods['predict_proba'] = ('sgd_predict_proba' if name == 'SGDClassifier' else 'lrcv_predict_proba', (arg(0),))
-        plan = add(getattr(linear, name), linear._XL_CALL, linear._XL_CONTEXT, methods)
-        if not classifier:
-            plan['method_entries'] = {'score': (linear._LINEAR_SCORE, linear._LINEAR_SCORE_CONTEXT)}
+    if linear is not None:
+        for name, fit, classifier, weighted in (  # glue: fixed ABI metadata connected once during package import
+            ('SGDClassifier', 'fit_sgd_classifier', True, True),
+            ('SGDRegressor', 'fit_sgd_regressor', False, True),
+            ('PoissonRegressor', 'fit_glm', False, True),
+            ('GammaRegressor', 'fit_glm', False, True),
+            ('TweedieRegressor', 'fit_glm', False, True),
+            ('HuberRegressor', 'fit_huber', False, True),
+            ('BayesianRidge', 'fit_bayes', False, True),
+            ('ARDRegression', 'fit_ard', False, False),
+            ('Lars', 'fit_lars', False, False),
+            ('LassoLars', 'fit_lasso_lars', False, False),
+            ('QuantileRegressor', 'fit_quantile', False, True),
+            ('Perceptron', 'fit_perceptron', True, True),
+            ('PassiveAggressiveClassifier', 'fit_pa_classifier', True, False),
+            ('PassiveAggressiveRegressor', 'fit_pa_regressor', False, False),
+            ('RidgeClassifier', 'fit_ridge_classifier', True, True),
+            ('RidgeCV', 'fit_ridge_cv', False, True),
+            ('LassoCV', 'fit_lasso_cv', False, True),
+            ('ElasticNetCV', 'fit_elastic_net_cv', False, True),
+            ('LogisticRegressionCV', 'fit_logistic_cv', True, True),
+        ):
+            methods = {
+                'fit': (fit, (arg(0), arg(1)) + ((keyword('sample_weight'),) if weighted else ())),
+                'predict': ('classifier_predict' if classifier else 'regressor_predict', (arg(0),)),
+                'score': ('classifier_score' if classifier else 'linear_regressor_score', (arg(0), arg(1))),
+            }
+            if classifier:
+                methods['decision_function'] = ('decision_function', (arg(0),))
+            if name in ('SGDClassifier', 'LogisticRegressionCV'):
+                methods['predict_proba'] = ('sgd_predict_proba' if name == 'SGDClassifier' else 'lrcv_predict_proba', (arg(0),))
+            plan = add(getattr(linear, name), linear._XL_CALL, linear._XL_CONTEXT, methods)
+            if not classifier:
+                plan['method_entries'] = {'score': (linear._LINEAR_SCORE, linear._LINEAR_SCORE_CONTEXT)}
 
-    for cls in (cd.ElasticNet, cd.Lasso):  # glue: fixed ABI metadata connected once during package import
-        add(cls, cd._CD_CALL, cd._CD_CONTEXT, {
-            'fit': ('cd_fit', (arg(0), arg(1), keyword('sample_weight'))),
-            'predict': ('cd_predict', (arg(0),)),
-            'score': ('cd_score', (arg(0), arg(1))),
-        }, initial={'l1_ratio': 1.0} if cls is cd.Lasso else None)
+    if cd is not None:
+        for cls in (cd.ElasticNet, cd.Lasso):  # glue: fixed ABI metadata connected once during package import
+            add(cls, cd._CD_CALL, cd._CD_CONTEXT, {
+                'fit': ('cd_fit', (arg(0), arg(1), keyword('sample_weight'))),
+                'predict': ('cd_predict', (arg(0),)),
+                'score': ('cd_score', (arg(0), arg(1))),
+            }, initial={'l1_ratio': 1.0} if cls is cd.Lasso else None)
 
-    add(linear_model.QNRegressor, linear_model._QN_CALL, linear_model._QN_CONTEXT, {
-        'fit': ('fit', (arg(0), arg(1), keyword('sample_weight'))),
-        'predict': ('predict', (arg(0),)),
-        'score': ('score', (arg(0), arg(1))),
-    })
+    if linear_model is not None:
+        add(linear_model.QNRegressor, linear_model._QN_CALL, linear_model._QN_CONTEXT, {
+            'fit': ('fit', (arg(0), arg(1), keyword('sample_weight'))),
+            'predict': ('predict', (arg(0),)),
+            'score': ('score', (arg(0), arg(1))),
+        })
 
-    for name in ('BaggingClassifier', 'BaggingRegressor', 'AdaBoostClassifier', 'AdaBoostRegressor',  # glue: fixed ABI metadata connected once during package import
-                 'DARTClassifier', 'DARTRegressor'):
-        methods = {
-            'fit': ('trees_boost_fit', (arg(0), arg(1), constant(None) if name.startswith('DART') else keyword('sample_weight'))),
-            'predict': ('trees_boost_predict', (arg(0),)),
-            'score': ('trees_boost_score', (arg(0), arg(1), constant(None))),
-        }
-        if name.endswith('Classifier'):
-            methods['predict_proba'] = ('trees_boost_predict_proba', (arg(0),))
-        if name == 'AdaBoostClassifier':
-            methods['decision_function'] = ('trees_boost_decision_function', (arg(0),))
-        add(getattr(trees, name), trees._TREES, trees._TREES_CONTEXT, methods)
+    if trees is not None:
+        for name in ('BaggingClassifier', 'BaggingRegressor', 'AdaBoostClassifier', 'AdaBoostRegressor',  # glue: fixed ABI metadata connected once during package import
+                     'DARTClassifier', 'DARTRegressor'):
+            methods = {
+                'fit': ('trees_boost_fit', (arg(0), arg(1), constant(None) if name.startswith('DART') else keyword('sample_weight'))),
+                'predict': ('trees_boost_predict', (arg(0),)),
+                'score': ('trees_boost_score', (arg(0), arg(1), constant(None))),
+            }
+            if name.endswith('Classifier'):
+                methods['predict_proba'] = ('trees_boost_predict_proba', (arg(0),))
+            if name == 'AdaBoostClassifier':
+                methods['decision_function'] = ('trees_boost_decision_function', (arg(0),))
+            add(getattr(trees, name), trees._TREES, trees._TREES_CONTEXT, methods)
 
     # The public SVM/kernel-method doors admit their import-connected binding
     # inside the shared native provider. Composed calls use the same None slot,
     # so replaced bindings and operation metadata follow that admission too.
-    for cls, prefix in ((svm.SVC, 'svc'), (svm.SVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
-        native = constant(None)
-        methods = {
-            'fit': ('family_svc_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
-            'predict': ('family_svc_' + prefix + '_predict', (native, arg(0))),
-            'score': ('family_svc_' + prefix + '_score', (native, arg(0), arg(1))),
-            'coef_': ('family_svc_' + prefix + '_coef', (native,)),
-        }
-        if cls is svm.SVC:
-            methods.update(decision_function=('family_svc_svc_decision', (native, arg(0))),
-                           predict_proba=('family_svc_svc_proba', (native, arg(0))))
-        add(cls, svm._NATIVE, svm._NATIVE_CONTEXT, methods)
+    if svm is not None:
+        for cls, prefix in ((svm.SVC, 'svc'), (svm.SVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
+            native = constant(None)
+            methods = {
+                'fit': ('family_svc_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
+                'predict': ('family_svc_' + prefix + '_predict', (native, arg(0))),
+                'score': ('family_svc_' + prefix + '_score', (native, arg(0), arg(1))),
+                'coef_': ('family_svc_' + prefix + '_coef', (native,)),
+            }
+            if cls is svm.SVC:
+                methods.update(decision_function=('family_svc_svc_decision', (native, arg(0))),
+                               predict_proba=('family_svc_svc_proba', (native, arg(0))))
+            add(cls, svm._NATIVE, svm._NATIVE_CONTEXT, methods)
 
-    for cls, prefix in ((linear_svm.LinearSVC, 'svc'), (linear_svm.LinearSVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
-        native = constant(None)
-        methods = {
-            'fit': ('family_svc_linear_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
-            'predict': ('family_svc_linear_svc_predict' if prefix == 'svc' else 'family_svm_linear_svr_predict', (native, arg(0))),
-            'score': ('family_svc_linear_' + prefix + '_score', (native, arg(0), arg(1))),
-        }
-        if prefix == 'svc':
-            methods['decision_function'] = ('family_svm_linear_svc_decision', (native, arg(0)))
-        add(cls, linear_svm._NATIVE, linear_svm._NATIVE_CONTEXT, methods)
+    if linear_svm is not None:
+        for cls, prefix in ((linear_svm.LinearSVC, 'svc'), (linear_svm.LinearSVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
+            native = constant(None)
+            methods = {
+                'fit': ('family_svc_linear_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
+                'predict': ('family_svc_linear_svc_predict' if prefix == 'svc' else 'family_svm_linear_svr_predict', (native, arg(0))),
+                'score': ('family_svc_linear_' + prefix + '_score', (native, arg(0), arg(1))),
+            }
+            if prefix == 'svc':
+                methods['decision_function'] = ('family_svm_linear_svc_decision', (native, arg(0)))
+            add(cls, linear_svm._NATIVE, linear_svm._NATIVE_CONTEXT, methods)
 
     native = binding('_mojolearn_gp')
-    add(gp.GaussianProcessRegressor, gp._NATIVE, gp._NATIVE_CONTEXT, {
-        'fit': ('family_gp_gpr_fit', (native, arg(0), arg(1))),
-        'predict': ('family_gp_gpr_predict', (native, arg(0), constant(False), constant(False))),
-        'predict_std': ('family_gp_gpr_predict', (native, arg(0), constant(True), constant(False))),
-        'score': ('family_gp_gpr_score', (native, arg(0), arg(1))),
-    })
-    # Kernel objects are immutable constructor specifications copied through
-    # native instance dictionaries, never _nodes/_replace/deepcopy callbacks.
-    for cls, names in (  # glue: fixed ABI metadata connected once during package import
-        (gp.ConstantKernel, ('constant_value', 'constant_value_bounds')),
-        (gp.WhiteKernel, ('noise_level', 'noise_level_bounds')),
-        (gp.RBF, ('length_scale', 'length_scale_bounds')),
-        (gp.Matern, ('length_scale', 'length_scale_bounds', 'nu')),
-        (gp._Combined, ('a', 'b', 'op', 'sym')),
-        (gp._SavedKernel, ('_SavedKernel__nodes',)),
-    ):
-        add(cls, gp._NATIVE, gp._NATIVE_CONTEXT, {}, parameters=names)
+    if gp is not None:
+        add(gp.GaussianProcessRegressor, gp._NATIVE, gp._NATIVE_CONTEXT, {
+            'fit': ('family_gp_gpr_fit', (native, arg(0), arg(1))),
+            'predict': ('family_gp_gpr_predict', (native, arg(0), constant(False), constant(False))),
+            'predict_std': ('family_gp_gpr_predict', (native, arg(0), constant(True), constant(False))),
+            'score': ('family_gp_gpr_score', (native, arg(0), arg(1))),
+        })
+        # Kernel objects are immutable constructor specifications copied through
+        # native instance dictionaries, never _nodes/_replace/deepcopy callbacks.
+        for cls, names in (  # glue: fixed ABI metadata connected once during package import
+            (gp.ConstantKernel, ('constant_value', 'constant_value_bounds')),
+            (gp.WhiteKernel, ('noise_level', 'noise_level_bounds')),
+            (gp.RBF, ('length_scale', 'length_scale_bounds')),
+            (gp.Matern, ('length_scale', 'length_scale_bounds', 'nu')),
+            (gp._Combined, ('a', 'b', 'op', 'sym')),
+            (gp._SavedKernel, ('_SavedKernel__nodes',)),
+        ):
+            add(cls, gp._NATIVE, gp._NATIVE_CONTEXT, {}, parameters=names)
 
     native = constant(None)
-    add(km.KernelRidge, km._NATIVE, km._NATIVE_CONTEXT, {
-        'fit': ('family_km_krr_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
-        'predict': ('family_km_krr_predict', (native, arg(0))),
-        'score': ('family_km_krr_score', (native, arg(0), arg(1), constant(None), binding('_mojolearn_metrics'))),
+    if km is not None:
+        add(km.KernelRidge, km._NATIVE, km._NATIVE_CONTEXT, {
+            'fit': ('family_km_krr_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
+            'predict': ('family_km_krr_predict', (native, arg(0))),
+            'score': ('family_km_krr_score', (native, arg(0), arg(1), constant(None), binding('_mojolearn_metrics'))),
     })
-    for cls, prefix in ((neighbors.KNeighborsClassifier, 'clf'), (neighbors.KNeighborsRegressor, 'reg')):  # glue: fixed ABI metadata connected once during package import
-        methods = {
-            'fit': ('family_xn_knn_' + prefix + '_fit', (binding('_mojolearn_x_neighbors'), arg(0), arg(1))),
-            'predict': ('family_xn_knn_' + prefix + '_predict', (binding('_mojolearn'), arg(0))),
-            'score': ('family_xn_knn_' + prefix + '_score', (binding('_mojolearn'), arg(0), arg(1), constant(None))),
-        }
-        if prefix == 'clf':
-            methods['predict_proba'] = ('family_xn_knn_clf_predict_proba', (binding('_mojolearn'), arg(0)))
-        add(cls, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, methods,
-            initial={'_index': None, '_y_cols': None})
+    if neighbors is not None:
+        for cls, prefix in ((neighbors.KNeighborsClassifier, 'clf'), (neighbors.KNeighborsRegressor, 'reg')):  # glue: fixed ABI metadata connected once during package import
+            methods = {
+                'fit': ('family_xn_knn_' + prefix + '_fit', (binding('_mojolearn_x_neighbors'), arg(0), arg(1))),
+                'predict': ('family_xn_knn_' + prefix + '_predict', (binding('_mojolearn'), arg(0))),
+                'score': ('family_xn_knn_' + prefix + '_score', (binding('_mojolearn'), arg(0), arg(1), constant(None))),
+            }
+            if prefix == 'clf':
+                methods['predict_proba'] = ('family_xn_knn_clf_predict_proba', (binding('_mojolearn'), arg(0)))
+            add(cls, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, methods,
+                initial={'_index': None, '_y_cols': None})
 
     # Lane a7d: the clustering, mixture and decomposition families' fixed
     # owner ABIs, so cross_validate / GridSearchCV / RandomizedSearchCV /
     # learning_curve reach them natively (they were pending migration).
     # Every constructor stores its parameters only (field copy, init None).
-    from . import cluster, mixture, decomposition, _expansion_cluster as xcluster, _expansion_decomp as xdecomp
     native = constant(None)
-    add(cluster.KMeans, cluster._NATIVE, cluster._NATIVE_CONTEXT, {
-        'fit': ('family_kmeans_fit', (native, arg(0), keyword('sample_weight'))),
-        'predict': ('family_kmeans_predict', (native, arg(0))),
-        'transform': ('family_kmeans_transform', (native, arg(0))),
-    })
-    for cls, fit, predict in ((xcluster.MiniBatchKMeans, 'family_cfa_mbk_fit', 'family_xc_variants_predict'),  # glue: fixed ABI metadata connected once during package import
-                              (xcluster.BisectingKMeans, 'family_cfa_bisect_fit', 'family_xc_bisect_predict')):
-        add(cls, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
-            'fit': (fit, (native, arg(0), keyword('sample_weight'), arg(1))),
-            'predict': (predict, (native, arg(0))),
-            'transform': ('family_xc_variants_transform', (native, arg(0))),
-            'score': ('family_xc_variants_score', (native, arg(0))),
+    if cluster is not None:
+        add(cluster.KMeans, cluster._NATIVE, cluster._NATIVE_CONTEXT, {
+            'fit': ('family_kmeans_fit', (native, arg(0), keyword('sample_weight'))),
+            'predict': ('family_kmeans_predict', (native, arg(0))),
+            'transform': ('family_kmeans_transform', (native, arg(0))),
         })
-    add(xcluster.MeanShift, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
-        'fit': ('family_cfa_meanshift_fit', (native, arg(0), arg(1))),
-        'predict': ('family_xc_predict', (native, arg(0))),
-    })
-    add(xcluster.AffinityPropagation, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
-        'fit': ('family_cfa_ap_fit', (native, arg(0), arg(1))),
-        'predict': ('family_xc_ap_predict', (native, arg(0))),
-    })
-    add(xcluster.BayesianGaussianMixture, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
-        'fit': ('family_mix_bgmm_fit', (native, arg(0), arg(1))),
-        'predict': ('family_mix_bgmm_predict', (native, arg(0))),
-        'predict_proba': ('family_mix_bgmm_predict_proba', (native, arg(0))),
-        'score': ('family_mix_bgmm_score', (native, arg(0))),
-    })
-    add(mixture.GaussianMixture, mixture._NATIVE, mixture._NATIVE_CONTEXT, {
-        'fit': ('family_mix_gmm_public_fit', (arg(0), arg(1))),
-        'predict': ('family_mix_gmm_public_predict', (arg(0),)),
-        'predict_proba': ('family_mix_gmm_public_predict_proba', (arg(0),)),
-        'score': ('family_mix_gmm_public_score', (arg(0),)),
-    })
-    add(decomposition.TruncatedSVD, decomposition._TSVD_ENTRY, decomposition._TSVD_CONTEXT, {
-        'fit': ('fit', (arg(0), arg(1))),
-        'transform': ('transform', (arg(0),)),
-    })
-    add(xdecomp.IncrementalPCA, xdecomp._IPCA_CALL, xdecomp._IPCA_CONTEXT, {
-        'fit': ('fit', (arg(0),)),
-        'transform': ('transform', (arg(0),)),
-    })
-    for cls, score in ((xdecomp.FactorAnalysis, True), (xdecomp.LatentDirichletAllocation, True),  # glue: fixed ABI metadata connected once during package import
-                       (xdecomp.FastICA, False)):
-        methods = {'fit': ('fit', (arg(0),)), 'transform': ('transform', (arg(0),) if cls is not xdecomp.LatentDirichletAllocation
-                                                            else (arg(0), constant(True)))}
-        if score:
-            methods['score'] = ('score', (arg(0),))
-        add(cls, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, methods)
+    if xcluster is not None:
+        for cls, fit, predict in ((xcluster.MiniBatchKMeans, 'family_cfa_mbk_fit', 'family_xc_variants_predict'),  # glue: fixed ABI metadata connected once during package import
+                                  (xcluster.BisectingKMeans, 'family_cfa_bisect_fit', 'family_xc_bisect_predict')):
+            add(cls, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+                'fit': (fit, (native, arg(0), keyword('sample_weight'), arg(1))),
+                'predict': (predict, (native, arg(0))),
+                'transform': ('family_xc_variants_transform', (native, arg(0))),
+                'score': ('family_xc_variants_score', (native, arg(0))),
+            })
+        add(xcluster.MeanShift, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+            'fit': ('family_cfa_meanshift_fit', (native, arg(0), arg(1))),
+            'predict': ('family_xc_predict', (native, arg(0))),
+        })
+        add(xcluster.AffinityPropagation, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+            'fit': ('family_cfa_ap_fit', (native, arg(0), arg(1))),
+            'predict': ('family_xc_ap_predict', (native, arg(0))),
+        })
+        add(xcluster.BayesianGaussianMixture, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+            'fit': ('family_mix_bgmm_fit', (native, arg(0), arg(1))),
+            'predict': ('family_mix_bgmm_predict', (native, arg(0))),
+            'predict_proba': ('family_mix_bgmm_predict_proba', (native, arg(0))),
+            'score': ('family_mix_bgmm_score', (native, arg(0))),
+        })
+    if mixture is not None:
+        add(mixture.GaussianMixture, mixture._NATIVE, mixture._NATIVE_CONTEXT, {
+            'fit': ('family_mix_gmm_public_fit', (arg(0), arg(1))),
+            'predict': ('family_mix_gmm_public_predict', (arg(0),)),
+            'predict_proba': ('family_mix_gmm_public_predict_proba', (arg(0),)),
+            'score': ('family_mix_gmm_public_score', (arg(0),)),
+        })
+    if decomposition is not None:
+        add(decomposition.TruncatedSVD, decomposition._TSVD_ENTRY, decomposition._TSVD_CONTEXT, {
+            'fit': ('fit', (arg(0), arg(1))),
+            'transform': ('transform', (arg(0),)),
+        })
+    if xdecomp is not None:
+        add(xdecomp.IncrementalPCA, xdecomp._IPCA_CALL, xdecomp._IPCA_CONTEXT, {
+            'fit': ('fit', (arg(0),)),
+            'transform': ('transform', (arg(0),)),
+        })
+        for cls, score in ((xdecomp.FactorAnalysis, True), (xdecomp.LatentDirichletAllocation, True),  # glue: fixed ABI metadata connected once during package import
+                           (xdecomp.FastICA, False)):
+            methods = {'fit': ('fit', (arg(0),)), 'transform': ('transform', (arg(0),) if cls is not xdecomp.LatentDirichletAllocation
+                                                                else (arg(0), constant(True)))}
+            if score:
+                methods['score'] = ('score', (arg(0),))
+            add(cls, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, methods)
 
     # Lane a8d: NMF, SparsePCA, OPTICS and the manifold family's fixed owner
     # ABIs (they were pending migration), the same recipes as their public
     # methods pass. NMF.fit's keyword dictionary is empty (no W / H).
-    from . import _spectral_impl as spectral
-    add(xdecomp.NMF, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, {
-        'fit': ('fit', (arg(0), constant({}))),
-        'transform': ('transform', (arg(0),)),
-    })
-    add(xdecomp.SparsePCA, xdecomp._DL_CALL, xdecomp._DL_CONTEXT, {
-        'fit': ('spca_fit', (arg(0),)),
-        'transform': ('spca_transform', (arg(0),)),
-    })
-    add(xcluster.OPTICS, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
-        'fit': ('family_cfa_optics_fit', (native, arg(0), arg(1))),
-    })
-    for cls, prefix, query in ((xdecomp.Isomap, 'iso', True), (xdecomp.LocallyLinearEmbedding, 'lle', True),  # glue: fixed ABI metadata connected once during package import
-                               (xdecomp.MDS, 'mds', False)):
-        fit_args = (native, native, arg(0), constant(None), arg(1)) if prefix == 'mds' else (native, native, arg(0), arg(1))
-        methods = {'fit': ('family_mani_' + prefix + '_fit', fit_args)}
-        if query:
-            methods['transform'] = ('family_mani_' + prefix + '_transform', (native, native, arg(0)))
-        add(cls, xdecomp._NATIVE, xdecomp._NATIVE_CONTEXT, methods)
-    add(spectral.SpectralEmbedding, spectral._NATIVE, spectral._NATIVE_CONTEXT, {
-        'fit': ('family_cfb_se_fit', (arg(0), arg(1))),
-    })
+    if xdecomp is not None:
+        add(xdecomp.NMF, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, {
+            'fit': ('fit', (arg(0), constant({}))),
+            'transform': ('transform', (arg(0),)),
+        })
+        add(xdecomp.SparsePCA, xdecomp._DL_CALL, xdecomp._DL_CONTEXT, {
+            'fit': ('spca_fit', (arg(0),)),
+            'transform': ('spca_transform', (arg(0),)),
+        })
+    if xcluster is not None:
+        add(xcluster.OPTICS, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+            'fit': ('family_cfa_optics_fit', (native, arg(0), arg(1))),
+        })
+    if xdecomp is not None:
+        for cls, prefix, query in ((xdecomp.Isomap, 'iso', True), (xdecomp.LocallyLinearEmbedding, 'lle', True),  # glue: fixed ABI metadata connected once during package import
+                                   (xdecomp.MDS, 'mds', False)):
+            fit_args = (native, native, arg(0), constant(None), arg(1)) if prefix == 'mds' else (native, native, arg(0), arg(1))
+            methods = {'fit': ('family_mani_' + prefix + '_fit', fit_args)}
+            if query:
+                methods['transform'] = ('family_mani_' + prefix + '_transform', (native, native, arg(0)))
+            add(cls, xdecomp._NATIVE, xdecomp._NATIVE_CONTEXT, methods)
+    if spectral is not None:
+        add(spectral.SpectralEmbedding, spectral._NATIVE, spectral._NATIVE_CONTEXT, {
+            'fit': ('family_cfb_se_fit', (arg(0), arg(1))),
+        })
 
-    for name in ('VotingClassifier', 'VotingRegressor', 'StackingClassifier', 'StackingRegressor',  # glue: fixed meta-estimator ABIs at import
-                 'MultiOutputRegressor', 'MultiOutputClassifier', 'OneVsRestClassifier', 'CalibratedClassifierCV'):  # glue: exact meta-estimator ABIs at import
-        methods = {
-            'fit': ('trees_meta_fit', (arg(0), arg(1), constant(None) if name in ('OneVsRestClassifier', 'CalibratedClassifierCV') else keyword('sample_weight'))),
-            'predict': ('trees_meta_predict', (arg(0),)),
-            'score': ('trees_meta_score', (arg(0), arg(1), constant(None))),
-        }
-        if name.endswith('Classifier') or name == 'CalibratedClassifierCV':
-            methods['predict_proba'] = ('trees_meta_predict_proba', (arg(0),))
-        if name.startswith(('Voting', 'Stacking')):
-            methods['transform'] = ('trees_meta_transform', (arg(0),))
-        add(getattr(trees, name), trees._TREES, trees._TREES_CONTEXT, methods,
-            initial={'stack_method': 'predict'} if name == 'StackingRegressor' else None)
+    if trees is not None:
+        for name in ('VotingClassifier', 'VotingRegressor', 'StackingClassifier', 'StackingRegressor',  # glue: fixed meta-estimator ABIs at import
+                     'MultiOutputRegressor', 'MultiOutputClassifier', 'OneVsRestClassifier', 'CalibratedClassifierCV'):  # glue: exact meta-estimator ABIs at import
+            methods = {
+                'fit': ('trees_meta_fit', (arg(0), arg(1), constant(None) if name in ('OneVsRestClassifier', 'CalibratedClassifierCV') else keyword('sample_weight'))),
+                'predict': ('trees_meta_predict', (arg(0),)),
+                'score': ('trees_meta_score', (arg(0), arg(1), constant(None))),
+            }
+            if name.endswith('Classifier') or name == 'CalibratedClassifierCV':
+                methods['predict_proba'] = ('trees_meta_predict_proba', (arg(0),))
+            if name.startswith(('Voting', 'Stacking')):
+                methods['transform'] = ('trees_meta_transform', (arg(0),))
+            add(getattr(trees, name), trees._TREES, trees._TREES_CONTEXT, methods,
+                initial={'stack_method': 'predict'} if name == 'StackingRegressor' else None)
 
     splitter_fields = {
         'KFold': ('n_splits', 'shuffle', 'random_state'),
@@ -296,8 +325,10 @@ def connect(context, register, registry):
 
     wanted = {item[1] for plan in registry.values() for _, recipe in plan['methods'].values()  # glue: fixed ABI metadata connected once during package import
               for item in recipe if item[0] == 'binding'}  # glue: fixed ABI metadata connected once during package import
-    modules = {}
-    for basename in sorted(wanted):  # glue: fixed ABI metadata connected once during package import
+    if trees is not None:
+        wanted.add('_mojolearn_metrics')  # the tree meta-estimators' metric owner, below
+    modules = context.setdefault('family_msel_bindings', {})
+    for basename in sorted(wanted - set(modules)):  # glue: fixed ABI metadata connected once per binding
         modes = {}
         for mode in ('identical', 'fast'):  # glue: fixed ABI metadata connected once during package import
             try:
@@ -305,10 +336,11 @@ def connect(context, register, registry):
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
                 modes[mode] = type(error).__name__ + ': ' + str(error)
         modules[basename] = modes
-    context['family_msel_bindings'] = modules
     # (family context, metrics bindings by mode): bindings/trees_public_meta.mojo calls the metrics owner natively
-    trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
-    linear._XL_CONTEXT.update(native_estimator_entry=ms._NATIVE, native_estimator_context=context)
+    if trees is not None:
+        trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
+    if linear is not None:
+        linear._XL_CONTEXT.update(native_estimator_entry=ms._NATIVE, native_estimator_context=context)
     _connect_device_rows(registry)
 
 
@@ -342,41 +374,54 @@ def _connect_device_rows(registry):
     # through it (_xl_matrix / classical_view / admit_x, each resolving a
     # DeviceRows) join. The *CV estimators stay out: their fit hands X to
     # their own splitter (prep_native_split), which takes no fold handle.
-    from . import linear_model, _expansion_prep as prep, decomposition
-    from . import _svm_impl as svm, svm as linear_svm, _gp_impl as gp, kernel_methods as km, neighbors
-    from . import _expansion_linear as linear, _solver_impl as cd
-    xl = tuple(getattr(linear, name) for name in (  # glue: fixed ABI metadata connected once during package import
-        'SGDClassifier', 'SGDRegressor', 'PoissonRegressor', 'GammaRegressor', 'TweedieRegressor',
-        'HuberRegressor', 'BayesianRidge', 'ARDRegression', 'Lars', 'LassoLars', 'QuantileRegressor',
-        'Perceptron', 'PassiveAggressiveClassifier', 'PassiveAggressiveRegressor', 'RidgeClassifier'))
-    from . import _gpc_impl as gpc
+    # Re-run when a family loads (lane lazy-family-import): the classes of the
+    # LOADED families only, by (module, class name); the flag is idempotent.
+    import sys
+    xl = ('SGDClassifier', 'SGDRegressor', 'PoissonRegressor', 'GammaRegressor', 'TweedieRegressor',
+          'HuberRegressor', 'BayesianRidge', 'ARDRegression', 'Lars', 'LassoLars', 'QuantileRegressor',
+          'Perceptron', 'PassiveAggressiveClassifier', 'PassiveAggressiveRegressor', 'RidgeClassifier')
     # Lane a7a: GaussianProcessClassifier opts in (its door admits X through
     # admit_x; predict / predict_proba gather a fold on the device).
-    from . import cluster, mixture, _expansion_cluster as xcluster, _expansion_decomp as xdecomp
-    from . import _spectral_impl as spectral
-    for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler,  # glue: fixed ABI metadata connected once during package import
-                decomposition.PCA, svm.SVC, svm.SVR, linear_svm.LinearSVC, linear_svm.LinearSVR,
-                gp.GaussianProcessRegressor, gpc.GaussianProcessClassifier, km.KernelRidge,
-                neighbors.KNeighborsClassifier, neighbors.KNeighborsRegressor,
-                linear_model.LogisticRegression, linear_model.QNRegressor, cd.Lasso, cd.ElasticNet,
-                cluster.KMeans, xcluster.MiniBatchKMeans, xcluster.BisectingKMeans, xcluster.MeanShift,
-                xcluster.AffinityPropagation, xcluster.BayesianGaussianMixture, mixture.GaussianMixture,
-                decomposition.TruncatedSVD, xdecomp.IncrementalPCA, xdecomp.FactorAnalysis,
-                xdecomp.LatentDirichletAllocation, xdecomp.FastICA,
-                # Lane a8d: through their admissions (decomp_admit,
-                # admit_family / admit_family_meta), which gather a fold's
-                # rows out of the host base and test them in the gather.
-                xdecomp.NMF, xdecomp.SparsePCA, xcluster.OPTICS, xdecomp.Isomap,
-                xdecomp.LocallyLinearEmbedding, xdecomp.MDS, spectral.SpectralEmbedding) + xl:
-        if cls in registry:
-            registry[cls]['device_rows'] = True
+    # Lane a8d: NMF, SparsePCA, OPTICS, Isomap, LLE, MDS and SpectralEmbedding
+    # through their admissions (decomp_admit, admit_family / admit_family_meta),
+    # which gather a fold's rows out of the host base and test them in the gather.
+    opted = (
+        ('linear_model', ('LinearRegression', 'Ridge', 'LogisticRegression', 'QNRegressor')),
+        ('_expansion_prep', ('MaxAbsScaler', 'RobustScaler')),
+        ('decomposition', ('PCA', 'TruncatedSVD')),
+        ('_svm_impl', ('SVC', 'SVR')), ('svm', ('LinearSVC', 'LinearSVR')),
+        ('_gp_impl', ('GaussianProcessRegressor',)), ('_gpc_impl', ('GaussianProcessClassifier',)),
+        ('kernel_methods', ('KernelRidge',)), ('neighbors', ('KNeighborsClassifier', 'KNeighborsRegressor')),
+        ('_solver_impl', ('Lasso', 'ElasticNet')), ('cluster', ('KMeans',)),
+        ('_expansion_cluster', ('MiniBatchKMeans', 'BisectingKMeans', 'MeanShift', 'AffinityPropagation',
+                                'BayesianGaussianMixture', 'OPTICS')),
+        ('mixture', ('GaussianMixture',)),
+        ('_expansion_decomp', ('IncrementalPCA', 'FactorAnalysis', 'LatentDirichletAllocation', 'FastICA',
+                               'NMF', 'SparsePCA', 'Isomap', 'LocallyLinearEmbedding', 'MDS')),
+        ('_spectral_impl', ('SpectralEmbedding',)),
+        ('_expansion_linear', xl),
+    )
+    for module_name, names in opted:  # glue: fixed ABI metadata of the loaded families
+        module = sys.modules.get(__package__ + '.' + module_name)
+        if module is None:
+            continue
+        for name in names:  # glue: fixed opted-in classes of one family
+            cls = getattr(module, name)
+            if cls in registry:
+                registry[cls]['device_rows'] = True
 
 
 def connect_estimator_defaults():
     # glue: the trees' default member estimators, constructed after the native
     # full-reset, linear and declared constructors are connected: an instance
     # built earlier would reach a constructor that is not ready yet.
-    from . import svm as linear_svm, linear_model, _expansion_trees as trees
+    # Once, when the tree family is loaded; `_families.DEPENDS` loads the
+    # linear model and SVM families with it (lane lazy-family-import).
+    import sys
+    trees = sys.modules.get(__package__ + '._expansion_trees')
+    if trees is None or 'native_estimator_defaults' in trees._TREES_CONTEXT:
+        return
+    from . import svm as linear_svm, linear_model
     trees._TREES_CONTEXT['native_estimator_defaults'] = {
         'Ridge': linear_model.Ridge(), 'LogisticRegression': linear_model.LogisticRegression(),
         'LinearSVC': linear_svm.LinearSVC(),

@@ -133,5 +133,5 @@ def test_native_owner_preserves_order_and_uses_existing_storage_and_lifetime_gua
     assert 'native_release_admit(item, context["ownership"])' in source
     for forbidden in ('fields.clear', 'fields.pop', '_mojolearn_params_reset', 'model.set_params(', 'model.__init__('):
         assert forbidden not in source
-    init = (ROOT / 'python/mojolearn/__init__.py').read_text()
-    assert init.index('_connect_params_metadata_classes(_params_metadata_owner') < init.index('_connect_declared_params(_params_metadata_sys')
+    init = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
+    assert init.index('_connect_params_metadata_classes(_mode') < init.index('_connect_declared_params(package')

@@ -10,6 +10,7 @@
 # typed entry. The caller (bindings/kit_call.mojo) releases the GIL around
 # these, as the doors did.
 from x_decomp.api import ew_run, gemm_run, sqdist_run, move_run, idn_flags_run, tsqr_r_run, ols_tsqr_r_run, order_f_run, svd_run, rank_above_run, geqrf_run, orgqr_run
+from x_decomp.api import tsqr_q_run, r_signs_run
 from x_decomp.api import (
     rand_run, lu_solve_run, eigh_run, lasso_rows_run, lars_rows_run, omp_rows_run, lu_aux_run, absmax_sign_run,
     select_smallest_run, argmin_all_run,
@@ -21,7 +22,7 @@ from x_decomp.descriptor_schema import (
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE, xd_dim,
     XD_FLAGS, XD_TSQR_R, XD_OLS_TSQR_R, XD_ORDER, XD_SVD, XD_RANK, XD_ORTH_DIAG, XD_GEQRF, XD_ORGQR,
     XD_RAND, XD_LU, XD_LU_SOLVE, XD_EIGH, XD_LASSO_ROWS, XD_LARS_ROWS, XD_OMP_ROWS, XD_LU_AUX, XD_ABSMAX_SIGN,
-    XD_REDUCE, XD_SELECT_SMALLEST, XD_ARGMIN_ALL, XD_ORDER_SMALL,
+    XD_REDUCE, XD_SELECT_SMALLEST, XD_ARGMIN_ALL, XD_ORDER_SMALL, XD_TSQR_Q, XD_R_SIGNS,
 )
 
 
@@ -48,7 +49,7 @@ def xd_float(floats: Int, i: Int) raises -> Float64:
 def xd_is_address_op(op: Int) -> Bool:
     return ((op >= XD_EW and op <= XD_MOVE) or op == XD_FLAGS or op == XD_TSQR_R or op == XD_OLS_TSQR_R or op == XD_ORDER
             or op == XD_SVD or op == XD_RANK or op == XD_ORTH_DIAG or op == XD_GEQRF or op == XD_ORGQR
-            or (op >= XD_RAND and op <= XD_ARGMIN_ALL) or op == XD_ORDER_SMALL)
+            or (op >= XD_RAND and op <= XD_ARGMIN_ALL) or op == XD_ORDER_SMALL or op == XD_TSQR_Q or op == XD_R_SIGNS)
 
 
 def xd_address_op[E: Exec](op: Int, a: List[Int], p: List[Int], floats: Int) raises -> Int:
@@ -99,6 +100,16 @@ def xd_address_op[E: Exec](op: Int, a: List[Int], p: List[Int], floats: Int) rai
         var n = xd_dim(p[0])
         order_small_run(xd_f32(a[0]), xd_f32(a[1]), n)
         return n
+    if op == XD_TSQR_Q:
+        # tsqr_q_py: q (m x k) = Q c for the factorization XD_TSQR_R kept,
+        # then released; p = [m, n, k] (lane entangled-decompkit, 2026-11-12)
+        var k = xd_dim(p[2])
+        tsqr_q_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[0]), xd_dim(p[1]), k)
+        return k
+    if op == XD_R_SIGNS:
+        # r_signs_py: p = [n] (lane entangled-decompkit, 2026-11-12)
+        r_signs_run(xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[0]))
+        return 0
     if op == XD_SVD:
         svd_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_dim(p[0]), xd_dim(p[1]))
         return p[1]

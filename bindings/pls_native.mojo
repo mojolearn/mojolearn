@@ -27,14 +27,12 @@ from bindings.parallel_public_result import parallel_public_result
 from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
-from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x
 from bindings.admitted_input import admit_f32
 from bindings.metrics_cls_native import metrics_cls_operation
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.native_scalar_decode import native_scalar_buffer
-from bindings.native_array_storage import native_array_zeros
 from bindings.sequential_admission import _one_of
 from bindings.classifier_public_lifecycle import _feature_names
 from bindings.admitted_input import admit_x_unrecorded, classical_view
@@ -43,13 +41,13 @@ from bindings.host_sparse_native_door import host_sparse_format, host_sparse_den
 from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.decomp_kit_native import (
-    DecompKit, decomp_int, decomp_float, decomp_entries, decomp_is_a,
-    decomp_class_attr, XD_SUB, XD_ADD, XD_MUL, XD_DIV, XD_SCALE, XD_SQ, XD_SQRT, XD_SELECT, XD_RECIP,
+    DecompDoor, decomp_int, decomp_float, decomp_entries, decomp_is_a, decomp_class_attr, decomp_kit_unpack,
+    decomp_kit_publish, decomp_kit_out_shape, decomp_door_snapshot, decomp_door_tested, decomp_door_resident_hit,
+    decomp_door_resident_input,
 )
-from x_decomp.descriptor_schema import XD_PLS_FIT
-
-comptime PLS_F32_EPS = 1.1920928955078125e-07
-
+from bindings.decomp_kit_run import DKit
+from bindings.pls_run import PlsFitWords, PlsFit, pls_fit_run, pls_project, pls_rebuild, pls_predict_run
+from std.python._cpython import GILReleased
 
 def _name(model: PythonObject) raises -> String:
     return String(py=py_type(model).__name__)
@@ -149,7 +147,7 @@ def _pls_input_deferred(source: PythonObject, name: String, context: PythonObjec
     """A PLS operand through the one admission (bindings/admitted_input.mojo):
     the public X by admit_x_unrecorded (scikit-learn's refusals and wording),
     a target or fitted operand of rank `ndim` (-1: 1-D or 2-D) by admit_f32;
-    then its captured metadata (array_metadata_once) for DecompKit. A
+    then its captured metadata (array_metadata_once) for the typed kit. A
     float32 C-order operand is borrowed, anything else one parallel cast
     with the finite test in the pass."""
     # TOMBSTONE: decomp_input_snapshot (providers/python/decomp_input_pyapi.mojo, PLS's own cast-and-scan copy) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -166,9 +164,9 @@ def _pls_input_deferred(source: PythonObject, name: String, context: PythonObjec
         # TOMBSTONE: A8C_PLS_PUBLIC_X_HOST_SCAN (removed: superseded by the kit upload's device test) deleted 2026-11-09 by 197546da0d; code recoverable at 197546da0d^.
         # Restore: git apply experiments/removed/A8C_PLS_PUBLIC_X_HOST_SCAN.patch
         # Lane a8c-device-x-linear-prep-rfe: with `defer` (the operation's
-        # kit tests its upload, DecompKit.defers_finite) a borrowed X takes
+        # kit tests its upload, DKit.defers_finite) a borrowed X takes
         # no host pass here; `deferred` tells the caller to add it through
-        # DecompKit.input_tested. A cast X is tested in its cast pass.
+        # decomp_door_tested. A cast X is tested in its cast pass.
         var admitted = admit_x_unrecorded(value, public_name, context, defer_finite=defer)
         deferred = not admitted.finite
         array = admitted.array
@@ -197,21 +195,31 @@ def _pls_input_deferred(source: PythonObject, name: String, context: PythonObjec
     return snapshot^
 
 
-def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+def _matrix(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+            context: PythonObject) raises -> Int:
     var pin = ArrayPin()
     var input = _pls_input(source, name, context, pin)
-    return kit.input_snapshot(input, pin, input.shape[0], input.shape[1])
+    return decomp_door_snapshot(door, kit, input, pin, input.shape[0], input.shape[1])
 
 
-def _captured(mut kit: DecompKit, captured: ArrayMetadata, pin: ArrayPin, deferred: Bool, est: String) raises -> Int:
+def _captured(mut door: DecompDoor, mut kit: DKit, captured: ArrayMetadata, pin: ArrayPin, deferred: Bool,
+              est: String) raises -> Int:
     """The public X the door admitted (`pls_public_operation`) as a kit
-    matrix: through `input_tested` (the upload tests it on the device) when
-    the door deferred its finite test, else `input_snapshot`."""
+    matrix: tested on its upload (decomp_door_tested) when the door deferred
+    its finite test, else borrowed."""
     if deferred:
         if not kit.defers_finite():
             raise Error("RuntimeError: mojolearn " + est + ": X was admitted untested but this binding has no tested upload")
-        return kit.input_tested(captured, pin, captured.shape[0], captured.shape[1], est)
-    return kit.input_snapshot(captured, pin, captured.shape[0], captured.shape[1])
+        return decomp_door_tested(door, kit, captured, pin, captured.shape[0], captured.shape[1], est)
+    return decomp_door_snapshot(door, kit, captured, pin, captured.shape[0], captured.shape[1])
+
+
+def _x(mut door: DecompDoor, mut kit: DKit, args: PythonObject, captured_x: Optional[ArrayMetadata],
+       x_pin: Optional[ArrayPin], x_deferred: Bool, fields: PythonObject, context: PythonObject) raises -> Int:
+    # `x_pin`: the door's pin of `captured_x`.
+    if captured_x:
+        return _captured(door, kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"]))
+    return _matrix(door, kit, args[0], "X", context)
 
 
 def _pls_defers(fields: PythonObject, fitting: Bool, context: PythonObject) -> Bool:
@@ -228,46 +236,46 @@ def _pls_defers(fields: PythonObject, fitting: Bool, context: PythonObject) -> B
         return False
 
 
-def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    # A fitted 1-D float32 vector as a 1 x n matrix.
-    var pin = ArrayPin()
-    var input = _pls_input(source, name, context, pin, 1)
-    return kit.input_snapshot(input, pin, 1, input.shape[0])
-
-
-def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    # A fitted operand: admitted per call as before; on a query its device
-    # copy is kept across calls (DecompKit.resident_input), else as _matrix.
-    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+def _fitted_matrix(mut door: DecompDoor, mut kit: DKit, fields: PythonObject, name: String,
+                   context: PythonObject) raises -> Int:
+    # UNPACK a fitted operand: on a query its device copy is kept across
+    # calls (the model's record), else borrowed as _matrix.
+    var source = fields[name]
+    var hit = decomp_door_resident_hit(door, kit, source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
     var pin = ArrayPin()
     var input = _pls_input(source, name, context, pin)
-    var held = kit.resident_input(source, name, pin.keep, input.source.addr, pin.owner, input.shape[0], input.shape[1])
+    var held = decomp_door_resident_input(door, kit, source, name, pin.keep, input.source.addr, pin.owner,
+                                          input.shape[0], input.shape[1])
     if held >= 0:
         return held
-    return kit.input_snapshot(input, pin, input.shape[0], input.shape[1])
+    return decomp_door_snapshot(door, kit, input, pin, input.shape[0], input.shape[1])
 
 
-def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+def _fitted_row(mut door: DecompDoor, mut kit: DKit, fields: PythonObject, name: String,
+                context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector as a 1 x n matrix, resident as _fitted_matrix.
-    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+    var source = fields[name]
+    var hit = decomp_door_resident_hit(door, kit, source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
     var pin = ArrayPin()
     var input = _pls_input(source, name, context, pin, 1)
-    var held = kit.resident_input(source, name, pin.keep, input.source.addr, pin.owner, 1, input.shape[0])
+    var held = decomp_door_resident_input(door, kit, source, name, pin.keep, input.source.addr, pin.owner, 1,
+                                          input.shape[0])
     if held >= 0:
         return held
-    return kit.input_snapshot(input, pin, 1, input.shape[0])
+    return decomp_door_snapshot(door, kit, input, pin, 1, input.shape[0])
 
 
-def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject,
+def _target(mut door: DecompDoor, mut kit: DKit, source: PythonObject, context: PythonObject,
             captured: Optional[ArrayMetadata] = None,
             captured_pin: Optional[ArrayPin] = None) raises -> Tuple[Int, Bool]:
     # Admit the exact supported input before reading any metadata. A vector
     # keeps the old row-then-transpose execution order, using captured shape
-    # and address instead of source.shape, source.reshape or __array__ hooks.
+    # and address instead of source.shape, source.reshape or __array__ hooks
+    # (the transpose of a row is a view: no operation runs).
     if source is None:
         return (Int(-1), False)
     var pin = ArrayPin()
@@ -278,52 +286,9 @@ def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject,
     else:
         input = _pls_input(source, "Y", context, pin, -1)
     if len(input.shape) == 2:
-        return (kit.input_snapshot(input, pin, input.shape[0], input.shape[1]), False)
-    var row = kit.input_snapshot(input, pin, 1, input.shape[0])
+        return (decomp_door_snapshot(door, kit, input, pin, input.shape[0], input.shape[1]), False)
+    var row = decomp_door_snapshot(door, kit, input, pin, 1, input.shape[0])
     return (kit.transpose(row), True)
-
-
-def _center_scale(mut kit: DecompKit, a: Int, scale: Bool) raises -> Tuple[Int, Int, Int]:
-    # `_PLS._center_scale`: (centered and scaled A, mean, std).
-    var n = kit.nrows(a)
-    var mean = kit.colmean(a)
-    var centered = kit.ew(XD_SUB, a, mean)
-    var std: Int
-    if scale:
-        var squares = kit.ew(XD_SQ, centered)
-        var sums = kit.colsum(squares)
-        var variance = kit.ew(XD_SCALE, sums, scalar=1.0 / Float64(n - 1))
-        var root = kit.ew(XD_SQRT, variance)
-        var one = kit.const(1.0)
-        std = kit.ew(XD_SELECT, root, root, one, 0.0)
-        centered = kit.ew(XD_DIV, centered, std)
-    else:
-        std = kit.const(1.0, 1, kit.ncols(a))
-    return (centered, mean, std)
-
-
-def _pinv(mut kit: DecompKit, a: Int) raises -> Int:
-    # `_pinv` (rcond None): V diag(1/s) U^T through the thin SVD, values at or
-    # below max(shape) * float32 eps * s_max dropped.
-    var rows = kit.nrows(a)
-    var cols = kit.ncols(a)
-    var r = min(rows, cols)
-    var usv = kit.thin_svd(a, r, True)
-    var cond = Float64(max(rows, cols)) * PLS_F32_EPS
-    var cut = Float64(0.0)
-    if r:
-        cut = Float64(Float32(kit.word(usv[1], 0) * cond))
-    var zero = kit.zeros(1, 1)
-    var kept = kit.ew(XD_SELECT, usv[1], usv[1], zero, cut)
-    var inverse = kit.ew(XD_RECIP, kept)
-    var scaled = kit.ew(XD_MUL, usv[0], inverse)
-    return kit.mm(usv[2], scaled, ta=True, tb=True)
-
-
-def _rotation(mut kit: DecompKit, weights: Int, loadings: Int) raises -> Int:
-    var gram = kit.mm(loadings, weights, ta=True)
-    var inverse = _pinv(kit, gram)
-    return kit.mm(weights, inverse)
 
 
 def _pls_store(fields: PythonObject, state: PythonObject, key: String, value: PythonObject) raises:
@@ -333,145 +298,93 @@ def _pls_store(fields: PythonObject, state: PythonObject, key: String, value: Py
     py_setitem(state, key, value)
 
 
-def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject, mut kit: DecompKit,
+def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject, transform: Bool,
              context: PythonObject, fields: PythonObject, state: PythonObject,
              captured_x: Optional[ArrayMetadata] = None, captured_y: Optional[ArrayMetadata] = None,
              x_deferred: Bool = False, x_pin: Optional[ArrayPin] = None,
-             y_pin: Optional[ArrayPin] = None) raises -> Tuple[Int, Int]:
-    # `_PLS.fit` reads the captured settings and publishes into separate state.
+             y_pin: Optional[ArrayPin] = None) raises -> PythonObject:
+    # `_PLS.fit` reads the captured settings and publishes into separate
+    # state: one UNPACK, one RUN (bindings/pls_run.mojo), one PACK.
     # `x_pin`/`y_pin` are the door's pins of `captured_x`/`captured_y`.
-    var x = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, x_source, "X", context)
-    var target = _target(kit, y_source, context, captured_y, y_pin)
-    var ym = target[0]
-    if ym < 0:
-        raise Error(String(fields["_pls_name"]) + " requires y to be passed, but the target y is None.")
-    var n = kit.nrows(x)
-    var p = kit.ncols(x)
-    var q = kit.ncols(ym)
-    if kit.nrows(ym) != n:
-        raise Error("Found input variables with inconsistent numbers of samples: [" + String(n) + ", "
-                    + String(kit.nrows(ym)) + "]")
-    if n < 2:
-        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
-                    + ")) while a minimum of 2 is required.")
-    var nc = decomp_int(fields["n_components"])
-    var deflation = fields["_deflation"]
-    if py_type(deflation) is not py_type(PythonObject("")):
-        raise Error("TypeError: PLS deflation must remain a native string")
-    var canonical = String(py=deflation) == "canonical"
-    var bound = min(n, min(p, q)) if canonical else p
-    if not (1 <= nc and nc <= bound):
-        raise Error("n_components == " + String(nc) + ", while 1 <= n_components <= " + String(bound) + " is required")
-    _pls_store(fields, state, "_predict_1d", PythonObject(target[1]))
-    var scale = Bool(py=fields["scale"])
-    var xs = _center_scale(kit, x, scale)
-    var ys = _center_scale(kit, ym, scale)
-    var algorithm = py_get(fields, "algorithm", PythonObject("nipals"))
-    var b = native_loaded_module("builtins")
-    var svd_algo = Bool(py=py_call(b.isinstance, algorithm, b.str)) and String(py=algorithm) == "svd"
-    var pmode = fields["_pmode"]
-    if py_type(pmode) is not py_type(PythonObject("")):
-        raise Error("TypeError: PLS component mode must remain a native string")
-    var mode_b = String(py=pmode) == "B"
-    # The component loop (NIPALS or the SVD pair, the flips, the deflations)
-    # is ONE binding call writing six host blocks.
-    var sizes = [p, q, n, n, p, q]
-    var outs = List[Int]()
-    # XD_PLS_FIT (was the Python entry x_decomp_pls_fit): a = [x, y, the six
-    # blocks, the int32 iteration counts, the int64 word nits comes back in].
-    var addresses: List[Int] = [kit.at(xs[0]), kit.at(ys[0])]
-    for k in range(6):  # driver-loop: over the six fitted blocks
-        var block = kit.zeros(sizes[k], nc)
-        outs.append(block)
-        addresses.append(kit.at(block))
-    var its = native_array_zeros("i", nc)
-    var iterations_address = Int(py=py_call(its.buffer_info)[0])
-    var written = List[Int](length=1, fill=0)
-    addresses.append(iterations_address)
-    addresses.append(Int(written.unsafe_ptr()))
-    var params: List[Int] = [n, p, q, nc, decomp_int(fields["max_iter"]), 1 if mode_b else 0, Int(canonical),
-                             Int(canonical), Int(svd_algo)]
-    var tol: List[Float64] = [decomp_float(fields["tol"])]
-    var done = kit.xd(XD_PLS_FIT, addresses, params, tol, True)
-    var nits = written[0]
-    _ = written^
-    for k in range(6):  # driver-loop: over the six fitted blocks
-        kit.wrote_host(outs[k])
-    if done < nc:
-        metric_warn("y residual is constant at iteration " + String(done), b.UserWarning, context)
-        for k in range(6):  # driver-loop: over the six fitted blocks
-            outs[k] = kit.cols_of(outs[k], 0, done)
-    var all_iterations = Python.list()
-    # Publish the completed native Int32 counts without Python iterable or
-    # slicing work. Match the old list[:nits] bound for the driver's count.
-    var stop = max(nc + nits, 0) if nits < 0 else min(nits, nc)
-    var iterations = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=iterations_address)
-    for index in range(stop):  # driver-loop: publish completed component iteration counts
-        _ = py_call(all_iterations.append, PythonObject(Int(iterations[index])))
-    _pls_store(fields, state, "n_iter_", all_iterations)
-    _ = its
-    var x_rotations = _rotation(kit, outs[0], outs[4])
-    var y_rotations = _rotation(kit, outs[1], outs[5])
-    var coef = kit.mm(x_rotations, outs[5], tb=True)
-    var scaled = kit.ew(XD_MUL, coef, ys[2])
-    var x_std_t = kit.transpose(xs[2])
-    var divided = kit.ew(XD_DIV, scaled, x_std_t)
-    coef = kit.transpose(divided)
-    _pls_store(fields, state, "x_weights_", kit.publish(outs[0]))
-    _pls_store(fields, state, "y_weights_", kit.publish(outs[1]))
-    _pls_store(fields, state, "x_loadings_", kit.publish(outs[4]))
-    _pls_store(fields, state, "y_loadings_", kit.publish(outs[5]))
-    _pls_store(fields, state, "x_rotations_", kit.publish(x_rotations))
-    _pls_store(fields, state, "y_rotations_", kit.publish(y_rotations))
-    _pls_store(fields, state, "coef_", kit.publish(coef))
-    _pls_store(fields, state, "intercept_", kit.out_shape(ys[1], Python.tuple(q)))
-    _pls_store(fields, state, "_x_scores", kit.publish(outs[2]))
-    _pls_store(fields, state, "_y_scores", kit.publish(outs[3]))
-    _pls_store(fields, state, "_x_mean", kit.out_shape(xs[1], Python.tuple(p)))
-    _pls_store(fields, state, "_x_std", kit.out_shape(xs[2], Python.tuple(p)))
-    _pls_store(fields, state, "_y_mean", kit.out_shape(ys[1], Python.tuple(q)))
-    _pls_store(fields, state, "_y_std", kit.out_shape(ys[2], Python.tuple(q)))
-    _pls_store(fields, state, "n_features_in_", PythonObject(p))
-    if Bool(py=fields["_pls_regression"]):
-        _pls_store(fields, state, "x_scores_", fields["_x_scores"])
-        _pls_store(fields, state, "y_scores_", fields["_y_scores"])
-    return (x, ym)
+    var entries = decomp_entries(fields["numeric_mode"], context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
+    try:
+        var x = _x(door, kit, Python.tuple(x_source), captured_x, x_pin, x_deferred, fields, context)
+        var target = _target(door, kit, y_source, context, captured_y, y_pin)
+        var ym = target[0]
+        if ym < 0:
+            raise Error(String(fields["_pls_name"]) + " requires y to be passed, but the target y is None.")
+        var n = kit.nrows(x)
+        var p = kit.ncols(x)
+        var q = kit.ncols(ym)
+        if kit.nrows(ym) != n:
+            raise Error("Found input variables with inconsistent numbers of samples: [" + String(n) + ", "
+                        + String(kit.nrows(ym)) + "]")
+        if n < 2:
+            raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
+                        + ")) while a minimum of 2 is required.")
+        var nc = decomp_int(fields["n_components"])
+        var deflation = fields["_deflation"]
+        if py_type(deflation) is not py_type(PythonObject("")):
+            raise Error("TypeError: PLS deflation must remain a native string")
+        var canonical = String(py=deflation) == "canonical"
+        var bound = min(n, min(p, q)) if canonical else p
+        if not (1 <= nc and nc <= bound):
+            raise Error("n_components == " + String(nc) + ", while 1 <= n_components <= " + String(bound) + " is required")
+        _pls_store(fields, state, "_predict_1d", PythonObject(target[1]))
+        var scale = Bool(py=fields["scale"])
+        var algorithm = py_get(fields, "algorithm", PythonObject("nipals"))
+        var b = native_loaded_module("builtins")
+        var svd_algo = Bool(py=py_call(b.isinstance, algorithm, b.str)) and String(py=algorithm) == "svd"
+        var pmode = fields["_pmode"]
+        if py_type(pmode) is not py_type(PythonObject("")):
+            raise Error("TypeError: PLS component mode must remain a native string")
+        var words = PlsFitWords(nc, decomp_int(fields["max_iter"]), String(py=pmode) == "B", canonical, svd_algo,
+                                scale, decomp_float(fields["tol"]))
+        # RUN: the centering, the one component-loop call, the rotations,
+        # the coefficients (and fit_transform's projections), the GIL released.
+        var fit = PlsFit()
+        var py = Python()
+        with GILReleased(py):
+            fit = pls_fit_run(kit, x, ym, words, transform)
+        # PACK: the warning, the iteration counts and the fitted fields, once.
+        if fit.done < nc:
+            metric_warn("y residual is constant at iteration " + String(fit.done), b.UserWarning, context)
+        var all_iterations = Python.list()
+        for index in range(len(fit.iterations)):  # driver-loop: publish completed component iteration counts
+            _ = py_call(all_iterations.append, PythonObject(Int(fit.iterations[index])))
+        _pls_store(fields, state, "n_iter_", all_iterations)
+        _pls_store(fields, state, "x_weights_", decomp_kit_publish(door, kit, fit.outs[0]))
+        _pls_store(fields, state, "y_weights_", decomp_kit_publish(door, kit, fit.outs[1]))
+        _pls_store(fields, state, "x_loadings_", decomp_kit_publish(door, kit, fit.outs[4]))
+        _pls_store(fields, state, "y_loadings_", decomp_kit_publish(door, kit, fit.outs[5]))
+        _pls_store(fields, state, "x_rotations_", decomp_kit_publish(door, kit, fit.x_rotations))
+        _pls_store(fields, state, "y_rotations_", decomp_kit_publish(door, kit, fit.y_rotations))
+        _pls_store(fields, state, "coef_", decomp_kit_publish(door, kit, fit.coef))
+        _pls_store(fields, state, "intercept_", decomp_kit_out_shape(door, kit, fit.y_mean, Python.tuple(q)))
+        _pls_store(fields, state, "_x_scores", decomp_kit_publish(door, kit, fit.outs[2]))
+        _pls_store(fields, state, "_y_scores", decomp_kit_publish(door, kit, fit.outs[3]))
+        _pls_store(fields, state, "_x_mean", decomp_kit_out_shape(door, kit, fit.x_mean, Python.tuple(p)))
+        _pls_store(fields, state, "_x_std", decomp_kit_out_shape(door, kit, fit.x_std, Python.tuple(p)))
+        _pls_store(fields, state, "_y_mean", decomp_kit_out_shape(door, kit, fit.y_mean, Python.tuple(q)))
+        _pls_store(fields, state, "_y_std", decomp_kit_out_shape(door, kit, fit.y_std, Python.tuple(q)))
+        _pls_store(fields, state, "n_features_in_", PythonObject(p))
+        if Bool(py=fields["_pls_regression"]):
+            _pls_store(fields, state, "x_scores_", fields["_x_scores"])
+            _pls_store(fields, state, "y_scores_", fields["_y_scores"])
+        if not transform:
+            return model
+        # fit_transform: the projections of the X and Y the fit held.
+        return Python.tuple(decomp_kit_publish(door, kit, fit.tx), decomp_kit_publish(door, kit, fit.ty))
+    finally:
+        kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def _check_fitted(model: PythonObject, fields: PythonObject) raises:
     if not py_contains(fields, "coef_"):
         raise Error("RuntimeError: " + String(fields["_pls_name"]) + " is not fitted; call fit first")
-
-
-def _project(mut kit: DecompKit, a: Int, mean_name: String, std_name: String, rotations_name: String,
-             fields: PythonObject, context: PythonObject) raises -> Int:
-    # ((A - mean) / std) @ rotations.
-    var mean = _fitted_row(kit, fields[mean_name], mean_name, context)
-    var std = _fitted_row(kit, fields[std_name], std_name, context)
-    var rotations = _fitted_matrix(kit, fields[rotations_name], rotations_name, context)
-    var centered = kit.ew(XD_SUB, a, mean)
-    var scaled = kit.ew(XD_DIV, centered, std)
-    return kit.mm(scaled, rotations)
-
-
-def _transform(mut kit: DecompKit, x: Int, ym: Int, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var xs = _project(kit, x, "_x_mean", "_x_std", "x_rotations_", fields, context)
-    if ym < 0:
-        return kit.publish(xs)
-    var ys = _project(kit, ym, "_y_mean", "_y_std", "y_rotations_", fields, context)
-    return Python.tuple(kit.publish(xs), kit.publish(ys))
-
-
-def _rebuild(mut kit: DecompKit, z: Int, loadings_name: String, std_name: String, mean_name: String,
-             fields: PythonObject, context: PythonObject) raises -> Int:
-    # (Z @ loadings^T) * std + mean.
-    var loadings = _fitted_matrix(kit, fields[loadings_name], loadings_name, context)
-    var std = _fitted_row(kit, fields[std_name], std_name, context)
-    var mean = _fitted_row(kit, fields[mean_name], mean_name, context)
-    var product = kit.mm(z, loadings, tb=True)
-    var scaled = kit.ew(XD_MUL, product, std)
-    return kit.ew(XD_ADD, scaled, mean)
-
 
 
 def _score_binding(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -518,18 +431,9 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             var is_str = Bool(py=py_call(b.isinstance, algorithm, b.str))
             if not is_str or (String(py=algorithm) != "nipals" and String(py=algorithm) != "svd"):
                 raise Error("PLSCanonical: algorithm must be 'nipals' or 'svd'")
-        var mode = fields["numeric_mode"]
-        _pls_store(fields, state, "numeric_mode_", mode)
-        var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
-        try:
-            var held = _pls_fit(model, args[0], y, kit, context, fields, state, captured_x, captured_y, x_deferred,
-                                x_pin, y_pin)
-            if operation == "fit":
-                return model
-            # transform(X, y): the X and Y the fit converted and uploaded.
-            return _transform(kit, held[0], held[1], fields, context)
-        finally:
-            kit.close()
+        _pls_store(fields, state, "numeric_mode_", fields["numeric_mode"])
+        return _pls_fit(model, args[0], y, operation == "fit_transform", context, fields, state, captured_x,
+                        captured_y, x_deferred, x_pin, y_pin)
     if operation == "score":
         # `RegressorScoreMixin.score`: y as float32 (`as_f32_c(y, ndim=None,
         # name="y")`), the native predict, then `metrics.r2_score(y, pred,
@@ -551,39 +455,76 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         _ = truth^
         return r2
     _check_fitted(model, fields)
-    var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
+    var door = DecompDoor(entries, context["output_context"])
     # A query: the fitted operands stay on the device across calls.
-    kit.owner = model
+    door.owner = model
+    var kit = decomp_kit_unpack(entries)
     try:
+        var py = Python()
         if operation == "transform":
-            # args: (X, y, Y)
+            # args: (X, y, Y). UNPACK: X, Y, then the fitted state they use.
             var y = args[1] if args[1] is not None else args[2]
-            var x = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
-            var target = _target(kit, y, context)
-            return _transform(kit, x, target[0], fields, context)
+            var x = _x(door, kit, args, captured_x, x_pin, x_deferred, fields, context)
+            var ym = _target(door, kit, y, context)[0]
+            var x_mean = _fitted_row(door, kit, fields, "_x_mean", context)
+            var x_std = _fitted_row(door, kit, fields, "_x_std", context)
+            var x_rot = _fitted_matrix(door, kit, fields, "x_rotations_", context)
+            var y_mean = -1
+            var y_std = -1
+            var y_rot = -1
+            if ym >= 0:
+                y_mean = _fitted_row(door, kit, fields, "_y_mean", context)
+                y_std = _fitted_row(door, kit, fields, "_y_std", context)
+                y_rot = _fitted_matrix(door, kit, fields, "y_rotations_", context)
+            var xs = -1
+            var ys = -1
+            with GILReleased(py):
+                xs = pls_project(kit, x, x_mean, x_std, x_rot)
+                if ym >= 0:
+                    ys = pls_project(kit, ym, y_mean, y_std, y_rot)
+            if ym < 0:
+                return decomp_kit_publish(door, kit, xs)
+            return Python.tuple(decomp_kit_publish(door, kit, xs), decomp_kit_publish(door, kit, ys))
         if operation == "inverse_transform":
-            var z = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
-            var xr = _rebuild(kit, z, "x_loadings_", "_x_std", "_x_mean", fields, context)
+            var z = _x(door, kit, args, captured_x, x_pin, x_deferred, fields, context)
+            var x_load = _fitted_matrix(door, kit, fields, "x_loadings_", context)
+            var x_std = _fitted_row(door, kit, fields, "_x_std", context)
+            var x_mean = _fitted_row(door, kit, fields, "_x_mean", context)
             var y = args[1] if args[1] is not None else args[2]
-            if y is None:
-                return kit.publish(xr)
-            var w = _matrix(kit, y, "Y", context)
-            var yr = _rebuild(kit, w, "y_loadings_", "_y_std", "_y_mean", fields, context)
-            return Python.tuple(kit.publish(xr), kit.publish(yr))
+            var w = -1
+            var y_load = -1
+            var y_std = -1
+            var y_mean = -1
+            if y is not None:
+                w = _matrix(door, kit, y, "Y", context)
+                y_load = _fitted_matrix(door, kit, fields, "y_loadings_", context)
+                y_std = _fitted_row(door, kit, fields, "_y_std", context)
+                y_mean = _fitted_row(door, kit, fields, "_y_mean", context)
+            var xr = -1
+            var yr = -1
+            with GILReleased(py):
+                xr = pls_rebuild(kit, z, x_load, x_std, x_mean)
+                if w >= 0:
+                    yr = pls_rebuild(kit, w, y_load, y_std, y_mean)
+            if w < 0:
+                return decomp_kit_publish(door, kit, xr)
+            return Python.tuple(decomp_kit_publish(door, kit, xr), decomp_kit_publish(door, kit, yr))
         if operation == "predict":
-            var x = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
-            var mean = _fitted_row(kit, fields["_x_mean"], "_x_mean", context)
-            var centered = kit.ew(XD_SUB, x, mean)
-            var coef = _fitted_matrix(kit, fields["coef_"], "coef_", context)
-            var product = kit.mm(centered, coef, tb=True)
-            var y_mean = _fitted_row(kit, fields["_y_mean"], "_y_mean", context)
-            var prediction = kit.ew(XD_ADD, product, y_mean)
+            var x = _x(door, kit, args, captured_x, x_pin, x_deferred, fields, context)
+            var mean = _fitted_row(door, kit, fields, "_x_mean", context)
+            var coef = _fitted_matrix(door, kit, fields, "coef_", context)
+            var y_mean = _fitted_row(door, kit, fields, "_y_mean", context)
+            var prediction = -1
+            with GILReleased(py):
+                prediction = pls_predict_run(kit, x, mean, coef, y_mean)
             if Bool(py=fields["_predict_1d"]):
-                return kit.out_shape(prediction, Python.tuple(kit.nrows(prediction)))
-            return kit.publish(prediction)
+                return decomp_kit_out_shape(door, kit, prediction, Python.tuple(kit.nrows(prediction)))
+            return decomp_kit_publish(door, kit, prediction)
         raise Error("unknown native PLS operation")
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 
@@ -599,7 +540,7 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
     var name = String(fields["_pls_name"])
     var sparse = Bool(py=fields["_pls_regression"])
     # Lane a8c: the X of an operation whose kit tests its upload is admitted
-    # with no host pass (`x_deferred`; DecompKit.input_tested refuses it).
+    # with no host pass (`x_deferred`; decomp_door_tested refuses it).
     var x_deferred = False
     var x_pin = ArrayPin()
     var x = _pls_input_deferred(args[0], "X", context, x_pin, 2, name, False, sparse,

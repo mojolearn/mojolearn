@@ -59,6 +59,11 @@ import json
 from pathlib import Path
 import sys
 
+# Every command (verify above all) runs on the loaded set the package had
+# before lazy family import: every family and every unit (`_families.load_all`),
+# so verify's enumeration and binding provenance find each one.
+from . import _families
+_families.load_all()
 from . import _conformance
 from . import _identity
 from . import _verify

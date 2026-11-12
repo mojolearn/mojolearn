@@ -113,90 +113,57 @@ gpu_arch_how = _backend.gpu_arch_how
 #: `numpy.asarray(result)` is ZERO-COPY for a caller who has NumPy
 #: (`python/mojolearn/NUMPY_FREE_CONTRACT.md`).
 from ._array import Array
-from . import model_selection
-from .model_selection import cross_val_score
 
-from .cluster import KMeans
-from .decomposition import PCA, TruncatedSVD
-from .density import DBSCAN, KernelDensity
-from .ensemble import (ExperimentalTwoLevelFeatureFreq, GradientBoosting, OrderedRMSE,
-                       GradientBoostingClassifier, GradientBoostingRegressor)
-from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
-from . import preprocessing
-from .preprocessing import MinMaxScaler, StandardScaler
-from .linear_model import LinearRegression, LogisticRegression, QNRegressor, Ridge
-from .neighbors import (
-    KNeighborsClassifier,
-    KNeighborsRegressor,
-    NearestNeighbors,
-    RadiusNeighbors,
-)
-from .randomforest import RandomForestClassifier, RandomForestRegressor
+# The tokenizer is core: its host unit carries the compiled descriptors every
+# family connects through, so it loads with the package.
+from . import tokenizer
+from .tokenizer import BpeTokenizer
+from . import _families as _families
+import importlib as _importlib
 
-# ---------------------------------------------------------------------------
-# THE 2026-08-24 SURFACE. Seven estimators, two submodules and two functions
-# over lanes that were finished and CERTIFIED at the kernel level and simply
-# unreachable from Python. Each carries its own WHAT IS HONORED / REFUSED
-# table and its own cross-vendor status, and those statuses DIFFER: `SVC`,
-# `Lasso`, `ElasticNet`, `AgglomerativeClustering` and `mojolearn.metrics`
-# stand on lanes with three-vendor identity cards at leg 11; `IsolationForest`,
-# `SpectralClustering` and `ExponentialSmoothing` do NOT and say so on the
-# class. Read the class, not this list.
+# EVERY OTHER PUBLIC NAME LOADS ITS FAMILY ON FIRST TOUCH (lane
+# lazy-family-import, 2026-11-12; `_families.py`). `import mojolearn` loads
+# the core only; `mojolearn.Ridge` (or `from mojolearn import Ridge`, or
+# `import mojolearn.linear_model`) imports that family's modules, whose own
+# import-time connections run unchanged and load its native units, and then
+# the package's class connections run over the newly loaded classes. A value
+# is the module that defines the name ('.module'); None is a submodule.
 #
-# `SVR` joined them on 2026-09-01, on the same lane as `SVC` and through the
-# same compiled extension, but WITHOUT `SVC`'s three-vendor card: the
-# regression half was gated after leg 11 and has not been in a cross-vendor
-# round. Its class says so.
-#
-# `ARIMA` JOINED THEM ON 2026-09-01 and this block said it could not. It read
-# that ARIMA was "deliberately absent" because its lane had no `fit`, so the
-# class would have to demand its own answer as an argument. True while it was
-# true: `estimate_x0` (over an own-written Householder QR) and an own-written
-# batched L-BFGS landed that day, gated in both numeric tiers, and what was
-# missing afterwards was only the Python door. `arima/` has a three-vendor
-# identity card for its KALMAN FILTER at `221aa141`; the FIT does not, and the
-# class says so rather than inheriting the lane's headline.
-#
-# Imported eagerly, like the block above, which is safe because every impl
-# module resolves its binding on FIRST USE rather than at import. A partial
-# build therefore still yields an importable package whose missing pieces
-# raise BY NAME when touched, which is `_backend.py`'s whole design.
-from . import linalg
-from . import lowbit
-from . import models
-from .linalg import matmul
-import sys as _sys
-
-from . import _metrics_impl as metrics
-# `metrics` is an alias of a private module, so `import mojolearn.metrics` and
-# `from mojolearn.metrics import accuracy_score` found no `mojolearn/metrics.py`
-# and raised ModuleNotFoundError while `mojolearn.metrics.accuracy_score`
-# worked (Sep 22 pip smoke). Registering the alias makes both spellings work.
-_sys.modules[__name__ + ".metrics"] = metrics
-from ._hierarchy_impl import AgglomerativeClustering
-from ._iforest_impl import IsolationForest
-from ._solver_impl import ElasticNet, Lasso
-from ._spectral_impl import SpectralClustering, SpectralEmbedding
-from . import manifold
-from . import umap
-from .umap import UMAP
-from .neural_network import SmallMLPTrainer
-# The forest host lane (2026-09-13): predict and predict_proba of a SAVED
-# RandomForest, ExtraTrees or (the GBDT host lane, the same day)
-# GradientBoosting model on a CPU with no GPU, through
-# host/_mojolearn_forest_host.so. Resolves its binding on first use, so an
-# install without it still imports and raises BY NAME when touched.
-# cpu-gpu-cleanup c-core (2026-10-02): the CPU inference modules load on
-# first touch (`__getattr__` below), so importing the package on a GPU
-# install pulls in no CPU-side module.
-_CPU_INFERENCE = {
+# THE ALGORITHM EXPANSION'S DOORS (lane/algos-prep, 2026-09-27) own
+# `_expansion_<lane>.py`, whose `__all__` is what each makes public; their
+# names are routed here in door order (host_surface.EXPANSION_LANES). When a
+# door loads, `_families` refuses BY NAME a door whose `__all__` differs from
+# the names routed to it, so no name can belong to two doors or shadow
+# another (tests/test_lazy_family_import.py checks this table against the
+# doors' source).
+_LAZY_NAMES = {
+    "model_selection": None, "cross_val_score": ".model_selection",
+    "cluster": None, "KMeans": ".cluster",
+    "decomposition": None, "PCA": ".decomposition", "TruncatedSVD": ".decomposition",
+    "density": None, "DBSCAN": ".density", "KernelDensity": ".density",
+    "ensemble": None, "ExperimentalTwoLevelFeatureFreq": ".ensemble", "GradientBoosting": ".ensemble",
+    "OrderedRMSE": ".ensemble", "GradientBoostingClassifier": ".ensemble",
+    "GradientBoostingRegressor": ".ensemble",
+    "extratrees": None, "ExtraTreesClassifier": ".extratrees", "ExtraTreesRegressor": ".extratrees",
+    "preprocessing": None, "MinMaxScaler": ".preprocessing", "StandardScaler": ".preprocessing",
+    "linear_model": None, "LinearRegression": ".linear_model", "LogisticRegression": ".linear_model",
+    "QNRegressor": ".linear_model", "Ridge": ".linear_model",
+    "neighbors": None, "KNeighborsClassifier": ".neighbors", "KNeighborsRegressor": ".neighbors",
+    "NearestNeighbors": ".neighbors", "RadiusNeighbors": ".neighbors",
+    "randomforest": None, "RandomForestClassifier": ".randomforest", "RandomForestRegressor": ".randomforest",
+    "linalg": None, "matmul": ".linalg", "lowbit": None, "models": None,
+    # `mojolearn/metrics.py` puts the private module itself under this name.
+    "metrics": None,
+    "AgglomerativeClustering": "._hierarchy_impl", "IsolationForest": "._iforest_impl",
+    "ElasticNet": "._solver_impl", "Lasso": "._solver_impl",
+    "SpectralClustering": "._spectral_impl", "SpectralEmbedding": "._spectral_impl",
+    "manifold": None, "umap": None, "UMAP": ".umap",
+    "neural_network": None, "SmallMLPTrainer": ".neural_network",
+    # The CPU inference and language-model names (cpu-gpu-cleanup c-core,
+    # 2026-10-02; cgr-py 2026-10-03), lazy before this lane too: a GPU install
+    # importing the package loads no CPU-side module.
     "HostForest": "._forest_host", "host_model": "._forest_host", "host_predict": "._forest_host",
     "host_predict_proba": "._forest_host", "HostGBDT": "._gbdt_host",
-    # cgr-py (2026-10-03): the language-model names load on first touch
-    # too. `language_model` re-exports the CPU trainer and CPU inference
-    # from `_byte_lm_host`, which an eager `from .language_model import`
-    # pulled in on every import; the GPU trainers come from their own
-    # modules, so a GPU install importing the package loads neither.
     "language_model": None,
     "SmallByteLanguageModelTrainer": "._byte_lm_impl",
     "ByteLanguageModelConfig": "._byte_lm_config",
@@ -204,173 +171,136 @@ _CPU_INFERENCE = {
     "LanguageModelConfig": ".language_model",
     "LanguageModelInference": "._byte_lm_host",
     "LanguageModelHostTrainer": "._byte_lm_host",
-    # The public CPU neural inference (host/_mojolearn_neural_host.so).
     "neural_inference": None,
-    # The operation session (`mojolearn.ops`, autograd/ops_api.mojo): loads on
-    # first touch, so the package imports without NumPy.
+    # The operation session (`mojolearn.ops`, autograd/ops_api.mojo) and model
+    # import (docs/plans/MODEL_IMPORT.md): the package imports without NumPy.
     "ops": None,
-    # Model import (docs/plans/MODEL_IMPORT.md, lane ag-import-docs): the
-    # package and its entry point load on first touch, as `ops` does.
     "importers": None,
     "import_model": ".importers",
     "MLPInference": ".neural_inference", "TransformerBlockInference": ".neural_inference",
     "Mamba1BlockInference": ".neural_inference", "Mamba2BlockInference": ".neural_inference",
     "Mamba3BlockInference": ".neural_inference", "SambaInference": ".neural_inference",
+    "SVC": "._svm_impl", "SVR": "._svm_impl",
+    "svm": None, "LinearSVC": ".svm", "LinearSVR": ".svm",
+    "ARIMA": "._arima_impl",
+    "ExponentialSmoothing": "._tsa_impl", "kpss_test": "._tsa_impl", "select_d": "._tsa_impl",
+    "lm_corpus": None,
+    "Cholesky": "._cholesky_impl",
+    "kernel_methods": None, "KernelRidge": ".kernel_methods", "Nystroem": ".kernel_methods",
+    "RBFSampler": ".kernel_methods",
+    "mixture": None, "GaussianMixture": ".mixture",
+    "hdbscan": None, "HDBSCAN": ".hdbscan",
+    "resample": None,
+    "IVFIndex": "._ivf_impl",
+    "embedding": None, "Embedding": ".embedding",
+    "ConstantKernel": "._gp_impl", "GaussianProcessRegressor": "._gp_impl", "Matern": "._gp_impl",
+    "RBF": "._gp_impl", "WhiteKernel": "._gp_impl",
+    "GaussianProcessClassifier": "._gpc_impl",
+    "training": None, "SGD": ".training", "Adam": ".training", "AdamW": ".training",
+    "clip_grad_norm_": ".training", "cross_entropy": ".training",
+    "mamba": None, "Mamba1Block": "._mamba_impl", "Mamba1State": "._mamba_impl",
+    "Mamba2Block": "._mamba_impl", "Mamba2State": "._mamba_impl", "Mamba3Block": "._mamba_impl",
+    "Mamba3State": "._mamba_impl",
+    "transformer": None, "TransformerBlock": "._transformer_impl", "TransformerState": "._transformer_impl",
+    "SambaConfig": "._samba_impl", "SambaStack": "._samba_impl",
+    "parallel_training": None, "ParallelByteLanguageModelTrainer": ".parallel_training",
+    "ParallelNeuralTrainer": ".parallel_training",
+    "model_pool_training": None, "PooledByteLanguageModelTrainer": ".model_pool_training",
+    "offload_training": None, "OffloadedByteLanguageModelTrainer": ".offload_training",
+    "parallel_classical": None, "parallel_ensemble": None, "parallel_forecasting": None,
+    "parallel_gaussian_process": None, "parallel_graph": None, "parallel_ivf": None,
+    "parallel_model_selection": None, "parallel_neighbors": None, "parallel_neighbors_reference": None,
+    "parallel_preprocessing": None, "DistributedIVFIndex": ".parallel_ivf",
+    # _expansion_linear
+    "SGDClassifier": "._expansion_linear", "SGDRegressor": "._expansion_linear",
+    "PoissonRegressor": "._expansion_linear", "GammaRegressor": "._expansion_linear",
+    "TweedieRegressor": "._expansion_linear", "HuberRegressor": "._expansion_linear",
+    "BayesianRidge": "._expansion_linear", "ARDRegression": "._expansion_linear", "Lars": "._expansion_linear",
+    "LassoLars": "._expansion_linear", "QuantileRegressor": "._expansion_linear",
+    "Perceptron": "._expansion_linear", "PassiveAggressiveClassifier": "._expansion_linear",
+    "PassiveAggressiveRegressor": "._expansion_linear", "SGDOneClassSVM": "._expansion_linear",
+    "RidgeClassifier": "._expansion_linear", "RidgeCV": "._expansion_linear", "LassoCV": "._expansion_linear",
+    "ElasticNetCV": "._expansion_linear", "LogisticRegressionCV": "._expansion_linear",
+    "IsotonicRegression": "._expansion_linear",
+    # _expansion_cluster
+    "MiniBatchKMeans": "._expansion_cluster", "BisectingKMeans": "._expansion_cluster",
+    "MeanShift": "._expansion_cluster", "OPTICS": "._expansion_cluster",
+    "AffinityPropagation": "._expansion_cluster", "BayesianGaussianMixture": "._expansion_cluster",
+    # _expansion_neighbors
+    "LocalOutlierFactor": "._expansion_neighbors", "NearestCentroid": "._expansion_neighbors",
+    "OneClassSVM": "._expansion_neighbors", "KernelPCA": "._expansion_neighbors",
+    "PolynomialCountSketch": "._expansion_neighbors", "AdditiveChi2Sampler": "._expansion_neighbors",
+    "SkewedChi2Sampler": "._expansion_neighbors", "LabelPropagation": "._expansion_neighbors",
+    "LabelSpreading": "._expansion_neighbors", "KNNImputer": "._expansion_neighbors",
+    "PageRank": "._expansion_neighbors", "connected_components": "._expansion_neighbors",
+    "Louvain": "._expansion_neighbors", "SVGP": "._expansion_neighbors",
+    # _expansion_decomp
+    "IncrementalPCA": "._expansion_decomp", "GaussianRandomProjection": "._expansion_decomp",
+    "SparseRandomProjection": "._expansion_decomp", "johnson_lindenstrauss_min_dim": "._expansion_decomp",
+    "NMF": "._expansion_decomp", "FastICA": "._expansion_decomp", "FactorAnalysis": "._expansion_decomp",
+    "lu_factor": "._expansion_decomp", "lu_solve": "._expansion_decomp", "solve": "._expansion_decomp",
+    "lstsq": "._expansion_decomp", "randomized_svd": "._expansion_decomp", "PLSRegression": "._expansion_decomp",
+    "PLSCanonical": "._expansion_decomp", "CCA": "._expansion_decomp", "DictionaryLearning": "._expansion_decomp",
+    "MiniBatchDictionaryLearning": "._expansion_decomp", "SparsePCA": "._expansion_decomp",
+    "MiniBatchSparsePCA": "._expansion_decomp", "sparse_encode": "._expansion_decomp",
+    "SparseCoder": "._expansion_decomp", "LatentDirichletAllocation": "._expansion_decomp",
+    "Isomap": "._expansion_decomp", "MDS": "._expansion_decomp", "ClassicalMDS": "._expansion_decomp",
+    "LocallyLinearEmbedding": "._expansion_decomp", "MinCovDet": "._expansion_decomp",
+    "EllipticEnvelope": "._expansion_decomp", "AlternatingLeastSquares": "._expansion_decomp",
+    # _expansion_prep
+    "f_classif": "._expansion_prep", "f_regression": "._expansion_prep", "r_regression": "._expansion_prep",
+    "chi2": "._expansion_prep", "mutual_info_classif": "._expansion_prep",
+    "mutual_info_regression": "._expansion_prep", "RobustScaler": "._expansion_prep",
+    "MaxAbsScaler": "._expansion_prep", "OrdinalEncoder": "._expansion_prep", "OneHotEncoder": "._expansion_prep",
+    "TargetEncoder": "._expansion_prep", "SimpleImputer": "._expansion_prep",
+    "KBinsDiscretizer": "._expansion_prep", "GaussianNB": "._expansion_prep", "MultinomialNB": "._expansion_prep",
+    "BernoulliNB": "._expansion_prep", "LinearDiscriminantAnalysis": "._expansion_prep",
+    "QuadraticDiscriminantAnalysis": "._expansion_prep", "QuantileTransformer": "._expansion_prep",
+    "PowerTransformer": "._expansion_prep", "Normalizer": "._expansion_prep",
+    "PolynomialFeatures": "._expansion_prep", "SplineTransformer": "._expansion_prep",
+    "Binarizer": "._expansion_prep", "LabelEncoder": "._expansion_prep", "LabelBinarizer": "._expansion_prep",
+    "MultiLabelBinarizer": "._expansion_prep", "IterativeImputer": "._expansion_prep",
+    "VarianceThreshold": "._expansion_prep", "SelectKBest": "._expansion_prep", "RFE": "._expansion_prep",
+    "ComplementNB": "._expansion_prep", "CategoricalNB": "._expansion_prep",
+    # _expansion_sequence
+    "LSTMRegressor": "._expansion_sequence", "LSTMClassifier": "._expansion_sequence",
+    "GRURegressor": "._expansion_sequence", "GRUClassifier": "._expansion_sequence",
+    "RMSprop": "._expansion_sequence", "Adagrad": "._expansion_sequence", "AutoARIMA": "._expansion_sequence",
+    "STL": "._expansion_sequence", "VAR": "._expansion_sequence", "MLPClassifier": "._expansion_sequence",
+    "MLPRegressor": "._expansion_sequence", "RNNRegressor": "._expansion_sequence",
+    "RNNClassifier": "._expansion_sequence", "Lion": "._expansion_sequence", "Adafactor": "._expansion_sequence",
+    "LAMB": "._expansion_sequence", "Adamax": "._expansion_sequence", "NAdam": "._expansion_sequence",
+    "StepLR": "._expansion_sequence", "ExponentialLR": "._expansion_sequence", "OneCycleLR": "._expansion_sequence",
+    "LayerNorm": "._expansion_sequence", "layer_norm_forward": "._expansion_sequence",
+    "layer_norm_backward": "._expansion_sequence", "Theta": "._expansion_sequence",
+    "OptimizedTheta": "._expansion_sequence", "DynamicTheta": "._expansion_sequence",
+    "DynamicOptimizedTheta": "._expansion_sequence", "AutoTheta": "._expansion_sequence",
+    "CrostonClassic": "._expansion_sequence", "CrostonOptimized": "._expansion_sequence",
+    "CrostonSBA": "._expansion_sequence", "ETS": "._expansion_sequence", "DampedETS": "._expansion_sequence",
+    "GARCH": "._expansion_sequence", "ProphetForecaster": "._expansion_sequence",
+    "MoEBlock": "._expansion_sequence", "Sequential": "._expansion_sequence",
+    # _expansion_trees
+    "DecisionTreeClassifier": "._expansion_trees", "DecisionTreeRegressor": "._expansion_trees",
+    "BaggingClassifier": "._expansion_trees", "BaggingRegressor": "._expansion_trees",
+    "AdaBoostClassifier": "._expansion_trees", "AdaBoostRegressor": "._expansion_trees",
+    "DARTRegressor": "._expansion_trees", "DARTClassifier": "._expansion_trees",
+    "RandomTreesEmbedding": "._expansion_trees", "VotingClassifier": "._expansion_trees",
+    "VotingRegressor": "._expansion_trees", "StackingClassifier": "._expansion_trees",
+    "StackingRegressor": "._expansion_trees", "MultiOutputClassifier": "._expansion_trees",
+    "MultiOutputRegressor": "._expansion_trees", "OneVsRestClassifier": "._expansion_trees",
+    "CalibratedClassifierCV": "._expansion_trees", "TreeExplainer": "._expansion_trees",
+    "KernelExplainer": "._expansion_trees", "PermutationExplainer": "._expansion_trees",
+    # _expansion_cnn
+    "Conv2d": "._expansion_cnn", "Conv1d": "._expansion_cnn", "MaxPool2d": "._expansion_cnn",
+    "AvgPool2d": "._expansion_cnn", "MaxPool1d": "._expansion_cnn", "AvgPool1d": "._expansion_cnn",
+    "CNNClassifier": "._expansion_cnn", "BatchNorm2d": "._expansion_cnn", "BatchNorm1d": "._expansion_cnn",
+    "Dropout2d": "._expansion_cnn", "AdaptiveAvgPool2d": "._expansion_cnn", "AdaptiveMaxPool2d": "._expansion_cnn",
+    "BasicBlock": "._expansion_cnn", "GCNConv": "._expansion_cnn", "SAGEConv": "._expansion_cnn",
+    # _expansion_ann
+    "IVFPQIndex": "._expansion_ann", "TSNE": "._expansion_ann", "CagraIndex": "._expansion_ann",
+    "IVFSQIndex": "._expansion_ann", "IVFRaBitQIndex": "._expansion_ann", "refine": "._expansion_ann",
+    # _expansion_metrics
 }
-from ._svm_impl import SVC, SVR
-# lane/expose-qn-objectives (2026-09-20): the linear machines, the
-# quasi-Newton solver on the four hinge-family losses, and the `svm`
-# namespace that holds all four.
-from . import svm
-from .svm import LinearSVC, LinearSVR
-from ._arima_impl import ARIMA
-from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
-from . import tokenizer
-from . import lm_corpus
-from .tokenizer import BpeTokenizer
-# Public neural inference on the CPU from GPU-trained weights (2026-09-15):
-# `neural_inference`'s classes load on first touch (`_CPU_INFERENCE`).
-
-# Workstream D, 2026-09-14: the door-less families of the claim-surface
-# census given a binding and a class. `Cholesky` binds `_mojolearn_gp` (the GP
-# build already links cholesky/); the other four have their own bindings,
-# resolved on FIRST USE like every other, so an unbuilt one leaves the
-# package importable and raises BY NAME with the build command when
-# touched. Compile-checked on one Apple M4; no box has run them through
-# the Python door, and their identity_break lanes and three columns are
-# owed.
-from ._cholesky_impl import Cholesky
-from . import kernel_methods
-from .kernel_methods import KernelRidge, Nystroem, RBFSampler
-from . import mixture
-from .mixture import GaussianMixture
-from . import hdbscan
-from .hdbscan import HDBSCAN
-from . import resample
-
-# `IVFIndex` and `Embedding` JOINED 2026-09-14 (lane/expose-ivf-embedding),
-# the two entries `_NOT_YET` held since the claim-surface census. IVFIndex
-# is IVF-Flat build plus search under one card (reference: cuVS `ivf_flat`)
-# (`bindings/_mojolearn_ivf.mojo`); `pixi run check-ivf` reads ALL OK with
-# one IDENTICAL card on Apple, NVIDIA and AMD
-# (bench/results/ivf_embed_km_legs_2026-09-14/README.md). Embedding is
-# profile mojolearn.identical.embedding.fp32.v1's gather and ascending fold
-# with padding_idx and the microbatch carry (`bindings/_mojolearn_embedding.mojo`);
-# its clause (a) card is byte-identical on the three columns and its
-# sabotage arms are resolved in the same branch. The identity_break lanes
-# `ivf` and `embedding` and their three columns are in
-# bench/results/identity_break/2026-09-14_ivf-embedding/.
-from ._ivf_impl import IVFIndex
-from . import embedding
-from .embedding import Embedding
-
-# `GaussianProcessRegressor` JOINED 2026-09-01, the last name deleted from
-# `_NOT_YET` below and the only one held for a reason other than a missing
-# surface. The blocker -- an IDENTICAL card believed to diverge Apple
-# against AMD -- was WITHDRAWN at `9835094e` (the divergent lines were a
-# sabotage arm's own block; see `_gp_impl.py`'s header), and the surface
-# was written that day. Its binding `_mojolearn_gp` resolves on FIRST USE
-# like every other: an unbuilt extension leaves the package importable and
-# raises BY NAME with the build command when touched (`_backend.py`'s
-# design). No reference GP exists in cuML/cuVS/RAFT at the
-# pinned commits; scikit-learn `_gpr.py` is the semantics oracle only.
-from ._gp_impl import (
-    ConstantKernel,
-    GaussianProcessRegressor,
-    Matern,
-    RBF,
-    WhiteKernel,
-)
-# `GaussianProcessClassifier` JOINED 2026-09-15 (lane/gaussian-process-
-# classifier): scikit-learn `_gpc.py`'s Laplace approximation on the same
-# binding, one-vs-rest past two classes, `optimizer=None` only (DEVIATIONS
-# 2830-2833 close DEVIATION 1766).
-from ._gpc_impl import GaussianProcessClassifier
-
-# `Mamba1Block` / `Mamba2Block` JOINED 2026-09-01 (later the same day
-# again), closing `archive/evidence/mamba/FEATURE_PARITY.md`'s "PyPI surface: NONE
-# EXISTS" row -- the single largest parity gap: both blocks were
-# certified at the kernel level (Mamba-1 three-vendor, Mamba-2 gated on
-# Apple) and exported no Python symbol at all. Not estimators -- no
-# `fit` -- so they also live in the `mojolearn.mamba` submodule; their
-# binding `_mojolearn_mamba` (the FOURTEENTH) resolves on FIRST USE like
-# every other, so an unbuilt extension leaves the package importable and
-# raises BY NAME with the build command when touched (`_backend.py`'s
-# design). The Mamba-1/2 surface gate printed green in all three tiers
-# on 2026-09-01; `Mamba3Block` joined later the same day and its
-# `tests/test_mamba_surface.py` arms printed green that evening at
-# `08a38a13`, all three tiers, identical bitwise-asserted
-# (`archive/evidence/mamba/FEATURE_PARITY.md` RUN LEDGER -- one box, one vendor; the
-# NVIDIA/AMD columns stay OWED there).
-# `_mojolearn_training.so` SHIPS IN THE WHEEL, so its Python half must be
-# reachable from the package. The release workflow's "nothing ships that
-# nothing imports" gate caught this on the 0.4.0 cut: `_training_impl.py`
-# was in the wheel and no module imported it, which is the shape
-# `mojolearn/torch_ops.py` had for two minor releases before it was
-# deleted. This module is NOT abandoned -- it drives a shipped binding and
-# has its own surface gate (`tests/test_training_surface.py`) -- so the
-# fix is the import, not a deletion. It is imported PRIVATELY and adds no
-# public optimizer/loss names historically. The alpha training module below
-# now exposes the explicit supported primitives; SmallMLPTrainer also composes
-# them internally. The import is safe at
-# package load because the module resolves its binding lazily through
-# `_backend`, so an unbuilt training extension still raises BY NAME when
-# touched rather than at import.
-from . import _training_impl as _training_impl  # noqa: F401  (private)
-from . import training
-from .training import SGD, Adam, AdamW, clip_grad_norm_, cross_entropy
-from . import mamba
-from ._mamba_impl import (
-    Mamba1Block,
-    Mamba1State,
-    Mamba2Block,
-    Mamba2State,
-    Mamba3Block,
-    Mamba3State,
-)
-
-# `TransformerBlock` JOINED 2026-09-02, giving profile
-# `mojolearn.identical.transformer.fp32.v1` its first Python symbol: the
-# lane's forward is CERTIFIED at the kernel level with a recorded
-# three-column round (2026-08-28, clauses (a) and (d), the same
-# 30-record card bytes on Apple, NVIDIA and AMD -- transformer/README.md
-# is the authority and its OWED list is real: clauses (b), (c), (e), the
-# sabotage ladder and the whole BACKWARD profile are not in that record)
-# and exported no Python symbol at all before this. Not an estimator --
-# no `fit` -- so it also lives in the `mojolearn.transformer` submodule;
-# its binding `_mojolearn_transformer` (the FIFTEENTH) resolves on FIRST
-# USE like every other, so an unbuilt extension leaves the package
-# importable and raises BY NAME with the build command when touched
-# (`_backend.py`'s design). THE PYTHON PATH RAN 2026-09-02, the day the
-# binding first compiled -- `tests/test_transformer_surface.py` printed
-# green in all three tiers, 44 checks 0 failed each, with the binding
-# rebuilt for each tier (`bash bindings/build_transformer.sh` per tier
-# first). ONE BOX, ONE VENDOR -- an Apple M4. The NVIDIA and AMD columns
-# of this surface are OWED, and so is the corpus cross-check
-# (transformer/README.md's "PyPI surface" section is the ledger).
-from . import transformer
-from ._transformer_impl import TransformerBlock, TransformerState
-# The Samba-shaped training stack (embedding, Mamba-3 / attention blocks,
-# final norm, LM head, cross-entropy, AdamW with schedule and clause 9.2
-# accumulation, position-keyed RNG, JSON checkpoint) over the training,
-# mamba and transformer bindings. `_samba_impl.py` holds no numerics.
-from ._samba_impl import SambaConfig, SambaStack
-# Existing capacity-oriented trainers are also discoverable at package level.
-# These imports resolve no device bindings; GPU work begins on first use.
-from .parallel_training import ParallelByteLanguageModelTrainer, ParallelNeuralTrainer
-from .model_pool_training import PooledByteLanguageModelTrainer
-from .offload_training import OffloadedByteLanguageModelTrainer
-from . import parallel_classical
-from . import parallel_ensemble
-from . import parallel_forecasting
-from . import parallel_gaussian_process
-from . import parallel_graph
-from . import parallel_ivf
-from . import parallel_model_selection
-from . import parallel_neighbors
-from . import parallel_neighbors_reference
-from . import parallel_preprocessing
-from .parallel_ivf import DistributedIVFIndex
 
 __all__ = [
     "parallel_classical",
@@ -515,33 +445,8 @@ __all__ = [
     "gpu_arch_how",
 ]
 
-# THE ALGORITHM EXPANSION'S DOORS (lane/algos-prep, 2026-09-27). Nine lanes
-# add public algorithms in parallel and none of them edits this file: each
-# owns `_expansion_<lane>.py`, whose `__all__` is what it makes public. They
-# are imported here in lane order (host_surface.EXPANSION_LANES) and their
-# names bound and appended to `__all__`. A name that is already public, or
-# that two doors both export, is refused at import BY NAME rather than one
-# silently shadowing the other, which is what a bare `import *` would do.
-from . import (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
-               _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann,
-               _expansion_metrics)
-_LAZY_EXPANSION_EXPORTS = {}
-for _door in (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
-              _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann,
-              _expansion_metrics):
-    for _name in _door.__all__:
-        if _name in __all__ or _name in globals():
-            raise ImportError(f"mojolearn: {_door.__name__} exports {_name!r}, which is already public "
-                              "or already bound; choose another name")
-        if _door is _expansion_sequence:
-            # Its optional NumPy-based implementations must not prevent the
-            # core library or the verifier's installation guidance importing.
-            _LAZY_EXPANSION_EXPORTS[_name] = _door
-        else:
-            globals()[_name] = getattr(_door, _name)
-        __all__.append(_name)
-del _door
-globals().pop("_name", None)
+__all__.extend(name for name, where in _LAZY_NAMES.items()  # glue: the doors' names, in door order
+               if where is not None and where.startswith("._expansion_"))
 
 # Named absences. Importing one of these raises with a reason rather than an
 # AttributeError, because "why is X missing" is a question the answer to is
@@ -576,19 +481,18 @@ _NOT_YET = {}
 
 
 def __getattr__(name):
-    if name in _CPU_INFERENCE:
-        import importlib
-        where = _CPU_INFERENCE[name]
+    if name in _LAZY_NAMES:
+        where = _LAZY_NAMES[name]
         if where is None:   # a submodule named in __all__
-            value = importlib.import_module("." + name, __name__)
+            value = _importlib.import_module("." + name, __name__)
         else:
-            value = getattr(importlib.import_module(where, __name__), name)
+            value = getattr(_importlib.import_module(where, __name__), name)
         globals()[name] = value
         return value
-    if name in _LAZY_EXPANSION_EXPORTS:
-        value = getattr(_LAZY_EXPANSION_EXPORTS[name], name)
-        globals()[name] = value
-        return value
+    if name in _families.EAGER_BEFORE:
+        # A package module bound as an attribute by the eager imports before
+        # this lane (`mojolearn._gp_impl`): imported, and connected, on touch.
+        return _importlib.import_module("." + name, __name__)
     if name == "GPT2Tokenizer":
         # Renamed BpeTokenizer 2026-09-18; kept in __all__ because 0.8.x
         # shipped it. tokenizer.__getattr__ warns and returns the same class.
@@ -606,133 +510,14 @@ def __dir__():
     return sorted(set(globals()) | set(__all__))  # glue: module attribute names for dir
 
 
-# CPU categorical GradientBoosting prediction is a native tree operation too;
-# connect its fixed host metadata after the public classes and lazy names are
-# available. The GPU package keeps explicit host APIs lazy. An unavailable
-# native tree owner has no vendor context and remains importable as before.
-from ._native_trees_bridge import connect_cpu_prediction as _connect_cpu_tree_prediction
-
-_connect_cpu_tree_prediction()
-del _connect_cpu_tree_prediction
-
 # The native Array operations share the base binding's core helpers.
 from ._array import connect_helpers as _connect_array_helpers
 from ._buffer import _native_optional as _array_helper
 _connect_array_helpers(_array_helper)
 del _connect_array_helpers, _array_helper
 
-# Field-only constructors must precede every method/storage identity snapshot.
-from ._native_linear_constructors import install as _install_linear_constructors
-_install_linear_constructors()
-del _install_linear_constructors
-
-# Full-reset setters precede every class-layout snapshot; the linear subset keeps its separate contract.
-from ._native_full_reset_params import install as _install_full_reset_params
-_install_full_reset_params()
-del _install_full_reset_params
-
-# Field-only declared prep/decomp constructors precede every class-layout snapshot too.
-from ._native_declared_constructors import install as _install_declared_constructors
-_install_declared_constructors()
-del _install_declared_constructors
-
-# Layouts connected at module import (neighbor queries, host inference, ...)
-# predate the installers above: rebind their replaced __init__/set_params.
-from ._native_classical_bridge import refresh_installed_members as _refresh_installed_members
-_refresh_installed_members()
-del _refresh_installed_members
-
-# Connect CV's fixed native estimator ABIs after every public class exists.
-from ._native_mode_metadata import connect_classes as _connect_mode_metadata_classes
-from . import _mode as _mode_metadata_owner
-import sys as _mode_metadata_sys
-_connect_mode_metadata_classes(_mode_metadata_owner._MODE_METADATA_CONTEXT, _mode_metadata_sys.modules[__name__])
-del _connect_mode_metadata_classes, _mode_metadata_owner, _mode_metadata_sys
-
-# Native attribute slots precede the estimator and parameter layout snapshots.
-from ._native_public_attributes import connect_classes as _connect_public_attributes
-import sys as _attribute_sys
-_connect_public_attributes(_attribute_sys.modules[__name__])
-del _connect_public_attributes, _attribute_sys
-
-from ._native_msel_dispatch import connect as _connect_native_cv
-import sys as _cv_sys
-_connect_native_cv(model_selection._NATIVE_CONTEXT, _cv_sys.modules[__name__])
-del _connect_native_cv, _cv_sys
-# The prep owners (RFE, IterativeImputer, TargetEncoder's cv splitter) reach a
-# wrapped estimator or splitter through the same compiled model-selection entry
-# and plan table (bindings/prep_native_estimator.mojo), never its Python methods.
-from . import _expansion_prep as _prep_owner
-_prep_owner._ENCODE_CONTEXT.update(native_estimator_entry=model_selection._NATIVE,
-                                   native_estimator_context=model_selection._NATIVE_CONTEXT)
-del _prep_owner
-from . import _expansion_trees as _tree_owner
-_tree_owner._TREES_CONTEXT.update(native_estimator_entry=model_selection._NATIVE,
-                                 native_estimator_context=model_selection._NATIVE_CONTEXT)
-# PermutationExplainer's resident linear route recognizes this library's
-# linear predict by identity (bindings/trees_agnostic_native_door.mojo).
-from . import _expansion_linear as _linear_owner
-_tree_owner._TREES_CONTEXT["trees_linear_predict"] = _linear_owner._LinearRegressorMixin.__dict__["predict"]
-del _linear_owner
-del _tree_owner
-
-# Parameter-read schemas capture the final built-in installers' method and
-# descriptor identities; the connection changes only this private plan table.
-from ._native_params_setter import connect as _connect_params_setter
-from . import _mode as _params_setter_owner
-_connect_params_setter(model_selection._NATIVE_CONTEXT, _params_setter_owner._PARAMS_METADATA_CONTEXT)
-del _connect_params_setter, _params_setter_owner
-
-from ._native_params_metadata import connect_classes as _connect_params_metadata_classes
-from . import _mode as _params_metadata_owner
-import sys as _params_metadata_sys
-_connect_params_metadata_classes(_params_metadata_owner._PARAMS_METADATA_CONTEXT, _params_metadata_sys.modules[__name__])
-from ._native_declared_params import connect as _connect_declared_params
-_connect_declared_params(_params_metadata_sys.modules[__name__], model_selection._NATIVE_CONTEXT,
-                         _params_metadata_owner._PARAMS_METADATA_CONTEXT)
-del _connect_declared_params
-del _connect_params_metadata_classes, _params_metadata_owner, _params_metadata_sys
-
-# Complete constructor ownership only after the native setter layouts exist.
-from ._native_linear_constructors import connect as _connect_linear_constructors
-from ._native_params_setter import _CONTEXT as _linear_constructor_setters
-_connect_linear_constructors(_linear_constructor_setters)
-del _connect_linear_constructors, _linear_constructor_setters
-
-# Connect full-reset ownership and nested routes after all getter/setter plans.
-from ._native_full_reset_params import connect as _connect_full_reset_params
-from ._native_params_setter import _CONTEXT as _full_reset_linear
-from ._native_declared_params import CONTEXT as _full_reset_declared
-from . import _mode as _full_reset_mode
-_connect_full_reset_params(_full_reset_mode._PARAMS_METADATA_CONTEXT, _full_reset_linear,
-                           _full_reset_declared, model_selection._NATIVE_CONTEXT)
-del _connect_full_reset_params, _full_reset_linear, _full_reset_declared, _full_reset_mode
-
-# Declared-family constructors release overwritten values under the declared setter's admission.
-from ._native_declared_constructors import connect as _connect_declared_constructors
-from ._native_declared_params import CONTEXT as _declared_constructor_setters
-_connect_declared_constructors(_declared_constructor_setters)
-del _connect_declared_constructors, _declared_constructor_setters
-
-# Snapshot family storage after every native constructor/attribute installer.
-from ._native_family_layouts import connect as _connect_family_layouts
-import sys as _family_layout_sys
-_connect_family_layouts(_family_layout_sys.modules[__name__])
-del _connect_family_layouts, _family_layout_sys
-
-# Default member estimators are constructed only after every constructor above is connected.
-from ._native_msel_prep import connect_estimator_defaults as _connect_estimator_defaults
-_connect_estimator_defaults()
-del _connect_estimator_defaults
-
-# The public parallel drivers' class/storage snapshots are taken last: every
-# import-time class connection above (native attribute slots, constructors)
-# precedes them, so a correct call is not refused as a changed hook.
-from ._native_parallel_public import refresh as _refresh_parallel_public
-_refresh_parallel_public(parallel_ensemble._FAMILY_CONTEXT)
-del _refresh_parallel_public
-
-# Complete process backend metadata is native after import-time provider setup.
+# Complete process backend metadata is native; it reads the loaded units and
+# re-reads them when a family loads one (_native_backend_public.refresh).
 from ._native_backend_public import connect as _connect_backend_public
 import sys as _backend_public_sys
 _connect_backend_public(_backend_public_sys.modules[__name__])
@@ -750,3 +535,9 @@ del _connect_numeric_profile_public, _numeric_profile_public_sys
 from ._native_numeric_profile import (_profiles as numeric_profiles, _measured as numeric_profile_measured,
                                       _default_profile as numeric_profile,
                                       _set_default_profile as set_numeric_profile)
+
+# Last: record the core, install the first-touch finder and connect the
+# core's classes. Every later package import connects its own classes.
+import sys as _families_sys
+_families.install(_families_sys.modules[__name__])
+del _families_sys
