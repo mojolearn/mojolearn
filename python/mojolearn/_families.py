@@ -165,14 +165,6 @@ def _arm_import_layouts():
         bridge.arm_import_layouts()
 
 
-def attribute(name, where):
-    """The public attribute `name`: a submodule (`where` None) or the name
-    from the module `where` ('.module'). Imports, and so connects, its family."""
-    if where is None:
-        return importlib.import_module("." + name, _PKG)
-    return getattr(importlib.import_module(where, _PKG), name)
-
-
 def _check_doors(package):
     # glue: once per expansion door, when it loads: its `__all__` is exactly
     # the names the package routes to it (no drift, no name in two doors).
@@ -233,12 +225,15 @@ def _connect_pass(package):
 
     # Field-only constructors must precede every method/storage identity snapshot.
     from . import _native_linear_constructors as linear_constructors
+    linear_constructors.collect()
     linear_constructors.install()
     # Full-reset setters precede every class-layout snapshot; the linear subset keeps its separate contract.
     from . import _native_full_reset_params as full_reset
+    full_reset.collect()
     full_reset.install()
     # Field-only declared prep/decomp constructors precede every class-layout snapshot too.
     from . import _native_declared_constructors as declared_constructors
+    declared_constructors.collect()
     declared_constructors.install()
     # Layouts connected at module import (neighbor queries, host inference, ...)
     # predate the installers above: rebind their replaced __init__/set_params.
