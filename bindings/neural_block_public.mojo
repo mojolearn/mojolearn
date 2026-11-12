@@ -1083,6 +1083,13 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
     return neural_training_entries(mods, fields, context)
 
 
+def neural_training_selection(fields: PythonObject, context: PythonObject) raises -> NeuralTrainingSelection:
+    # The connected training entries and their neural table key, for callers
+    # without a NativeModules cache (the Samba executor).
+    var mods = NativeModules()
+    return neural_training_selection(mods, fields, context)
+
+
 def _neural_int_words(values: PythonObject) raises -> List[Int]:
     # Internal boundary vectors already contain admitted scalar/address words.
     var result = List[Int]()
