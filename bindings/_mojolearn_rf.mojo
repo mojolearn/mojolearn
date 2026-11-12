@@ -157,11 +157,8 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]], notices: Int) raises ->
 
 # DEVIATION 2482: both RF label types own the same typed tree list. Moving it
 # into the export registry retains existing native storage without flattening.
-from forest_export_binding import (
-    forest_export_descriptor_py,
-    forest_export_py_list_f64,
-    forest_export_py_list_i64,
-)
+from forest_export_binding_unpack import (forest_export_py_list_f64, forest_export_py_list_i64,)
+from forest_export_binding_pack import (forest_export_descriptor_py,)
 from core.mojolearn_rf_impl import rf_flatten_trees
 
 
