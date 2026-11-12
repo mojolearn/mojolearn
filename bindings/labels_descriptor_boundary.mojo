@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Label provider admission and image pins around typed native kernel calls."""
+"""Label provider admission and image pins around typed native kernel calls (door).
+
+The route word, the typed driver and the device-or-host dispatch are in
+`bindings/labels_descriptor_boundary_run.mojo`."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get, py_type
@@ -7,55 +10,52 @@ from core.shared_slot import SharedSlot
 from core.hotpath_impl import HpStat
 from core.labels_native_api import (
     LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT,
-    LABELS_OP_MODE, LABELS_OP_CAPABILITIES, LABELS_CAP_DEVICE,
     LabelsNativeDriver, LabelsPrepareRequest, LabelsReduceRequest,
     LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest, LabelsThresholdRequest,
 )
-from core.labels_native_host import LabelsHostKernels, labels_host_fsum
+from core.labels_native_host import labels_host_fsum
+from bindings.labels_descriptor_boundary_run import (
+    labels_route_state, labels_route_host, labels_route_check, labels_route_device, labels_route_driver,
+    labels_prepare_run, labels_reduce_run, labels_threshold_run, labels_argmax_run, labels_gather_run,
+    labels_ratio_run,
+)
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 
 
-struct _LabelsProvider(Defaultable, Movable):
-    # Existing process route: 0 unconnected, 1 device, 2 host. Python owns only
-    # the admitted extension image; dispatch and all numerical state are native.
-    var state: Int
+struct _LabelsProviderPin(Defaultable, Movable):
+    # Python owns only the admitted extension image; the route word, dispatch
+    # and all numerical state are native (bindings/labels_descriptor_boundary_run.mojo).
     var provider: PythonObject
-    var driver: Optional[LabelsNativeDriver]
 
     def __init__(out self):
-        self.state = 0
         self.provider = PythonObject(None)
-        self.driver = Optional[LabelsNativeDriver]()
 
 
-comptime _LABELS_PROVIDER = SharedSlot[_LabelsProvider, "MojolearnLabelsProviderV4", 3]
+comptime _LABELS_PROVIDER_PIN = SharedSlot[_LabelsProviderPin, "MojolearnLabelsProviderPinV1"]
 
 
 def _labels_route(context: PythonObject) raises -> Int:
-    var slot = _LABELS_PROVIDER.get_or_create_ptr()
-    if slot[].state != 0:
-        return slot[].state
+    var state = labels_route_state()
+    if state != 0:
+        return state
     var base = py_get(context, "labels_base_binding")
     if base is None:
         raise Error("ImportError: mojolearn: the label steps need the label context (labels_base_binding)")
     if py_type(base) is py_type(PythonObject(False)):
-        slot[].state = 2
+        labels_route_host()
         return 2
     if py_type(base) is py_type(PythonObject("")):
         raise Error(String(base))
     var factory = neural_descriptor_entry(base, LABELS_NATIVE_FACTORY)
     var provider = neural_descriptor_connect_factory_once(factory, String(LABELS_NATIVE_ABI_NAME), LABELS_NATIVE_OPERATION_COUNT)
     var driver = LabelsNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-    var mode = driver.metadata(LABELS_OP_MODE)
-    if mode != 0 and mode != 1:
-        raise Error("kit provider: unsupported compiled numeric mode")
-    if driver.metadata(LABELS_OP_CAPABILITIES) != LABELS_CAP_DEVICE:
-        raise Error("ImportError: mojolearn: the base binding's labels provider is not the device provider")
-    slot[].provider = provider
-    slot[].driver = Optional[LabelsNativeDriver](driver^)
-    slot[].state = 1
+    # RUN checks the compiled mode and capabilities before anything is stored;
+    # the pin is stored first so the published device route always has it.
+    labels_route_check(driver)
+    _LABELS_PROVIDER_PIN.get_or_create_ptr()[].provider = provider
+    labels_route_device(driver^)
     return 1
 
 
@@ -67,8 +67,7 @@ struct _LabelsPin(Movable):
 
 def _labels_pin(context: PythonObject) raises -> _LabelsPin:
     _ = _labels_route(context)
-    var slot = _LABELS_PROVIDER.get_or_create_ptr()
-    return _LabelsPin(slot[].provider, slot[].driver.copy())
+    return _LabelsPin(_LABELS_PROVIDER_PIN.get_or_create_ptr()[].provider, labels_route_driver())
 
 
 def labels_prepare_targets(context: PythonObject, y_addr: Int, y_code: Int, n: Int,
@@ -78,7 +77,7 @@ def labels_prepare_targets(context: PythonObject, y_addr: Int, y_code: Int, n: I
     var driver = pin.driver.copy()
     try:
         with GILReleased(Python()):
-            return driver.value().prepare(request) if driver else LabelsHostKernels.prepare(request)
+            return labels_prepare_run(driver^, request)
     finally:
         _ = pin
 
@@ -89,7 +88,7 @@ def labels_reduce_stat(context: PythonObject, addr: Int, code: Int, n: Int, what
     var driver = pin.driver.copy()
     try:
         with GILReleased(Python()):
-            return driver.value().reduce(request) if driver else LabelsHostKernels.reduce(request)
+            return labels_reduce_run(driver^, request)
     finally:
         _ = pin
 
@@ -99,7 +98,7 @@ def labels_threshold(context: PythonObject, request: LabelsThresholdRequest) rai
     var driver = pin.driver.copy()
     try:
         with GILReleased(Python()):
-            return driver.value().threshold(request) if driver else LabelsHostKernels.threshold(request)
+            return labels_threshold_run(driver^, request)
     finally:
         _ = pin
 
@@ -110,10 +109,7 @@ def labels_argmax_rows(context: PythonObject, wide: Bool, scores_addr: Int, rows
     var driver = pin.driver.copy()
     try:
         with GILReleased(Python()):
-            if driver:
-                driver.value().argmax(wide, request)
-            else:
-                LabelsHostKernels.argmax(wide, request)
+            labels_argmax_run(driver^, wide, request)
     finally:
         _ = pin
 
@@ -127,10 +123,7 @@ def labels_gather(context: PythonObject, kind: Int, table_addr: Int, n_table: In
     var driver = pin.driver.copy()
     try:
         with GILReleased(Python()):
-            if driver:
-                driver.value().gather(native_kind, request)
-            else:
-                LabelsHostKernels.gather(native_kind, request)
+            labels_gather_run(driver^, native_kind, request)
     finally:
         _ = pin
 
@@ -142,7 +135,7 @@ def labels_class_ratio_f64(context: PythonObject, counts_addr: Int, k: Int, n: I
     var driver = pin.driver.copy()
     try:
         with GILReleased(Python()):
-            return driver.value().ratio(request) if driver else LabelsHostKernels.ratio(request)
+            return labels_ratio_run(driver^, request)
     finally:
         _ = pin
 
