@@ -24,7 +24,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classical_validate import classical_view, classical_refuse_sparse, classical_estimator_name
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from bindings.family_common import (
     family_repr, family_str, family_call, family_array,
@@ -234,7 +234,7 @@ def _ivf_extension(fields: PythonObject, binding: PythonObject, context: PythonO
 
 
 def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
-               x_snapshot: ArrayMetadata) raises -> PythonObject:
+               x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
     """`IVFIndex.fit(X)`: `ivf_flat_build_resident` when the binding has it
     (the list vectors stay in its handle), else `ivf_flat_build`."""
     var b = native_loaded_module("builtins")
@@ -247,7 +247,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var stamp_mods = NativeModules()
     prepared_drop(stamp_mods, IVF_QUERY_STATE_SLOT, model)
     _ann_release(fields, "ivf_flat_index_release")
-    var x = x_snapshot.keep
+    var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
     var n_lists_o = _ann_param(fields, "IVFIndex", "n_lists")
@@ -274,6 +274,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                         classical_address(offsets), classical_address(indices)),
             params))
         _ = x_snapshot  # retain the captured storage owners through native execution
+        _ = x_pin
         _ = centers  # keep the Python object alive through the native call above
         _ = norms  # keep the Python object alive through the native call above
         _ = offsets  # keep the Python object alive through the native call above
@@ -317,6 +318,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                                 classical_address(offsets), classical_address(indices), classical_address(data)),
                     params)
     _ = x_snapshot  # retain the captured storage owners through native execution
+    _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
     _ = norms  # keep the Python object alive through the native call above
     _ = offsets  # keep the Python object alive through the native call above
@@ -345,7 +347,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 
 def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
-               x_snapshot: ArrayMetadata) raises -> PythonObject:
+               x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
     """`IVFPQIndex.fit(X)`: `x_ann_ivf_pq_build_resident` when the binding
     has it (`codes_` stays in its handle), else `x_ann_ivf_pq_build`."""
     var b = native_loaded_module("builtins")
@@ -358,7 +360,7 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var owner = String("IVFPQIndex")
     _ = py_call(fields.pop, PythonObject("_device_codes"), PythonObject(None))
     _ann_release(fields, "x_ann_index_release")
-    var x = x_snapshot.keep
+    var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
     var n_lists_o = _ann_param(fields, owner, "n_lists")
@@ -387,6 +389,7 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
             resident_build, addrs,
             Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed, pq_dim_o, pq_bits_o, pq_iters)))
         _ = x_snapshot  # retain the captured storage owners through native execution
+        _ = x_pin
         _ = centers  # keep the Python object alive through the native call above
         _ = offsets  # keep the Python object alive through the native call above
         _ = indices  # keep the Python object alive through the native call above
@@ -427,6 +430,7 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = family_call(build, addrs,
                     Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed, pq_dim_o, pq_bits_o, pq_iters))
     _ = x_snapshot  # retain the captured storage owners through native execution
+    _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
     _ = offsets  # keep the Python object alive through the native call above
     _ = indices  # keep the Python object alive through the native call above
@@ -457,7 +461,7 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 
 def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
-               x_snapshot: ArrayMetadata) raises -> PythonObject:
+               x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
     """`IVFSQIndex.fit(X)` through `x_ann_ivf_sq_build`."""
     var binding = args[0]
     var fields = _fields(model)
@@ -466,7 +470,7 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     ann_stored_drop(model)
     var owner = String("IVFSQIndex")
     _ann_release(fields, "x_ann_index_release")
-    var x = x_snapshot.keep
+    var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
     var n_lists_o = _ann_param(fields, owner, "n_lists")
@@ -492,6 +496,7 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var seed = _ann_param(fields, owner, "random_state")
     _ = family_call(build, addrs, Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed, train_per_list))
     _ = x_snapshot  # retain the captured storage owners through native execution
+    _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
     _ = offsets  # keep the Python object alive through the native call above
     _ = indices  # keep the Python object alive through the native call above
@@ -522,7 +527,7 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 
 def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
-               x_snapshot: ArrayMetadata) raises -> PythonObject:
+               x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
     """`IVFRaBitQIndex.fit(X)` through `x_ann_ivf_rabitq_build`."""
     var binding = args[0]
     var fields = _fields(model)
@@ -531,7 +536,7 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     ann_stored_drop(model)
     var owner = String("IVFRaBitQIndex")
     _ann_release(fields, "x_ann_index_release")
-    var x = x_snapshot.keep
+    var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
     var n_lists_o = _ann_param(fields, owner, "n_lists")
@@ -553,6 +558,7 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var seed = _ann_param(fields, owner, "random_state")
     _ = family_call(build, addrs, Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed))
     _ = x_snapshot  # retain the captured storage owners through native execution
+    _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
     _ = offsets  # keep the Python object alive through the native call above
     _ = indices  # keep the Python object alive through the native call above
@@ -584,7 +590,7 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 
 def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
-               x_snapshot: ArrayMetadata) raises -> PythonObject:
+               x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
     """`CagraIndex.fit(X)` through `x_ann_cagra_build`; the index keeps X."""
     var binding = args[0]
     var fields = _fields(model)
@@ -593,7 +599,7 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     ann_stored_drop(model)
     var owner = String("CagraIndex")
     _ann_release(fields, "x_ann_index_release")
-    var x = x_snapshot.keep
+    var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var d = x_snapshot.shape[1]
     # `min(self._p("intermediate_graph_degree"), n - 1)`, then
@@ -608,6 +614,7 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = family_call(build, Python.list(PythonObject(x_snapshot.source.addr), classical_address(graph)),
                     Python.list(PythonObject(n), PythonObject(d), PythonObject(kdeg), PythonObject(deg)))
     _ = x_snapshot  # retain the captured storage owners through native execution
+    _ = x_pin
     _ = graph  # keep the Python object alive through the native call above
     # p3-neighbors-cluster (caller-aliased inputs): the index keeps X, and the
     # resident device copy is keyed by the kept array's identity. Unless the
@@ -615,11 +622,12 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # the caller's own buffer, and it is read-only from here on.
     var dataset: PythonObject
     if x_snapshot.copied and x_snapshot.is_array:
-        dataset = x_snapshot.keep
+        dataset = x_pin.keep
     else:
         var flat = _ann_empty(n * d, "<f4", context)
         cagra_copy_dataset(Int(py=classical_address(flat)), x_snapshot.source.addr, n * d)
         _ = x_snapshot  # the source storage stays alive through the copy above
+        _ = x_pin
         dataset = _ann_view(flat, Python.tuple(n, d), context)
     py_setitem(fields, "dataset_", dataset)
     py_setitem(fields, "graph_", _ann_view(graph, Python.tuple(n, deg), context))
@@ -663,9 +671,12 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # the queries is refused (they were not tested before): a cast by its own
     # verdict, borrowed float32 words by the entry's one status word (behind
     # their uploads on the GPU, one parallel scan on the CPU column).
-    var x = admit_family_meta(args[1], 2, "dataset", context, False, True,
+    var x_pin = ArrayPin()
+    var q_pin = ArrayPin()
+    var c_pin = ArrayPin()
+    var x = admit_family_meta(args[1], 2, "dataset", context, x_pin, False, True,
                               refusal=admitted_finite_wording("refine", "dataset"), defer_finite=True)
-    var q = admit_family_meta(args[2], 2, "queries", context, False, True,
+    var q = admit_family_meta(args[2], 2, "queries", context, q_pin, False, True,
                               refusal=admitted_finite_wording("refine", "queries"), defer_finite=True)
     var status = List[Int32](length=1, fill=Int32(0))
     var n = x.shape[0]
@@ -677,7 +688,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var candidate = classical_view(args[3], context, "candidates")
     var shape = array_shape_once(candidate, context)
     var k0 = refine_candidates_k0(shape, m)
-    var c = array_metadata_once(candidate, shape^, "candidates", context, True)
+    var c = array_metadata_once(candidate, shape^, "candidates", context, c_pin, True)
     refine_check_candidate_kind(c.source.kind == CAST_KIND_SIGNED or c.source.kind == CAST_KIND_UNSIGNED, m)
     # Without NumPy the native sequence owner represents a bool sequence as
     # int8. Retain asarray's boolean refusal while accepting real int8 buffers.
@@ -692,6 +703,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     refine_narrow_ids(c.source.addr, c.source.s0, c.source.s1, m, k0, c.source.itemsize,
                       c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order, Int(py=classical_address(c32)))
     _ = c
+    _ = c_pin
     _ = c32
     var dist = _ann_empty(m * k, "<f4", context)
     var idx = _ann_empty(m * k, "<i4", context)
@@ -707,7 +719,9 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
                                 classical_address(dist), classical_address(idx)),
                     params)
     _ = x  # keep the Python object alive through the native call above
+    _ = x_pin
     _ = q  # keep the Python object alive through the native call above
+    _ = q_pin
     _ = c32  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
     _ = idx  # keep the Python object alive through the native call above
@@ -754,7 +768,8 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
     var fields = _fields(model)
     var name = classical_estimator_name(model)
     classical_refuse_sparse(args[1], name)
-    var snapshot = admit_family_meta(args[1], 2, "X", context)
+    var snapshot_pin = ArrayPin()
+    var snapshot = admit_family_meta(args[1], 2, "X", context, snapshot_pin)
     var rows = snapshot.shape[0]
     var columns = snapshot.shape[1]
     if len(args) > 2:
@@ -764,15 +779,15 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
     var result = PythonObject(None)
     try:
         if operation == "family_xn_ann_ivf_fit":
-            result = _ivf_fit(model, args, context, snapshot)
+            result = _ivf_fit(model, args, context, snapshot, snapshot_pin)
         elif operation == "family_xn_ann_pq_fit":
-            result = _pq_fit(model, args, context, snapshot)
+            result = _pq_fit(model, args, context, snapshot, snapshot_pin)
         elif operation == "family_xn_ann_sq_fit":
-            result = _sq_fit(model, args, context, snapshot)
+            result = _sq_fit(model, args, context, snapshot, snapshot_pin)
         elif operation == "family_xn_ann_rabitq_fit":
-            result = _rabitq_fit(model, args, context, snapshot)
+            result = _rabitq_fit(model, args, context, snapshot, snapshot_pin)
         elif operation == "family_xn_ann_cagra_fit":
-            result = _cagra_fit(model, args, context, snapshot)
+            result = _cagra_fit(model, args, context, snapshot, snapshot_pin)
         else:
             raise Error("RuntimeError: unknown neighbors operation " + operation)
     except error:
@@ -781,4 +796,5 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
     finally:
         neighbors_public_end(model, call)
     _ = snapshot
+    _ = snapshot_pin
     return neighbors_public_finish(model, operation, result, call, context)
