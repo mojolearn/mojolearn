@@ -10,6 +10,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_module_fields
 from bindings.native_class_admission import static_builtin_type
+from bindings.native_scalar_promotion_run import native_numpy_version_weak
 
 
 def native_scalar_weak_promotion(admission: PythonObject, label: String) raises -> Bool:
@@ -22,30 +23,7 @@ def native_scalar_weak_promotion(admission: PythonObject, label: String) raises 
     if py_type(version) is not py_type(PythonObject("")):
         raise Error("TypeError: " + label + " requires native NumPy version metadata")
     var text = String(version)
-    var major = 0
-    var minor = 0
-    var component = 0
-    var digits = 0
-    for codepoint in text.codepoints():  # driver-loop: bounded native version metadata
-        var point = Int(codepoint)
-        if point == 46:
-            if digits == 0:
-                raise Error("TypeError: " + label + " requires native NumPy version metadata")
-            if component == 1:
-                break
-            component = 1
-            digits = 0
-        elif point >= 48 and point <= 57:
-            if component == 0:
-                major = min(100, major * 10 + point - 48)
-            else:
-                minor = min(100, minor * 10 + point - 48)
-            digits += 1
-        else:
-            break
-    if component == 0 or digits == 0:
-        raise Error("TypeError: " + label + " requires native NumPy version metadata")
-    if major > 2 or (major == 2 and minor >= 2):
+    if native_numpy_version_weak(text, label):
         return True
     var owner = py_get(admission["modules"], "numpy._core._multiarray_umath")
     if owner is None:

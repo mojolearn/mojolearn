@@ -255,7 +255,8 @@ comptime _ADMITTED_MODULES = SharedSlot[_AdmittedModules, "MojolearnAdmittedModu
 
 # ------------------------------------------------- shared dictionary watcher
 # Lane ne2-i-j (2026-11-07): CPython 3.10 / 3.11 stamps (no watcher there).
-from bindings.py_version_tags import dict_version_tags, dict_version_tag
+from bindings.py_version_tags import dict_version_tags
+from bindings.py_version_tags_run import dict_version_tag
 from core.shared_slot import SharedSlot
 # CPython >= 3.12 dictionary watchers (`PyDict_AddWatcher` / `PyDict_Watch`)
 # report every insertion, replacement, deletion, clear, clone and

@@ -63,8 +63,9 @@ from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
-    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave, native_unit_device_workers,
+    native_unit_gate_enter, native_unit_device_workers,
 )
+from bindings.native_unit_os_threads_run import native_unit_gate, native_unit_gate_leave
 from core.host_parallel import host_fp_env, host_fp_env_set
 from std.python._cpython import GILReleased
 from std.ffi import c_int, external_call

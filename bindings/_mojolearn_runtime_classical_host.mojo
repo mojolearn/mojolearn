@@ -11,7 +11,8 @@
 # _mojolearn_runtime_linear_host), each its own merged group. The Python types
 # their code allocates stay registered HERE, unchanged: import setup loads this
 # owner before them (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES order).
-from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_run import native_owner_no_pins
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject

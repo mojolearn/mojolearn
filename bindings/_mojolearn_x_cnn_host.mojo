@@ -21,14 +21,21 @@ from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.host.ops_host import X_CNN_HOST_SABOTAGE
 from x_cnn.ops import FP, IP
-from x_cnn.host.ops_host import conv_block_forward_into, conv_block_backward_into
-from x_cnn.host.ops_host import softmax_xent_into, sgd_into, adam_into
+from x_cnn.host.mojolearn_x_cnn_host_run import (
+    conv_block_forward_run,
+    conv_block_backward_run,
+    softmax_xent_run,
+    sgd_list_run,
+    sgd_run,
+    adam_list_run,
+    adam_run,
+)
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
-# out of this shell; `out_f32` (the CPU column's output seam) lives there too.
+# out of this shell; `out_f32` (the CPU column's output seam) lives there too
+# and is called from x_cnn/host/mojolearn_x_cnn_host_run.mojo.
 # TOMBSTONE: the host fit-epoch helpers (epoch_rows_fill, adam_rows, widen_f32_into, widen_f32_list_into, sgd_hyper_rows, fit_epoch_r_into) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
 # Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 from x_cnn.host.binding_entries_impl import (
-    out_f32,
     pool_counts as _pool_counts,
     check_labels_below,
 )
@@ -109,8 +116,7 @@ def _block_forward(
     var pk = FP(unsafe_from_address=kcols) if keep else po
     var py_ = FP(unsafe_from_address=ky) if keep else po
     with GILReleased(Python()):
-        conv_block_forward_into(px, pw, pb, po, pi, cprm, pprm, pool, keep, pk, py_)
-        out_f32(po, no)
+        conv_block_forward_run(px, pw, pb, po, pi, cprm, pprm, pool, keep, pk, py_, no)
     _ = noidx^
     return PythonObject(0)
 
@@ -157,17 +163,10 @@ def conv_block_backward_binding(
     var py_ = FP(unsafe_from_address=ky) if keep else pdb
     _ = db_addr  # keep the Python object alive through the native call above
     with GILReleased(Python()):
-        conv_block_backward_into(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_)
+        conv_block_backward_run(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_, nx, OC, ckk)
         _ = db_addr  # keep the Python object alive through the native call above
         _ = dw_addr  # keep the Python object alive through the native call above
         _ = dx_addr  # keep the Python object alive through the native call above
-        if need_dx:
-            out_f32(pdx, nx)
-            _ = dx_addr  # keep the Python object alive through the native call above
-        out_f32(pdw, OC * ckk)
-        _ = dw_addr  # keep the Python object alive through the native call above
-        out_f32(pdb, OC)
-        _ = db_addr  # keep the Python object alive through the native call above
     _ = noidx^
     return PythonObject(0)
 
@@ -207,9 +206,7 @@ def softmax_xent_binding(
     var pp = fp(proba_addr)
     var loss = Float32(0)
     with GILReleased(Python()):
-        loss = softmax_xent_into(pl, py_, pg, pp, n, k)
-        out_f32(pg, n * k)
-        out_f32(pp, n * k)
+        loss = softmax_xent_run(pl, py_, pg, pp, n, k)
     return PythonObject(Float64(loss))
 
 
@@ -237,19 +234,14 @@ def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject
             qgs.append(fp(g_addr[j]))
             qvs.append(fp(v_addr[j]))
         with GILReleased(Python()):
-            for j in range(len(cnt)):  # driver-loop: over the model's parameters
-                sgd_into(qws[j], qgs[j], qvs[j], h, cnt[j])
-                out_f32(qws[j], cnt[j])
-                out_f32(qvs[j], cnt[j])
+            sgd_list_run(qws, qgs, qvs, h, cnt)
         return PythonObject(len(cnt))
     var n = _count(params)
     var pw = fp(w_addr)
     var pg = fp(g_addr)
     var pv = fp(v_addr)
     with GILReleased(Python()):
-        sgd_into(pw, pg, pv, h, n)
-        out_f32(pw, n)
-        out_f32(pv, n)
+        sgd_run(pw, pg, pv, h, n)
     return PythonObject(n)
 
 def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
@@ -273,19 +265,14 @@ def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObje
             qgs.append(fp(g_addr[j]))
             qms.append(fp(mv_addr[j]))
         with GILReleased(Python()):
-            for j in range(len(cnt)):  # driver-loop: over the model's parameters
-                adam_into(qws[j], qgs[j], qms[j], h, cnt[j])
-                out_f32(qws[j], cnt[j])
-                out_f32(qms[j], 2 * cnt[j])
+            adam_list_run(qws, qgs, qms, h, cnt)
         return PythonObject(len(cnt))
     var n = _count(params)
     var pw = fp(w_addr)
     var pg = fp(g_addr)
     var pm = fp(mv_addr)
     with GILReleased(Python()):
-        adam_into(pw, pg, pm, h, n)
-        out_f32(pw, n)
-        out_f32(pm, 2 * n)
+        adam_run(pw, pg, pm, h, n)
     return PythonObject(n)
 
 

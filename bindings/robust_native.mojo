@@ -20,6 +20,7 @@ from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.x_prep_native_inputs import _target
 from bindings.scaler_native import _input, _ptr
 from core.preprocessing_program import prep_program_stage as _stage
+from x_prep.robust_native_run import _robust_fit_program
 from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_owner_run import xprep_r3
@@ -223,19 +224,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     _ = fraction_values  # keep the Python object alive through the native call above
     var inputs = Python.tuple(Python.tuple(0,values),Python.tuple(fractions,Python.tuple(0,fraction_values,PythonObject(None),3,1)))
     var program = List[Int32]()
-    if not select:
-        _stage(program,0,d,0,n,d,sorted,0)
-    if blocked:
-        _stage(program,124,blocks*d,0,n,d,part,blocks)
-        _stage(program,125,d,part,blocks,d,stats)
-    else:
-        _stage(program,1,d,0,n,d,stats)
-    _stage(program,2,3*d,0 if select else sorted,n,d,fractions,3,q,stats,1 if select else 0)
-    _stage(program,4,d,q,3,d,center,scale,0,0,2,1)
-    if unit:
-        _stage(program,73,d,scale,fractions)
-    if fused:
-        _stage(program,3,n*d,0,n*d,d,center if centering else -1,scale if scaling else -1,dest)
+    _robust_fit_program(program,select,blocked,unit,fused,centering,scaling,n,d,blocks,sorted,part,stats,fractions,q,center,scale,dest)
     xprep_run(arena,host,scratch,PythonObject(None),0,program^,inputs,entries,context)
     var scaled = xprep_take(arena[0],dest,n,d,context["output_context"]) if fused else PythonObject(None)
     py_setitem(fields,"center_",xprep_take(arena[0],center,d,0,context["output_context"]) if centering else PythonObject(None))

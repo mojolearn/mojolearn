@@ -7,6 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_pandas import classical_admit_value
 from bindings.xseq_native_common import xseq_input, xseq_refuse_f64, xseq_zeros, xseq_f32p
 from bindings.admitted_sequence import admit_nd_f32
+from sequence.recurrent_state_run import recurrent_state_layout
 
 
 def _state_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -67,27 +68,7 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
     var names = List[String]()
     var dimensions = List[List[Int]]()
     var counts = List[Int]()
-    var total = 0
-    for layer in range(layers):  # driver-loop: over recurrent parameter block layout
-        var input_width = features if layer == 0 else hidden
-        names.append("weight_ih_l" + String(layer))
-        dimensions.append(List[Int]([gates * hidden, input_width]))
-        names.append("weight_hh_l" + String(layer))
-        dimensions.append(List[Int]([gates * hidden, hidden]))
-        names.append("bias_ih_l" + String(layer))
-        dimensions.append(List[Int]([gates * hidden]))
-        names.append("bias_hh_l" + String(layer))
-        dimensions.append(List[Int]([gates * hidden]))
-    names.append("head.weight")
-    dimensions.append(List[Int]([outputs, hidden]))
-    names.append("head.bias")
-    dimensions.append(List[Int]([outputs]))
-    for i in range(len(names)):  # driver-loop: over named parameter buffers
-        var count = 1
-        for j in range(len(dimensions[i])):  # small-loop(parameter shape words)
-            count *= dimensions[i][j]
-        counts.append(count)
-        total += count
+    var total = recurrent_state_layout(gates, hidden, layers, features, outputs, names, dimensions, counts)
     var loading = operation == "rnn_load_state_dict"
     var state = PythonObject(None)
     var packed = PythonObject(None)

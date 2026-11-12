@@ -4,7 +4,8 @@ Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
-from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_run import native_owner_no_pins
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
 from core.linear_boundary_types import LinearPredictRequest

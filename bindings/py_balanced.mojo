@@ -15,18 +15,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from core.shared_slot import SharedSlot
-
-
-struct _ExactDictType(Defaultable, Movable):
-    # Address of CPython's dict type (a static, immortal type), 0 until read.
-    var address: Int
-
-    def __init__(out self):
-        self.address = 0
-
-
-comptime _EXACT_DICT_TYPE = SharedSlot[_ExactDictType, "MojolearnPyBalancedDictTypeV2"]
+from bindings.py_balanced_run import _EXACT_DICT_TYPE
 
 
 def _is_exact_dict(value: PythonObject) raises -> Bool:

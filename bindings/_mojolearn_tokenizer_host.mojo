@@ -218,6 +218,7 @@ from bindings.causal_lm_public import (
     causal_lm_snapshot_binding, causal_lm_resume_binding,
     causal_lm_parameters_binding, causal_lm_blocks_binding,
 )
+from tokenizer.mojolearn_tokenizer_host_run import _require_loaded
 
 def _index(value: PythonObject) raises -> Int:
     var type_name = String(py=value.__class__.__name__)
@@ -237,11 +238,6 @@ def _flag(value: PythonObject, name: String) raises -> Bool:
             "tokenizer host: " + name + " must be a bool, got " + type_name
         )
     return Bool(py=value)
-
-
-def _require_loaded(loaded: Bool) raises:
-    if not loaded:
-        raise Error("tokenizer host: the handle holds no tokenizer; bpe_load it")
 
 
 def tokenizer_host_numeric_mode_binding() raises -> PythonObject:

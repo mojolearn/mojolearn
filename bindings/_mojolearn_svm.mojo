@@ -45,7 +45,8 @@ there.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_run import native_owner_no_pins
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.device_plan import device_plan_current

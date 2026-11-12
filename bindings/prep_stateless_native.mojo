@@ -21,6 +21,30 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
+from x_prep.prep_stateless_native_run import (
+    F32P,
+    I64P,
+    OP_BINARIZE,
+    OP_NORMALIZE,
+    OP_POLY,
+    OP_TRANSPOSE,
+    OP_GATHER_COLS,
+    OP_QT_APPLY,
+    OP_QT_INVERSE,
+    OP_RGATHER,
+    OP_PERM_ROWS,
+    OP_PT_APPLY,
+    OP_PT_INVERSE,
+    OUT_MIN_WORDS,
+    PrepLayout,
+    _col_stats_run,
+    _place_scratch,
+    _poly_terms,
+    _poly_powers,
+    _variance_program,
+    _quantile_program,
+    _power_program,
+)
 from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
@@ -33,58 +57,6 @@ from bindings.prep_normalizer_lifecycle import normalizer_transform
 from bindings.prep_normalizer_fit import normalizer_fit
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
-comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
-comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
-
-# x_prep stage codes (_expansion_prep._OPS).
-comptime OP_BINARIZE = 12
-comptime OP_NORMALIZE = 47
-comptime OP_POLY = 48
-comptime OP_TRANSPOSE = 209
-comptime OP_COL_STATS = 1
-comptime OP_GATHER_COLS = 61
-comptime OP_VAR_PTP = 62
-comptime OP_COLB_PART = 124
-comptime OP_COLB_FOLD = 125
-comptime OP_COLB_SS = 126
-comptime OP_COLB_VAR = 127
-comptime OP_KEY64 = 253
-comptime OP_GT = 255
-comptime OP_SORT_COLS = 0
-comptime OP_QUANTILE = 2
-comptime OP_QT_APPLY = 43
-comptime OP_QT_INVERSE = 74
-comptime OP_RGATHER = 204
-comptime OP_PERM_ROWS = 233
-comptime OP_GRID = 263
-comptime OP_PT_FIT = 44
-comptime OP_PT_APPLY = 45
-comptime OP_STD_PARAMS = 46
-comptime OP_PT_INVERSE = 75
-comptime OP_PT_INIT = 104
-comptime OP_PT_MAP = 105
-comptime OP_PT_FOLD = 106
-comptime OP_PT_LOG = 109
-comptime OP_PT_SPTS = 110
-comptime OP_PT_SMAP = 111
-comptime OP_PT_SFOLD = 112
-comptime OP_PT_SRES = 113
-comptime OP_PTB_PART1 = 172
-comptime OP_PTB_MEAN = 173
-comptime OP_PTB_PART2 = 174
-comptime OP_PTB_FIN = 175
-comptime OP_PTB_STEP = 176
-# PowerTransformer's fixed golden-section evaluations and per-column state words.
-comptime PT_EVALS = 50
-comptime PT_STATE = 10
-# x_prep_idn_fam bit 8: IDN_PT_BLOCKED.
-comptime IDN_PT_BLOCKED = 8
-# Row blocks of the blocked column statistics (_expansion_prep._XB).
-comptime ROW_BLOCK = 2048
-# x_prep_idn_fam bit 1: IDN_STATS_BLOCKED.
-comptime IDN_STATS_BLOCKED = 1
-# `_Prog.output`: below this many words the output is plain arena words.
-comptime OUT_MIN_WORDS = 134217728
 
 
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
@@ -157,35 +129,6 @@ def _degrees(fields: PythonObject, context: PythonObject) raises -> Tuple[Int, I
     return (lo, hi)
 
 
-def _emit(mut index: List[Int], mut start: List[Int], terms: List[Int]):
-    for i in range(len(terms)):  # driver-loop: over one polynomial term's feature indices
-        index.append(terms[i])
-    start.append(len(index))
-
-
-def _combinations(d: Int, k: Int, replacement: Bool, mut index: List[Int], mut start: List[Int]):
-    # itertools.combinations(_with_replacement)(range(d), k), in its order.
-    if k == 0:
-        _emit(index, start, List[Int]())
-        return
-    if not replacement and k > d:
-        return
-    var c = List[Int](length=k, fill=0)
-    if not replacement:
-        for i in range(k):  # driver-loop: over one polynomial term's positions
-            c[i] = i
-    while True:  # driver-loop: over polynomial terms of feature indices
-        _emit(index, start, c)
-        var i = k - 1
-        while i >= 0 and c[i] >= (d - 1 if replacement else d - k + i):  # driver-loop: over one term's positions
-            i -= 1
-        if i < 0:
-            return
-        c[i] += 1
-        for j in range(i + 1, k):  # driver-loop: over one term's positions
-            c[j] = c[i] if replacement else c[j - 1] + 1
-
-
 def _words(values: List[Int], context: PythonObject) raises -> PythonObject:
     # Index words as the float32 values `_Prog.put_list` packed (exact).
     var count = max(len(values), 1)
@@ -211,19 +154,13 @@ def _fit(model: PythonObject, kind: String, values: PythonObject, context: Pytho
         var replacement = not Bool(py=fields["interaction_only"])
         var index = List[Int]()
         var start = List[Int]()
-        start.append(0)
-        if Bool(py=fields["include_bias"]):
-            _combinations(d, 0, replacement, index, start)
-        for k in range(max(1, degrees[0]), degrees[1] + 1):  # driver-loop: over polynomial degrees
-            _combinations(d, k, replacement, index, start)
+        _poly_terms(d, degrees[0], degrees[1], replacement, Bool(py=fields["include_bias"]), index, start)
         var nout = len(start) - 1
         var powers = classical_typed(Python.tuple(max(nout, 1), d), "<i8", context["output_context"])
         var table = I64P(unsafe_from_address=Int(py=classical_address(powers)))
         _ = powers  # keep the Python object alive through the native call above
-        for t in range(nout):  # driver-loop: over polynomial terms
-            for i in range(start[t], start[t + 1]):  # driver-loop: over one term's feature indices
-                table[t * d + index[i]] += 1
-                _ = powers  # keep the Python object alive through the native call above
+        _poly_powers(table, d, nout, index, start)
+        _ = powers  # keep the Python object alive through the native call above
         py_setitem(fields, "_poly_index", _words(index, context))
         _ = index  # keep the Python object alive through the native call above
         py_setitem(fields, "_poly_start", _words(start, context))
@@ -325,68 +262,12 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     return result
 
 
-struct PrepLayout(Movable):
-    """A program's arena words and device scratch words, in allocation order
-    (`_Prog.alloc` / `_Prog.work`): scratch offsets are taken past the host
-    words when the program runs, so they are resolved with `scratch_at`."""
-    var host: Int
-    var scratch: Int
-    var work: Bool
-
-    def __init__(out self, host: Int):
-        self.host = host
-        self.scratch = 0
-        self.work = xprep_r3("work")
-
-    def alloc(mut self, words: Int) -> Int:
-        var offset = self.host
-        self.host += max(words, 0)
-        return offset
-
-    def scratch_words(mut self, words: Int) -> Int:
-        # `_Prog.scratch`: device-only words, whatever the `work` switch.
-        var offset = self.scratch
-        self.scratch += max(words, 0)
-        return -(offset + 2)
-
-    def work_words(mut self, words: Int) -> Int:
-        # A stage word -(k + 2) marks scratch word k (-1 is the stages' "none").
-        if not self.work:
-            return self.alloc(words)
-        var offset = self.scratch
-        self.scratch += max(words, 0)
-        return -(offset + 2)
-
-
 def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObject, entries: PythonObject,
                xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True) raises:
     """`_expansion_prep._cs`: the blocked order under IDN_STATS_BLOCKED on
     the IDENTICAL tier, else one thread per column. `variance` False skips
     the blocked variance pass (its callers read the other rows)."""
-    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
-    var fam = 0
-    if String(mode) == "identical":
-        fam = prep_entry_word(entries, "x_prep_idn_fam")  # read once per binding
-    if blocked and (fam & IDN_STATS_BLOCKED) != 0:
-        var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-        var part = layout.work_words(5 * nb * d)
-        _stage(program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-        _stage(program, OP_COLB_FOLD, d, part, nb, d, out_buf)
-        if variance:
-            var ss = layout.work_words(nb * d)
-            _stage(program, OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
-            _stage(program, OP_COLB_VAR, d, ss, nb, d, out_buf)
-    else:
-        _stage(program, OP_COL_STATS, d, xo, n, d, out_buf)
-
-
-def _place_scratch(mut program: List[Int32], host: Int):
-    # A stage word -(k + 2) is scratch word k, at host + k.
-    for i in range(len(program) // 16):  # driver-loop: over the program's stages
-        for k in range(2, 16):  # small-loop(params: the fixed fourteen-word stage ABI)
-            var word = Int(program[i * 16 + k])
-            if word < -1:
-                program[i * 16 + k] = Int32(host - word - 2)
+    _col_stats_run(program, layout, _fam(mode, entries), xo, n, d, out_buf, variance)
 
 
 def _f64_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -410,17 +291,12 @@ def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObje
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var entries = _entries(mode, context)
     var threshold = fields["threshold"]
-    var layout = PrepLayout(n * d)
-    var st = layout.alloc(6 * d)
-    var variance = layout.alloc(d)
+    var layout = PrepLayout(n * d, xprep_r3("work"))
     var program = List[Int32]()
-    _col_stats(program, layout, mode, entries, 0, n, d, st)
-    _stage(program, OP_VAR_PTP, d, st, d, variance, 1 if Bool(py=threshold == PythonObject(0)) else 0)
-    var key = layout.work_words(2 * d)
-    var mask = layout.alloc(d)
-    var limit = layout.alloc(2)
-    _stage(program, OP_KEY64, d, variance, 0, key)
-    _stage(program, OP_GT, d, key, limit, mask)
+    var placed = _variance_program(program, layout, _fam(mode, entries), n, d, Bool(py=threshold == PythonObject(0)))
+    var variance = placed[0]
+    var mask = placed[1]
+    var limit = placed[2]
     var words = _f64_input(threshold, context)
     var inputs = Python.list(Python.tuple(0, values), Python.tuple(limit, Python.tuple(0, words, PythonObject(None), 2, 1)))
     var arena = _run_layout(program^, layout, inputs, entries, context)
@@ -553,7 +429,7 @@ def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObje
         seed = PythonObject(0) if state is None else py_call(b.int, state)
         n = Int(py=py_call(b.int, subsample))
     var nq = max(1, min(Int(py=py_call(b.int, fields["n_quantiles"])), n))
-    var layout = PrepLayout(n_all * d)
+    var layout = PrepLayout(n_all * d, xprep_r3("work"))
     var inputs = Python.list(Python.tuple(0, values))
     var program = List[Int32]()
     var xo = 0
@@ -575,19 +451,13 @@ def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObje
         _stage(program, OP_PERM_ROWS, n, so, n_all, rows)
         _stage(program, OP_RGATHER, n * d, xo, d, rows, sample)
         xo = sample
-    var sorted = layout.work_words(n * d)
-    var st = layout.alloc(6 * d)
-    var grid = layout.alloc(nq)
-    var nb = layout.alloc(1)
+    var placed = _quantile_program(program, layout, _fam(mode, entries), xo, n, d, nq)
+    var grid = placed[0]
+    var nb = placed[1]
+    var qo = placed[2]
+    var qt = placed[3]
     var level = _vector(Float64(nq - 1), context)
     _ = py_call(inputs.append, Python.tuple(nb, Python.tuple(0, level, PythonObject(None), 1, 1)))
-    _stage(program, OP_GRID, nq, nb, nq, 1, grid)
-    var qo = layout.alloc(nq * d)
-    _stage(program, OP_SORT_COLS, d, xo, n, d, sorted, 0)
-    _col_stats(program, layout, mode, entries, xo, n, d, st, False)
-    _stage(program, OP_QUANTILE, nq * d, sorted, n, d, grid, nq, qo, st)
-    var qt = layout.alloc(nq * d)
-    _stage(program, OP_TRANSPOSE, nq * d, qo, d, nq, qt)
     var arena = _run_layout(program^, layout, inputs, entries, context)
     py_setitem(fields, "_q", xprep_take(arena[0], qo, nq * d, 0, context["output_context"]))
     py_setitem(fields, "quantiles_", xprep_take(arena[0], qt, nq, d, context["output_context"]))
@@ -655,23 +525,6 @@ def _pt_flags(mode: PythonObject, entries: PythonObject) raises -> Int:
     return prep_entry_word(entries, "x_prep_ptimpute_flags")  # read once per binding
 
 
-def _pt_spec_depth(n: Int, d: Int) -> Int:
-    """`_expansion_prep._pt_spec_depth`: MOJOLEARN_XPREP_PT_SPEC (default 3,
-    clamped to [0, 6]), lowered until the candidates' transforms fit in 2^28
-    words (a size range, not a shape); 0 when even two do not."""
-    var s = 3
-    try:
-        s = Int(String(getenv("MOJOLEARN_XPREP_PT_SPEC", "3")).strip())
-    except:
-        s = 3
-    s = max(0, min(s, 6))
-    while s > 1 and ((1 << s) - 1) * n * d > 268435456:  # driver-loop: over speculation depths
-        s -= 1
-    if s == 1 and 2 * n * d > 268435456:
-        s = 0
-    return s
-
-
 def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
     """PowerTransformer.fit: the host column's pt_fit, or the device's
     golden-section search as stages (staged, or speculated `spec` deep, with
@@ -688,112 +541,19 @@ def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject)
     var standardize = Bool(py=fields["standardize"])
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var entries = _entries(mode, context)
-    var layout = PrepLayout(n * d)
+    var layout = PrepLayout(n * d, xprep_r3("work"))
     var program = List[Int32]()
-    var xo = 0
-    var st = layout.alloc(6 * d)
-    var lam = layout.alloc(d)
     var host = py_get(entries, "x_prep_host_column") is not None
     var flags = _pt_flags(mode, entries)
-    # PT_SCORE_STABLE (bit 32): the device's centered coordinates; never on the host binding
-    var centered = (flags & 32) != 0 and not host
-    var anchor = layout.alloc(d) if centered else -1
-    var anchor_kind = layout.alloc(d) if centered else -1
-    _col_stats(program, layout, mode, entries, xo, n, d, st)
-    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
-    var fam_pt = blocked and (_fam(mode, entries) & IDN_PT_BLOCKED) != 0
-    var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-    var unit = 1 if standardize else 0
-    if not fam_pt and host:
-        _stage(program, OP_PT_FIT, d, xo, n, d, method, st, lam)
-    else:
-        var tiled = (flags & 1) != 0
-        var spec = _pt_spec_depth(n, d) if String(mode) == "identical" else 0
-        if spec:
-            var mmax = max((1 << spec) - 1, 2)
-            var il = 0
-            if not tiled and String(getenv("MOJOLEARN_XPREP_PT_INTERLEAVE", "0")) == "1":
-                il = 1
-            var state = layout.alloc(PT_STATE * d)
-            var leval = layout.alloc(d)
-            var spl = layout.alloc(d * mmax)
-            var vals = layout.alloc(d * mmax)
-            var lg = layout.scratch_words(1 if tiled else n * d)
-            var tv = layout.scratch_words(1 if tiled else n * d * mmax)
-            _stage(program, OP_PT_INIT, d, method, st, d, lam, state, leval, anchor, anchor_kind, unit)
-            if not tiled:
-                _stage(program, OP_PT_LOG, n * d, xo, n, d, method, lg)
-            var bps = 0
-            var bpc = 0
-            var bss = 0
-            var bpj = 0
-            var bmean = 0
-            var bcnt = 0
-            if fam_pt:
-                bps = layout.work_words(nb * d * mmax)
-                bpc = layout.work_words(nb * d * mmax)
-                bss = layout.work_words(nb * d * mmax)
-                bpj = layout.work_words(nb * d)
-                bmean = layout.work_words(d * mmax)
-                bcnt = layout.work_words(d * mmax)
-            var k0 = 0
-            while k0 <= PT_EVALS - 2:  # driver-loop: over the fixed golden-section evaluations
-                var steps = 2 if k0 == 0 else min(spec, PT_EVALS - 1 - k0)
-                var m = 2 if k0 == 0 else (1 << steps) - 1
-                _stage(program, OP_PT_SPTS, d, state, leval, spl, m, k0)
-                _stage(program, OP_PT_SMAP, m * n * d, xo, n, d, method, spl, m, tv, lg, il)
-                if fam_pt:
-                    var first = 1 if k0 == 0 else 0
-                    _stage(program, OP_PTB_PART1, nb * d * m, xo, n, d, method, tv, m, state, bps, bpc, bpj, nb, first, il)
-                    _stage(program, OP_PTB_MEAN, d * m, bps, bpc, bpj, nb, d, m, state, bmean, bcnt, first)
-                    _stage(program, OP_PTB_PART2, nb * d * m, tv, n, d, m, state, bmean, bcnt, bss, nb, il)
-                    _stage(program, OP_PTB_FIN, d * m, bss, nb, d, m, state, spl, vals, bcnt)
-                else:
-                    _stage(program, OP_PT_SFOLD, d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
-                _stage(program, OP_PT_SRES, d, state, leval, m, vals, k0, steps, lam)
-                k0 += steps
-        else:
-            var state = layout.alloc(PT_STATE * d)
-            var leval = layout.alloc(d)
-            var tv = layout.alloc(1 if tiled else n * d)
-            var lg = layout.alloc(1 if tiled else n * d)
-            _stage(program, OP_PT_INIT, d, method, st, d, lam, state, leval, anchor, anchor_kind, unit)
-            if not tiled:
-                _stage(program, OP_PT_LOG, n * d, xo, n, d, method, lg)
-            var bps = 0
-            var bpc = 0
-            var bss = 0
-            var bpj = 0
-            var bmean = 0
-            var bcnt = 0
-            if fam_pt:
-                bps = layout.work_words(nb * d)
-                bpc = layout.work_words(nb * d)
-                bss = layout.work_words(nb * d)
-                bpj = layout.work_words(nb * d)
-                bmean = layout.work_words(d)
-                _ = d  # keep the Python object alive through the native call above
-                bcnt = layout.work_words(d)
-                _ = d  # keep the Python object alive through the native call above
-            for k in range(PT_EVALS):  # driver-loop: over the fixed golden-section evaluations
-                # tiled: the device fuses pt_map into pt_fold (LG1 = 0 either way)
-                _stage(program, OP_PT_MAP, n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
-                if fam_pt:
-                    var first = 1 if k == 0 else 0
-                    _stage(program, OP_PTB_PART1, nb * d, xo, n, d, method, tv, 1, state, bps, bpc, bpj, nb, first, 0)
-                    _stage(program, OP_PTB_MEAN, d, bps, bpc, bpj, nb, d, 1, state, bmean, bcnt, first)
-                    _stage(program, OP_PTB_PART2, nb * d, tv, n, d, 1, state, bmean, bcnt, bss, nb, 0)
-                    _stage(program, OP_PTB_STEP, d, xo, n, d, method, tv, k, state, leval, lam, bss, nb, bcnt)
-                else:
-                    _stage(program, OP_PT_FOLD, d, xo, n, d, method, tv, k, state, leval, lam)
-    var mean = layout.alloc(d)
-    var scale = layout.alloc(d)
-    if standardize:
-        var tx = layout.alloc(n * d)
-        var st2 = layout.alloc(6 * d)
-        _stage(program, OP_PT_APPLY, n * d, xo, n, d, lam, method, -1, -1, tx, anchor, anchor_kind)
-        _col_stats(program, layout, mode, entries, tx, n, d, st2)
-        _stage(program, OP_STD_PARAMS, d, st2, d, mean, scale)
+    var placed = _power_program(program, layout, _fam(mode, entries), flags, host, String(mode) == "identical",
+                                n, d, method, standardize)
+    var st = placed[0]
+    var lam = placed[1]
+    var anchor = placed[2]
+    var anchor_kind = placed[3]
+    var mean = placed[4]
+    var scale = placed[5]
+    var centered = placed[6]
     var arena = _run_layout(program^, layout, Python.list(Python.tuple(0, values)), entries, context)
     var base = F32P(unsafe_from_address=Int(py=arena[1]))
     if method == 1:

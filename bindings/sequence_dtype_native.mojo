@@ -9,6 +9,7 @@ from bindings.sequence_string_storage import sequence_string_class, sequence_str
 from bindings.sequence_array_warnings import sequence_array_warn, sequence_array_category
 from bindings.optimizer_public_words import stash_python_error
 from bindings.py_optional import py_or_none, py_present
+from sequence.sequence_dtype_run import sequence_dtype_syntax_offset
 
 
 def sequence_dtype_create(value: PythonObject, context: PythonObject, aligned: Bool,
@@ -42,20 +43,7 @@ def sequence_dtype_syntax(repeats: PythonObject) raises:
     # wrapper. Preserve the source information carried by that exception.
     ref cpy = Python().cpython()
     var category = sequence_array_category("SyntaxError")
-    var text = String(repeats)
-    var offset = 1
-    var empty = True
-    for i in range(text.byte_length()):  # driver-loop: locate an empty compact-shape component in native parser text
-        var character = UInt8(text.unsafe_ptr()[i])
-        if character == 32 or character == 40:
-            continue
-        if character == 44:
-            if empty:
-                offset = i + 1
-                break
-            empty = True
-        else:
-            empty = False
+    var offset = sequence_dtype_syntax_offset(String(repeats))
     var details = Python.tuple("<unknown>", 1, offset, repeats, 1, offset + 1)
     var exception = py_call(category, "invalid syntax", details)
     cpy.lib.get_function[NoneType]("PyErr_SetObject")(category._obj_ptr, exception._obj_ptr)

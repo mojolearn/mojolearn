@@ -16,6 +16,7 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _input, _ptr, _copy_row
 from core.preprocessing_program import prep_program_stage as _stage
+from x_prep.maxabs_native_run import _maxabs_fit_program
 from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
@@ -81,20 +82,8 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         var device_scratch = scratch > 0 and (py_get(entries,"x_prep_run_out") is not None or py_get(entries,"x_prep_run_scratch") is not None)
         var arena = xprep_storage(host+(0 if device_scratch else scratch),context)
         var sc = n*d
-        var ma = 0
         var program = List[Int32]()
-        if blocked:
-            var part = host if work else sc+d
-            ma = sc+d if work else part+5*blocks*d
-            _stage(program,124,blocks*d,0,n,d,part,blocks)
-            _stage(program,128,d,part,blocks,d,ma,sc)
-        else:
-            var st = sc+d
-            ma = st+5*d
-            _stage(program,1,d,0,n,d,st)
-            _stage(program,4,d,ma,1,d,-1,sc,1)
-        if fused:
-            _stage(program,3,n*d,0,n*d,d,-1,sc,dest)
+        var ma = _maxabs_fit_program(program,blocked,work,fused,n,d,blocks,host,sc,dest)
         xprep_run(arena,host,scratch,PythonObject(None),0,program^,Python.tuple(Python.tuple(0,values)),entries,context)
         maximum = xprep_take(arena[0],ma,d,0,context["output_context"])
         scale = xprep_take(arena[0],sc,d,0,context["output_context"])
