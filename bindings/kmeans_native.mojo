@@ -15,8 +15,9 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import (
-    admit_family, admit_family_weights, admit_family_input, admit_family_cast, admitted_family_x,
+    admit_family, admit_family_weights_array, admit_family_input, admit_family_cast, admitted_family_x,
 )
+from providers.python.array_metadata_pyapi import ArrayPin, array_python_shape
 from bindings.admitted_input import AdmittedX, admit_x_unrecorded, admitted_finite_refuse
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.native_loaded_module import native_loaded_module
@@ -115,11 +116,12 @@ def _kmeans_x(source: PythonObject, context: PythonObject) raises -> AdmittedX:
     the gather."""
     if door_is_device_rows(source, context):
         return admit_x_unrecorded(source, _KMEANS_EST, context, device_x=True)
-    var snapshot = admit_family_input(source, 2, "X", context)
+    var pin = ArrayPin()
+    var snapshot = admit_family_input(source, 2, "X", context, pin)
     var borrowed = snapshot.f32_c()
-    admit_family_cast(snapshot, "X", context, not borrowed,
+    admit_family_cast(snapshot, pin, "X", context, not borrowed,
                       "Input X contains NaN or infinity (" + String(_KMEANS_EST) + ").")
-    return admitted_family_x(snapshot, source, not borrowed)
+    return admitted_family_x(snapshot, pin, source, not borrowed)
 
 
 def _kmeans_host_x(source: PythonObject, x: AdmittedX, context: PythonObject) raises -> AdmittedX:
@@ -254,14 +256,15 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         # The one admission path in its two steps: the rank and emptiness
         # refusals on the metadata, the shape refusal, then the cast (or the
         # borrow) with the finiteness verdict (family_view deleted).
-        var snapshot = admit_family_input(init_centroids, 2, "init_centroids", context)
+        var pin = ArrayPin()
+        var snapshot = admit_family_input(init_centroids, 2, "init_centroids", context, pin)
         if snapshot.shape[0] != k or snapshot.shape[1] != d:
             raise Error("mojolearn: init_centroids must be (" + family_str(k_obj) + ", " + String(d)
-                        + "), got " + family_repr(snapshot.python_shape()))
+                        + "), got " + family_repr(array_python_shape(snapshot)))
         var c0 = PythonObject(None)
-        admit_family_cast(snapshot, "init_centroids", context, True,
+        admit_family_cast(snapshot, pin, "init_centroids", context, True,
                           "Input init_centroids contains NaN or infinity (" + String(_KMEANS_EST) + ").")
-        c0 = snapshot.keep
+        c0 = pin.keep
         # A COPY, on purpose: the kernel writes the centroids in place and
         # `c0` may borrow the caller's array.
         unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))),
@@ -270,13 +273,14 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = c0  # keep the Python object alive through the native call above
         _ = c0^
         _ = snapshot^
+        _ = pin^
     # int32 cluster ids: the kernel writes uint32 ids below 2**31, the same
     # bytes, into the array the model keeps (DEVIATION 2672).
     var labels = family_array(Python.tuple(n), "<i4", context)
     var n_weights = 0
     var weights = x.array
     if sample_weight is not None:
-        weights = admit_family_weights(sample_weight, n, True, context).keep
+        weights = admit_family_weights_array(sample_weight, n, True, context)
         n_weights = n
     # Retain the original scalar admission order, then discard the former
     # Python parameter list before RUN. Host integer slots keep index semantics.

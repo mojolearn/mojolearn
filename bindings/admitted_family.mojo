@@ -478,3 +478,12 @@ def admit_family_weights(source: PythonObject, n: Int, allow_negative: Bool, con
     if status == WEIGHTS_ALL_ZERO:
         raise Error(FAMILY_ZERO_WEIGHTS)
     return snapshot^
+
+
+def admit_family_weights_array(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject,
+                               wide: Bool = False) raises -> PythonObject:
+    """`admit_family_weights` for a door that needs only the weight array
+    the kernels read (`pin.keep`): the array itself holds its words."""
+    var pin = ArrayPin()
+    _ = admit_family_weights(source, n, allow_negative, context, pin, wide)
+    return pin.keep
