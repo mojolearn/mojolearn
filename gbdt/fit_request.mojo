@@ -168,7 +168,7 @@ def gbdt_outcome_free(handle: Int) raises:
 
 
 # A/B define (lane loops-trees-ab, 2026-11-11; perf audit 20261111 section 7):
-# `-D MOJOLEARN_GBDT_FIT_TEXT_COPY_OFF` builds the String in ONE copy from a
+# `-D MOJOLEARN_GBDT_FAST_FIT_TEXT_ONECOPY` builds the String in ONE copy from a
 # byte view of the source span, instead of a byte List copy and then the
 # String copy of that List. It halves the model-text copies of every GBDT
 # fit on both sides of the table: the caller's outcome text
@@ -179,8 +179,8 @@ def gbdt_outcome_free(handle: Int) raises:
 # constructor has not compiled on this toolchain yet (lanes do not compile);
 # the integrator compiles it, the GBDT-fit-with-a-large-model A/B decides it,
 # and a winner becomes the default (verdict pending:
-# docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_GBDT_FIT_TEXT_COPY_OFF).
-comptime _GBDT_FIT_TEXT_COPY_OFF = is_defined["MOJOLEARN_GBDT_FIT_TEXT_COPY_OFF"]()
+# docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_GBDT_FAST_FIT_TEXT_ONECOPY).
+comptime _GBDT_FAST_FIT_TEXT_ONECOPY = is_defined["MOJOLEARN_GBDT_FAST_FIT_TEXT_ONECOPY"]()
 
 
 def gbdt_string_at(address: Int, nbytes: Int) raises -> String:
@@ -188,7 +188,7 @@ def gbdt_string_at(address: Int, nbytes: Int) raises -> String:
     model text)."""
     if nbytes < 0 or (nbytes > 0 and address == 0):
         raise Error("gbdt: null or invalid string span")
-    comptime if _GBDT_FIT_TEXT_COPY_OFF:
+    comptime if _GBDT_FAST_FIT_TEXT_ONECOPY:
         if nbytes == 0:
             return String()
         var view = Span(unsafe_ptr=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), length=nbytes)
