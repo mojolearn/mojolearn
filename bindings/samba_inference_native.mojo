@@ -35,27 +35,8 @@ from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.byte_perf_helpers import byte_view_bytes
-
-
-def _m3_shapes(b: Int, h: Int) -> List[List[Int]]:
-    var result = List[List[Int]]()
-    result.append([b, h, 32])
-    result.append([b, h, 64, 128])
-    result.append([b, 64, h, 128])
-    result.append([b, 64, h, 128])
-    result.append([b, 64, h, 64])
-    result.append([b, 64, h])
-    result.append([b, 64, h])
-    result.append([b, 64, h])
-    result.append([b, h, 128])
-    result.append([b, h, 64])
-    return result^
-
-
-def _m3_names() -> List[String]:
-    return [String("theta"), String("h"), String("buffer_qrot"), String("buffer_krot"),
-            String("buffer_v"), String("buffer_dt"), String("buffer_sig"), String("buffer_adt"),
-            String("pending_k"), String("pending_v")]
+# RUN (lane rs-neural): typed pieces, no Python import.
+from training.samba_inference_run import _m3_shapes, _m3_names, _samba_host_ref
 
 
 def samba_state_construct(state: PythonObject, b: PythonObject, maximum: PythonObject, layers: PythonObject) raises -> PythonObject:
@@ -105,7 +86,6 @@ def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObje
     var result = py_call(bi.object.__new__, context["state_class"])
     _ = samba_state_construct(result, PythonObject(b), PythonObject(cap), states)
     return result
-
 
 
 def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -484,15 +464,6 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     # The admitted ragged lengths go back to samba_forward, which formerly
     # admitted them a second time for the output prefix copy.
     return (ids, sizes^)
-
-
-def _samba_host_ref(cpu_inference: Bool, key: SambaEntryKey) raises -> EntryRef:
-    """The host route's primitive entry, resolved once per forward: the CPU
-    inference model's neural_host image or the stack's connected training
-    image, through the Samba table."""
-    if cpu_inference:
-        return samba_ref[SAMBA_TABLE_NEURAL_HOST](key)
-    return samba_ref[SAMBA_TABLE_TRAINING](key)
 
 
 def _samba_host_primitive(prim: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
