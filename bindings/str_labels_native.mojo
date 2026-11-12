@@ -11,7 +11,7 @@
 from std.python import Python, PythonObject
 from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from bindings.native_loaded_module import native_loaded_module
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
@@ -21,6 +21,9 @@ from core.host_parallel import host_parallelize
 
 # Py_TPFLAGS_UNICODE_SUBCLASS
 comptime UNICODE_FLAG = 1 << 28
+# One code point above Unicode's range (0x10FFFF): the one-point label a
+# non-str value is read as in a lenient read, which no str class matches.
+comptime NOT_STR_POINT = UInt32(0x110000)
 
 
 struct StrTable(Movable):
@@ -72,9 +75,12 @@ def _read(labels: List[PythonObject], mut table: StrTable) raises -> Bool:
     return _read_source[True](PythonObject(None), labels, table)
 
 
-def _read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], mut table: StrTable) raises -> Bool:
-    # Every label's code points; False when one is not a str. The C API
-    # entries are resolved once per call, not once per label.
+def _read_source[native: Bool, strict: Bool = True](labels: PythonObject, pins: List[PythonObject],
+                                                    mut table: StrTable) raises -> Bool:
+    # Every label's code points; False when one is not a str (`strict`), or,
+    # not `strict`, a non-str value read as the one point NOT_STR_POINT
+    # (no str class matches it). The C API entries are resolved once per
+    # call, not once per label.
     ref cpy = Python().cpython()
     # perf-audit-3: the three C-API entries come from the process table
     # (resolved once at import), not three dlsym lookups per call.
@@ -82,7 +88,13 @@ def _read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], m
     for i in range(label_source_count[native](labels, pins)):  # api-bound-loop: over the caller's Python list of str labels, one read per label
         var value = label_source_value[native](labels, pins, i)
         if (cpt[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
-            return False
+            comptime if strict:
+                return False
+            else:
+                table.starts.append(len(table.points))
+                table.lengths.append(1)
+                table.points.append(NOT_STR_POINT)
+                continue
         var count = cpt[].PyUnicode_GetLength(value._obj_ptr)
         if count < 0:
             raise cpy.unsafe_get_error()
@@ -183,12 +195,23 @@ def _pow2_at_least(n: Int) -> Int:
     return c
 
 
-def str_unique_into(table: StrTable, n: Int, codes_address: Int) -> List[Int]:
+def str_unique_into(table: StrTable, n: Int, codes_address: Int) raises -> List[Int]:
     """The classes of the n labels of `table` in code-point order, as the row
     of each class's FIRST label, with each label's int32 class index written
     at `codes_address` (n words, the caller's). The classes and codes the
     stable sort of all n labels gave (`str_encode`'s former fallback and
-    `_text_fit`), from hashing plus a sort of the distinct classes only."""
+    `_text_fit`), from hashing plus a sort of the distinct classes only.
+    Runs with the GIL released: the work reads only the native table and
+    writes the caller's code words (round2-fixes-2; the host pool ran with
+    the GIL held, perf audit 2-b)."""
+    var firsts = List[Int]()
+    with GILReleased(Python()):
+        firsts = _str_unique_native(table, n, codes_address)
+    return firsts^
+
+
+def _str_unique_native(table: StrTable, n: Int, codes_address: Int) -> List[Int]:
+    """`str_unique_into`'s native work (no Python object touched)."""
     if n <= 0:
         return List[Int]()
     var units = (n + _UNIQUE_CHUNK - 1) // _UNIQUE_CHUNK
@@ -329,6 +352,61 @@ def str_find(rows: StrTable, i: Int, known: StrTable, classes: StrClasses) -> In
     return -1
 
 
+comptime _LOOKUP_CHUNK = 4096  # labels per lookup task: each task runs thousands of binary searches, so the pool's dispatch cost is amortized whatever the label count
+
+
+@fieldwise_init
+struct StrUnseen(Movable):
+    """The labels a lookup did not find: the rows of the first five (label
+    order) and their count."""
+    var rows: List[Int]
+    var count: Int
+
+
+def str_codes_into(rows: StrTable, known: StrTable, classes: StrClasses, address: Int,
+                   as_float: Bool) raises -> StrUnseen:
+    """THE str-label lookup (every caller: `str_lookup`'s code-point path and
+    bindings/prep_labels_native.mojo `_text_codes`): each label of `rows`
+    looked up among `classes` of `known`, its index (-1 unseen) written as
+    int32 (float32 with `as_float`) at `address`, across the host pool with
+    the GIL released (only native tables and the caller's words are read or
+    written)."""
+    var unseen = StrUnseen(List[Int](), 0)
+    with GILReleased(Python()):
+        unseen = _str_codes_native(rows, known, classes, address, as_float)
+    return unseen^
+
+
+def _str_codes_native(rows: StrTable, known: StrTable, classes: StrClasses, address: Int,
+                      as_float: Bool) -> StrUnseen:
+    var n = len(rows.starts)
+    var tp = UnsafePointer(to=rows)
+    var kp = UnsafePointer(to=known)
+    var cp = UnsafePointer(to=classes)
+    var units = (n + _LOOKUP_CHUNK - 1) // _LOOKUP_CHUNK
+    def lookup(unit: Int) {imm tp, imm kp, imm cp, imm n, imm address, imm as_float}:
+        var stop = min(n, (unit + 1) * _LOOKUP_CHUNK)
+        for i in range(unit * _LOOKUP_CHUNK, stop):  # native data loop (not a driver loop): labels of one lookup chunk (native, no Python)
+            var found = str_find(tp[], i, kp[], cp[])
+            if as_float:
+                MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Float32(found)
+            else:
+                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Int32(found)
+    host_parallelize(lookup, units)
+    _ = rows  # read by every lookup task above
+    _ = known
+    _ = classes
+    var first = List[Int]()
+    var count = 0
+    for i in range(n):  # native data loop (not a driver loop): native scan for unseen labels (no CPython call)
+        var missing = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[i] < 0 if as_float else MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)[i] < 0
+        if missing:
+            if count < 5:
+                first.append(i)
+            count += 1
+    return StrUnseen(first^, count)
+
+
 def _store(code: String, n: Int) raises -> PythonObject:
     var array = native_loaded_module("array")
     var b = native_loaded_module("builtins")
@@ -407,50 +485,21 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     # The distinct sorted classes and the index each answers with.
     var lookup = str_classes(table, k)
     var n = len(values)
+    # round2-fixes-2: every value's code points read ONCE (a non-str value as
+    # a point no class matches), then the one shared lookup `str_codes_into`
+    # (host pool, GIL released). The former loop copied each value into a
+    # one-label table and searched it serially: a second lookup beside
+    # prep_labels `_text_codes` (perf audit 2-b, 3).
+    var rows = StrTable()
+    var pins = List[PythonObject]()
+    _ = _read_source[False, False](values, pins, rows)
     var codes = _store("f" if as_float else "i", n)
-    var address = _address(codes)
-    _ = codes  # keep the Python object alive through the native call above
+    var unseen = str_codes_into(rows, table, lookup, _address(codes), as_float)
+    _ = codes  # keep the Python object alive through the native writes above
     var missing = Python.list()
-    var count = 0
-    ref cpy = Python().cpython()
-    # One reused one-label table and the C API entries resolved once: each
-    # value used to build a Python list, a fresh table and four symbol
-    # lookups.
-    # perf-audit-3: the three C-API entries come from the process table
-    # (resolved once at import), not three dlsym lookups per call.
-    var cpt = cpython_table()
-    var single = StrTable()
-    for i in range(n):  # api-bound-loop: over the caller's Python list of str labels, one lookup per label
-        var value = values[i]
-        var found = -1
-        if (cpt[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) != 0:
-            var length = cpt[].PyUnicode_GetLength(value._obj_ptr)
-            if length < 0:
-                raise cpy.unsafe_get_error()
-            var ucs4 = cpt[].PyUnicode_AsUCS4Copy(value._obj_ptr)
-            if ucs4 == 0:
-                raise cpy.unsafe_get_error()
-            var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=ucs4)
-            single.points.clear()
-            single.starts.clear()
-            single.lengths.clear()
-            single.starts.append(0)
-            single.lengths.append(length)
-            for k in range(length):  # native data loop, no CPython (not a driver loop): over one label's code points
-                single.points.append(source[k])
-            cpt[].PyMem_Free(ucs4)
-            found = str_find(single, 0, table, lookup)
-        if found < 0:
-            count += 1
-            if len(missing) < 5:
-                _ = py_call(missing.append, value)
-        if as_float:
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Float32(found)
-            _ = codes  # keep the Python object alive through the native call above
-        else:
-            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Int32(found)
-            _ = codes  # keep the Python object alive through the native call above
-    return Python.tuple(codes, missing, count)
+    for u in range(len(unseen.rows)):  # driver-loop: over the first five unseen labels
+        _ = py_call(missing.append, values[unseen.rows[u]])
+    return Python.tuple(codes, missing, unseen.count)
 
 
 def str_labels_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

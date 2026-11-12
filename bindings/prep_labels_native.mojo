@@ -29,12 +29,13 @@ from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_values
 from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
-from bindings.str_labels_native import str_lookup, StrTable, _is_str, str_unique_into, str_classes, str_find
-from bindings.boundary_read import text_buffer_view, read_text_rows_into, read_str_points, pack_ucs4_str, admitted_buffer_view
+from bindings.str_labels_native import str_lookup, StrTable, _read, str_unique_into, str_classes, str_codes_into
+from bindings.boundary_read import text_buffer_view, read_text_rows_into, pack_ucs4_str, admitted_buffer_view
 from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT, gather_i64
 from bindings.classical_pandas import classical_admit_value
 from bindings.label_admission_native import LabelTypeKinds
-from core.host_parallel import host_parallelize
+>>>
+
 from bindings.user_objects_native import _Env, _f32_exact, _indicator
 from bindings.cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
@@ -544,6 +545,19 @@ def _int64_codes(values: PythonObject) raises -> List[Int]:
     return out^
 
 
+def _class_seq(classes: PythonObject, list_only: Bool) raises -> PythonObject:
+    """The fitted classes as an exact list (a tuple too unless `list_only`),
+    for the native readers that index an exact list or tuple. `_classes` is a
+    list from `_set_fit`; a state restored from an archive may hold another
+    sequence (an Array), which the former `_take_classes` indexed as is: one
+    `list()` of the k classes, once per call."""
+    var b = _builtins()
+    var cls = py_type(classes)
+    if cls is b.list or (not list_only and cls is b.tuple):
+        return classes
+    return py_call(b.list, classes)
+
+
 def _class_list(classes: PythonObject, codes: List[Int], context: PythonObject) raises -> PythonObject:
     """`_classes_array([classes[i] for i in codes])` with no Python call per
     label: the codes range-checked natively (a negative index from the end,
@@ -610,8 +624,7 @@ def _class_list(classes: PythonObject, codes: List[Int], context: PythonObject) 
 # refusal) become Python str objects. `tolist()` made one str per row and the
 # lookups then read each back.
 
-comptime _TEXT_LOOKUP_CHUNK = 4096  # labels per lookup task: each task runs thousands of binary searches, so the pool's dispatch cost is amortized whatever the label count
-
+>>>
 
 def _text_labels(y: PythonObject, context: PythonObject, mut table: StrTable) raises -> Bool:
     """A one-dimensional, non-empty NumPy 'U' label vector read ONCE into
@@ -668,53 +681,28 @@ def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context:
     var k = len(classes)
     if k == 0:
         return PythonObject(None)
+    # round2-fixes-2: the classes read by the one str-label reader and the
+    # labels looked up by the one shared lookup (bindings/str_labels_native.mojo
+    # `_read`, `str_codes_into`, host pool with the GIL released); this file
+    # kept its own copy of both (perf audits 2-b and 3).
     var known = StrTable()
-    for c in range(k):  # driver-loop: over the fitted classes (one code-point copy each)
-        var cls = classes[c]
-        if not _is_str(cls):
-            return PythonObject(None)
-        var points = read_str_points(cls)
-        known.starts.append(len(known.points))
-        known.lengths.append(len(points))
-        for q in range(len(points)):  # driver-loop: over one class's code points (native)
-            known.points.append(points[q])
+    if not _read(_class_seq(classes, True), known):
+        return PythonObject(None)
     var lookup_classes = str_classes(known, k)
     var n = len(table.starts)
     var codes = classical_wrap_array(native_array_zeros("f" if as_float else "i", n), Python.tuple(n),
                                      "<f4" if as_float else "<i4", "C", _out(context))
-    var address = Int(py=classical_address(codes))
-    var tp = UnsafePointer(to=table)
-    var kp = UnsafePointer(to=known)
-    var cp = UnsafePointer(to=lookup_classes)
-    var units = (n + _TEXT_LOOKUP_CHUNK - 1) // _TEXT_LOOKUP_CHUNK
-    def lookup(unit: Int) {imm tp, imm kp, imm cp, imm n, imm address, imm as_float}:
-        var stop = min(n, (unit + 1) * _TEXT_LOOKUP_CHUNK)
-        for i in range(unit * _TEXT_LOOKUP_CHUNK, stop):  # native data loop (not a driver loop): labels of one lookup chunk (native, no Python)
-            var found = str_find(tp[], i, kp[], cp[])
-            if as_float:
-                F32P(unsafe_from_address=address)[i] = Float32(found)
-            else:
-                I32P(unsafe_from_address=address)[i] = Int32(found)
-    host_parallelize(lookup, units)
-    _ = table  # read by every lookup task above
+    var unseen = str_codes_into(table, known, lookup_classes, Int(py=classical_address(codes)), as_float)
+    _ = codes  # keep the Python object alive through the native writes above
     _ = known
     _ = lookup_classes
-    var unseen = List[Int](length=5, fill=0)
-    var count = 0
-    for i in range(n):  # native data loop (not a driver loop): native scan for unseen labels (no CPython call)
-        var missing = F32P(unsafe_from_address=address)[i] < 0 if as_float else I32P(unsafe_from_address=address)[i] < 0
-        if missing:
-            if count < 5:
-                unseen[count] = i
-            count += 1
-    _ = codes  # keep the Python object alive through the native reads above
     var first = Python.list()
     var base = Int(table.points.unsafe_ptr())
-    for u in range(min(count, 5)):  # driver-loop: over the first five unseen labels
-        var row = unseen[u]
+    for u in range(len(unseen.rows)):  # driver-loop: over the first five unseen labels
+        var row = unseen.rows[u]
         _ = py_call(first.append, pack_ucs4_str(base + table.starts[row] * 4, table.lengths[row]))
     _ = table
-    return Python.tuple(codes, first, count)
+    return Python.tuple(codes, first, unseen.count)
 
 
 def _code_buffer(y: PythonObject, context: PythonObject, mut codes: List[Int]) raises -> Bool:
