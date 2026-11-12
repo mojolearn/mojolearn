@@ -1733,6 +1733,11 @@ struct DecompDoor(Movable):
     def keep(mut self, value: PythonObject):
         self.keeps.append(value)
 
+    def keep_alive(self):
+        """A named use after RUN and `kit.close()`: Mojo frees a local at its
+        last use, and the kit reads the kept owners' words by address."""
+        pass
+
 
 def decomp_kit_unpack(entries: PythonObject) raises -> DKit:
     """UNPACK: the typed kit over a connected x_decomp entries dict: its image
