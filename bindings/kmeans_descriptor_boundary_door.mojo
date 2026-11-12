@@ -13,7 +13,7 @@ from core.kmeans_native_api import (
 )
 from x_cluster.kmeans_descriptor_boundary_run import kmeans_connection_index, kmeans_connection_add, kmeans_driver
 from bindings.py_provider_pins import ProviderPins, provider_word
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 
@@ -46,7 +46,7 @@ def kmeans_connection(binding: PythonObject) raises -> Int:
         return index
     # The typed record and the door pin are appended together, under the GIL.
     index = kmeans_connection_add(provider_word(provider),
-        KMeansNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+        KMeansNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
     KMEANS_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     return index
 

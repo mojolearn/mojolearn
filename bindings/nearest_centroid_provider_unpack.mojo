@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.nearest_centroid_plan import NcDriver
 from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
@@ -54,7 +54,7 @@ struct NcConnection(Movable):
                 String(XN_ABI_NAME), XN_OPERATION_COUNT)
         else:
             provider = binding.downcast_value_ptr[CompiledBindingSnapshot]()[].provider
-        self.driver = NcDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = NcDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         var capabilities = _nc_capabilities(provider, self.driver)
         self.fused = (capabilities & 32) != 0
         self.wide = (capabilities & 128) != 0

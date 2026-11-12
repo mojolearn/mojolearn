@@ -4,7 +4,7 @@
 # ideas-cpu-per-call-cost.md). A kit that drives a device algorithm as a
 # sequence of primitive operations connects its binding's `<family>_native_api_v1`
 # capsule ONCE per binding module (the process-wide connection and snapshot
-# records of providers/python/neural_descriptor_pyapi.mojo and
+# records of providers/python/neural_descriptor_pyapi_door.mojo and
 # compiled_binding_snapshot_pyapi.mojo, keyed by module and live factory entry)
 # and then calls one `abi("C")` dispatch function per operation:
 #
@@ -22,7 +22,7 @@
 # The PACK half of the former `bindings/kit_call.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/kit_call_unpack.mojo`.
 from std.python import PythonObject
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, NeuralDescriptorProvider,
 )
 from core.entry_table import EntryRef, entry_ref_word

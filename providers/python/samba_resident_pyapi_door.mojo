@@ -10,7 +10,7 @@ from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from core.samba_optimizer_plan import SambaOptimizerPlan
 # RUN (lane rs-neural): the resident step words, no Python import.
 from training.samba_resident_run import samba_resident_step_words
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
 
 
 def samba_resident_provider(fields: PythonObject, entries: PythonObject) raises -> PythonObject:

@@ -22,7 +22,7 @@ from core.xseq_entry_table import XseqEntryKey, xseq_glue_ref
 from sequence.xseq_door_run import xseq_run_glue
 from bindings.sequential_arrays_door import sequential_array, sequential_address
 from bindings.sequential_inputs_door import sequential_input
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, MODEL_UNIFORM
 from autograd.model_descriptor import MODEL_ABI_NAME
 from core.xseq_marshal import xseq_column_copy_f32, xseq_column_copy_i64

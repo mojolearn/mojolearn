@@ -3,7 +3,7 @@
 On a CPU-only install `_backend.binding("_mojolearn_x_decomp")` is the lazy
 `_HostBinding` facade. The UMAP/spectral bridge must retain the exact host
 module that owns `x_decomp_native_api_v1`, because the provider admission
-(providers/python/neural_descriptor_pyapi.mojo `neural_descriptor_entry`)
+(providers/python/neural_descriptor_pyapi_door.mojo `neural_descriptor_entry`)
 accepts an entry only from its owning module. A copy of the entries into a
 fresh module made every UMAP fit on the CPU column refuse with
 "native provider requires compiled entry x_decomp_native_api_v1".

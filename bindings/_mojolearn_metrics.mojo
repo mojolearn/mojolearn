@@ -1327,7 +1327,7 @@ def metrics_vendor_binding() raises -> PythonObject:
 from core.shared_slot import SharedSlot
 from core.spectral_native_provider import SpectralProviderAPI
 from core.spectral_native_device import SpectralDeviceKernels
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
 
 comptime _SPECTRAL_API_SLOT = "MojolearnSpectralDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralDeviceFastV1"

@@ -6,7 +6,7 @@ the GPU binding's export names and address contract."""
 from core.experiment_guards_base import BASE_GUARDS_OK
 from x_metrics.mojolearn_x_metrics_host_run import _publish_linear_entry_table
 from x_metrics.descriptor_host import METRICS_PROGRAM_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

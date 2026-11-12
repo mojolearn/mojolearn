@@ -103,7 +103,7 @@ from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, 
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from bindings.py_optional import py_or_none
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_info,
 )
 

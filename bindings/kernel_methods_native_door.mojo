@@ -39,7 +39,7 @@ from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside,
 from providers.python.kernel_public_lifecycle_pyapi_unpack import kernel_public_finite, kernel_public_ignored_target, kernel_public_column_target, kernel_public_refusal, kernel_public_feature_snapshot, kernel_public_fit_complete
 from providers.python.kernel_public_lifecycle_pyapi_pack import kernel_public_admit, kernel_public_result
 from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_provider, kernel_method_execute, kernel_method_metadata
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_close,
     neural_descriptor_info, neural_descriptor_entry,
 )

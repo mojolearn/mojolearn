@@ -13,7 +13,7 @@ from glm.logistic_descriptor_boundary_run import (
     logistic_connection_index, logistic_connection_add, logistic_mode, logistic_multiclass, logistic_driver,
 )
 from bindings.py_provider_pins import ProviderPins, provider_word
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
 comptime LOGISTIC_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnLogisticProviderPinsV1"]
@@ -27,7 +27,7 @@ def logistic_connection(entries: PythonObject) raises -> Int:
         return index
     # The typed record and the door pin are appended together, under the GIL.
     index = logistic_connection_add(provider_word(provider),
-        provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     LOGISTIC_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     return index
 
@@ -88,7 +88,7 @@ def logistic_run_log(entries: PythonObject, source: Int, dst: Int, count: Int) r
 
 def logistic_run_fold_fit(factory: PythonObject, store: QnFoldStore, request: QnFitRequest) raises -> QnFoldResult:
     var provider = neural_descriptor_connect_factory_once(factory, String(LOGISTIC_FOLD_ABI), QN_FOLD_COUNT)
-    var driver = QnFoldDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = QnFoldDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     var words = List[Int32](length=2, fill=0)
     var iterations = 0
     try:
@@ -102,7 +102,7 @@ def logistic_run_fold_fit(factory: PythonObject, store: QnFoldStore, request: Qn
 
 def logistic_run_fold_query(factory: PythonObject, operation: Int, store: QnFoldStore, request: QnQueryRequest) raises -> QnFoldResult:
     var provider = neural_descriptor_connect_factory_once(factory, String(LOGISTIC_FOLD_ABI), QN_FOLD_COUNT)
-    var driver = QnFoldDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = QnFoldDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     var words = List[Int32](length=2, fill=0)
     try:
         with GILReleased(Python()):

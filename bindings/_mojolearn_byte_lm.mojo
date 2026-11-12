@@ -26,7 +26,7 @@ from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
 from training.byte_lm_native_status import byte_lm_status
 from training.byte_lm_native_dispatch import BYTE_LM_NATIVE_TABLE
 from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from training.byte_lm_glue_entry import publish_byte_lm_entries
 from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill

@@ -37,7 +37,7 @@ from bindings.gp_state_admission_native_unpack import _gp_scalar_fields, _gp_arr
 from bindings.gp_svm_records_door import gpsvm_no_fit_callbacks
 from bindings.gp_svm_gp_state_door import gp_state_forget, gp_state_admitted, gp_state_remember, gp_x_mark, gp_x_release
 from bindings.optimizer_public_words_unpack import stash_python_error
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi_door import _refusal

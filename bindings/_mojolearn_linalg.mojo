@@ -64,7 +64,7 @@ from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from gemm.linalg_dispatch import LINALG_NATIVE_TABLE
 from gemm.linalg_native import _f32_ptr, _dev_f32, _dev_u16, _dev_i8, _dev_i32, _refuse_lowbit_shape, _LowbitSlot, _LOWBIT_POOL, _lowbit_run, _lowbit_tick, gemm_native, gemm_bf16_native, gemm_int8_native, quantize_int8_native, dequantize_int8_native, gemm_int15_native, quantize_int15_native, dequantize_int15_native, to_bf16_native, from_bf16_native, from_f16_native
 

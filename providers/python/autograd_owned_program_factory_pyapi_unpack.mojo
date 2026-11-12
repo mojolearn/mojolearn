@@ -6,7 +6,7 @@ from bindings.py_balanced import py_type
 from core.native_descriptor_call import native_descriptor_words
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session_registry_token
-from providers.python.neural_descriptor_pyapi import neural_descriptor_resource_handle
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_resource_handle
 from providers.python.autograd_owned_program_public_pyapi_door import NativeOwnedProgramCreateRequest
 from providers.python.autograd_distributed_pyapi_unpack import distributed_devices, distributed_object
 from providers.python.autograd_distributed_pyapi_pack import distributed_open, distributed_load

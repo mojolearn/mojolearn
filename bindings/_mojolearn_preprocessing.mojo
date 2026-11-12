@@ -14,7 +14,7 @@ from core.scaler_native_device import ScalerDeviceKernels
 from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
 from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
 from x_prep.transport_abi import xp_vendor_word
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from preprocessing.estimator import validate_dimensions, validate_standard, minmax_fit_refusing, minmax_transform_refusing, standard_fit_refusing, standard_transform_refusing, minmax_fit_direct, standard_fit_direct, minmax_transform_direct, standard_transform_direct

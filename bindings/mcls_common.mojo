@@ -23,7 +23,7 @@ from core.metrics_program_plan import MetricProgramPlan
 from bindings.admitted_family_door import admit_family
 from bindings.metrics_plan_admission_unpack import MetricPlanOpcodes
 from bindings.arena_prog_run import MetricArenaOwner
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.metrics_native_support_door import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
 from bindings.metrics_native_inputs_door import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
 from bindings.classical_pandas_door import classical_admit_value

@@ -7,7 +7,7 @@ from core.spectral_preparation_api import (
     SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest,
 )
 from bindings.spectral_umap_routes_unpack import spectral_umap_entry
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
 struct SpectralPreparationConnection(Movable):
@@ -18,7 +18,7 @@ struct SpectralPreparationConnection(Movable):
         var factory = spectral_umap_entry(binding, "spectral_preparation_native_api_v1", context)
         var provider = neural_descriptor_connect_factory_once(factory,
             String(SPECTRAL_PREPARATION_ABI), SPECTRAL_PREPARATION_COUNT)
-        self.driver = SpectralPreparationDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = SpectralPreparationDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         self.provider = provider
 
 

@@ -13,7 +13,7 @@ from x_decomp.tsvd_descriptor_boundary_run import (
 from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
 comptime TSVD_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnTSVDProviderPinsV1"]
@@ -40,7 +40,7 @@ def tsvd_connect(factory: PythonObject, mode: Int, vendor: String) raises -> Int
     if index < 0:
         # The typed record and the door pin are appended together, under the GIL.
         index = tsvd_connection_add(provider_word(provider),
-            TSVDNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+            TSVDNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
         TSVD_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     if pca_vendor_name(tsvd_vendor(index)) != vendor:
         raise Error("RuntimeError: TruncatedSVD native vendor differs from selected execution")

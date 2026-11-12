@@ -35,13 +35,13 @@ from bindings.sequential_inputs_door import sequential_input
 from bindings.sequential_arrays_door import sequential_array
 from bindings.xcnn_common_door import xcnn_shape, xcnn_tuple, xcnn_reshape, xcnn_numpy
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
-from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
 from bindings.native_model_records import (
     RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stampable, records_stamped_get,
     records_stamped_put,
 )
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN, SESSION_CLOSE
-from providers.python.neural_descriptor_pyapi import neural_descriptor_adopt, NativeDescriptorResource
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_adopt, NativeDescriptorResource
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
 from bindings.native_identity_key_door import NativeIdentityKey
 from x_cnn.classifier_run import (

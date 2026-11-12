@@ -6,7 +6,7 @@ arbitrary Python callbacks are refused before state mutation.
 """
 from providers.python.samba_execution_pyapi_door import samba_provider_accumulated_gradients
 from providers.python.samba_resident_pyapi_door import samba_resident_provider, samba_resident_native_step
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_execute
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

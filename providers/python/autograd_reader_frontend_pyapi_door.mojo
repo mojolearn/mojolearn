@@ -7,7 +7,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_json_door import native_path
 from providers.python.autograd_import_metadata_pyapi_door import _fields, _shape_words, _unsupported, _status
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_reuse, neural_descriptor_entry, neural_descriptor_execute, neural_descriptor_adopt
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_reuse, neural_descriptor_entry, neural_descriptor_execute, neural_descriptor_adopt
 from autograd.import_reader_dispatch import NativeReaderRequest
 from providers.python.autograd_graph_metadata_pyapi_door import graph_metadata_operation
 

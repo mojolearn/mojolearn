@@ -105,7 +105,7 @@ def test_named_runtime_parameters_and_snapshot_ownership():
 # installed a Python stand-in binding (one without the runtime-shape entry,
 # one answering a different profile), and the native owner now refuses any
 # provider that is not the exact compiled module before reading either
-# (providers/python/neural_descriptor_pyapi.mojo `neural_descriptor_entry`).
+# (providers/python/neural_descriptor_pyapi_door.mojo `neural_descriptor_entry`).
 # A binding without an entry is refused by name in
 # test_byte_lm_host_trainer::test_a_binding_without_the_training_entry_is_refused_by_name,
 # a wrong mode or vendor in test_byte_lm_host::test_wrong_mode_or_vendor_refused.

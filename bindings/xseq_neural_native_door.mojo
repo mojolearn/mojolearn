@@ -23,7 +23,7 @@ from bindings.native_identity_key_door import NativeIdentityKey
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
 from bindings.native_model_records import records_open, model_generation
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
 from providers.python.autograd_pyapi_door import cast_in_of
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_descriptor
 from bindings.optimizer_admission_door import opt_schedule
@@ -85,7 +85,7 @@ def _entry(provider: PythonObject) raises -> XseqNeuralEntry:
     of its retained call workspace, the typed words the RUN calls take (the
     provider stays referenced by the caller through every call)."""
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    return XseqNeuralEntry(owner[].entry, Int(owner[].workspace.unsafe_ptr()))
+    return XseqNeuralEntry(owner[].record[0].entry, Int(owner[].record[0].workspace.unsafe_ptr()))
 
 
 # ---------------------------------------------------------------- shared input steps

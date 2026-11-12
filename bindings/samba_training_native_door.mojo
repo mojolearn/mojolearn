@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_training_ids_into
 from core.samba_count_impl import samba_target_count
 from providers.python.samba_execution_pyapi_door import samba_provider_gradients

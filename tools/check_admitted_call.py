@@ -481,7 +481,7 @@ DEBT = {
     'providers/python/lowbit_weight_pyapi_door.mojo': {'native_loaded_module': 4},
     'providers/python/neighbors_feature_names_pyapi_door.mojo': {'native_loaded_module': 5},
     'providers/python/neighbors_public_lifecycle_pyapi_door.mojo': {'native_loaded_module': 4},
-    'providers/python/neural_descriptor_pyapi.mojo': {'cpython': 8, 'native_loaded_module': 5},
+    'providers/python/neural_descriptor_pyapi_door.mojo': {'cpython': 8, 'native_loaded_module': 5},
     'providers/python/operation_lock_pyapi_door.mojo': {'native_loaded_module': 2},
     'providers/python/pca_fit_model_pyapi_unpack.mojo': {'native_loaded_module': 4},
     'providers/python/pca_fit_scalar_pyapi_unpack.mojo': {'cpython': 11, 'native_loaded_module': 4},

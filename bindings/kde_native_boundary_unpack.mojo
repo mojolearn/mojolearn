@@ -6,7 +6,7 @@ from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.classical_arrays_door import classical_wrap_layout
 from bindings.native_array_storage_door import native_array_zeros
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.kde_native_api import KDE_NATIVE_ABI, KDE_NATIVE_COUNT, KDE_CAPABILITIES, KDENativeDriver, KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery
 from core.kde_native_state import KDEFitKey, KDEResidentState
@@ -19,7 +19,7 @@ struct KDEConnection(Movable):
 
     def __init__(out self, binding: PythonObject) raises:
         self.provider = neural_descriptor_connect_once(binding, "kde_native_api_v1", String(KDE_NATIVE_ABI), KDE_NATIVE_COUNT)
-        self.driver = KDENativeDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = KDENativeDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         self.capabilities = self.driver.metadata(KDE_CAPABILITIES)
 
 

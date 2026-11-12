@@ -58,7 +58,7 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
 from svm.native_descriptor_dispatch import SVC_NATIVE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.svr_native_device import SVR_DEVICE_API
 from isolation_forest.impl.isolation_forest import (
     IF_DEVICE_TRANSPOSE,

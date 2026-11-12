@@ -50,7 +50,7 @@ from core.gp_entry_table import GPEntryKey, GP_COLUMN_HOST, gp_table_publish
 from bindings.py_balanced import py_setattr
 from core.gp_native_host import GPHostKernels
 from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject

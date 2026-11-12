@@ -33,7 +33,7 @@ from core.sha256 import sha256_hex_addr
 from bindings.tsa_hw_native_door import tsa_array
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.host_helpers_impl import argmax_rows_f32
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value

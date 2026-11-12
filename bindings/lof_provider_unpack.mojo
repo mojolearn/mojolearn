@@ -2,7 +2,7 @@
 """Operation-local compiled image pin for the native LOF plan."""
 from std.python import PythonObject
 from core.neighbors_native_driver import XnDriver
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
@@ -20,7 +20,7 @@ struct LofConnection(Movable):
                 String(XN_ABI_NAME), XN_OPERATION_COUNT)
         else:
             provider = binding.downcast_value_ptr[CompiledBindingSnapshot]()[].provider
-        self.driver = XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        self.driver = XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
         self.provider = provider
         _ = module
         _ = binding

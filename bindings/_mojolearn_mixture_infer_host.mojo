@@ -27,7 +27,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.mixture_host_scoring_pack import gmm_sample_binding
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from mixture.host.gmm_native_infer_host import GMM_NATIVE_INFER_HOST_API
 from checks.kernel_matrix import (
     COLUMN_CPU,

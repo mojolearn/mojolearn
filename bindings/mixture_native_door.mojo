@@ -66,7 +66,7 @@ from bindings.cluster_side_records_pack import (
     cluster_record_key,
     cluster_record_get,
 )
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
 from core.bgmm_native_api import (
@@ -328,7 +328,7 @@ def _bgmm_connection(binding: PythonObject) raises -> _BgmmConnection:
     (`bgmm_native_api_v1`), connected once per process."""
     var factory = neural_descriptor_entry(binding, "bgmm_native_api_v1")
     var provider = neural_descriptor_connect_factory_once(factory, String(BGMM_NATIVE_ABI), BGMM_NATIVE_COUNT)
-    var driver = BgmmDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = BgmmDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     return _BgmmConnection(provider, driver^)
 
 
@@ -396,7 +396,7 @@ def _gmm_connection(binding: PythonObject) raises -> _GmmConnection:
     (`mixture_native_api_v1`), connected once per process."""
     var factory = neural_descriptor_entry(binding, "mixture_native_api_v1")
     var provider = neural_descriptor_connect_factory_once(factory, String(MIXTURE_NATIVE_ABI), MIXTURE_NATIVE_COUNT)
-    var driver = GmmDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    var driver = GmmDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
     return _GmmConnection(provider, driver^)
 
 def _gmm_score_run(binding: PythonObject, operation: Int, request: GmmScoreRequest) raises:

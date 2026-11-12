@@ -10,13 +10,13 @@ def text(path):
 
 def test_reuse_checks_exact_factory_module_and_session_admission_identity():
     # The generation session provider is deleted (lane transformer-session-native).
-    neural = text('providers/python/neural_descriptor_pyapi.mojo').split('def neural_descriptor_reuse(')[1].split('def neural_descriptor_cached')[0]
+    neural = text('providers/python/neural_descriptor_pyapi_door.mojo').split('def neural_descriptor_reuse(')[1].split('def neural_descriptor_cached')[0]
     assert 'held[].factory is factory' in neural
     # The owner check reads PyCFunction_GetSelf directly instead of resolving __self__.
     assert 'held[].module._obj_ptr == _neural_descriptor_function_owner(factory)' in neural
-    assert 'held[].name == name' in neural
+    assert 'held[].record[0].name == name' in neural
     assert 'return neural_descriptor_connect(factory, name, operation_count)' in neural
-    assert 'len(held[].calls) == operation_count' in neural
+    assert 'len(held[].record[0].calls) == operation_count' in neural
     assert 'operation_count < 1' in neural
 
 

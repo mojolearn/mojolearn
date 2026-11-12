@@ -14,7 +14,7 @@ def test_native_dependencies_resolve_and_include_shared_numerical_owners():
 
 
 def test_connection_and_hot_execution_remain_separate():
-    provider = read('providers/python/neural_descriptor_pyapi.mojo')
+    provider = read('providers/python/neural_descriptor_pyapi_door.mojo')
     connect = provider.split('def neural_descriptor_connect(')[1].split('def neural_descriptor_cached')[0]
     assert 'PyCapsule_IsValid' in connect and 'PyCapsule_GetPointer' in connect
     assert 'NeuralDescriptorProvider(module, capsule, factory, name^, table[0], operation_count)' in connect
@@ -57,7 +57,7 @@ def test_native_descriptors_are_checked_named_private_operations():
         assert f'if op < 0 or op >= {count}:' in body
         assert 'if result == 0:' in body
         assert 'native_descriptor_report(problem, context, sink)' in body
-    for file in ('providers/python/neural_descriptor_pyapi.mojo', 'core/native_descriptor_call.mojo'):
+    for file in ('providers/python/neural_descriptor_pyapi_door.mojo', 'core/native_descriptor_call.mojo'):
         body = read(file)
         for forbidden in ('PyCFunction_GetFunction', 'PyObject_Vectorcall', 'PyObject_Call'):
             assert forbidden not in body

@@ -5,7 +5,7 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from providers.python.autograd_program_arrays_pyapi_door import initialize_program_arrays, program_admission_context, program_numeric_scalar
-from providers.python.neural_descriptor_pyapi import (
+from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_connect, neural_descriptor_entry, neural_descriptor_matches,
     neural_descriptor_execute, neural_descriptor_adopt, NeuralDescriptorProvider,
 )
@@ -100,7 +100,7 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     if not neural_descriptor_matches(public_provider, module):
         raise Error("TypeError: Session public provider belongs to another compiled module")
     var public_owner = public_provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    if public_owner[].name != "mojolearn.session.public.v1" or public_owner[].factory is not neural_descriptor_entry(module, "session_public_api_v1"):
+    if public_owner[].record[0].name != "mojolearn.session.public.v1" or public_owner[].factory is not neural_descriptor_entry(module, "session_public_api_v1"):
         raise Error("TypeError: Session public provider requires its connected native ABI")
     # Admit the selected public doors once, before any session is allocated.
     # These are retained entry identities; no Python/extension callable runs.

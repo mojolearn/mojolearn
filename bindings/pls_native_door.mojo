@@ -39,7 +39,7 @@ from bindings.admitted_input import admit_x_unrecorded, classical_view
 from bindings.classical_arrays_door import classical_kind
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from providers.python.array_metadata_pyapi_door import array_shape_once, array_metadata_once
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.decomp_kit_native_door import (
     DecompDoor, decomp_int, decomp_float, decomp_entries, decomp_is_a, decomp_class_attr, decomp_kit_unpack,
     decomp_kit_publish, decomp_kit_out_shape, decomp_door_snapshot, decomp_door_tested, decomp_door_resident_hit,

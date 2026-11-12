@@ -55,7 +55,7 @@ from bindings.py_balanced import py_call as _balanced_call, py_type as _svm_host
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.host.svr_native_host import SVR_HOST_API
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
