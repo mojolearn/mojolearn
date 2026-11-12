@@ -21,12 +21,14 @@ The sabotage arm (`gp_infer_host_sabotage`) is the reference binding's:
 (`-D MOJOLEARN_HOST_SABOTAGE=1`).
 """
 from core.gp_native_provider import GPProviderAPI
+from core.gp_entry_table import GPEntryKey, GP_COLUMN_HOST_INFER, gp_table_publish
+from bindings.py_balanced import py_setattr
 from core.gp_native_host_infer import GPHostInferenceKernels
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.gp_host_predict import gpc_ovr_combine_binding, gpc_predict_binding, gpr_predict_binding
@@ -77,9 +79,23 @@ def gp_numeric_mode_binding() raises -> PythonObject:
 comptime GP_HOST_INFER_NATIVE_API = SharedSlot[GPProviderAPI[GPHostInferenceKernels], "MojolearnGPHostInferenceKernelsV1"]
 
 
+# The capsule factory stays only for the Python import prerequisite that
+# names it (python/mojolearn/host_surface.py); no native caller connects
+# through it (the GP owners read the table below, core/gp_entry_table.mojo).
 def gp_native_api_v1_binding() raises -> PythonObject:
     var api = GP_HOST_INFER_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_gp_table(module: PythonObject) raises:
+    # The _mojolearn_gp_infer_host column of the GP table (core/gp_entry_table.mojo), CPU
+    # vendor word 0; the key is recorded as the module attribute
+    # `gp_native_key` for the GP owners (bindings/gp_native_boundary.mojo).
+    var key = GPEntryKey(Int(GLOBAL_NUMERIC_MODE), 0, GP_COLUMN_HOST_INFER)
+    var api = GP_HOST_INFER_NATIVE_API.get_or_create_ptr()
+    gp_table_publish(key, Int(api[].entries.unsafe_ptr()), api[].entries[0])
+    py_setattr(module, "gp_native_key", Python.tuple(PythonObject(key.mode), PythonObject(key.vendor),
+                                                     PythonObject(key.column)))
 
 def build__mojolearn_gp_infer_host() -> PythonObject:
     comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
@@ -95,6 +111,8 @@ def build__mojolearn_gp_infer_host() -> PythonObject:
         module.def_function[gpr_predict_binding]("gpr_predict")
         module.def_function[gpc_predict_binding]("gpc_predict")
         module.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
-        return module.finalize()
+        var published = module.finalize()
+        _publish_gp_table(published)
+        return published
     except e:
         abort(String("failed to create _mojolearn_gp_infer_host: ", e))

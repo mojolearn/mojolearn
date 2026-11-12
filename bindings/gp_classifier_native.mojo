@@ -181,14 +181,6 @@ def _gpc_binary_result(context: PythonObject, y01: PythonObject, l_out: PythonOb
 
 
 
-def _gpc_binary(context: PythonObject, y01: PythonObject, l_out: PythonObject, pi: PythonObject,
-                wsr: PythonObject, lml: Float64, n_iter: Int, nb: Int) raises -> PythonObject:
-    # Explicit worker/interpreter PACK compatibility: no opaque Mojo owner
-    # crosses into another interpreter's transport.
-    var result = _gpc_binary_result(context, y01, l_out, pi, wsr, lml, n_iter, nb)
-    return result.member
-
-
 @fieldwise_init
 struct GPCMemberPins(Movable):
     var targets: PythonObject
@@ -265,17 +257,30 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: NativeLabelCodes,
     return answer^
 
 
-def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays: PythonObject,
-                    max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
-    # UNPACK of the existing worker transport Array.
-    var answer = _gpc_fit_binary_address(ext, x, Int(py=classical_address(codes)), arrays, max_iter, k, context)
-    _ = codes
-    return answer.member
+@fieldwise_init
+struct GPCBinaryArrays(Movable):
+    # One binary Laplace fit's output storage and scalars, before PACK.
+    var targets: PythonObject
+    var factor: PythonObject
+    var pi: PythonObject
+    var wsr: PythonObject
+    var likelihood: Float64
+    var iterations: Int
+    var nb: Int
 
 
 def _gpc_fit_binary_address(ext: PythonObject, x: PythonObject, codes: Int, arrays: PythonObject,
                     max_iter: Int, k: Int, context: PythonObject) raises -> GPCBinaryPublication:
-    # The worker transport enters here too; unpack its exact public storage.
+    var connection = GPConnection(ext)
+    var fit = _gpc_fit_binary_run(connection, x, codes, arrays, max_iter, k, context)
+    return _gpc_binary_result(context, fit.targets, fit.factor, fit.pi, fit.wsr, fit.likelihood, fit.iterations, fit.nb)
+
+
+def _gpc_fit_binary_run(connection: GPConnection, x: PythonObject, codes: Int, arrays: PythonObject,
+                        max_iter: Int, k: Int, context: PythonObject) raises -> GPCBinaryArrays:
+    """One binary Laplace fit through the GP table entry `connection`
+    resolved (core/gp_entry_table.mojo): the public fit's per-class route and
+    the GPC shard worker (`gpc_worker_fit`)."""
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
     var y01 = family_array(Python.tuple(n_rows), "<f4", context)
@@ -283,7 +288,6 @@ def _gpc_fit_binary_address(ext: PythonObject, x: PythonObject, codes: Int, arra
     var pi = family_array(Python.tuple(n_rows), "<f4", context)
     var wsr = family_array(Python.tuple(n_rows), "<f4", context)
     var scalars = List[Float64](length=3, fill=0.0)
-    var connection = GPConnection(ext)
     var kernel = gp_kernel_view(arrays)
     var request = GPCFitRequest(Int(py=classical_address(x)), codes,
         Int(py=classical_address(factor)), Int(py=classical_address(pi)), Int(py=classical_address(wsr)),
@@ -291,13 +295,37 @@ def _gpc_fit_binary_address(ext: PythonObject, x: PythonObject, codes: Int, arra
         Int(py=classical_address(y01)))
     var iterations = gp_run(connection, request)
     _ = x
-    _ = codes
     _ = arrays
     _ = y01
     _ = factor
     _ = pi
     _ = wsr
-    return _gpc_binary_result(context, y01, factor, pi, wsr, scalars[0], iterations, Int(scalars[2]))
+    var likelihood = scalars[0]
+    var nb = Int(scalars[2])
+    _ = scalars
+    return GPCBinaryArrays(y01, factor, pi, wsr, likelihood, iterations, nb)
+
+
+def gpc_worker_fit(binding: PythonObject, x: PythonObject, codes: PythonObject, arrays: PythonObject,
+                   max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    """The GPC shard worker's binary fit (bindings/parallel_shard_native.mojo
+    `gpc_class_fit`): UNPACK the transported X, int32 codes and packed kernel
+    arrays, RUN the GP table entry of the connected `binding`, PACK the
+    fitted fields the driver joins (`_fit_gpc`) as one plain dict, in the
+    order `_gpc_binary_result` sets them. No `_BinaryLaplace` object is
+    built in the worker."""
+    var connection = GPConnection(binding)
+    var fit = _gpc_fit_binary_run(connection, x, Int(py=classical_address(codes)), arrays, max_iter, k, context)
+    _ = codes
+    var fields = Python.dict()
+    py_setitem(fields, "y_train_", fit.targets)
+    py_setitem(fields, "L_", fit.factor)
+    py_setitem(fields, "pi_", fit.pi)
+    py_setitem(fields, "W_sr_", fit.wsr)
+    py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(fit.likelihood))
+    py_setitem(fields, "n_iter_", PythonObject(fit.iterations))
+    py_setitem(fields, "nb_", PythonObject(fit.nb))
+    return fields
 
 
 def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject, fits: GPCFitPublication,
@@ -399,15 +427,40 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
                 out_kind: Int, context: PythonObject, kernel_arrays: PythonObject, pack: Int = 7, native_codes: Bool = False) raises -> GPCLatentResult:
     """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
     `kernel_arrays`: the kernel's packed arrays when the caller already has
-    them (a multi-GPU shard worker, which holds no kernel object); else
-    `gp_kernel_arrays(fields["_kernel"])`."""
-    var n_star = Int(py=q.shape[0])
+    them; else `gp_kernel_arrays(fields["_kernel"])`."""
     var xt = gp_f32(fields, "X_train_", 2, context)
-    var n_train = Int(py=xt.shape[0])
-    var n_features = Int(py=xt.shape[1])
     var arrays = kernel_arrays
     if arrays is None:
         arrays = gp_kernel_arrays(fields["_kernel"], context)
+    var own = py_fields(est)
+    var y01 = gp_f32(own, "y_train_", -1, context)
+    var pi = gp_f32(own, "pi_", -1, context)
+    var wsr = gp_f32(own, "W_sr_", -1, context)
+    var lf = gp_f32(own, "L_", -1, context)
+    var connection = GPConnection(ext)
+    var result = _gpc_latent_run(connection, xt, y01, pi, wsr, lf, q, want_proba, out_kind, arrays, pack,
+                                 native_codes, context)
+    lifecycle_admit_fields(fields)
+    lifecycle_admit_fields(own)
+    _ = xt^
+    _ = y01^
+    _ = pi^
+    _ = wsr^
+    _ = lf^
+    _ = arrays^
+    return result^
+
+
+def _gpc_latent_run(connection: GPConnection, xt: PythonObject, y01: PythonObject, pi: PythonObject,
+                    wsr: PythonObject, lf: PythonObject, q: PythonObject, want_proba: Bool, out_kind: Int,
+                    arrays: PythonObject, pack: Int, native_codes: Bool,
+                    context: PythonObject) raises -> GPCLatentResult:
+    """One binary latent pass through the GP table entry `connection`
+    resolved, over admitted float32 training, fit and query arrays: the
+    public predict routes and the GPC shard worker (`gpc_worker_latent`)."""
+    var n_star = Int(py=q.shape[0])
+    var n_train = Int(py=xt.shape[0])
+    var n_features = Int(py=xt.shape[1])
     var exposed = pack if out_kind == 0 else 0
     var scratch = GPCQueryScratch(n_star, exposed)
     var mean = family_array(Python.tuple(n_star), "<f4", context) if (exposed & 1) != 0 else PythonObject(None)
@@ -422,12 +475,6 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
             dst = family_array(Python.tuple(n_star), "<i8", context)
     elif out_kind == 2:
         dst = family_array(Python.tuple(n_star, 2), "<f8", context)
-    var own = py_fields(est)
-    var y01 = gp_f32(own, "y_train_", -1, context)
-    var pi = gp_f32(own, "pi_", -1, context)
-    var wsr = gp_f32(own, "W_sr_", -1, context)
-    var lf = gp_f32(own, "L_", -1, context)
-    var connection = GPConnection(ext)
     var kernel = gp_kernel_view(arrays)
     var output_address = 0
     if out_kind != 0:
@@ -440,20 +487,45 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
         Int(py=classical_address(q)), mean_address, variance_address,
         probability_address, n_train, n_features, n_star, kernel^, want_proba, out_kind, output_address)
     _ = gp_run(connection, request)
-    lifecycle_admit_fields(fields)
-    lifecycle_admit_fields(own)
     _ = mean
     _ = var_out
     _ = proba
     _ = dst
     _ = q
+    _ = xt
+    _ = y01
+    _ = pi
+    _ = wsr
+    _ = lf
+    _ = arrays
+    return GPCLatentResult(scratch^, codes^, mean, var_out, proba, dst)
+
+
+def gpc_worker_latent(binding: PythonObject, x_train: PythonObject, fit_fields: PythonObject, q: PythonObject,
+                      want_proba: Bool, out_kind: Int, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The GPC shard worker's latent pass (bindings/parallel_shard_native.mojo
+    `gpc_class_predict`): UNPACK the transported X_train_, the fit's field
+    dict, the query rows and the packed kernel arrays, RUN the GP table entry
+    of the connected `binding`, PACK the one column the driver joins: the
+    decoded output for two classes (out_kind 1 or 2), else the class
+    probability (want_proba) or the latent mean. No `_BinaryLaplace` object
+    or holder dict is built in the worker."""
+    var connection = GPConnection(binding)
+    var xt = admit_family(x_train, 2, "X_train_", context).array
+    var y01 = gp_f32(fit_fields, "y_train_", -1, context)
+    var pi = gp_f32(fit_fields, "pi_", -1, context)
+    var wsr = gp_f32(fit_fields, "W_sr_", -1, context)
+    var lf = gp_f32(fit_fields, "L_", -1, context)
+    var latent = _gpc_latent_run(connection, xt, y01, pi, wsr, lf, q, want_proba, out_kind, arrays,
+                                 4 if want_proba else 1, False, context)
     _ = xt^
     _ = y01^
     _ = pi^
     _ = wsr^
     _ = lf^
-    _ = arrays^
-    return GPCLatentResult(scratch^, codes^, mean, var_out, proba, dst)
+    if out_kind != 0:
+        return latent.output
+    return latent.probability if want_proba else latent.mean
 
 
 def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObject, gq: GpQuery, out_kind: Int,

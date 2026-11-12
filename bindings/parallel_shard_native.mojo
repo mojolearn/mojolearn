@@ -62,7 +62,7 @@ from bindings.parallel_shard_common import (
 )
 from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
-    gpc_validate, _gpc_fit_binary, _gpc_binary, _gpc_binary_result, GPCFitPublication, _gpc_set_fitted, _gpc_latent, _gpc_ovr_combine,
+    gpc_validate, gpc_worker_fit, gpc_worker_latent, _gpc_binary_result, GPCFitPublication, _gpc_set_fitted, _gpc_ovr_combine,
 )
 from bindings.gp_common_native import gp_kernel_arrays_transport
 from bindings.gp_labels_native import gp_encode_labels_transport, gp_decode_labels
@@ -1412,22 +1412,16 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
             return family_call(entry, model, PythonObject("transform"), Python.tuple(args[0], args[1], PythonObject(None)),
                                owner_context)
         return family_call(entry, model, PythonObject("transform"), Python.tuple(args[0], args[1]), owner_context)
+    # The GPC sites call the GP table entry (core/gp_entry_table.mojo) of the
+    # connected identical binding with plain arrays and words
+    # (bindings/gp_classifier_native.mojo gpc_worker_fit/gpc_worker_latent).
     if operation == "gpc_class_fit":
-        var ext = _worker_binding("_mojolearn_gp")
-        var fit = _gpc_fit_binary(ext, args[0], args[1], state[0], Int(py=state[1]), Int(py=args[2]), context)
-        return shard_state(py_fields(fit), b.frozenset(), context)
+        var fields = gpc_worker_fit(_worker_binding("_mojolearn_gp"), args[0], args[1], state[0], Int(py=state[1]),
+                                    Int(py=args[2]), context)
+        return shard_state(fields, b.frozenset(), context)
     if operation == "gpc_class_predict":
-        var ext = _worker_binding("_mojolearn_gp")
-        var f = state[2]
-        var fit = _gpc_binary(context, f["y_train_"], f["L_"], f["pi_"], f["W_sr_"],
-                              Float64(py=f["log_marginal_likelihood_value_"]), Int(py=f["n_iter_"]), Int(py=f["nb_"]))
-        var holder = b.dict()
-        py_setitem(holder, "X_train_", state[1])
-        var out_kind = Int(py=args[2])
-        var latent = _gpc_latent(ext, holder, fit, args[0], Bool(py=args[1]), out_kind, context, state[0], 4 if Bool(py=args[1]) else 1)
-        if out_kind != 0:
-            return latent.output
-        return latent.probability if Bool(py=args[1]) else latent.mean
+        return gpc_worker_latent(_worker_binding("_mojolearn_gp"), state[1], state[2], args[0], Bool(py=args[1]),
+                                 Int(py=args[2]), state[0], context)
     if operation == "forest_fit":
         var model = shard_model(_t("forest_by_name")[state[0]], state[1])
         py_setitem(py_fields(model), "_has_constructor_parameters", True)

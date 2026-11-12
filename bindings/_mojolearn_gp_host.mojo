@@ -46,6 +46,8 @@ leaf walks descending with it, so every fit and predict this binary serves
 differs.
 """
 from core.gp_native_provider import GPProviderAPI
+from core.gp_entry_table import GPEntryKey, GP_COLUMN_HOST, gp_table_publish
+from bindings.py_balanced import py_setattr
 from core.gp_native_host import GPHostKernels
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -588,9 +590,23 @@ def cholesky_solve_binding(
 comptime GP_HOST_NATIVE_API = SharedSlot[GPProviderAPI[GPHostKernels], "MojolearnGPHostKernelsV1"]
 
 
+# The capsule factory stays only for the Python import prerequisite that
+# names it (python/mojolearn/host_surface.py); no native caller connects
+# through it (the GP owners read the table below, core/gp_entry_table.mojo).
 def gp_native_api_v1_binding() raises -> PythonObject:
     var api = GP_HOST_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_gp_table(module: PythonObject) raises:
+    # The _mojolearn_gp_host column of the GP table (core/gp_entry_table.mojo), CPU
+    # vendor word 0; the key is recorded as the module attribute
+    # `gp_native_key` for the GP owners (bindings/gp_native_boundary.mojo).
+    var key = GPEntryKey(Int(GLOBAL_NUMERIC_MODE), 0, GP_COLUMN_HOST)
+    var api = GP_HOST_NATIVE_API.get_or_create_ptr()
+    gp_table_publish(key, Int(api[].entries.unsafe_ptr()), api[].entries[0])
+    py_setattr(module, "gp_native_key", Python.tuple(PythonObject(key.mode), PythonObject(key.vendor),
+                                                     PythonObject(key.column)))
 
 def build__mojolearn_gp_host() -> PythonObject:
     comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
@@ -618,6 +634,8 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")
-        return module.finalize()
+        var published = module.finalize()
+        _publish_gp_table(published)
+        return published
     except e:
         abort(String("failed to create _mojolearn_gp_host: ", e))

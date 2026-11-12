@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
-"""GP provider/image and public storage pins around synchronous native RUN."""
+"""GP image pins and the native GP table entry around synchronous RUN
+(core/gp_entry_table.mojo; lane gp-entry-table, 2026-11-12)."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_type
+from bindings.py_balanced import py_type, py_get, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.classical_arrays import classical_address
-from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
+from core.entry_table import EntryRef
+from core.gp_entry_table import GPEntryKey, gp_table_resolve
 from core.gp_native_api import (
-    GP_NATIVE_ABI, GP_NATIVE_COUNT, GP_MODE, GP_CAPABILITIES, GPDriver, GPKernelView,
+    GP_CAPABILITIES, GPDriver, GPKernelView,
     GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest,
     GPRGradientRequest, GPROptimizeRequest, GPCFitRequest, GPCFitAllRequest,
     GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest, GPThetaRequest,
@@ -17,54 +18,43 @@ from core.gp_native_api import (
 )
 
 
-@fieldwise_init
-struct GPDescriptorMetadata(Movable):
-    # The Python reference pins the exact admitted provider image. Mode and
-    # capability values themselves are native; no boxed cache payload exists.
-    var provider: PythonObject
-    var mode: Int
-    var capabilities: Int
-
-
-struct GPDescriptorMetadataTable(Defaultable, Movable):
-    var rows: List[GPDescriptorMetadata]
-
-    def __init__(out self):
-        self.rows = List[GPDescriptorMetadata]()
-
-
-comptime GP_DESCRIPTOR_METADATA = SharedSlot[GPDescriptorMetadataTable, "MojolearnGpDescriptorMetadataV1"]
-
-
-def _gp_metadata(provider: PythonObject, driver: GPDriver) raises -> Tuple[Int, Int]:
-    # UNPACK owns the GIL, as does the existing descriptor connection cache.
-    # Holding the provider pins makes identity comparison safe from address
-    # reuse. A replacement factory has a new admitted provider and new row.
-    var table = GP_DESCRIPTOR_METADATA.get_or_create_ptr()
-    for i in range(len(table[].rows)):  # driver-loop: the handful of connected GP provider images
-        if table[].rows[i].provider is provider:
-            return (table[].rows[i].mode, table[].rows[i].capabilities)
-    var mode = driver.metadata(GP_MODE)
-    var capabilities = driver.metadata(GP_CAPABILITIES)
-    # Match the bounded retention policy of neural_descriptor_connect_once.
-    if len(table[].rows) >= 64:
-        table[].rows.clear()
-    table[].rows.append(GPDescriptorMetadata(provider, mode, capabilities))
-    return (mode, capabilities)
+def gp_entry_key(binding: PythonObject) raises -> GPEntryKey:
+    """UNPACK: the GP table key an image recorded as its module attribute
+    `gp_native_key` = `(mode, vendor, column)` when it published
+    (core/gp_entry_table.mojo). One exact read of the module's `__dict__`."""
+    var b = native_loaded_module("builtins")
+    if py_type(binding) is not py_type(b):
+        raise Error("TypeError: GP execution requires its connected native module")
+    var key = py_get(py_fields(binding), PythonObject("gp_native_key"))
+    if (key is None or py_type(key) is not b.tuple or len(key) != 3 or py_type(key[0]) is not b.int
+            or py_type(key[1]) is not b.int or py_type(key[2]) is not b.int):
+        raise Error("ImportError: mojolearn: the GP binding publishes no native gp_native_key table key; rebuild it")
+    return GPEntryKey(Int(py=key[0]), Int(py=key[1]), Int(py=key[2]))
 
 
 struct GPConnection(Movable):
-    var provider: PythonObject
+    # `image` pins the connected module (and so the published entry's code)
+    # for the public call; its address is the lease identity of
+    # bindings/gp_resident_boundary.mojo. RUN reads only `driver`, `mode`
+    # and `capabilities`. The mode is the published key's tier (the image's
+    # GLOBAL_NUMERIC_MODE, the word GP_MODE answered); the capability word is
+    # one native metadata call through the resolved entry.
+    var image: PythonObject
+    var entry: EntryRef
     var driver: GPDriver
     var mode: Int
     var capabilities: Int
 
     def __init__(out self, binding: PythonObject) raises:
-        self.provider = neural_descriptor_connect_once(binding, "gp_native_api_v1", String(GP_NATIVE_ABI), GP_NATIVE_COUNT)
-        self.driver = GPDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        var metadata = _gp_metadata(self.provider, self.driver)
-        self.mode = metadata[0]
-        self.capabilities = metadata[1]
+        var key = gp_entry_key(binding)
+        var entry = gp_table_resolve(key)
+        var driver = GPDriver(entry.call)
+        var capabilities = driver.metadata(GP_CAPABILITIES)
+        self.image = binding
+        self.entry = entry
+        self.driver = driver^
+        self.mode = key.mode
+        self.capabilities = capabilities
 
 
 def gp_require(connection: GPConnection, capability: Int, entry: String) raises:

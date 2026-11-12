@@ -196,6 +196,7 @@ check-native-gp-normalization-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 check-native-gp-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gp_state.mojo"
 check-native-gp-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gp_contract.mojo"
 check-native-gp-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/gp_native_cpu.mojo"
+check-native-gp-entry-table-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/gp_entry_table_cpu.mojo"
 check-native-gp-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gp_native_gpu.mojo"
 check-native-agglo-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/agglo_native_cpu.mojo"
 check-native-agglo-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/agglo_native_gpu.mojo"
