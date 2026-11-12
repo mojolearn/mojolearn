@@ -6,11 +6,11 @@ from core.samba_construct_native_impl import samba_fill_ones
 from std.math import sqrt
 from std.memory import unsafe_memcpy
 from std.os import getenv
-from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
+from bindings.generation_buffers import generation_initialize_binding, generation_array
 from bindings.generator_state_native import generator_init, generator_fields, generator_validate, generator_next
-from bindings.samba_state_native import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot
+from bindings.samba_state_native import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot, samba_entry_key, samba_primitive
+from core.samba_entry_table import samba_ref, SAMBA_TABLE_TRAINING, SAMBA_PRIM_NEURAL_RNG
 from bindings.causal_lm_construct import _model_f32, _model_shape
-from bindings.causal_lm_public import _native_function
 from bindings.py_balanced import py_call, py_setitem, py_setattr
 from bindings.native_model_records import bump_model_generation
 from bindings.optimizer_owner_boundary import OptimizerOwnerLease, optimizer_owner_new
@@ -57,7 +57,11 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
     var generator = fields["generator"]
     var rng = generator_fields(generator)
     _ = generator_validate(rng["seed"], rng["counter"])
-    var entries = samba_entries(context, rng["numeric_mode"])
+    # samba_entries keeps its mode/vendor admission; the RNG below calls the
+    # training image's primitive entry resolved once here (op 6, the former
+    # `neural_rng` Python entry; lane entangled-native-modules, 2026-11-12).
+    _ = samba_entries(context, rng["numeric_mode"])
+    var primitives = samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, rng["numeric_mode"]))
     var seed = rng["seed"]
     var low = Int(py=seed & PythonObject(0xffffffff))
     var high = Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff))
@@ -92,10 +96,9 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
             samba_fill_ones(dst, Int(py=output.size))
         if random:
             var stream = generator_next(generator)
-            var plan = py_ints([Int(py=output.size), 0, low, high, Int(py=stream), kind])
-            _ = py_call(plan.append, Float64(first))
-            _ = py_call(plan.append, Float64(second))
-            _ = py_call(_native_function(entries, "neural_rng"), Python.list(output._addr, unused._addr), plan)
+            _ = samba_primitive(primitives, SAMBA_PRIM_NEURAL_RNG, [Int(py=output._addr), Int(py=unused._addr)],
+                [Int(py=output.size), 0, low, high, Int(py=stream), kind], [Float64(first), Float64(second)])
+            _ = output  # the parameter owner stays alive through the native call above
     _ = unused^
 
 
