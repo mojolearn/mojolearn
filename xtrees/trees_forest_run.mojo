@@ -160,3 +160,24 @@ def trees_check_features(cols: Int, fitted: Int) raises:
     """A predict's feature-count refusal against the fitted width."""
     if cols != fitted:
         raise Error("X has " + String(cols) + " features, fit saw " + String(fitted))
+
+
+def _refuse(name: String, why: String) raises:
+    """`randomforest._refuse` (xtrees/trees_forest_run.mojo)."""
+    trees_refuse(name, why)
+
+
+def _family(kind: String) -> String:
+    return "et" if kind.startswith("et_") else "rf"
+
+
+def _classifier(kind: String) -> Bool:
+    return kind.endswith("_classifier")
+
+
+# ------------------------------------------------------- parameters
+
+
+def _y_rows_check(n: Int, rows: Int) raises:
+    if n != rows:
+        raise Error("y has " + String(n) + " rows, X has " + String(rows))
