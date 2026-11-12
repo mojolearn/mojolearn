@@ -4,13 +4,7 @@ Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
-from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_ESTIMATORS
-from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
-from core.linear_boundary_types import LINEAR_PREDICT_ABI
-from glm.linear_fit_device import linear_fit_device_v1
-from glm.linear_predict_device import linear_predict_device_v1
 from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
-from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
 from core.linear_boundary_types import LinearPredictRequest
@@ -19,8 +13,12 @@ from core.logistic_native_api import (
     QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
-from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API, qn_device_native_v1
-from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN
+from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
+from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
+from core.mojolearn_estimators_run import (
+    _DEVCTX_SLOT, _f32_ptr, _i32_ptr, _f64_ptr, _pca_whiten_pointer, _pca_whiten_dims, _pca_whiten_device,
+    _publish_linear_entry_table, _publish_estimators_qn_table,
+)
 from glm.linear_svc_native_device import LINEAR_SVC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
@@ -36,7 +34,6 @@ from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAI
 
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
 # TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b (its witnesses scoped_gemm_flags, scoped_gemm_count, scoped_gemm_metadata, and the MOJOLEARN_SOFTMAX_G2_AUDIT
@@ -57,11 +54,7 @@ from glm.linear_route_controls import OLS_FAST_NORMAL_EQ, RIDGE_FAST_RESIDENT
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
-#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
-#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEstimatorsContextFastV3"
 
 
 from core.labeled_reference_predict import labeled_reference_predict
@@ -75,8 +68,6 @@ from decomposition.estimator import (
     pca_fit_host,
     pca_fit_full_host,
     pca_transform_host,
-    pca_whiten_transform_host,
-    pca_whiten_inverse_transform_host,
     tsvd_explained_host,
     tsvd_fit_explained_host,
     tsvd_fit_host,
@@ -122,17 +113,6 @@ from core.estimators_impl import (
 # TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by e4e58162e9; code
 # recoverable at f59d913b0b (its reach counter export pca_compensated_cov_count).
 # Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
-
-
-def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    return f64_ptr(addr)
 
 
 def dbscan_fit_binding(
@@ -363,16 +343,6 @@ def pca_transform_binding(
     return PythonObject(Int(status))
 
 
-def _pca_whiten_pointer(
-    address: Int, count: Int,
-) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if address <= 0 or address % 4 != 0:
-        raise Error("PCA whitening requires positive aligned FP32 pointers")
-    if address > 9223372036854775807 - count * 4:
-        raise Error("PCA whitening pointer span overflows signed Int")
-    return _f32_ptr(address)
-
-
 def _pca_whiten_apply(
     input_addr: PythonObject,
     mean_addr: PythonObject,
@@ -390,13 +360,7 @@ def _pca_whiten_apply(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var nfit = Int(py=params[3])
-    if nr < 1 or nf < 1 or nc < 1 or nc > nf or nfit < 2:
-        # one feature admitted with the one-column PCA fit (lane sk-kernels)
-        raise Error("PCA whitening requires positive rows/features/components and fit_rows>=2")
-    if nr > 2147483647 or nf > 2147483647 or nc > 2147483647 or nfit > 2147483647:
-        raise Error("PCA whitening dimensions exceed Int32")
-    if nr > 2147483647 // nf or nc > 2147483647 // nf:
-        raise Error("PCA whitening matrix cell count exceeds Int32")
+    _pca_whiten_dims(nr, nf, nc, nfit)
     var input_count = nr * (nc if inverse else nf)
     var output_count = nr * (nf if inverse else nc)
     var xa = Int(py=input_addr)
@@ -414,16 +378,7 @@ def _pca_whiten_apply(
     # and of the output run as device scans of the resident buffers
     # (`device_checks=True`), never as host walks of the caller's arrays.
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        if inverse:
-            pca_whiten_inverse_transform_host(
-                ctx, xp, cp, sp, mp, op, nr, nf, nc, nfit, device_checks=True
-            )
-        else:
-            pca_whiten_transform_host(
-                ctx, xp, mp, cp, sp, op, nr, nf, nc, nfit, device_checks=True
-            )
-        ctx.synchronize()
+        _pca_whiten_device(xp, mp, cp, sp, op, nr, nf, nc, nfit, inverse)
     return PythonObject(0)
 
 
@@ -1599,26 +1554,6 @@ def dbscan_core_arrays_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 
-def _publish_linear_entry_table() raises:
-    # Native publication only; the existing capsule ABI remains for clients
-    # not yet converted. The original descriptor owner has image lifetime.
-    var api = LINEAR_FIT_DEVICE_API.get_or_create_ptr()
-    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1))
-    linear_table_publish[LINEAR_TABLE_ESTIMATORS](key,
-        Int(api[].entries.unsafe_ptr()), [String(LINEAR_FIT_ABI), String(LINEAR_PREDICT_ABI)], [LINEAR_FIT_OPERATION_COUNT, 1], [linear_fit_device_v1, linear_predict_device_v1])
-
-def _publish_estimators_qn_table() raises:
-    # The QN entry of the estimators table (core/estimators_entry_table.mojo):
-    # QNRegressor's owner (bindings/qn_native.mojo) calls it instead of the
-    # `qn_fit` / `qn_decision_function` Python exports, which remain for the
-    # other doors and the Python tests that call the binding directly. A
-    # build with no GPU vendor ("none") publishes nothing.
-    var word = estimators_vendor_word(String(COMPILED_VENDOR))
-    if word < 0:
-        return
-    var api = LOGISTIC_DEVICE_API.get_or_create_ptr()
-    estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word),
-        Int(api[].entries.unsafe_ptr()), qn_device_native_v1)
 
 def _publish_decomp_pca_ops(module: PythonObject) raises:
     # The device column of the PCA owned-fit table
