@@ -18,7 +18,7 @@ from bindings.native_torch_admission import (
 )
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
+from core.cast_in import CastIn, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
 from autograd.program import PROGRAM_IN_IDS, same_shape
 from autograd.program_io import ProgramInput
@@ -30,6 +30,7 @@ from providers.python.autograd_import_metadata_pyapi import imported_program_sna
 from bindings.cpython_table import cpython_table
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
+from autograd.autograd_torch_program_run import _torch_kind
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
@@ -37,29 +38,6 @@ def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
     if entry is None or py_type(entry) is not py_type(native_loaded_module("builtins").len):
         raise Error("TypeError: Torch execution requires compiled entry " + name)
     return entry
-
-
-def _torch_kind(dtype: String) raises -> Tuple[Int, Int]:
-    if dtype == "float32":
-        return (CAST_KIND_FLOAT, 4)
-    if dtype == "float64":
-        return (CAST_KIND_FLOAT, 8)
-    if dtype == "float16":
-        return (CAST_KIND_FLOAT, 2)
-    if dtype == "int64":
-        return (CAST_KIND_SIGNED, 8)
-    if dtype == "int32":
-        return (CAST_KIND_SIGNED, 4)
-    if dtype == "int16":
-        return (CAST_KIND_SIGNED, 2)
-    if dtype == "int8":
-        return (CAST_KIND_SIGNED, 1)
-    if dtype == "uint8":
-        return (CAST_KIND_UNSIGNED, 1)
-    if dtype == "bool":
-        return (CAST_KIND_BOOL, 1)
-    raise Error("TypeError: unsupported Torch program input dtype " + dtype)
-
 
 def _torch_describe(value: PythonObject) raises -> PythonObject:
     var info = native_torch_storage_metadata(value)

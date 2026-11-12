@@ -10,6 +10,7 @@ from bindings.native_buffer_owner import native_buffer_view, native_storage_allo
 from bindings.classical_attributes import classical_connect_numpy
 from core.training_state_validation import training_byte_shape_validate
 from bindings.optimizer_public_words import stash_python_error
+from bindings.byte_lm_metadata_pyapi_run import _config_names
 
 
 def _b() raises -> PythonObject:
@@ -204,12 +205,6 @@ def byte_lm_lengths(source: PythonObject, batch: Int, length: Int, context: Pyth
             raise Error("lengths must be in [1, L]")
         result.append(Int(py=scalar))
     return result^
-
-
-def _config_names() -> List[String]:
-    return [String("batch"), String("length"), String("d_model"), String("n_heads"), String("n_kv"),
-            String("head_dim"), String("intermediate"), String("n_layers"), String("vocab_size")]
-
 
 def _config_store(value: PythonObject, shape: _Shape) raises:
     var fields = py_fields(value)

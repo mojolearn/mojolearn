@@ -45,6 +45,7 @@ from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
 from bindings.cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
+from bindings.user_objects_native_run import _refusal, _index_at, _float_is_integer
 
 comptime KIND_STR = 0         # isinstance(v, str)
 comptime KIND_BOOL = 1        # bool or NumPy bool_ (_labels.is_bool)
@@ -243,18 +244,6 @@ def _list_put(dst: PythonObject, i: Int, v: PythonObject) raises:
 def _address(store: PythonObject) raises -> Int:
     return Int(py=store.buffer_info()[0])
 
-
-def _refusal(kind: String, message: String) -> Error:
-    # the door raises it as `kind` (TypeError, ValueError, IndexError, OverflowError)
-    return Error("__refuse__" + kind + ":" + message)
-
-
-def _index_at(address: Int, k: Int, width: Int) -> Int:
-    if width == 4:
-        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)[k])
-    return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)[k])
-
-
 def _take(env: _Env, values: PythonObject, address: Int, count: Int, width: Int) raises -> PythonObject:
     var n = len(values)
     var kind = _seq_kind(env, values)
@@ -321,16 +310,6 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
             out[i] = Int32(Int(py=got))
             _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(codes, missing)
-
-
-def _float_is_integer(x: Float64) -> Bool:
-    # math.isfinite(x) and x.is_integer()
-    if not (x - x == 0.0):
-        return False
-    if x >= 9007199254740992.0 or x <= -9007199254740992.0:
-        return True  # every float this large is an integer
-    return Float64(Int(x)) == x
-
 
 def _is_intval(env: _Env, v: PythonObject) raises -> Bool:
     # math.isfinite(v) and float(v).is_integer(), for a Real

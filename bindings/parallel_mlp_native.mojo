@@ -29,6 +29,7 @@ from core.samba_entry_table import (
     SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_ACCUMULATE,
     SAMBA_PRIM_OPTIMIZER_STEP,
 )
+from bindings.parallel_mlp_native_run import _mlp_names, _mlp_dims
 
 
 struct ParallelMlpBoundary(Defaultable, Movable):
@@ -104,31 +105,6 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
             b[].primitives = samba_ref[SAMBA_TABLE_TRAINING](SambaEntryKey(1 if mode == "identical" else 0, word))
         except problem:
             b[].primitives_error = String(problem)
-
-
-def _mlp_names() -> List[String]:
-    var result = List[String]()
-    result.append("weight1")
-    result.append("bias1")
-    result.append("weight2")
-    result.append("bias2")
-    return result^
-
-
-def _mlp_dims(index: Int) -> List[Int]:
-    var result = List[Int]()
-    if index == 0:
-        result.append(16)
-        result.append(8)
-    elif index == 1:
-        result.append(16)
-    elif index == 2:
-        result.append(3)
-        result.append(16)
-    else:
-        result.append(3)
-    return result^
-
 
 def _mlp_mode() raises:
     if PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].mode != "identical":
