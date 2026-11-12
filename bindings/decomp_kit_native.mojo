@@ -43,6 +43,10 @@ from x_decomp.descriptor_schema import (
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
+from bindings.decomp_kit_run import (
+    DKit, DK_HAS_DEV_SVD, DK_HAS_DEV_LU, DK_HAS_DEV_CODE_ROWS, DK_HAS_DEV_EIGH_TO, DK_HAS_S_FLAGS,
+    DK_HAS_QFIX_FLAGS, DK_HAS_IDN_FLAGS,
+)
 
 comptime DecompF32 = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -1698,3 +1702,209 @@ def decomp_resident_adopt(owner: PythonObject, entries: PythonObject, source: Py
         return PythonObject(None)
     return decomp_resident_hold(owner, entries["x_decomp_dev_alloc"], free, source, name, rows, cols, handle, True,
                                 True)
+
+
+# ---------------------------------------------------------------------------
+# The typed kit's door half (lane entangled-decompkit, 2026-11-12). A public
+# operation of a decomposition owner is UNPACK (read the Python arrays,
+# options, the image and the model's resident records into a `DKit` and
+# plain words), RUN (bindings/<estimator>_run.mojo over the `DKit`, the GIL
+# released, no Python) and PACK (fresh public Arrays, fitted fields
+# published once, resident records written). `DecompDoor` is what UNPACK
+# and PACK hold that the RUN must not: the connected entries dict (the
+# resident records name their binding by its pool entries), the output
+# context, the query model, and every Python owner a borrowed matrix reads,
+# kept alive until the door is dropped (after RUN and `kit.close()`).
+# ---------------------------------------------------------------------------
+
+
+struct DecompDoor(Movable):
+    var entries: PythonObject
+    var output: PythonObject    # the NumPy-free output context: every buffer is an Array
+    var owner: PythonObject     # the fitted model of a query, or None
+    var keeps: List[PythonObject]
+
+    def __init__(out self, entries: PythonObject, output: PythonObject):
+        self.entries = entries
+        self.output = output
+        self.owner = PythonObject(None)
+        self.keeps = List[PythonObject]()
+
+    def keep(mut self, value: PythonObject):
+        self.keeps.append(value)
+
+
+def decomp_kit_unpack(entries: PythonObject) raises -> DKit:
+    """UNPACK: the typed kit over a connected x_decomp entries dict: its image
+    dispatch (`x_decomp_native_key`, resolved once), whether it is resident
+    (`x_decomp_dev_ew`) and which optional entries it exports."""
+    var key = py_get(entries, "x_decomp_native_key")
+    var entry = entry_ref_unresolved()
+    var keyed = key is not None
+    if keyed:
+        entry = decomp_ref(LinearEntryKey(Int(py=key[0]), Int(py=key[1])))
+    var present = 0
+    if py_get(entries, "x_decomp_dev_svd") is not None:
+        present |= DK_HAS_DEV_SVD
+    if py_get(entries, "x_decomp_dev_lu") is not None:
+        present |= DK_HAS_DEV_LU
+    if py_get(entries, "x_decomp_dev_code_rows") is not None:
+        present |= DK_HAS_DEV_CODE_ROWS
+    if py_get(entries, "x_decomp_dev_eigh_to") is not None:
+        present |= DK_HAS_DEV_EIGH_TO
+    if py_get(entries, "x_decomp_s_flags") is not None:
+        present |= DK_HAS_S_FLAGS
+    if py_get(entries, "x_decomp_qfix_flags") is not None:
+        present |= DK_HAS_QFIX_FLAGS
+    if py_get(entries, "x_decomp_idn_flags") is not None:
+        present |= DK_HAS_IDN_FLAGS
+    return DKit(entry, keyed, py_get(entries, "x_decomp_dev_ew") is not None, present)
+
+
+def decomp_door_borrow(mut door: DecompDoor, mut kit: DKit, array: PythonObject, rows: Int, cols: Int) raises -> Int:
+    """UNPACK `kit.input`: a C-order float32 Array the door converted
+    (decomp_input), read in place; the door keeps it alive."""
+    door.keep(array)
+    return kit.borrow(Int(py=classical_address(array)), rows, cols)
+
+
+def decomp_door_input(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                      context: PythonObject) raises -> Int:
+    """UNPACK `_M.from_input` into the kit: decomp_input, then borrowed."""
+    var array = decomp_input(source, name, context)
+    return decomp_door_borrow(door, kit, array, Int(py=array.shape[0]), Int(py=array.shape[1]))
+
+
+def decomp_door_snapshot(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, rows: Int,
+                         cols: Int) raises -> Int:
+    """UNPACK `input_snapshot`: the provider's admitted address, its storage
+    owners kept by the door."""
+    door.keep(snapshot.owner)
+    door.keep(snapshot.keep)
+    return kit.borrow(snapshot.source.addr, rows, cols)
+
+
+def decomp_door_tested(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, rows: Int, cols: Int,
+                       est: String) raises -> Int:
+    """UNPACK `input_tested`: `decomp_door_snapshot` of an X admitted with
+    `defer_finite`, tested on its upload (the GIL released, as before)."""
+    door.keep(snapshot.owner)
+    door.keep(snapshot.keep)
+    var index = -1
+    var py = Python()
+    with GILReleased(py):
+        index = kit.borrow_tested(snapshot.source.addr, rows, cols, est)
+    return index
+
+
+def decomp_door_resident_hit(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String) raises -> Int:
+    """UNPACK `resident_hit`: a fitted operand already resident on this
+    image (the stored `source` is the same frozen Array whose own words were
+    uploaded), served before the per-call admission. -1 on any miss."""
+    if door.owner is None or not kit.resident:
+        return -1
+    var held = decomp_resident_find(door.owner, door.entries["x_decomp_dev_alloc"],
+                                    door.entries["x_decomp_dev_free"], source, name, True)
+    if held is None:
+        return -1
+    door.keep(held)
+    door.keep(source)
+    return kit.add_resident(Int(py=source._addr), Int(py=held[5]), Int(py=held[3]), Int(py=held[4]))
+
+
+def decomp_door_resident_input(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                               host: PythonObject, address: Int, keep: PythonObject, rows: Int,
+                               cols: Int) raises -> Int:
+    """UNPACK `resident_input`: a fitted operand of the query model whose
+    device copy is kept across calls in the model's record (uploaded at the
+    first query after a fit, reused while the stored `source` is the same
+    frozen object of the same shape on the minting binding at the model's
+    generation). -1 when nothing is kept (a host image, no query model, an
+    empty operand, storage that cannot be frozen): the caller borrows the
+    operand as before. Same words, same routes (a host matrix at first)."""
+    var n = rows * cols
+    if door.owner is None or not kit.resident or n < 1:
+        return -1
+    # Hazard class A: a device copy is served only while the host words
+    # cannot change under it (the read-only rule, decomp_resident_freeze).
+    if not decomp_resident_freeze(source):
+        return -1
+    var alloc = door.entries["x_decomp_dev_alloc"]
+    var free = door.entries["x_decomp_dev_free"]
+    var held = decomp_resident_find(door.owner, alloc, free, source, name, False)
+    if held is not None and (Int(py=held[3]) != rows or Int(py=held[4]) != cols):
+        held = PythonObject(None)
+    if held is None:
+        var handle = kit.dev_alloc(n)
+        try:
+            var py = Python()
+            with GILReleased(py):
+                kit.dev_upload(handle, address, n)
+        except error:
+            kit.dev_free(handle)
+            raise error^
+        _ = keep  # keep the host owner alive through the upload above
+        # From here the record's capsule owns the device buffer. Word 7:
+        # the uploaded words are the frozen source's own (no cast copy).
+        held = decomp_resident_hold(door.owner, alloc, free, source, name, rows, cols, handle, host is source)
+    door.keep(held)
+    door.keep(keep)
+    door.keep(host)
+    return kit.add_resident(address, Int(py=held[5]), rows, cols)
+
+
+def decomp_door_resident_derived(mut door: DecompDoor, mut kit: DKit, source: PythonObject,
+                                 name: String) raises -> Int:
+    """UNPACK `resident_derived`: a device matrix an earlier query computed
+    from the fitted operand `source` and kept, served while `source` is the
+    same frozen Array at the same generation (the words this call would
+    compute again), added as that call left it. -1 on any miss."""
+    if door.owner is None or not kit.resident:
+        return -1
+    var held = decomp_resident_find(door.owner, door.entries["x_decomp_dev_alloc"],
+                                    door.entries["x_decomp_dev_free"], source, name, False)
+    if held is None or Bool(py=held[7]):
+        return -1
+    door.keep(held)
+    return kit.add_device(Int(py=held[5]), Int(py=held[3]), Int(py=held[4]))
+
+
+def decomp_door_resident_keep(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                              a: Int) raises -> Bool:
+    """PACK `resident_keep`: matrix `a`, computed by RUN from the frozen
+    fitted operand `source` and left on the device, goes to the model's
+    record for later queries (its pool buffer leaves the kit's ledger for a
+    record capsule). False (nothing kept) for a host image, no query model,
+    an unfrozen source, or a buffer the kit does not own."""
+    if door.owner is None or not kit.resident:
+        return False
+    if not decomp_resident_frozen(source):
+        return False
+    var handle = kit.release_device(a)
+    if handle < 0:
+        return False
+    var held = decomp_resident_hold(door.owner, door.entries["x_decomp_dev_alloc"], door.entries["x_decomp_dev_free"],
+                                    source, name, kit.nrows(a), kit.ncols(a), handle, False)
+    door.keep(held)
+    return True
+
+
+def decomp_kit_out_shape(mut door: DecompDoor, mut kit: DKit, a: Int, shape: PythonObject) raises -> PythonObject:
+    """PACK `_M.out(shape)`: a fresh float32 Array of matrix a's words (a
+    device matrix comes down once, the GIL released)."""
+    var n = kit.size(a)
+    var result = classical_typed(shape, "<f4", door.output)
+    if n:
+        var src = 0
+        var py = Python()
+        with GILReleased(py):
+            src = kit.at(a)
+        unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
+                      src=DecompF32(unsafe_from_address=src), count=n)
+        _ = result  # keep the Python object alive through the copy above
+    return result
+
+
+def decomp_kit_publish(mut door: DecompDoor, mut kit: DKit, a: Int) raises -> PythonObject:
+    """PACK `_M.out()`: a fresh (rows, cols) float32 Array of matrix a."""
+    return decomp_kit_out_shape(door, kit, a, Python.tuple(kit.nrows(a), kit.ncols(a)))
