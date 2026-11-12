@@ -70,8 +70,3 @@ def registered_native_owner_pins(cls: PythonObject) raises -> Optional[NativeOwn
     if found and found.value().cls is cls:
         return found.value().pins
     return None
-
-
-def native_owner_no_pins(value: Int, index: Int) abi("C") -> Int:
-    # For audited owners consisting entirely of native words/handles.
-    return 0 if index == -1 else -1

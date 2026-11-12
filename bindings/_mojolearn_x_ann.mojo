@@ -13,7 +13,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_ann.abi import out_f32_to, out_i32_to
+from x_ann.mojolearn_x_ann_run import ivf_pq_build_run, ivf_pq_build_resident_run
 from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int, py_int_list
 from x_ann.switches import ANN3_DIRECT_OUT, IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
@@ -25,7 +25,7 @@ from providers.python.x_ann_resident_pyapi import x_ann_index_prepare_binding, x
 from providers.python.x_ann_resident_pyapi import x_ann_index_export_codes_binding
 from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.resident import x_ann_register_pq_built
-from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_sq_build_device, refine_device, ivf_rabitq_build_device
+from x_ann.ivf_pq_device import ivf_sq_build_device, refine_device, ivf_rabitq_build_device
 from x_ann.ops_entry_device import (
     ANN_OPS_DEVICE_API, ann_ops_device_v1, ann_ivf_pq_search_device_run, ann_ivf_sq_search_device_run,
     ann_ivf_rabitq_search_device_run, ann_cagra_search_device_run, ann_filter_topk_device_run,
@@ -34,7 +34,7 @@ from x_ann.ops_entry_device import (
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
 from core.neighbors_entry_table_ann import ann_ops_publish
 from bindings.py_balanced import py_setattr
-from x_ann.ivf_pq_device import IvfPqDevice, ivf_pq_build_device_resident
+from x_ann.ivf_pq_device import IvfPqDevice
 # TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
@@ -74,16 +74,10 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var codebooks_out = a_int(addrs, 4)
     var codes_out = a_int(addrs, 5)
     with GILReleased(Python()):
-        var index = ivf_pq_build_device(
-            x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr, x_addr
+        ivf_pq_build_run(
+            x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr, x_addr,
+            bst, centers_out, offsets_out, indices_out, codebooks_out, codes_out,
         )
-        bst.host("build")
-        out_f32_to(index.centers, centers_out)
-        out_i32_to(index.offsets, offsets_out)
-        out_i32_to(index.list_indices, indices_out)
-        out_f32_to(index.codebooks, codebooks_out)
-        out_i32_to(index.codes, codes_out)
-        bst.host("copy_out")
     return PythonObject(n)
 
 
@@ -122,15 +116,10 @@ def ivf_pq_build_resident_binding(addrs: PythonObject, params: PythonObject) rai
     var indices_out = a_int(addrs, 3)
     var codebooks_out = a_int(addrs, 4)
     with GILReleased(Python()):
-        index = ivf_pq_build_device_resident(
-            x, x_addr, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, dev
+        ivf_pq_build_resident_run(
+            x, x_addr, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, dev,
+            index, bst, centers_out, offsets_out, indices_out, codebooks_out,
         )
-        bst.host("build")
-        out_f32_to(index.centers, centers_out)
-        out_i32_to(index.offsets, offsets_out)
-        out_i32_to(index.list_indices, indices_out)
-        out_f32_to(index.codebooks, codebooks_out)
-        bst.host("copy_out")
     _ = x^
     var handle = x_ann_register_pq_built(index^, dev^)
     bst.host("register")

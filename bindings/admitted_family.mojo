@@ -63,6 +63,7 @@ from core.admitted_weights import (
 from core.host_finite_scan import host_all_finite_f32_strided
 from core.host_parallel_copy import host_parallel_copy_bytes
 from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
+from bindings.admitted_family_run import admitted_reverse_word
 
 comptime _AF_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _AF_F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -414,10 +415,7 @@ def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObje
         if not scalar.native_byte_order:
             # float(zero_dim_ndarray) accepted a byte-swapped scalar; keep
             # that scalar-only behavior before the unchanged cast.
-            var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=raw.addr)
-            var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(reversed)))
-            for byte in range(raw.itemsize):  # small-loop(one admitted scalar word)
-                dst[byte] = src[raw.itemsize - 1 - byte]
+            admitted_reverse_word(raw.addr, Int(py=classical_address(reversed)), raw.itemsize)
             scalar_address = Int(py=classical_address(reversed))
         admitted_cast_f64(scalar_address, 0, 0, 1, 1, raw.itemsize, raw.kind, ptr)
         var result = _weight_scalar(ptr[0], n, wide, context)
