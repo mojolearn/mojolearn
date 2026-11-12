@@ -79,6 +79,8 @@ FAMILIES = (
         host_modules=("xtrees/ops.mojo", "providers/python/xtrees_api_pyapi.mojo", "xtrees/api_kernels.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
                       "xtrees/dart_units.mojo", "xtrees/dart_host.mojo"),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "label_weights_native_api_v1",
             "x_trees_host_numeric_mode", "x_trees_host_vendor", "x_trees_host_column", "x_trees_host_sabotage",
             "x_trees_numeric_mode", "x_trees_vendor",
             "x_trees_sample_indices", "x_trees_weighted_sample", "x_trees_gather_f32", "x_trees_gather_i32",
