@@ -46,8 +46,8 @@ from core.shared_slot import SharedSlot
 
 #: Layout version of `CPythonTable` (core/shared_slot.mojo rule; the slot
 #: name carries it too). V8: the layout word.
-comptime _CPYTHON_TABLE_LAYOUT = 13
-comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV13"
+comptime _CPYTHON_TABLE_LAYOUT = 14
+comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV14"
 
 # PyObject *PyImport_GetModuleDict(void)  (borrowed)
 comptime _PyImport_GetModuleDict = ExternalFunction[
@@ -260,9 +260,8 @@ comptime _PySequence_Repeat = ExternalFunction[
 
 # Absorbed from ManifoldCalls of manifold_storage_native.mojo and the per-call
 # loads of neural_labels_native.mojo (lane ne1-e-table).
-# PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg)  (new, NULL on error)
-comptime _PyObject_CallOneArg = ExternalFunction[
-    "PyObject_CallOneArg", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# TOMBSTONE: PyObject_CallOneArg (its only table user, the ManifoldDevice
+# release, deleted 2026-11-12 by lane entangled-mkit; code recoverable at e561a66d6b).
 # PyObject *PyNumber_Long(PyObject *o)  (new)
 comptime _PyNumber_Long = ExternalFunction[
     "PyNumber_Long", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
@@ -382,7 +381,6 @@ struct CPythonTable(Defaultable, Movable):
     var PyIter_Next: _PyIter_Next.type
     var PyType_GetModule: _PyType_GetModule.type
     var PySequence_Repeat: _PySequence_Repeat.type
-    var PyObject_CallOneArg: _PyObject_CallOneArg.type
     var PyNumber_Long: _PyNumber_Long.type
     var PyNumber_Float: _PyNumber_Float.type
     var PyUnicode_FromKindAndData: _PyUnicode_FromKindAndData.type
@@ -465,7 +463,6 @@ struct CPythonTable(Defaultable, Movable):
         self.PyIter_Next = _PyIter_Next.load(lib)
         self.PyType_GetModule = _PyType_GetModule.load(lib)
         self.PySequence_Repeat = _PySequence_Repeat.load(lib)
-        self.PyObject_CallOneArg = _PyObject_CallOneArg.load(lib)
         self.PyNumber_Long = _PyNumber_Long.load(lib)
         self.PyNumber_Float = _PyNumber_Float.load(lib)
         self.PyUnicode_FromKindAndData = _PyUnicode_FromKindAndData.load(lib)
