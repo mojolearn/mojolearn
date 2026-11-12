@@ -19,6 +19,7 @@ from providers.python.transformer_decode_pyapi import transformer_decode_native_
 from bindings.mamba_public_native import mamba_native_c
 from bindings.samba_config_native import samba_config_c
 from bindings.samba_public_native import samba_public_c
+from providers.python.samba_program_handle_pyapi import samba_program_handle_type
 from bindings.neural_block_public import neural_block_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.causal_lm_public import causal_public_c
@@ -60,6 +61,9 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(mamba_native_c, "mamba_native_call")
         module.def_py_c_function(samba_config_c, "samba_config_call")
         module.def_py_c_function(samba_public_c, "samba_native_call")
+        # The Samba program handle owner (core/samba_program_handle.mojo) the
+        # Samba doors keep on a stack and a decode session: one binding owns it.
+        samba_program_handle_type(module)
         module.def_py_c_function(neural_block_c[0], "neural_block_init")
         module.def_py_c_function(neural_block_c[4], "neural_block_set_params")
         module.def_py_c_function(neural_block_c[5], "neural_block_getstate")

@@ -8,7 +8,7 @@ from bindings.causal_lm_public import _native_function
 from bindings.generation_buffers import generation_array
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from core.samba_optimizer_plan import SambaOptimizerPlan
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
+from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
 
 
 def samba_resident_provider(fields: PythonObject, entries: PythonObject) raises -> PythonObject:
@@ -21,20 +21,19 @@ def samba_resident_provider(fields: PythonObject, entries: PythonObject) raises 
 
 
 def samba_resident_session(fields: PythonObject, config: PythonObject, provider: PythonObject) raises -> PythonObject:
+    # Lane samba-sessions-native (2026-11-12): the session is always the
+    # primitive entry's native owner (op 12), adopted as a descriptor
+    # resource (release op 13). The second, Python-object session
+    # (`samba_resident_open` + `samba_resident_native_handle_v1`) and the
+    # `_resident_native_address` / `_resident_native_resource` words that
+    # told the two apart are deleted.
     var session = py_get(fields, "_resident_handle")
-    var pinned = py_get(fields, "_resident_native_provider")
     if session is not None:
-        if pinned is not None:
-            # A resident resource always belongs to its retained image. Reject
-            # image replacement instead of reading its owner in another image.
-            if pinned.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module:
-                raise Error("Samba resident session belongs to the prior binding; create a new stack after replacing bindings")
-            return session
-        var module = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
-        var handle = neural_descriptor_handle(provider, _native_function(module, "samba_resident_native_handle_v1"), session)
-        py_setitem(fields, "_resident_native_address", PythonObject(handle))
-        py_setitem(fields, "_resident_native_provider", provider)
-        py_setitem(fields, "_resident_native_resource", False)
+        var pinned = fields["_resident_native_provider"]
+        # A resident resource always belongs to its retained image. Reject
+        # image replacement instead of reading its owner in another image.
+        if pinned.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module:
+            raise Error("Samba resident session belongs to the prior binding; create a new stack after replacing bindings")
         return session
     var p: List[Int] = [Int(py=config["vocab"]), Int(py=config["d_model"])]
     for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # small-loop(resident model dimensions)
@@ -49,17 +48,13 @@ def samba_resident_session(fields: PythonObject, config: PythonObject, provider:
     var handle = neural_descriptor_execute(provider, 12, [Int(py=fields["flat"]._addr)], p,
         [Float64(py=config["norm_eps"])], False)
     session = neural_descriptor_adopt(provider, handle, 13, [12])
-    py_setitem(fields, "_resident_native_address", PythonObject(handle))
     py_setitem(fields, "_resident_native_provider", provider)
-    py_setitem(fields, "_resident_native_resource", True)
     py_setitem(fields, "_resident_handle", session)
     return session
 
 
-def samba_resident_address(fields: PythonObject, session: PythonObject) raises -> Int:
-    if Bool(py=fields["_resident_native_resource"]):
-        return neural_descriptor_resource_handle(session, [12])
-    return Int(py=fields["_resident_native_address"])
+def samba_resident_address(session: PythonObject) raises -> Int:
+    return neural_descriptor_resource_handle(session, [12])
 
 
 # TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_native_forward (descriptor op 16 forward) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
@@ -71,7 +66,7 @@ def samba_resident_native_step(fields: PythonObject, config: PythonObject, provi
                                info: PythonObject, loss: PythonObject, plan: SambaOptimizerPlan,
                                optimizer_handle: Int, accumulation: Int, total_count: Int) raises:
     var session = samba_resident_session(fields, config, provider)
-    var handle = samba_resident_address(fields, session)
+    var handle = samba_resident_address(session)
     # Validation remains GIL-held and BEFORE reserving model.busy, exactly as
     # the existing binding. The numerical operation consumes the validated slot.
     var h = neural_descriptor_execute(provider, 19, [], [optimizer_handle, Int(py=fields["n_total"])], [], False)

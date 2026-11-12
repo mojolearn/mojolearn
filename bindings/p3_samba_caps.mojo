@@ -23,9 +23,9 @@ comptime _SAMBA_CAPS_SLOT = "p3_samba_caps_v1"
 # Record layout (a Python tuple of exact ints/bools/strs).
 comptime SAMBA_CAP_MODE = 0  # Int: training_numeric_mode() of the binding (1 identical, 0 fast), -1 absent
 comptime SAMBA_CAP_VENDOR = 1  # training_vendor() of the binding, None when absent
-comptime SAMBA_CAP_RESIDENT_ABI = 2  # Bool: the three resident train-step entries exist
+comptime SAMBA_CAP_RESIDENT_ABI = 2  # Bool: the binding reports samba_resident_enabled (the resident step is the primitive entry's ops 12-18)
 comptime SAMBA_CAP_RESIDENT_ON = 3  # Bool: samba_resident_enabled() (compile-time switch)
-comptime SAMBA_CAP_ACCUMULATED = 4  # Bool: samba_resident_accumulated_step exists
+comptime SAMBA_CAP_ACCUMULATED = 4  # Bool: the resident accumulated step (primitive op 18) is compiled: equal to RESIDENT_ON
 comptime SAMBA_CAP_CHUNKED = 5  # Bool: training_chunked_lm_head_enabled() (False when absent)
 comptime SAMBA_CAP_AFN = 6  # Bool: the two fused training-tail entries exist
 comptime SAMBA_CAP_HEAD_LOSS = 7  # Bool: samba_head_loss exists
@@ -43,11 +43,13 @@ def _probe(entries: PythonObject) raises -> PythonObject:
     var vendor = PythonObject(None)
     if _has(bi, entries, "training_vendor"):
         vendor = _native_function(entries, "training_vendor")()
-    var abi = True
-    for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_step")]:  # driver-loop: over the fixed resident Samba ABI names, once per binding
-        abi = abi and _has(bi, entries, name)
+    # Lane samba-sessions-native (2026-11-12): the Python resident entries
+    # (`samba_resident_open/step/accumulated_step`) are deleted; the resident
+    # session and both steps are the primitive entry's ops 12-18, compiled
+    # together behind IDN_SAMBA_RESIDENT_STEP (training/native_resident_dispatch.mojo).
+    var abi = _has(bi, entries, "samba_resident_enabled")
     var resident_on = abi and Bool(py=_native_function(entries, "samba_resident_enabled")())
-    var accumulated = _has(bi, entries, "samba_resident_accumulated_step")
+    var accumulated = resident_on
     var chunked = _has(bi, entries, "training_chunked_lm_head_enabled") and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")())
     var afn = True
     for name in [String("samba_afn_tail_train"), String("samba_afn_embedding_backward_tied")]:  # driver-loop: over the fixed fused-tail names, once per binding

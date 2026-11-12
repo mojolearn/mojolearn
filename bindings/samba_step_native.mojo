@@ -5,7 +5,7 @@ This public execution owner accepts native built-in schedule configurations;
 arbitrary Python callbacks are refused before state mutation.
 """
 from providers.python.samba_execution_pyapi import samba_provider_accumulated_gradients
-from providers.python.samba_resident_pyapi import samba_resident_provider, samba_resident_session, samba_resident_native_step
+from providers.python.samba_resident_pyapi import samba_resident_provider, samba_resident_native_step
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
@@ -141,21 +141,14 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, mut record: Op
     _samba_open_optimizer(opt, record, entries, context, provider, device_plan)
     if record.control.handle < 0:
         return PythonObject(None)
-    var session = py_get(fields, "_resident_handle")
-    if provider is not None:
-        session = samba_resident_session(fields, config, provider)
-    elif session is None:
-        var kinds = Python.list()
-        for i in range(len(config["layers"])):  # driver-loop: over model layer kind metadata
-            _ = py_call(kinds.append, 0 if String(config["layers"][i]) == "mamba3" else 1)
-        var params = Python.list(config["vocab"], config["d_model"])
-        for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # driver-loop: over resident model shape metadata
-            _ = py_call(params.append, PythonObject(0) if config[name] is None else config[name])
-        _ = py_call(params.append, 1 if Bool(py=config["tie_embeddings"]) else 0)
-        _ = py_call(params.append, config["norm_eps"])
-        _ = py_call(params.append, fields["n_total"])
-        session = py_call(_native_function(entries, "samba_resident_open"), kinds, params, fields["flat"]._addr)
-        py_setitem(fields, "_resident_handle", session)
+    # The resident session is the primitive entry's native owner (op 12,
+    # training/native_resident_dispatch.mojo), opened by
+    # samba_resident_native_step below on whichever primitive provider the
+    # stack connected. Lane samba-sessions-native (2026-11-12) deleted the
+    # second, Python-object session (`samba_resident_open`, a
+    # `_SambaResidentSession` held in `_resident_handle` and adopted through
+    # `samba_resident_native_handle_v1`): the same SambaResidentSession, the
+    # same constructor words.
     var plan = _samba_step_plan(fields, opt, context, schedule)
     var info = generation_array([3])
     var loss = generation_array([1])
