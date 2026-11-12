@@ -28,7 +28,7 @@ from bindings.svc_common import svc_builtins, svc_cached_class_table, svc_shape_
 from bindings.labels_descriptor_boundary import labels_prepare_targets, labels_gather
 from bindings.labels_score_boundary import ScoreKeyOwner, score_keys_unpack, score_keys_union, score_keys_index
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
-from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words
+from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words, SvcUsedClasses
 from core.gp_native_accuracy import GPCAccuracyProgram
 from bindings.arena_prog_native import _family_entries, _switch
 from bindings.x_prep_native_owner import _resident_scope
@@ -92,7 +92,12 @@ def svc_decode_score(owner: PythonObject, var classes: PythonObject, codes: List
         raise Error("IndexError: list index out of range")
     # UNPACK per USED class (the rows only index them, in native code): the
     # class objects a row-by-row decode would have referenced, once each.
-    var used = svc_used_classes(codes, len(classes))
+    # The row scan is data-sized native work over plain words: the GIL is
+    # released around it like the gathers below (lane perf-audit-2-a).
+    var n_classes = len(classes)
+    var used = SvcUsedClasses(0)
+    with GILReleased(Python()):
+        used = svc_used_classes(codes, n_classes)
     var result = SvcDecodedScore(count, GP_LABEL_OBJECT)
     var tuple_input = py_type(classes) is svc_builtins().tuple
     for i in range(len(used.order)):  # UNPACK one borrowed reference per used class (C slot, no protocol)
