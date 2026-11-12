@@ -9,8 +9,7 @@ from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from glm.linear_fit_device import linear_fit_device_v1
 from glm.linear_predict_device import linear_predict_device_v1
-from std.python.bindings import lookup_py_type_object
-from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
 from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
@@ -1665,7 +1664,6 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[inverse_transform_binding]("inverse_transform")
         # Device-resident TruncatedSVD components (lane ne1-a-decomp-resident).
         _ = m.add_type[TsvdResidentLease]("_TsvdResidentLease")
-        register_native_owner(lookup_py_type_object[TsvdResidentLease](), m.module, native_owner_no_pins)
         m.def_function[tsvd_resident_lease_binding]("tsvd_resident_lease")
         m.def_function[tsvd_resident_stats_binding]("tsvd_resident_stats")
         m.def_function[tsvd_transform_resident_binding]("tsvd_transform_resident")
@@ -1713,6 +1711,9 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
         var published_module = m.finalize()
+        # The owner identity needs the finalized type object (Mojo 1.2 creates
+        # it in finalize(); see bindings/native_owner_registry.mojo).
+        register_native_owner_type[TsvdResidentLease](published_module, native_owner_no_pins)
         _publish_linear_entry_table()
         _publish_estimators_qn_table()
         # The ridge multi table (core/linear_entry_table_multi.mojo).

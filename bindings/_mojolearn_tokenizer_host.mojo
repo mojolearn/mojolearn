@@ -67,7 +67,7 @@ tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
 it; the `break_ties_high` flag in `dims` is the Python door's environment
 spelling of the same arm.
 """
-from bindings.native_owner_registry import register_native_owner
+from bindings.native_owner_registry import register_native_owner_type
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import unsafe_memcpy
 from std.os import abort
@@ -102,7 +102,6 @@ from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.optimizer_owner_boundary import OptimizerOwner
 from std.python.bindings import lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
@@ -1172,7 +1171,7 @@ def register_optimizer_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[OptimizerOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[OptimizerOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[OptimizerOwner]("_OptimizerOwner")
         return
@@ -1355,9 +1354,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
         _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
-        register_native_owner(lookup_py_type_object[NeuralDescriptorProvider](), module.module, neural_descriptor_provider_pins)
         _ = module.add_type[NativeDescriptorResource]("_NativeDescriptorResource")
-        register_native_owner(lookup_py_type_object[NativeDescriptorResource](), module.module, native_descriptor_resource_pins)
         _ = module.add_type[ProviderOperationLock]("_NativeOperationLockOwner")
         module.def_function[operation_lock_connect]("operation_lock_connect")
         module.def_py_c_function(operation_lock_c[0], "operation_lock_init")
@@ -1392,6 +1389,11 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_init")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_repr")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_repr")
-        return module.finalize()
+        # Owner identities need the finalized type objects (Mojo 1.2 creates
+        # them in finalize(); see bindings/native_owner_registry.mojo).
+        var published = module.finalize()
+        register_native_owner_type[NeuralDescriptorProvider](published, neural_descriptor_provider_pins)
+        register_native_owner_type[NativeDescriptorResource](published, native_descriptor_resource_pins)
+        return published
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))

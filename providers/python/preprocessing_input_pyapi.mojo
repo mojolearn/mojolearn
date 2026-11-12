@@ -4,7 +4,6 @@
 # stages share a frozen Array view and retain its original buffer owners.
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.py_balanced import py_call, py_type, py_setattr, py_setitem
 from bindings.native_loaded_module import native_loaded_module
@@ -48,7 +47,7 @@ def register_scaler_snapshot(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[ScalerInputSnapshot]()
     except error:
-        if not py_type_absent(error, String(reflect[ScalerInputSnapshot].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[ScalerInputSnapshot]("_ScalerInputSnapshot")
         return

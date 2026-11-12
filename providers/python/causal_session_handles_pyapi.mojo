@@ -3,7 +3,6 @@
 # causal-lm-sessions-native, 2026-11-11). Module setup only, GIL held.
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from core.causal_session_handles import CausalSessionHandles
 
@@ -18,7 +17,7 @@ def causal_session_handles_type(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[CausalSessionHandles]()
     except error:
-        if not py_type_absent(error, String(reflect[CausalSessionHandles].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[CausalSessionHandles]("_CausalSessionHandles")
         return

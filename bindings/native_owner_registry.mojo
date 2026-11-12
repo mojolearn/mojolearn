@@ -2,10 +2,11 @@
 """Exact compiled owner identities and native inspection of their retained pins.
 
 Only audited compiled type registrars call register_native_owner, using the
-canonical result of lookup_py_type_object after add_type/attachment. Nothing
+canonical result of lookup_py_type_object after the module is finalized. Nothing
 here is exported to Python. Registration and admission hold the GIL.
 """
 from std.python import PythonObject
+from std.python.bindings import lookup_py_type_object
 from std.python._cpython import PyObjectPtr
 from core.shared_slot import SharedSlot
 
@@ -50,6 +51,17 @@ def register_native_owner(cls: PythonObject, module: PythonObject, pins: NativeO
     var address = Int(cls._obj_ptr)
     if address not in registry[].entries:
         registry[].entries[address] = NativeOwnerRegistration(cls, module, pins)
+
+
+def register_native_owner_type[T: AnyType](module: PythonObject, pins: NativeOwnerPins) raises:
+    # Call only AFTER PythonModuleBuilder.finalize(). Under Mojo 1.2 add_type
+    # only queues a PythonTypeBuilder; finalize() runs PyType_FromSpec and
+    # records the type in MOJO_PYTHON_TYPE_OBJECTS, so a lookup between
+    # add_type and finalize raises "No Python type object registered" and the
+    # PyInit aborts (import smoke 2026-11-12, _mojolearn_estimators.mojo:1722).
+    # On a second initialization the lookup returns the canonical class the
+    # first one created, and register_native_owner keeps the first entry.
+    register_native_owner(lookup_py_type_object[T](), module, pins)
 
 
 def registered_native_owner_pins(cls: PythonObject) raises -> Optional[NativeOwnerPins]:

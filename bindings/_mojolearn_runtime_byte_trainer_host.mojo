@@ -18,7 +18,6 @@ from bindings.byte_lm_trainer_native import byte_lm_trainer_c, byte_lm_pooled_fi
 from bindings.parallel_byte_native import parallel_byte_c, ParallelByteOwner
 from bindings.byte_lm_session_owner import register_bytelmsessionowner
 from std.python.bindings import lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 
 comptime RUNTIME_BYTE_TRAINER_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -55,7 +54,7 @@ def register_parallelbyteowner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[ParallelByteOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[ParallelByteOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[ParallelByteOwner]("_ParallelByteOwner")
         return
