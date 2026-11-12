@@ -28,7 +28,8 @@ from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address
-from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
+from bindings.x_prep_native_owner_run import xprep_r3
+from bindings.x_prep_native_owner import xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
 from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
 from bindings.x_prep_native_owner import xprep_drop_resident
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys

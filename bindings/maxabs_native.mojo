@@ -19,7 +19,8 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
-from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.x_prep_native_owner_run import xprep_r3
+from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run
 from core.scaler_fit_impl import scaler_refuse_infinite
 from bindings.py_optional import py_or_none, py_present
 

@@ -24,7 +24,8 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
-from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
+from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.py_typed_call import py_call_typed
 from bindings.cpython_table import cpython_table
 from bindings.prep_support_native import prep_support
