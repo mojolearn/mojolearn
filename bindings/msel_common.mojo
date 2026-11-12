@@ -852,7 +852,7 @@ struct MselRng(Movable):
             _ = py_call(result.append, rows)
         # The copied offsets are raw addresses into arena. Retain its storage
         # through every row allocation/copy, not just through _arena_base.
-        _ = arena
+        _ = arena^
         _ = prog^
         return result
 
@@ -864,8 +864,16 @@ struct MselRng(Movable):
         var o = prog.want(slot, size)
         var arena = _reg_run(prog, PythonObject(None), context)
         _ = prog^
+        # PACK: the words o..o+size of the native arena as one bytes object,
+        # read as `array('i')` (lane entangled-programs: the arena is native).
+        ref cpy = Python().cpython()
+        var raw = cpython_table()[].PyBytes_FromStringAndSize(_arena_base(arena) + 4 * o, 4 * size)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        var chunk = PythonObject(from_owned=raw)
+        _ = arena^
         var store = py_call(native_loaded_module("array").array, PythonObject("i"))
-        _ = py_call(store.frombytes, py_call(py_call(py_attr(arena, "__getitem__"), py_call(msel_b().slice, PythonObject(o), PythonObject(o + size))).tobytes))
+        _ = py_call(store.frombytes, chunk)
         return py_call(msel_b().list, store)
 
     def approximate_modes(mut self, counts: List[Int], n_train: Int, n_test: Int,
@@ -893,7 +901,7 @@ struct MselRng(Movable):
         var both = List[Int]()
         for i in range(2 * k):  # driver-loop: over classes (train and test counts)
             both.append(Int(words[out + i]))
-        _ = arena
+        _ = arena^
         _ = prog^
         return both^
 

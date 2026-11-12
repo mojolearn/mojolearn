@@ -38,7 +38,7 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
 from bindings.arena_prog_native import _metrics_run_plan, _family_dictionary
-from bindings.metrics_plan_admission import MetricArenaOwner
+from bindings.arena_prog_run import MetricArenaOwner
 from core.metrics_program_plan import MetricProgramPlan
 from core.labels_accuracy_plan import label_accuracy_plan
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
@@ -1572,7 +1572,7 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
         w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
         inputs.append(w_array)
     var arena = _accuracy_run(plan.program, inputs, mode, context)
-    var base = arena.base
+    var base = arena.base()
     var result_at = plan.result_offset
     _ = yt
     _ = yp

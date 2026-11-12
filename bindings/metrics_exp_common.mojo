@@ -20,7 +20,8 @@
 from std.memory import unsafe_memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.admitted_family import admit_family
-from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
+from bindings.metrics_plan_admission import MetricPlanOpcodes
+from bindings.arena_prog_run import MetricArenaOwner
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi import metric_score_matrix
@@ -266,47 +267,38 @@ struct MxProg(Movable):
 
 
 struct MxArena(Copyable, Movable):
-    """A run program's arena (the float32 `array.array` the runner made)."""
-    var store: PythonObject
-    var base: Int
+    """A run program's arena: the native store `_metrics_run_plan` returns
+    (lane entangled-programs, 2026-11-12: was the Python `array.array`).
+    Every read takes the base from the store this value owns."""
+    var arena: MetricArenaOwner
 
-    def __init__(out self, arena: MetricArenaOwner):
-        self.store = arena.store
-        self.base = arena.base
+    def __init__(out self, var arena: MetricArenaOwner):
+        self.arena = arena^
 
     def i32(self, off: Int) -> Int:
-        var result = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
-        _ = self.store
-        return result
+        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)[0])
 
     def i64(self, off: Int) -> Int:
-        var result = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
-        _ = self.store
-        return result
+        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)[0])
 
     def f64(self, off: Int) -> Float64:
         """The binary64 value of arena[off], arena[off + 1], low first (`words(off, 2, "d")`)."""
-        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)
-        var result = bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
-        _ = self.store
-        return result
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)
+        return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
 
     def f32(self, off: Int) -> Float64:
         """`floats(off, 1)[0]`: the Float32 word, widened."""
-        var result = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
-        _ = self.store
-        return result
+        return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)[0])
 
     def words(self, off: Int, words: Int, shape: PythonObject, typestr: String,
               context: PythonObject) raises -> PythonObject:
-        """`Array._owned(words(off, words, code), shape, typestr)`: a copy of
-        the arena words as a new Array."""
+        """PACK `Array._owned(words(off, words, code), shape, typestr)`: a
+        copy of the arena words as a new Array."""
         var result = family_array(shape, typestr, context)
         if words > 0:
             unsafe_memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
-                   src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off), count=words)
-            _ = result  # keep both owners alive through the native copy above
-            _ = self.store
+                   src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off), count=words)
+            _ = result  # keep the Python object alive through the native copy above
         return result
 
 

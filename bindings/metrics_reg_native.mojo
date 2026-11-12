@@ -28,7 +28,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run_plan
-from bindings.cpython_table import cpython_table
+from bindings.arena_prog_run import MetricArenaOwner
 from bindings.metrics_plan_admission import MetricPlanOpcodes
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.family_common import (
@@ -247,46 +247,38 @@ struct _Reg(Movable):
         return scores
 
 
-def _reg_run(prog: _Prog, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+def _reg_run(prog: _Prog, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
     """`_run(prog, numeric_mode)`: the program handed to the shared runner's
-    native plan entry (the one call the Python `_run` made); returns the
-    arena store."""
+    native plan entry (UNPACK + typed RUN, bindings/arena_prog_native.mojo);
+    returns the native arena (lane entangled-programs, 2026-11-12: was the
+    Python store, read through a CPython buffer export per word read)."""
     var prog_context = context["family_metrics_prog_context"]
-    var owner = _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
-    return owner.store
+    return _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
 
 
-def _arena_base(arena: PythonObject) raises -> Int:
-    # p3-labels-metrics: the store's address through one C buffer export
-    # (the process-wide table), not a Python `buffer_info()` call, attribute
-    # lookup and tuple per word read. The caller holds `arena` across reads.
-    ref cpy = Python().cpython()
-    var storage = List[Int](length=10, fill=0)
-    var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpython_table()[].PyObject_GetBuffer(arena._obj_ptr, pointer, Int32(0)) != 0:
-        raise cpy.unsafe_get_error()
-    var address = storage[0]
-    cpython_table()[].PyBuffer_Release(pointer)
-    _ = storage^
-    return address
+def _arena_base(arena: MetricArenaOwner) -> Int:
+    # Lane entangled-programs (2026-11-12): the native arena's base (was one
+    # CPython buffer export of the Python arena store per read). The caller
+    # holds `arena` across every read through the address.
+    return arena.base()
 
 
-def _arena_double(arena: PythonObject, off: Int) raises -> Float64:
+def _arena_double(arena: MetricArenaOwner, off: Int) raises -> Float64:
     """The binary64 value whose words are arena[off], arena[off + 1], low first."""
-    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)
+    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)
     return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
 
 
-def _arena_float(arena: PythonObject, off: Int) raises -> Float32:
+def _arena_float(arena: MetricArenaOwner, off: Int) raises -> Float32:
     """The binary32 value at arena[off], read while `arena` is borrowed."""
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0]
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0]
 
 
-def _arena_int(arena: PythonObject, off: Int) raises -> Int:
-    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0])
+def _arena_int(arena: MetricArenaOwner, off: Int) raises -> Int:
+    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0])
 
 
-def _reg_result(r: _Reg, out_buf: Int, arena: PythonObject, context: PythonObject) raises -> PythonObject:
+def _reg_result(r: _Reg, out_buf: Int, arena: MetricArenaOwner, context: PythonObject) raises -> PythonObject:
     """`_Reg.result`'s answer: a float, or the per-output float64 Array for raw_values."""
     if r.mo == "raw_values":
         var values = family_array(Python.tuple(r.d), "<f8", context)
@@ -294,10 +286,9 @@ def _reg_result(r: _Reg, out_buf: Int, arena: PythonObject, context: PythonObjec
         # The completed arena is private to this operation. Resolve its
         # storage once, keeping the existing low-word-first binary64 decoding
         # without a Python/CPython address lookup for each reported output.
-        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * out_buf)
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * out_buf)
         for i in range(r.d):  # driver-loop: over the metric's outputs
             dst[i] = bitcast[DType.float64](UInt64(words[2 * i]) | (UInt64(words[2 * i + 1]) << 32))
-        _ = arena
         _ = values
         return values
     return PythonObject(_arena_double(arena, out_buf))
@@ -492,8 +483,8 @@ def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject
     var arena = _reg_run(prog, args[2], context)
     # Read through the helper: `arena` is the only owner of the store, and
     # Mojo releases a local at its last named use, so a pointer taken from
-    # `_arena_base(arena)` here would read freed words (different max_error
-    # bits run to run on CUDA).
+    # `arena.base()` here would read freed words (different max_error bits
+    # run to run on CUDA).
     return PythonObject(Float64(_arena_float(arena, out)))
 
 
@@ -529,7 +520,7 @@ def _tweedie_power(power: PythonObject, context: PythonObject) raises -> Float64
     return Float64(py=family_call(native_loaded_module("builtins").float, power))
 
 
-def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, arena: PythonObject) raises:
+def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, arena: MetricArenaOwner) raises:
     """`_tweedie_domain`'s check, after the run."""
     var msg = "Mean Tweedie deviance error with power=" + shown + " can only be used on "
     var y_neg = _arena_int(arena, flags_y) != 0
