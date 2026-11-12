@@ -61,11 +61,17 @@ def _warning_admit_category(cls: PythonObject, context: PythonObject) raises:
     if not warning or py_type(py_call(b.type.__getattribute__,cls,"__name__")) is not b.str:
         raise Error("TypeError: warning category names and ancestry must be native metadata")
     for k in range(len(names)):  # driver-loop: over standard native exception slots
-        var found = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var declared = Optional[PythonObject]()
         for j in range(len(mro)):  # driver-loop: over native exception slot declarations
-            found = py_get(_warning_class_fields(mro[j]), names[k])
-            if found is not None:
+            var slot = py_get(_warning_class_fields(mro[j]), names[k])
+            if slot is not None:
+                declared = slot
                 break
+        if not declared:
+            # every warning class inherits BaseException's slots; none declared is not a native warning
+            raise Error("TypeError: custom warning exception hooks are not native")
+        var found = declared.value()
         var admitted = found is context["warning_category_slots"][names[k]]
         if k == 0:
             var constructors = context["warning_native_new"]
@@ -137,7 +143,8 @@ def classical_warning(message: String, category: PythonObject, context: PythonOb
         source_line = PythonObject("")
     var category_name = String(py_call(b.type.__getattribute__, category, "__name__"))
     var filters = py_get(fields, "filters")
-    var log = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: a context's `log` of None is absent (modular/modular#7546).
+    var log = Optional[PythonObject]()
     if Bool(py=context["warning_context_enabled"]):
         var active = py_get(context["warning_context_var"], context["warning_global_context"])
         if active is not context["warning_global_context"]:
@@ -145,8 +152,10 @@ def classical_warning(message: String, category: PythonObject, context: PythonOb
                 raise Error("TypeError: custom warning contexts are not native")
             var stored = _warning_fields(py_call(context["warning_context_fields"].__get__, active))
             filters = py_get(stored, "_filters")
-            log = py_get(stored, "log")
-    if py_type(filters) is not b.list or (log is not None and py_type(log) is not b.list):
+            var recorded = py_get(stored, "log")
+            if recorded is not None:
+                log = recorded
+    if py_type(filters) is not b.list or (Bool(log) and py_type(log.value()) is not b.list):
         raise Error("TypeError: warning filters and recording require native lists")
     var old = context["warning_filter_rows"]
     var changed = filters is not context["warning_filter_owner"] or len(old) != len(filters)
@@ -197,7 +206,7 @@ def classical_warning(message: String, category: PythonObject, context: PythonOb
         pass
     else:
         raise Error("TypeError: custom warning recording callbacks are not native")
-    if log is not None:
+    if log:
         var record_class = context["warning_record"]
         var ancestry = py_call(b.type.__dict__["__mro__"].__get__, record_class)
         if len(ancestry) != 2 or ancestry[1] is not b.object or py_get(_warning_class_fields(record_class), "__del__") is not None:
@@ -212,7 +221,7 @@ def classical_warning(message: String, category: PythonObject, context: PythonOb
         py_setitem(stored, "line", PythonObject(None))
         py_setitem(stored, "source", PythonObject(None))
         py_setitem(stored, "_category_name", category_name)
-        py_call(log.append, record)
+        py_call(log.value().append, record)
         if mode != "always" and mode != "all":
             py_setitem(context["warning_seen"], key, True)
         return
