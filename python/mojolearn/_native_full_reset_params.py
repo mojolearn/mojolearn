@@ -2,28 +2,6 @@
 """Import-time schemas for full-reset field-only parameter setters."""
 from types import BuiltinFunctionType
 from .tokenizer import _binding
-from . import _expansion_trees as _m0
-from . import _expansion_neighbors as _m1
-from . import _expansion_cluster as _m2
-from . import _hierarchy_impl as _m3
-from . import _expansion_ann as _m4
-from . import density as _m6
-from . import _solver_impl as _m7
-from . import mixture as _m9
-from . import _gpc_impl as _m10
-from . import _gp_impl as _m11
-from . import hdbscan as _m12
-from . import _ivf_impl as _m13
-from . import _iforest_impl as _m14
-from . import _expansion_linear as _m15
-from . import cluster as _m16
-from . import neighbors as _m17
-from . import kernel_methods as _m18
-from . import svm as _m19
-from . import decomposition as _m21
-from . import _svm_impl as _m22
-from . import _spectral_impl as _m23
-from . import _umap_impl as _m24
 
 _ENTRY = _binding()._module.full_reset_params_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
@@ -46,95 +24,104 @@ _CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
 # original signature, which the native constructor plan retains verbatim.
 # Keep an explicit vetted inventory; field-only construction alone does not
 # establish that the remaining methods of every _CLASSES member are native.
+# Class names, resolved through _CLASS_SOURCES when their family loads.
 _NATIVE_PUBLIC_CLASSES = (
-    _m17.NearestNeighbors,
-    _m17.KNeighborsClassifier,
-    _m17.KNeighborsRegressor,
-    _m17.RadiusNeighbors,
-    _m1.LocalOutlierFactor,
-    _m1.NearestCentroid,
-    _m13.IVFIndex,
-    _m4.IVFPQIndex,
-    _m4.IVFSQIndex,
-    _m4.IVFRaBitQIndex,
-    _m4.CagraIndex,
+    'NearestNeighbors',
+    'KNeighborsClassifier',
+    'KNeighborsRegressor',
+    'RadiusNeighbors',
+    'LocalOutlierFactor',
+    'NearestCentroid',
+    'IVFIndex',
+    'IVFPQIndex',
+    'IVFSQIndex',
+    'IVFRaBitQIndex',
+    'CagraIndex',
 )
 # Native archives below also replace the old post-load fit wrapper. Their
 # sole package hook (NearestNeighbors' empty resident holder) is published by
 # host_archive_native; the connected identity refuses changed/user hooks.
 _NATIVE_PUBLIC_LOADERS = (
-    _m17.NearestNeighbors, _m17.KNeighborsClassifier,
-    _m17.KNeighborsRegressor, _m17.RadiusNeighbors, _m13.IVFIndex,
+    'NearestNeighbors',
+    'KNeighborsClassifier',
+    'KNeighborsRegressor',
+    'RadiusNeighbors',
+    'IVFIndex',
 )
-_CLASSES = (
-    _m0.AdaBoostClassifier,
-    _m0.AdaBoostRegressor,
-    _m1.AdditiveChi2Sampler,
-    _m2.AffinityPropagation,
-    _m3.AgglomerativeClustering,
-    _m0.BaggingClassifier,
-    _m0.BaggingRegressor,
-    _m2.BayesianGaussianMixture,
-    _m2.BisectingKMeans,
-    _m4.CagraIndex,
-    _m0.CalibratedClassifierCV,
-    _m6.DBSCAN,
-    _m7.ElasticNet,
-    _m9.GaussianMixture,
-    _m10.GaussianProcessClassifier,
-    _m11.GaussianProcessRegressor,
-    _m12.HDBSCAN,
-    _m13.IVFIndex,
-    _m4.IVFPQIndex,
-    _m4.IVFRaBitQIndex,
-    _m4.IVFSQIndex,
-    _m14.IsolationForest,
-    _m15.IsotonicRegression,
-    _m16.KMeans,
-    _m1.KNNImputer,
-    _m17.KNeighborsClassifier,
-    _m17.KNeighborsRegressor,
-    _m6.KernelDensity,
-    _m1.KernelPCA,
-    _m18.KernelRidge,
-    _m1.LabelPropagation,
-    _m1.LabelSpreading,
-    _m7.Lasso,
-    _m19.LinearSVC,
-    _m19.LinearSVR,
-    _m1.LocalOutlierFactor,
-    _m1.Louvain,
-    _m2.MeanShift,
-    _m2.MiniBatchKMeans,
-    _m0.MultiOutputClassifier,
-    _m0.MultiOutputRegressor,
-    _m1.NearestCentroid,
-    _m17.NearestNeighbors,
-    _m18.Nystroem,
-    _m2.OPTICS,
-    _m1.OneClassSVM,
-    _m0.OneVsRestClassifier,
-    _m21.PCA,
-    _m1.PageRank,
-    _m1.PolynomialCountSketch,
-    _m18.RBFSampler,
-    _m17.RadiusNeighbors,
-    _m0.RandomTreesEmbedding,
-    _m15.SGDOneClassSVM,
-    _m22.SVC,
-    _m1.SVGP,
-    _m22.SVR,
-    _m1.SkewedChi2Sampler,
-    _m23.SpectralClustering,
-    _m23.SpectralEmbedding,
-    _m0.StackingClassifier,
-    _m0.StackingRegressor,
-    _m4.TSNE,
-    _m21.TruncatedSVD,
-    _m24.UMAP,
-    _m0.VotingClassifier,
-    _m0.VotingRegressor,
-)
+# Class name -> the package module that defines it (lane lazy-family-import,
+# 2026-11-12): a family is connected when it loads (`collect()` then
+# `install()`/`connect()` from `_families`), never imported by this module.
+_CLASS_SOURCES = {
+    'AdaBoostClassifier': '_expansion_trees',
+    'AdaBoostRegressor': '_expansion_trees',
+    'AdditiveChi2Sampler': '_expansion_neighbors',
+    'AffinityPropagation': '_expansion_cluster',
+    'AgglomerativeClustering': '_hierarchy_impl',
+    'BaggingClassifier': '_expansion_trees',
+    'BaggingRegressor': '_expansion_trees',
+    'BayesianGaussianMixture': '_expansion_cluster',
+    'BisectingKMeans': '_expansion_cluster',
+    'CagraIndex': '_expansion_ann',
+    'CalibratedClassifierCV': '_expansion_trees',
+    'DBSCAN': 'density',
+    'ElasticNet': '_solver_impl',
+    'GaussianMixture': 'mixture',
+    'GaussianProcessClassifier': '_gpc_impl',
+    'GaussianProcessRegressor': '_gp_impl',
+    'HDBSCAN': 'hdbscan',
+    'IVFIndex': '_ivf_impl',
+    'IVFPQIndex': '_expansion_ann',
+    'IVFRaBitQIndex': '_expansion_ann',
+    'IVFSQIndex': '_expansion_ann',
+    'IsolationForest': '_iforest_impl',
+    'IsotonicRegression': '_expansion_linear',
+    'KMeans': 'cluster',
+    'KNNImputer': '_expansion_neighbors',
+    'KNeighborsClassifier': 'neighbors',
+    'KNeighborsRegressor': 'neighbors',
+    'KernelDensity': 'density',
+    'KernelPCA': '_expansion_neighbors',
+    'KernelRidge': 'kernel_methods',
+    'LabelPropagation': '_expansion_neighbors',
+    'LabelSpreading': '_expansion_neighbors',
+    'Lasso': '_solver_impl',
+    'LinearSVC': 'svm',
+    'LinearSVR': 'svm',
+    'LocalOutlierFactor': '_expansion_neighbors',
+    'Louvain': '_expansion_neighbors',
+    'MeanShift': '_expansion_cluster',
+    'MiniBatchKMeans': '_expansion_cluster',
+    'MultiOutputClassifier': '_expansion_trees',
+    'MultiOutputRegressor': '_expansion_trees',
+    'NearestCentroid': '_expansion_neighbors',
+    'NearestNeighbors': 'neighbors',
+    'Nystroem': 'kernel_methods',
+    'OPTICS': '_expansion_cluster',
+    'OneClassSVM': '_expansion_neighbors',
+    'OneVsRestClassifier': '_expansion_trees',
+    'PCA': 'decomposition',
+    'PageRank': '_expansion_neighbors',
+    'PolynomialCountSketch': '_expansion_neighbors',
+    'RBFSampler': 'kernel_methods',
+    'RadiusNeighbors': 'neighbors',
+    'RandomTreesEmbedding': '_expansion_trees',
+    'SGDOneClassSVM': '_expansion_linear',
+    'SVC': '_svm_impl',
+    'SVGP': '_expansion_neighbors',
+    'SVR': '_svm_impl',
+    'SkewedChi2Sampler': '_expansion_neighbors',
+    'SpectralClustering': '_spectral_impl',
+    'SpectralEmbedding': '_spectral_impl',
+    'StackingClassifier': '_expansion_trees',
+    'StackingRegressor': '_expansion_trees',
+    'TSNE': '_expansion_ann',
+    'TruncatedSVD': 'decomposition',
+    'UMAP': '_umap_impl',
+    'VotingClassifier': '_expansion_trees',
+    'VotingRegressor': '_expansion_trees',
+}
+# The loaded classes of _CLASS_SOURCES, in its order (`collect()`).
+_CLASSES = ()
 # Modules that need NumPy at import stay lazy: `import mojolearn` never imports
 # NumPy. Each one calls connect_module(globals()) as its last statement, which
 # connects these classes with the same schemas, order and native context.
@@ -255,11 +242,24 @@ class NativeFullResetParams:
         return _ENTRY(self, params, _CONTEXT)
 
 
+def collect():
+    """Refresh `_CLASSES` with the classes of the loaded families."""
+    # glue: fixed class inventory of the families imported so far
+    global _CLASSES
+    import sys
+    found = []
+    for name, source in _CLASS_SOURCES.items():  # glue: fixed vetted class table
+        module = sys.modules.get(__package__ + '.' + source)
+        if module is not None:
+            found.append(getattr(module, name))
+    _CLASSES = tuple(found)
+
+
 def _install(classes):
     # glue: install only source-vetted classes before class-layout snapshots
     import inspect
+    import sys
     from ._mode import ParamsMixin
-    from . import _classical_host
     from ._native_public_attributes import _resolved
     from ._native_archive_bridge import connect as archive_connection
     archive = archive_connection()[1].get('host_archive_context')
@@ -301,12 +301,18 @@ def _install(classes):
     # The explicit host inference subclasses have their own constructor and
     # storage contracts. Keep their existing setter debt visible: changing a
     # selected base must not silently replace a host setter with a refusal.
+    # The host module may load before or after its bases' families, so its
+    # descendants of any installed base are kept on the original setter.
+    host = sys.modules.get(__package__ + '._classical_host')
     previous = _CONTEXT.get('deferred_host_classes', ())
-    deferred = tuple(cls for cls in vars(_classical_host).values()  # glue: fixed built-in descendants outside this migration
-                     if type(cls) is type and cls not in _CONTEXT['plans'] and cls not in previous
-                     and cls.__module__ == _classical_host.__name__
-                     and any(base in classes for base in cls.__mro__[1:])  # glue: fixed host ancestry during import
-                     and _resolved(cls, 'set_params', _CONTEXT['missing']) is ParamsMixin.set_params)
+    installed = set(_CONTEXT['originals'])
+    deferred = () if host is None else tuple(
+        cls for cls in vars(host).values()  # glue: fixed built-in descendants outside this migration
+        if type(cls) is type and cls not in _CONTEXT['plans'] and cls not in previous
+        and cls.__module__ == host.__name__ and 'set_params' not in vars(cls)
+        and any(base in installed for base in cls.__mro__[1:])  # glue: fixed host ancestry at connection
+        and _resolved(cls, 'set_params', _CONTEXT['missing']) in (ParamsMixin.set_params,
+                                                                   NativeFullResetParams.set_params))
     for cls in deferred:  # glue: preserve the original unconverted host contract before changing bases
         cls.set_params = ParamsMixin.set_params
     _CONTEXT['deferred_host_classes'] = previous + deferred
@@ -321,17 +327,18 @@ def _install(classes):
         function.__doc__ = original.__doc__
         function.__signature__ = _CONTEXT['plans'][cls]['signature']
         cls.__init__ = function
-        if cls in _NATIVE_PUBLIC_LOADERS and archive is not None:
+        if cls.__name__ in _NATIVE_PUBLIC_LOADERS and archive is not None:
             archive.setdefault('host_archive_native_loader_hooks', {})[cls] = (
                 _resolved(cls, '_mojolearn_after_fit', _CONTEXT['missing']),
                 _CONTEXT['missing'])
-        if cls in _NATIVE_PUBLIC_CLASSES:
+        if cls.__name__ in _NATIVE_PUBLIC_CLASSES:
             cls._mojolearn_native_public = True
 
 
 def install():
-    # glue: the NumPy-free classes; _DEFERRED_MODULES connect when they load
-    _install(_CLASSES)
+    # glue: the loaded NumPy-free classes not installed yet; _DEFERRED_MODULES
+    # connect when they load
+    _install(tuple(cls for cls in _CLASSES if cls not in _CONTEXT['originals']))
     from ._native_mode_reconstruction import install as install_reconstruction
     install_reconstruction(_CONTEXT, NativeFullResetParams.set_params)
 
@@ -344,6 +351,7 @@ def _connect(classes, parameter_metadata):
     protected = ('__new__', '__init__', 'set_params', 'get_params', '_get_param_names',
                  '__getattribute__', '__getattr__', '__setattr__', '__delattr__', '__del__', '__dict__', '__slots__')
     for cls in classes:  # glue: final snapshots after native attribute installation
+        _CONTEXT.setdefault('connected_classes', set()).add(cls)
         plan = _CONTEXT['plans'][cls]
         class_protected = protected + (('_parameters', '_extras') if plan['validation_kind'] == 'umap' else ())
         mro = type.__dict__['__mro__'].__get__(cls)
@@ -370,9 +378,13 @@ def _connect(classes, parameter_metadata):
 def connect(parameter_metadata, linear, declared, estimator_context):
     # glue: final method/storage identities and already-supported native setters
     from ._native_public_attributes import _CONTEXT as attributes
-    _connect(_CLASSES, parameter_metadata)
+    # Each class is snapshotted once, when its family first connects; a later
+    # family load never re-reads an already connected class.
+    done = _CONTEXT.setdefault('connected_classes', set())
+    _connect(tuple(cls for cls in _CLASSES if cls not in done), parameter_metadata)
     from ._native_mode_reconstruction import finish as finish_reconstruction
-    finish_reconstruction(_CONTEXT, parameter_metadata, tuple(_CONTEXT.get('reconstruction_classes', ())))
+    finish_reconstruction(_CONTEXT, parameter_metadata,
+                          tuple(cls for cls in _CONTEXT.get('reconstruction_classes', ()) if cls not in done))
     native_setters = {}
     # Export identity and ABI are connection metadata, not transitive runtime
     # qualification. The nested ownership/callback tests must pass before
