@@ -20,6 +20,7 @@ from bindings.family_common import family_call, family_repr, family_str, family_
 from bindings.tensor_view import TensorView, shape_text
 from bindings.linalg_ops_buffers import lin_truth, lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
+from bindings.linalg_ops_lowbit_run import lin_op_code
 from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
 
 comptime OP_NN = 0
@@ -46,37 +47,7 @@ def lin_attr(binding: PythonObject, name: String) raises -> PythonObject:
 
 def lin_call(binding: PythonObject, context: PythonObject, name: String, *args: PythonObject) raises -> PythonObject:
     """`binding.name(*args)`; the binding's own exception propagates unchanged."""
-    var op = -1
-    if name == "gemm":
-        op = 0
-    if name == "gemm_bf16":
-        op = 1
-    if name == "gemm_int8":
-        op = 2
-    if name == "quantize_int8":
-        op = 3
-    if name == "dequantize_int8":
-        op = 4
-    if name == "gemm_int15":
-        op = 5
-    if name == "quantize_int15":
-        op = 6
-    if name == "dequantize_int15":
-        op = 7
-    if name == "to_bf16":
-        op = 8
-    if name == "from_bf16":
-        op = 9
-    if name == "from_f16":
-        op = 10
-    if name == "linalg_numeric_mode":
-        op = 11
-    if name == "linalg_profile_version":
-        op = 12
-    if name == "lowbit_profile_version":
-        op = 13
-    if name == "int15_profile_version":
-        op = 14
+    var op = lin_op_code(name)
     var state = lin_state(context)
     var provider = py_get(state, "_native_provider")
     if op >= 0 and provider is not None and py_get(state, "_native_provider_binding") is binding:
