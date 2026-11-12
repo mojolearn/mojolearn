@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The decomposition owners' X admission (PCA, TruncatedSVD, IncrementalPCA,
 # KernelPCA, FactorAnalysis, FastICA, NMF, LatentDirichletAllocation, the
-# random projections): the one admission path (bindings/admitted_input.mojo,
+# random projections): the one admission path (bindings/admitted_input_unpack.mojo,
 # admit_x) with scikit-learn's refusals naming the estimator, after an exact
 # SciPy sparse container is densified from its storage, as the Python shells
 # densified it before converting. No cast or scan of its own.
@@ -9,7 +9,7 @@ from std.python import PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_get, py_type
 from bindings.classical_arrays_door import classical_address
-from bindings.admitted_input import AdmittedX, admit_x, admit_x_unrecorded
+from bindings.admitted_input_unpack import AdmittedX, admit_x, admit_x_unrecorded
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 
 # TOMBSTONE: decomp_copied (a second classical_view / memoryview of X to rediscover the input_copied_ flag the admission already knows) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.

@@ -4,7 +4,7 @@
 # docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.3 row A2, lane
 # a2-admit-family, 2026-11-08): clustering, neighbors, SVM, GP, mixture,
 # kernel methods, manifold, model selection and parallel_shard admit their
-# arrays here, on bindings/admitted_input.mojo's AdmittedX and the A0 core
+# arrays here, on bindings/admitted_input_unpack.mojo's AdmittedX and the A0 core
 # (core/admitted_input.mojo cast, core/host_finite_scan.mojo scan,
 # core/admitted_weights.mojo weight status).
 #
@@ -50,7 +50,8 @@ from bindings.native_array_storage_door import native_scratch_bytes, native_scra
 from bindings.classical_arrays_door import (
     classical_address, classical_is_array, classical_cast_kind, classical_dtype_str, classical_c_order,
 )
-from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view, admit_x_unrecorded
+from bindings.admitted_input_unpack import AdmittedX, classical_view, admit_x_unrecorded
+from bindings.admitted_input_run import RESHAPE_HINT
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense

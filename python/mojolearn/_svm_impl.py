@@ -1261,7 +1261,7 @@ _native_family_bridge.tables(family_svc_native=_native, family_svc_base_helpers=
                              family_svc_refused=dict(_SVC_REFUSED_KERNELS),
                              family_svr_refused=dict(_SVR_REFUSED_KERNELS))
 
-# The shared native label step (bindings/classical_labels.mojo): SVC, NuSVC and
+# The shared native label step (bindings/classical_labels_door.mojo): SVC, NuSVC and
 # LinearSVC fit encode a numeric y from its buffer in one native call.
 from ._native_labels_bridge import label_context as _label_context  # noqa: E402
 _native_family_bridge.tables(**_label_context())

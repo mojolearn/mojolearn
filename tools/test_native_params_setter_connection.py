@@ -78,7 +78,7 @@ def test_subset_matches_existing_native_constructor_plans_and_inheritance():
 
 
 def test_owned_fitted_state_covers_all_linear_owner_writes():
-    owner = (ROOT / 'bindings/x_linear_native.mojo').read_text()
+    owner = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
     writes = set(re.findall(r'py_setitem\(fields, "([^"]+)"', owner))
     assert writes <= set(constants()['_FITTED_FIELDS'])
     assert not [line for line in owner.splitlines() if 'py_setitem(fields,' in line

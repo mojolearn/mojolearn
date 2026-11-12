@@ -24,16 +24,38 @@ from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
 from bindings.py_typed_call import py_call_typed
-from bindings.trees_public_inputs import (
-    TREES_NONFINITE, TreesLabels, trees_builtins, trees_table,
-    trees_helper, trees_reshape, trees_freeze, trees_address,
-    trees_forest_x, trees_finite_f32, trees_encode_labels,
-    trees_decode_labels, trees_argmax_rows, trees_class_rows_only, trees_weighted_rows, trees_cast,
+from bindings.trees_public_inputs_door import (
+    TreesLabels,
+    trees_builtins,
+    trees_table,
+    trees_helper,
+    trees_reshape,
+    trees_freeze,
+    trees_address,
+    trees_forest_x,
+    trees_encode_labels,
+    trees_decode_labels,
+    trees_argmax_rows,
+    trees_class_rows_only,
+    trees_weighted_rows,
+    trees_cast,
 )
-from bindings.admitted_input import (
-    AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, classical_view,
-    admitted_finite_refuse, admitted_finite_entry_refuse,
+from bindings.trees_public_inputs_run import (
+    TREES_NONFINITE,
+    trees_finite_f32,
 )
+from bindings.admitted_input_unpack import (
+    AdmittedX,
+    admit_f32,
+    admit_weight_words,
+    admitted_words,
+    admitted_array,
+    admitted_vector,
+    classical_view,
+    admitted_finite_refuse,
+)
+from bindings.admitted_input_run import admitted_finite_entry_refuse
+from bindings.admitted_input_run import AdmittedXView
 from bindings.classical_validate_unpack import classical_estimator_name, classical_check_y
 from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_view / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -49,6 +71,7 @@ from bindings.metrics_native_support_door import metric_is_integral, metric_warn
 from bindings.classical_warnings_unpack import classical_warning
 from ensemble.rf_notices import rf_notice_text
 from xtrees.trees_forest_run import (
+    _refuse, _family, _classifier, _y_rows_check,
     ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
     forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features, forest_fit_core,
 )
@@ -107,11 +130,6 @@ def _float(value: PythonObject) raises -> PythonObject:
     return py_call_typed(trees_builtins().float, value)
 
 
-def _refuse(name: String, why: String) raises:
-    """`randomforest._refuse` (xtrees/trees_forest_run.mojo)."""
-    trees_refuse(name, why)
-
-
 def _class_fields(cls: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
     return py_call(b.type.__dict__["__dict__"].__get__, cls)
@@ -149,10 +167,6 @@ def forest_kind(model: PythonObject, context: PythonObject) raises -> String:
     raise Error("TypeError: " + String(cls.__name__) + " is not a connected tree ensemble")
 
 
-def _family(kind: String) -> String:
-    return "et" if kind.startswith("et_") else "rf"
-
-
 def forest_check_fit_device(model: PythonObject, context: PythonObject) raises:
     """Extra Trees: refuse a non-GPU `device` at fit before any input is
     admitted or converted (scikit-learn's convention: fit validates the
@@ -165,13 +179,6 @@ def forest_check_fit_device(model: PythonObject, context: PythonObject) raises:
     var b = trees_builtins()
     if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
         raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
-
-
-def _classifier(kind: String) -> Bool:
-    return kind.endswith("_classifier")
-
-
-# ------------------------------------------------------- parameters
 
 
 def forest_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -609,7 +616,7 @@ def forest_fit_request(fields: PythonObject, cfg: PythonObject, kind: String, ro
     return args^
 
 
-def _launch(native: PythonObject, fit: ForestFit, x: AdmittedX, args: ForestFitArgs, device_scan: Bool,
+def _launch(native: PythonObject, fit: ForestFit, x: AdmittedXView, args: ForestFitArgs, device_scan: Bool,
             context: PythonObject) raises -> PythonObject:
     """One fit launch and its export, through the connected image's native
     entry: the typed fit core (`forest_fit_core`, XF_FIT) on the request
@@ -618,7 +625,6 @@ def _launch(native: PythonObject, fit: ForestFit, x: AdmittedX, args: ForestFitA
     var key = forest_key(native)
     var selection = forest_export_selection()
     var handle = forest_fit_core(key, fit.classifier, fit.rowmajor_ok and x.c_order, args, device_scan)
-    _ = x.array
     return forest_export_handle(key, handle, selection, context)
 
 
@@ -776,11 +782,6 @@ def _store_model(fields: PythonObject, arrays: PythonObject, cols: Int) raises:
     py_setitem(fields, "_resident_holder", Python.dict())
 
 
-def _y_rows_check(n: Int, rows: Int) raises:
-    if n != rows:
-        raise Error("y has " + String(n) + " rows, X has " + String(rows))
-
-
 def _x_for(source: PythonObject, rowmajor: Bool, context: PythonObject) raises -> AdmittedX:
     """`_fit_arrays`' X: the forest layout when the fit has a row-major
     entry, else the column-major float32 copy."""
@@ -812,7 +813,7 @@ def _rf_fit_arrays(fields: PythonObject, kind: String, x: AdmittedX, y_addr: Int
     _finite_or_refuse(x, device_scan, context)
     var request = forest_fit_request(fields, fields["_cfg"], kind, x.rows, x.cols, classes, x.address, y_addr, fit,
                                      rf, context)
-    var result = _launch(rf, fit, x, request, device_scan, context)
+    var result = _launch(rf, fit, x.view(), request, device_scan, context)
     _rf_fit_notices(result[5], context)
     _store_model(fields, result, x.cols)
     return result
@@ -933,7 +934,7 @@ def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> P
                          PythonObject(count), PythonObject(what))
 
 
-def _check_regression_target(y: AdmittedX, code: Int, criterion: PythonObject, family: String,
+def _check_regression_target(y: AdmittedXView, code: Int, criterion: PythonObject, family: String,
                              context: PythonObject) raises:
     """The deviance criteria's target refusals (RF and ET wording)."""
     var tables = context["trees_rf_tables"] if family == "rf" else context["trees_et_tables"]
@@ -967,7 +968,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
     var cfg = fields["_cfg"]
     var y32 = admit_f32(y, 1, "y", context, finite=False)
     var code = Int(py=cfg["criterion"])
-    _check_regression_target(y32, code, fields["criterion"], "rf", context)
+    _check_regression_target(y32.view(), code, fields["criterion"], "rf", context)
     var names = Python.tuple("oob_prediction_", "oob_score_", "feature_importances_")
     for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
@@ -1033,7 +1034,7 @@ def _et_fit_arrays(fields: PythonObject, cfg: PythonObject, X: PythonObject, y_a
     _finite_or_refuse(x, device_scan, context)
     # "et_forest": an ET kind for `_family` (the ET params do not read the kind)
     var request = forest_fit_request(fields, cfg, "et_forest", x.rows, x.cols, classes, x.address, y_addr, fit, et, context)
-    var result = _launch(et, fit, x, request, device_scan, context)
+    var result = _launch(et, fit, x.view(), request, device_scan, context)
     _store_model(fields, result, x.cols)
     var meta = result[5]
     py_setitem(fields, "depth_cap_bound_", PythonObject(_truthy(meta[2])))
@@ -1092,7 +1093,7 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         _ = codes^
         return model
     var y32 = admit_f32(y, 1, "y", context, finite=False)
-    _check_regression_target(y32, Int(py=fields["_criterion_code"]), fields["criterion"], "et", context)
+    _check_regression_target(y32.view(), Int(py=fields["_criterion_code"]), fields["criterion"], "et", context)
     if sample_weight is not None:
         var weights = admit_weight_words(sample_weight, y32.rows, context)
         if tree_start is not None:
@@ -1265,7 +1266,7 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
         var y32 = admit_f32(checked, 1, "y", context, finite=False)
         _y_rows_check(y32.rows, rows)
         var code = Int(py=fields["_criterion_code"]) if et else Int(py=cfg["criterion"])
-        _check_regression_target(y32, code, fields["criterion"], "et" if et else "rf", context)
+        _check_regression_target(y32.view(), code, fields["criterion"], "et" if et else "rf", context)
         y = y32.array
     if not et and _truthy(cfg["oob_score"]):
         raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")

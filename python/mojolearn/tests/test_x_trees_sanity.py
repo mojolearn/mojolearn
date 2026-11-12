@@ -205,7 +205,7 @@ class _FoldRows(list):
 
 
 # The device fold law (sklearn's unshuffled StratifiedKFold / KFold) the
-# meta-estimator owner launches (bindings/trees_public_meta.mojo
+# meta-estimator owner launches (bindings/trees_public_meta_door.mojo
 # `_native_folds`): the test's own reader of `x_trees_device_folds`, moved
 # out of the product module by lane python-package-audit (2026-11-11).
 def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
@@ -453,7 +453,7 @@ def test_bagging_oob_score():
 def test_cv_splitter_objects():
     # The meta-estimators admit mojolearn's native splitters and lists of
     # index pairs; a Python splitter's split() would be a callback inside the
-    # native fit (bindings/trees_public_meta.mojo _cv_value).
+    # native fit (bindings/trees_public_meta_door.mojo _cv_value).
     from mojolearn.model_selection import KFold, StratifiedKFold
     Xa, Xb, ya, yb = _clf()
     est = [("dt", ml.DecisionTreeClassifier(max_depth=4))]

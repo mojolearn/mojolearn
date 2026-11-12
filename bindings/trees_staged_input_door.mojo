@@ -17,8 +17,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.trees_public_inputs import trees_table, trees_entry
-from bindings.trees_public_forest import forest_effective_mode, forest_kind, _engine, _ordered_export
+from bindings.trees_public_inputs_door import trees_table, trees_entry
+from bindings.trees_public_forest_door import forest_effective_mode, forest_kind, _engine, _ordered_export
 from bindings.py_optional import py_present
 from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_TREES,

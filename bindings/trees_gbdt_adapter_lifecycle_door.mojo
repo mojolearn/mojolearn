@@ -12,7 +12,7 @@ from bindings.classical_attributes_door import classical_check_layout
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_validate_unpack import classical_refuse_sparse, classical_check_y, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from bindings.classical_labels import labels_shape_of, _flatten_labels
+from bindings.classical_labels_door import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list, _feature_names
 from bindings.prep_lda_admission_door import lda_native_labels
@@ -21,7 +21,7 @@ from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_
 from bindings.trees_constructor_native_unpack import tree_parameter_storage
 from bindings.trees_public_state_unpack import _release_tree_values
 from bindings.trees_public_state_pack import tree_is_fitted
-from bindings.admitted_input import admit_f32, classical_view
+from bindings.admitted_input_unpack import admit_f32, classical_view
 # TOMBSTONE: trees_view / trees_check_rank / trees_f32_view uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.native_loaded_module_door import NativeModules
@@ -30,8 +30,8 @@ from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, records_drop, ContentRecord, content_fields,
     content_object, RECORDS_TREES,
 )
-from bindings.trees_public_gbdt_fit import adapter_classifier_fit, adapter_regressor_fit, _adapter_eval
-from bindings.trees_public_gbdt_fit import gbdt_fit, _tables as _gbdt_tables, _in as _gbdt_in
+from bindings.trees_public_gbdt_fit_door import adapter_classifier_fit, adapter_regressor_fit, _adapter_eval
+from bindings.trees_public_gbdt_fit_door import gbdt_fit, _tables as _gbdt_tables, _in as _gbdt_in
 from bindings.trees_public_gbdt_door import adapter_decision_function, adapter_predict, adapter_predict_proba
 from bindings.trees_public_gbdt_door import gbdt_predict, gbdt_predict_proba, ordered_rmse_fit, feature_freq_fit
 from bindings.trees_public_mixin_score_unpack import gbdt_adapter_score

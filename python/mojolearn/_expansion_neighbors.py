@@ -141,7 +141,7 @@ _native_family_bridge.tables(family_xn_loc_flags={"unfused_knn": _UNFUSED_KNN,
                                                   "uncompact_impute": _UNCOMPACT_IMPUTE,
                                                   "old_items": _OLD_ITEMS})
 # The shared native label, weight and score steps those owners read
-# (bindings/classical_labels.mojo: encode/decode, accuracy, the base helpers).
+# (bindings/classical_labels_door.mojo: encode/decode, accuracy, the base helpers).
 from ._native_labels_bridge import label_context as _label_context  # noqa: E402
 _native_family_bridge.tables(**_label_context())
 # TOMBSTONE: MOJOLEARN_XN_FAST_TILED_RBF (DROPPED-noise) deleted 2026-10-03 by f103d7381; code recoverable at f103d7381^.

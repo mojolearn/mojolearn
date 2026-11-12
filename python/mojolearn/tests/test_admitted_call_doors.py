@@ -85,7 +85,7 @@ def test_second_admissions_removed():
     assert "labels_shape_of(" not in operation
     assert "classical_check_x(call, args[0], name, context, 0, admitted=True)" in operation
     assert "labels_shape_of(" not in _function(boost, "def _boost_classifier_target(").split('"""', 2)[2]
-    admission = _read("bindings/admitted_input.mojo")
+    admission = _read("bindings/admitted_input_unpack.mojo")
     assert "admitted_typed_once(prepared, context, hold, prepared is source)" in _function(admission, "def admit_typed(")
     projection = _function(_read("bindings/host_projection_native_door.mojo"), "def host_projection_inference(")
     assert "host_tree_cast(raw, context)" in projection

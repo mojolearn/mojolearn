@@ -18,7 +18,8 @@ from bindings.classical_arrays_door import classical_wrap_array, _store_code
 from bindings.arena_array_metadata_pack import arena_array_metadata
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.sequential_admission_door import _one_of, _ctypes_array_owner
-from bindings.admitted_input import admit_view, admitted_view_kind, AdmittedTypedPin
+from bindings.admitted_input_unpack import admit_view, AdmittedTypedPin
+from bindings.admitted_input_run import admitted_view_kind
 from bindings.tensor_view import TensorView
 from core.cast_in import CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 
@@ -42,7 +43,7 @@ def tsa_scalar(value: PythonObject, context: PythonObject, integer: Bool = False
             return native_scalar_buffer(value).to_python_number(integer or kind == "i" or kind == "u" or kind == "b")
     # Native one-element numeric buffers retain the original int/float
     # conversion interface. Arbitrary __int__/__float__/__bool__ never run.
-    # The one admission captures the value (bindings/admitted_input.mojo
+    # The one admission captures the value (bindings/admitted_input_unpack.mojo
     # admit_view, which also reads a ctypes-backed Array from its slots); its
     # one word is decoded here from the captured address.
     var one_pin = AdmittedTypedPin()
@@ -95,7 +96,7 @@ def tsa_word(v: TensorView, name: String) raises -> PythonObject:
 
 
 # TOMBSTONE: tsa_buffer (the TSA owners' own admission: classical_view, a by-hand repack of ctypes-backed Arrays,
-# arena _prepare, a second pinned view; superseded by bindings/admitted_input.mojo admit_view, the one admission)
+# arena _prepare, a second pinned view; superseded by bindings/admitted_input_unpack.mojo admit_view, the one admission)
 # deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/TSA_BUFFER_ADMISSION.patch
 

@@ -23,7 +23,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from bindings.classical_validate_unpack import classical_view
 from bindings.prep_lda_admission_door import (
     lda_native_fields, lda_native_labels, lda_native_context, lda_native_initialize,
@@ -39,8 +39,8 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.msel_fixed_owner_unpack import fixed_owner_context, fixed_owner_fields
 from bindings.msel_fixed_owner_pack import fixed_owner_set_params
 from bindings.scaler_lifecycle_native_door import _public_result
-from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_score_from_codes
-from bindings.admitted_input import admit_weight_words
+from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, classical_score_from_codes
+from bindings.admitted_input_unpack import admit_weight_words
 from bindings.x_prep_native_inputs_door import _values, _rows_fields
 from bindings.arena_cache_release_door import arena_cache_release_operation
 from bindings.prep_classify_prog_door import ClsProg, NONE, f32_array, i32_array, f32_input

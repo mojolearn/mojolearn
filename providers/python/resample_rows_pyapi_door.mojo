@@ -10,7 +10,7 @@ from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.admitted_input import AdmittedTypedPin, admitted_typed_once, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
+from bindings.admitted_input_unpack import AdmittedTypedPin, admitted_typed_once, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from core.borrowed_buffer import BorrowedBufferLayout
@@ -21,7 +21,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.native_buffer_address_unpack import native_buffer_address
 
 
-# _row_dtype_admit moved to bindings/admitted_input.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).
+# _row_dtype_admit moved to bindings/admitted_input_unpack.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).
 
 
 def _take_rows_contiguous(src: Int, row_stride: Int, row_bytes: Int, n: Int,

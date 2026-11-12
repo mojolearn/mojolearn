@@ -19,7 +19,7 @@ from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays_door import classical_typed, classical_address, classical_kind
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from std.python._cpython import GILReleased
 from core.linear_entry_table import LinearEntryKey
 from core.entry_table import EntryRef, entry_ref_unresolved

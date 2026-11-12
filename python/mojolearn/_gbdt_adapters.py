@@ -325,7 +325,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         """
         return _TREES(self, "trees_public_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
 
-# The adapters' native fit (bindings/trees_public_gbdt_fit.mojo) reads the
+# The adapters' native fit (bindings/trees_public_gbdt_fit_door.mojo) reads the
 # constructor protocol it checks (`get_params`) and builds the learner class.
 _native_trees_bridge.register(GradientBoostingClassifier, "gbdt_adapter", trees_gbdt_adapter_tables=dict(
     base=_GBDTAdapter, learner=GradientBoosting,

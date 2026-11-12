@@ -24,9 +24,9 @@ from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from providers.python.array_metadata_pyapi_door import ArrayMetadata
 from bindings.classical_pandas_door import _pd_class
-from bindings.classical_labels import _pandas_values, labels_type_name
-from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
-from bindings.classical_labels import labels_accuracy, classical_score_from_codes
+from bindings.classical_labels_door import _pandas_values, labels_type_name
+from bindings.classical_labels_door import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
+from bindings.classical_labels_door import labels_accuracy, classical_score_from_codes
 from bindings.label_admission_native_pack import classifier_label_list
 from bindings.gp_svm_records_door import gpsvm_class_table, gpsvm_class_table_put
 from bindings.p3_labels_metrics_native_door import p3_decode_list
@@ -449,7 +449,7 @@ def svc_accuracy_codes(y_true: PythonObject, classes: PythonObject, codes: Pytho
     for classes that are neither all str nor all integers, so every refusal
     is the one the decoded prediction raised."""
     # N382 (lane ne3-g-svc-gp-neighbors). classical_score_from_codes is the
-    # shared helper of lane ne1-h-labels (bindings/classical_labels.mojo).
+    # shared helper of lane ne1-h-labels (bindings/classical_labels_door.mojo).
     var shape = svc_shape_of(y_true, context)
     if len(shape) != 1 or Int(py=shape[0]) != n_pred:
         raise Error("mojolearn: y must be 1-D with one entry per row of X")

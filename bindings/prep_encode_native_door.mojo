@@ -38,8 +38,8 @@ from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end,
 from bindings.classical_validate_unpack import classical_estimator_name
 from core.host_finite_scan import host_all_finite_f32
 from bindings.prep_stateless_native_door import _fam, _int_like, _repr, _name, _take_f, _select_transform
-from bindings.classical_labels import ClassicalLabels, labels_address, labels_cast, classical_encode_labels
-from bindings.admitted_input import admit_c_view, admitted_dtype, admit_f32, admit_ids, admitted_vector
+from bindings.classical_labels_door import ClassicalLabels, labels_address, labels_cast, classical_encode_labels
+from bindings.admitted_input_unpack import admit_c_view, admitted_dtype, admit_f32, admit_ids, admitted_vector
 from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f64
 from bindings.py_optional import py_or_none, py_present

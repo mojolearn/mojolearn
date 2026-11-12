@@ -425,7 +425,7 @@ def dart_open(
         # Lane a8c-device-x-linear-prep-rfe: X is tested on the device over
         # this upload (NaN or infinity, on bits), read back under the open's
         # one synchronize; the DART door's host scan of X before the round
-        # (bindings/trees_public_boost.mojo, TREES_NONFINITE) is deleted.
+        # (bindings/trees_public_boost_door.mojo, TREES_NONFINITE) is deleted.
         var x_status = ctx.enqueue_create_buffer[DType.int32](1)
         enqueue_fill[DType.int32](ctx, x_status, Int32(0))
         enqueue_finite_status(ctx, x.unsafe_ptr(), n * d, x_status.unsafe_ptr(), 0)

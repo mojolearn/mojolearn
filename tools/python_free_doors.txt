@@ -20,9 +20,6 @@ core/*_entry_table*.mojo
 # An `allow:` line admits one file that still violates because its RUN work sits behind a
 # Python-holding construct that needs a design change. Each line is dated and names the
 # owner; the list only shrinks: the owning lane deletes the line when the file is split.
-allow: bindings/admitted_input.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/classical_labels.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/logistic_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/mcls_classify.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
 allow: bindings/mcls_common.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
 allow: bindings/mcls_ranking.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
@@ -31,11 +28,4 @@ allow: bindings/metrics_exp_common.mojo  # 2026-11-12 lane metric-programs-2 (to
 allow: bindings/metrics_exp_curve.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
 allow: bindings/metrics_exp_rank.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot; _Proba
 allow: bindings/metrics_reg_native.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): _Reg y/p/w refs + _Prog owners + MetricPlanOpcodes snapshot
-allow: bindings/nmf_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/spectral_affinity_boundary.mojo  # 2026-11-12 lane entangled-mkit follow-up (to open): SpectralAffinityRoom public_array pin (entangled-mkit follow-up)
-allow: bindings/trees_public_boost.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/trees_public_forest.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/trees_public_gbdt_fit.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/trees_public_inputs.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/trees_public_meta.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/x_linear_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done

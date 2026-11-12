@@ -13,13 +13,14 @@ from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_has, prep_estimator_call
-from bindings.trees_public_inputs import trees_table, trees_call, trees_address, trees_reshape
-from bindings.admitted_input import admitted_vector, classical_view
+from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape
+from bindings.admitted_input_unpack import admitted_vector, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.trees_public_forest import forest_effective_mode, _engine, _ordered_export, _resident, _family
-from bindings.trees_public_boost import _seed
+from bindings.trees_public_forest_door import forest_effective_mode, _engine, _ordered_export, _resident
+from xtrees.trees_forest_run import _family
+from bindings.trees_public_boost_door import _seed
 from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, _replace, _tree_mode
 from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS, _chunk
 

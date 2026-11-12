@@ -34,7 +34,7 @@ from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from providers.python.array_metadata_pyapi_door import ArrayPin, array_shape_once, array_metadata_once
 from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.classical_labels import (
+from bindings.classical_labels_door import (
     ClassicalLabels, NativeTextLabels, _TextCodeStorage, _TextLabels, _PythonTextCodes, _NativeTextCodes,
     _text_buffer_labels_into, _text_list_labels_into,
 )

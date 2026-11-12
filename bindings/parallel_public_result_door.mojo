@@ -5,8 +5,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_is_array, classical_typed, classical_address
-from bindings.admitted_input import admit_x
-from bindings.classical_labels import labels_cast
+from bindings.admitted_input_unpack import admit_x
+from bindings.classical_labels_door import labels_cast
 from bindings.scaler_lifecycle_native_door import _outside
 from bindings.sequential_inputs_door import sequential_input
 

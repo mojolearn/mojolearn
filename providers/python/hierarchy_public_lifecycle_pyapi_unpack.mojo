@@ -20,7 +20,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_validate_unpack import classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions_door import classical_not_fitted_class
-from bindings.classical_labels import labels_shape_of, _flatten_labels
+from bindings.classical_labels_door import labels_shape_of, _flatten_labels
 from bindings.label_integer_storage_unpack import labels_integer_storage, labels_float_storage
 from bindings.label_input_sources_unpack import labels_storage_source, labels_list_integer_storage, labels_text_storage
 from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE, LABELS_FLOAT_CONTINUOUS

@@ -13,11 +13,11 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_validate_unpack import classical_check_x, classical_estimator_name
-from bindings.classical_labels import labels_shape_of
+from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, _feature_names
 from bindings.trees_public_lifecycle_native_door import _feature_check
-from bindings.trees_public_meta import meta_kind, meta_admitted_operation
+from bindings.trees_public_meta_door import meta_kind, meta_admitted_operation
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_native_context
 from bindings.trees_meta_admission_door import meta_admit_configuration
 from bindings.msel_inputs_unpack import msel_admit, msel_input_count

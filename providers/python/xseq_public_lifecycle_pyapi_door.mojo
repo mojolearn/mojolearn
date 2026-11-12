@@ -17,7 +17,7 @@ from bindings.optimizer_admission_door import opt_schedule
 from bindings.classical_validate_unpack import classical_view, classical_refuse_sparse, classical_estimator_name, RESHAPE_HINT
 from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions_door import classical_require_fitted
-from bindings.classical_labels import labels_shape_of
+from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.prep_lda_admission_door import lda_native_labels
 from bindings.classifier_public_lifecycle_door import classifier_label_list

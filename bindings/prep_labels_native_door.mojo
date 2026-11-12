@@ -19,10 +19,10 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.classical_arrays_door import classical_address, classical_wrap_array
-from bindings.classical_labels import (
+from bindings.classical_labels_door import (
     labels_address, labels_label_kind, labels_cast,
     labels_reduce_stat, _numeric_label_view, _flatten_labels, _sorted_classes)
-from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
+from bindings.admitted_input_unpack import admitted_array, admitted_vector, admit_c_view, admitted_dtype
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.prep_entry_cache_unpack import prep_entry_word

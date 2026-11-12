@@ -28,12 +28,20 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_wrap_array, _store_code
 from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
-from bindings.trees_public_inputs import (
-    TreesLabels, trees_builtins, trees_table,
-    trees_reshape, trees_address, trees_itemsize,
-    trees_encode_labels, trees_decode_labels, trees_cast, trees_finite_f32,
+from bindings.trees_public_inputs_door import (
+    TreesLabels,
+    trees_builtins,
+    trees_table,
+    trees_reshape,
+    trees_address,
+    trees_itemsize,
+    trees_encode_labels,
+    trees_decode_labels,
+    trees_cast,
 )
-from bindings.admitted_input import (
+from bindings.trees_public_inputs_run import trees_finite_f32
+from bindings.admitted_input_run import AdmittedXView
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype,
 )
@@ -42,20 +50,30 @@ from bindings.classical_arrays_door import classical_address
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_meta_run import CalibratedProgram, meta_binary_column_check
 from xtrees.trees_forest_run import trees_check_features
-from bindings.trees_public_forest import (
-    _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
+from bindings.trees_public_forest_door import (
+    _check_mode,
+    _repr,
+    _str,
+    _truthy,
+    _is_bool,
+    _is_integral,
+    forest_kind,
 )
-from bindings.trees_public_boost import (
+from xtrees.trees_forest_run import (
+    _refuse,
+    _classifier,
+)
+from bindings.trees_public_boost_door import (
     _mode, _xt, _xr, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
     _gather_vec, _argmax, _scale, _member_codes,
 )
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
-from bindings.classical_labels import labels_accuracy, _classification_encoded as score_classification_encoded
+from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split,
 )
-from bindings.classical_labels import _label_list, classical_score_from_codes
+from bindings.classical_labels_door import _label_list, classical_score_from_codes
 from bindings.p3_labels_metrics_native_door import p3_interleave_columns
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.classifier_public_lifecycle_door import classifier_label_list
@@ -164,7 +182,7 @@ def _f64_word(array: PythonObject, index: Int) raises -> Float64:
 def _x_array(X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`as_f32_c(X, ndim=2, name="X")` as the Array the members read. Inside
     the operation's hold scope (meta_admitted_operation) a finite matrix is
-    held once (bindings/py_admitted_registry.mojo `admitted_hold`): every member
+    held once (bindings/admitted_registry.mojo `admitted_hold`): every member
     door then reads it as admitted, with no second view, check or scan."""
     if admitted_is_held(X):
         return X
@@ -298,7 +316,7 @@ def _index_of_one(member: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=_member_class_codes(member, context)[3])
 
 
-def _one_col(xt: PythonObject, p: AdmittedX, j: Int, context: PythonObject) raises -> PythonObject:
+def _one_col(xt: PythonObject, p: AdmittedXView, j: Int, context: PythonObject) raises -> PythonObject:
     """Column j of a float32 (n, c) block as an (n, 1) Array (`_gather`)."""
     var rows = _arange(xt, p.rows, context)
     var col = _codes_array(Python.list(PythonObject(j)), context)
@@ -335,7 +353,7 @@ def _acc_votes(xt: PythonObject, acc: PythonObject, codes: PythonObject, n: Int,
     _ = codes
 
 
-def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: AdmittedX, rows: PythonObject,
+def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: AdmittedXView, rows: PythonObject,
            col0: Int) raises -> Int:
     """`_TreesWrapperBase._place`: the block's columns into dst (an Array)
     at col0, at the rows of `rows` (an int32 Array)."""
@@ -344,7 +362,6 @@ def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: A
                    Int(py=rows.shape[0]), blk.cols, col0)
     _ = dst
     _ = rows
-    _ = blk  # retain every address owner until the native call completes
     return blk.cols
 
 
@@ -784,11 +801,11 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
             var p = _zeros(n * k, context)
             _acc_cols_w(xt, p, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
             var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, finite=False)
-            _ = _place(xt, out, n, width, blk, rows, j * k)
+            _ = _place(xt, out, n, width, blk.view(), rows, j * k)
             _ = blk^
         else:
             var blk = _out2d(prep_estimator_call(e, "predict", Python.tuple(Xa), context), n, context)
-            _ = _place(xt, out, n, width, blk, rows, j)
+            _ = _place(xt, out, n, width, blk.view(), rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
 
@@ -850,7 +867,7 @@ def _stack_out(xt: PythonObject, est: PythonObject, method: String, Xs: PythonOb
     var out = prep_estimator_call(est, method, Python.tuple(Xs), context)
     if method == "predict_proba" and binary:
         var p = _out2d(out, n, context)
-        var col = _one_col(xt, p, 1, context)
+        var col = _one_col(xt, p.view(), 1, context)
         _ = p^
         return col
     return out
@@ -947,7 +964,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
             _fit_member(e, Xtr, y_tr, w_tr, context)
             var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, Int(py=te_view.shape[0]), binary, context), Int(py=te_view.shape[0]), context)
             _ = Xa  # keep the Python object alive through the native call above
-            var got = _place(xt, meta_view, n, width, blk, te_view, col0)
+            var got = _place(xt, meta_view, n, width, blk.view(), te_view, col0)
             _ = blk^
             if got != native_widths[i]:
                 raise Error("a member's output width changed between folds (a class missing from a fold)")
@@ -955,7 +972,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     if passthrough:
         var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
-        _ = _place(xt, meta_view, n, width, xb, _arange(xt, n, context), total)
+        _ = _place(xt, meta_view, n, width, xb.view(), _arange(xt, n, context), total)
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
@@ -994,12 +1011,12 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var methods = _attr(model, "stack_method_", Python.list())
     for i in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_stack_out(xt, members[i], String(methods[i]), Xa, n, binary, context), n, context)
-        col0 += _place(xt, meta_view, n, width, blk, rows_view, col0)
+        col0 += _place(xt, meta_view, n, width, blk.view(), rows_view, col0)
         _ = blk^
     if passthrough:
         var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
-        _ = _place(xt, meta_view, n, width, xb, rows_view, col0)
+        _ = _place(xt, meta_view, n, width, xb.view(), rows_view, col0)
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
@@ -1248,7 +1265,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     var rows = _arange(xt, n, context)
     for j in range(m):  # driver-loop: over members
         var blk = _out2d(prep_estimator_call(members[j], "predict", Python.tuple(Xa), context), n, context)
-        _ = _place(xt, out, n, m, blk, rows, j)
+        _ = _place(xt, out, n, m, blk.view(), rows, j)
         _ = blk^
     return trees_reshape(out, Python.tuple(n, m), context)
 
@@ -1638,7 +1655,7 @@ def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context
     if at < 0:
         _ = p^
         return admitted_vector(n, "<f4", context)
-    var col = _one_col(xt, p, at, context)
+    var col = _one_col(xt, p.view(), at, context)
     _ = p^
     return trees_reshape(col, Python.tuple(n), context)
 
@@ -1715,7 +1732,7 @@ def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) rais
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_positive(xt, members[j], Xa, context), n, context)
-        _ = _place(xt, acc, n, k, blk, rows, j)
+        _ = _place(xt, acc, n, k, blk.view(), rows, j)
         _ = blk^
     return _argmax(xt, acc, n, k, context)
 
@@ -1741,7 +1758,7 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_proba_positive(xt, members[j], Xa, context), n, context)
-        _ = _place(xt, acc, n, k, blk, rows, j)
+        _ = _place(xt, acc, n, k, blk.view(), rows, j)
         _ = blk^
     _ = xt_normalize_rows(glue, trees_address(acc), n, k)
     _ = acc  # keep the Python object alive through the native call above
@@ -1785,7 +1802,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
             var at = _index_of_one(e, context)
             if at < 0:
                 raise Error("1 is not in list")
-            var col = _one_col(xt, blk, at, context)
+            var col = _one_col(xt, blk.view(), at, context)
             _ = xt_accumulate(glue, trees_address(acc), trees_address(col), n, 1.0)
             _ = col  # keep the Python object alive through the native call above
             _ = acc  # keep the Python object alive through the native call above
@@ -2056,7 +2073,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         var S = _zeros(n * c, context)
         for f in range(len(splits)):  # driver-loop: over the cv folds (placing each fold's scores)
             var blk = admit_f32(units.results[f], 2, "scores", context, finite=False)
-            _ = _place(xt, S, n, c, blk, splits[f][1], 0)
+            _ = _place(xt, S, n, c, blk.view(), splits[f][1], 0)
             _ = blk^
         var e = _clone(base, context)
         _fit_member(e, Xa, labels.codes, PythonObject(None), context)
@@ -2369,7 +2386,7 @@ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: P
             return _regressor_score(model, prediction, y, sample_weight, context)
         # Scored in codes (lane ne2-b-members, N082): the predicted codes
         # and `classes_` go to the shared score from codes (y encoded once
-        # against `classes_`, bindings/classical_labels.mojo
+        # against `classes_`, bindings/classical_labels_door.mojo
         # `classical_score_from_codes`, lane ne1-h-labels) instead of a decode
         # to labels (a Python list of n objects for str classes) that the
         # accuracy then re-encoded. Same refusals, same match count and

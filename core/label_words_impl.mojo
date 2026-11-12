@@ -2,7 +2,7 @@
 """Native label and id words of the Python doors (lane i3-move-data-loops,
 2026-11-09): the loops over label, id and code words that lanes P1/P2/P3
 wrote in the binding shells (bindings/mani_umap_native.mojo,
-bindings/trees_public_gbdt_fit.mojo, bindings/prep_labels_native_door.mojo),
+bindings/trees_public_gbdt_fit_door.mojo, bindings/prep_labels_native_door.mojo),
 moved here word for word. The shells keep only the unpack (a buffer
 address, a length, a word kind) and the pack. No Python here.
 
@@ -55,7 +55,7 @@ def label_word_f64(addr: Int, item: Int) -> Float64:
 
 def id_word_coded(addr: Int, code: Int, i: Int) -> Int:
     """Word `i` of a group-id vector whose element kind was decided once
-    (bindings/trees_public_gbdt_fit.mojo `_id_code`: 0 <i8, 1 <i4, 2 <u4,
+    (bindings/trees_public_gbdt_fit_door.mojo `_id_code`: 0 <i8, 1 <i4, 2 <u4,
     3 <i2, 4 <u2, 5 i1, 6 u1)."""
     if code == 0:
         return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[i])

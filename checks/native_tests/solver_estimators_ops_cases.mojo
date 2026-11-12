@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The solver operations table (core/solver_entry_table.mojo) and the
 estimators QN / QN-fold tables (core/estimators_entry_table.mojo), one case
-per entry the linear owner (bindings/x_linear_native.mojo, ElasticNet /
+per entry the linear owner (bindings/x_linear_native_door.mojo, ElasticNet /
 Lasso) and QNRegressor's owner (bindings/qn_native.mojo) call, with
 expectations known by construction (dyadic data, orthogonal designs), not by
 another call into the implementation. No Python objects.

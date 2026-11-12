@@ -60,7 +60,7 @@ from bindings.family_common_pack import (
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense, _sparse_fields
 # TOMBSTONE: _any_contiguous_address use (the labels admission copy's buffer address read) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from bindings.admitted_input import admitted_finite_refuse
+from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 

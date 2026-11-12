@@ -6,7 +6,7 @@ admission path (lane m3-linalg-and-housekeeping, 2026-11-09). The refusals
 of a deferred finite status word and of a device fold's status words live
 here too, so a Python-free RUN module raises them with the same text. Moved
 from bindings/admitted_finite_wording.mojo to core/ (lane doorsplit-linear,
-2026-11-11); that file, bindings/admitted_input.mojo and
+2026-11-11); that file, bindings/admitted_input_unpack.mojo and
 bindings/device_rows_door.mojo re-export these names."""
 
 

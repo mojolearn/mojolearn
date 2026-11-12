@@ -87,7 +87,7 @@ def tree_shap_binding(forest: PythonObject, tscale: PythonObject, cover: PythonO
 # ---- DART (round, predict and the kept forest): no Python entries since lane
 # calltable-gbdt-forest-dart (2026-11-11). Their bodies run through this image's
 # native DART entry (xtrees/dart_runs_device.mojo, published at init below;
-# callers in bindings/trees_public_boost.mojo through xtrees/dart_calls.mojo).
+# callers in bindings/trees_public_boost_door.mojo through xtrees/dart_calls.mojo).
 # Removed with them: the x_trees_dart_{open,step,add,close,predict} and
 # x_trees_dart_forest_{prepare,predict,release} Python entries and their
 # parameter-list unpacking; the DART door was their only caller.

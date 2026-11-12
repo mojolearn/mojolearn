@@ -10,7 +10,7 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.classical_validate_unpack import classical_check_x_snapshot, classical_estimator_name
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from bindings.sequential_description_unpack import sequential_fields
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from providers.python.linear_state_boundary_door import LinearStateOwner, linear_state_owner, linear_state_refresh

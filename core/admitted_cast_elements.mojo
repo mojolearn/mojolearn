@@ -3,7 +3,7 @@
 """`cast_elements` of the tree and label doors, split across the host's cores
 (no Python import).
 
-Lane A1 admit-trees-labels: bindings/classical_labels.mojo `labels_cast`
+Lane A1 admit-trees-labels: bindings/classical_labels_door.mojo `labels_cast`
 (the trees_* `trees_cast`) reached the base binding's `cast_elements` through
 a Python call, one task (`_tasks = 1`, core/hotpath_impl.mojo). It now runs
 the same typed kernel in process over contiguous element ranges, one range

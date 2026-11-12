@@ -10,7 +10,7 @@ from bindings.classical_warnings_unpack import classical_warning, _warning_class
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.native_caller_frame_pack import native_frame_globals
-from bindings.admitted_input import admitted_snapshot
+from bindings.admitted_input_unpack import admitted_snapshot
 
 
 def metric_is_bool(value: PythonObject, context: PythonObject) raises -> Bool:

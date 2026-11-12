@@ -22,7 +22,7 @@ from bindings.tensor_view import TensorView, shape_text
 from bindings.linalg_ops_buffers_unpack import lin_truth, lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.linalg_ops_lowbit_run import lin_op_code
-from bindings.admitted_input import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
+from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
 
 comptime OP_NN = 0
 comptime OP_NT = 1

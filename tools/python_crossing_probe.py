@@ -352,7 +352,7 @@ def _estimator_operations(name, rows, result, np, ml):
         y = np.where(y > 0, "pos", "neg").astype(object)
     if name == "MultiOutputClassifier_str":
         # Two str-label outputs: the score encodes each column against
-        # that output's classes (bindings/trees_public_meta.mojo).
+        # that output's classes (bindings/trees_public_meta_door.mojo).
         y = np.stack([np.where(y > 0, "pos", "neg"), np.where(x[:, 2] > 0, "up", "down")], axis=1).astype(object)
     fit_kwargs = {}
     if name == "GradientBoosting_pairs":

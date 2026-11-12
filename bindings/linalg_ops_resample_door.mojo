@@ -38,7 +38,7 @@ from bindings.family_common_pack import (
     family_call,
 )
 from bindings.linalg_ops_buffers_unpack import lin_truth
-from bindings.admitted_input import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
+from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.tensor_view import TensorView
 
 

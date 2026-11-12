@@ -17,7 +17,6 @@
 # dimension is read from the fitted text in the same call.
 from std.math import isfinite
 from std.memory import bitcast
-from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native_door import _read, _resolved
@@ -29,11 +28,20 @@ from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.host_archive_native_door import host_archive_gbdt_state
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.native_buffer_owner_pack import native_buffer_view
-from bindings.trees_public_inputs import (
-    TreesLabels, trees_builtins, trees_entry, trees_need, trees_helper, trees_address,
-    trees_forest_x, trees_finite_f32, trees_call, trees_encode_labels,
+from bindings.trees_public_inputs_door import (
+    TreesLabels,
+    trees_builtins,
+    trees_entry,
+    trees_need,
+    trees_helper,
+    trees_address,
+    trees_forest_x,
+    trees_call,
+    trees_encode_labels,
 )
-from bindings.admitted_input import (
+from bindings.trees_public_inputs_run import trees_finite_f32
+from bindings.admitted_input_run import AdmittedXView
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_vector, admitted_array, classical_view, admitted_dtype,
 )
 from bindings.classical_arrays_door import classical_address, classical_c_order
@@ -53,6 +61,7 @@ from bindings.label_list_words_unpack import label_store_address
 from bindings.label_list_words_pack import label_list_store
 from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
 from gbdt.trees_gbdt_fit_run import (
+    _sabotaged, _pair_end_range,
     GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,
     gbdt_validate_search_options, gbdt_id_code, gbdt_id_typestr_supported, gbdt_check_group_rows, gbdt_bias_of,
 )
@@ -123,10 +132,6 @@ def catboost_auto_learning_rate_op(args: PythonObject, context: PythonObject) ra
     iterations, use_best_model, boost_from_average, table=None)`."""
     return gbdt_auto_learning_rate(args[0], _float(args[1]), _float(args[2]), _truthy(args[3]),
                                    _truthy(args[4]), args[5] if _truthy(args[5]) else PythonObject(None), context)
-
-
-def _sabotaged() -> Bool:
-    return getenv("MOJOLEARN_CATBOOST_DEFAULTS_SABOTAGE") == "1" and getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1"
 
 
 def _resolved_learning_rate(fields: PythonObject, model: PythonObject, n_rows: Int, n_eval_rows: Int,
@@ -604,12 +609,6 @@ def _pair_end_checked(index: PythonObject, i: Int, j: Int, n_rows: Int, int_word
     return v
 
 
-def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
-    if not (0 <= v and v < n_rows):
-        raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
-                    + String(n_rows) + " rows")
-
-
 def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, admit: _PairAdmit) raises -> Float32:
     """One `pairs_weight[i]`: an exact Python float is read with one
     PyFloat_AsDouble; any other object takes the `isinstance(numbers.Real)`
@@ -804,7 +803,7 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
     return _keep_ret_xe^
 
 
-def _has_nan(x: AdmittedX, context: PythonObject) raises -> Bool:
+def _has_nan(x: AdmittedXView, context: PythonObject) raises -> Bool:
     """Whether a float32 X holds a NaN (an infinity is not one): the label
     encoder refuses a NaN by name and accepts an infinity. Reached only when
     the finite scan already failed."""
@@ -933,7 +932,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi_output else "")
                     + " (GradientBoosting).")
     if _eq(_field(fields, model, "nan_mode"), "Forbidden") and not trees_finite_f32(x.address, n_rows * n_features):
-        if _has_nan(x, context):
+        if _has_nan(x.view(), context):
             raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
                         + "CatBoost refuses this pair; this implementation would otherwise "
                         + "bin the NaNs silently with no NaN bin. Use "

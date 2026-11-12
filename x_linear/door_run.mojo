@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""RUN pieces of the linear expansion door (bindings/x_linear_native.mojo):
+"""RUN pieces of the linear expansion door (bindings/x_linear_native_door.mojo):
 the typed calls of the x_linear operations entry, the fit request words,
 and the byte copies that assemble and slice its float32 words. Typed Mojo
 values and addresses only, no Python import (tools/python_free_dirs.sh).
@@ -233,3 +233,27 @@ def xl_cv_roles_run(key: EntryRef, splits: XlSplitWords, n: Int, roles: Int, nam
                 raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
         if splits.train_sizes[k] == 0 or splits.test_sizes[k] == 0:
             raise Error("mojolearn " + name + ": every cv split needs training and test rows")
+
+
+def _xl_method(operation: String) -> String:
+    """The public method an x_linear operation serves ("" for none). The
+    coordinate-descent door (ElasticNet/Lasso `cd_*`) runs the same native
+    lifecycle as the other linear estimators, so those classes carry
+    `_mojolearn_native_public` and get no `_mode` class-creation wrappers."""
+    if operation.startswith("fit_") or operation == "isotonic_fit" or operation == "cd_fit":
+        return "fit"
+    if operation == "isotonic_fit_transform":
+        return "fit_transform"
+    if operation == "regressor_predict" or operation == "classifier_predict" or operation == "one_class_predict" or operation == "isotonic_predict" or operation == "cd_predict":
+        return "predict"
+    if operation == "decision_function" or operation == "one_class_decision_function":
+        return "decision_function"
+    if operation == "classifier_score" or operation == "isotonic_score" or operation == "cd_score":
+        return "score"
+    if operation == "sgd_predict_proba" or operation == "lrcv_predict_proba":
+        return "predict_proba"
+    if operation == "one_class_score_samples":
+        return "score_samples"
+    if operation == "isotonic_transform":
+        return "transform"
+    return ""

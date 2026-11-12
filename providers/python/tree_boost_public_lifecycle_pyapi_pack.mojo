@@ -7,10 +7,10 @@ from bindings.admitted_call_door import AdmittedCall
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_validate_unpack import classical_check_x, classical_check_y, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from bindings.classical_labels import labels_shape_of
+from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.trees_boost_admission_pack import boost_admit
-from bindings.trees_public_boost import boost_kind, boost_operation_of
+from bindings.trees_public_boost_door import boost_kind, boost_operation_of
 from bindings.trees_public_mixin_score_pack import boost_score
 from bindings.trees_public_auxiliary_door import embedding_apply
 from bindings.parallel_public_result_door import parallel_public_result

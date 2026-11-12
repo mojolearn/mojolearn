@@ -12,7 +12,7 @@
 #                                        False for a context without it
 #   DoorRows(value, context)             the resolution with no host words:
 #                                        base, indices, row count, row width
-#   (the door then reads the rows through `admit_x`, bindings/admitted_input.mojo:
+#   (the door then reads the rows through `admit_x`, bindings/admitted_input_unpack.mojo:
 #   the handle itself for an entry that gathers on the device (`device_x`), or
 #   a parallel host gather out of the host base; never a download)
 #
@@ -82,7 +82,7 @@ struct DoorRows(Movable):
 # kernels: device gather, download, host finite scan, kernel re-upload; REGRESSIONS
 # R13) deleted 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch. admit_x / admit_rows_host
-# (bindings/admitted_input.mojo) read a DeviceRows without the round trip.
+# (bindings/admitted_input_unpack.mojo) read a DeviceRows without the round trip.
 
 
 def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRowsStore:

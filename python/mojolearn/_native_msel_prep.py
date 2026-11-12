@@ -336,7 +336,7 @@ def connect(context, register, registry):
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
                 modes[mode] = type(error).__name__ + ': ' + str(error)
         modules[basename] = modes
-    # (family context, metrics bindings by mode): bindings/trees_public_meta.mojo calls the metrics owner natively
+    # (family context, metrics bindings by mode): bindings/trees_public_meta_door.mojo calls the metrics owner natively
     if trees is not None:
         trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
     if linear is not None:

@@ -1359,7 +1359,7 @@ def _rf_data_session_stage(
     # Lane a8c-device-x-linear-prep-rfe: the scan tests NaN AND infinity
     # (ensemble/device_finite.mojo, bits of the exponent), so the boost
     # meta-estimators' host scan of X before the open
-    # (bindings/trees_public_boost.mojo, TREES_NONFINITE) is deleted:
+    # (bindings/trees_public_boost_door.mojo, TREES_NONFINITE) is deleted:
     # this one device pass over the upload the session makes anyway is
     # the only test. One synchronize, as the NaN scan had.
     var scan = ForestFiniteScan(ctx)

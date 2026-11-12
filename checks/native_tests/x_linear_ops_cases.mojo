@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The x_linear operations table entry (core/linear_entry_table_ext.mojo),
-one case per operation the linear owner (bindings/x_linear_native.mojo)
+one case per operation the linear owner (bindings/x_linear_native_door.mojo)
 calls, with expectations known by construction (dyadic data, exact small
 systems), not by another call into the implementation. No Python objects.
 """

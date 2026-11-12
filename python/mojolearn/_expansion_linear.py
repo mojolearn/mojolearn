@@ -17,7 +17,7 @@ first imported, after the package, so both may rely on every module existing:
 Every fit here is one call into `_mojolearn_x_linear` (`x_linear_fit`), whose
 source is x_linear/ (one sequential schedule, the same on the CPU host
 binding and on the device); every score is `x_linear_decision`. The public
-methods are one call into the native owner (bindings/x_linear_native.mojo),
+methods are one call into the native owner (bindings/x_linear_native_door.mojo),
 which validates, encodes labels, assigns CV folds (integers) and unpacks the
 flat float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
@@ -2536,7 +2536,7 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
 
 
 # The native owner of every public fit / predict / transform / score above
-# (bindings/x_linear_native.mojo), connected once at import. A user cv
+# (bindings/x_linear_native_door.mojo), connected once at import. A user cv
 # splitter's `split(X, y)` is called once by it, as the Python did.
 from . import _native_x_linear_bridge  # noqa: E402
 _XL_CALL, _XL_CONTEXT = _native_x_linear_bridge.connect({

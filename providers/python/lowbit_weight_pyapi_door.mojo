@@ -13,7 +13,7 @@ from bindings.classical_arrays_door import classical_wrap_array
 from bindings.sequential_inputs_door import sequential_sequence_f32
 from bindings.linalg_ops_buffers_unpack import lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
-from bindings.admitted_input import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
+from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.linalg_ops_lowbit_door import lin_connected_binding, lin_lowbit, lin_call, lin_ints
 from bindings.tensor_view import base_format, shape_text, TensorView
 from bindings.lowbit_weight_run import low_empty

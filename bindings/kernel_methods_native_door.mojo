@@ -31,7 +31,7 @@ from bindings.metrics_native_support_door import metric_float, metric_is_real, m
 from bindings.host_inference_scalars_door import host_inference_primitive_number
 from core.cast_in import CAST_KIND_SIGNED
 from core.host_finite_scan import host_all_finite_f32_strided
-from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
+from bindings.admitted_input_unpack import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.device_rows_door_run import DoorRowsStore
 from providers.python.estimator_binding_pyapi_door import estimator_arguments, estimator_binding

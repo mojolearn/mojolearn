@@ -10,7 +10,7 @@
 # byte a kernel reads is unchanged.
 #
 # Derived from the tree owner's input and score steps (lane migrate-trees,
-# bindings/trees_public_inputs.mojo and trees_public_score.mojo) for the
+# bindings/trees_public_inputs_door.mojo and trees_public_score.mojo) for the
 # linear, discriminant and naive Bayes classifiers; fold the two copies into
 # one module once both lanes are on main.
 #
@@ -25,7 +25,7 @@ from std.math import isfinite
 from core.native_array_layout import NativeArrayLayout
 from std.memory import bitcast, unsafe_memcpy
 from core.native_label_codes import NativeLabelCodes
-from std.os import getenv
+from bindings.classical_labels_run import labels_env, _native_code, _encode_code, _LabelsCodeSource, _NativeLabelCodes
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_attr import py_attr
@@ -73,7 +73,8 @@ from bindings.labels_descriptor_boundary_door import (
 )
 from bindings.label_input_sources_unpack import LABELS_LIST_INT
 from core.admitted_cast_elements import admitted_cast_elements
-from bindings.admitted_input import (
+from bindings.admitted_input_run import AdmittedXView
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, admit_c_view,
     admitted_dtype,
 )
@@ -187,30 +188,17 @@ def labels_argmax_rows(context: PythonObject, wide: Bool, scores_addr: Int, rows
     labels_argmax_run(context, wide, scores_addr, rows, cols, dst_addr)
 
 
-def labels_env(name: String, default: String) -> String:
-    var value = getenv(name)
-    return value if value else default
-
-
 # --------------------------------------------------------------- outputs
 
 
 # The array admission copy (lane consol-a0-admission merged the trees copy
 # into this one) is gone: X, targets and weights are admitted by
-# bindings/admitted_input.mojo (admit_x / admit_f32 / admit_weight_words /
+# bindings/admitted_input_unpack.mojo (admit_x / admit_f32 / admit_weight_words /
 # admit_c_view / admit_ids, admitted_array / admitted_vector), the one path.
 # TOMBSTONE: labels_empty / labels_vector / LabelsView / labels_view / labels_check_rank / labels_shape_repr / _view_of_array / _view_of_buffer / _any_contiguous_address / LabelsMatrix / labels_f32 / labels_f32_view / labels_forest_layout / labels_all_finite / labels_check_sample_weight / labels_prepare_weights (the second admission path, and its trees_* aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-def labels_itemsize(typestr: String) raises -> Int:
-    if typestr == "<f8" or typestr == "<i8":
-        return 8
-    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
-        return 4
-    if typestr == "<f2" or typestr == "<u2":
-        return 2
-    if typestr == "<u1" or typestr == "<i1":
-        return 1
-    raise Error("TypeError: " + typestr + " is not an Array dtype")
+# labels_itemsize (a second copy of admitted_width) deleted 2026-11-12 by lane admitted-x-view:
+# bindings/admitted_input_run.mojo admitted_width is the one Array item width.
 
 
 def labels_full_f32(count: Int, value: Float64, context: PythonObject) raises -> PythonObject:
@@ -286,29 +274,6 @@ def _pandas_values(source: PythonObject) raises -> PythonObject:
     return _pd_get("pandas._libs.internals", "Block", "values", blocks[0])
 
 
-def _native_code(typestr: String) raises -> Int:
-    """`_array._NATIVE_CODE`: the core helpers' dtype numbering."""
-    if typestr == "<f4":
-        return 0
-    if typestr == "<f8":
-        return 1
-    if typestr == "<i4":
-        return 2
-    if typestr == "<i8":
-        return 3
-    if typestr == "<u4":
-        return 4
-    if typestr == "<u1":
-        return 5
-    if typestr == "<u2":
-        return 6
-    if typestr == "<i1":
-        return 7
-    if typestr == "<f2":
-        return 8
-    raise Error("TypeError: " + typestr + " has no native element code")
-
-
 def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, context: PythonObject) raises:
     """`Array.astype(target)` of a contiguous block (`_native_astype`): the
     core cast `cast_elements` in process, one conversion per element in
@@ -327,23 +292,6 @@ def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, 
 
 
 # ----------------------------------------------------------------- labels
-
-
-def _encode_code(typestr: String) -> Int:
-    """`_labels._NATIVE_ENCODE`, or -1."""
-    if typestr == "<f4":
-        return 0
-    if typestr == "<f8":
-        return 1
-    if typestr == "<i4":
-        return 2
-    if typestr == "<i8":
-        return 3
-    if typestr == "<u4":
-        return 4
-    if typestr == "<u1":
-        return 5
-    return -1
 
 
 struct ClassicalLabels(Copyable, Movable):
@@ -994,24 +942,12 @@ def labels_label_kind(var classes: PythonObject, context: PythonObject) raises -
     return String("int") if all_int else String("float") if all_real else String("object")
 
 
-trait _LabelsCodeSource:
-    def address(self) raises -> Int: ...
-
-
 @fieldwise_init
 struct _PythonLabelCodes(Copyable, Movable, _LabelsCodeSource):
     var keep: PythonObject
 
     def address(self) raises -> Int:
         return labels_address(self.keep)
-
-
-@fieldwise_init
-struct _NativeLabelCodes(Copyable, Movable, _LabelsCodeSource):
-    var data: Int
-
-    def address(self) raises -> Int:
-        return self.data
 
 
 def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1578,7 +1514,7 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
     var inputs: List[PythonObject] = [yt, yp]
     var w_array = PythonObject(None)
     if weighted:
-        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
+        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value().view(), context)
         inputs.append(w_array)
     var arena = _accuracy_run(plan.program, inputs, mode, context)
     var base = arena.base()
@@ -1738,7 +1674,7 @@ def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, cod
     return _accuracy_codes(yt, yp, n, len(classes), w^, mode, context)
 
 
-def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
+def _owned_f32(w: AdmittedXView, context: PythonObject) raises -> PythonObject:
     """A float32 Array copy of weights that borrow a foreign buffer (the
     program runner copies Arrays into its arena; `put` took `as_f32_c`'s
     Array). Copy the already-admitted contiguous float32 words natively."""
@@ -1747,7 +1683,6 @@ def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
     # `array` owns the admitted storage; it need not itself export bytes.
     unsafe_memcpy(dest=_F32P(unsafe_from_address=labels_address(out)),
            src=_F32P(unsafe_from_address=w.address), count=count)
-    _ = w  # retain the source export until the copy finishes
     return out
 
 

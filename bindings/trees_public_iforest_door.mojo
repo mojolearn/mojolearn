@@ -32,10 +32,10 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_typed_call import py_call_typed
 from core.host_parallel_copy import host_parallel_copy_bytes
 from bindings.native_buffer_owner_pack import native_storage_allocate
-from bindings.trees_public_inputs import (
+from bindings.trees_public_inputs_door import (
     trees_builtins, trees_table, trees_entry, trees_address, trees_call,
 )
-from bindings.admitted_input import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view
+from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view
 from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 # TOMBSTONE: trees_f32 / trees_all_finite / TreesMatrix / trees_vector / trees_empty uses and _copied (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.

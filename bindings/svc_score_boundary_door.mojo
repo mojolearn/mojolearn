@@ -16,10 +16,13 @@ from bindings.p3_labels_metrics_native_door import p3_item
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.classical_labels import (
-    _native_classification_input, _classification_labels, _encode_code,
-    _refuse_multilabel, _accuracy_context,
+from bindings.classical_labels_door import (
+    _native_classification_input,
+    _classification_labels,
+    _refuse_multilabel,
+    _accuracy_context,
 )
+from bindings.classical_labels_run import _encode_code
 from bindings.label_admission_native_unpack import LabelTypeKinds
 from bindings.label_admission_native_pack import classifier_label_list
 from bindings.label_input_sources_unpack import LABELS_LIST_INT

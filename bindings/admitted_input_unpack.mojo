@@ -129,17 +129,25 @@ from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_owner_lifetime_door import native_release_admit, _released_dtype
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.tensor_view import TensorView, shape_text, _contiguous, base_format, _array_code
+from bindings.tensor_view import TensorView, shape_text, _contiguous, _array_code
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.array_metadata_pyapi_door import array_owner_once
-from core.admitted_convert import admitted_convert
-from core.cast_in import CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
+from bindings.admitted_input_run import (
+    AdmittedXView,
+    RESHAPE_HINT,
+    _admitted_storage_key,
+    _entry_nonfinite,
+    admitted_finite_entry_refuse,
+    admitted_width,
+    _typed_kind,
+    _typed_target,
+    admitted_typed_convert,
+    admitted_view_kind,
+)
 from core.native_array_layout import NativeArrayLayout, native_matrix_shape, native_array_itemsize as _array_itemsize
 from providers.python.array_layout_boundary_unpack import native_shape_unpack
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.py_optional import py_present
-
-comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
 
 comptime _ADM_F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -217,6 +225,14 @@ struct AdmittedX(Copyable, Movable):
         self.c_order = True
         self.store = DoorRowsStore.none()
 
+    def view(self) -> AdmittedXView:
+        """The Python-free typed view (bindings/admitted_input_run.mojo), built
+        once by the door and passed to every typed read. The caller names this
+        AdmittedX again after the last call that reads `address`: the view
+        holds no owner."""
+        return AdmittedXView(self.address, self.rows, self.cols, self.ndim, self.c_order, self.borrowed,
+                             self.finite, self.position, self.device_rows, self.store)
+
 
 def admitted_words(array: PythonObject, address: Int, rows: Int, cols: Int, c_order: Bool = True) -> AdmittedX:
     """An AdmittedX over `rows` x `cols` float32 words at `address` that the
@@ -236,7 +252,7 @@ def admitted_array(shape: PythonObject, typestr: String, context: PythonObject, 
     # Lane a1b-doors-opt-in-trees-linear: labels_empty / labels_vector (and
     # their trees_empty alias) moved here word for word: one zero store
     # (native_array_zeros), the same zero bytes as before.
-    # TOMBSTONE: labels_empty / labels_vector / trees_empty (bindings/classical_labels.mojo) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+    # TOMBSTONE: labels_empty / labels_vector / trees_empty (bindings/classical_labels_door.mojo) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
     # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
     var layout = NativeArrayLayout(native_shape_unpack(shape), _array_itemsize(typestr), order)
     return classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
@@ -263,16 +279,6 @@ def admitted_storage_f32(rows: Int, cols: Int, context: PythonObject, order: Str
     # overwrote in full was a second pass over X.
     return admitted_storage_native(native_matrix_shape(rows, cols), "<f4", context,
                             order, as_array)
-
-
-def _admitted_storage_key(typestr: String) raises -> String:
-    if typestr == "<f4":
-        return "float32"
-    if typestr == "<f8":
-        return "float64"
-    if typestr == "<i8":
-        return "int64"
-    raise Error("TypeError: admitted storage holds <f4, <f8 or <i8, not " + typestr)
 
 
 def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject, order: String = "C",
@@ -416,7 +422,7 @@ def admit_f32(source: PythonObject, ndim: Int, name: String, context: PythonObje
     inputs that are not a public X (a target, a fitted array, a published
     prediction); a public X goes through admit_x_unrecorded / admit_x."""
     # Lane a1b-doors-opt-in-trees-linear: the former labels_f32 /
-    # trees_f32 (bindings/classical_labels.mojo, a second cast path with its
+    # trees_f32 (bindings/classical_labels_door.mojo, a second cast path with its
     # own view struct) is this call.
     var array = admit_x(source, ndim, name, context, False, admitted, defer_finite, order, as_array,
                         finite)
@@ -760,35 +766,6 @@ def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: 
     return x^
 
 
-def _entry_nonfinite(text: String, name: String) -> Bool:
-    """True when `text` is a kernel entry's own refusal of a non-finite
-    `name` ("X" or "y"): the x_linear fit's "mojolearn: X contains NaN or
-    infinity", the forest's "X contains NaN or infinity; the forest has no
-    missing-value arm", IsolationForest's "mojolearn IsolationForest: X
-    contains NaN or infinity" and the resident forest's "resident forest
-    requires finite Float32 values" (X only). The admission's own wording
-    ("Input X contains ...") is not an entry's: it is left as it is."""
-    if text.startswith("Input ") or text.startswith("ValueError: Input "):
-        return False
-    if name == "X" and "resident forest requires finite Float32 values" in text:
-        return True
-    return (name + " contains NaN or infinity") in text and "metrics" not in text
-
-
-def admitted_finite_entry_refuse(error: Error, est: String) raises:
-    """The refusal of a deferred finite test that the kernel entry raised in
-    its own words instead of returning the status word (the fit entries of
-    x_linear, the forests and IsolationForest; lane a7c): raises
-    scikit-learn's wording through `admitted_finite_refuse`, the one
-    wording of every deferred refusal. Returns for any other error: the
-    caller re-raises it."""
-    var text = String(error)
-    if _entry_nonfinite(text, "X"):
-        admitted_finite_refuse(1, est, "X")
-    if _entry_nonfinite(text, "y"):
-        admitted_finite_refuse(1, est, "y")
-
-
 def admit_rows_host(value: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
     """The host rows of a DeviceRows fold as one fresh C-order float32
     array, gathered in parallel out of model selection's host base (no
@@ -970,19 +947,6 @@ def admitted_shape_tuple(shape: List[Int]) raises -> PythonObject:
     return py_call(native_loaded_module("builtins").tuple, dims)
 
 
-def admitted_width(typestr: String) raises -> Int:
-    """The item width of an Array typestr; refuses a dtype no Array holds."""
-    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
-        return 4
-    if typestr == "<f8" or typestr == "<i8":
-        return 8
-    if typestr == "<u2" or typestr == "<f2":
-        return 2
-    if typestr == "<i1" or typestr == "<u1":
-        return 1
-    raise Error("TypeError: " + typestr + " is not an Array dtype")
-
-
 def admitted_zeros(shape: List[Int], typestr: String, context: PythonObject) raises -> AdmittedBuf:
     """A new zero-filled C-order Array of any Array dtype. Array stores have
     no uninitialised constructor (admitted_storage keeps the same zeros
@@ -991,68 +955,6 @@ def admitted_zeros(shape: List[Int], typestr: String, context: PythonObject) rai
     var array = classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
     var addr = Int(py=classical_address(array))
     return AdmittedBuf(array, addr, shape.copy())
-
-
-def _typed_kind(v: TensorView, mut item: Int) raises -> Int:
-    """The CastIn element kind of a viewed buffer (its item size in `item`);
-    -1 for a format no Array dtype holds."""
-    item = v.itemsize
-    if v.is_array:
-        var t = v.dtype
-        if t == "<f4" or t == "<f8" or t == "<f2":
-            return CAST_KIND_FLOAT
-        if t == "<i1" or t == "<i4" or t == "<i8":
-            return CAST_KIND_SIGNED
-        return CAST_KIND_UNSIGNED
-    var code = base_format(v.fmt)
-    if code == "f" or code == "d" or code == "e":
-        return CAST_KIND_FLOAT
-    if code == "?":
-        return CAST_KIND_BOOL
-    if code == "b" or code == "h" or code == "i" or code == "l" or code == "q" or code == "n":
-        return CAST_KIND_SIGNED
-    if code == "B" or code == "H" or code == "I" or code == "L" or code == "Q" or code == "N":
-        return CAST_KIND_UNSIGNED
-    return -1
-
-
-def _typed_target(typestr: String, mut item: Int) raises -> Int:
-    item = admitted_width(typestr)
-    if typestr == "<f4" or typestr == "<f8" or typestr == "<f2":
-        return CAST_KIND_FLOAT
-    if typestr == "<i1" or typestr == "<i4" or typestr == "<i8":
-        return CAST_KIND_SIGNED
-    return CAST_KIND_UNSIGNED
-
-
-def admitted_typed_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
-    """Every element of the viewed buffer, in C order, into the C-order
-    `typestr` store at `dst`: a copy of each contiguous run for the same
-    dtype, else one conversion per element by Array.astype's rules. The
-    elements are split into contiguous C-order ranges across the host's
-    cores (core/admitted_convert.mojo; each element writes only its own cell,
-    so no word depends on the split); a refusal is the one the first failing
-    element in C order raises."""
-    var item = 0
-    var kind = _typed_kind(v, item)
-    if kind < 0:
-        raise Error("TypeError: mojolearn: " + name + " has buffer format '" + v.fmt + "', which is not a numeric array")
-    var titem = 0
-    var tkind = _typed_target(typestr, titem)
-    var nd = len(v.shape)
-    var strides = List[Int](length=max(nd, 1), fill=0)
-    var shape = List[Int](length=max(nd, 1), fill=1)
-    if v.has_strides:
-        for k in range(nd):  # driver-loop: over stride words
-            strides[k] = v.strides[k]
-    else:
-        var step = v.itemsize
-        for k in range(nd - 1, -1, -1):  # driver-loop: over stride words
-            strides[k] = step
-            step *= v.shape[k]
-    for k in range(nd):  # driver-loop: over shape words
-        shape[k] = v.shape[k]
-    admitted_convert(v.addr, shape, strides, v.count(), item, kind, titem, tkind, typestr, dst)
 
 
 def admitted_typed_exporter(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -1326,16 +1228,6 @@ def admit_view(source: PythonObject, name: String, context: PythonObject, mut ho
         except:
             prepared = classical_view(source, context, name, True)
     return admitted_typed_once(prepared, context, hold, prepared is source)
-
-
-def admitted_view_kind(v: TensorView, name: String) raises -> Tuple[Int, Int]:
-    """(CastIn element kind, item size) of a captured view; refused for a
-    format no numeric Array dtype holds."""
-    var item = 0
-    var kind = _typed_kind(v, item)
-    if kind < 0:
-        raise Error("TypeError: mojolearn: " + name + " has buffer format '" + v.fmt + "', which is not a numeric array")
-    return (kind, item)
 
 
 def admitted_dtype_admit(dtype: PythonObject, context: PythonObject) raises:

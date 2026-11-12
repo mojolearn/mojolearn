@@ -7,7 +7,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_array_storage_admission_door import array_storage_address
-from bindings.admitted_input import admit_f32, AdmittedX, admitted_finite_refuse
+from bindings.admitted_input_run import AdmittedXView
+from bindings.admitted_input_unpack import admit_f32, AdmittedX, admitted_finite_refuse
 from bindings.decomp_inputs_unpack import decomp_admit
 from bindings.decomp_owner_common_unpack import decomp_attr, decomp_check, decomp_set_mode
 from x_decomp.decomp_owner_common_run import decomp_gemm_check
@@ -117,7 +118,7 @@ def _regs(fields: PythonObject, n: Int, d: Int, context: PythonObject) raises ->
     return nmf_regularization(n, d, a_w, a_h, l1)
 
 
-def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedX, nc: Int, init: Int,
+def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedXView, nc: Int, init: Int,
          w_address: Int, h_address: Int, seed: Int, update_h: Bool, options: NMFOptions,
          context: PythonObject, publish_w: Bool = True) raises -> NMFPackedFit:
     var connection = nmf_connection(model, fields, context, NMF_CAP_FIT, "x_decomp_nmf_fit")
@@ -179,7 +180,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
         var nc = hm.rows
         if wm.rows != n or wm.cols != nc or hm.cols != d:
             raise Error("NMF: W must be (n_samples, n_components) and H (n_components, n_features) for init='custom'")
-        result = _run(model, fields, admitted, nc, NMF_INIT_GIVEN, wm.address, hm.address,
+        result = _run(model, fields, admitted.view(), nc, NMF_INIT_GIVEN, wm.address, hm.address,
                       _seed(fields["random_state"]), True, options, context, publish_w)
         _ = wm^
         _ = hm^
@@ -204,7 +205,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
             raise Error("init=" + decomp_scalar_repr(name, context) + " is not supported here (random, nndsvd, nndsvda, nndsvdar)")
         if code != NMF_INIT_RANDOM and nc > smaller:
             raise Error("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
-        result = _run(model, fields, admitted, nc, code, -1, -1,
+        result = _run(model, fields, admitted.view(), nc, code, -1, -1,
                       _seed(fields["random_state"]), True, options, context, publish_w)
     py_setitem(fields, "components_", result.h)
     py_setitem(fields, "n_components_", PythonObject(result.count))
@@ -239,7 +240,7 @@ def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObje
         raise Error("X has " + String(admitted.cols) + " features, but NMF is expecting " + String(fitted))
     var options = _validate(fields, context)
     var h = admit_f32(fields["components_"], 2, "components_", context)
-    var result = _run(model, fields, admitted, h.rows, NMF_TRANSFORM, -1, h.address,
+    var result = _run(model, fields, admitted.view(), h.rows, NMF_TRANSFORM, -1, h.address,
                       _seed(fields["random_state"]), False, options, context)
     _ = admitted^
     _ = h^

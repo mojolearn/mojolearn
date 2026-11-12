@@ -13,8 +13,8 @@ from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout, classical_getattribute
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_c_order
-from bindings.classical_labels import labels_reshape
-from bindings.admitted_input import classical_view
+from bindings.classical_labels_door import labels_reshape
+from bindings.admitted_input_unpack import classical_view
 from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_values
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
