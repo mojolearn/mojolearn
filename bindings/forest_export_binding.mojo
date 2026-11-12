@@ -16,15 +16,7 @@ from core.forest_export_binding_impl import (
     validate_forest_export_destinations,
     copy_forest_export_leaves,
 )
-
-
-@fieldwise_init
-struct ForestExportEntry[Model: Movable & Deinitable](Movable):
-    var model: Self.Model
-    var trees: Int
-    var nodes: Int
-    var outputs: Int
-    var meta: List[Int64]
+from core.forest_export_run import ForestExportEntry
 
 
 struct ForestExportRegistry[Model: Movable & Deinitable](Defaultable, Movable):
