@@ -1,14 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
-"""KernelPCA provider admission and image pins around typed native plans."""
+"""KernelPCA provider admission and image pins around typed native plans (door).
+
+The typed connection records are in `x_decomp/kpca_descriptor_boundary_run.mojo`."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.neighbors_native_driver import XnDriver
 from core.kpca_native_api import (
-    KPCA_NATIVE_ABI, KPCA_NATIVE_COUNT, KPCA_MODE, KPCA_VENDOR, KPCA_CAPABILITIES,
-    KPCA_CAP_EIGEN, KPCA_CAP_NEIGHBORS, KPCA_CAP_RESIDENT, KPCANativeDriver, KPCAEigenRequest,
+    KPCA_NATIVE_ABI, KPCA_NATIVE_COUNT, KPCA_CAP_EIGEN, KPCA_CAP_NEIGHBORS, KPCANativeDriver, KPCAEigenRequest,
 )
+from x_decomp.kpca_descriptor_boundary_run import (
+    kpca_near_index, kpca_near_add, kpca_near_facts, kpca_near_driver,
+    kpca_decomp_index, kpca_decomp_add, kpca_decomp_facts, kpca_decomp_driver, kpca_decomp_reduction,
+)
+from bindings.py_provider_pins import provider_word
 from core.kpca_native_plan import (
     KPCANeighborDriver, KPCAAlphaRequest, KPCAQueryRequest, KPCACenteredQuery,
     KPCAFitPrepareRequest, KPCADenseFit,
@@ -23,37 +29,21 @@ from providers.python.neural_descriptor_pyapi import (
 )
 
 
-@fieldwise_init
-struct KPCANearConnection(Movable):
-    var provider: PythonObject
-    var metadata: PythonObject
-    var driver: KPCANeighborDriver
-    var mode: Int
-    var vendor: Int
-    var capabilities: Int
-
-
-@fieldwise_init
-struct KPCADecompConnection(Movable):
-    var provider: PythonObject
-    var reduction_provider: PythonObject
-    var driver: KPCANativeDriver
-    var reduction: NativeDescriptorCall
-    var mode: Int
-    var vendor: Int
-    var capabilities: Int
-
-
-struct KPCAConnections(Defaultable, Movable):
-    var near: List[KPCANearConnection]
-    var decomp: List[KPCADecompConnection]
+struct KPCAProviderPins(Defaultable, Movable):
+    # Door-side lifetime pins, at the index of their typed RUN record.
+    var near_providers: List[PythonObject]
+    var near_metadata: List[PythonObject]
+    var decomp_providers: List[PythonObject]
+    var decomp_reductions: List[PythonObject]
 
     def __init__(out self):
-        self.near = List[KPCANearConnection]()
-        self.decomp = List[KPCADecompConnection]()
+        self.near_providers = List[PythonObject]()
+        self.near_metadata = List[PythonObject]()
+        self.decomp_providers = List[PythonObject]()
+        self.decomp_reductions = List[PythonObject]()
 
 
-comptime KPCA_CONNECTIONS = SharedSlot[KPCAConnections, "MojolearnKPCAConnectionsV1"]
+comptime KPCA_PROVIDER_PINS = SharedSlot[KPCAProviderPins, "MojolearnKPCAProviderPinsV1"]
 
 
 def _factory(context: PythonObject, table_name: String, mode: String) raises -> PythonObject:
@@ -94,22 +84,17 @@ def kpca_near_connection(mode: String, context: PythonObject) raises -> Int:
         String(KPCA_NATIVE_ABI), KPCA_NATIVE_COUNT)
     if provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not metadata.downcast_value_ptr[NeuralDescriptorProvider]()[].module:
         raise Error("RuntimeError: KernelPCA neighbor metadata and execution must belong to the same provider image")
-    var cache = KPCA_CONNECTIONS.get_or_create_ptr()
-    var index = -1
-    for i in range(len(cache[].near)):  # driver-loop: admitted native provider images
-        if cache[].near[i].provider is provider and cache[].near[i].metadata is metadata:
-            index = i
-            break
+    var index = kpca_near_index(provider_word(provider), provider_word(metadata))
     if index < 0:
-        var info = KPCANativeDriver(metadata.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        var native_mode = info.metadata(KPCA_MODE)
-        var vendor = info.metadata(KPCA_VENDOR)
-        var capabilities = info.metadata(KPCA_CAPABILITIES)
-        var driver = KPCANeighborDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
-        index = len(cache[].near)
-        cache[].near.append(KPCANearConnection(provider, metadata, driver^, native_mode, vendor, capabilities))
-    _check(mode, cache[].near[index].vendor, cache[].near[index].mode,
-        cache[].near[index].capabilities, KPCA_CAP_NEIGHBORS, context)
+        # The typed record and the door pins are appended together, under the GIL.
+        index = kpca_near_add(provider_word(provider), provider_word(metadata),
+            KPCANativeDriver(metadata.downcast_value_ptr[NeuralDescriptorProvider]()[].entry),
+            KPCANeighborDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)))
+        var pins = KPCA_PROVIDER_PINS.get_or_create_ptr()
+        pins[].near_providers.append(provider)
+        pins[].near_metadata.append(metadata)
+    var facts = kpca_near_facts(index)
+    _check(mode, facts.vendor, facts.mode, facts.capabilities, KPCA_CAP_NEIGHBORS, context)
     return index
 
 
@@ -120,27 +105,18 @@ def kpca_decomp_connection(mode: String, context: PythonObject) raises -> Int:
     var reduction = neural_descriptor_connect_once(module, "x_decomp_native_api_v1", String(XD_ABI_NAME), XD_OPERATION_COUNT)
     if reduction.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not module:
         raise Error("RuntimeError: KernelPCA eigensolver and reduction must belong to the same provider image")
-    var cache = KPCA_CONNECTIONS.get_or_create_ptr()
-    var index = -1
-    for i in range(len(cache[].decomp)):  # driver-loop: admitted native provider images
-        if cache[].decomp[i].provider is provider and cache[].decomp[i].reduction_provider is reduction:
-            index = i
-            break
+    var index = kpca_decomp_index(provider_word(provider), provider_word(reduction))
     if index < 0:
-        var driver = KPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        var native_mode = driver.metadata(KPCA_MODE)
-        var vendor = driver.metadata(KPCA_VENDOR)
-        var capabilities = driver.metadata(KPCA_CAPABILITIES)
-        var entry = reduction.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
-        index = len(cache[].decomp)
-        cache[].decomp.append(KPCADecompConnection(provider, reduction, driver^, entry, native_mode, vendor, capabilities))
-    _check(mode, cache[].decomp[index].vendor, cache[].decomp[index].mode,
-        cache[].decomp[index].capabilities, KPCA_CAP_EIGEN, context)
+        # The typed record and the door pins are appended together, under the GIL.
+        index = kpca_decomp_add(provider_word(provider), provider_word(reduction),
+            KPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry),
+            reduction.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+        var pins = KPCA_PROVIDER_PINS.get_or_create_ptr()
+        pins[].decomp_providers.append(provider)
+        pins[].decomp_reductions.append(reduction)
+    var facts = kpca_decomp_facts(index)
+    _check(mode, facts.vendor, facts.mode, facts.capabilities, KPCA_CAP_EIGEN, context)
     return index
-
-
-def kpca_resident(connection: Int) raises -> Bool:
-    return (KPCA_CONNECTIONS.get_or_create_ptr()[].near[connection].capabilities & KPCA_CAP_RESIDENT) != 0
 
 
 @fieldwise_init
@@ -159,15 +135,15 @@ struct KPCADecompCall(Movable):
 
 
 def _near_call(connection: Int) raises -> KPCANearCall:
-    var cache = KPCA_CONNECTIONS.get_or_create_ptr()
-    return KPCANearCall(cache[].near[connection].provider, cache[].near[connection].metadata,
-        cache[].near[connection].driver.copy())
+    var pins = KPCA_PROVIDER_PINS.get_or_create_ptr()
+    return KPCANearCall(pins[].near_providers[connection], pins[].near_metadata[connection],
+        kpca_near_driver(connection))
 
 
 def _decomp_call(connection: Int) raises -> KPCADecompCall:
-    var cache = KPCA_CONNECTIONS.get_or_create_ptr()
-    return KPCADecompCall(cache[].decomp[connection].provider, cache[].decomp[connection].reduction_provider,
-        cache[].decomp[connection].driver.copy(), cache[].decomp[connection].reduction)
+    var pins = KPCA_PROVIDER_PINS.get_or_create_ptr()
+    return KPCADecompCall(pins[].decomp_providers[connection], pins[].decomp_reductions[connection],
+        kpca_decomp_driver(connection), kpca_decomp_reduction(connection))
 
 
 def kpca_run_prepare(near: Int, decomp: Int, request: KPCAFitPrepareRequest) raises -> KPCADenseFit:
