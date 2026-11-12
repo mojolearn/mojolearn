@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_validate_unpack import classical_estimator_name
 from bindings.classical_labels import _flatten_labels

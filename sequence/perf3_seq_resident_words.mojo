@@ -57,7 +57,7 @@ def seq_resident_words(addresses: List[Int], base: Int, operation: String) raise
 # Free at model death (lane ne1-a-cluster-spectral, owed row N172). The
 # device store lives in the GPU sequence binding and the record that names a
 # block in the provider; neither sees the model die. The records module's
-# release (bindings/native_model_records.mojo) posts the model's identity
+# release (bindings/py_model_records.mojo) posts the model's identity
 # word on its dead-key ring (core/records_death_ring.mojo, Python-free);
 # `seq_resident_take_dead` pulls the ring from
 # the last sequence word it saw (no callback, no function pointer), and the

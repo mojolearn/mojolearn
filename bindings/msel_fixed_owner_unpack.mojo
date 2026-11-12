@@ -3,7 +3,7 @@
 # constructors only store the supplied parameter objects. Numerical work
 # continues through each estimator's existing native owner.
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stamped_get, records_stamped_put,
 )
 from std.python import Python, PythonObject
@@ -13,7 +13,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.native_typed_context_pack import native_typed_context
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.sequential_admission_door import _one_of
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 
 
 def _parameter(name: PythonObject, value: PythonObject, context: PythonObject) raises:
@@ -60,7 +60,7 @@ def fixed_owner_fields(model: PythonObject, context: PythonObject) raises -> Pyt
     # N069: the parameter, fitted-buffer and learner admission below depends
     # only on the instance dictionary state, the identities and classes its
     # values hold, and the learner's own state. It is kept as one stamped
-    # record per model (bindings/native_model_records.mojo: the model's
+    # record per model (bindings/py_model_records.mojo: the model's
     # generation word plus a ContentRecord of every field value to the
     # admission depth and of the learner), so a predict / score / set_params
     # with no state change skips it; any assignment, in-place container edit,

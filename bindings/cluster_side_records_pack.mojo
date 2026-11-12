@@ -17,7 +17,7 @@
 # Class facts are kept per class state (bindings/native_class_admission.mojo:
 # a type watcher invalidates them on any modification of the class or an
 # ancestor). Model facts are kept per model in the CLUSTER slot of the one
-# record table (bindings/native_model_records.mojo, lane ne1-e-records):
+# record table (bindings/py_model_records.mojo, lane ne1-e-records):
 # keyed by a weak reference to the model, outside its `__dict__`, so a query
 # leaves `__dict__` unchanged, pickles and copies carry no record, and a
 # record dies with its model. A model record is valid while its key matches:
@@ -40,7 +40,7 @@ from bindings.py_balanced import py_call, py_type, py_contains, py_get
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_address
 from bindings.trees_side_records_unpack import trees_key_same, trees_key_shallow
-from bindings.native_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_CLUSTER
+from bindings.py_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_CLUSTER
 
 # PyType_IsSubtype comes from the one CPython table (ClusterCPython,
 # MojolearnClusterCPythonV1, folded into it by lane ne1-e-table, 2026-11-06).

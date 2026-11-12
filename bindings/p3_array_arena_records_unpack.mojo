@@ -33,7 +33,7 @@ from bindings.py_balanced import py_call, py_type
 from bindings.native_class_admission_door import _class_arm, _class_epoch, class_watch_ready
 from bindings.native_loaded_module_door import shared_dict_watcher, shared_dict_epoch, shared_dict_watch
 from bindings.py_cpython_table import cpython_table
-from bindings.native_model_records import records_live, records_open, records_slot_array_arena
+from bindings.py_model_records import records_live, records_open, records_slot_array_arena, records_pin_arena_extra
 from core.shared_slot import SharedSlot
 from bindings.p3_array_arena_records_run import P3NumpyClasses, P3DictRecords
 
@@ -54,7 +54,7 @@ comptime P3_NATIVE_ARRAY_STORAGE_LAYOUT = 12  # shared native Array storage/slot
 
 
 # Storage (lane ne1-e-records, 2026-11-06): the layout admissions live in
-# the ARRAY_ARENA slot of the class's entry in bindings/native_model_records.mojo
+# the ARRAY_ARENA slot of the class's entry in bindings/py_model_records.mojo
 # (one weak entry per class; the `extra` objects held by that entry), so a
 # lookup scans only the class's own few records and nothing is retained for
 # the life of the process.
@@ -70,7 +70,7 @@ def p3_layout_admitted(kind: Int, cls: PythonObject, extra: PythonObject) raises
     var slot = records_slot_array_arena(Int(cls._obj_ptr))
     var n = len(slot[].words) // 3
     for i in range(n):  # driver-loop: over the class's few admitted (kind, extra) records
-        if slot[].words[3 * i] == kind and Int(slot[].extras[slot[].words[3 * i + 1]]._obj_ptr) == other:
+        if slot[].words[3 * i] == kind and slot[].extras[slot[].words[3 * i + 1]] == other:
             return slot[].words[3 * i + 2] == epoch
     return False
 
@@ -90,13 +90,16 @@ def p3_layout_admit(kind: Int, cls: PythonObject, extra: PythonObject) raises:
     var slot = records_slot_array_arena(key)
     var n = len(slot[].words) // 3
     for i in range(n):  # driver-loop: over the class's few admitted (kind, extra) records
-        if slot[].words[3 * i] == kind and Int(slot[].extras[slot[].words[3 * i + 1]]._obj_ptr) == other:
+        if slot[].words[3 * i] == kind and slot[].extras[slot[].words[3 * i + 1]] == other:
             slot[].words[3 * i + 2] = epoch
             return
-    slot[].extras.append(extra)
+    slot[].extras.append(other)
     slot[].words.append(kind)
     slot[].words.append(len(slot[].extras) - 1)
     slot[].words.append(epoch)
+    # Pin `extra`, whose id() word the slot now holds (`slot` is not used
+    # past this call).
+    records_pin_arena_extra(key, extra)
 
 
 comptime P3_NUMPY_CLASSES = SharedSlot[P3NumpyClasses, "MojolearnP3ArrayArenaNumpyClassesV2"]

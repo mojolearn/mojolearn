@@ -20,7 +20,7 @@ comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"
 
 
 def _records_death_callback(callback: PythonObject, context: PythonObject) raises -> Bool:
-    """True for the death callback of bindings/native_model_records.mojo:
+    """True for the death callback of bindings/py_model_records.mojo:
     an exact bound method (PyMethod_New) of the compiled `release` entry of
     its `_mojolearn_model_records_lifetime` module, bound to an int token.
     Each binding holds its own records table, so the entry is recognized by

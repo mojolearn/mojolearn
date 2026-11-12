@@ -25,7 +25,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.prep_native_estimator_door import prep_estimator_call, prep_estimator_plan
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, ContentRecord, content_value, content_object,
     RECORDS_TREES,
 )
@@ -206,7 +206,7 @@ def _held_matches(held: PythonObject, model: PythonObject, context: PythonObject
 
 
 # Generation stamp (lane ne2-b-members, row N071; the generation word of
-# bindings/native_model_records.mojo, lane ne1-e-records): after an admission
+# bindings/py_model_records.mojo, lane ne1-e-records): after an admission
 # (or a record match) the configuration is stamped with the meta-estimator's
 # generation word plus native content words for what that word does not
 # prove: the items of every exact list and dict the walk reads, the class of

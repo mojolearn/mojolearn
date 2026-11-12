@@ -49,7 +49,7 @@ DOORS = frozenset({
     "bindings/native_loaded_module_door.mojo",
     "bindings/admitted_call_door.mojo",
     "bindings/py_cpython_table.mojo",
-    "bindings/native_model_records.mojo",
+    "bindings/py_model_records.mojo",
     "bindings/perf2_shared_cpython_table.mojo",
     "bindings/native_class_admission_door.mojo",
     "bindings/native_prepared_owner_unpack.mojo",

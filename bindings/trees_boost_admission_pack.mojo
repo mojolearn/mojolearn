@@ -11,7 +11,7 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.native_loaded_module_door import NativeModules
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_fields
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, records_drop, ContentRecord, content_fields,
     content_object, RECORDS_TREES,
 )

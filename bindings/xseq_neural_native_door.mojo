@@ -21,7 +21,7 @@ from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_identity_key_door import NativeIdentityKey
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
-from bindings.native_model_records import records_open, model_generation
+from bindings.py_model_records import records_open, model_generation
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
 from providers.python.autograd_pyapi_door import cast_in_of
@@ -252,7 +252,7 @@ def _record_get(mut mods: NativeModules, slot: String, model: PythonObject, firs
         same = False
     # Lane ne1-e-records (lesson 9: identity key plus generation word, no
     # content stamp): the record's last word is the model's generation when
-    # it was kept (bindings/native_model_records.mojo); any later assignment,
+    # it was kept (bindings/py_model_records.mojo); any later assignment,
     # deletion, set_params, __setstate__ or load moves the model's word on.
     # 0 (no dictionary watcher) leaves the identity key alone deciding.
     if same:

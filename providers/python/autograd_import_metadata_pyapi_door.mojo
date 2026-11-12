@@ -7,7 +7,7 @@ from bindings.native_class_admission_door import class_record, class_admit, dict
 from bindings.optimizer_public_words_unpack import stash_python_error
 from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from providers.python.neural_descriptor_pyapi import NativeDescriptorResource
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_stampable, records_stamped_get, records_stamped_put,
 )
 
@@ -116,7 +116,7 @@ def _program_specs_kept(program: PythonObject, fields: PythonObject, name: Strin
     """`_program_specs(fields[name])`, rebuilt only when the program's
     generation word or the content of that descriptor list changed (row
     N141: the immutable spec tuples were rebuilt item by item on every run).
-    The record lives in the native side table (bindings/native_model_records),
+    The record lives in the native side table (bindings/py_model_records),
     never in the program's `__dict__`; Python 3.10 / 3.11 keep the per-run
     build. The payload holds only the spec tuples (no reference to the
     program)."""

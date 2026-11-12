@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from bindings.gp_native_boundary_door import GPConnection
 from bindings.native_loaded_module_door import NativeModules, native_interpreter_finalizing
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
-from bindings.native_model_records import model_generation
+from bindings.py_model_records import model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_owns_store_any, fitted_freeze_any
 from core.gp_native_api import GPDriver
 from core.gp_native_state import GPLeaseState

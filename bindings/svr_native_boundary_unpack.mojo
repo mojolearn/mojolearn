@@ -38,7 +38,7 @@ def svr_run_query(connection: SvrConnection, request: SvrQueryRequest, resident:
 from core.gp_native_state import GPLeaseState
 from bindings.native_loaded_module_door import NativeModules, native_interpreter_finalizing
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
-from bindings.native_model_records import model_generation
+from bindings.py_model_records import model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_owns_store_any, fitted_freeze_any
 
 

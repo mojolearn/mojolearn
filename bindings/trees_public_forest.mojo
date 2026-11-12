@@ -43,7 +43,7 @@ from bindings.py_trees_resident import (
     TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_unpin,
     trees_resident_watch, trees_resident_forget,
 )
-from bindings.native_model_records import model_identity_key, model_generation
+from bindings.py_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.metrics_native_support_door import metric_is_integral, metric_warning_location
 from bindings.classical_warnings_unpack import classical_warning

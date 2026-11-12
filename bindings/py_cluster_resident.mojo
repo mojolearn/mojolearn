@@ -18,7 +18,7 @@ Rules (plan section 2A) are listed in the RUN module. Callers hold only
 exact mojolearn `Array`s made read-only (`fitted_freeze`). Nothing here
 computes on data."""
 from std.python import PythonObject
-from bindings.native_model_records import model_identity_key, model_generation
+from bindings.py_model_records import model_identity_key, model_generation
 from core.shared_slot import SharedSlot
 from bindings.kmeans_variants_resident_boundary_unpack import VariantsResidentLease, variants_resident_retire
 from bindings.spectral_native_boundary_unpack import SpectralStatePins

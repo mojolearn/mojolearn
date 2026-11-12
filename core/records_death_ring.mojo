@@ -2,7 +2,7 @@
 """The dead-key ring of the native model records: released model identity
 words, kept for polling by the family stores keyed by model identity.
 
-`bindings/native_model_records.mojo` posts a key here when a model's record
+`bindings/py_model_records.mojo` posts a key here when a model's record
 is released; a store (the sequence resident store, the cluster/spectral
 resident table) keeps the last sequence word it drained and pulls the keys
 released since. Host-only, standard library only: no Python and no bindings
@@ -13,7 +13,7 @@ from std.atomic import Atomic, Ordering
 from core.shared_slot import SharedSlot
 
 
-# Moved out of bindings/native_model_records.mojo (2026-11-07, lane
+# Moved out of bindings/native_model_records.mojo (now py_model_records.mojo) (2026-11-07, lane
 # post-kernel-imports-shell) unchanged, so the sequence kernel's import does
 # not reach the shell; the _Global name is the same, so the ring is the same
 # process-wide object.

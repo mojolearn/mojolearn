@@ -2,7 +2,7 @@
 """Prepared-only fitted GP admission state and retained public identity pins."""
 from std.python import PythonObject
 from bindings.gp_kernel_cache_boundary_door import GPKernelKey
-from bindings.native_model_records import ContentRecord
+from bindings.py_model_records import ContentRecord
 
 
 struct GPPreparedState(Movable, Writable):

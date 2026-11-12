@@ -25,7 +25,7 @@ from bindings.sequential_arrays_door import sequential_array, sequential_address
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from core.classical_ridge_impl import classical_widen_f32_f64
 from core.host_inference_impl import host_inference_nd_finite
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_drop, records_stampable, records_stamped_get,
     records_stamped_put,
 )
@@ -46,7 +46,7 @@ from bindings.native_model_records import (
 # (an ndarray's header reassigned in place, `est.coefs_[0].shape = ...`).
 comptime _OWNER_SLOT = "perf3_xseq_owner_fields_v1"
 # N137 (ne3-c-cnn, 2026-11-07): the same record, stamped with the model's
-# generation word (bindings/native_model_records.mojo: the watched instance
+# generation word (bindings/py_model_records.mojo: the watched instance
 # dictionary) and the content words of the fields, so a hit is one
 # generation compare plus native word compares, without the per-field
 # identity walk. History lists the call never reads (`loss_curve_`,

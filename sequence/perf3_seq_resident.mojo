@@ -31,7 +31,7 @@ store read and write takes the store's lock word, so two descriptor entries
 on two threads (a GIL released around a device entry) never interleave a
 lookup, an upload record and an eviction. A model's death is posted on the
 records module's dead-key ring (`records_release`,
-bindings/native_model_records.mojo); every call drains it first
+bindings/py_model_records.mojo); every call drains it first
 (`seq_resident_take_dead`, sequence/perf3_seq_resident_words.mojo) and
 frees those models' blocks (every unpinned block when the ring overflowed
 since the last drain), after a synchronize of the shared context,

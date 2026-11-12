@@ -13,7 +13,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
 from bindings.native_resident_capsule_pack import resident_capsule
-from bindings.native_model_records import records_open, model_generation
+from bindings.py_model_records import records_open, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
@@ -229,7 +229,7 @@ comptime _DK_RESIDENT_SLOT = "decomp_resident_operands_v1"
 # returns the pool buffer when the entry is replaced or dropped, `own words`
 # is True when the buffer holds the source's own words (False: words a
 # query derived from them), and `generation` the model's generation word
-# (bindings/native_model_records.mojo) when the entry was taken. The key is
+# (bindings/py_model_records.mojo) when the entry was taken. The key is
 # so (model identity, generation, source identity): no content hash. The
 # read-only rule (bindings/p3nc_fitted_freeze.mojo) makes the source
 # read-only before an entry is taken. No byte cap here: an entry is one

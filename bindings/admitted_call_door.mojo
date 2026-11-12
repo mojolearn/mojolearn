@@ -27,7 +27,7 @@
 # Rules:
 # - Never stored on a Python object and never kept past its operation: no
 #   field survives the door's return. Nothing here is a cache across calls
-#   (cross-call records live in bindings/native_model_records.mojo).
+#   (cross-call records live in bindings/py_model_records.mojo).
 # - After every GIL release window the door (or the helper that released)
 #   calls released(): the modules, the binding and the layout verdict are
 #   re-admitted on next use; the inputs keep their owners (the buffers stay

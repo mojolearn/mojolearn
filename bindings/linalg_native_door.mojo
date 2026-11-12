@@ -12,7 +12,7 @@ from bindings.admitted_family_door import admit_family
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.native_model_records import records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_PREPARED
+from bindings.py_model_records import records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_PREPARED
 from bindings.family_common_unpack import (
     FAMILY_F64P,
     family_repr,
@@ -59,7 +59,7 @@ comptime _CHOL_STAMP = "linalg_chol_scalars_stamp_v1"
 def _chol_admit_state_once(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
     """`_chol_admit_state` with its scalar half admitted once per generation
     (lane ne1-e-records, row N238): while the model's generation word
-    (bindings/native_model_records.mojo) is unchanged, its stored names and
+    (bindings/py_model_records.mojo) is unchanged, its stored names and
     values are the same objects, and exact builtin scalars admit the same
     way again. `L_` is admitted on every call (an ndarray can be reshaped or
     retyped in place)."""

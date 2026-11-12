@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.native_model_records import ContentRecord, content_object, content_same, model_generation, records_stampable
+from bindings.py_model_records import ContentRecord, content_object, content_same, model_generation, records_stampable
 from bindings.gp_svm_records_door import gpsvm_side_get, gpsvm_side_put
 from bindings.mode_metadata_native_door import _fields
 from bindings.py_balanced import py_type

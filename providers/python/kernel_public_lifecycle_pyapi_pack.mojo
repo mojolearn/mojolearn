@@ -36,7 +36,7 @@ from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.trees_side_records_unpack import trees_key_same
 from bindings.gp_svm_records_door import gpsvm_side_get, gpsvm_side_put, gpsvm_side_drop
-from bindings.native_model_records import (
+from bindings.py_model_records import (
     records_key_append, records_stamped_get, records_stamped_put, records_stampable, records_drop,
     ContentRecord, content_value, RECORDS_GP_SVM,
 )

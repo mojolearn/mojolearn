@@ -13,13 +13,13 @@ from bindings.samba_state_native_door import samba_fields, samba_entries, samba_
 from core.samba_entry_table import samba_ref, SAMBA_TABLE_TRAINING, SAMBA_PRIM_NEURAL_RNG
 from bindings.causal_lm_construct_door import _model_f32, _model_shape
 from bindings.py_balanced import py_call, py_setitem, py_setattr
-from bindings.native_model_records import bump_model_generation
+from bindings.py_model_records import bump_model_generation
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwnerLease
 from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
 
 
 def samba_load_weights(model: PythonObject, weights: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(model)
     _ = generation_initialize_binding(context["neural"]["generation_classes"])

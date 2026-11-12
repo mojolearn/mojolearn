@@ -3,7 +3,7 @@
 # Python function objects identify import-time plans; they are never invoked.
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.native_model_records import RECORDS_PREPARED, ContentRecord, records_stamped_get, records_stamped_put
+from bindings.py_model_records import RECORDS_PREPARED, ContentRecord, records_stamped_get, records_stamped_put
 from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -100,7 +100,7 @@ def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> Py
         raise Error("TypeError: Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric")
     var fields = py_call(context["family_msel_scorer_fields"], scorer, cls)
     # N067: the exact-str key admission once per scorer state: a stamped
-    # record of the scorer (bindings/native_model_records.mojo, keyed by the
+    # record of the scorer (bindings/py_model_records.mojo, keyed by the
     # scorer's identity, released when it dies). Its generation word follows
     # the scorer's instance dictionary (any insertion, replacement, deletion
     # or clear misses), and the keys are all that this scan reads, so the

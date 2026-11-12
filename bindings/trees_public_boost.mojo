@@ -61,7 +61,7 @@ from bindings.py_trees_resident import (
     TREES_RESIDENT_DART, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_watch,
     trees_resident_forget, trees_resident_unpin,
 )
-from bindings.native_model_records import model_identity_key, model_generation
+from bindings.py_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from core.trees_entry_table import TreesEntryKey
 from xtrees.dart_abi import XD_CAP_ROUND, XD_CAP_RESIDENT, XD_FOREST_RELEASE
@@ -1914,7 +1914,7 @@ comptime _DART_SLOT = "trees_dart_forest_v2"
 
 def _dart_key(model: PythonObject, fields: PythonObject, K: Int) raises -> PythonObject:
     """The validity key of the kept DART forest (N003, ne1-a-trees,
-    2026-11-06): K, the model's generation word (bindings/native_model_records:
+    2026-11-06): K, the model's generation word (bindings/py_model_records:
     a refit, set_params or __setstate__ bumps it), the identities of the
     three per-tree sequences and `init_score_`, and the sequences' lengths.
     Nine words, no per-tree walk: the O(T) identity walk of every tree's
