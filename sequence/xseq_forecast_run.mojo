@@ -82,7 +82,8 @@ def forecast_run_theta_codes(info: Int, batch: Int) -> List[Int]:
     connected name (Python indexing, its own IndexError)."""
     var words = ForecastF32P(unsafe_from_address=info)
     var codes = List[Int](capacity=batch)
-    for row in range(batch):  # driver-loop: over the fitted series (one selected model code each)
+    # One native read per fitted series (no CPython); a data loop, so untagged.
+    for row in range(batch):
         codes.append(Int(Int64(words[row * 8 + 4])))
     return codes^
 

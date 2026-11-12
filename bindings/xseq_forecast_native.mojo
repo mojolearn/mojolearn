@@ -293,8 +293,19 @@ def _theta_model_names(models: PythonObject, info: PythonObject, batch: Int) rai
     var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     var codes = forecast_run_theta_codes(Int(py=xseq_addr(info)), batch)
     _ = info  # keep the code words alive through the native read above
-    for row in range(batch):  # driver-loop: over the fitted series (one selected model name each)
-        var name = models[codes[row]]
+    # perf-audit-3 (pattern 8): each connected name is read once, then each
+    # series takes a new reference to its cached name. Before, every series
+    # made a generic `models[code]` CPython item call. A code outside
+    # [0, len(models)) still goes through Python indexing (its own result or
+    # IndexError, as before).
+    var model_count = len(models)
+    var cached = List[PythonObject](capacity=model_count)
+    for k in range(model_count):  # driver-loop: over the connected model names (a handful), read once
+        cached.append(models[k])
+    # PACK: one PyList_SetItem per fitted series (the public result is a list of str).
+    for row in range(batch):
+        var code = codes[row]
+        var name = cached[code].copy() if code >= 0 and code < model_count else models[code]
         # SetItem steals the reference on both success and failure.
         if set_item(names._obj_ptr, row, name.steal_data()) != 0:
             raise cpy.unsafe_get_error()
