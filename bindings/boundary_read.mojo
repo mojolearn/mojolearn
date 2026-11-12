@@ -578,18 +578,35 @@ def view_int_at(view: BufferView, index: Int) -> Int:
     return Int(_load_i64(view.layout.address + index * view.layout.strides[0], view.kind, view.itemsize))
 
 
-def read_exact_int_item(seq: PythonObject, index: Int, is_tuple: Bool, type_error: String) raises -> Int:
-    """Item `index` of an exact list or tuple, admitted as an exact `int`
-    (not bool, not a subclass; `type_error` is raised otherwise) and read
-    as a 64-bit word. CPython calls: PyList_GetItem / PyTuple_GetItem
-    (borrowed, no allocation, no `__getitem__`), PyObject_Type,
-    PyLong_AsLongLong. The caller holds `seq` and runs no Python code
-    between reads."""
-    var raw = borrowed_item(seq, index, is_tuple)
-    if borrowed_type_word(raw) != _scalar_types()[].int_word:
-        raise Error(type_error)
+def read_exact_int_items(seq: PythonObject, count: Int, is_tuple: Bool, type_error: String,
+                         lo: Int, hi: Int, range_error: String) raises -> List[Int]:
+    """Items 0..count-1 of an exact list or tuple, each admitted as an exact
+    `int` (not bool, not a subclass; `type_error` is raised otherwise), read
+    as a 64-bit word with borrowed PyList_GetItem / PyTuple_GetItem (no
+    allocation, no `__getitem__`) and PyLong_AsLongLong, and checked to lie
+    in [lo, hi] (`range_error` otherwise), in item order (a type error and a range error are raised in the order the
+    per-item form raised them). The process tables (C-API entries, the exact
+    `int` class word, the interpreter handle) are resolved once per call,
+    not once per item (perf-audit-3)."""
     var t = cpython_table()
-    var value = t[].PyLong_AsLongLong(raw)
-    if value == -1 and t[].PyErr_Occurred():
-        raise _pending_error()
-    return Int(value)
+    var int_word = _scalar_types()[].int_word
+    ref cpy = Python().cpython()
+    var result = List[Int](length=count, fill=0)
+    for i in range(count):  # api-bound-loop: over the caller's exact list or tuple of ints, one borrowed read per item
+        var raw = t[].PyTuple_GetItem(seq._obj_ptr, i) if is_tuple else t[].PyList_GetItem(seq._obj_ptr, i)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        var cls = cpy.PyObject_Type(raw)
+        var word = Int(cls)
+        cpy.Py_DecRef(cls)
+        if word != int_word:
+            raise Error(type_error)
+        var value = t[].PyLong_AsLongLong(raw)
+        if value == -1 and t[].PyErr_Occurred():
+            raise _pending_error()
+        var n = Int(value)
+        if n < lo or n > hi:
+            raise Error(range_error)
+        result[i] = n
+    _ = seq  # the caller's container owns every borrowed item read above
+    return result^

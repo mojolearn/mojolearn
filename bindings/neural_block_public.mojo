@@ -17,7 +17,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_identity_key import NativeIdentityKey
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_fields, prepared_key_same
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
-from bindings.boundary_read import buffer_view, view_int_at, read_exact_int_item
+from bindings.boundary_read import buffer_view, view_int_at, read_exact_int_items
 from core.boundary_layout import BOUNDARY_KIND_FLOAT, BOUNDARY_KIND_BOOL
 from std.memory import unsafe_memcpy
 from std.os import getenv
@@ -890,14 +890,11 @@ def _neural_lengths(mut mods: NativeModules, value: PythonObject, b: Int, l: Int
     # PyLong_AsLongLong per batch row (no boxed index, no item reference,
     # no `__getitem__`); a Python list has no buffer to read once.
     var is_tuple = py_type(value) is bi.tuple
-    var result = List[Int](length=b, fill=0)
-    for i in range(b):
-        var n = read_exact_int_item(value, i, is_tuple,
-            "TypeError: neural block lengths entries must be integers, not bool or float")
-        if n < 1 or n > l:
-            raise Error("neural block: lengths must be in [1, L]")
-        result[i] = n
-    return result^
+    # perf-audit-3: the bulk form resolves the process tables once per
+    # call; the per-item form looked two global slots up per batch row.
+    return read_exact_int_items(value, b, is_tuple,
+        "TypeError: neural block lengths entries must be integers, not bool or float",
+        1, l, "neural block: lengths must be in [1, L]")
 
 
 def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) raises -> List[Int]:
