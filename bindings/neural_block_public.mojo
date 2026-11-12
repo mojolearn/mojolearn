@@ -24,7 +24,7 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
-from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, _addr, _weight_addr, _native_function, causal_transformer_admin, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
+from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
@@ -32,6 +32,10 @@ from providers.python.operation_lock_pyapi import OperationLockLease, operation_
 from bindings.native_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_reserved_execute, neural_descriptor_handle,
+)
+from providers.python.transformer_block_session_pyapi import (
+    transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
+    transformer_block_session_close,
 )
 from bindings.causal_lm_public import _causal_array_guard
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
@@ -249,9 +253,9 @@ def _neural_owner_runtime_names() -> List[String]:
     # arithmetic profile words, reports). They are not setup inputs: each
     # call copies their live values into its snapshot, as the full setup did.
     return [String("_arithmetic_profile"), String("_arithmetic_profile_mode"), String("_arithmetic_profile_changed"),
-            String("_native_session"), String("_session_binding"), String("_native_forward_owner"), String("h_last_"),
+            String("_native_session"), String("h_last_"),
             String("_native_block_provider_cache"), String("_native_mamba_block_provider_cache"), String("_native_mamba_state"),
-            String("_native_session_provider_cache"), String("_native_primitives_provider_cache"),
+            String("_native_primitives_provider_cache"),
             String("_native_mamba_provider_cache")]
 
 
@@ -707,7 +711,7 @@ def _neural_publish_state(state: PythonObject, captured: PythonObject) raises:
 def _neural_publish_fields(captured: PythonObject) raises:
     var fields = captured["_neural_live_fields"]
     for name in ["_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed",  # driver-loop: native admission metadata and retained owner registry
-                 "_native_session", "_session_binding", "_native_forward_owner", "h_last_",
+                 "_native_session", "h_last_",
                  "_native_block_provider_cache", "_native_mamba_block_provider_cache", "_native_mamba_state"]:
         if py_contains(captured, name):
             py_setitem(fields, name, captured[name])
@@ -755,7 +759,13 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
     # restored 2026-11-09 by lane r1-restore-measured-winners (the switches came back with the fresh prefill arm;
     # default unchanged: the block's session).
-    var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+    # The forward image's table entry (core/neural_entry_table.mojo), resolved
+    # once at plan construction; a GPU block's session is a native registry
+    # handle of that image (core/transformer_block_session.mojo, lane
+    # transformer-session-native): "block_session" marks a GPU Transformer
+    # route (the former "forward_session" Python entry's presence).
+    var forward = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].forward_entry
+    var reuse = transformer and py_contains(e, "block_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
@@ -763,10 +773,9 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
         lock_lease.acquire()
         mods.released()
     try:
-        if transformer and fields["_native_session"] is not None and (not reuse or fields["_session_binding"] is not e["block_binding"]):
-            causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)
+        if transformer and fields["_native_session"] is not None and (not reuse or not transformer_block_session_serves(fields["_native_session"], forward)):
+            transformer_block_session_close(fields["_native_session"])
             py_setitem(fields, "_native_session", PythonObject(None))
-            py_setitem(fields, "_session_binding", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
             var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
             if fresh_session or py_contains(e, "transformer_forward_fresh"):
@@ -796,18 +805,15 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                 # entries (transformer_session_forward_fresh,
                 # transformer_forward_fresh) and the env-gated provider capsule
                 # arms ran the same bodies with these words.
-                var forward = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].forward_entry
                 if fresh_session:
                     if fields["_native_session"] is None:
-                        py_setitem(fields, "_native_session", e["create"]())
-                        mods.released()
-                        py_setitem(fields, "_session_binding", e["block_binding"])
+                        py_setitem(fields, "_native_session", transformer_block_session_open(forward))
                     comptime if _NEURAL_TABLE_ROUTE_OFF:
                         _ = py_call(e["transformer_session_forward_fresh"], fields["_native_session"], py_ints(addresses), py_ints(params))
                         mods.released()
                     else:
                         var session_owner = fields["_native_session"]
-                        var handle = _neural_session_handle(mods, py_get(e, "transformer_native_session_handle_v1"), session_owner)
+                        var handle = transformer_block_session_handle(session_owner)
                         _ = _neural_table_reserved(forward, handle, NEURAL_BLOCK_RESERVE,
                             NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_FORWARD_FRESH, addresses, params, List[Float64]())
                         mods.released()
@@ -1387,14 +1393,14 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         try:
             var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
             if session:
-                if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
-                    causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)
+                # The block's session is a registry handle of the training
+                # image (the GPU image publishes one entry for forward and
+                # training, so a forward's session serves the backward).
+                if fields["_native_session"] is not None and not transformer_block_session_serves(fields["_native_session"], train_entry):
+                    transformer_block_session_close(fields["_native_session"])
                     py_setitem(fields, "_native_session", PythonObject(None))
-                    py_setitem(fields, "_session_binding", PythonObject(None))
                 if fields["_native_session"] is None:
-                    py_setitem(fields, "_native_session", _native_function(mods, entries, "transformer_session_create")())
-                    mods.released()
-                    py_setitem(fields, "_session_binding", entries.canonical)
+                    py_setitem(fields, "_native_session", transformer_block_session_open(train_entry))
                 # Session backward (op 3) through the training image's table
                 # entry. The former Python entry transformer_session_backward
                 # and the env-gated provider capsule arm ran the same
@@ -1405,8 +1411,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                     mods.released()
                 else:
                     var session_owner = fields["_native_session"]
-                    var handle = _neural_session_handle(mods,
-                        _native_function(mods, entries, "transformer_native_session_handle_v1"), session_owner)
+                    var handle = transformer_block_session_handle(session_owner)
                     _ = _neural_table_reserved(train_entry, handle, NEURAL_BLOCK_RESERVE,
                         NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_BACKWARD, addresses, params, List[Float64]())
                     mods.released()
@@ -1519,9 +1524,8 @@ def neural_block_getstate_binding(mut mods: NativeModules, block: PythonObject, 
     elif saved is not None:
         raise Error("transformer: a tagged model requires a binding that reports its arithmetic profile")
     var result = py_call(bi.dict, fields)
-    var transient_names = [String("_runtime_lock"), String("_native_session"), String("_session_binding"),
-        String("_native_forward_owner"), String("_native_block_provider_cache"),
-        String("_native_session_provider_cache"), String("_native_primitives_provider_cache")]
+    var transient_names = [String("_runtime_lock"), String("_native_session"), String("_native_block_provider_cache"),
+        String("_native_primitives_provider_cache")]
     for name in transient_names:  # driver-loop: over operation owners excluded from serialized model state
         _ = py_call(result.pop, name, PythonObject(None))
     return result
@@ -1549,15 +1553,13 @@ def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, 
         py_setitem(fields, "_runtime_lock", context["rlock"]())
         mods.released()
     var session = PythonObject(None)
-    var binding = PythonObject(None)
     if String(fields["_native_route"]) == "gpu" and String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        # A native registry handle of the block's GPU image (lane
+        # transformer-session-native; the former `transformer_session_create`).
         var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)
-        binding = bindings["transformer"]
-        session = _native_function(mods, binding, "transformer_session_create")()
-        mods.released()
+        session = transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
+            NeuralEntryKey(Int(py=bindings["entry_mode"]), Int(py=bindings["entry_vendor"]))))
     py_setitem(fields, "_native_session", session)
-    py_setitem(fields, "_session_binding", binding)
-    py_setitem(fields, "_native_forward_owner", PythonObject(None))
     py_setitem(fields, "_native_block_provider_cache", PythonObject(None))
     return PythonObject(None)
 
