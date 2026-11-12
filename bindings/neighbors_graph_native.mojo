@@ -48,7 +48,8 @@ from neighbors.neighbors_graph_run import (
     xn_unary_scale_request, xn_unary_shift_request, xn_matmul_request, xn_svgp_var_request,
 )
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
-from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present
 

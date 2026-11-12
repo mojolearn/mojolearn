@@ -19,7 +19,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_is_int, family_isinstance, family_call, family_entry, family_array,
 )
-from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
 

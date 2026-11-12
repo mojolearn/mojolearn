@@ -33,7 +33,8 @@ from bindings.family_common import (
 from bindings.classical_arrays import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
-from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present
 from core.kmeans_native_api import (
