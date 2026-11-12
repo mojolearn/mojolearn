@@ -24,13 +24,19 @@ from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.sys.compile import is_defined
-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import read_f32, read_i32
 from std.python import Python, PythonObject
 from core.hdbscan_query_api import hdbscan_soft_shape_refusal as _soft_shape_refusal
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hdbscan.native_query_device import HDBSCAN_QUERY_DEVICE_API
-from hdbscan.native_query_device_doors import _hdbscan_predict_run, _hdbscan_membership_run, _hdbscan_all_points_run
+from hdbscan.native_query_device_doors import _hdbscan_predict_run
+from hdbscan.mojolearn_hdbscan_run import (
+    _f32_ptr,
+    _i32_ptr,
+    hdbscan_membership_batches_run,
+    hdbscan_all_points_batches_run,
+)
 from hdbscan.native_fit_device import HDBSCAN_FIT_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from hdbscan.impl.hdbscan_door_impl import hdbscan_fit_door_run, prediction_data_door_run
@@ -41,14 +47,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
 
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
 
 
 def hdbscan_numeric_mode_binding() raises -> PythonObject:
@@ -370,16 +368,11 @@ def hdbscan_membership_vector_binding(
     var q_addr = Int(py=addrs[10])
     var out_addr = Int(py=addrs[11])
     with GILReleased(Python()):
-        var first = 0
-        while first < nq:  # driver-loop: over query batches inside the one public call
-            var count = min(batch, nq - first)
-            var q = read_f32(q_addr + first * d * 4, count * d)
-            _hdbscan_membership_run(
-                x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
-                deaths, selected, iic, ex_idx, offsets, q, count, min_samples,
-                _f32_ptr(out_addr + first * n_selected * 4),
-            )
-            first += count
+        hdbscan_membership_batches_run(
+            x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
+            deaths, selected, iic, ex_idx, offsets, nq, min_samples, batch,
+            n_selected, q_addr, out_addr,
+        )
     return PythonObject(nq)
 
 
@@ -443,15 +436,10 @@ def hdbscan_all_points_membership_vectors_binding(
         raise Error("hdbscan_all_points_membership_vectors: batch size must be positive; refused by name")
     var out_addr = Int(py=addrs[8])
     with GILReleased(Python()):
-        var done = 0
-        while done < count:  # driver-loop: over training-row batches inside the one public call
-            var part = min(batch, count - done)
-            _hdbscan_all_points_run(
-                x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
-                iic, ex_idx, offsets, row0 + done, part,
-                _f32_ptr(out_addr + done * n_selected * 4),
-            )
-            done += part
+        hdbscan_all_points_batches_run(
+            x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
+            iic, ex_idx, offsets, row0, count, batch, n_selected, out_addr,
+        )
     return PythonObject(count)
 
 
