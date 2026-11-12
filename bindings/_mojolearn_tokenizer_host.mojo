@@ -206,7 +206,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     vocab_fingerprint_hex,
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
-from providers.python.generation_session_pyapi import GenerationNativeProvider, GenerationNativeSession
+from providers.python.transformer_block_session_pyapi import transformer_block_session_type
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info, neural_descriptor_provider_pins, native_descriptor_resource_pins
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_operation_owner import CausalExecutionEntries
@@ -1352,8 +1352,10 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_load")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
-        _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
-        _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
+        # The Transformer block session owner (core/transformer_block_session.mojo)
+        # the neural doors keep on a block; it replaces the generation session
+        # provider and link types (lane transformer-session-native, 2026-11-12).
+        transformer_block_session_type(module)
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
         _ = module.add_type[NativeDescriptorResource]("_NativeDescriptorResource")
         _ = module.add_type[ProviderOperationLock]("_NativeOperationLockOwner")

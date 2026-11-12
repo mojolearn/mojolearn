@@ -81,7 +81,10 @@ comptime NEURAL_TABLE_LAST = 5
 
 # The operation counts every publisher and reader agree on: the readers'
 # former capsule admissions (`neural_descriptor_reuse(..., 36)` and `(..., 44)`).
-comptime NEURAL_BLOCK_OPERATIONS = 36
+# The block table gained op 36, NEURAL_BLOCK_SESSION_CREATE (lane
+# transformer-session-native, 2026-11-12); the capsule admissions still name 36
+# operations and never call it.
+comptime NEURAL_BLOCK_OPERATIONS = 37
 comptime NEURAL_MAMBA_OPERATIONS = 44
 # The small MLP program: open, step, download, apply, close, sessions.
 comptime NEURAL_MLP_PROGRAM_ABI = "mojolearn.neural.small_mlp_program.v1"
@@ -117,6 +120,18 @@ comptime NEURAL_BLOCK_SESSION_FORWARD_FRESH = 2
 comptime NEURAL_BLOCK_SESSION_BACKWARD = 3
 comptime NEURAL_BLOCK_FORWARD_FRESH = 4
 comptime NEURAL_BLOCK_BACKWARD = 5
+# The block session is a native registry handle of the GPU Transformer image
+# (lane transformer-session-native, 2026-11-12; core/transformer_block_session.mojo):
+# every session operation's first word is the handle word, never an address.
+comptime NEURAL_BLOCK_SESSION_FORWARD = 11
+"""a: 13 (+ options tail); words [h, 10 scalars (+ tail)] -> cached tokens."""
+comptime NEURAL_BLOCK_SESSION_CLOSE = 13
+"""words [h]: close the session and release its handle (a busy session refuses
+and keeps the handle)."""
+comptime NEURAL_BLOCK_SESSION_FORWARD_INT15 = 35
+"""a: INT15_ENTRY_ADDRS; words [h, INT15_ENTRY_PARAMS] -> cached tokens."""
+comptime NEURAL_BLOCK_SESSION_CREATE = 36
+"""No arguments -> a new session's handle word (creation does no device work)."""
 # Mamba block operation codes (mamba/native_block_dispatch.mojo).
 comptime NEURAL_MAMBA_RESERVE = 0
 comptime NEURAL_MAMBA_RELEASE = 1
