@@ -16,6 +16,13 @@
 # step, so the refusals keep their order: the settings checks the Python
 # methods made before reading X, X's own refusals, then the rest.
 # Runtime/vendor evidence is pending.
+# Kept inline tombstones of the steps that moved to bindings/mani_decomp_run.mojo (permanent record):
+        # TOMBSTONE: the host assembly of T (a j x j host matrix of the batch's
+        # alphas and betas) and its dense `k.eigh` deleted 2026-11-09 by lane
+        # n9-decomp-eigh-families; code recoverable at the lane's base
+        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 bit 1 device-LU arm) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.native_loaded_module import native_loaded_module

@@ -15,6 +15,13 @@
 # optional/one_host/one_dev PythonObject fields; `fn(name)` + `family_call`
 # per primitive; mk_* helpers over PythonObject matrices) deleted 2026-11-12
 # by lane entangled-mkit; code recoverable at the lane's base e561a66d6b.
+# Kept inline tombstones of the Python-holding MKit (permanent record):
+    # TOMBSTONE: x_decomp_w4_flags probe (DecompKit.w4_flags) deleted with its entry by 292b1af4e0; no caller left.
+        # TOMBSTONE: mani_kit.mojo from_snapshot host scan (host_all_finite_f32 before the resident upload) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+        # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by ed9ba6e7a1;
+    # code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
