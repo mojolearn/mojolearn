@@ -11,13 +11,9 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.msel_estimator_native import msel_native_clone, msel_estimator_plan, msel_clone_parameter
 from bindings.msel_scorer_native import msel_scorer_fields, msel_metric_plan
 from bindings.family_common import family_call
+from core.msel_parallel_wire_run import _depth
 
 comptime MSEL_WIRE_VERSION = "native-parallel-cv-v1"
-
-
-def _depth(depth: Int) raises:
-    if depth > 64:
-        raise Error("ValueError: native CV configuration exceeds 64 nested levels")
 
 
 def _record_size(record: PythonObject, size: Int) raises:
