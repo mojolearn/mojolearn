@@ -17,14 +17,16 @@ from x_decomp.resident import (
     dev_svd_run, dev_orth_diag_run,
     dev_colsum_run, dev_rowsum_run, dev_sqdist_run, dev_move_run, dev_upload_finite_run,
     dev_rand_run, dev_absmax_run, dev_lu_run, dev_lu_aux_run, dev_code_rows_run, dev_eigh_to_run,
-    IDN_LU_RESIDENT, IDN_CODE_RESIDENT, IDN_EIGH_RESIDENT,
+    IDN_LU_RESIDENT, IDN_CODE_RESIDENT, IDN_EIGH_RESIDENT, IDN_SVD_RESIDENT,
 )
-from x_decomp.select_dev import dev_reduce_run, dev_order_f_run, dev_argmin_all_run, dev_select_smallest_run
+from x_decomp.select_dev import (
+    dev_reduce_run, dev_order_f_run, dev_argmin_all_run, dev_select_smallest_run, dev_order_small_run,
+)
 from x_decomp.qfix import LU_QFIX, TSVD_QFIX, lu_resid_run
 from x_decomp.s_linalg_fast import s_flags_run
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op, xd_f32, xd_float, xd_i32
 from x_decomp.descriptor_schema import (
-    XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_CAP_RESIDENT,
+    XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_CAP_RESIDENT, XD_CAP_DEV_SVD, XD_DEV_ORDER_SMALL,
     XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD, XD_DEV_EW, XD_DEV_GEMM,
     XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN, XD_DEV_UPLOAD_FINITE,
     XD_CELL_ADD, XD_CELL_MIN, XD_MV_TAKE_ROWS, XD_MV_TAKE_COLS,
@@ -112,6 +114,9 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
                                  xd_dim(p[7]), xd_dim(p[8]))
     if op == XD_DEV_REDUCE:
         return dev_reduce_run(p[0], p[1], xd_dim(p[2]), p[3])
+    if op == XD_DEV_ORDER_SMALL:
+        # dev_order_small_py: p = [a, dst, n] (lane entangled-kits, 2026-11-12)
+        return dev_order_small_run(p[0], p[1], xd_dim(p[2]))
     if op == XD_DEV_ORDER:
         return dev_order_f_run(p[0], p[1], p[2], p[3], xd_dim(p[4]), p[5], p[6])
     if op == XD_DEV_SVD:
@@ -181,6 +186,8 @@ def x_decomp_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             answer = xd_vendor_code(String(COMPILED_VENDOR))
         elif operation == XD_CAPABILITIES:
             answer = XD_CAP_HOST | XD_CAP_RESIDENT
+            comptime if IDN_SVD_RESIDENT:
+                answer |= XD_CAP_DEV_SVD
         elif xd_is_address_op(operation):
             answer = xd_address_op[DevExec](operation, a, p, ff)
         elif xd_is_owner_op(operation):
