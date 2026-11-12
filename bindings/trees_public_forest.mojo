@@ -50,19 +50,19 @@ from bindings.classical_warnings import classical_warning
 from ensemble.rf_notices import rf_notice_text
 from xtrees.trees_forest_run import (
     ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
-    forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features,
+    forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features, forest_fit_core,
 )
 from checks.numerics import portable_log2_64
-from bindings.forest_fit_boundary import forest_fit_request_py
+from bindings.forest_fit_boundary import forest_fit_request_py, forest_request_words_py, forest_request_from_words_py
 from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.trees_entry_table import TreesEntryKey
 from core.forest_fit_request import (
-    XF_CAP_DEVICE_SCAN, XF_CAP_ORDERED_RESIDENT, XF_CAP_FUSED_LABELS, XF_CAP_RESIDENT_LABELS, XF_CAP_STRICT,
+    ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_ORDERED_RESIDENT, XF_CAP_FUSED_LABELS, XF_CAP_RESIDENT_LABELS, XF_CAP_STRICT,
     XF_RESIDENT_RELEASE, XF_STRICT_RELEASE,
 )
 from core.entry_table import EntryRef
 from core.forest_calls import (
-    ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_fit, xf_fit_dart, xf_export_sizes, xf_export_into,
+    ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_fit_dart, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,
     xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
@@ -578,27 +578,45 @@ def forest_export_handle(key: EntryRef, handle: Int, selection: String,
         raise error^
 
 
-def _launch(native: PythonObject, fit: ForestFit, x: AdmittedX, y_addr: Int, params: PythonObject,
-            criterion: PythonObject, device_scan: Bool, context: PythonObject) raises -> PythonObject:
-    """One fit launch and its export, through the connected image's native
-    entry: the params list unpacked once (`forest_fit_request_py`), the fit
-    (XF_FIT), the owned export copied into the model Arrays."""
-    var key = forest_key(native)
-    var selection = forest_export_selection()
-    var args = forest_fit_request_py(x.address, y_addr, params, criterion)
+def forest_fit_request(fields: PythonObject, cfg: PythonObject, kind: String, rows: Int, cols: Int, classes: Int,
+                       x_addr: Int, y_addr: Int, fit: ForestFit, native: PythonObject,
+                       context: PythonObject) raises -> ForestFitArgs:
+    """UNPACK, once per fit: the typed request (`ForestFitArgs`) from the
+    fitted configuration (the RF 16/17-slot or the ET 22-slot params list,
+    read into int and float views once), the X and y (label codes or
+    targets) addresses and the trailing words of `fit` (row weights, the
+    tree-ID start, the auxiliary outputs, the largest weight). `cfg` is the
+    ET params' configuration (the unweighted copy for a class-weighted ET
+    fit); the RF params read `fields["_cfg"]`. The public fit and the
+    tree-range shard driver (`forest_shard_prepare`) both build their
+    request here; `forest_fit_core` runs it."""
+    var params: PythonObject
+    var criterion: PythonObject
+    if _family(kind) == "et":
+        params = _et_params(fields, cfg, rows, cols, classes, context)
+        criterion = PythonObject(None)
+    else:
+        params = _rf_params(fields, kind, rows, cols, classes, native, context)
+        criterion = py_item(py_item(fields, PythonObject("_cfg")), PythonObject("criterion"))
+    var args = forest_fit_request_py(x_addr, y_addr, params, criterion)
     args.weights = fit.weights
     args.tree_start = fit.tree_start
     args.oob = fit.oob
     args.score = fit.score
     args.importance = fit.importance
     args.weight_max = fit.weight_max
-    var handle = 0
-    try:
-        handle = xf_fit(key, fit.classifier, fit.rowmajor_ok and x.c_order, args)
-    except error:
-        if device_scan and TREES_NONFINITE in String(error):
-            raise Error(TREES_NONFINITE)
-        raise error^
+    return args^
+
+
+def _launch(native: PythonObject, fit: ForestFit, x: AdmittedX, args: ForestFitArgs, device_scan: Bool,
+            context: PythonObject) raises -> PythonObject:
+    """One fit launch and its export, through the connected image's native
+    entry: the typed fit core (`forest_fit_core`, XF_FIT) on the request
+    `forest_fit_request` built, then the owned export copied into the model
+    Arrays (PACK)."""
+    var key = forest_key(native)
+    var selection = forest_export_selection()
+    var handle = forest_fit_core(key, fit.classifier, fit.rowmajor_ok and x.c_order, args, device_scan)
     _ = x.array
     return forest_export_handle(key, handle, selection, context)
 
@@ -791,8 +809,9 @@ def _rf_fit_arrays(fields: PythonObject, kind: String, x: AdmittedX, y_addr: Int
     _y_rows_check(y_rows, x.rows)
     var device_scan = _device_scan(rf)
     _finite_or_refuse(x, device_scan, context)
-    var params = _rf_params(fields, kind, x.rows, x.cols, classes, rf, context)
-    var result = _launch(rf, fit, x, y_addr, params, fields["_cfg"]["criterion"], device_scan, context)
+    var request = forest_fit_request(fields, fields["_cfg"], kind, x.rows, x.cols, classes, x.address, y_addr, fit,
+                                     rf, context)
+    var result = _launch(rf, fit, x, request, device_scan, context)
     _rf_fit_notices(result[5], context)
     _store_model(fields, result, x.cols)
     return result
@@ -1011,8 +1030,9 @@ def _et_fit_arrays(fields: PythonObject, cfg: PythonObject, X: PythonObject, y_a
     _y_rows_check(y_rows, x.rows)
     var device_scan = _device_scan(et)
     _finite_or_refuse(x, device_scan, context)
-    var params = _et_params(fields, cfg, x.rows, x.cols, classes, context)
-    var result = _launch(et, fit, x, y_addr, params, PythonObject(None), device_scan, context)
+    # "et_forest": an ET kind for `_family` (the ET params do not read the kind)
+    var request = forest_fit_request(fields, cfg, "et_forest", x.rows, x.cols, classes, x.address, y_addr, fit, et, context)
+    var result = _launch(et, fit, x, request, device_scan, context)
     _store_model(fields, result, x.cols)
     var meta = result[5]
     py_setitem(fields, "depth_cap_bound_", PythonObject(_truthy(meta[2])))
