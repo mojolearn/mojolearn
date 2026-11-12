@@ -234,4 +234,3 @@ def argmax_last_rows_f32_binding(
 # The three centering helpers of `linear_model.py` (workstream E): the base
 # binding's definitions on the calling thread.
 # ---------------------------------------------------------------------------
-
