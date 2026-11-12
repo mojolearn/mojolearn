@@ -7,6 +7,8 @@ docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md, "kind B"):
 and `transform_scaler`, `parallel_gaussian_process.fit_gaussian_process_classifier`
 and `predict_gaussian_process_classifier`, and
 `parallel_ensemble.fit_forest`, one call each into `parallel_shard_call`.
+The forest workers receive typed request words and arrays and call the one
+forest fit core (lane forest-typed-fit); they build no estimator.
 
 Each driver's partition, request order, driver negative control and merge
 are its old Python driver's (bindings/parallel_shard_common.mojo for the
@@ -35,7 +37,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
-from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
+from bindings.classifier_public_lifecycle import classifier_after_fit
 from bindings.scaler_lifecycle_native import _public_result, _entries, scaler_standard_rows
 from bindings.scaler_native import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
 from bindings.minmax_native import minmax_rows, minmax_fit_publish, _configuration as minmax_configuration
@@ -70,7 +72,7 @@ from bindings.gp_classifier_native import (
 )
 from bindings.gp_common_native import gp_kernel_arrays_transport
 from bindings.gp_labels_native import gp_encode_labels_transport, gp_decode_labels
-from bindings.trees_public_inputs import trees_encode_labels
+from bindings.trees_public_forest import forest_shard_prepare, forest_shard_fit, forest_shard_publish
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
 from core.shared_slot import SharedSlot
@@ -505,37 +507,22 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
 
 # ---------------------------------------------------------------- forests
 
-def _forest_y(y: PythonObject, regressor: Bool, context: PythonObject) raises -> PythonObject:
-    """The targets a forest shard receives, and the class list the joined
-    classifier publishes: `(float32 y, None)` for a regressor (the old
-    driver's `as_f32_c(y, ndim=1)`); `(int32 codes, classes)` for a
-    classifier.
-
-    Lane ne2-i-j (2026-11-07, plan row N450): a classifier's labels were sent
-    as given or as `y.tolist()`, one Python object per row that the codec
-    encoded element by element into every tree-range request. They are now
-    encoded ONCE here by the encoder the plain fit runs
-    (`trees_encode_labels`, bindings/trees_public_forest.mojo
-    `_rf_fit_classifier` / the ExtraTrees fit): `classes` is the list the
-    plain fit stores as `classes_`, `codes` one int32 per row, a native Array
-    the codec carries as one buffer. A shard fits on the codes: they are the
-    integers `0 .. k - 1`, every one present, so the shard's own encode
-    returns them unchanged with classes `[0, .., k - 1]`, and its trees, leaf
-    class order and votes are the words the plain fit on the labels gives
-    (class order = code order = the order of `classes`). NO BIT MOVES; the
-    driver puts `classes` back as `classes_` (`_fit_forest`)."""
-    if regressor:
-        return Python.tuple(admit_family(y, 1, "y", context).array, PythonObject(None))
-    var labels = trees_encode_labels(y, _t("trees_context"))
-    return Python.tuple(labels.codes, labels.classes)
-
-
 def _fit_forest(args: PythonObject) raises -> PythonObject:
     """args (estimator, X, y, devices, trees_per_shard, the native
     `msel_rebase_offsets_i32` entry the shell resolved): whole global tree-ID
-    ranges, each a fresh forest of the estimator's parameters fitted from
-    its first global tree ID; the trees joined in ID order, their node
-    offsets rebased natively."""
+    ranges, each fitted by the one typed forest fit core from its first
+    global tree ID in a worker; the trees joined in ID order, their node
+    offsets rebased natively.
+
+    Lane forest-typed-fit (2026-11-12): the driver runs the forest door's
+    UNPACK once (`forest_shard_prepare`: refresh, labels or targets, class
+    weights, the typed request words); a worker receives the words and the
+    arrays and calls `forest_shard_fit` (the typed core `forest_fit_core`,
+    xtrees/trees_forest_run.mojo), never building an estimator; the driver
+    stores the joined model with the door's PACK (`forest_shard_publish`).
+    A tree is a pure function of its global ID and the request words are the
+    plain fit's with the range's tree count, so the joined forest is the
+    one-device forest."""
     var b = shard_b()
     var context = _ctx()
     # A fresh caller may reach this driver before another operation has
@@ -546,7 +533,6 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var estimator = args[0]
     var cls = py_type(estimator)
     var classes = _t("forest_classes")
-    var regressors = _t("forest_regressors")
     var admitted = False
     for i in range(len(classes)):  # driver-loop: exact connected forest classes
         admitted = admitted or cls is classes[i]
@@ -556,42 +542,35 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var tps = args[4]
     if py_type(tps) is not b.int or Int(py=tps) < 1:
         raise Error("ValueError: trees_per_shard must be a positive integer")
-    var entry = _t("trees_entry")
     var trees_context = _t("trees_context")
-    var params = family_call(entry, estimator, PythonObject("trees_forest_get_params"), Python.tuple(False), trees_context)
-    var mode = py_get(params, PythonObject("numeric_mode"), PythonObject(None))
-    if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
-        raise Error("ValueError: parallel forests require IDENTICAL numeric mode")
-    py_setitem(params, "numeric_mode", "identical")
-    var x = admit_family(args[1], 2, "X", context).array
-    var regressor = Bool(py=py_call(py_attr(regressors, "__contains__"), cls))
-    var targets = _forest_y(args[2], regressor, context)
-    var y = targets[0]
-    var label_classes = targets[1]
-    var count = Int(py=params["n_estimators"])
+    var x_admitted = admit_family(args[1], 2, "X", context)
+    var x = x_admitted.array
+    var plan = forest_shard_prepare(estimator, x_admitted.rows, x_admitted.cols, args[2], trees_context)
+    var count = Int(py=plan.fields["n_estimators"])
     if count < 1:
         raise Error("ValueError: n_estimators must be positive")
     var ranges = shard_ranges(count, tps, "trees_per_shard", "")
     var n_devices = shard_devices(args[3])
-    # N452 (lane ne2-i-j): with more tree ranges than workers, X and y go to
-    # each worker once (`shard_run_stored`), not once per tree range
+    # N452 (lane ne2-i-j): with more tree ranges than workers, X, y and the
+    # weights go to each worker once (`shard_run_stored`), not once per range
     var stored = len(ranges) // 2 > n_devices
     var token = shard_store_token() if stored else String("")
+    var weighted = plan.weights is not None
+    var payload = Python.tuple(x, plan.y, plan.weights) if weighted else Python.tuple(x, plan.y)
     var requests = b.list()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per tree range
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
-        var shard_params = py_call(b.dict, params)
-        py_setitem(shard_params, "n_estimators", hi - lo)
         var shift = shard_read_shift(r, lo, n_devices)
         if stored:
-            _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
+            var w_ref = shard_stored_ref(token, 2) if weighted else PythonObject(None)
+            _ = py_call(requests.append, Python.tuple("forest_fit", plan.state,
                                                       Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
-                                                                   lo - shift)))
+                                                                   w_ref, lo - shift, hi - lo)))
         else:
-            _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
-                                                      Python.tuple(x, y, lo - shift)))
-    var parts = (shard_run_stored(Python.tuple(x, y), token, requests, args[3], _CHILD) if stored
+            _ = py_call(requests.append, Python.tuple("forest_fit", plan.state,
+                                                      Python.tuple(x, plan.y, plan.weights, lo - shift, hi - lo)))
+    var parts = (shard_run_stored(payload, token, requests, args[3], _CHILD) if stored
                  else shard_run(requests, args[3], _CHILD))
     var merged = b.dict()
     # node offsets: one rebased table over every shard's trees
@@ -606,43 +585,15 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
         for r in range(len(parts)):  # driver-loop: one node array per tree range
             total += Int(py=parts[r][name].shape[0])
         py_setitem(merged, name, shard_concat(parts, name, total, context))
-    # `result = type(estimator)(**params); result.__dict__.update(parts[0].__dict__)`
-    var fields = py_fields(estimator)
-    _ = py_call(fields.clear)
-    _ = py_call(fields.update, params)
-    py_setitem(fields, "_has_constructor_parameters", True)
-    _ = py_call(fields.update, parts[0])
-    _ = py_call(fields.update, merged)
-    py_setitem(fields, "_n_trees", count)
-    py_setitem(fields, "n_estimators", count)
-    if not regressor:
-        # The shards fitted on the int32 codes (`_forest_y`): their
-        # `classes_` is `[0, .., k - 1]`; the labels are the class list the
-        # plain fit stores, encoded once above (same length, same order).
-        if len(fields["classes_"]) != len(label_classes):
-            raise Error("ValueError: forest worker returned " + String(len(fields["classes_"]))
-                        + " classes for " + String(len(label_classes)) + " labels")
-        py_setitem(fields, "classes_", label_classes)
-        py_setitem(fields, "n_classes_", PythonObject(len(label_classes)))
+    forest_shard_publish(plan, merged, parts, count, trees_context)
+    var fields = plan.fields
+    if plan.classifier:
         # The plain fit's completed-classifier metadata: public `classes_`
-        # labels, and `feature_names_in_` from this caller's X (an object
-        # array the codec does not carry).
+        # labels, and `feature_names_in_` from this caller's X.
         classifier_after_fit(fields, args[1], trees_context)
-    var cfg = py_get(fields, PythonObject("_cfg"), PythonObject(None))
-    if cfg is not None:
-        cfg = py_call(b.dict, cfg)
-        py_setitem(cfg, "n_estimators", count)
-        py_setitem(fields, "_cfg", cfg)
-    if py_contains(fields, PythonObject("depth_cap_bound_")):
-        var bound = False
-        for r in range(len(parts)):  # driver-loop: one flag per tree range
-            if Bool(py=py_call(b.bool, py_get(parts[r], PythonObject("depth_cap_bound_"), PythonObject(False)))):
-                bound = True
-        py_setitem(fields, "depth_cap_bound_", bound)
-    # `result._resident_forest = None`: a fresh holder with no device snapshot
-    var holder = b.dict()
-    py_setitem(holder, "forest", PythonObject(None))
-    py_setitem(fields, "_resident_holder", holder)
+    else:
+        py_setitem(fields, "_mojolearn_fitted", True)
+    _ = x_admitted^
     return estimator
 
 
@@ -1477,20 +1428,9 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         return gpc_worker_latent(_worker_binding("_mojolearn_gp"), state[1], state[2], args[0], Bool(py=args[1]),
                                  Int(py=args[2]), state[0], context)
     if operation == "forest_fit":
-        var model = shard_model(_t("forest_by_name")[state[0]], state[1])
-        py_setitem(py_fields(model), "_has_constructor_parameters", True)
-        _ = family_call(_t("trees_entry"), model, PythonObject("trees_public_forest_fit"),
-                        Python.tuple(args[0], args[1], PythonObject(None), False, args[2]), _t("trees_context"))
-        var fields = py_call(b.dict, py_fields(model))
-        _ = py_call(fields.pop, "_resident_holder", PythonObject(None))
-        # A fitted classifier's `classes_` is the public ClassLabels list
-        # subclass, which the codec does not carry (shard_state dropped it
-        # and the joined forest's predict refused with 'classes_'). Send the
-        # plain label list; the driver restores the public labels.
-        var labels = py_get(fields, "classes_")
-        if labels is not None:
-            py_setitem(fields, "classes_", classifier_label_list(labels, _t("trees_context")))
-        return shard_state(fields, b.frozenset(), context)
+        # Lane forest-typed-fit: the request words and the arrays, fitted by
+        # the one typed forest fit core; no estimator is built here.
+        return forest_shard_fit(state, args, _t("trees_context"))
     if (operation == "reference_shard" or operation == "reference_store" or operation == "reference_query"
             or operation == "reference_vote" or operation == "query_state"
             or operation == "query_rows" or operation == "ivf_store" or operation == "ivf_search" or operation == "release"):

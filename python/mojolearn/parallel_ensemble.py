@@ -36,10 +36,7 @@ from ._native_parallel_shard import _native_parallel_shard
 # glue: fixed forest types and compiled entries, connected once at import.
 _FORESTS = (_rf.RandomForestClassifier, _rf.RandomForestRegressor,
             _et.ExtraTreesClassifier, _et.ExtraTreesRegressor)
-_shard.register(forest_classes=_FORESTS,
-                forest_regressors=(_rf.RandomForestRegressor, _et.ExtraTreesRegressor),
-                forest_by_name={cls.__name__: cls for cls in _FORESTS},  # glue: four fixed names
-                trees_entry=_rf._TREES, trees_context=_rf._TREES_CONTEXT)
+_shard.register(forest_classes=_FORESTS, trees_context=_rf._TREES_CONTEXT)
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 _native_parallel_public.connect(_FAMILY_CONTEXT)
 
