@@ -18,6 +18,7 @@ from std.math import isinf
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -180,7 +181,9 @@ def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises 
     `check_sample_weight(sample_weight, n, allow_negative=True)`."""
     if sample_weight is None:
         return PythonObject(None)
-    return admit_family_weights(sample_weight, n, True, context).keep
+    var pin = ArrayPin()
+    _ = admit_family_weights(sample_weight, n, True, context, pin)
+    return pin.keep
 
 
 def _init_array(model: PythonObject, source: PythonObject, init: PythonObject, k: Int, d: Int,

@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.admitted_input_nd import admitted_cast_nd_f32
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_SIGNED
 from bindings.sequential_admission import _one_of
@@ -81,26 +81,28 @@ def _number(value: PythonObject, context: PythonObject) raises -> Float64:
     return Float64(py=py_call(native_loaded_module("builtins").float, value))
 
 
-def _buffer(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
+def _buffer(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     classical_admit_value(value, context)
     var prepared = classical_input(value, context, name)
-    return array_metadata_once(prepared, array_shape_once(prepared, context), name, context)
+    return array_metadata_once(prepared, array_shape_once(prepared, context), name, context, pin)
 
 
-def _series_buffer(value: PythonObject, name: String, refusal: String, context: PythonObject) raises -> ArrayMetadata:
+def _series_buffer(value: PythonObject, name: String, refusal: String, context: PythonObject,
+                   mut pin: ArrayPin) raises -> ArrayMetadata:
     """`_buffer` of a public series input that may be a pandas DataFrame or
     Series: its native block storage becomes one float32 copy, refused with
     `refusal` when pandas promotes it beyond float32 (float64 or object)."""
     classical_admit_value(value, context)
     if not native_pandas_exact(value):
-        return _buffer(value, name, context)
+        return _buffer(value, name, context, pin)
     var converted = native_pandas_f32(value, context, False, True, refusal)
-    return _buffer(converted, name, context)
+    return _buffer(converted, name, context, pin)
 
 
 def autoarima_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model, context["autoarima_class"])
-    var source = _series_buffer(args[0], "endog", _REFUSE_DOUBLE, context)
+    var source_pin = ArrayPin()
+    var source = _series_buffer(args[0], "endog", _REFUSE_DOUBLE, context, source_pin)
     var rank = len(source.shape)
     if rank != 1 and rank != 2 or source.count == 0:
         raise Error("ValueError: AutoARIMA: endog must be (batch_size, n_obs)")
@@ -108,12 +110,12 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
         raise Error(_REFUSE_DOUBLE)
     var rows = 1 if rank == 1 else source.shape[0]
     var cols = source.shape[0] if rank == 1 else source.shape[1]
-    var out = source.keep
+    var out = source_pin.keep
     if source.f32_c() and rank == 2:
         pass  # preserve the existing contiguous ndarray/Array storage owner
     elif source.f32_c() and not source.is_array:
         # Exact ndarray was admitted before its native reshape descriptor runs.
-        out = py_call(source.keep.reshape, Python.tuple(rows, cols))
+        out = py_call(source_pin.keep.reshape, Python.tuple(rows, cols))
     else:
         out = classical_typed(Python.tuple(rows, cols), "<f4", context)
         var strides = List[Int]()
@@ -130,11 +132,13 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
     py_setitem(updates, "models", Python.list())
     forecast_commit(fields, updates, context["tsa_owner_context"])
     _ = source
+    _ = source_pin^
     return PythonObject(None)
 
 
-def _packed(value: PythonObject, name: String, context: PythonObject, integer: Bool = False) raises -> ArrayMetadata:
-    var result = _buffer(value, name, context)
+def _packed(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin,
+            integer: Bool = False) raises -> ArrayMetadata:
+    var result = _buffer(value, name, context, pin)
     if not result.c_order or (result.source.itemsize != (8 if integer else 4)):
         raise Error("TypeError: AutoARIMA fitted storage must be contiguous with its native dtype")
     if (not integer and result.dtype_number != NPY_FLOAT) or (integer and result.source.kind != CAST_KIND_SIGNED):
@@ -179,9 +183,12 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         var n_exog = _integer(state["n_exog_"], context)
         if rows <= 0 or n_obs <= 0 or n_exog != 0 or k < 0 or k > 1:
             raise Error("ValueError: AutoARIMA fitted dimensions are invalid")
-        var y = _packed(state["_y"], "endog", context)
-        var params = _packed(state["params_"], "params", context)
-        var ids = _packed(ids_all[group], "group indices", context, True)
+        var y_pin = ArrayPin()
+        var params_pin = ArrayPin()
+        var ids_pin = ArrayPin()
+        var y = _packed(state["_y"], "endog", context, y_pin)
+        var params = _packed(state["params_"], "params", context, params_pin)
+        var ids = _packed(ids_all[group], "group indices", context, ids_pin, True)
         var words = Python.list(rows, n_obs, start, end) if prediction else Python.list(rows, n_obs, steps)
         var complexity = k + 1
         var order_words = List[Int]()
@@ -251,6 +258,9 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         _ = y
         _ = params
         _ = ids
+        _ = y_pin^  # the door's pins hold the fitted words through every RUN read
+        _ = params_pin^
+        _ = ids_pin^
         _ = part
     return out
 

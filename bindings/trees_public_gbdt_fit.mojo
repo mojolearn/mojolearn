@@ -647,7 +647,7 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
     var fast_pairs = False
     if pair_view:
         ref view = pair_view.value()
-        fast_pairs = view.ndim == 2 and view.shape[1] == 2 and view_kind_fits_i64(view)
+        fast_pairs = view.ndim == 2 and view.shape[1] == 2 and view_kind_fits_i64(view.layout, view.kind)
     var m: Int
     var rows = PythonObject(None)
     if fast_pairs:
@@ -698,7 +698,7 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
     var fast_weights = False
     if weight_view:
         ref view = weight_view.value()
-        fast_weights = view.ndim == 1 and view_kind_real(view)
+        fast_weights = view.ndim == 1 and view_kind_real(view.layout, view.kind)
     if fast_weights:
         var count = weight_view.value().shape[0]
         if count != m:

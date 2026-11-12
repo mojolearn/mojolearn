@@ -18,6 +18,7 @@ from x_ann.neighbors_ann_query_run import (
     ann_mask_from_bytes, ann_search_plan, ann_handle_addresses, ann_full_addresses, ann_filter_params,
 )
 from bindings.admitted_family import admit_family_meta
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.admitted_input import admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -195,11 +196,13 @@ def _mask(source: PythonObject, n: Int, owner: String, context: PythonObject) ra
     var shape = array_shape_once(view, context)
     if len(shape) != 1 or shape[0] != n:
         raise Error(refusal)
-    var snapshot = array_metadata_once(view, shape^, "filter", context)
+    var pin = ArrayPin()
+    var snapshot = array_metadata_once(view, shape^, "filter", context, pin)
     if snapshot.source.kind != CAST_KIND_BOOL or snapshot.source.itemsize != 1:
         raise Error(refusal)
     ann_mask_from_bytes(dest_address, snapshot.source.addr, n, snapshot.source.s0)
     _ = snapshot
+    _ = pin^
     return result
 
 
@@ -395,7 +398,8 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
     # refused by its own verdict; borrowed float32 queries are tested by the
     # search entry behind its query upload on the GPU binding, by one parallel
     # host scan on the CPU column, and the word comes back with the result.
-    var q = admit_family_meta(args[1], 2, "queries", context, False, True,
+    var q_pin = ArrayPin()
+    var q = admit_family_meta(args[1], 2, "queries", context, q_pin, False, True,
                               refusal=admitted_finite_wording(owner, "queries"), defer_finite=True)
     var status = List[Int32](length=1, fill=Int32(0))
     var status_word = 0 if q.copied else Int(status.unsafe_ptr())
@@ -479,6 +483,7 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
     if kind != ANN_SEARCH_CAGRA:
         py_setitem(fields, "n_candidates_", candidates)
     _ = q
+    _ = q_pin
     _ = arrays
     _ = mask
     _ = candidates

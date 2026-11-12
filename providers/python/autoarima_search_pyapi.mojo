@@ -12,6 +12,7 @@ from bindings.sequential_arrays import sequential_array
 from bindings.tsa_autoarima_native import _new_arima
 from bindings.tsa_arima_native import arima_fit, _arima_entries
 from providers.python.autoarima_lifecycle_pyapi import _fields, _integer, _integer_object, _number, _packed, _buffer
+from providers.python.array_metadata_pyapi import ArrayPin
 from arima.autoarima_search_run import _penalty
 from providers.python.autoarima_owner_pyapi import autoarima_commit
 from bindings.py_optional import py_present
@@ -104,10 +105,11 @@ def _options(name: String, value: PythonObject, low: Int, high: Int, context: Py
     elif cls is b.list or cls is b.tuple or cls is b.range:
         options = py_call(b.list, value)
     else:
-        var admitted = _buffer(value, "order options", context)
+        var admitted_pin = ArrayPin()
+        var admitted = _buffer(value, "order options", context, admitted_pin)
         if len(admitted.shape) != 1 or admitted.is_array:
             raise Error("TypeError: AutoARIMA order options require a native vector, range, list or tuple")
-        options = py_call(admitted.keep.tolist)
+        options = py_call(admitted_pin.keep.tolist)
     var result = List[Int]()
     for i in range(len(options)):  # driver-loop: over candidate order option metadata
         var word = _integer_object(options[i], context)
@@ -160,7 +162,8 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     var explicit_k = List[Int]()
     if not auto_k:
         explicit_k = _options("k", args[7], 0, 1, context)
-    var y = _packed(fields["_endog"], "endog", context)
+    var y_pin = ArrayPin()
+    var y = _packed(fields["_endog"], "endog", context, y_pin)
     if len(y.shape) != 2 or y.shape[0] <= 0 or y.shape[1] <= 0:
         raise Error("ValueError: AutoARIMA endog must be a nonempty matrix")
     var batch = y.shape[0]
@@ -221,7 +224,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
         if count == 0:
             continue
         var ids = _where(d32, d, batch, count, context)
-        var subflat = _take(y.keep, ids, batch, count, n_obs, 0, context)
+        var subflat = _take(y_pin.keep, ids, batch, count, n_obs, 0, context)
         var sub = py_call(subflat.reshape, Python.tuple(count, n_obs))
         var ks = explicit_k.copy()
         if auto_k:
@@ -374,4 +377,5 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     py_setitem(updates, "ic_", ic_out)
     autoarima_commit(fields, updates, context)
     _ = y
+    _ = y_pin^  # the door's pin held endog through every RUN read
     return model

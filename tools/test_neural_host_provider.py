@@ -72,7 +72,7 @@ def test_host_owned_operations_preserve_failure_state_and_original_counters():
 
 def test_cpu_mamba_public_admission_refreshes_both_tables():
     public=(ROOT/'bindings/mamba_public_native.mojo').read_text()
-    admission=public.split('def _m3_entries(')[1].split('def _m3_canonical(')[0]
+    admission=public.split('def _m3_entries(')[1].split('def _m3_allocate(')[0]
     for factory in ('mamba_block_api_v1','mamba_state_api_v1'):
         assert factory in admission
     assert 'py_setitem(fields, "_native_mamba_state", state_provider)' in admission

@@ -7,7 +7,7 @@ from std.python import PythonObject
 from bindings.py_balanced import py_type, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED
 from providers.python.pcs_rng_pyapi import pcs_seed
 from core.pcs_native_api import PCSFitPlan, pcs_options, pcs_feature_width
@@ -39,12 +39,13 @@ def _pcs_real(value: PythonObject, name: String) raises -> Float64:
     return Float64(py=value)
 
 
-def _pcs_hash(source: PythonObject, degree: Int, name: String, context: PythonObject) raises -> ArrayMetadata:
+def _pcs_hash(source: PythonObject, degree: Int, name: String, context: PythonObject,
+              mut pin: ArrayPin) raises -> ArrayMetadata:
     var view = classical_view(source, context, name)
     var shape = array_shape_once(view, context)
     if len(shape) != 2 or shape[0] != degree:
         raise Error("ValueError: PolynomialCountSketch hash tables must match degree")
-    var result = array_metadata_once(view, shape^, name, context)
+    var result = array_metadata_once(view, shape^, name, context, pin)
     if result.source.kind != CAST_KIND_SIGNED or result.source.itemsize != 4 or not result.c_order:
         raise Error("TypeError: PolynomialCountSketch hash tables must be contiguous native int32 arrays")
     return result^
@@ -81,8 +82,10 @@ def _pcs_transform(settings: PythonObject, binding: PythonObject, x: ArrayMetada
                    context: PythonObject) raises -> PythonObject:
     """Capture mutable public hashes anew; RUN sees only pinned addresses."""
     pcs_feature_width(x.source.cols, _pcs_int(family_field(settings, "n_features_in_"), "n_features_in_"))
-    var index_hash = _pcs_hash(family_field(settings, "indexHash_"), plan.options.degree, "indexHash_", context)
-    var bit_hash = _pcs_hash(family_field(settings, "bitHash_"), plan.options.degree, "bitHash_", context)
+    var index_pin = ArrayPin()
+    var bit_pin = ArrayPin()
+    var index_hash = _pcs_hash(family_field(settings, "indexHash_"), plan.options.degree, "indexHash_", context, index_pin)
+    var bit_hash = _pcs_hash(family_field(settings, "bitHash_"), plan.options.degree, "bitHash_", context, bit_pin)
     plan.admit_hash_widths(index_hash.source.cols, bit_hash.source.cols)
     var dst = pcs_array(plan.output_shape(x.source.rows), "<f4", context)
     var old_items = getenv("MOJOLEARN_XN_OLD_ITEMS") == "1"
@@ -94,6 +97,8 @@ def _pcs_transform(settings: PythonObject, binding: PythonObject, x: ArrayMetada
         _ = dst
         _ = index_hash
         _ = bit_hash
+        _ = index_pin^  # the door's pins hold both hash tables through RUN
+        _ = bit_pin^
         _ = x
     return dst
 

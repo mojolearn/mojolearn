@@ -23,7 +23,7 @@ from bindings.manifold_storage_native import (
     device_alloc, device_release, device_upload, device_download, device_move,
     words_new, words_count, words_address,
 )
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from bindings.classical_arrays import classical_address
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array
 from core.host_finite_scan import host_all_finite_f32
@@ -776,7 +776,7 @@ struct MKit(Movable):
         var nd = self._devbuf(r * c)
         var flagged = kit_call(self.xd(), XD_DEV_UPLOAD_FINITE, [value.source.addr],
                                [Int(py=device_identifier(nd)), r * c], List[Float64](), True)
-        _ = value  # keep the snapshot's owners alive through the synchronous upload
+        _ = value  # the caller's door pin keeps the storage alive through the synchronous upload
         if flagged != 0:
             raise Error(name + ": input must be finite; NaN/inf are unsupported")
         return mk_dev_view(nd, r, c, self.ctx)
@@ -1670,8 +1670,10 @@ def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) rais
 
 def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises -> PythonObject:
     """Capture dense/sparse input once and copy its admitted float32 words."""
-    var snapshot = admit_family_meta(source, 2, name, ctx, True)
+    var pin = ArrayPin()
+    var snapshot = admit_family_meta(source, 2, name, ctx, pin, True)
     var result = mk_from_snapshot(snapshot, name, ctx)
     _ = snapshot
+    _ = pin^  # the door's pin held the input through the copy
     _ = source
     return result

@@ -32,7 +32,7 @@ from bindings.metrics_native_support import metric_float, metric_is_real, metric
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.hierarchy_settings_pyapi import AggloSettings
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.py_optional import py_present
@@ -46,6 +46,8 @@ struct HierarchyPublicCall(Movable):
     var settings: AggloSettings
     var source: PythonObject
     var x: ArrayMetadata
+    # The door's pin of `x`: held by this call record until the operation ends.
+    var x_pin: ArrayPin
     var fitting: Bool
     var outside: Bool
     var depth: Int
@@ -53,13 +55,14 @@ struct HierarchyPublicCall(Movable):
     var columns: Int
 
     def __init__(out self, fields: PythonObject, var settings: AggloSettings, source: PythonObject,
-                 var x: ArrayMetadata, fitting: Bool, outside: Bool, depth: Int):
+                 var x: ArrayMetadata, var x_pin: ArrayPin, fitting: Bool, outside: Bool, depth: Int):
         self.fields = fields
         self.settings = settings^
         self.source = source
         self.rows = x.shape[0]
         self.columns = x.shape[1]
         self.x = x^
+        self.x_pin = x_pin^
         self.fitting = fitting
         self.outside = outside
         self.depth = depth
@@ -225,7 +228,8 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
     if host_sparse_format(source).byte_length() > 0:
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: sparse X is refused; pass a dense matrix")
     # The finiteness test rides in the admission (no second pass over X).
-    var x = admit_family_meta(source, 2, "X", context, finite=True,
+    var x_pin = ArrayPin()
+    var x = admit_family_meta(source, 2, "X", context, x_pin, finite=True,
                               refusal=admitted_finite_wording("AgglomerativeClustering"))
     if Int(py=depth) == 0:
         if fitting:
@@ -236,7 +240,7 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
             classical_check_width(x.shape[1], Int(py=width), "AgglomerativeClustering")
             estimator_feature_check(model, fields, source, context)
     var previous = estimator_fit_begin(fields) if fitting else Int(py=depth)
-    return HierarchyPublicCall(fields, settings^, source, x^, fitting, estimator_outside(), previous)
+    return HierarchyPublicCall(fields, settings^, source, x^, x_pin^, fitting, estimator_outside(), previous)
 
 
 def hierarchy_public_end(model: PythonObject, call: HierarchyPublicCall) raises:

@@ -10,6 +10,7 @@ from bindings.prep_normalizer_lifecycle import _setting, _class_setting, _tags, 
 from bindings.prep_fit_error import prep_fit_error
 from bindings.parallel_public_result import parallel_public_result
 from providers.python.prep_transform_pyapi import prep_transform_snapshot, prep_transform_values
+from providers.python.array_metadata_pyapi import ArrayPin
 from providers.python.prep_target_pyapi import prep_ignored_target
 
 
@@ -89,7 +90,8 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
         raise Error("TypeError: native Normalizer validation requires static target tags; Python target-tag hooks cannot execute")
     if _setting(model, fields, "_mojolearn_after_fit", PythonObject(None)) is not None:
         raise Error("TypeError: native Normalizer fit cannot invoke Python after-fit hooks")
-    var snapshot = prep_transform_snapshot(source, name, validate, scan, context, sparse, not nested)
+    var pin = ArrayPin()
+    var snapshot = prep_transform_snapshot(source, name, validate, scan, context, pin, sparse, not nested)
     # _check_X's object/string buffers have no numeric Check.info. Sparse
     # descriptions retain their length even when static rank tags opt out.
     var numeric = (snapshot.dtype_number >= 0 and snapshot.dtype_number <= 13) or snapshot.dtype_number == 23 or snapshot.dtype_number == -103
@@ -113,7 +115,7 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
     var result = model
     try:
         var entries = _native_entries(mode, context)
-        var values = prep_transform_values(snapshot, context)
+        var values = prep_transform_values(snapshot, pin, context)
         if norm is missing:
             norm = fields["norm"]
         var code = _normalizer_norm(norm)
@@ -144,4 +146,5 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
         _ = py_call(state.pop, "feature_names_in_", PythonObject(None))
     _ = target_keep^
     _ = snapshot^
+    _ = pin
     return result

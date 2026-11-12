@@ -23,7 +23,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
 from bindings.manifold_scalar_native import manifold_number
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
 from x_ann.mani_tsne_run import (
@@ -99,7 +99,8 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     return z
 
 
-def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, snapshot: ArrayMetadata,
+              pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     """`TSNE.fit(X)`; returns the embedding."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
@@ -113,7 +114,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     # other starts ask x_ann_tsne_fit for it (params[12]). No host scan.
     # TOMBSTONE: mani_tsne_native.mojo door host scan of X (host_all_finite_f32) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
     # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
-    var x = snapshot.keep
+    var x = pin.keep
     var x_address = snapshot.source.addr
     var n = snapshot.source.rows
     var d = snapshot.source.cols
@@ -152,6 +153,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var y0: PythonObject
     var y0_address = 0
     var initial_snapshot = Optional[ArrayMetadata]()
+    var init_pin = ArrayPin()  # the door's pin of a caller-given start array
     var mode = 0
     var low = PythonObject(0)
     var high = PythonObject(0)
@@ -175,13 +177,13 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
             raise Error("mojolearn TSNE: init must be 'pca', 'random' or an array, got " + family_repr(init))
         var view = classical_view(init, context, "init")
         var shape = array_shape_once(view, context)
-        var captured = array_metadata_once(view, shape^, "init", context,
+        var captured = array_metadata_once(view, shape^, "init", context, init_pin,
                                            allow_non_native=True, allow_unsupported=True)
         if not tsne_init_shape_matches(captured.shape, n, k):
-            var refusal = tsne_init_shape_refusal(family_repr(captured.python_shape()), n, k)
+            var refusal = tsne_init_shape_refusal(family_repr(array_python_shape(captured)), n, k)
             raise refusal^
-        var prepared = _cast(captured^, "init", context)
-        y0 = prepared.keep
+        var prepared = _cast(captured^, init_pin, "init", context)
+        y0 = init_pin.keep
         y0_address = prepared.source.addr
         initial_snapshot = Optional(prepared^)
         _ = view
@@ -209,6 +211,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     _ = kl  # keep the Python object alive through the native call above
     _ = snapshot
     _ = initial_snapshot
+    _ = init_pin^
     _ = x^
     _ = y0^
     py_setitem(settings.fields, "embedding_", embedding)
@@ -225,11 +228,11 @@ def _tsne_is_bool(value: PythonObject) raises -> Bool:
 
 
 def tsne_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,
-                   snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+                   snapshot: ArrayMetadata, pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     """TSNE: args = (x_ann binding, estimators binding, X)."""
     if operation == "family_mani_tsne_fit":
-        _ = _tsne_fit(model, settings, args, snapshot, context)
+        _ = _tsne_fit(model, settings, args, snapshot, pin, context)
         return model
     if operation == "family_mani_tsne_fit_transform":
-        return _tsne_fit(model, settings, args, snapshot, context)
+        return _tsne_fit(model, settings, args, snapshot, pin, context)
     raise Error("RuntimeError: unknown TSNE operation " + operation)

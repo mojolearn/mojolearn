@@ -11,56 +11,75 @@ from mamba.host.mamba_host_shell_impl import (
     _m3_owned_export_run, _nn40_host_require,
 )
 from core.shared_slot import SharedSlot
+from core.state_registry import StateRegistry
+from core.neural_entry_table import (
+    NEURAL_MAMBA_OPERATIONS, NEURAL_MAMBA3_SESSION_CREATE, NEURAL_MAMBA3_SESSION_INFO,
+    NEURAL_MAMBA3_SESSION_CAPS, NEURAL_MAMBA3_SESSION_CLOSE, MAMBA3_CAP_OWNED_WEIGHTS,
+)
+from core.mamba3_prefill_session import mamba3_prefill_session_word, mamba3_prefill_session_of
+
+# The CPU training image's owned Mamba-3 snapshots as registry sessions (lane
+# mamba3-prefill-handle, 2026-11-12; core/mamba3_prefill_session.mojo): every
+# session operation leads its words with the handle word, never an address.
+# Named per tier, as the GPU image's PREFILL_SESSIONS.
+comptime HOST_PREFILL_SESSIONS = StateRegistry[M3OwnedHostSession,
+    ("MojolearnMamba3HostPrefillSessionsIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMamba3HostPrefillSessionsFastV1")]
 
 
-def mamba_host_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
-    if op == 0 or op == 1 or op == 18:
-        if len(words) != 1 or words[0] == 0 or len(a) != 0 or len(f) != 0:
-            raise Error("mamba3 owned host: invalid lifecycle descriptor")
-        var owner = MutPointer[M3OwnedHostSession, MutUntrackedOrigin](unsafe_from_address=words[0])
-        if op == 1:
-            owner[].busy = False
-        elif op == 18:
-            if owner[].busy:
-                raise Error("mamba3 owned host: session busy")
-            owner[].weights = None
-            owner[].usable = False
-        else:
-            if owner[].busy or not owner[].usable:
-                raise Error("mamba3 owned host: session busy or unusable")
-            owner[].busy = True
+def mamba3_host_prefill_caps() -> Int:
+    """The host image's capability bits: no non-owned session prefill, every
+    report materialized; the owned snapshot where NN40 is compiled."""
+    comptime if NN40_OWNED_WEIGHTS:
+        return MAMBA3_CAP_OWNED_WEIGHTS
+    return 0
+
+
+def _m3_host_lifecycle(op: Int, session: Int, a: List[Int]) raises -> Int:
+    # Reserve (0), release (1) and info (45) on a leased owner.
+    var owner = MutPointer[M3OwnedHostSession, MutUntrackedOrigin](unsafe_from_address=session)
+    if op == 1:
+        owner[].busy = False
         return 0
-    if op == 2 or op == 3 or op == 4:
-        if len(a) != (23 if op == 2 else 21) or len(words) != 3 or len(f) != (2 if op == 3 else 0):
-            raise Error("Mamba host backward: invalid descriptor arity")
-        for address in a:  # driver-loop: admitted fixed gradient address vector
-            if address == 0:
-                raise Error("Mamba host backward: null buffer address")
-        if words[0] <= 0 or words[1] <= 0 or words[2] <= 0:
-            raise Error("Mamba host backward: B, L and d_model must be positive")
-        if op == 2:
-            _mamba1_backward_run(a, words[0], words[1], words[2])
-        elif op == 3:
-            _mamba2_backward_run(a, words[0], words[1], words[2], Float32(f[0]), Float32(f[1]))
-        else:
-            _mamba3_backward_run(a, words[0], words[1], words[2])
+    if op == NEURAL_MAMBA3_SESSION_INFO:
+        # Same six-field public metadata schema as the GPU session; host
+        # backward recomputes and holds no saved stages. Counters report
+        # snapshot use, not device traffic.
+        if len(a) != 1 or a[0] == 0:
+            raise Error("mamba3 owned host info: expected one output address")
+        if owner[].busy:
+            raise Error("mamba3 owned host info: session busy")
+        var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[0])
+        dst[0] = owner[].generation
+        dst[1] = 0
+        dst[2] = owner[].weight_reuses
+        dst[3] = 0
+        dst[4] = owner[].backward_recomputes
+        dst[5] = 0
         return 0
-    if op == 5:
-        if len(a) != 15 or len(words) != 3 or len(f) != 0:
-            raise Error("mamba3_forward_fresh: expected 15 addresses and B, L, d_model")
-        if words[0] < 1 or words[1] < 1:
-            raise Error("mamba3_forward_fresh: B and L must be positive")
-        var expanded = List[Int](length=25, fill=0)
-        for i in range(10):  # small-loop(input plus nine weights)
-            expanded[i] = a[i]
-        for i in range(10, 15):  # small-loop(output plus four reports)
-            expanded[i + 10] = a[i]
-        return _mamba3_run(expanded, words[0], words[1], words[2], 0, 0, True)
-    if op != 8 and op != 9 and op != 15 and op != 16 and op != 17:
-        raise Error("Mamba host provider: unavailable operation")
-    if len(words) < 2 or words[0] == 0 or len(f) != 0:
-        raise Error("mamba3 owned host: invalid execution descriptor")
-    var owner = MutPointer[M3OwnedHostSession, MutUntrackedOrigin](unsafe_from_address=words[0])
+    if owner[].busy or not owner[].usable:
+        raise Error("mamba3 owned host: session busy or unusable")
+    owner[].busy = True
+    return 0
+
+
+def _m3_host_close(word: Int) raises -> Int:
+    var handle = mamba3_prefill_session_of(word)
+    var lease = HOST_PREFILL_SESSIONS.acquire(handle)
+    var owner = MutPointer[M3OwnedHostSession, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=lease[])))
+    if owner[].busy:
+        _ = lease
+        raise Error("mamba3 owned host: session busy")
+    owner[].weights = None
+    owner[].usable = False
+    _ = lease
+    HOST_PREFILL_SESSIONS.release(handle)
+    return 0
+
+
+def _m3_host_session_operation(op: Int, session: Int, a: List[Int], words: List[Int]) raises -> Int:
+    # `session` is the address of a leased registry owner; the caller holds
+    # the lease through this call.
+    var owner = MutPointer[M3OwnedHostSession, MutUntrackedOrigin](unsafe_from_address=session)
     if not owner[].busy or not owner[].usable:
         raise Error("mamba3 owned host: execution requires a reserved usable owner")
     var p = List[Int]()
@@ -112,10 +131,78 @@ def mamba_host_block_operation(op: Int, a: List[Int], words: List[Int], f: List[
     return 0
 
 
+def mamba_host_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
+    if op == NEURAL_MAMBA3_SESSION_CREATE:
+        if len(a) != 0 or len(words) != 0 or len(f) != 0:
+            raise Error("mamba3 owned host: create takes no arguments")
+        return mamba3_prefill_session_word(HOST_PREFILL_SESSIONS.insert(M3OwnedHostSession()))
+    if op == NEURAL_MAMBA3_SESSION_CAPS:
+        if len(a) != 0 or len(words) != 0 or len(f) != 0:
+            raise Error("mamba3 owned host: capabilities take no arguments")
+        return mamba3_host_prefill_caps()
+    if op == NEURAL_MAMBA3_SESSION_CLOSE:
+        if len(words) != 1 or len(a) != 0 or len(f) != 0:
+            raise Error("mamba3 owned host: invalid lifecycle descriptor")
+        return _m3_host_close(words[0])
+    if op == 0 or op == 1 or op == NEURAL_MAMBA3_SESSION_INFO:
+        if len(words) != 1 or len(a) != (1 if op == NEURAL_MAMBA3_SESSION_INFO else 0) or len(f) != 0:
+            raise Error("mamba3 owned host: invalid lifecycle descriptor")
+        var lease = HOST_PREFILL_SESSIONS.acquire(mamba3_prefill_session_of(words[0]))
+        var result = 0
+        try:
+            result = _m3_host_lifecycle(op, Int(UnsafePointer(to=lease[])), a)
+        except problem:
+            _ = lease
+            raise problem
+        _ = lease
+        return result
+    if op == 2 or op == 3 or op == 4:
+        if len(a) != (23 if op == 2 else 21) or len(words) != 3 or len(f) != (2 if op == 3 else 0):
+            raise Error("Mamba host backward: invalid descriptor arity")
+        for address in a:  # driver-loop: admitted fixed gradient address vector
+            if address == 0:
+                raise Error("Mamba host backward: null buffer address")
+        if words[0] <= 0 or words[1] <= 0 or words[2] <= 0:
+            raise Error("Mamba host backward: B, L and d_model must be positive")
+        if op == 2:
+            _mamba1_backward_run(a, words[0], words[1], words[2])
+        elif op == 3:
+            _mamba2_backward_run(a, words[0], words[1], words[2], Float32(f[0]), Float32(f[1]))
+        else:
+            _mamba3_backward_run(a, words[0], words[1], words[2])
+        return 0
+    if op == 5:
+        if len(a) != 15 or len(words) != 3 or len(f) != 0:
+            raise Error("mamba3_forward_fresh: expected 15 addresses and B, L, d_model")
+        if words[0] < 1 or words[1] < 1:
+            raise Error("mamba3_forward_fresh: B and L must be positive")
+        var expanded = List[Int](length=25, fill=0)
+        for i in range(10):  # small-loop(input plus nine weights)
+            expanded[i] = a[i]
+        for i in range(10, 15):  # small-loop(output plus four reports)
+            expanded[i + 10] = a[i]
+        return _mamba3_run(expanded, words[0], words[1], words[2], 0, 0, True)
+    if op != 8 and op != 9 and op != 15 and op != 16 and op != 17:
+        raise Error("Mamba host provider: unavailable operation")
+    if len(words) < 2 or len(f) != 0:
+        raise Error("mamba3 owned host: invalid execution descriptor")
+    # The lease keeps the owner alive through the call even if another thread
+    # closes the handle meanwhile (a close of a busy session refuses).
+    var lease = HOST_PREFILL_SESSIONS.acquire(mamba3_prefill_session_of(words[0]))
+    var result = 0
+    try:
+        result = _m3_host_session_operation(op, Int(UnsafePointer(to=lease[])), a, words)
+    except problem:
+        _ = lease
+        raise problem
+    _ = lease
+    return result
+
+
 def mamba_host_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                           result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 44 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
+        if op < 0 or op >= NEURAL_MAMBA_OPERATIONS or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
             raise Error("mamba host provider: invalid descriptor span or operation")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)

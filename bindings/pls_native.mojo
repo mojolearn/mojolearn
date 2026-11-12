@@ -26,7 +26,7 @@ from bindings.classical_validate_run import classical_check_width
 from bindings.parallel_public_result import parallel_public_result
 from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x
 from bindings.admitted_input import admit_f32
@@ -136,14 +136,15 @@ def _pls_require_fitted(fields: PythonObject, operation: String, context: Python
         raise Error("NotFittedError: This " + String(fields["_pls_name"]) + " instance is not fitted yet. Call 'fit' with appropriate arguments before using " + operation + ".")
 
 
-def _pls_input(source: PythonObject, name: String, context: PythonObject, ndim: Int = 2, public_name: String = "",
-               public_target: Bool = False, sparse_allowed: Bool = True) raises -> ArrayMetadata:
+def _pls_input(source: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin, ndim: Int = 2,
+               public_name: String = "", public_target: Bool = False, sparse_allowed: Bool = True) raises -> ArrayMetadata:
     var deferred = False
-    return _pls_input_deferred(source, name, context, ndim, public_name, public_target, sparse_allowed, False,
+    return _pls_input_deferred(source, name, context, pin, ndim, public_name, public_target, sparse_allowed, False,
                                deferred)
 
 
-def _pls_input_deferred(source: PythonObject, name: String, context: PythonObject, ndim: Int, public_name: String,
+def _pls_input_deferred(source: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin, ndim: Int,
+                        public_name: String,
                         public_target: Bool, sparse_allowed: Bool, defer: Bool, mut deferred: Bool) raises -> ArrayMetadata:
     """A PLS operand through the one admission (bindings/admitted_input.mojo):
     the public X by admit_x_unrecorded (scikit-learn's refusals and wording),
@@ -190,26 +191,27 @@ def _pls_input_deferred(source: PythonObject, name: String, context: PythonObjec
                 raise Error(name + ": input must be finite; NaN/inf are unsupported")
             raise error^
         _ = view^
-    var snapshot = array_metadata_once(array, array_shape_once(array, context), name, context)
+    var snapshot = array_metadata_once(array, array_shape_once(array, context), name, context, pin)
     # Pin the caller's object with the admitted words for the operation.
-    snapshot.owner = Python.tuple(source, snapshot.owner)
+    pin.owner = Python.tuple(source, pin.owner)
     return snapshot^
 
 
 def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    var input = _pls_input(source, name, context)
-    return kit.input_snapshot(input, input.shape[0], input.shape[1])
+    var pin = ArrayPin()
+    var input = _pls_input(source, name, context, pin)
+    return kit.input_snapshot(input, pin, input.shape[0], input.shape[1])
 
 
-def _captured(mut kit: DecompKit, captured: ArrayMetadata, deferred: Bool, est: String) raises -> Int:
+def _captured(mut kit: DecompKit, captured: ArrayMetadata, pin: ArrayPin, deferred: Bool, est: String) raises -> Int:
     """The public X the door admitted (`pls_public_operation`) as a kit
     matrix: through `input_tested` (the upload tests it on the device) when
     the door deferred its finite test, else `input_snapshot`."""
     if deferred:
         if not kit.defers_finite():
             raise Error("RuntimeError: mojolearn " + est + ": X was admitted untested but this binding has no tested upload")
-        return kit.input_tested(captured, captured.shape[0], captured.shape[1], est)
-    return kit.input_snapshot(captured, captured.shape[0], captured.shape[1])
+        return kit.input_tested(captured, pin, captured.shape[0], captured.shape[1], est)
+    return kit.input_snapshot(captured, pin, captured.shape[0], captured.shape[1])
 
 
 def _pls_defers(fields: PythonObject, fitting: Bool, context: PythonObject) -> Bool:
@@ -228,8 +230,9 @@ def _pls_defers(fields: PythonObject, fitting: Bool, context: PythonObject) -> B
 
 def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector as a 1 x n matrix.
-    var input = _pls_input(source, name, context, 1)
-    return kit.input_snapshot(input, 1, input.shape[0])
+    var pin = ArrayPin()
+    var input = _pls_input(source, name, context, pin, 1)
+    return kit.input_snapshot(input, pin, 1, input.shape[0])
 
 
 def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
@@ -238,11 +241,12 @@ def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, conte
     var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
-    var input = _pls_input(source, name, context)
-    var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, input.shape[0], input.shape[1])
+    var pin = ArrayPin()
+    var input = _pls_input(source, name, context, pin)
+    var held = kit.resident_input(source, name, pin.keep, input.source.addr, pin.owner, input.shape[0], input.shape[1])
     if held >= 0:
         return held
-    return kit.input_snapshot(input, input.shape[0], input.shape[1])
+    return kit.input_snapshot(input, pin, input.shape[0], input.shape[1])
 
 
 def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
@@ -250,24 +254,32 @@ def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context:
     var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
-    var input = _pls_input(source, name, context, 1)
-    var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, 1, input.shape[0])
+    var pin = ArrayPin()
+    var input = _pls_input(source, name, context, pin, 1)
+    var held = kit.resident_input(source, name, pin.keep, input.source.addr, pin.owner, 1, input.shape[0])
     if held >= 0:
         return held
-    return kit.input_snapshot(input, 1, input.shape[0])
+    return kit.input_snapshot(input, pin, 1, input.shape[0])
 
 
 def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject,
-            captured: Optional[ArrayMetadata] = None) raises -> Tuple[Int, Bool]:
+            captured: Optional[ArrayMetadata] = None,
+            captured_pin: Optional[ArrayPin] = None) raises -> Tuple[Int, Bool]:
     # Admit the exact supported input before reading any metadata. A vector
     # keeps the old row-then-transpose execution order, using captured shape
     # and address instead of source.shape, source.reshape or __array__ hooks.
     if source is None:
         return (Int(-1), False)
-    var input = captured.value().copy() if captured else _pls_input(source, "Y", context, -1)
+    var pin = ArrayPin()
+    var input: ArrayMetadata
+    if captured:
+        input = captured.value().copy()
+        pin = captured_pin.value().copy()
+    else:
+        input = _pls_input(source, "Y", context, pin, -1)
     if len(input.shape) == 2:
-        return (kit.input_snapshot(input, input.shape[0], input.shape[1]), False)
-    var row = kit.input_snapshot(input, 1, input.shape[0])
+        return (kit.input_snapshot(input, pin, input.shape[0], input.shape[1]), False)
+    var row = kit.input_snapshot(input, pin, 1, input.shape[0])
     return (kit.transpose(row), True)
 
 
@@ -324,10 +336,12 @@ def _pls_store(fields: PythonObject, state: PythonObject, key: String, value: Py
 def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject, mut kit: DecompKit,
              context: PythonObject, fields: PythonObject, state: PythonObject,
              captured_x: Optional[ArrayMetadata] = None, captured_y: Optional[ArrayMetadata] = None,
-             x_deferred: Bool = False) raises -> Tuple[Int, Int]:
+             x_deferred: Bool = False, x_pin: Optional[ArrayPin] = None,
+             y_pin: Optional[ArrayPin] = None) raises -> Tuple[Int, Int]:
     # `_PLS.fit` reads the captured settings and publishes into separate state.
-    var x = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, x_source, "X", context)
-    var target = _target(kit, y_source, context, captured_y)
+    # `x_pin`/`y_pin` are the door's pins of `captured_x`/`captured_y`.
+    var x = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, x_source, "X", context)
+    var target = _target(kit, y_source, context, captured_y, y_pin)
     var ym = target[0]
     if ym < 0:
         raise Error(String(fields["_pls_name"]) + " requires y to be passed, but the target y is None.")
@@ -493,7 +507,8 @@ def _score_binding(fields: PythonObject, context: PythonObject) raises -> Python
 
 def pls_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject,
                   fields: PythonObject, state: PythonObject, captured_x: Optional[ArrayMetadata] = None,
-                  captured_y: Optional[ArrayMetadata] = None, x_deferred: Bool = False) raises -> PythonObject:
+                  captured_y: Optional[ArrayMetadata] = None, x_deferred: Bool = False,
+                  x_pin: Optional[ArrayPin] = None, y_pin: Optional[ArrayPin] = None) raises -> PythonObject:
     if operation == "fit" or operation == "fit_transform":
         # args: (X, y, Y); y wins over Y, as PLSRegression.fit chose.
         var y = args[1] if args[1] is not None else args[2]
@@ -507,7 +522,8 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         _pls_store(fields, state, "numeric_mode_", mode)
         var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
         try:
-            var held = _pls_fit(model, args[0], y, kit, context, fields, state, captured_x, captured_y, x_deferred)
+            var held = _pls_fit(model, args[0], y, kit, context, fields, state, captured_x, captured_y, x_deferred,
+                                x_pin, y_pin)
             if operation == "fit":
                 return model
             # transform(X, y): the X and Y the fit converted and uploaded.
@@ -527,7 +543,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         var binding = _score_binding(fields, owner[1])
         var truth = admit_f32(args[1], -1, "y", context, finite=False)
         var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x,
-                                       None, x_deferred)
+                                       None, x_deferred, x_pin)
         var mode = py_get(fields, "numeric_mode")
         var r2 = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
                          Python.tuple(binding, truth.array, prediction, args[2], PythonObject("uniform_average"),
@@ -542,11 +558,11 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         if operation == "transform":
             # args: (X, y, Y)
             var y = args[1] if args[1] is not None else args[2]
-            var x = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
+            var x = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
             var target = _target(kit, y, context)
             return _transform(kit, x, target[0], fields, context)
         if operation == "inverse_transform":
-            var z = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
+            var z = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
             var xr = _rebuild(kit, z, "x_loadings_", "_x_std", "_x_mean", fields, context)
             var y = args[1] if args[1] is not None else args[2]
             if y is None:
@@ -555,7 +571,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             var yr = _rebuild(kit, w, "y_loadings_", "_y_std", "_y_mean", fields, context)
             return Python.tuple(kit.publish(xr), kit.publish(yr))
         if operation == "predict":
-            var x = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
+            var x = _captured(kit, captured_x.value(), x_pin.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
             var mean = _fitted_row(kit, fields["_x_mean"], "_x_mean", context)
             var centered = kit.ew(XD_SUB, x, mean)
             var coef = _fitted_matrix(kit, fields["coef_"], "coef_", context)
@@ -585,14 +601,18 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
     # Lane a8c: the X of an operation whose kit tests its upload is admitted
     # with no host pass (`x_deferred`; DecompKit.input_tested refuses it).
     var x_deferred = False
-    var x = _pls_input_deferred(args[0], "X", context, 2, name, False, sparse,
+    var x_pin = ArrayPin()
+    var x = _pls_input_deferred(args[0], "X", context, x_pin, 2, name, False, sparse,
                                 _pls_defers(fields, fitting, context), x_deferred)
     var y = Optional[ArrayMetadata]()
+    var y_pin = Optional[ArrayPin]()
     if fitting:
         var target = args[1] if args[1] is not None else args[2]
         if target is None:
             raise Error(name + " requires y to be passed, but the target y is None.")
-        y = _pls_input(target, "Y", context, -1, name, True)
+        var target_pin = ArrayPin()
+        y = _pls_input(target, "Y", context, target_pin, -1, name, True)
+        y_pin = Optional(target_pin^)
         if x.shape[0] != y.value().shape[0]:
             raise Error("Found input variables with inconsistent numbers of samples: [" + String(x.shape[0]) + ", " + String(y.value().shape[0]) + "]")
     elif operation != "inverse_transform":
@@ -611,7 +631,8 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
         var depth = Int(py=depth_value)
         py_setitem(state, "_mojolearn_fitting", PythonObject(depth + 1))
         try:
-            result = pls_operation(model, operation, args, context, fields, state, x.copy(), y, x_deferred)
+            result = pls_operation(model, operation, args, context, fields, state, x.copy(), y, x_deferred,
+                                   Optional(x_pin.copy()), y_pin)
         except error:
             # _sk_validate.reraise annotated failed one-row/one-feature fits.
             var message = String(error)
@@ -635,7 +656,9 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
         if operation == "fit":
             return result
     else:
-        result = pls_operation(model, operation, args, context, fields, state, x.copy(), None, x_deferred)
+        result = pls_operation(model, operation, args, context, fields, state, x.copy(), None, x_deferred,
+                               Optional(x_pin.copy()))
+    _ = x_pin^  # the door's pin held X through the operation (the kit holds its own owners)
     return parallel_public_result(result, operation, PythonObject("regressor"), context)
 
 

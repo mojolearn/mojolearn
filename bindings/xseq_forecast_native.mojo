@@ -28,7 +28,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
-from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayPin, array_shape_once, array_metadata_once
 from providers.python.arima_buffer_pyapi import ArimaBuffer, arima_buffer
 from core.cast_in import NPY_DOUBLE
 from providers.python.forecast_initialize_pyapi import forecast_initialize
@@ -87,7 +87,8 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
     var shape = array_shape_once(y, lifecycle)
     if len(shape) != 1 and len(shape) != 2:
         raise Error(label + ": input must be one series or a matrix of series")
-    var metadata = array_metadata_once(y, shape^, label, lifecycle)
+    var pin = ArrayPin()
+    var metadata = array_metadata_once(y, shape^, label, lifecycle, pin)
     if metadata.dtype_number == NPY_DOUBLE:
         raise Error("TypeError: " + label + ": " + message)
     var one = len(metadata.shape) == 1
@@ -109,6 +110,7 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
                      metadata.source.kind, xseq_f32p(arr))
         address = Int(py=xseq_addr(arr))
     _ = metadata
+    _ = pin^  # the door's pin held the input storage through the cast
     return Python.tuple(one, arr, rows, cols, address)
 
 
@@ -584,7 +586,8 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
         classical_admit_value(forecast, lifecycle)
         if py_type(forecast) is not context["ndarray"]:
             raise Error("TypeError: GARCH forecast storage requires its native ndarray")
-        var metadata = array_metadata_once(forecast, array_shape_once(forecast, lifecycle), "forecast", lifecycle)
+        var pin = ArrayPin()
+        var metadata = array_metadata_once(forecast, array_shape_once(forecast, lifecycle), "forecast", lifecycle, pin)
         if len(metadata.shape) != 2 or not metadata.f32_c():
             raise Error("TypeError: GARCH forecast storage requires a contiguous float32 matrix")
         if h > metadata.shape[1]:
@@ -599,6 +602,7 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
         # including zero/negative horizons and the one-series output rank.
         var result = forecast[Python.tuple(py_call(b.slice, PythonObject(None)), py_call(b.slice, PythonObject(None), h))]
         _ = metadata
+        _ = pin^
         var finished = xseq_first(result, xseq_truth(fields["_one"]))
         forecast_commit(target, fields, context["xseq_forecast_ownership"])
         return finished

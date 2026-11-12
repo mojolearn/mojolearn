@@ -48,7 +48,7 @@ from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, pla
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
 from bindings.classical_arrays import classical_address
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.mode_metadata_native import _fields
 from bindings.public_attributes_native import _string_keys
@@ -122,12 +122,12 @@ def _km_params(fields: PythonObject, ridge: Bool, context: PythonObject) raises 
                         _km_number(params[2], "gamma", context), _km_number(params[3], "coef0", context), last)
 
 
-def _km_i32_snapshot(value: PythonObject, count: Int, context: PythonObject) raises -> ArrayMetadata:
+def _km_i32_snapshot(value: PythonObject, count: Int, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     var view = classical_view(value, context, "component_indices_")
     var shape = array_shape_once(view, context)
     if len(shape) != 1 or shape[0] != count:
         raise Error("ValueError: component_indices_ must match the fitted component count")
-    var result = array_metadata_once(view, shape^, "component_indices_", context)
+    var result = array_metadata_once(view, shape^, "component_indices_", context, pin)
     if result.source.kind != CAST_KIND_SIGNED or result.source.itemsize != 4 or not result.c_order:
         raise Error("TypeError: component_indices_ must be a contiguous native int32 array")
     return result^
@@ -240,7 +240,7 @@ def _km_degree(fields: PythonObject, where: String) raises -> Int:
 
 
 def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata,
-             fold: DoorRowsStore) raises:
+             x_pin: ArrayPin, fold: DoorRowsStore) raises:
     """`KernelRidge.fit(X, y, sample_weight)`.
 
     X (lane a8a): `fold` active is a cross-validation fold (`x_meta` then
@@ -261,12 +261,13 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var native = admission[1]
     var flags = admission[2]
     var ptr_entry = neural_descriptor_entry(binding, "kernel_ridge_fit_ptr", False) if native is None else PythonObject(None)
-    var x = x_meta.keep
+    var x = x_pin.keep
     var n = x_meta.source.rows
     var d = x_meta.source.cols
     if args[2] is None:
         raise Error("ValueError: KernelRidge requires y to be passed, but the target y is None.")
-    var target = admit_family_meta(args[2], -1, "y", context)
+    var target_pin = ArrayPin()
+    var target = admit_family_meta(args[2], -1, "y", context, target_pin)
     kernel_public_finite(target, "y")
     var rank = len(target.shape)
     var t = 1
@@ -278,7 +279,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
         raise Error("mojolearn " + where + ": y must be 1-D or 2-D, got " + String(rank) + "-D")
     if target.source.rows != n:
         raise Error("mojolearn " + where + ": y has " + String(target.source.rows) + " rows, X has " + String(n))
-    var y = target.keep
+    var y = target_pin.keep
     # `_kp`: the kernel, degree, gamma and coef0, in that order.
     var kernel = _km_kernel_code(family_field(fields, "kernel"), where, True, context)
     if fold.active() and (kernel == _KERNEL_CHI2 or kernel == _KERNEL_ADDITIVE_CHI2
@@ -286,9 +287,11 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
         # This route reads host words: the fold's host rows, gathered in
         # parallel out of model selection's host base (unchecked: X is
         # tested below like any host X).
-        var rows = admit_family_meta(admit_rows_host_unchecked(args[1], context), 2, "X", context, True)
+        var rows_pin = ArrayPin()
+        var rows = admit_family_meta(admit_rows_host_unchecked(args[1], context), 2, "X", context, rows_pin, True)
         _ = target^
-        _krr_fit(model, args, context, rows, DoorRowsStore.none())
+        _ = target_pin
+        _krr_fit(model, args, context, rows, rows_pin, DoorRowsStore.none())
         return
     var entry_tests = ptr_entry is not None
     var degree = _km_degree(fields, where)
@@ -312,9 +315,10 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var weights_owner = PythonObject(None)
     var weights_address = 0
     if args[3] is not None:
-        var snapshot = admit_family_weights(args[3], n, False, context, wide=True)
-        weights = py_present(snapshot.keep)
-        weights_owner = snapshot.owner
+        var w_pin = ArrayPin()
+        var snapshot = admit_family_weights(args[3], n, False, context, w_pin, wide=True)
+        weights = py_present(w_pin.keep)
+        weights_owner = w_pin.owner
         weights_address = snapshot.source.addr
     var fit = ptr_entry
     if native is None and ptr_entry is None:
@@ -359,11 +363,12 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     # X_fit_ is an owned copy, never the caller's own X (hazard class A,
     # caller-aliased inputs, lane p3-svm-gp-kernel): the resident predict
     # freezes X_fit_ read-only, which must never reach the caller's array.
-    var kept = fold_fit if fold.active() else _km_fit_owned(x_meta, context)
+    var kept = fold_fit if fold.active() else _km_fit_owned(x_meta, x_pin, context)
     _ = y^
     _ = weights^
     _ = weights_owner^
     _ = target^
+    _ = target_pin
     py_setitem(fields, "X_fit_", kept)
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "n_targets_", PythonObject(t))
@@ -377,10 +382,11 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     _km_release(model, "kernel_ridge_resident_release")
     py_setitem(fields, _HOLDER, Python.dict())
     _ = x_meta
+    _ = x_pin
 
 
 def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
-                 xq_meta: ArrayMetadata, resident: Bool = True,
+                 xq_meta: ArrayMetadata, xq_pin: ArrayPin, resident: Bool = True,
                  fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
     """`KernelRidge.predict(X)`: K(X, X_fit_) @ dual_coef_. `resident=False`
     (the multi-GPU driver) skips the device copy of the fit: a copy minted on
@@ -400,7 +406,7 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("dual_coef_")):
         raise Error("mojolearn " + where + ": call fit before predict")
-    var xq = xq_meta.keep
+    var xq = xq_pin.keep
     var q = xq_meta.source.rows
     var d = xq_meta.source.cols
     var fitted = _km_int(family_field(fields, "n_features_in_"), "n_features_in_")
@@ -420,8 +426,11 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
             # This route reads host words: the fold's host rows, gathered in
             # parallel out of model selection's host base (unchecked: the
             # query is tested below like any host query).
-            var rows = admit_family_meta(admit_rows_host_unchecked(args[1], context), 2, "X", context, True)
-            return _krr_predict(model, args, context, rows, resident)
+            var rows_pin = ArrayPin()
+            var rows = admit_family_meta(admit_rows_host_unchecked(args[1], context), 2, "X", context, rows_pin, True)
+            var fold_out = _krr_predict(model, args, context, rows, rows_pin, resident)
+            _ = rows_pin^
+            return fold_out
         return _krr_predict_fold(fields, args, context, ptr_entry, kp, fold, q, d, t)
     _km_chi2_input(xq_meta, kernel, where)
     var dual_obj = family_field(fields, "dual_coef_")
@@ -449,12 +458,15 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
             _ = hit_out  # keep the Python object alive through the native call above
             _ = xq  # keep the Python object alive through the native call above
             _ = xq_meta
+            _ = xq_pin
             return hit_out
-    var x_fit_meta = admit_family_meta(x_fit_obj, 2, "X_fit_", context)
-    var x_fit = x_fit_meta.keep
+    var x_fit_pin = ArrayPin()
+    var dual_pin = ArrayPin()
+    var x_fit_meta = admit_family_meta(x_fit_obj, 2, "X_fit_", context, x_fit_pin)
+    var x_fit = x_fit_pin.keep
     var n = x_fit_meta.source.rows
-    var dual_meta = admit_family_meta(dual_obj, -1, "dual_coef_", context)
-    var dual = dual_meta.keep
+    var dual_meta = admit_family_meta(dual_obj, -1, "dual_coef_", context, dual_pin)
+    var dual = dual_pin.keep
     if t < 1 or x_fit_meta.source.cols != d or dual_meta.count != n * t:
         raise Error("ValueError: KernelRidge fitted arrays do not match the fitted dimensions")
     var out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
@@ -479,8 +491,11 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = dual^
         _ = xq^
         _ = xq_meta
+        _ = xq_pin
         _ = x_fit_meta^
+        _ = x_fit_pin
         _ = dual_meta^
+        _ = dual_pin
         return out
     var predict = PythonObject(None)
     if native is None:
@@ -502,8 +517,11 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = dual^
     _ = xq^
     _ = xq_meta
+    _ = xq_pin
     _ = x_fit_meta^
+    _ = x_fit_pin
     _ = dual_meta^
+    _ = dual_pin
     return out
 
 
@@ -524,9 +542,11 @@ def _krr_predict_fold(fields: PythonObject, args: PythonObject, context: PythonO
     upload of X) with the fitted X_fit_ and dual_coef_ uploaded from their
     host words; the fold's status words refused in admit_x's wording."""
     var where = String("KernelRidge")
-    var x_fit_meta = admit_family_meta(family_field(fields, "X_fit_"), 2, "X_fit_", context)
+    var x_fit_pin = ArrayPin()
+    var dual_pin = ArrayPin()
+    var x_fit_meta = admit_family_meta(family_field(fields, "X_fit_"), 2, "X_fit_", context, x_fit_pin)
     var n = x_fit_meta.source.rows
-    var dual_meta = admit_family_meta(family_field(fields, "dual_coef_"), -1, "dual_coef_", context)
+    var dual_meta = admit_family_meta(family_field(fields, "dual_coef_"), -1, "dual_coef_", context, dual_pin)
     if t < 1 or x_fit_meta.source.cols != d or dual_meta.count != n * t:
         raise Error("ValueError: KernelRidge fitted arrays do not match the fitted dimensions")
     var squeeze = _km_bool(family_field(fields, "_squeeze"), "_squeeze")
@@ -543,12 +563,14 @@ def _krr_predict_fold(fields: PythonObject, args: PythonObject, context: PythonO
     _ = out  # keep the Python object alive through the native call above
     door_rows_refuse(Int(py=words[0]), Int(py=words[1]), where, fold.base_rows)
     _ = x_fit_meta^
+    _ = x_fit_pin
     _ = dual_meta^
+    _ = dual_pin
     return out
 
 
 def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
-             x_meta: ArrayMetadata, transform: Bool = False) raises -> PythonObject:
+             x_meta: ArrayMetadata, x_pin: ArrayPin, transform: Bool = False) raises -> PythonObject:
     """`Nystroem.fit(X)`: the basis rows and the normalization. With
     `transform` (`fit_transform`), returns the transform of X: one
     `nystroem_fit_transform_ptr` call (X uploaded once) where the binding
@@ -557,7 +579,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var where = String("Nystroem")
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var x = x_meta.keep
+    var x = x_pin.keep
     var n = x_meta.source.rows
     var d = x_meta.source.cols
     var kernel = _km_kernel_code(family_field(fields, "kernel"), where, False, context)
@@ -670,36 +692,43 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = out
     _ = x^
     _ = x_meta
+    _ = x_pin
     return py_or_none(out)
 
 
-def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata) raises -> PythonObject:
+def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata,
+                   x_pin: ArrayPin) raises -> PythonObject:
     """`Nystroem.transform(X)`: K(X, components_) @ normalization_.T."""
     classical_connect_numpy(context)
     var where = String("Nystroem")
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("components_")):
         raise Error("mojolearn " + where + ": call fit before transform")
-    var x = x_meta.keep
+    var x = x_pin.keep
     var m = x_meta.source.rows
     var d = x_meta.source.cols
     var fitted = _km_int(family_field(fields, "n_features_in_"), "n_features_in_")
     if d != fitted:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(fitted))
-    var components_meta = admit_family_meta(family_field(fields, "components_"), 2, "components_", context)
-    var components = components_meta.keep
+    var components_pin = ArrayPin()
+    var indices_pin = ArrayPin()
+    var normalization_pin = ArrayPin()
+    var eigenvalues_pin = ArrayPin()
+    var eigenvectors_pin = ArrayPin()
+    var components_meta = admit_family_meta(family_field(fields, "components_"), 2, "components_", context, components_pin)
+    var components = components_pin.keep
     var q = components_meta.source.rows
     var kp = _km_params(fields, False, context)
     _km_chi2_input(x_meta, Int(py=kp[0]), where)
     var out = family_array(Python.tuple(m, q), "<f4", context)
-    var indices_meta = _km_i32_snapshot(family_field(fields, "component_indices_"), q, context)
-    var indices = indices_meta.keep
-    var normalization_meta = admit_family_meta(family_field(fields, "normalization_"), 2, "normalization_", context)
-    var normalization = normalization_meta.keep
-    var eigenvalues_meta = admit_family_meta(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context)
-    var eigenvalues = eigenvalues_meta.keep
-    var eigenvectors_meta = admit_family_meta(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context)
-    var eigenvectors = eigenvectors_meta.keep
+    var indices_meta = _km_i32_snapshot(family_field(fields, "component_indices_"), q, context, indices_pin)
+    var indices = indices_pin.keep
+    var normalization_meta = admit_family_meta(family_field(fields, "normalization_"), 2, "normalization_", context, normalization_pin)
+    var normalization = normalization_pin.keep
+    var eigenvalues_meta = admit_family_meta(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context, eigenvalues_pin)
+    var eigenvalues = eigenvalues_pin.keep
+    var eigenvectors_meta = admit_family_meta(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context, eigenvectors_pin)
+    var eigenvectors = eigenvectors_pin.keep
     if (components_meta.source.cols != d or normalization_meta.source.rows != q or normalization_meta.source.cols != q
             or eigenvalues_meta.count != q or eigenvectors_meta.source.rows != q or eigenvectors_meta.source.cols != q):
         raise Error("ValueError: Nystroem fitted arrays do not match the fitted dimensions")
@@ -743,34 +772,43 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     _ = indices^
     _ = x^
     _ = components_meta^
+    _ = components_pin
     _ = indices_meta^
+    _ = indices_pin
     _ = normalization_meta^
+    _ = normalization_pin
     _ = eigenvalues_meta^
+    _ = eigenvalues_pin
     _ = eigenvectors_meta^
+    _ = eigenvectors_pin
     _ = x_meta
+    _ = x_pin
     return out
 
 
-def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata) raises -> PythonObject:
+def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata,
+                   x_pin: ArrayPin) raises -> PythonObject:
     """`RBFSampler.transform(X)`: scale_ * cos(X @ random_weights_ + random_offset_)."""
     classical_connect_numpy(context)
     var where = String("RBFSampler")
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("random_weights_")):
         raise Error("mojolearn " + where + ": call fit before transform")
-    var x = x_meta.keep
+    var x = x_pin.keep
     var m = x_meta.source.rows
     var d = x_meta.source.cols
     var fitted = _km_int(family_field(fields, "n_features_in_"), "n_features_in_")
     if d != fitted:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(fitted))
-    var weights_meta = admit_family_meta(family_field(fields, "random_weights_"), 2, "random_weights_", context)
-    var weights = weights_meta.keep
+    var weights_pin = ArrayPin()
+    var offset_pin = ArrayPin()
+    var weights_meta = admit_family_meta(family_field(fields, "random_weights_"), 2, "random_weights_", context, weights_pin)
+    var weights = weights_pin.keep
     var q = weights_meta.source.cols
     var params_in = _km_tuple(family_field(fields, "_params"), 2, "_params")
     var params = Python.tuple(_km_number(params_in[0], "gamma", context), _km_int(params_in[1], "random_state"))
-    var offset_meta = admit_family_meta(family_field(fields, "random_offset_"), 1, "random_offset_", context)
-    var offset = offset_meta.keep
+    var offset_meta = admit_family_meta(family_field(fields, "random_offset_"), 1, "random_offset_", context, offset_pin)
+    var offset = offset_pin.keep
     if weights_meta.source.rows != d or offset_meta.count != q:
         raise Error("ValueError: RBFSampler fitted arrays do not match the fitted dimensions")
     var out = family_array(Python.tuple(m, q), "<f4", context)
@@ -794,8 +832,11 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     _ = offset^
     _ = x^
     _ = weights_meta^
+    _ = weights_pin
     _ = offset_meta^
+    _ = offset_pin
     _ = x_meta
+    _ = x_pin
     return out
 
 
@@ -834,13 +875,13 @@ def _km_release(model: PythonObject, release: String) raises:
         pass
 
 
-def _km_fit_owned(x_meta: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+def _km_fit_owned(x_meta: ArrayMetadata, x_pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     """`x_meta`'s float32 C-order rows as an Array the model owns: the
     snapshot's own copy when the admission made one, else one memcpy (the
     caller's own Array is never kept, so freezing the fit never freezes it)."""
     if x_meta.copied and x_meta.owned_writable:
-        return x_meta.keep
-    var result = family_array(x_meta.python_shape(), "<f4", context)
+        return x_pin.keep
+    var result = family_array(array_python_shape(x_meta), "<f4", context)
     unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_meta.source.addr), count=x_meta.count)
     return result
@@ -986,7 +1027,8 @@ def _km_scale_gamma(binding: PythonObject, x: ArrayMetadata, d: Int, context: Py
     return PythonObject(scale_gamma_from_limbs(limbs, n, d))
 
 
-def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: PythonObject, x_meta: ArrayMetadata) raises -> PythonObject:
+def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: PythonObject, x_meta: ArrayMetadata,
+             x_pin: ArrayPin) raises -> PythonObject:
     """`RBFSampler.fit(X)` (returns the model) or, with `transform`,
     `fit_transform(X)`: one `rbf_sampler_fit_transform_resident` call where
     the binding registers it, else the fit and then the transform."""
@@ -994,7 +1036,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     var where = String("RBFSampler")
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var x = x_meta.keep
+    var x = x_pin.keep
     var m = x_meta.source.rows
     var d = x_meta.source.cols
     var binding = args[0]
@@ -1071,6 +1113,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     if not transform:
         _ = x^
         _ = x_meta
+        _ = x_pin
         return model
     if not out:
         out = family_array(Python.tuple(m, q), "<f4", context)
@@ -1085,6 +1128,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = out
     _ = x^
     _ = x_meta
+    _ = x_pin
     return py_or_none(out)
 
 
@@ -1130,17 +1174,19 @@ def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("ValueError: KernelRidge fit requires y")
     var devices = plan_devices(args[3], "km_fit", True, context)
     var binding = args[0]
-    var x = admit_family_meta(args[1], 2, "X", context, True)
+    var x_pin = ArrayPin()
+    var x = admit_family_meta(args[1], 2, "X", context, x_pin, True)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
-            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context, x,
+            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context, x, x_pin,
                      DoorRowsStore.none())
         else:
-            _ = _nys_fit(model, Python.tuple(binding, args[1]), context, x)
+            _ = _nys_fit(model, Python.tuple(binding, args[1]), context, x, x_pin)
     finally:
         plan_exit(binding)
     _ = x^
+    _ = x_pin
     return model
 
 
@@ -1151,17 +1197,19 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     var ridge = _km_par_admit(model, context)
     var devices = plan_devices(args[2], "km_apply", True, context)
     var binding = args[0]
-    var x = admit_family_meta(args[1], 2, "X", context, True)
+    var x_pin = ArrayPin()
+    var x = admit_family_meta(args[1], 2, "X", context, x_pin, True)
     var out = PythonObject(None)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
-            out = _krr_predict(model, Python.tuple(binding, args[1]), context, x, False)
+            out = _krr_predict(model, Python.tuple(binding, args[1]), context, x, x_pin, False)
         else:
-            out = _nys_transform(model, Python.tuple(binding, args[1]), context, x)
+            out = _nys_transform(model, Python.tuple(binding, args[1]), context, x, x_pin)
     finally:
         plan_exit(binding)
     _ = x^
+    _ = x_pin
     return out
 
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -1209,15 +1257,16 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     # Lane a8a: the fit takes a fold on the device too (`_krr_fit`).
     var krr_device_x = krr_query or operation == "family_km_krr_fit"
     var x: ArrayMetadata
+    var x_pin = ArrayPin()  # the door's pin of X, held through the operation
     if krr_device_x and door_is_device_rows(args[1], context):
         var fx = admit_x_unrecorded(args[1], "KernelRidge", context, device_x=True, finite=False)
         fold = fx.store
         if fold.active():
             x = admit_family_fold_meta(fx.rows, fx.cols)
         else:
-            x = admit_family_meta(fx.array, 2, "X", context, True)
+            x = admit_family_meta(fx.array, 2, "X", context, x_pin, True)
     else:
-        x = admit_family_meta(args[1], 2, "X", context, True)
+        x = admit_family_meta(args[1], 2, "X", context, x_pin, True)
     if operation.startswith("family_km_rbf_"):
         kernel_public_finite(x, "X")
     if fitting and not operation.startswith("family_km_krr_"):
@@ -1228,7 +1277,7 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
     try:
-        result = _kernel_methods_operation(model, operation, admitted, context, x, fold)
+        result = _kernel_methods_operation(model, operation, admitted, context, x, x_pin, fold)
     except error:
         var failure = kernel_public_refusal(error, fitting, depth > 0, x.source.rows, x.source.cols, model)
         raise failure^
@@ -1239,35 +1288,36 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         kernel_public_fit_complete(model, feature_names)
     _ = feature_names^
     _ = x^
+    _ = x_pin
     return kernel_public_result(result, method == "predict", outside, context)
 
 
 def _kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
-                              context: PythonObject, x: ArrayMetadata,
+                              context: PythonObject, x: ArrayMetadata, x_pin: ArrayPin,
                               fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
     if operation == "family_km_krr_fit":
-        _krr_fit(model, args, context, x, fold)
+        _krr_fit(model, args, context, x, x_pin, fold)
         return model
     if operation == "family_km_krr_predict":
-        return _krr_predict(model, args, context, x, True, fold)
+        return _krr_predict(model, args, context, x, x_pin, True, fold)
     if operation == "family_km_krr_score":
         var truth = admit_family(args[2], -1, "y", context, finite=True).array
-        var prediction = _krr_predict(model, args, context, x, True, fold)
+        var prediction = _krr_predict(model, args, context, x, x_pin, True, fold)
         var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
         var metrics = estimator_binding(model, "_mojolearn_metrics", context)
         return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                       PythonObject("uniform_average"), PythonObject(True), mode), context)
     if operation == "family_km_nys_fit":
-        _ = _nys_fit(model, args, context, x)
+        _ = _nys_fit(model, args, context, x, x_pin)
         return model
     if operation == "family_km_nys_transform":
-        return _nys_transform(model, args, context, x)
+        return _nys_transform(model, args, context, x, x_pin)
     if operation == "family_km_rbf_transform":
-        return _rbf_transform(model, args, context, x)
+        return _rbf_transform(model, args, context, x, x_pin)
     if operation == "family_km_nys_fit_transform":
-        return _nys_fit(model, args, context, x, True)
+        return _nys_fit(model, args, context, x, x_pin, True)
     if operation == "family_km_rbf_fit":
-        return _rbf_fit(model, args, False, context, x)
+        return _rbf_fit(model, args, False, context, x, x_pin)
     if operation == "family_km_rbf_fit_transform":
-        return _rbf_fit(model, args, True, context, x)
+        return _rbf_fit(model, args, True, context, x, x_pin)
     raise Error("RuntimeError: unknown kernel methods operation " + operation)

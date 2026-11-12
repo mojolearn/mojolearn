@@ -23,7 +23,7 @@ from bindings.native_resident_capsule import resident_capsule
 from bindings.native_model_records import records_open, model_generation
 from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
 from std.memory import unsafe_memcpy
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_kind
 from bindings.admitted_input import admit_x, admitted_finite_refuse
@@ -411,11 +411,12 @@ struct DecompKit(Movable):
         # never written (every operation writes a fresh output).
         return self.add(array, rows, cols)
 
-    def input_snapshot(mut self, snapshot: ArrayMetadata, rows: Int, cols: Int) -> Int:
-        # The provider admitted shape/dtype/address once. Preserve the original
-        # storage owner independently of mutable caller Array slots.
-        self.input_owners.append(snapshot.owner)
-        var index = self.add(snapshot.keep, rows, cols)
+    def input_snapshot(mut self, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int, cols: Int) -> Int:
+        # The provider admitted shape/dtype/address once (the typed view);
+        # the door's pin hands the kit the original storage owner, kept
+        # independently of mutable caller Array slots for the kit's life.
+        self.input_owners.append(pin.owner)
+        var index = self.add(pin.keep, rows, cols)
         self.matrices[index].host_address = snapshot.source.addr
         return index
 
@@ -426,7 +427,7 @@ struct DecompKit(Movable):
         borrowed X with `defer_finite` and add it through `input_tested`."""
         return self.resident and self.keyed
 
-    def input_tested(mut self, snapshot: ArrayMetadata, rows: Int, cols: Int, est: String) raises -> Int:
+    def input_tested(mut self, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int, cols: Int, est: String) raises -> Int:
         """`input_snapshot` of an X the door admitted with `defer_finite`
         (no host pass over a borrowed X; lane a8c-device-x-linear-prep-rfe):
         the words go up now through the op XD_DEV_UPLOAD_FINITE, which
@@ -436,7 +437,7 @@ struct DecompKit(Movable):
         still starts as a host matrix (`on_device` False), so every route
         is the one `input_snapshot` gave and no bit moves. Only for a kit
         where `defers_finite()` holds."""
-        var index = self.input_snapshot(snapshot, rows, cols)
+        var index = self.input_snapshot(snapshot, pin, rows, cols)
         var n = rows * cols
         if n < 1:
             return index
