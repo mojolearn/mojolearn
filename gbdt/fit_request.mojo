@@ -22,10 +22,14 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
                     params = the fit's params list; flags = one byte per
                     parameter (`GbdtFitArgs.bad`) or 0. Returns an outcome
                     handle owned by the image until XG_OUTCOME_FREE.
-  XG_OUTCOME_SIZES  addrs [outcome, out5]: writes [text bytes,
-                    best_iteration, stopped_early, n_learn, n_test].
-  XG_OUTCOME_COPY   addrs [outcome, text (UInt8, text bytes), learn
-                    (Float64, n_learn), test (Float64, n_test)].
+  XG_OUTCOME_SIZES  addrs [outcome, out6]: writes [text bytes,
+                    best_iteration, stopped_early, n_learn, n_test, text
+                    address]; the text address stays valid until
+                    XG_OUTCOME_FREE, and the caller copies the text from it
+                    once (same process).
+  XG_OUTCOME_COPY   addrs [outcome, text (UInt8, text bytes) or 0 to skip
+                    the text, learn (Float64, n_learn), test (Float64,
+                    n_test)].
   XG_OUTCOME_FREE   addrs [outcome].
   XG_MODEL_DIM      addrs [text]; params [text bytes]; returns the model's
                     approx dimension.
@@ -33,7 +37,6 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
 The caller owns every buffer until the synchronous call returns.
 """
 from std.memory import alloc, unsafe_memcpy
-from std.sys.compile import is_defined
 
 comptime GBDT_ENTRY_ABI = "mojolearn.trees.gbdt.v1"
 
@@ -137,20 +140,21 @@ def _outcome(handle: Int) raises -> UnsafePointer[GbdtFitOutcome, MutUntrackedOr
     return UnsafePointer[GbdtFitOutcome, MutUntrackedOrigin](unsafe_from_address=handle)
 
 
-def gbdt_outcome_sizes(handle: Int, out5: Int) raises:
+def gbdt_outcome_sizes(handle: Int, out6: Int) raises:
     var o = _outcome(handle)
-    var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=out5)
+    var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=out6)
     dst[0] = o[].text.byte_length()
     dst[1] = o[].best_iteration
     dst[2] = 1 if o[].stopped_early else 0
     dst[3] = len(o[].learn)
     dst[4] = len(o[].test)
+    dst[5] = Int(o[].text.unsafe_ptr()) if o[].text.byte_length() > 0 else 0
 
 
 def gbdt_outcome_copy(handle: Int, text_dst: Int, learn_dst: Int, test_dst: Int) raises:
     var o = _outcome(handle)
     var nb = o[].text.byte_length()
-    if nb > 0:
+    if nb > 0 and text_dst != 0:
         unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=text_dst),
                src=o[].text.unsafe_ptr(), count=nb)
     if len(o[].learn) > 0:
@@ -167,37 +171,21 @@ def gbdt_outcome_free(handle: Int) raises:
     o.free()
 
 
-# A/B define (lane loops-trees-ab, 2026-11-11; perf audit 20261111 section 7):
-# `-D MOJOLEARN_GBDT_FAST_FIT_TEXT_ONECOPY` builds the String in ONE copy from a
-# byte view of the source span, instead of a byte List copy and then the
-# String copy of that List. It halves the model-text copies of every GBDT
-# fit on both sides of the table: the caller's outcome text
-# (gbdt/fit_calls.mojo `xg_fit`, after the one crossing copy out of the
-# image) and the image's `model_dim` read (gbdt/gbdt_entry.mojo
-# XG_MODEL_DIM); request option strings take the same path. Same bytes, no
-# bit change. It is a define, not a deletion, because the pointer-span
-# constructor has not compiled on this toolchain yet (lanes do not compile);
-# the integrator compiles it, the GBDT-fit-with-a-large-model A/B decides it,
-# and a winner becomes the default (verdict pending:
-# docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_GBDT_FAST_FIT_TEXT_ONECOPY).
-comptime _GBDT_FAST_FIT_TEXT_ONECOPY = is_defined["MOJOLEARN_GBDT_FAST_FIT_TEXT_ONECOPY"]()
-
-
 def gbdt_string_at(address: Int, nbytes: Int) raises -> String:
     """A String of nbytes UTF-8 bytes at address (a request string or the
-    model text)."""
+    model text), built in one copy from a byte view of the span."""
+    # One copy (round2-fixes, 2026-11-11; perf audit 2 A pattern 7): the
+    # former default copied the span into a byte List and then the List into
+    # the String (two copies of every model text and option string). The
+    # experiment `MOJOLEARN_GBDT_FAST_FIT_TEXT_ONECOPY` held this one-copy
+    # form behind a define only because its span constructor had not been
+    # compiled yet; it is the same bytes with one copy fewer, so no measured
+    # question remains and the define and the List form are deleted
+    # (docs/apple-fast/EXPERIMENTS.md row). The view form is the one
+    # core/kde_native_api.mojo `_kde_name` already compiles.
     if nbytes < 0 or (nbytes > 0 and address == 0):
         raise Error("gbdt: null or invalid string span")
-    comptime if _GBDT_FAST_FIT_TEXT_ONECOPY:
-        if nbytes == 0:
-            return String()
-        var view = Span(unsafe_ptr=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), length=nbytes)
-        return String(StringSlice(unsafe_from_utf8=view))
-    else:
-        var bytes = List[UInt8](length=nbytes, fill=0)
-        if nbytes > 0:
-            unsafe_memcpy(dest=bytes.unsafe_ptr(), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address),
-                          count=nbytes)
-        var text = String(StringSlice(unsafe_from_utf8=Span(bytes)))
-        _ = bytes
-        return text^
+    if nbytes == 0:
+        return String()
+    var view = Span(unsafe_ptr=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=address), length=nbytes)
+    return String(StringSlice(unsafe_from_utf8=view))

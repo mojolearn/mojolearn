@@ -77,7 +77,7 @@ def _run[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) rai
         return gbdt_outcome_box(I.fit(op == XG_FIT_ROWMAJOR, args))
     if op == XG_OUTCOME_SIZES:
         if na != 2:
-            raise Error("gbdt outcome sizes: needs [outcome, out5]")
+            raise Error("gbdt outcome sizes: needs [outcome, out6]")
         gbdt_outcome_sizes(_addr(aa, 0), _addr(aa, 1))
         return 0
     if op == XG_OUTCOME_COPY:

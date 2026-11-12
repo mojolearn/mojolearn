@@ -60,19 +60,21 @@ def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFi
     var handle = entry_ref_call(entry, XG_FIT_ROWMAJOR if row_major else XG_FIT, addrs, args.ints,
                                         args.floats)
     _ = args  # the strings, views and flags stay alive through the call above
-    var sizes: List[Int] = [0, 0, 0, 0, 0]
+    var sizes: List[Int] = [0, 0, 0, 0, 0, 0]
     var outcome_addrs: List[Int] = [handle, Int(sizes.unsafe_ptr())]
     var none = List[Int]()
     try:
         _ = entry_ref_call(entry, XG_OUTCOME_SIZES, outcome_addrs, none, _none_f())
-        var text_bytes = List[UInt8](length=sizes[0] + 1, fill=0)
+        # The model text is copied ONCE, straight from the image's outcome
+        # String (sizes[5], valid until XG_OUTCOME_FREE below) into ours; the
+        # former path copied it into a byte List here, then into a second
+        # List and into the String in `gbdt_string_at` (round2-fixes,
+        # 2026-11-11; perf audit 2 A pattern 7).
+        var text = gbdt_string_at(sizes[5], sizes[0])
         var learn = List[Float64](length=sizes[3], fill=0.0)
         var test = List[Float64](length=sizes[4], fill=0.0)
-        var copy_addrs: List[Int] = [handle, Int(text_bytes.unsafe_ptr()), Int(learn.unsafe_ptr()),
-                                     Int(test.unsafe_ptr())]
+        var copy_addrs: List[Int] = [handle, 0, Int(learn.unsafe_ptr()), Int(test.unsafe_ptr())]
         _ = entry_ref_call(entry, XG_OUTCOME_COPY, copy_addrs, none, _none_f())
-        var text = gbdt_string_at(Int(text_bytes.unsafe_ptr()), sizes[0])
-        _ = text_bytes
         return GbdtFitOutcome(text^, sizes[1], sizes[2] != 0, learn^, test^)
     finally:
         var free_addrs: List[Int] = [handle]
