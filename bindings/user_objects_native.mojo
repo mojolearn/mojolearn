@@ -43,6 +43,8 @@ from core.boundary_layout import gather_i64, gather_f64
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
+from bindings.cpython_table import cpython_table
+from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
 
 comptime KIND_STR = 0         # isinstance(v, str)
 comptime KIND_BOOL = 1        # bool or NumPy bool_ (_labels.is_bool)
@@ -68,6 +70,15 @@ struct _Env(Movable):
     var isinstance_fn: PythonObject
     var eq_fn: PythonObject
     var lt_fn: PythonObject
+    # Class words of the exact builtins, read once per operation: an item's
+    # class is compared by pointer (lane list-input-loops, 2026-11-12).
+    var list_word: Int
+    var tuple_word: Int
+    var int_word: Int
+    var float_word: Int
+    var bool_word: Int
+    var str_word: Int
+    var bytes_word: Int
 
     def __init__(out self) raises:
         var b = native_loaded_module("builtins")
@@ -82,6 +93,13 @@ struct _Env(Movable):
         self.isinstance_fn = b.isinstance
         self.eq_fn = self.op.eq
         self.lt_fn = self.op.lt
+        self.list_word = Int(b.list._obj_ptr)
+        self.tuple_word = Int(b.tuple._obj_ptr)
+        self.int_word = Int(b.int._obj_ptr)
+        self.float_word = Int(b.float._obj_ptr)
+        self.bool_word = Int(b.bool._obj_ptr)
+        self.str_word = Int(b.str._obj_ptr)
+        self.bytes_word = Int(b.bytes._obj_ptr)
         self.b = b
 
     def isinstance(self, v: PythonObject, cls: PythonObject) raises -> Bool:
@@ -106,6 +124,120 @@ struct _Env(Movable):
 
     def store(self, code: String, n: Int, itemsize: Int) raises -> PythonObject:
         return py_call(self.array, code, py_call(self.b.bytes, itemsize * max(n, 0)))
+
+
+# ------------------------------------------------------------ item reads
+# Lane list-input-loops (2026-11-12): the list-input loops below read the
+# items of an exact list or tuple borrowed from its C storage
+# (PyList_GetItem / PyTuple_GetItem: no boxed index, no PyObject_GetItem, no
+# new object per item) and convert an exact int / float by its class word
+# with one C call. Any other container is read through its own __getitem__
+# and any other item class keeps the builtin's protocol (PyNumber_Long /
+# PyNumber_Float are exactly what int(v) / float(v) call), so the values,
+# refusals and their texts are the former ones.
+
+comptime SEQ_OTHER = 0   # read through the container's own __getitem__
+comptime SEQ_LIST = 1    # exact list: borrowed PyList_GetItem
+comptime SEQ_TUPLE = 2   # exact tuple: borrowed PyTuple_GetItem
+
+
+def _seq_kind(env: _Env, values: PythonObject) raises -> Int:
+    var word = borrowed_type_word(values._obj_ptr)
+    if word == env.list_word:
+        return SEQ_LIST
+    if word == env.tuple_word:
+        return SEQ_TUPLE
+    return SEQ_OTHER
+
+
+def _item_at(values: PythonObject, kind: Int, i: Int) raises -> PythonObject:
+    """`values[i]` for 0 <= i < len(values): a new reference to the stored
+    item of an exact list or tuple (one incref), else the container's own
+    subscript."""
+    if kind == SEQ_OTHER:
+        return values[i]
+    return PythonObject(from_borrowed=borrowed_item(values, i, kind == SEQ_TUPLE))
+
+
+def _int_word(env: _Env, v: PythonObject, mut overflow: List[Int32]) raises -> Int64:
+    """`int(v)` as an int64 word, refused with the OverflowError the former
+    `int(v)` range check raised outside int64. An exact int is one
+    PyLong_AsLongLongAndOverflow; any other class one PyNumber_Long first.
+    `overflow` is the caller's one-word flag, allocated once per loop."""
+    var t = cpython_table()
+    ref cpy = Python().cpython()
+    var number = v
+    if borrowed_type_word(v._obj_ptr) != env.int_word:
+        var converted = t[].PyNumber_Long(v._obj_ptr)
+        if not converted:
+            var pending = cpy.unsafe_get_error()
+            raise pending^
+        number = PythonObject(from_owned=converted)
+    overflow[0] = 0
+    var word = t[].PyLong_AsLongLongAndOverflow(number._obj_ptr, Int(overflow.unsafe_ptr()))
+    if overflow[0] != 0:
+        var refused = _refusal("OverflowError", "Python int too large to convert to C long")
+        raise refused^
+    if word == -1 and t[].PyErr_Occurred():
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    _ = number
+    return word
+
+
+def _float_word(env: _Env, v: PythonObject) raises -> Float64:
+    """`float(v)`: an exact float or int is one PyFloat_AsDouble (an int too
+    large raises the OverflowError float() raises); any other class one
+    PyNumber_Float first."""
+    var t = cpython_table()
+    ref cpy = Python().cpython()
+    var word = borrowed_type_word(v._obj_ptr)
+    if word == env.float_word or word == env.int_word:
+        var x = t[].PyFloat_AsDouble(v._obj_ptr)
+        if x == -1.0 and t[].PyErr_Occurred():
+            var pending = cpy.unsafe_get_error()
+            raise pending^
+        return x
+    var converted = t[].PyNumber_Float(v._obj_ptr)
+    if not converted:
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    var owned = PythonObject(from_owned=converted)
+    var y = t[].PyFloat_AsDouble(owned._obj_ptr)
+    if y == -1.0 and t[].PyErr_Occurred():
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    _ = owned
+    return y
+
+
+def _is_real_nonbool(env: _Env, v: PythonObject) raises -> Bool:
+    """`isinstance(v, numbers.Real) and not isinstance(v, bool)`: an exact
+    int or float by class word, any other class through isinstance."""
+    var word = borrowed_type_word(v._obj_ptr)
+    if word == env.int_word or word == env.float_word:
+        return True
+    if word == env.bool_word or word == env.str_word:
+        return False
+    return not env.isinstance(v, env.b.bool) and env.isinstance(v, env.real)
+
+
+def _new_list(n: Int) raises -> PythonObject:
+    """A presized list of n NULL slots that `_list_put` fills, every slot
+    exactly once."""
+    ref cpy = Python().cpython()
+    var raw = cpython_table()[].PyList_New(n)
+    if not raw:
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    return PythonObject(from_owned=raw)
+
+
+def _list_put(dst: PythonObject, i: Int, v: PythonObject) raises:
+    """`dst[i] = v` into a `_new_list` slot (PyList_SetItem steals the new
+    reference taken here)."""
+    ref cpy = Python().cpython()
+    _ = cpython_table()[].PyList_SetItem(dst._obj_ptr, i, cpy.Py_NewRef(v._obj_ptr))
 
 
 def _address(store: PythonObject) raises -> Int:
