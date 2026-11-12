@@ -1785,20 +1785,6 @@ def _xl_split_words(splits: PythonObject) raises -> XlSplitWords:
     return words^
 
 
-def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
-    sides partition the rows and every train side is the complement of its
-    test side; None otherwise (RUN: x_linear/door_run.mojo, on the base
-    helper table)."""
-    var fold = _xl_full_i32(n, -1, context)
-    var key = base_helpers_key(context["xl_helpers"])
-    var partition = xl_cv_fold_ids_run(key, _xl_split_words(splits), n, labels_address(fold))
-    _ = splits  # keep the index Arrays alive through the native calls above
-    if not partition:
-        return PythonObject(None)
-    return fold
-
-
 def _xl_full_i32(n: Int, value: Int, context: PythonObject) raises -> PythonObject:
     """`full((n,), value, '<i4')`: the store repeated in C."""
     var one = py_call(context["array_type"], PythonObject("i"), Python.list(PythonObject(value)))
@@ -1809,9 +1795,26 @@ def _xl_full_i32(n: Int, value: Int, context: PythonObject) raises -> PythonObje
 def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
                         context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
     """`_cv_fold_ids_f32(splits, n, name)`: (fold ids, None) for a
-    partition, else (the -(n + 1) words, the per-split roles)."""
-    var ids = _xl_cv_fold_ids(splits, n, context)
-    if ids is not None:
+    partition, else (the -(n + 1) words, the per-split roles).
+
+    `_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
+    sides partition the rows and every train side is the complement of its
+    test side (RUN: x_linear/door_run.mojo, on the base helper table).
+    The split words and the helper key are read once for both RUNs, and
+    both RUNs run with the GIL released: the former `assign_fold_i64`,
+    `check_indices_i64`, `count_fold_hits_i64` and `mark_split_roles_f32`
+    exports released it around their work (lane perf-audit-2-a)."""
+    var key = base_helpers_key(context["xl_helpers"])
+    var words = _xl_split_words(splits)
+    var ids = _xl_full_i32(n, -1, context)
+    var ids_addr = labels_address(ids)
+    var partition = False
+    var py = Python()
+    with GILReleased(py):
+        partition = xl_cv_fold_ids_run(key, words, n, ids_addr)
+    _ = ids  # keep the Python object alive through the native calls above
+    _ = splits  # keep the index Arrays alive through the native calls above
+    if partition:
         var out = admitted_vector(n, "<f4", context)
         labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
         _ = out  # keep the Python object alive through the native call above
@@ -1820,7 +1823,10 @@ def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
     # `_cv_roles_f32`: per-split roles (x_linear/cv_roles.mojo)
     xl_cv_roles_limit(n, name)
     var roles = admitted_vector(len(splits) * n, "<f4", context)
-    xl_cv_roles_run(base_helpers_key(context["xl_helpers"]), _xl_split_words(splits), n, labels_address(roles), name)
+    var roles_addr = labels_address(roles)
+    with GILReleased(py):
+        xl_cv_roles_run(key, words, n, roles_addr, name)
+    _ = words^
     _ = splits  # keep the index Arrays alive through the native calls above
     return (labels_full_f32(n, -Float64(n + 1), context), roles)
 

@@ -864,6 +864,10 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     var outputs = b.list()
     var diagnostics = b.list()
     var first = 0
+    # The base entry, resolved at the first query row block and reused by
+    # every later block (perf-audit-2: was one key read and table resolution
+    # per query row block). Still resolved only when a block runs.
+    var base_ref = Optional[EntryRef]()
     try:
         var store_wave = 0
         while store_wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
@@ -887,7 +891,9 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 _ = py_call(parts.extend, _map(pool, requests))
                 wave += n_devices
 
-            var merged = _merge_candidates(parts, ranges, end - first, k, _table_key("base"), context)
+            if not base_ref:
+                base_ref = _table_key("base")
+            var merged = _merge_candidates(parts, ranges, end - first, k, base_ref.value(), context)
             var output = PythonObject(None)
             if method == "kneighbors":
                 var wide = shard_array("<i8", Python.tuple(end - first, k), (end - first) * k, context)

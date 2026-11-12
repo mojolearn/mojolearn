@@ -20,7 +20,6 @@ fitted state.
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
-from bindings.base_helpers_released import base_reduce_stat
 from std.python._cpython import PyObjectPtr
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.native_loaded_module import native_loaded_module
@@ -371,7 +370,14 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
         var positive = Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), series[4], PythonObject(size)))
         _ = y  # keep the Python object alive through the native call above
         if positive:
-            positive = forecast_run_min_above_zero(base_helpers_key(context["xseq_base"]), Int(py=series[4]), size)
+            # The data-sized reduce_stat runs with the GIL released, as the
+            # released base helper (bindings/base_helpers_released.mojo) did
+            # before the door split moved the call into RUN.
+            var base_ref = base_helpers_key(context["xseq_base"])
+            var y_addr = Int(py=series[4])
+            var ets_py = Python()
+            with GILReleased(ets_py):
+                positive = forecast_run_min_above_zero(base_ref, y_addr, size)
             _ = y  # keep the Python object alive through the native call above
         forecast_run_ets_check_positive(positive)
     var damped = xseq_truth(fields["damped"])
