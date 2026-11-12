@@ -1,12 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
-"""PCA provider admission and image pins surrounding typed native execution."""
+"""PCA provider admission and image pins surrounding typed native execution (door).
+
+The typed connection records and their capability reads are in
+`x_decomp/pca_descriptor_boundary_run.mojo`; the provider pins stay here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
 from core.pca_native_api import (
-    PCA_NATIVE_ABI, PCA_NATIVE_COUNT, PCA_MODE, PCA_VENDOR, PCA_CAPABILITIES, PCA_CAP_WHITEN,
-    PCANativeDriver, PCAFitRequest, PCAFitResult, PCAQueryRequest, PCAQueryResult, pca_vendor_name,
+    PCA_NATIVE_ABI, PCA_NATIVE_COUNT, PCANativeDriver, PCAFitRequest, PCAFitResult, PCAQueryRequest, PCAQueryResult,
 )
+from x_decomp.pca_descriptor_boundary_run import (
+    pca_connection_index, pca_connection_add, pca_mode, pca_vendor, pca_driver,
+)
+from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import (
@@ -14,23 +20,7 @@ from providers.python.neural_descriptor_pyapi import (
 )
 
 
-@fieldwise_init
-struct PCAConnection(Movable):
-    var provider: PythonObject
-    var driver: PCANativeDriver
-    var mode: Int
-    var vendor: Int
-    var capabilities: Int
-
-
-struct PCAConnections(Defaultable, Movable):
-    var records: List[PCAConnection]
-
-    def __init__(out self):
-        self.records = List[PCAConnection]()
-
-
-comptime PCA_CONNECTIONS = SharedSlot[PCAConnections, "MojolearnPCAConnectionsV1"]
+comptime PCA_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnPCAProviderPinsV1"]
 
 
 def pca_mode_name(value: PythonObject) raises -> String:
@@ -44,22 +34,15 @@ def pca_mode_name(value: PythonObject) raises -> String:
 
 def _pca_connect(factory: PythonObject, context: PythonObject, mode: Int) raises -> Int:
     var provider = neural_descriptor_connect_factory_once(factory, String(PCA_NATIVE_ABI), PCA_NATIVE_COUNT)
-    var cache = PCA_CONNECTIONS.get_or_create_ptr()
-    var index = -1
-    for candidate in range(len(cache[].records)):  # driver-loop: connected compiled provider images
-        if cache[].records[candidate].provider is provider:
-            index = candidate
-            break
+    var index = pca_connection_index(provider_word(provider))
     if index < 0:
-        var driver = PCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        var native_mode = driver.metadata(PCA_MODE)
-        var vendor = driver.metadata(PCA_VENDOR)
-        var capabilities = driver.metadata(PCA_CAPABILITIES)
-        index = len(cache[].records)
-        cache[].records.append(PCAConnection(provider, driver^, native_mode, vendor, capabilities))
-    if pca_vendor_name(cache[].records[index].vendor) != String(context["vendor"]):
+        # The typed record and the door pin are appended together, under the GIL.
+        index = pca_connection_add(provider_word(provider),
+            PCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+        PCA_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
+    if pca_vendor(index) != String(context["vendor"]):
         raise Error("RuntimeError: PCA native vendor differs from selected execution")
-    if cache[].records[index].mode != mode:
+    if pca_mode(index) != mode:
         raise Error("RuntimeError: PCA native mode differs from selected execution")
     return index
 
@@ -93,7 +76,7 @@ def pca_connection_matches(connection: Int, mode: String, context: PythonObject)
             if py_type(keys[index]) is not py_type(PythonObject("")):
                 return False
         dict_keys_admit(bindings)
-    var provider = PCA_CONNECTIONS.get_or_create_ptr()[].records[connection].provider
+    var provider = PCA_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
     var factory = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].factory
     return py_get(bindings, PythonObject(mode)) is factory
 
@@ -105,27 +88,9 @@ def pca_fold_connection(context: PythonObject) raises -> Int:
     return _pca_connect(factory, context, 1)
 
 
-def pca_capabilities(connection: Int) raises -> Int:
-    return PCA_CONNECTIONS.get_or_create_ptr()[].records[connection].capabilities
-
-
-def pca_mode(connection: Int) raises -> Int:
-    return PCA_CONNECTIONS.get_or_create_ptr()[].records[connection].mode
-
-
-def pca_vendor(connection: Int) raises -> String:
-    return pca_vendor_name(PCA_CONNECTIONS.get_or_create_ptr()[].records[connection].vendor)
-
-
-def pca_whiten_capability(connection: Int) raises:
-    if (pca_capabilities(connection) & PCA_CAP_WHITEN) == 0:
-        raise Error("NotImplementedError: PCA whiten=True requires the compiled whitened transform pair")
-
-
 def pca_run_fit(connection: Int, request: PCAFitRequest) raises -> PCAFitResult:
-    var cache = PCA_CONNECTIONS.get_or_create_ptr()
-    var pin = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var pin = PCA_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
+    var driver = pca_driver(connection)
     try:
         with GILReleased(Python()):
             return driver.fit(request)
@@ -134,9 +99,8 @@ def pca_run_fit(connection: Int, request: PCAFitRequest) raises -> PCAFitResult:
 
 
 def pca_run_query(connection: Int, request: PCAQueryRequest) raises -> PCAQueryResult:
-    var cache = PCA_CONNECTIONS.get_or_create_ptr()
-    var pin = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var pin = PCA_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
+    var driver = pca_driver(connection)
     try:
         with GILReleased(Python()):
             return driver.query(request)

@@ -8,9 +8,8 @@ from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.native_loaded_module import native_loaded_module
 from bindings.pca_exact_run import pca_too_small, pca_refusal
-from bindings.pca_descriptor_boundary import (
-    pca_capabilities, pca_mode, pca_fold_connection, pca_whiten_capability, pca_run_fit,
-)
+from bindings.pca_descriptor_boundary import pca_fold_connection, pca_run_fit
+from x_decomp.pca_descriptor_boundary_run import pca_capabilities, pca_mode, pca_whiten_capability
 from core.pca_native_api import (
     PCAFitRequest, PCAFitResult, PCAFoldStore, PCA_CAP_EXACT, PCA_CAP_FULL, PCA_CAP_RANDOMIZED,
 )
