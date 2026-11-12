@@ -7,6 +7,7 @@
 # at fit, so `predict` uploads only its queries. Existing kernels/defaults
 # and transfer counts are retained.
 from bindings.admitted_family import admit_family, admit_family_weights
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.p3nc_fitted_freeze import fitted_freeze
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -141,7 +142,9 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var w = PythonObject(None)
     var weight_addr = 0
     if weights_source is not None:
-        w = admit_family_weights(weights_source, n, True, context).keep
+        var w_pin = ArrayPin()
+        _ = admit_family_weights(weights_source, n, True, context, w_pin)
+        w = w_pin.keep
         weight_addr = Int(py=classical_address(w))
         _ = w  # keep the Python object alive through the native call above
     var workspace = DBSCANFitWorkspace(n)

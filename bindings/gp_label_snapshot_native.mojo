@@ -9,7 +9,7 @@ from bindings.classical_labels import _label_list, _flatten_label_pins
 from bindings.native_scalar_decode import NativeScalarBuffer
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_BOOL
-from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayPin, array_shape_once, array_metadata_once
 
 
 def _gp_label_word(data: MutPointer[UInt8, MutUntrackedOrigin], offset: Int,
@@ -56,7 +56,8 @@ def _gp_array_label_capture[native: Bool](value: PythonObject, context: PythonOb
     # public compatibility path retains nested lists; native execution needs
     # only a flat vector of scalar identity pins and creates no row containers.
     var shape = array_shape_once(value, context)
-    var snapshot = array_metadata_once(value, shape^, "GP labels", context)
+    var pin = ArrayPin()
+    var snapshot = array_metadata_once(value, shape^, "GP labels", context, pin)
     var source = snapshot.source
     var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
     var result = GPArrayLabelCapture()
@@ -92,6 +93,7 @@ def _gp_array_label_capture[native: Bool](value: PythonObject, context: PythonOb
                     comptime if not native:
                         _ = py_call(result.public_value.append, values)
     finally:
-        _ = snapshot.keep
-        _ = snapshot.owner
+        _ = snapshot.shape
+        _ = pin.keep  # the door's pin holds the storage read above
+        _ = pin.owner
     return result^
