@@ -22,7 +22,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.msel_device import device_rebase_offsets_i32, device_take_rows
+from core.msel_device import device_take_rows
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
 # lane calltable-msel: the store, scatter, column, split-table and
@@ -33,13 +33,14 @@ from core.msel_helpers_device import (
     msel_scatter_rows_device_run, msel_proba_column_device_run, msel_split_table_device_run,
     msel_group_fold_perm_device_run, msel_store_free_bytes_device_run,
 )
-from decomposition.pca_fold import pca_transform_fold, pca_fit_fold, tsvd_fit_fold
+from decomposition.pca_fold import pca_transform_fold, tsvd_fit_fold
 from core.pca_native_fold import PCA_FOLD_API
 from core.tsvd_native_fold import TSVD_FOLD_API
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_query
 from core.logistic_native_api import QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_PROBA
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
+from cluster.kmeans_fold import kmeans_query_fold
+from core.msel_device_run import _mdx_f32_ptr, _mdx_u32_ptr, kmeans_fit_fold_run, pca_fit_fold_run
 
 #: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
 #: the base binding's `_DEVCTX_SLOT`): one definition, so every reader of the
@@ -158,31 +159,6 @@ def msel_proba_column_binding(
     return PythonObject(status)
 
 
-def msel_rebase_offsets_i32_device_run(ra: Int, nr: Int, la: Int, p: Int, no: Int, d: Int) raises:
-    """The parallel forest's merged int32 tree offsets, on the device. The
-    GPU base image's parallel table entry (bindings/parallel_base_entry_device.mojo)
-    calls it with the GIL released by its caller; the Python door
-    `msel_rebase_offsets_i32` had no caller left once the parallel forest
-    merge read the table (lane calltable-parallel-archive, 2026-11-11)."""
-    if p < 1 or nr < 1 or no < 1 or ra == 0 or la == 0 or d == 0:
-        raise Error("msel_rebase_offsets_i32: bad sizes")
-    # the part lengths are k scalars (one per device shard): checked here
-    var lens = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=la)
-    var total = 0
-    var outs = 1
-    for s in range(p):  # small-loop(p: one length per device shard): shard bookkeeping, not data
-        var l = Int(lens.unsafe_load(s))
-        if l < 1:
-            raise Error("msel_rebase_offsets_i32: every part holds its leading offset")
-        total += l
-        outs += l - 1
-    if total != nr or outs != no:
-        raise Error("msel_rebase_offsets_i32: part lengths disagree with the sizes")
-    var ctx = process_ctx[_MSEL_SLOT]()
-    if not device_rebase_offsets_i32(ctx, ra, nr, la, p, no, d):
-        raise Error("msel_rebase_offsets_i32: a merged offset leaves int32")
-
-
 def msel_split_table_i32_binding(
     perm_addr: PythonObject, m: PythonObject, n_test: PythonObject, n_train: PythonObject,
     counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,
@@ -218,12 +194,6 @@ def msel_group_fold_perm_i32_binding(
     with GILReleased(Python()):
         status = msel_group_fold_perm_device_run(ca, mm, K, pa, da, sa)
     return PythonObject(status)
-
-
-def _mdx_f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr <= 0 or addr % 4 != 0:
-        raise Error("pca_transform_fold: pointers must be positive and float32-aligned")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
 # Lane a6: the device-X entries of family and classical estimators live in
@@ -325,12 +295,6 @@ def qn_infer_fold_binding(
     return Python.list(Int(words[0]), Int(words[1]))
 
 
-def _mdx_u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
-    if addr <= 0 or addr % 4 != 0:
-        raise Error("kmeans fold: pointers must be positive and 4-byte aligned")
-    return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
-
-
 def kmeans_fit_fold_binding(
     ids: PythonObject,
     out_centroids_addr: PythonObject,
@@ -372,9 +336,8 @@ def kmeans_fit_fold_binding(
     var finite = Int32(0)
     var in_range = Int32(0)
     with GILReleased(Python()):
-        var ctx = msel_fold_entry_context()
-        var r = kmeans_fit_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, lp,
-                                mi, tl, sd, ninit, ii, mm, ovs)
+        var r = kmeans_fit_fold_run(base_id, base_rows, index_id, ns, nf, nc, cp, lp,
+                                    mi, tl, sd, ninit, ii, mm, ovs)
         inertia = r.fit.inertia
         n_iter = r.fit.n_iter
         sum_scale = r.fit.sum_scale
@@ -459,8 +422,7 @@ def pca_fit_fold_binding(
     var finite = Int32(0)
     var in_range = Int32(0)
     with GILReleased(Python()):
-        var ctx = msel_fold_entry_context()
-        var r = pca_fit_fold(ctx, base_id, base_rows, index_id, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, frac)
+        var r = pca_fit_fold_run(base_id, base_rows, index_id, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, frac)
         keep = r.keep
         noise = r.noise
         finite = r.finite
