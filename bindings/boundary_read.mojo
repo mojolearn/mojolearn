@@ -36,7 +36,7 @@ total can be read off its UNPACK and PACK.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word
 from bindings.native_instance_item import native_instance_item
@@ -52,7 +52,7 @@ from core.boundary_layout import (
     BufferLayout, buffer_layout_from_words, layout_is_c_contiguous, format_kind, format_matches,
     gather_f32, gather_f64, gather_i64, _load_i64, PY_BUFFER_WORDS, PyBUF_RECORDS_RO, PyBUF_RECORDS, PyBUF_FORMAT,
     BOUNDARY_KIND_FLOAT, BOUNDARY_KIND_INT, BOUNDARY_KIND_UINT,
-    text_format_kind, text_rows, text_rows_into, TextRows,
+    text_format_kind, text_rows_into,
 )
 
 
@@ -450,26 +450,27 @@ def admitted_buffer_view(obj: PythonObject, writable: Bool = False) raises -> Bu
 def text_buffer_view(obj: PythonObject) raises -> BufferView:
     """`admitted_buffer_view` that also admits fixed-width text storage
     (NumPy 'U' / 'S'; `view.kind` is `BOUNDARY_KIND_UCS4` /
-    `BOUNDARY_KIND_BYTES`, read with `read_text_rows`). A numeric buffer
+    `BOUNDARY_KIND_BYTES`, read with `read_text_rows_into`). A numeric buffer
     comes back as `admitted_buffer_view` gives it. CPython calls: the
     admission's identity reads, PyObject_GetBuffer, PyBuffer_Release."""
     admit_native_buffer_exporter(obj)
     return BufferView(obj, PyBUF_RECORDS_RO, True)
 
 
-def read_text_rows(view: BufferView) raises -> TextRows:
-    """Every element of a text view as code units (`core.boundary_layout.
-    text_rows`): no CPython call at all, one native pass pair over the
-    buffer whatever its strides."""
-    return text_rows(view.layout, view.kind)
-
-
 def read_text_rows_into(view: BufferView, mut points: List[UInt32], mut starts: List[Int],
                         mut lengths: List[Int]) raises -> Int:
-    """`read_text_rows` into the caller's lists (a code-point table such as
+    """Every element of a text view as code units (`core.boundary_layout.
+    text_rows_into`) into the caller's lists (a code-point table such as
     bindings/str_labels_native.mojo `StrTable` fills its own fields, no
-    second copy). Returns the element count."""
-    return text_rows_into(view.layout, view.kind, points, starts, lengths)
+    second copy): no CPython call at all, one native pass pair over the
+    buffer whatever its strides. Returns the element count."""
+    # round2-fixes-2: the two host-pool passes run with the GIL released (the
+    # view's buffer export pins the storage; only native memory is read and
+    # the caller's lists written). They held it (perf audit 2-b).
+    var count = 0
+    with GILReleased(Python()):
+        count = text_rows_into(view.layout, view.kind, points, starts, lengths)
+    return count
 
 
 def read_str_points(obj: PythonObject) raises -> List[UInt32]:
