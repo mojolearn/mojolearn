@@ -178,6 +178,19 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
         var ints: List[Int] = [b, d, q, pending] if step else [b, l, d, q, pending]
         updated = PythonObject(neural_descriptor_execute(native, 5 if step else 4, addresses, ints, []))
         _ = output
+    # OPEN (lane samba-sessions-native, 2026-11-12): the two calls below and
+    # `mamba3_state_owned` above still reach the block's binding module by
+    # attribute. The image that serves MAMBA_STATE_ABI_NAME ops 4/5 for this
+    # block is: `_mojolearn_mamba` for a GPU block (CAUSAL_TABLE_MAMBA at
+    # (tier, gpu vendor), mamba/causal_entry_device.mojo);
+    # `_mojolearn_neural_host` for the CPU inference model's block
+    # (CAUSAL_TABLE_MAMBA at (tier, cpu), core/causal_entry_neural_host.mojo);
+    # `_mojolearn_mamba_host` for a CPU-build training block, which publishes
+    # its state entry (NATIVE_MAMBA_HOST_STATE_API) in NO table yet and cannot
+    # take the (tier, cpu) CAUSAL_TABLE_MAMBA slot neural_host holds. The
+    # conversion needs that publication under its own slot and the block's
+    # (route, tier, vendor) key passed in by both callers (this file and
+    # bindings/mamba_public_native.mojo).
     elif step:
         updated = py_call(_native_function(entries, "mamba3_decode_step"), py_ints(addresses), py_ints([b, d, q, pending]))
         _ = output  # keep the Python object alive through the native call above
