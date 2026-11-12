@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.native_loaded_module import native_loaded_module
-from bindings.pca_exact import pca_too_small, pca_refusal
+from bindings.pca_exact_run import pca_too_small, pca_refusal
 from bindings.pca_descriptor_boundary import (
     pca_capabilities, pca_mode, pca_fold_connection, pca_whiten_capability, pca_run_fit,
 )
@@ -188,7 +188,8 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         try:
             fitted = pca_run_fit(connection, request)
         except error:
-            raise pca_refusal(error^)
+            var failure = pca_refusal(error^)
+            raise failure^
     else:
         fitted = pca_run_fit(fold_connection if on_device else connection, request)
     if on_device:

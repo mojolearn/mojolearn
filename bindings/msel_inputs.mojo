@@ -5,6 +5,7 @@ from bindings.native_array_storage import native_array_from_bytes, native_array_
 from bindings.native_loaded_module import native_loaded_module
 from std.memory import unsafe_memcpy
 from core.msel_column_rows import msel_block_columns_to_rows
+from bindings.msel_inputs_run import _pandas_promoted_dtype
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_attr import py_attr
@@ -172,18 +173,7 @@ def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context
         ncols += width
         _ = py_call(owned.append, prepared)
         _ = py_call(positions.append, placement)
-    if objects or (booleans and numbers):
-        # The old materializer reads pandas' object export as int64 when
-        # every scalar is integral, float64 otherwise.
-        item = 8
-        kind = "f" if kind == "f" else "i"
-    if kind == "i" and item == 2:
-        item = 4  # the established Array ABI widens signed 16-bit buffers to int32
-    if kind == "b":
-        kind = "u"
-    if kind == "u" and item == 8:
-        kind = "i"
-    var dtype = "<" + kind + String(item)
+    var dtype = _pandas_promoted_dtype(kind, item, objects, booleans, numbers)
     var output = _empty(Python.tuple(nrows) if series else Python.tuple(nrows, ncols), dtype, rows_context)
     var seen = List[Bool](length=ncols, fill=False)
     var out_address = Int(py=_slot(output, "_addr", rows_context))

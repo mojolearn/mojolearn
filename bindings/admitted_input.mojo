@@ -110,7 +110,8 @@ from bindings.admitted_registry import (
     admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols, admitted_held_finite,
 )
 from bindings.admitted_meta_scope import admitted_held_verify
-from bindings.device_rows_door import door_is_device_rows, DoorRows, DoorRowsStore, door_rows_store
+from bindings.device_rows_door import door_is_device_rows, DoorRows, door_rows_store
+from bindings.device_rows_door_run import DoorRowsStore
 from core.admitted_f32_plan import (
     AdmittedInputShape, admitted_numeric_kind, admitted_f32_column, admitted_f32_shape_check, admitted_f32_byte_order,
     admitted_f32_order, admitted_f32_plan, admitted_f32_run,

@@ -5,7 +5,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_pandas import _pd_class
-from bindings.pandas_arrow_native import _chunked, _arrow_typestr, _itemsize
+from bindings.pandas_arrow_native import _chunked, _arrow_typestr
+from bindings.pandas_arrow_run import _itemsize
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.prep_metadata_pyapi import _description
 from core.prep_boundary_impl import prep_arrow_finite

@@ -6,7 +6,7 @@ from bindings.device_rows_door import door_rows_refuse
 from bindings.admitted_input import admitted_finite_refuse
 from bindings.classical_validate_run import classical_check_width
 from bindings.sequential_arrays import sequential_array, sequential_address
-from bindings.pca_exact import pca_refusal
+from bindings.pca_exact_run import pca_refusal
 from bindings.pca_descriptor_boundary import pca_mode, pca_fold_connection, pca_whiten_capability, pca_run_query
 from core.pca_native_api import PCAQueryRequest, PCAFoldStore
 from providers.python.pca_model_pyapi import pca_query_admitted
@@ -76,7 +76,8 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
         try:
             _ = pca_run_query(connection, request)
         except error:
-            raise pca_refusal(error^)
+            var failure = pca_refusal(error^)
+            raise failure^
         _ = singular^
         _ = variance^
     elif inverse:

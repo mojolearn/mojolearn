@@ -5,6 +5,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.arena_cache_stats import _attribute, _mapping, _admit_entry_keys
 from bindings.arena_cache_get import arena_cache_key
+from bindings.arena_cache_upload_run import _counter_binary_increment
 from bindings.optimizer_public_words import stash_python_error, PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
 from bindings.p3_array_arena_records import (
     P3_SETATTR_LAYOUT, p3_layout_admitted, p3_layout_admit, P3_DICT_CACHE_KEYS, p3_dict_admitted, p3_dict_admit,
@@ -63,31 +64,7 @@ def _increment(value: PythonObject, context: PythonObject) raises -> PythonObjec
         raise failure^
     var encoded = PythonObject(from_owned=pointer)
     var text = String(encoded)
-    var negative = text.startswith("-")
-    var offset = 3 if negative else 2
-    var digits = List[UInt8]()
-    for i in range(offset,text.byte_length()):  # driver-loop: exact arbitrary-precision binary digits
-        digits.append(text.as_bytes()[i])
-    var carry = True
-    for i in range(len(digits)-1,-1,-1):  # driver-loop: increment a positive magnitude or decrement a negative one
-        if not carry:
-            break
-        if negative:
-            if digits[i] == 49:
-                digits[i] = 48
-                carry = False
-            else:
-                digits[i] = 49
-        elif digits[i] == 48:
-            digits[i] = 49
-            carry = False
-        else:
-            digits[i] = 48
-    var result = String("-") if negative else String("")
-    if carry and not negative:
-        result += "1"
-    for i in range(len(digits)):  # driver-loop: publish the native integer's computed binary spelling
-        result += "1" if digits[i] == 49 else "0"
+    var result = _counter_binary_increment(text)
     return py_call(b["int"],PythonObject(result),2)
 
 

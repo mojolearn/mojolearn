@@ -34,6 +34,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.admitted_finite_wording import door_rows_refuse
+from bindings.device_rows_door_run import DoorRowsStore
 
 
 def door_is_device_rows(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -82,33 +83,6 @@ struct DoorRows(Movable):
 # R13) deleted 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch. admit_x / admit_rows_host
 # (bindings/admitted_input.mojo) read a DeviceRows without the round trip.
-
-
-struct DoorRowsStore(ImplicitlyCopyable, Movable):
-    """The resident store ids of a DeviceRows fold in model selection's
-    store (core/msel_device_x.mojo `msel_store`): the float32 C-order base
-    (`base_rows` x `row_words`) and the int64 row indices (`rows` words).
-    A device kernel entry gathers the fold on the device out of these
-    (core/msel_device_x.mojo msel_device_x_f32); no host word is read."""
-    var base_id: Int
-    var base_rows: Int
-    var row_words: Int
-    var index_id: Int
-    var rows: Int
-
-    def __init__(out self, base_id: Int, base_rows: Int, row_words: Int, index_id: Int, rows: Int):
-        self.base_id = base_id
-        self.base_rows = base_rows
-        self.row_words = row_words
-        self.index_id = index_id
-        self.rows = rows
-
-    @staticmethod
-    def none() -> Self:
-        return DoorRowsStore(-1, 0, 0, -1, 0)
-
-    def active(self) -> Bool:
-        return self.base_id >= 0 and self.index_id >= 0 and self.rows > 0
 
 
 def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRowsStore:

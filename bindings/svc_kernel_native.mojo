@@ -83,7 +83,8 @@ comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 63
 
 
 from bindings.fitted_resident_door import fitted_resident_lease
-from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
+from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
+from bindings.device_rows_door_run import DoorRowsStore
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from core.host_finite_scan import host_all_finite_f32_strided
 from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute

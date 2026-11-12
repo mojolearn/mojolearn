@@ -31,7 +31,8 @@ from bindings.scaler_native import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
-from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
+from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate import classical_estimator_name
 from core.host_finite_scan import host_all_finite_f32

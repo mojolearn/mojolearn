@@ -60,7 +60,8 @@ from bindings.classical_labels import (
 )
 from bindings.admitted_input import admit_c_view, admitted_dtype, admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
-from bindings.device_rows_door import door_is_device_rows, door_rows_store, door_rows_refuse, DoorRowsStore
+from bindings.device_rows_door import door_is_device_rows, door_rows_store, door_rows_refuse
+from bindings.device_rows_door_run import DoorRowsStore
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.host_archive_native import host_archive_rbc_metric_object

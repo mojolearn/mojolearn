@@ -16,6 +16,7 @@ from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.linalg_ops_lowbit import lin_connected_binding, lin_lowbit, lin_call, lin_ints
 from bindings.tensor_view import base_format, shape_text
+from bindings.lowbit_weight_run import low_empty
 
 
 
@@ -29,12 +30,6 @@ def low_fields(value: PythonObject) raises -> PythonObject:
             raise Error("TypeError: packed storage field names must be exact strings")
     return fields
 
-
-def low_empty(name: String, shape: List[Int]) raises:
-    var what = "feature(s)" if len(shape) == 2 and shape[0] != 0 else "sample(s)"
-    var text = shape_text(shape)
-    raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
-        + " (shape=" + text + ") while a minimum of 1 is required.")
 
 def low_kind(value: PythonObject, context: PythonObject) raises -> Int:
     var cls = py_type(value)

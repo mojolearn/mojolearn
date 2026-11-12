@@ -12,7 +12,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_is_array
 from bindings.admitted_input import admit_x
 from bindings.arena_prog_native import prep_run_words
-from bindings.x_prep_native_owner import xprep_r3, xprep_take, xprep_address
+from bindings.x_prep_native_owner import xprep_take, xprep_address
+from bindings.x_prep_native_owner_run import xprep_r3
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]

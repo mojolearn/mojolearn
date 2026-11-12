@@ -27,6 +27,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_typed_call import py_call_typed
 from bindings.cpython_table import cpython_table
 from bindings.py_optional import py_present
+from bindings.array_native_run import _rebuild, _prod, _c_strides, _f_strides, _both_orders, _is_int, _is_float, _address_in
 
 
 # ------------------------------------------------------------------ calls
@@ -113,11 +114,6 @@ def _repr(value: PythonObject) raises -> String:
     return String(_call(native_loaded_module("builtins").repr, value))
 
 
-def _rebuild(key: String) -> Error:
-    return Error("RuntimeError: mojolearn: this binary has no `" + key
-                 + "` helper (an older build); rebuild it")
-
-
 def _helper(key: String, size: Int, context: PythonObject) raises -> PythonObject:
     """The connected core helper `key` for a non-empty block, else None."""
     if size <= 0:
@@ -142,51 +138,8 @@ def _tuple(values: List[Int]) raises -> PythonObject:
     return py_call(native_loaded_module("builtins").tuple, items)
 
 
-def _prod(values: List[Int]) -> Int:
-    var n = 1
-    for i in range(len(values)):  # driver-loop: over array rank metadata
-        n *= values[i]
-    return n
-
-
-def _c_strides(shape: List[Int], itemsize: Int) -> List[Int]:
-    var out = List[Int](length=len(shape), fill=0)
-    var acc = itemsize
-    for k in range(len(shape)):  # driver-loop: over array rank metadata
-        var axis = len(shape) - 1 - k
-        out[axis] = acc
-        acc *= shape[axis]
-    return out^
-
-
-def _f_strides(shape: List[Int], itemsize: Int) -> List[Int]:
-    var out = List[Int](length=len(shape), fill=0)
-    var acc = itemsize
-    for axis in range(len(shape)):  # driver-loop: over array rank metadata
-        out[axis] = acc
-        acc *= shape[axis]
-    return out^
-
-
-def _both_orders(shape: List[Int]) -> Bool:
-    var big = 0
-    for i in range(len(shape)):  # driver-loop: over array rank metadata
-        if shape[i] != 1:
-            big += 1
-    return big <= 1
-
-
 def _code(dtype: String, context: PythonObject) raises -> PythonObject:
     return py_get(context["codes"], PythonObject(dtype))
-
-
-def _is_int(dtype: String) -> Bool:
-    return (dtype == "<i4" or dtype == "<i8" or dtype == "<u4" or dtype == "<u1"
-            or dtype == "<u2" or dtype == "<i1")
-
-
-def _is_float(dtype: String) -> Bool:
-    return dtype == "<f4" or dtype == "<f8" or dtype == "<f2"
 
 
 def _set_meta(array: PythonObject, shape: PythonObject, dtype: String, order: String,
@@ -293,7 +246,8 @@ def _strided_copy(src_addr: PythonObject, dst_addr: PythonObject, itemsize: Int,
     var dims = _call(context["array_type"], PythonObject("q"), words)
     var copy = py_get(context["helpers"], PythonObject("strided_copy_bytes"))
     if copy is None:
-        raise _rebuild("strided_copy_bytes")
+        var failure = _rebuild("strided_copy_bytes")
+        raise failure^
     _ = _call(copy, src_addr, dst_addr, _call(dims.buffer_info)[0], PythonObject(len(shape)), PythonObject(itemsize))
     _ = dims  # the dimension words stay alive through the native copy
 
@@ -783,13 +737,6 @@ def _member_addresses(members: PythonObject) raises -> List[Int]:
     return out^
 
 
-def _address_in(address: Int, members: List[Int]) -> Bool:
-    for i in range(len(members)):  # driver-loop: over the few connected class-set members
-        if members[i] == address:
-            return True
-    return False
-
-
 def _from_list(cls: PythonObject, nested: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list`: a new C-order Array from a (nested) list of numbers."""
     var b = native_loaded_module("builtins")
@@ -869,7 +816,8 @@ def _astype(a: PythonObject, requested: PythonObject, context: PythonObject) rai
         if Int(py=status) == 0:
             return _owned(store, a.shape, dtype, order, context)
     if cast is None:
-        raise _rebuild("cast_elements")
+        var failure = _rebuild("cast_elements")
+        raise failure^
     # The helper met an element the conversion refuses: raise its words.
     return _astype_reference(a, dtype, context)
 
@@ -887,7 +835,8 @@ def _reduce(a: PythonObject, what: Int, name: String, context: PythonObject) rai
                                                  size, what))
     if size == 0:
         raise Error("ValueError: mojolearn: " + name + " of an empty Array")
-    raise _rebuild("reduce_stat")
+    var failure = _rebuild("reduce_stat")
+    raise failure^
 
 
 def _sum(a: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -900,7 +849,8 @@ def _sum(a: PythonObject, context: PythonObject) raises -> PythonObject:
     var stat = _helper("reduce_stat", size, context)
     var code = py_get(context["native_codes"], a.dtype)
     if stat is None or code is None:
-        raise _rebuild("reduce_stat")
+        var failure = _rebuild("reduce_stat")
+        raise failure^
     if _is_float(dtype):
         return labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
                                                  size, 2))
@@ -1016,13 +966,15 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
                 _ = x^
                 _ = fill^
             return _owned(store, a.shape, "<u1", "C", context)
-        raise _rebuild("equal_elements")
+        var failure = _rebuild("equal_elements")
+        raise failure^
     if same_shape:
         if size == 0:
             return _owned(_call(context["array_type"], PythonObject("B")), a.shape, "<u1", "C", context)
         var theirs = String(other.dtype)
         if theirs == dtype:
-            raise _rebuild("equal_elements")
+            var failure = _rebuild("equal_elements")
+            raise failure^
         # Two dtypes: both widened EXACTLY to one dtype, then one native
         # comparison; int64 against a float compares with the helper's exact
         # int == float rule.
@@ -1033,7 +985,8 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
         if dtype != "<i8" and theirs != "<i8":
             return _equal(_astype(a, PythonObject("<f8"), context), _astype(other, PythonObject("<f8"), context), context)
         if equal is None:
-            raise _rebuild("equal_elements")
+            var failure = _rebuild("equal_elements")
+            raise failure^
         var ints = a if a_int else other
         var floats = other if a_int else a
         var ia = _as_c(ints, context)

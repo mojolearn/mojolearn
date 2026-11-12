@@ -3,8 +3,7 @@
 from bindings.native_array_storage import native_array_zeros
 from bindings.arena_buffer_copy import buffer_copy_to_array
 from std.python import Python, PythonObject
-from std.math import isinf, isnan
-from gemm.f16_widen import f16_bits_to_f32
+from bindings.arena_materialize_run import _itemsize, _cast_code, _cast_failure, _widen_elements, _canonical_half_nans
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -65,18 +64,6 @@ def _array_layout(context: PythonObject) raises:
         if py_get(mapping,names[i]) is not slots[names[i]]:
             raise Error("TypeError: native row materialization requires the connected Array slots")
     p3_layout_admit(P3_ARRAY_LAYOUT, cls, slots)
-
-
-def _itemsize(dtype: String) raises -> Int:
-    if dtype == "<f8" or dtype == "<i8":
-        return 8
-    if dtype == "<f4" or dtype == "<i4" or dtype == "<u4":
-        return 4
-    if dtype == "<f2" or dtype == "<u2":
-        return 2
-    if dtype == "<i1" or dtype == "<u1":
-        return 1
-    raise Error("TypeError: native row materialization requires a supported numeric Array dtype")
 
 
 def _array(shape: PythonObject, dtype: String, view: PythonObject, store: PythonObject,
@@ -153,28 +140,6 @@ def _buffer_owner(view: PythonObject, context: PythonObject) raises:
     raise Error("TypeError: native row materialization cannot invoke a Python buffer exporter")
 
 
-def _cast_code(dtype: String) raises -> Int:
-    if dtype == "<f4":
-        return 0
-    if dtype == "<f8":
-        return 1
-    if dtype == "<i4":
-        return 2
-    if dtype == "<i8":
-        return 3
-    if dtype == "<u4":
-        return 4
-    if dtype == "<u1":
-        return 5
-    if dtype == "<u2":
-        return 6
-    if dtype == "<i1":
-        return 7
-    if dtype == "<f2":
-        return 8
-    raise Error("TypeError: native row materialization requires a supported numeric Array dtype")
-
-
 def _slot(array: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     return py_call(context["owner_array_slots"][PythonObject(name)].__get__,array,context["array_class"])
 
@@ -198,25 +163,6 @@ def _prepared_info(array: PythonObject, context: PythonObject) raises -> PythonO
     py_setitem(metadata,"address",_address(view))
     py_setitem(metadata,"nbytes",nbytes)
     return metadata
-
-
-def _cast_failure(address: Int, source: String, count: Int) raises:
-    if source == "<f4" or source == "<f8" or source == "<f2":
-        for i in range(count):  # driver-loop: preserve the old ordered int-conversion refusal without a Python reference path
-            var number = Float64(0)
-            if source == "<f8":
-                number = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=address)[i]
-            elif source == "<f4":
-                number = Float64(MutPointer[Float32,MutUntrackedOrigin](unsafe_from_address=address)[i])
-            else:
-                number = Float64(f16_bits_to_f32(MutPointer[UInt16,MutUntrackedOrigin](unsafe_from_address=address)[i]))
-            if isnan(number):
-                raise Error("ValueError: cannot convert float NaN to integer")
-            if isinf(number):
-                raise Error("OverflowError: cannot convert float infinity to integer")
-            if number < -9223372036854775808.0 or number >= 9223372036854775808.0:
-                raise Error("TypeError: numeric row index exceeds int64 storage")
-    raise Error("OverflowError: row index exceeds the target integer range")
 
 
 def _cast(array: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -346,18 +292,7 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
                 _ = _native_call(context["arena_cast"],Python.tuple(address,6,output,4,count))
             _ = store^
             return out
-        for i in range(count):  # driver-loop: existing native-width buffer conversion without NumPy arithmetic
-            if kind == "b":
-                MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=output)[i] = UInt8(MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=address)[i] != 0)
-            elif kind == "i":
-                MutPointer[Int32,MutUntrackedOrigin](unsafe_from_address=output)[i] = Int32(MutPointer[Int16,MutUntrackedOrigin](unsafe_from_address=address)[i])
-            elif item == 2:
-                MutPointer[UInt32,MutUntrackedOrigin](unsafe_from_address=output)[i] = UInt32(MutPointer[UInt16,MutUntrackedOrigin](unsafe_from_address=address)[i])
-            else:
-                var word = MutPointer[UInt64,MutUntrackedOrigin](unsafe_from_address=address)[i]
-                if word > UInt64(9223372036854775807):
-                    raise Error("OverflowError: unsigned fold data exceeds int64 storage")
-                MutPointer[Int64,MutUntrackedOrigin](unsafe_from_address=output)[i] = Int64(word)
+        _widen_elements(kind, item, address, output, count)
         _ = store^
         return out
     if not Bool(py=view.contiguous) and Bool(py=value.dtype.isnative) and count:
@@ -369,10 +304,7 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
             # native float codec. CPython 3.11 canonicalizes NaN payloads;
             # 3.14 preserves them. Its import-time codec metadata preserves
             # that existing behavior without calling struct in a product op.
-            var words = MutPointer[UInt16,MutUntrackedOrigin](unsafe_from_address=address)
-            for i in range(count):  # driver-loop: preserve the prior half storage conversion's NaN bits
-                if (words[i] & 0x7FFF) > 0x7C00:
-                    words[i] = (words[i] & 0x8000) | 0x7E00
+            _canonical_half_nans(address, count)
     return _owned(store,shape,target,context)
 
 
