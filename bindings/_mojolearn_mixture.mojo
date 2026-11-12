@@ -30,7 +30,7 @@ THE GIL is released around every device call, and nothing inside a
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
-from core.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -42,14 +42,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from mixture.gmm_entries import _gmm_sample_run
 from checks.vendor import COMPILED_VENDOR
 from mixture.estimator import GaussianMixtureModel
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
+from mixture.mixture_binding_run import rebuild_model_run
 
 
 def mixture_numeric_mode_binding() raises -> PythonObject:
@@ -95,25 +88,13 @@ def _rebuild_model(
     var n_iter = Int(py=params[2])
     var converged = Int(py=params[3]) != 0
     var lower_bound = Float32(Float64(py=params[4]))
-    var weights = read_f32(Int(py=addrs[0]), max(0, k))
-    var means = read_f32(Int(py=addrs[1]), max(0, k * d))
-    # covariances_ (k*d*d) is read by no scoring, predict or sample kernel
-    # (they use precisions_chol, means, weights and log_det_chol): it is not
-    # copied (p3 rank 296; the address stays in the entry's word layout).
-    var covariances = List[Float32]()
-    var precisions = read_f32(Int(py=addrs[3]), max(0, k * d * d))
-    var log_det = read_f32(Int(py=addrs[4]), max(0, k))
-    return GaussianMixtureModel(
-        k,
-        d,
-        weights^,
-        means^,
-        covariances^,
-        precisions^,
-        log_det^,
-        n_iter,
-        converged,
-        lower_bound,
+    var weights_addr = Int(py=addrs[0])
+    var means_addr = Int(py=addrs[1])
+    var precisions_addr = Int(py=addrs[3])
+    var log_det_addr = Int(py=addrs[4])
+    return rebuild_model_run(
+        k, d, n_iter, converged, lower_bound,
+        weights_addr, means_addr, precisions_addr, log_det_addr,
     )
 
 
@@ -136,8 +117,8 @@ def gmm_sample_binding(
     var seed = (UInt64(Int(py=sample_params[2])) << 32) | UInt64(
         Int(py=sample_params[1])
     )
-    var xp = _f32_ptr(Int(py=addrs[5]))
-    var yp = _i32_ptr(Int(py=addrs[6]))
+    var xp = f32_ptr(Int(py=addrs[5]))
+    var yp = i32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
         _gmm_sample_run(model, n, seed, xp, yp)
     return PythonObject(n)
