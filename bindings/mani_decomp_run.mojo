@@ -650,18 +650,13 @@ def lle_smallest_run(mut run: MRun, k: Int, f: Int, nc: Int, max_iter: Int, seed
 
 
 def lle_fit_run(mut run: MRun, k: Int, hk: Int, m: Int, plan: LlePlan) raises -> LleFit:
-    """`LocallyLinearEmbedding.fit(X)` after X is admitted (`m`)."""
+    """`LocallyLinearEmbedding.fit(X)` after X is admitted (`m`) and the
+    door's n_neighbors / method refusals."""
     var out = LleFit()
     var n = run.r(m)
+    # n_neighbors / method refusals: the door's UNPACK, after X
     var nn = plan.nn
     var nc = plan.nc
-    if nn >= n:
-        raise Error("Expected n_neighbors < n_samples, but n_samples = " + String(n) + ", n_neighbors = " + String(nn))
-    if plan.method == LLE_HESSIAN and nn <= nc + nc * (nc + 1) // 2:
-        raise Error("for method='hessian', n_neighbors must be greater than "
-                    + "[n_components * (n_components + 3) / 2]")
-    if plan.method == LLE_MODIFIED and nn < nc:
-        raise Error("modified LLE requires n_neighbors >= n_components")
     var knn = mani_knn(run, k, m, m, nn, True, 0, 2.0)
     var idm = knn[0]
     var iw: Int

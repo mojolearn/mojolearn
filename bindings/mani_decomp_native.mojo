@@ -3,56 +3,42 @@
 # (python/mojolearn/_expansion_decomp.py): Isomap (`fit`, `fit_transform`,
 # `transform`, `reconstruction_error`), ClassicalMDS (`fit`, `fit_transform`),
 # MDS (`fit`, `fit_transform`) and LocallyLinearEmbedding (`fit`,
-# `fit_transform`, `transform`). The native provider selects the decomp binding
-# for the requested or fitted mode and the process-default helper kit; this owner
-# makes the Python methods' refusals (same wording, same order) and runs their
-# steps statement for statement on the kit (bindings/mani_kit.mojo): the same
-# x_decomp entries, operands, float32 scalars and order, every matrix where the
-# Python kit kept it (a GPU binding's results stay resident between steps), the
-# Lanczos batches, the shift-invert LLE solve and SMACOF in the same entries
-# with the same float64 stopping tests. Fitted matrices have typed native
-# owners, shared by fit and transform; the public lifecycle captures settings
-# and inputs before this execution. Runtime/vendor evidence is pending.
-from std.math import sqrt
+# `fit_transform`, `transform`).
+#
+# Door shape (lane entangled-mkit, 2026-11-12): UNPACK reads the settings into
+# typed plans (the Python methods' refusals, same wording), admits the decomp
+# binding (and the process-default helper binding) into the typed kit
+# (bindings/mani_kit.mojo `mk_image`) and the fitted `_ManifoldMatrix` owners
+# (`mk_fitted`); RUN (bindings/mani_decomp_run.mojo on bindings/mani_kit_run.mojo)
+# does the fit or transform with the GIL released, holding no Python object;
+# PACK builds the public Arrays and publishes every fitted field once at the
+# end, then returns the operation's pool ids. X is admitted as the first RUN
+# step, so the refusals keep their order: the settings checks the Python
+# methods made before reading X, X's own refusals, then the rest.
+# Runtime/vendor evidence is pending.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.admitted_family import admit_family_meta
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
-from bindings.manifold_storage_native import matrix_device, device_identifier
 from bindings.manifold_scalar_native import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.metrics_native_support import metric_warn
-from bindings.family_common import (
-    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
-    family_field,
-)
-from bindings.mani_kit import (
-    MKit, mk_freeze_fitted, mk_from_input, mk_from_snapshot, mk_copy, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_desc_range, mk_out,
-    mk_out2, mk_store, mk_store_ptr, mk_at, mk_of, mk_fill, mk_zeros, mk_reshape, mk_dev_view, mk_new,
-    mk_on_dev, mk_take_rows_list, mk_ints, mk_addr, mk_store_addr, mk_store_len, mk_store_zeros, mk_store_part,
-    OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_SQRT, OP_SQ, OP_SCALE, OP_FMA, OP_ADDS, OP_GTS, OP_MIN, OP_LE,
-    SEL_MAXABS, SEL_MAX, SEL_MIN,
+from bindings.family_common import family_repr, family_str, family_is_str, family_is_int, family_type_name, family_field
+from bindings.mani_kit import mk_image, mk_fitted, mk_keep, mk_owner, mk_out, mk_out2, mk_finish, mk_seed_word
+from bindings.mani_kit_run import MRun
+from bindings.mani_decomp_run import (
+    MANI_METRIC_PRECOMPUTED, MANI_METRIC_EUCLIDEAN, LLE_STANDARD, LLE_LTSA, LLE_HESSIAN, LLE_MODIFIED,
+    MDS_INIT_ARRAY, MDS_INIT_CLASSICAL, MDS_INIT_RANDOM, MdsPlan, IsoPlan, IsoFit, IsoState, LlePlan, LleFit,
+    cmds_core, mds_dissimilarity_run, mds_fit_run, iso_fit_run, iso_transform_run, iso_reconstruction_error_run,
+    lle_fit_run, lle_transform_run,
 )
 
-comptime _LANCZOS_MIN_N = 200
-comptime _LANCZOS_MAX_NC = 10
-comptime _LANCZOS_TOL = 1e-7
-comptime _LANCZOS_MAX_M = 600
-comptime _LANCZOS_DEV_MAX_FLOATS = 1 << 26
 comptime _LLE_ITER_MIN_N = 200
 comptime _LLE_ITER_MAX_K = 10
-comptime _LLE_SUBSPACE_TOL = 1e-5
-comptime _LLE_STALL_TOL = 1e-2
-comptime _LLE_NULL_GUARD = 1e-3
-comptime _LLE_NULL_FLOOR = 8.0
-comptime _F32_EPS = 1.1920928955078125e-07
-
-
-def _mani_finite(v: Float64) -> Bool:
-    """`math.isfinite(v)`."""
-    return v - v == 0.0
 
 
 def _mani_eq(value: PythonObject, text: String, context: PythonObject) raises -> Bool:
@@ -113,15 +99,23 @@ def _mani_f32(v: Float64) -> Float64:
     return Float64(Float32(v))
 
 
-def _mani_kit(mode: PythonObject, binding: PythonObject, context: PythonObject) raises -> MKit:
-    """`_Kit(mode)`: `binding` is the decomp binding the shell resolved for
-    `mode`."""
-    return MKit(String(py=py_call(native_loaded_module("builtins").str, mode)), binding, context)
+def _mani_kit(mut run: MRun, mode: PythonObject, binding: PythonObject, context: PythonObject) raises -> Int:
+    """UNPACK `_Kit(mode)`: `binding` is the decomp binding the shell resolved
+    for `mode`."""
+    return mk_image(run, String(py=py_call(native_loaded_module("builtins").str, mode)), binding, context)
 
 
-def _mani_host_kit(mode: PythonObject, binding: PythonObject, context: PythonObject) raises -> MKit:
-    """`_host_kit()`: the default-mode kit (`binding` resolved for it)."""
-    return MKit(String(mode), binding, context)
+def _mani_x(mut run: MRun, k: Int, x: ArrayMetadata) raises -> Int:
+    """RUN step 1: X admitted into the kit (`k.from_snapshot(x, "X")`), the
+    GIL released; the caller keeps `x` alive."""
+    var m = -1
+    var address = x.source.addr
+    var rows = x.source.rows
+    var cols = x.source.cols
+    var ndim = len(x.shape)
+    with GILReleased(Python()):
+        m = run.from_snapshot(k, address, rows, cols, ndim, "X")
+    return m
 
 
 def _mani_check(model: PythonObject, fields: PythonObject, attr: String) raises:
@@ -171,7 +165,7 @@ def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: P
             return (Int(0), Float64(2.0))
         if pw == 1.0:
             return (Int(1), Float64(1.0))
-        if pw > 0 and not _mani_finite(pw):
+        if pw > 0 and not (pw - pw == 0.0):
             return (Int(2), Float64(0.0))
         return (Int(3), pw)
     var kinds = context["family_mani_pd_kind"]
@@ -181,227 +175,48 @@ def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: P
                 + "minkowski p, manhattan, chebyshev, cosine)")
 
 
-def _mani_dist(mut k: MKit, a: PythonObject, b: PythonObject, kind: Int, pw: Float64,
-               same: Bool) raises -> PythonObject:
-    """`_dist(k, A, B, kind, pw, same)`."""
-    if kind == 0:
-        var sq = k.sqdist(a, b)
-        return k.ew1(OP_SQRT, sq, 0.0)
-    var d = k.pdist(a, b, kind, pw)
-    if same and kind == 4:
-        k.fill0(d, 0, mk_r(b) + 1, min(mk_r(a), mk_r(b)))
-    return d
-
-
-def _mani_knn(mut k: MKit, q: PythonObject, x: PythonObject, nn: Int, exclude_self: Bool, kind: Int,
-              pw: Float64) raises -> Tuple[PythonObject, PythonObject]:
-    """`_knn_mats(k, Q, X, nn, exclude_self, kind, pw)`."""
-    var d: PythonObject
-    if kind == 0:
-        d = k.sqdist(q, x)
-    else:
-        d = _mani_dist(k, q, x, kind, pw, exclude_self)
-    return k.graph_knn(d, nn, exclude_self)
-
-
-def _mani_center(mut k: MKit, kk: PythonObject) raises -> Tuple[PythonObject, PythonObject, PythonObject]:
-    """`_center_kernel(k, K)`: (Kc, column means 1 x n, total mean 1 x 1)."""
-    var n = mk_r(kk)
-    var col = k.ew1(OP_SCALE, k.colsum(kk), 1.0 / Float64(n))
-    var allm = k.ew1(OP_SCALE, k.total(col), 1.0 / Float64(n))
-    var row = k.ew1(OP_SCALE, k.rowsum(kk), 1.0 / Float64(mk_c(kk)))
-    var t1 = k.ew2(OP_SUB, kk, col)
-    var t2 = k.ew2(OP_SUB, t1, row)
-    var kc = k.ew2(OP_ADD, t2, allm)
-    return (kc, col, allm)
-
-
-def _mani_kdot(mut k: MKit, a: PythonObject, b: PythonObject) raises -> Float64:
-    """`_kdot(k, a, b)`: float(a^T b)."""
-    var p = k.mm(a, b, True, False)
-    return mk_at(p, 0, k.ctx)
-
-
-def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Bool, PythonObject, PythonObject]:
-    """`_lanczos_top(k, A, nc)`: (found, values, vectors); not found when the
-    basis cap is reached unconverged (the caller then runs the exact solve)."""
-    var ctx = k.ctx
-    var n = mk_r(a)
-    var cap = min(n, _LANCZOS_MAX_M)
-    if (cap + 1) * n > _LANCZOS_DEV_MAX_FLOATS:
-        return (False, PythonObject(None), PythonObject(None))
-    var q = k.ew1(OP_ADDS, k.rand(n, 1, PythonObject(0x1A2C05), 91, 0), -0.5)
-    q = k.ew1(OP_SCALE, q, 1.0 / sqrt(_mani_kdot(k, q, q)))
-    # the batch's alphas and betas: a native words holder, made once per solve
-    var ab = mk_store_zeros(2 * cap, ctx)
-    var resident = k.res()
-    var qd: PythonObject
-    var abd = PythonObject(None)
-    var aid = PythonObject(None)
-    if resident:
-        qd = k.dout(cap + 1, n)
-        k.place_rows(qd, mk_reshape(q, 1, n, ctx), 0)
-        abd = k.dout(1, 2 * cap)
-        aid = k.did(a)
-    else:
-        qd = mk_zeros(cap + 1, n, ctx)
-        k.place_rows(qd, mk_reshape(q, 1, n, ctx), 0)
-    var alphas = List[Float64]()
-    var betas = List[Float64]()
-    var m = min(n, max(2 * nc + 1, 20))
-    var j = 0
-    var stop = False
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    var th = Optional[PythonObject]()
-    var yv = Optional[PythonObject]()
-    var top = List[Int]()
-    while True:  # driver-loop: over Lanczos basis growth rounds (at most log2(_LANCZOS_MAX_M / 20) + 1)
-        if j < m and not stop:
-            # `_lanczos_batch`: steps j .. m - 1, then their alphas and betas
-            # up to the first breakdown
-            if resident:
-                _ = family_call(k.fn("x_decomp_dev_lanczos"), aid, device_identifier(matrix_device(qd)), device_identifier(matrix_device(abd)), mk_ints([n, j, m, cap]))
-                _ = family_call(k.fn("x_decomp_dev_download"), device_identifier(matrix_device(abd)), mk_store_addr(ab), PythonObject(2 * cap))
-                _ = ab  # keep the Python object alive through the native call above
-            else:
-                var pa = mk_addr(a, ctx)
-                _ = family_call(k.fn("x_decomp_lanczos"), pa, mk_addr(qd, ctx), mk_store_addr(ab),
-                                mk_ints([n, j, m, cap]))
-                _ = ab  # keep the Python object alive through the native call above
-            var abp = mk_store_ptr(ab)
-            _ = ab  # keep the Python object alive through the native call above
-            var reached = m
-            var broke = False
-            for jj in range(j, m):  # driver-loop: over this batch's Lanczos steps (at most _LANCZOS_MAX_M)
-                var av = Float64(abp[jj])
-                _ = ab  # keep the Python object alive through the native call above
-                var bv = Float64(abp[cap + jj])
-                _ = ab  # keep the Python object alive through the native call above
-                alphas.append(av)
-                betas.append(bv)
-                if bv <= 1e-30 * max(1.0, abs(av)) or jj + 1 == n:
-                    reached = jj + 1
-                    broke = True
-                    break
-            j = reached
-            stop = broke
-        # TOMBSTONE: the host assembly of T (a j x j host matrix of the batch's
-        # alphas and betas) and its dense `k.eigh` deleted 2026-11-09 by lane
-        # n9-decomp-eigh-families; code recoverable at the lane's base
-        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
-        # The projected solve is the executor op `eigh_op_tridiag` on the
-        # alphas / betas the Lanczos step wrote (x_decomp/lanczos_dev.mojo
-        # `dev_eigh_tridiag_run`, w and z left on the device), the host
-        # column its twin `eigh_op_tridiag_host` on `ab`
-        # (x_decomp/lanczos_host.mojo `eigh_tridiag_host_run`): one
-        # algorithm on every column. T's words are the float32 alphas and
-        # betas either way (mk_of rounded the float64 copies back to them).
-        if resident:
-            th = Optional[PythonObject](k.dout(1, j))
-            yv = Optional[PythonObject](k.dout(j, j))
-            _ = family_call(k.fn("x_decomp_dev_eigh_tridiag"), device_identifier(matrix_device(abd)),
-                            device_identifier(matrix_device(th.value())), device_identifier(matrix_device(yv.value())),
-                            mk_ints([j, cap]))
-        else:
-            th = Optional[PythonObject](mk_zeros(1, j, ctx))
-            yv = Optional[PythonObject](mk_zeros(j, j, ctx))
-            _ = family_call(k.fn("x_decomp_eigh_tridiag"), mk_store_addr(ab), mk_addr(th.value(), ctx), mk_addr(yv.value(), ctx),
-                            mk_ints([j, cap]))
-            _ = ab  # keep the Python object alive through the native call above
-        top = List[Int]()
-        var stop_at = max(j - 1 - nc, -1)
-        var t = j - 1
-        while t > stop_at:  # driver-loop: native Mojo values, no CPython call: (components: the wanted Ritz positions): bounded by n_components
-            top.append(t)
-            t -= 1
-        if len(top) < nc:
-            return (False, PythonObject(None), PythonObject(None))
-        var big = k.word(k.reduce(mk_take_cols(th.value(), top, ctx), SEL_MAXABS), 0)
-        if big == 0.0:
-            big = 1.0
-        var last = mk_take_cols(mk_rows(yv.value(), j - 1, j, ctx), top, ctx)
-        var res = k.word(k.reduce(k.ew1(OP_SCALE, last, betas[j - 1]), SEL_MAXABS), 0)
-        if stop or res <= _LANCZOS_TOL * big:
-            break
-        if m >= cap:
-            return (False, PythonObject(None), PythonObject(None))
-        m = min(min(n, 2 * m), _LANCZOS_MAX_M)
-    var yt = mk_take_cols(yv.value(), top, ctx)
-    var qm: PythonObject
-    if mk_on_dev(qd):
-        qm = mk_dev_view(matrix_device(qd), j, n, ctx)
-    else:
-        qm = mk_new(mk_store_part(mk_store(qd, ctx), 0, j * n), j, n, ctx)
-    var v = k.mm(qm, yt, True, False)
-    _ = ab^
-    _ = abd^
-    return (True, mk_take_cols(th.value(), top, ctx), v)
-
-
-def _mani_top_eig(mut k: MKit, a: PythonObject, nc: Int, topk: Bool) raises -> Tuple[PythonObject, PythonObject]:
-    """`_top_eig(k, A, nc, topk)`: the nc largest eigenpairs (descending),
-    vectors in columns, each column signed by svd_flip(u_based_decision=True)."""
-    var n = mk_r(a)
-    var found = False
-    var w = PythonObject(None)
-    var v = PythonObject(None)
-    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC:
-        var got = _mani_lanczos_top(k, a, nc)
-        found = got[0]
-        w = got[1]
-        v = got[2]
-    if not found:
-        var eig = k.eigh(a)
-        var order = mk_desc_range(n - 1, nc)
-        w = mk_take_cols(eig[0], order, k.ctx)
-        v = mk_take_cols(eig[1], order, k.ctx)
-    var signs = k.absmax_signs(v, True)
-    return (w, k.ew2(OP_MUL, v, signs))
+def _mani_metric(metric: PythonObject, metric_params: PythonObject, who: String,
+                 context: PythonObject) raises -> Tuple[Int, Float64]:
+    """ClassicalMDS / MDS: 'precomputed', 'euclidean' (the two named routes),
+    else `_metric_spec(metric, 2, metric_params, who)`."""
+    if _mani_eq(metric, "precomputed", context):
+        return (MANI_METRIC_PRECOMPUTED, Float64(0.0))
+    if _mani_eq(metric, "euclidean", context):
+        return (MANI_METRIC_EUCLIDEAN, Float64(2.0))
+    return _mani_metric_spec(metric, PythonObject(2), metric_params, who, context)
 
 
 # ---------------------------------------------------------------- ClassicalMDS
-def _cmds_core(mut k: MKit, m: PythonObject, metric: PythonObject, metric_params: PythonObject,
-               nc_param: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, PythonObject, PythonObject]:
-    """`ClassicalMDS.fit`'s steps: (dissimilarity_matrix_, eigenvalues_,
-    embedding_m_, M)."""
-    var d2: PythonObject
-    var dissimilarity: PythonObject
-    if _mani_eq(metric, "precomputed", context):
-        d2 = k.ew1(OP_SQ, m, 0.0)
-        dissimilarity = mk_out2(m, context)
-    elif _mani_eq(metric, "euclidean", context):
-        d2 = k.sqdist(m, m)
-        dissimilarity = mk_out2(k.ew1(OP_SQRT, d2, 0.0), context)
-    else:
-        var spec = _mani_metric_spec(metric, PythonObject(2), metric_params, "ClassicalMDS", context)
-        var dm = _mani_dist(k, m, m, spec[0], spec[1], True)
-        d2 = k.ew1(OP_SQ, dm, 0.0)
-        dissimilarity = mk_out2(dm, context)
-    var centered = _mani_center(k, k.ew1(OP_SCALE, d2, -0.5))
-    var eig = _mani_top_eig(k, centered[0], _mani_int(nc_param, context), True)
-    var w = eig[0]
-    var v = eig[1]
-    var values = mk_out(w, Python.tuple(mk_c(w)), context)
-    var embedding = k.ew2(OP_MUL, v, k.ew1(OP_SQRT, w, 0.0))
-    return (dissimilarity, values, embedding, m)
-
-
 def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`ClassicalMDS.fit(X)`; returns embedding_."""
     classical_connect_numpy(context)
     var fields = settings.values
     var mode = settings.mode
-    py_setitem(settings.fields, "numeric_mode_", mode)
-    var k = _mani_kit(mode, args[0], context)
-    var got = _cmds_core(k, k.from_snapshot(x, "X"), family_field(fields, "metric"), family_field(fields, "metric_params"),
-                         family_field(fields, "n_components"), context)
-    py_setitem(settings.fields, "dissimilarity_matrix_", got[0])
-    py_setitem(settings.fields, "eigenvalues_", got[1])
-    py_setitem(settings.fields, "embedding_m_", got[2])
-    var embedding = mk_out2(got[2], context)
-    py_setitem(settings.fields, "embedding_", embedding)
-    py_setitem(settings.fields, "n_features_in_", PythonObject(mk_c(got[3])))
-    return embedding
+    var run = MRun()
+    try:
+        var k = _mani_kit(run, mode, args[0], context)
+        var m = _mani_x(run, k, x)
+        var spec = _mani_metric(family_field(fields, "metric"), family_field(fields, "metric_params"), "ClassicalMDS",
+                                context)
+        var nc = _mani_int(family_field(fields, "n_components"), context)
+        var got = Tuple[Int, Int, Int](-1, -1, -1)
+        with GILReleased(Python()):
+            got = cmds_core(run, k, m, spec[0], spec[1], nc)
+        _ = x  # the admitted X stays alive through the RUN above
+        # PACK
+        var dissimilarity = mk_out2(run, got[0], context)
+        var values = mk_out(run, got[1], Python.tuple(run.c(got[1])), context)
+        var embedding = mk_out2(run, got[2], context)
+        var owner = mk_owner(run, got[2])
+        py_setitem(settings.fields, "numeric_mode_", mode)
+        py_setitem(settings.fields, "dissimilarity_matrix_", dissimilarity)
+        py_setitem(settings.fields, "eigenvalues_", values)
+        py_setitem(settings.fields, "embedding_m_", owner)
+        py_setitem(settings.fields, "embedding_", embedding)
+        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        return embedding
+    finally:
+        mk_finish(run, context)
 
 
 # ---------------------------------------------------------------- MDS
@@ -412,122 +227,69 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var b = native_loaded_module("builtins")
     var fields = settings.values
     var mode = settings.mode
-    py_setitem(settings.fields, "numeric_mode_", mode)
-    var k = _mani_kit(mode, args[0], context)
-    var m = k.from_snapshot(x, "X")
-    var metric = family_field(fields, "metric")
-    var dis: PythonObject
-    if _mani_eq(metric, "precomputed", context):
-        dis = m
-    elif _mani_eq(metric, "euclidean", context):
-        dis = k.ew1(OP_SQRT, k.sqdist(m, m), 0.0)
-    else:
-        var spec = _mani_metric_spec(metric, PythonObject(2), family_field(fields, "metric_params"), "MDS", context)
-        dis = _mani_dist(k, m, m, spec[0], spec[1], True)
-    py_setitem(settings.fields, "dissimilarity_matrix_", mk_out2(dis, context))
-    var metric_mds = _mani_truth(family_field(fields, "metric_mds"), context)
-    var normalized = family_field(fields, "normalized_stress")
-    var norm = (normalized is PythonObject(True)) or (_mani_eq(normalized, "auto", context) and not metric_mds)
-    py_setitem(settings.fields, "_norm", PythonObject(norm))
-    var n = mk_r(dis)
-    var nc = _mani_int(family_field(fields, "n_components"), context)
-    var seed = _mani_seed(family_field(fields, "random_state"))
-    var init_arg = args[3]
-    var init = family_field(fields, "init")
-    var starts = List[PythonObject]()
-    if not (init_arg is None):
-        starts.append(mk_from_input(init_arg, "init", context))
-    elif _mani_eq(init, "classical_mds", context):
-        # ClassicalMDS(nc, metric="precomputed", numeric_mode=self.numeric_mode_).fit(Dis.out()).embedding_m_
-        var inner = _mani_kit(mode, args[0], context)
-        var got = _cmds_core(inner, mk_copy(dis, context), PythonObject("precomputed"), PythonObject(None),
-                             PythonObject(nc), context)
-        _ = mk_out2(got[2], context)  # the inner fit's embedding_ (it reads the start back to the host)
-        starts.append(got[2])
-    elif _mani_eq(init, "random", context):
-        var restarts = _mani_int(family_field(fields, "n_init"), context)
-        for r in range(restarts):  # driver-loop: over random restarts (n_init)
-            starts.append(k.rand(n, nc, seed, 70 + r, 0))
-    else:
-        raise Error("init must be 'random', 'classical_mds' or an array")
-    if not metric_mds and n * n > 2147483647:
-        raise Error("MDS(metric_mds=False): " + String(n) + " rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
-    var s = k.vstack(starts) if len(starts) > 1 else starts[0]
-    var y = mk_zeros(n, nc, context)
-    var pd = mk_addr(dis, context)
-    var ps = mk_addr(s, context)
-    _ = s  # keep the Python object alive through the native call above
-    var params = mk_ints([n, nc, len(starts), _mani_int(family_field(fields, "max_iter"), context), 1 if metric_mds else 0,
-                          1 if norm else 0])
-    var tols = Python.list(PythonObject(_mani_float(family_field(fields, "eps"), context)))
-    var result = family_call(k.fn("x_decomp_mds_fit"), pd, ps, mk_addr(y, context), params, tols)
-    _ = y  # keep the Python object alive through the native call above
-    _ = s  # keep the Python object alive through the native call above
-    py_setitem(settings.fields, "stress_", py_call(b.float, result[0]))
-    _ = y  # keep the Python object alive through the native call above
-    py_setitem(settings.fields, "n_iter_", py_call(b.int, result[1]))
-    _ = y  # keep the Python object alive through the native call above
-    var embedding = mk_out2(y, context)
-    py_setitem(settings.fields, "embedding_", embedding)
-    py_setitem(settings.fields, "n_features_in_", PythonObject(mk_c(m)))
-    _ = s^
-    _ = dis^
-    return embedding
+    var run = MRun()
+    try:
+        var k = _mani_kit(run, mode, args[0], context)
+        var m = _mani_x(run, k, x)
+        var plan = MdsPlan()
+        var spec = _mani_metric(family_field(fields, "metric"), family_field(fields, "metric_params"), "MDS", context)
+        plan.metric = spec[0]
+        plan.pw = spec[1]
+        var dis = -1
+        with GILReleased(Python()):
+            dis = mds_dissimilarity_run(run, k, m, plan)
+        plan.metric_mds = _mani_truth(family_field(fields, "metric_mds"), context)
+        var normalized = family_field(fields, "normalized_stress")
+        plan.norm = (normalized is PythonObject(True)) or (_mani_eq(normalized, "auto", context) and not plan.metric_mds)
+        plan.nc = _mani_int(family_field(fields, "n_components"), context)
+        var seed = _mani_seed(family_field(fields, "random_state"))
+        var init_arg = args[3]
+        var init = family_field(fields, "init")
+        # the admitted `init` array stays alive (`init_meta`) through the RUN
+        var init_meta = Optional[ArrayMetadata]()
+        if not (init_arg is None):
+            init_meta = Optional(admit_family_meta(init_arg, 2, "init", context, True))
+            plan.init = MDS_INIT_ARRAY
+            plan.init_address = init_meta.value().source.addr
+            plan.init_rows = init_meta.value().source.rows
+            plan.init_cols = init_meta.value().source.cols
+            plan.init_ndim = len(init_meta.value().shape)
+        elif _mani_eq(init, "classical_mds", context):
+            plan.init = MDS_INIT_CLASSICAL
+        elif _mani_eq(init, "random", context):
+            plan.init = MDS_INIT_RANDOM
+            plan.restarts = _mani_int(family_field(fields, "n_init"), context)
+            plan.seed = mk_seed_word(seed)
+        else:
+            raise Error("init must be 'random', 'classical_mds' or an array")
+        plan.max_iter = _mani_int(family_field(fields, "max_iter"), context)
+        plan.eps = _mani_float(family_field(fields, "eps"), context)
+        var got = Tuple[Int, Float64, Int](-1, 0.0, 0)
+        with GILReleased(Python()):
+            got = mds_fit_run(run, k, dis, plan)
+        _ = init_meta^  # the admitted init stays alive through the RUN above
+        _ = x  # the admitted X stays alive through the RUNs above
+        # PACK
+        var dissimilarity = mk_out2(run, dis, context)
+        var embedding = mk_out2(run, got[0], context)
+        py_setitem(settings.fields, "numeric_mode_", mode)
+        py_setitem(settings.fields, "dissimilarity_matrix_", dissimilarity)
+        py_setitem(settings.fields, "_norm", PythonObject(plan.norm))
+        py_setitem(settings.fields, "stress_", py_call(b.float, PythonObject(got[1])))
+        py_setitem(settings.fields, "n_iter_", PythonObject(got[2]))
+        py_setitem(settings.fields, "embedding_", embedding)
+        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        return embedding
+    finally:
+        mk_finish(run, context)
 
 
 # ---------------------------------------------------------------- Isomap
-def _iso_graph(settings: ManifoldSettings, fields: PythonObject, mut k: MKit, m: PythonObject, n: Int, kind: Int,
-               pw: Float64) raises -> Tuple[PythonObject, PythonObject]:
-    """`Isomap._graph`: (the dense neighbor graph, n_neighbors or None)."""
-    var context = k.ctx
-    var radius = family_field(fields, "radius")
-    var wg: PythonObject
-    var nn_out = PythonObject(None)
-    if not (radius is None):
-        var d = _mani_dist(k, m, m, kind, pw, True)
-        wg = k.graph_radius(d, _mani_f32(_mani_float(radius, context)))
-    else:
-        var nn = _mani_int(family_field(fields, "n_neighbors"), context)
-        if nn >= n:
-            # scikit-learn's kneighbors refusal (the query point itself is
-            # one of the n_neighbors + 1 it asks for)
-            raise Error("Expected n_neighbors <= n_samples_fit, but n_neighbors = " + String(nn + 1)
-                        + ", n_samples_fit = " + String(n) + ", n_samples = " + String(n))
-        var got = _mani_knn(k, m, m, nn, True, kind, pw)
-        var idx = got[0]
-        var sq = got[1]
-        if kind == 0:
-            sq = k.ew1(OP_SQRT, sq, 0.0)
-        wg = k.graph_knn_dense(idx, sq, n)
-        nn_out = PythonObject(nn)
-    var comp = k.graph_components(wg)
-    var count = comp[1]
-    py_setitem(settings.fields, "n_connected_components_", PythonObject(count))
-    if count > 1:
-        metric_warn("The number of connected components of the neighbors graph is "
-                    + String(count) + " > 1. Completing the graph to fit Isomap might be slow.",
-                    native_loaded_module("builtins").UserWarning, k.ctx)
-        var d = _mani_dist(k, m, m, kind, pw, True)
-        k.graph_join(wg, d, comp[0], count)
-    return (wg, nn_out)
-
-
-# The fitted matrices Isomap / LLE keep on the model (frozen when fit returns).
-def _iso_fitted() -> List[String]:
-    return ["dist_matrix_m_", "_k_col", "_k_all", "eigenvalues_m_", "eigenvectors_m_",
-            "embedding_m_", "_fit_X", "_Kc", "_iso_v_m_"]
-
-
-def _lle_fitted() -> List[String]:
-    return ["embedding_m_", "_fit_X"]
-
-
 def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`Isomap.fit(X)`; returns embedding_."""
     classical_connect_numpy(context)
     var fields = settings.values
     var mode = settings.mode
-    py_setitem(settings.fields, "numeric_mode_", mode)
     var neighbors = family_field(fields, "n_neighbors")
     var radius = family_field(fields, "radius")
     if not (neighbors is None) and not (radius is None):
@@ -544,41 +306,65 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     _mani_eigen_solver(solver, "Isomap", context)
     var spec = _mani_metric_spec(family_field(fields, "metric"), family_field(fields, "p"),
                                  family_field(fields, "metric_params"), "Isomap", context)
-    var kind = spec[0]
-    var pw = spec[1]
-    py_setitem(settings.fields, "_kind", PythonObject(kind))
-    py_setitem(settings.fields, "_pw", PythonObject(pw))
-    var k = _mani_kit(mode, args[0], context)
-    var m = k.from_snapshot(x, "X")
-    var n = mk_r(m)
-    var graph = _iso_graph(settings, fields, k, m, n, kind, pw)
-    var d = k.dijkstra(graph[0])
-    py_setitem(settings.fields, "dist_matrix_m_", d)
-    py_setitem(settings.fields, "dist_matrix_", mk_out2(d, context))
-    var g = k.ew1(OP_SCALE, k.ew1(OP_SQ, d, 0.0), -0.5)
-    var centered = _mani_center(k, g)
-    var kc = centered[0]
-    py_setitem(settings.fields, "_k_col", centered[1])
-    py_setitem(settings.fields, "_k_all", centered[2])
-    var topk = _mani_in(solver, Python.tuple(PythonObject("auto"), PythonObject("arpack")), context)
-    var eig = _mani_top_eig(k, kc, _mani_int(family_field(fields, "n_components"), context), topk)
-    py_setitem(settings.fields, "eigenvalues_m_", eig[0])
-    py_setitem(settings.fields, "eigenvectors_m_", eig[1])
-    var em = k.ew2(OP_MUL, eig[1], k.ew1(OP_SQRT, eig[0], 0.0))
-    py_setitem(settings.fields, "embedding_m_", em)
-    var embedding = mk_out2(em, context)
-    py_setitem(settings.fields, "embedding_", embedding)
-    py_setitem(settings.fields, "_fit_X", m)
-    py_setitem(settings.fields, "_knn", graph[1])
-    py_setitem(settings.fields, "n_features_in_", PythonObject(mk_c(m)))
-    py_setitem(settings.fields, "_Kc", kc)
-    # transform's eigenvectors / sqrt(eigenvalues) (row N295): the same two
-    # launches transform made on every call, made once here.
-    py_setitem(settings.fields, "_iso_v_m_", k.ew2(OP_DIV, eig[1], k.ew1(OP_SQRT, eig[0], 0.0)))
-    # Fitted state is read-only from here (rows N291, N301): reads never
-    # move it, each side's copy is made once (bindings/mani_kit.mojo).
-    mk_freeze_fitted(settings.fields, _iso_fitted())
-    return embedding
+    var plan = IsoPlan()
+    plan.kind = spec[0]
+    plan.pw = spec[1]
+    var run = MRun()
+    try:
+        var k = _mani_kit(run, mode, args[0], context)
+        var m = _mani_x(run, k, x)
+        var nn_out = PythonObject(None)
+        if not (radius is None):
+            plan.use_radius = True
+            plan.radius = _mani_f32(_mani_float(radius, context))
+        else:
+            plan.nn = _mani_int(family_field(fields, "n_neighbors"), context)
+            nn_out = PythonObject(plan.nn)
+        plan.topk = _mani_in(solver, Python.tuple(PythonObject("auto"), PythonObject("arpack")), context)
+        plan.nc = _mani_int(family_field(fields, "n_components"), context)
+        var fit = IsoFit()
+        with GILReleased(Python()):
+            fit = iso_fit_run(run, k, m, plan)
+        _ = x  # the admitted X stays alive through the RUNs above
+        # PACK
+        if fit.components > 1:
+            metric_warn("The number of connected components of the neighbors graph is "
+                        + String(fit.components) + " > 1. Completing the graph to fit Isomap might be slow.",
+                        native_loaded_module("builtins").UserWarning, context)
+        var dist = mk_out2(run, fit.d, context)
+        var embedding = mk_out2(run, fit.em, context)
+        # Fitted state is read-only from here (rows N291, N301): reads never
+        # move it, each side's copy is made once (bindings/mani_kit_run.mojo).
+        var dist_m = mk_owner(run, fit.d)
+        var k_col = mk_owner(run, fit.col)
+        var k_all = mk_owner(run, fit.allm)
+        var values = mk_owner(run, fit.w)
+        var vectors = mk_owner(run, fit.v)
+        var em = mk_owner(run, fit.em)
+        var fit_x = mk_owner(run, m)
+        var kc = mk_owner(run, fit.kc)
+        # transform's eigenvectors / sqrt(eigenvalues) (row N295)
+        var iv = mk_owner(run, fit.iv)
+        py_setitem(settings.fields, "numeric_mode_", mode)
+        py_setitem(settings.fields, "_kind", PythonObject(plan.kind))
+        py_setitem(settings.fields, "_pw", PythonObject(plan.pw))
+        py_setitem(settings.fields, "n_connected_components_", PythonObject(fit.components))
+        py_setitem(settings.fields, "dist_matrix_m_", dist_m)
+        py_setitem(settings.fields, "dist_matrix_", dist)
+        py_setitem(settings.fields, "_k_col", k_col)
+        py_setitem(settings.fields, "_k_all", k_all)
+        py_setitem(settings.fields, "eigenvalues_m_", values)
+        py_setitem(settings.fields, "eigenvectors_m_", vectors)
+        py_setitem(settings.fields, "embedding_m_", em)
+        py_setitem(settings.fields, "embedding_", embedding)
+        py_setitem(settings.fields, "_fit_X", fit_x)
+        py_setitem(settings.fields, "_knn", nn_out)
+        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        py_setitem(settings.fields, "_Kc", kc)
+        py_setitem(settings.fields, "_iso_v_m_", iv)
+        return embedding
+    finally:
+        mk_finish(run, context)
 
 
 def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
@@ -586,294 +372,196 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     _mani_check(model, settings.values, "embedding_m_")
     classical_connect_numpy(context)
     var fields = settings.values
-    var k = _mani_kit(settings.mode, args[0], context)
-    var q = k.from_snapshot(x, "X")
-    var fit_x = family_field(fields, "_fit_X")
-    var n = mk_r(fit_x)
-    var d = family_field(fields, "dist_matrix_m_")
-    var knn = family_field(fields, "_knn")
-    var kind = _mani_int(family_field(fields, "_kind"), context)
-    var pw = _mani_float(family_field(fields, "_pw"), context)
-    var g = PythonObject(None)
-    if knn is None:
-        # `_radius_geodesic`
-        var radius = family_field(fields, "radius")
-        var r = _mani_f32(_mani_float(radius, context))
-        var dq = _mani_dist(k, q, fit_x, kind, pw, False)
-        var within = k.ew2(OP_LE, dq, mk_of([r], 1, 1, context))
-        var hits = k.ew1(OP_GTS, k.rowsum(within), 0.5)
-        var qr = mk_r(q)
-        if qr > 0 and mk_at(k.total(hits), 0, context) != Float64(qr):
-            var store = mk_store(hits, context)
-            var hp = mk_store_ptr(store)
-            _ = store  # keep the Python object alive through the native call above
-            var first = 0
-            for i in range(mk_store_len(store)):  # cpu-route: the refusal names the first query row without a training row in reach
-                if Float64(hp[i]) == 0.0:
-                    first = i
-                    break
-                _ = store  # keep the Python object alive through the native calls above
-            raise Error("Isomap.transform: query row " + String(first) + " has no training row within radius "
-                        + family_str(radius))
-        g = k.graph_radius_geo(dq, d, r)
-    else:
-        var nn = _mani_int(knn, context)
-        # the neighbour matrices as they come (indices as exact floats),
-        # each neighbour's rows of D gathered on the device
-        var got = _mani_knn(k, q, fit_x, nn, False, kind, pw)
-        var im = got[0]
-        var sq = got[1]
-        if kind == 0:
-            sq = k.ew1(OP_SQRT, sq, 0.0)
-        # A resident kit makes the whole gather-and-min in one native
-        # operation (row N295): the same launches, in the same order.
-        var fused = k.iso_gather_min(d, im, sq, mk_r(q), nn)
-        if not (fused is None):
-            g = fused
-        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-        var running = Optional[PythonObject]()
-        for a in range(nn if fused is None else 0):  # driver-loop: over neighbor ranks (n_neighbors), one gather-and-min step each (host kit)
-            var rows = k.take_rows_at(d, im, mk_r(q), nn, a, 0)
-            var cand = k.ew2(OP_ADD, rows, mk_take_cols(sq, mk_col_range(a, a + 1), context))
-            if not running:
-                running = cand
-            else:
-                running = Optional[PythonObject](k.ew2(OP_MIN, running.value(), cand))
-        if running:
-            g = running.value()
-    g = k.ew1(OP_SCALE, k.ew1(OP_SQ, g, 0.0), -0.5)
-    var row = k.ew1(OP_SCALE, k.rowsum(g), 1.0 / Float64(n))
-    var t1 = k.ew2(OP_SUB, g, family_field(fields, "_k_col"))
-    var t2 = k.ew2(OP_SUB, t1, row)
-    var kc = k.ew2(OP_ADD, t2, family_field(fields, "_k_all"))
-    # eigenvectors / sqrt(eigenvalues), kept by fit (models fitted before
-    # it was kept make it here, as every transform did)
-    var v = py_get(fields, PythonObject("_iso_v_m_"))
-    if v is None:
-        v = k.ew2(OP_DIV, family_field(fields, "eigenvectors_m_"),
-                  k.ew1(OP_SQRT, family_field(fields, "eigenvalues_m_"), 0.0))
-    return mk_out2(k.mm(kc, v, False, False), context)
+    var run = MRun()
+    try:
+        var k = _mani_kit(run, settings.mode, args[0], context)
+        var q = _mani_x(run, k, x)
+        var st = IsoState()
+        var fit_x = family_field(fields, "_fit_X")
+        var d = family_field(fields, "dist_matrix_m_")
+        var col = family_field(fields, "_k_col")
+        var allm = family_field(fields, "_k_all")
+        st.fit_x = mk_fitted(run, fit_x, "_fit_X")
+        st.d = mk_fitted(run, d, "dist_matrix_m_")
+        st.col = mk_fitted(run, col, "_k_col")
+        st.allm = mk_fitted(run, allm, "_k_all")
+        var knn = family_field(fields, "_knn")
+        st.kind = _mani_int(family_field(fields, "_kind"), context)
+        st.pw = _mani_float(family_field(fields, "_pw"), context)
+        if knn is None:
+            var radius = family_field(fields, "radius")
+            st.radius = _mani_f32(_mani_float(radius, context))
+            st.radius_text = family_str(radius)
+        else:
+            st.knn = _mani_int(knn, context)
+        # eigenvectors / sqrt(eigenvalues), kept by fit; a model fitted before
+        # it was kept makes it from eigenvectors_m_ / eigenvalues_m_
+        var iv = py_get(fields, PythonObject("_iso_v_m_"))
+        var w = PythonObject(None)
+        var v = PythonObject(None)
+        if iv is None:
+            w = family_field(fields, "eigenvalues_m_")
+            v = family_field(fields, "eigenvectors_m_")
+            st.w = mk_fitted(run, w, "eigenvalues_m_")
+            st.v = mk_fitted(run, v, "eigenvectors_m_")
+        else:
+            st.iv = mk_fitted(run, iv, "_iso_v_m_")
+        var out = -1
+        with GILReleased(Python()):
+            out = iso_transform_run(run, k, q, st)
+        _ = x  # the admitted X stays alive through the RUNs above
+        # PACK: the result, and the copies the RUN made of the fitted matrices
+        var result = mk_out2(run, out, context)
+        mk_keep(run, st.fit_x, fit_x)
+        mk_keep(run, st.d, d)
+        mk_keep(run, st.col, col)
+        mk_keep(run, st.allm, allm)
+        if iv is None:
+            mk_keep(run, st.w, w)
+            mk_keep(run, st.v, v)
+        else:
+            mk_keep(run, st.iv, iv)
+        return result
+    finally:
+        mk_finish(run, context)
 
 
 def _iso_reconstruction_error(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Isomap.reconstruction_error()`: a difference of two nearly equal sums,
-    accumulated in binary64 (`_dsum_sq`)."""
+    """`Isomap.reconstruction_error()`."""
     _mani_check(model, settings.values, "embedding_m_")
     var fields = settings.values
-    var k = _mani_kit(settings.mode, args[0], context)
-    var kc = family_field(fields, "_Kc")
-    var t = k.dsum_sq(kc) - k.dsum_sq(family_field(fields, "eigenvalues_m_"))
-    if t > 0:
-        return PythonObject(sqrt(t) / Float64(mk_r(kc)))
-    return PythonObject(0.0)
+    var run = MRun()
+    try:
+        var k = _mani_kit(run, settings.mode, args[0], context)
+        var kc_owner = family_field(fields, "_Kc")
+        var w_owner = family_field(fields, "eigenvalues_m_")
+        var kc = mk_fitted(run, kc_owner, "_Kc")
+        var w = mk_fitted(run, w_owner, "eigenvalues_m_")
+        var error = 0.0
+        with GILReleased(Python()):
+            error = iso_reconstruction_error_run(run, k, kc, w)
+        mk_keep(run, kc, kc_owner)
+        mk_keep(run, w, w_owner)
+        return PythonObject(error)
+    finally:
+        mk_finish(run, context)
 
 
 # ---------------------------------------------------------------- LocallyLinearEmbedding
-def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
-                  seed: PythonObject) raises -> Tuple[Bool, PythonObject, PythonObject]:
-    """`_lle_smallest(k, F, nc, max_iter, seed)`: (found, embedding, sv) by
-    the shift-invert subspace iteration on the deflated F0; not found sends
-    the caller to the full SVD."""
-    var ctx = k.ctx
-    var n = mk_c(f)
-    if mk_r(f) != n:
-        return (False, PythonObject(None), PythonObject(None))
-    var n1 = n - 1
-    var p = min(n1, max(2 * nc + 1, 20))
-    if p <= nc:
-        return (False, PythonObject(None), PythonObject(None))
-    var rn = 1.0 / sqrt(Float64(n))
-    var hv = List[Float64](length=n, fill=rn)
-    hv[n - 1] = rn - 1.0
-    var coef = 2.0 / (Float64(n - 1) * (rn * rn) + (rn - 1.0) * (rn - 1.0))
-    var h = mk_of(hv, n, 1, ctx)
-    var un = mk_fill(rn, n, 1, ctx)
-    var hrow = mk_fill(rn, 1, n1, ctx)
-    var fh = k.mm(f, h, False, False)
-    var hfull_v = List[Float64](length=n, fill=rn)
-    hfull_v[n - 1] = 0.0
-    var mask_v = List[Float64](length=n, fill=1.0)
-    mask_v[n - 1] = 0.0
-    var last_v = List[Float64](length=n, fill=0.0)
-    last_v[n - 1] = rn
-    var hfull = mk_of(hfull_v, 1, n, ctx)
-    var mask = mk_of(mask_v, 1, n, ctx)
-    var last = mk_of(last_v, 1, n, ctx)
-    var dd = k.ew2(OP_SUB, f, k.ew1(OP_SCALE, k.mm(fh, hfull, False, False), coef))
-    var f0 = k.ew3(OP_FMA, dd, mask, last, 0.0)
-    var fu = k.mm(f, un, False, False)
-    var g = sqrt(k.dsum_sq(fu))
-    var tot = mk_at(k.total(k.ew1(OP_SQ, f, 0.0)), 0, ctx)
-    # max(tot, 0.0): Python's order (tot unless 0.0 is larger)
-    var kept = Float64(0.0) if 0.0 > tot else tot
-    var rms = sqrt(kept / Float64(n))
-    if not (g <= _LLE_NULL_GUARD * rms):
-        return (False, PythonObject(None), PythonObject(None))
-    var floor = _LLE_NULL_FLOOR * _F32_EPS * rms
-    var lu: PythonObject
-    var pm: PythonObject
-    var im: PythonObject
-    var big: Float64
-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 bit 1 device-LU arm) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
-    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
-    var fac = k.lu(f0)
-    lu = fac[0]
-    var aux = k.lu_aux(lu, fac[1], True)
-    big = aux[0][0]
-    pm = aux[2]
-    im = aux[3]
-    if not (big > 0.0 and _mani_finite(big)):
-        return (False, PythonObject(None), PythonObject(None))
-    var en = mk_zeros(n, 1, ctx)
-    mk_store_ptr(mk_store(en, ctx))[n - 1] = 1.0
-    var z = k.trisolve(lu, im, en, 1)
-    var zn = sqrt(k.dsum_sq(z))
-    if not zn > 0.0 or not _mani_finite(zn):
-        return (False, PythonObject(None), PythonObject(None))
-    z = k.ew1(OP_SCALE, z, 1.0 / zn)
-    # `_lle_iterate`
-    var xm = mk_zeros(n1, p, ctx)
-    var ym = mk_zeros(n1, nc, ctx)
-    var sm = mk_zeros(1, p, ctx)
-    var b = native_loaded_module("builtins")
-    var pf = mk_addr(f0, ctx)
-    _ = f0  # keep the Python object alive through the native call above
-    var pl = mk_addr(lu, ctx)
-    var pp = mk_addr(pm, ctx)
-    var pi = mk_addr(im, ctx)
-    var pz = mk_addr(z, ctx)
-    _ = z  # keep the Python object alive through the native call above
-    var outs = Python.list(mk_addr(xm, ctx), mk_addr(ym, ctx), mk_addr(sm, ctx))
-    _ = sm  # keep the Python object alive through the native call above
-    _ = ym  # keep the Python object alive through the native call above
-    _ = xm  # keep the Python object alive through the native call above
-    var params = mk_ints([n, n1, nc, p, max(1, max_iter)])
-    _ = py_call(params.append, py_call(native_loaded_module("operator").and_, py_call(b.int, seed),
-                                       PythonObject(0xFFFFFFFF)))
-    var tols = Python.list(PythonObject(floor), PythonObject(_LLE_SUBSPACE_TOL), PythonObject(_LLE_STALL_TOL))
-    var status = family_call(k.fn("x_decomp_lle_iterate"), pf, pl, pp, pi, pz, outs, params, tols)
-    # The iteration receives integer addresses, not their matrix owners.
-    # Retain the LU factor and both permutation buffers until its host reads
-    # / device uploads finish; mk_addr was otherwise their last use.
-    _ = lu^
-    _ = pm^
-    _ = im^
-    _ = sm  # keep the Python object alive through the native call above
-    _ = ym  # keep the Python object alive through the native call above
-    _ = xm  # keep the Python object alive through the native call above
-    _ = z  # keep the Python object alive through the native call above
-    _ = f0  # keep the Python object alive through the native call above
-    if Int(py=py_call(b.int, status[0])) == 2:
-        raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in "
-                    + String(max_iter) + " iterations (last subspace change "
-                    + String(py=py_call(b.format, py_call(b.float, status[1]), PythonObject(".3g")))
-                    + "); pass eigen_solver='dense' for the full SVD. "
-                    + "An unconverged embedding is not returned as if it were one.")
-    var sv = mk_take_cols(sm, mk_desc_range(p - 1, nc), ctx)
-    # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
-    var t = k.mm(hrow, ym, False, False)
-    var full = k.pad_zero_row(ym)
-    var v = k.ew2(OP_SUB, full, k.ew1(OP_SCALE, k.mm(h, t, False, False), coef))
-    var sq = k.colsum(k.ew1(OP_SQ, v, 0.0))
-    var lo = k.word(k.reduce(sq, SEL_MIN), 0)
-    var hi = k.word(k.reduce(sq, SEL_MAX), 0)
-    if not (0.9 <= lo and hi <= 1.1) or not _mani_finite(k.word(k.reduce(sv, SEL_MAXABS), 0)):
-        var norms = Python.list()
-        var store = mk_store(sq, ctx)
-        var sp = mk_store_ptr(store)
-        _ = store  # keep the Python object alive through the native call above
-        for i in range(mk_store_len(store)):  # driver-loop: over (components: the refusal lists each column's squared norm): bounded by n_components
-            _ = py_call(norms.append, PythonObject(Float64(sp[i])))
-            _ = store  # keep the Python object alive through the native call above
-        raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of "
-                    + "squared norm " + family_repr(norms) + " (not unit); pass eigen_solver='dense' for the full SVD.")
-    var signs = k.absmax_signs(v, True)
-    return (True, k.ew2(OP_MUL, v, signs), sv)
-
-
 def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`LocallyLinearEmbedding.fit(X)`; returns embedding_."""
     classical_connect_numpy(context)
+    var b = native_loaded_module("builtins")
     var fields = settings.values
     var mode = settings.mode
-    py_setitem(settings.fields, "numeric_mode_", mode)
     var method = family_field(fields, "method")
     if not _mani_in(method, Python.tuple(PythonObject("standard"), PythonObject("hessian"), PythonObject("modified"),
                                          PythonObject("ltsa")), context):
         raise Error("LocallyLinearEmbedding: unrecognized method " + family_repr(method))
     var solver = family_field(fields, "eigen_solver")
     _mani_eigen_solver(solver, "LocallyLinearEmbedding", context)
-    var k = _mani_kit(mode, args[0], context)
-    var hk = _mani_host_kit(settings.default_mode, args[1], context)
-    var m = k.from_snapshot(x, "X")
-    var n = mk_r(m)
-    var nn = _mani_int(family_field(fields, "n_neighbors"), context)
-    var nc = _mani_int(family_field(fields, "n_components"), context)
-    if nn >= n:
-        raise Error("Expected n_neighbors < n_samples, but n_samples = " + String(n) + ", n_neighbors = " + String(nn))
-    var standard = _mani_eq(method, "standard", context)
-    if _mani_eq(method, "hessian", context) and nn <= nc + nc * (nc + 1) // 2:
-        raise Error("for method='hessian', n_neighbors must be greater than "
-                    + "[n_components * (n_components + 3) / 2]")
-    if _mani_eq(method, "modified", context) and nn < nc:
-        raise Error("modified LLE requires n_neighbors >= n_components")
-    var knn = _mani_knn(k, m, m, nn, True, 0, 2.0)
-    var idm = knn[0]
-    var iw: PythonObject
-    if standard:
-        var wb = k.barycenter(m, m, idm, family_field(fields, "reg"))
-        iw = k.graph_lle_iw(idm, wb, n)
+    var plan = LlePlan()
+    if _mani_eq(method, "standard", context):
+        plan.method = LLE_STANDARD
     elif _mani_eq(method, "ltsa", context):
-        iw = k.lle_local(m, idm, 0, nn, nc, 0.0)
+        plan.method = LLE_LTSA
     elif _mani_eq(method, "hessian", context):
-        iw = k.lle_local(m, idm, 1, nn, nc, _mani_float(family_field(fields, "hessian_tol"), context))
+        plan.method = LLE_HESSIAN
     else:
-        iw = k.lle_local(m, idm, 2, nn, nc, _mani_float(family_field(fields, "modified_tol"), context))
-    var found = False
-    var em = PythonObject(None)
-    var sv = PythonObject(None)
-    if standard and _mani_eq(solver, "auto", context) and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
-        k.enable_lle_precision()
-        var got = _lle_smallest(k, iw, nc, _mani_int(family_field(fields, "max_iter"), context),
-                                _mani_seed(family_field(fields, "random_state")))
-        found = got[0]
-        em = got[1]
-        sv = got[2]
-    if not found:
-        var dec = k.svd(iw, hk)
-        var rows = mk_desc_range(n - 2, nc)
-        em = mk_t(mk_take_rows_list(dec[1], rows, hk, context), hk, context)
-        sv = mk_take_cols(dec[0], rows, context)
-    py_setitem(settings.fields, "embedding_m_", em)
-    var embedding = mk_out2(em, context)
-    py_setitem(settings.fields, "embedding_", embedding)
-    py_setitem(settings.fields, "reconstruction_error_", PythonObject(k.dsum_sq(sv)))
-    py_setitem(settings.fields, "_fit_X", m)
-    py_setitem(settings.fields, "_knn", PythonObject(nn))
-    py_setitem(settings.fields, "n_features_in_", PythonObject(mk_c(m)))
-    mk_freeze_fitted(settings.fields, _lle_fitted())
-    return embedding
+        plan.method = LLE_MODIFIED
+    var run = MRun()
+    try:
+        var k = _mani_kit(run, mode, args[0], context)
+        var hk = mk_image(run, String(settings.default_mode), args[1], context)
+        var m = _mani_x(run, k, x)
+        var n = run.r(m)
+        plan.nn = _mani_int(family_field(fields, "n_neighbors"), context)
+        plan.nc = _mani_int(family_field(fields, "n_components"), context)
+        var nn = plan.nn
+        var nc = plan.nc
+        if nn >= n:
+            raise Error("Expected n_neighbors < n_samples, but n_samples = " + String(n) + ", n_neighbors = "
+                        + String(nn))
+        if plan.method == LLE_HESSIAN and nn <= nc + nc * (nc + 1) // 2:
+            raise Error("for method='hessian', n_neighbors must be greater than "
+                        + "[n_components * (n_components + 3) / 2]")
+        if plan.method == LLE_MODIFIED and nn < nc:
+            raise Error("modified LLE requires n_neighbors >= n_components")
+        if plan.method == LLE_STANDARD:
+            plan.reg = Float64(py=py_call(b.float, family_field(fields, "reg")))
+        elif plan.method == LLE_HESSIAN:
+            plan.tol = _mani_float(family_field(fields, "hessian_tol"), context)
+        elif plan.method == LLE_MODIFIED:
+            plan.tol = _mani_float(family_field(fields, "modified_tol"), context)
+        plan.auto_solver = _mani_eq(solver, "auto", context)
+        if plan.method == LLE_STANDARD and plan.auto_solver and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
+            plan.max_iter = _mani_int(family_field(fields, "max_iter"), context)
+            plan.seed = mk_seed_word(_mani_seed(family_field(fields, "random_state")))
+        var fit = LleFit()
+        with GILReleased(Python()):
+            fit = lle_fit_run(run, k, hk, m, plan)
+        _ = x  # the admitted X stays alive through the RUNs above
+        if fit.refusal == 1:
+            raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in "
+                        + String(plan.max_iter) + " iterations (last subspace change "
+                        + String(py=py_call(b.format, PythonObject(fit.change), PythonObject(".3g")))
+                        + "); pass eigen_solver='dense' for the full SVD. "
+                        + "An unconverged embedding is not returned as if it were one.")
+        if fit.refusal == 2:
+            var norms = Python.list()
+            for i in range(len(fit.norms)):  # driver-loop: over (components: the refusal lists each column's squared norm): bounded by n_components
+                _ = py_call(norms.append, PythonObject(fit.norms[i]))
+            raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of "
+                        + "squared norm " + family_repr(norms) + " (not unit); pass eigen_solver='dense' for the full SVD.")
+        # PACK
+        var embedding = mk_out2(run, fit.em, context)
+        var em = mk_owner(run, fit.em)
+        var fit_x = mk_owner(run, m)
+        py_setitem(settings.fields, "numeric_mode_", mode)
+        py_setitem(settings.fields, "embedding_m_", em)
+        py_setitem(settings.fields, "embedding_", embedding)
+        py_setitem(settings.fields, "reconstruction_error_", PythonObject(fit.reconstruction_error))
+        py_setitem(settings.fields, "_fit_X", fit_x)
+        py_setitem(settings.fields, "_knn", PythonObject(nn))
+        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        return embedding
+    finally:
+        mk_finish(run, context)
 
 
 def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`LocallyLinearEmbedding.transform(X)`."""
     _mani_check(model, settings.values, "embedding_m_")
     classical_connect_numpy(context)
+    var b = native_loaded_module("builtins")
     var fields = settings.values
-    var k = _mani_kit(settings.mode, args[0], context)
-    var q = k.from_snapshot(x, "X")
-    var fit_x = family_field(fields, "_fit_X")
-    var knn = _mani_knn(k, q, fit_x, _mani_int(family_field(fields, "_knn"), context), False, 0, 2.0)
-    var idm = knn[0]
-    var wb = k.barycenter(q, fit_x, idm, family_field(fields, "reg"))
-    return mk_out2(k.lle_apply(wb, idm, family_field(fields, "embedding_m_")), context)
+    var run = MRun()
+    try:
+        var k = _mani_kit(run, settings.mode, args[0], context)
+        var q = _mani_x(run, k, x)
+        var fit_x_owner = family_field(fields, "_fit_X")
+        var em_owner = family_field(fields, "embedding_m_")
+        var fit_x = mk_fitted(run, fit_x_owner, "_fit_X")
+        var nn = _mani_int(family_field(fields, "_knn"), context)
+        var reg = Float64(py=py_call(b.float, family_field(fields, "reg")))
+        var em = mk_fitted(run, em_owner, "embedding_m_")
+        var out = -1
+        with GILReleased(Python()):
+            out = lle_transform_run(run, k, q, fit_x, em, nn, reg)
+        _ = x  # the admitted X stays alive through the RUNs above
+        var result = mk_out2(run, out, context)
+        mk_keep(run, fit_x, fit_x_owner)
+        mk_keep(run, em, em_owner)
+        return result
+    finally:
+        mk_finish(run, context)
 
 
 def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     # Public shells hand over settings and buffers only. Resolve both legacy
     # binding slots after crossing the native boundary. Explicit modules remain
-    # supported for internal/legacy callers and are admitted by MKit.
+    # supported for internal/legacy callers and are admitted by mk_image.
     if len(args) < 2:
         raise Error("TypeError: manifold operation requires two binding slots")
     var requested = settings.mode
