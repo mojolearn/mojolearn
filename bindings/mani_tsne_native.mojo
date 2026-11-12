@@ -5,9 +5,17 @@
 # this owner makes the Python method's refusals (same wording, same order),
 # builds the 'pca' start with the call `PCA(n_components=k).fit_transform`
 # made (`pca_fit_owned`, the same arguments), runs `x_ann_tsne_fit` with the
-# argument lists it always took and stores the fitted attributes. The same
-# entries on the same operands: the bits do not move.
+# words it always took and stores the fitted attributes. The same bodies on
+# the same operands: the bits do not move. Both are native table calls (lane
+# calltable-cn-ann): the PCA owned-fit table (core/decomp_entry_table_pca.mojo)
+# and the ANN operations table (core/neighbors_entry_table_ann.mojo), each
+# image's key read once from its module attribute at UNPACK, the call made
+# with the GIL released and no CPython in between.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.native_ops_key_ann import ann_ops_key, decomp_pca_ops_key
+from core.neighbors_entry_table_ann import ann_ops_entry, ann_tsne_fit_call
+from core.decomp_entry_table_pca import pca_ops_entry, pca_fit_owned_call
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem
 from bindings.classical_arrays import classical_address, classical_word
@@ -18,7 +26,6 @@ from bindings.manifold_scalar_native import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
-from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
 from x_ann.mani_tsne_run import (
     TSNE_INIT_ARRAY, tsne_check_samples, tsne_perplexity_positive, tsne_perplexity_refusal,
     tsne_perplexity_below_samples, tsne_perplexity_samples_refusal, tsne_auto_learning_rate,
@@ -27,7 +34,7 @@ from x_ann.mani_tsne_run import (
     tsne_fit_tests_input,
 )
 from bindings.family_common import (
-    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_array,
+    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_array,
     family_field,
 )
 
@@ -45,10 +52,7 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     covariance arm, no whitening) as the float32 start: `PCA._fit(x, True)`'s
     refusal and its one `pca_fit_owned` call."""
     tsne_check_pca_components(k, d)
-    var fit_owned = spectral_umap_optional_entry(estimators, "pca_fit_owned", context)
-    if fit_owned is None:
-        raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not "
-                    + "export pca_fit_owned; rebuild it with bindings/build_estimators.sh")
+    var entry = pca_ops_entry(decomp_pca_ops_key(estimators))
     var components = family_array(Python.tuple(k, d), "<f4", context)
     var mean = family_array(Python.tuple(d), "<f4", context)
     var variance = family_array(Python.tuple(k), "<f4", context)
@@ -57,21 +61,34 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     var z = family_array(Python.tuple(n, k), "<f4", context)
     # ORDER MATCHES PCA._fit: x, components, mean, variance, ratio,
     # singular, out; n, d, nc, dense 0, keep_mode 0, whiten 0, frac 0.0.
-    # Lane a8d: the trailing 1 asks pca_fit_owned for X's finite status word
-    # over its own upload (no host scan in the door); a flagged X is refused
-    # here, before the eigensolver's result is read.
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(0),
-                             PythonObject(0), PythonObject(0), PythonObject(Float64(0.0)), PythonObject(1))
-    var fitted = family_call(fit_owned, PythonObject(x_address), classical_address(components), classical_address(mean),
-                    classical_address(variance), classical_address(ratio), classical_address(singular),
-                    classical_address(z), params)
+    # Lane a8d: the status word's address (the export's trailing finite flag
+    # 1) asks the fit for X's finite status word over its own upload (no
+    # host scan in the door); a flagged X is refused here, before the
+    # eigensolver's result is read.
+    var noise = List[Float64](length=1, fill=Float64(0.0))
+    var status = List[Int32](length=1, fill=Int32(0))
+    var components_address = Int(py=classical_address(components))
+    var mean_address = Int(py=classical_address(mean))
+    var variance_address = Int(py=classical_address(variance))
+    var ratio_address = Int(py=classical_address(ratio))
+    var singular_address = Int(py=classical_address(singular))
+    var z_address = Int(py=classical_address(z))
+    var noise_address = Int(noise.unsafe_ptr())
+    var status_address = Int(status.unsafe_ptr())
+    with GILReleased(Python()):
+        _ = pca_fit_owned_call(entry, x_address, components_address, mean_address, variance_address,
+                               ratio_address, singular_address, z_address, noise_address, status_address,
+                               n, d, k, False, 0, False, Float64(0.0))
     _ = mean  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = singular  # keep the Python object alive through the native call above
     _ = ratio  # keep the Python object alive through the native call above
     _ = variance  # keep the Python object alive through the native call above
     _ = z  # keep the Python object alive through the native call above
-    tsne_check_input_status(Int(py=fitted[2]))
+    var x_status = Int(status[0])
+    _ = status^  # written through its address; keep it alive past the read
+    _ = noise^
+    tsne_check_input_status(x_status)
     _ = components^
     _ = mean^
     _ = variance^
@@ -113,9 +130,11 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     # scikit-learn's rules: perplexity > 0 (its parameter constraint) and
     # perplexity < n_samples (`_check_params_vs_input`), in its words
     if not tsne_perplexity_positive(perplexity):
-        raise tsne_perplexity_refusal(family_repr(perplexity_param))
+        var refusal = tsne_perplexity_refusal(family_repr(perplexity_param))
+        raise refusal^
     if not tsne_perplexity_below_samples(perplexity, n):
-        raise tsne_perplexity_samples_refusal(family_str(perplexity_param), n)
+        var refusal = tsne_perplexity_samples_refusal(family_str(perplexity_param), n)
+        raise refusal^
     var exag = Float64(py=manifold_number(family_field(fields, "early_exaggeration"), False, context))
     var rate = family_field(fields, "learning_rate")
     var lr: Float64
@@ -126,7 +145,8 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var post_param = family_field(fields, "post_exaggeration_learning_rate_factor")
     var post_factor = Float64(py=manifold_number(post_param, False, context))
     if not tsne_post_factor_valid(post_factor):
-        raise tsne_post_factor_refusal(family_repr(post_param))
+        var refusal = tsne_post_factor_refusal(family_repr(post_param))
+        raise refusal^
     var exploration = tsne_exploration_iterations(Int(py=max_iter))
     var init = family_field(fields, "init")
     var y0: PythonObject
@@ -158,7 +178,8 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var captured = array_metadata_once(view, shape^, "init", context,
                                            allow_non_native=True, allow_unsupported=True)
         if not tsne_init_shape_matches(captured.shape, n, k):
-            raise tsne_init_shape_refusal(family_repr(captured.python_shape()), n, k)
+            var refusal = tsne_init_shape_refusal(family_repr(captured.python_shape()), n, k)
+            raise refusal^
         var prepared = _cast(captured^, "init", context)
         y0 = prepared.keep
         y0_address = prepared.source.addr
@@ -166,19 +187,24 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         _ = view
     var embedding = family_array(Python.tuple(n, k), "<f4", context)
     var kl = family_array(Python.tuple(1), "<f4", context)
-    var fit = family_entry(binding, "x_ann_tsne_fit", context)
-    # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, perplexity,
-    # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor,
-    # init mode, random_state low, high, n_components
-    var tested = family_call(fit, Python.list(PythonObject(x_address), PythonObject(y0_address), classical_address(embedding),
-                                     classical_address(kl)),
-                    Python.list(PythonObject(n), PythonObject(d), max_iter, PythonObject(exploration),
-                                PythonObject(perplexity), PythonObject(exag), PythonObject(lr),
-                                PythonObject(post_factor), PythonObject(mode), low, high, PythonObject(k),
-                                PythonObject(1 if tsne_fit_tests_input(mode) else 0)))
+    var fit = ann_ops_entry(ann_ops_key(binding))
+    var embedding_address = Int(py=classical_address(embedding))
+    var kl_address = Int(py=classical_address(kl))
+    var iteration_words = Int(py=max_iter)
+    var seed_low = Int(py=low)
+    var seed_high = Int(py=high)
+    var finite_flag = 1 if tsne_fit_tests_input(mode) else 0
+    var tested = 0
+    # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, init mode,
+    # random_state low, high, n_components, finite flag; perplexity,
+    # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor
+    with GILReleased(Python()):
+        tested = ann_tsne_fit_call(fit, x_address, y0_address, embedding_address, kl_address, n, d,
+                                   iteration_words, exploration, perplexity, exag, lr, post_factor, mode,
+                                   seed_low, seed_high, k, finite_flag)
     _ = embedding  # keep the Python object alive through the native call above
     if tsne_fit_tests_input(mode):
-        tsne_check_input_status(Int(py=tested[1]))
+        tsne_check_input_status(tested)
     _ = x  # keep the Python object alive through the native call above
     _ = kl  # keep the Python object alive through the native call above
     _ = snapshot

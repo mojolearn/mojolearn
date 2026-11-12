@@ -100,6 +100,10 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
+from decomposition.pca_ops_entry_host import PCA_OPS_HOST_API, pca_ops_host_v1, pca_fit_owned_host_run_words
+from core.decomp_entry_table_pca import pca_ops_publish
+from core.neighbors_entry_table import NeighborsEntryKey
+from bindings.py_balanced import py_setattr
 from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
     host_inverse_transform_into,
@@ -165,7 +169,6 @@ from core.estimators_host_impl import (
     ols_fit_host_run,
     pca_fit_full_host_run,
     pca_fit_host_run,
-    pca_fit_owned_host_run,
     pca_randomized_owned_host_run,
     pca_whiten_check_host,
     pca_whiten_host_run,
@@ -557,45 +560,37 @@ def pca_fit_owned_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`PCA.fit` / `fit_transform` for the exact solvers in one call on the
-    host (core/estimators_host_impl.mojo `pca_fit_owned_host_run`): the GPU
-    binding's contract. params: n_rows, n_features, n_components, dense (1:
-    svd_solver='full'), keep mode (0: every component, 1: the fraction
-    the fraction, 2: "mle"), whiten, the fraction, and OPTIONALLY (lane a7d)
-    a finite flag; an output address (0: none) gets X's projection. Returns
-    (kept count, noise variance), with X's finite status word third when the
-    flag asks for it (the parallel host scan before the fit; a flagged X is
-    not fit)."""
+    host (core/estimators_host_impl.mojo `pca_fit_owned_host_run`):
+    the five public arrays written at n_components, the kept count chosen,
+    and with an output address (0: none) X projected onto the kept
+    components. params: n_rows, n_features, n_components, dense (1:
+    svd_solver='full'), keep mode (0: every component, 1: the fraction, 2:
+    "mle"), whiten, the fraction, and OPTIONALLY (lane a7d) a finite flag: 1
+    asks for X's finite status word. Returns (kept count, noise variance),
+    with the status word third when asked (0 = finite; the door refuses
+    otherwise).
+    UNPACK and PACK only: the body is decomposition/pca_ops_entry_host.mojo `pca_fit_owned_host_run_words`, which
+    the PCA owned-fit table (core/decomp_entry_table_pca.mojo) also calls.
+    The export remains for bindings/pca_fit_native.mojo,
+    bindings/msel_device.mojo and python/mojolearn/host_surface.py."""
     if len(params) != 7 and len(params) != 8:
         raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
-    var x_address = Int(py=x_addr)
-    var cp = f32_ptr(Int(py=components_addr))
-    var mp = f32_ptr(Int(py=mean_addr))
-    var ep = f32_ptr(Int(py=explained_addr))
-    var rp = f32_ptr(Int(py=ratio_addr))
-    var sp = f32_ptr(Int(py=singular_addr))
-    var oa = Int(py=out_addr)
-    var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)  # read only when oa != 0
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nc = Int(py=params[2])
-    var dense = Int(py=params[3]) != 0
-    var keep_mode = Int(py=params[4])
-    var whiten = Int(py=params[5]) != 0
-    var fraction = Float64(py=params[6])
     var test = len(params) == 8 and Int(py=params[7]) != 0
-    var status = 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var a: List[Int] = [Int(py=x_addr), Int(py=components_addr), Int(py=mean_addr), Int(py=explained_addr),
+                        Int(py=ratio_addr), Int(py=singular_addr), Int(py=out_addr), 0,
+                        Int(word.unsafe_ptr()) if test else 0]
+    var p: List[Int] = [Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), Int(py=params[3]),
+                        Int(py=params[4]), Int(py=params[5])]
+    var fraction = Float64(py=params[6])
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
-        if test and nr >= 1 and nf >= 1:
-            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
-            status = Int(host_finite_status(x_address, nr * nf))
-        if status == 0:
-            var fitted = pca_fit_owned_host_run(
-                x_address, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
-            )
-            kept = fitted[0]
-            noise = fitted[1]
+        var fitted = pca_fit_owned_host_run_words(a, p, fraction)
+        kept = fitted[0]
+        noise = fitted[1]
+    var status = Int(word[0])
+    _ = word^  # the body wrote it through its address; keep it alive past the read
     if test:
         return Python.tuple(PythonObject(kept), PythonObject(noise), PythonObject(status))
     return Python.tuple(PythonObject(kept), PythonObject(noise))
@@ -1597,6 +1592,17 @@ def _publish_estimators_qn_table() raises:
     estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0),
         Int(api[].entries.unsafe_ptr()), qn_host_native_v1)
 
+def _publish_decomp_pca_ops(module: PythonObject) raises:
+    # The CPU column of the PCA owned-fit table
+    # (core/decomp_entry_table_pca.mojo): the TSNE owner's 'pca' start calls
+    # this entry with plain values and reads the key from the module
+    # attribute `decomp_pca_native_key`. The `pca_fit_owned` export remains
+    # for its other callers.
+    var api = PCA_OPS_HOST_API.get_or_create_ptr()
+    pca_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
+                    pca_ops_host_v1)
+    py_setattr(module, "decomp_pca_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
+
 def build__mojolearn_estimators_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -1667,6 +1673,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         var published_module = module.finalize()
         _publish_linear_entry_table()
         _publish_estimators_qn_table()
+        _publish_decomp_pca_ops(published_module)
         return published_module
     except error:
         abort(String("failed to create _mojolearn_estimators_host: ", error))

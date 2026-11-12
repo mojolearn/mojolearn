@@ -251,6 +251,9 @@ from neighbors.estimator import (
 )
 from core.shared_slot import SharedSlot
 from core.kmeans_native_api import KMEANS_NATIVE_ABI
+from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish, neighbors_vendor_word
+from neighbors.ops_entry_device import NEIGHBORS_OPS_DEVICE_API, neighbors_ops_device_v1
+from bindings.py_balanced import py_setattr
 from core.kmeans_native_device import kmeans_device_native_v1
 
 
@@ -2022,6 +2025,24 @@ def spectral_preparation_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def _publish_neighbors_ops(module: PythonObject) raises:
+    # The device column of the neighbors operations table
+    # (core/neighbors_entry_table.mojo): the k-NN owner
+    # (bindings/neighbors_knn_native.mojo) calls this entry with plain values
+    # and reads the key from the module attribute `neighbors_native_key`.
+    # The `knn_*` Python exports remain for the unconverted callers:
+    # bindings/parallel_neighbor_worker.mojo, bindings/host_knn_predict_native.mojo
+    # and python/mojolearn/_native_parallel_shard.py. A build with no GPU
+    # vendor ("none") publishes nothing and records no key.
+    var word = neighbors_vendor_word(COMPILED_VENDOR)
+    if word < 0:
+        return
+    var api = NEIGHBORS_OPS_DEVICE_API.get_or_create_ptr()
+    neighbors_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api[].entries.unsafe_ptr()),
+                          neighbors_ops_device_v1)
+    py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
+
+
 def _publish_qn_fold_table() raises:
     # The resident-fold QN entry (core/estimators_entry_table.mojo family
     # ESTIMATORS_TABLE_QN_FOLD, the former `qn_fit_fold` export's body):
@@ -2188,6 +2209,7 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         var published_module = m.finalize()
         _publish_qn_fold_table()
+        _publish_neighbors_ops(published_module)
         # The base helper table (core/base_entry_table.mojo): the same
         # helpers for native callers in other extension modules.
         publish_base_helpers_device()

@@ -106,7 +106,11 @@ from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_pair_device, scale_rows_device
 from glm.impl.ols_prep_device import ols_prep_device
 from glm.impl.lm_finish import lm_intercept
-from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
+from decomposition.impl.pca_owner import pca_randomized_owned
+from decomposition.pca_ops_entry_device import PCA_OPS_DEVICE_API, pca_ops_device_v1, pca_fit_owned_device_run
+from core.decomp_entry_table_pca import pca_ops_publish
+from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
+from bindings.py_balanced import py_setattr
 from core.linear_multi_device import (
     lm_col_sums_run, lm_means_finish_run, lm_center_run, publish_ridge_multi,
 )
@@ -795,46 +799,39 @@ def pca_fit_owned_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`PCA.fit` / `fit_transform` for the exact solvers in one call
-    (decomposition/impl/pca_owner.mojo): the five public arrays written at
-    n_components, the kept count chosen, and with an output address (0:
-    none) X projected onto the kept components. params: n_rows, n_features,
-    n_components, dense (1: svd_solver='full'), keep mode (0: every
-    component, 1: the fraction, 2: "mle"), whiten, the fraction, and
-    OPTIONALLY (lane a7d) a finite flag: 1 asks for X's finite status word
-    over the fit's upload. Returns (kept count, noise variance), with the
-    status word third when asked (0 = finite; the door refuses otherwise)."""
+    (decomposition/impl/pca_owner.mojo):
+    the five public arrays written at n_components, the kept count chosen,
+    and with an output address (0: none) X projected onto the kept
+    components. params: n_rows, n_features, n_components, dense (1:
+    svd_solver='full'), keep mode (0: every component, 1: the fraction, 2:
+    "mle"), whiten, the fraction, and OPTIONALLY (lane a7d) a finite flag: 1
+    asks for X's finite status word. Returns (kept count, noise variance),
+    with the status word third when asked (0 = finite; the door refuses
+    otherwise).
+    UNPACK and PACK only: the body is decomposition/pca_ops_entry_device.mojo `pca_fit_owned_device_run`, which
+    the PCA owned-fit table (core/decomp_entry_table_pca.mojo) also calls.
+    The export remains for bindings/pca_fit_native.mojo,
+    bindings/msel_device.mojo and python/mojolearn/host_surface.py."""
     if len(params) != 7 and len(params) != 8:
         raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _f32_ptr(Int(py=components_addr))
-    var mp = _f32_ptr(Int(py=mean_addr))
-    var ep = _f32_ptr(Int(py=explained_addr))
-    var rp = _f32_ptr(Int(py=ratio_addr))
-    var sp = _f32_ptr(Int(py=singular_addr))
-    var oa = Int(py=out_addr)
-    var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)  # read only when oa != 0
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nc = Int(py=params[2])
-    var dense = Int(py=params[3]) != 0
-    var keep_mode = Int(py=params[4])
-    var whiten = Int(py=params[5]) != 0
-    var fraction = Float64(py=params[6])
     var test = len(params) == 8 and Int(py=params[7]) != 0
     var word = List[Int32](length=1, fill=Int32(0))
-    var word_addr = Int(word.unsafe_ptr()) if test else 0
+    var a: List[Int] = [Int(py=x_addr), Int(py=components_addr), Int(py=mean_addr), Int(py=explained_addr),
+                        Int(py=ratio_addr), Int(py=singular_addr), Int(py=out_addr), 0,
+                        Int(word.unsafe_ptr()) if test else 0]
+    var p: List[Int] = [Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), Int(py=params[3]),
+                        Int(py=params[4]), Int(py=params[5])]
+    var fraction = Float64(py=params[6])
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var fitted = pca_fit_owned(
-            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten,
-            word_addr,
-        )
+        var fitted = pca_fit_owned_device_run(a, p, fraction)
         kept = fitted[0]
         noise = fitted[1]
+    var status = Int(word[0])
+    _ = word^  # the body wrote it through its address; keep it alive past the read
     if test:
-        return Python.tuple(PythonObject(kept), PythonObject(noise), PythonObject(Int(word[0])))
+        return Python.tuple(PythonObject(kept), PythonObject(noise), PythonObject(status))
     return Python.tuple(PythonObject(kept), PythonObject(noise))
 
 
@@ -1623,6 +1620,21 @@ def _publish_estimators_qn_table() raises:
     estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word),
         Int(api[].entries.unsafe_ptr()), qn_device_native_v1)
 
+def _publish_decomp_pca_ops(module: PythonObject) raises:
+    # The device column of the PCA owned-fit table
+    # (core/decomp_entry_table_pca.mojo): the TSNE owner's 'pca' start
+    # (bindings/mani_tsne_native.mojo) calls this entry with plain values and
+    # reads the key from the module attribute `decomp_pca_native_key`. The
+    # `pca_fit_owned` export remains for its other callers. A build with no
+    # GPU vendor ("none") publishes nothing and records no key.
+    var word = neighbors_vendor_word(COMPILED_VENDOR)
+    if word < 0:
+        return
+    var api = PCA_OPS_DEVICE_API.get_or_create_ptr()
+    pca_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api[].entries.unsafe_ptr()),
+                    pca_ops_device_v1)
+    py_setattr(module, "decomp_pca_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
+
 def build__mojolearn_estimators() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -1718,6 +1730,7 @@ def build__mojolearn_estimators() -> PythonObject:
         _publish_estimators_qn_table()
         # The ridge multi table (core/linear_entry_table_multi.mojo).
         publish_ridge_multi()
+        _publish_decomp_pca_ops(published_module)
         return published_module
     except e:
         abort(String("failed to create _mojolearn_estimators: ", e))

@@ -31,7 +31,11 @@ from providers.python.estimator_binding_pyapi import estimator_arguments, estima
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from core.hotpath_impl import HpStat
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
+from core.neighbors_entry_table import (
+    NeighborsEntryKey, NbFold, neighbors_ops_entry, nb_index_prepare_call, nb_index_release_call,
+    nb_fold_ready_call, nb_classify_call, nb_regress_call, nb_classify_resident_call, nb_regress_resident_call,
+)
 from bindings.admitted_family import admit_family, admit_family_meta, admit_family_owned
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
@@ -304,6 +308,22 @@ def knn_door(binding: PythonObject, name: String) raises -> PythonObject:
     return entry
 
 
+def knn_ops_key(binding: PythonObject) raises -> NeighborsEntryKey:
+    """The neighbors operations table key (core/neighbors_entry_table.mojo)
+    of the image behind `binding`: the `(mode, vendor)` it recorded as its
+    module attribute `neighbors_native_key` when it published. One exact
+    dictionary read at UNPACK; the k-NN entries are then called natively.
+    Vendor 0 is the CPU column (no resident index)."""
+    var b = _b()
+    if py_type(binding) is not py_type(b):
+        raise Error("TypeError: neighbor execution requires its connected native module")
+    var key = py_get(py_fields(binding), "neighbors_native_key")
+    if key is None or py_type(key) is not b.tuple or len(key) != 2:
+        raise Error("ImportError: mojolearn: the k-NN binding publishes no native neighbors table;"
+                    + " rebuild it")
+    return NeighborsEntryKey(Int(py=key[0]), Int(py=key[1]))
+
+
 def _holder(fields: PythonObject) raises -> PythonObject:
     """The instance's `_resident_holder` dict, created in `__dict__` when it
     is missing (the `_resident` / query-report property setters)."""
@@ -353,11 +373,16 @@ def knn_release(model: PythonObject) raises:
         return
     if py_type(held) is not b.tuple or len(held) != 3 or py_type(held[1]) is not b.int:
         raise Error("TypeError: neighbor resident state must retain its native handle and module")
-    var release = knn_door(held[2], "knn_index_release")
     py_setitem(holder, "index", PythonObject(None))
     try:
-        if release is not None:
-            _ = py_call(release, held[1])
+        # The minting image's table entry (its key travels with the handle
+        # as the module); the CPU column never minted a handle.
+        var key = knn_ops_key(held[2])
+        if key.vendor != 0:
+            var entry = neighbors_ops_entry(key)
+            var handle = Int(py=held[1])
+            with GILReleased(Python()):
+                nb_index_release_call(entry, handle)
     except:
         pass
 
@@ -396,7 +421,7 @@ def knn_x_tested(x: ArrayMetadata, source: PythonObject, context: PythonObject) 
 def knn_device_tests(binding: PythonObject) raises -> Bool:
     """True when the binding's entries return the finite status word (the
     GPU binding: it has the resident index entries)."""
-    return knn_door(binding, "knn_index_prepare") is not None
+    return knn_ops_key(binding).vendor != 0
 
 
 def knn_host_finite(model: PythonObject, x: ArrayMetadata) raises:
@@ -428,8 +453,8 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
     a8b-device-x-neighbors-rest; host_archive_native.mojo
     host_archive_neighbors)."""
     var b = _b()
-    var prepare = knn_door(binding, "knn_index_prepare")
-    if prepare is None:
+    var ops = knn_ops_key(binding)
+    if ops.vendor == 0:
         return PythonObject(None)
     var fields = py_fields(model)
     var key = Python.tuple(classical_address(idx), family_call(b.tuple, idx.shape))
@@ -445,7 +470,7 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
                 or py_type(previous[1]) is not b.tuple or len(previous[1]) != 2
                 or py_type(previous[1][0]) is not b.int or py_type(previous[1][1]) is not b.int):
             raise Error("TypeError: neighbor resident key must contain native address and shape words")
-        _ = knn_door(cached[2], "knn_index_release")
+        _ = knn_ops_key(cached[2])
     # Hazard H4 (lane pass2-cluster-nbr): `identical` and `fast` keep
     # separate handle registries, so a handle is reused only by the binding
     # that minted it; another binding releases it through its minter below
@@ -455,10 +480,15 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
     if cached is not None:
         knn_release(model)
     var status = List[Int32](length=1, fill=Int32(0))
-    var prepare_params = Python.list(family_call(b.int, idx.shape[0]), family_call(b.int, idx.shape[1]))
-    if test:
-        _ = py_call(prepare_params.append, PythonObject(Int(status.unsafe_ptr())))
-    var handle = family_call(b.int, family_call(prepare, key[0], prepare_params))
+    var n_index = Int(py=family_call(b.int, idx.shape[0]))
+    var n_features = Int(py=family_call(b.int, idx.shape[1]))
+    var index_address = Int(py=key[0])
+    var status_address = Int(status.unsafe_ptr()) if test else 0
+    var entry = neighbors_ops_entry(ops)
+    var handle_word = 0
+    with GILReleased(Python()):
+        handle_word = nb_index_prepare_call(entry, index_address, status_address, n_index, n_features)
+    var handle = PythonObject(handle_word)
     _ = idx  # keep the Python object alive through the native call above
     admitted_finite_refuse(Int(status[0]), _class_name(model))
     _ = status^
@@ -913,10 +943,14 @@ def _knn_fold(model: PythonObject, binding: PythonObject, x_source: PythonObject
     `_dist_params` when the fold is taken."""
     if not door_is_device_rows(x_source, context):
         return DoorRowsStore.none()
-    var ready = knn_door(binding, "knn_fold_ready")
-    if ready is None or knn_door(binding, "knn_index_prepare") is None:
+    var ops = knn_ops_key(binding)
+    if ops.vendor == 0:
         return DoorRowsStore.none()
-    if Int(py=family_call(ready)) == 0:
+    var entry = neighbors_ops_entry(ops)
+    var ready = False
+    with GILReleased(Python()):
+        ready = nb_fold_ready_call(entry)
+    if not ready:
         return DoorRowsStore.none()
     var fields = py_fields(model)
     if (py_get(fields, PythonObject("_index"), PythonObject(None)) is None
@@ -934,11 +968,30 @@ def _knn_fold(model: PythonObject, binding: PythonObject, x_source: PythonObject
     return store
 
 
-def _with_fold(dist: PythonObject, status: List[Int32], fold: DoorRowsStore) raises -> PythonObject:
-    """`dist` (`_dist_params`) with the two status words' host address and
-    the fold's store words (bindings/_mojolearn.mojo `_dist_fold`)."""
-    return Python.list(dist[0], dist[1], dist[2], PythonObject(Int(status.unsafe_ptr())),
-                       PythonObject(fold.base_id), PythonObject(fold.base_rows), PythonObject(fold.index_id))
+struct KnnCallWords(Movable):
+    """UNPACK of one k-NN query's common words: the fitted index's address
+    and shape, k, and the resolved `_dist_params` triple (the metric's
+    float rounded to Float32 by the entry, as the exports did)."""
+    var index: Int
+    var n_index: Int
+    var n_features: Int
+    var k: Int
+    var metric: Int
+    var metric_arg: Float64
+    var weights: Int
+
+    def __init__(out self, model: PythonObject, idx: PythonObject, nq: Int, dist: PythonObject) raises:
+        var fields = py_fields(model)
+        self.index = Int(py=classical_address(idx))
+        self.n_index = Int(py=idx.shape[0])
+        self.n_features = Int(py=idx.shape[1])
+        self.k = Int(py=family_field(fields, "n_neighbors"))
+        if len(dist) < 3:
+            raise Error("knn: dist_params must hold 3 values (metric, metric_arg, weights), got "
+                        + String(len(dist)))
+        self.metric = Int(py=dist[0])
+        self.metric_arg = Float64(py=dist[1])
+        self.weights = Int(py=dist[2])
 
 
 def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject, want_proba: Bool,
@@ -967,16 +1020,17 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     gathered on the device by the resident entry (`q_addr` 0)."""
     var b = _b()
     var fields = py_fields(model)
-    var k = family_field(fields, "n_neighbors")
     var y_cols = family_field(fields, "_y_cols")
     var n_out = Int(py=y_cols.shape[0])
     var classes_list = family_field(fields, "_classes_list")
     var n_classes = Python.list()
+    var class_counts = List[Int]()
     var total = 0
     for i in range(len(classes_list)):  # driver-loop: over class counts per output column
         var count = len(classes_list[i])
         total += count
-        _ = py_call(n_classes.append, PythonObject(count))
+        class_counts.append(count)
+        _ = py_call(n_classes.append, PythonObject(count))  # PACK: the returned n_classes list
     # The native contract writes exactly one of these two outputs; the
     # unselected one is a one-element sentinel it never reads or writes.
     var labels = family_array(Python.tuple(1), "<i4", context) if want_proba else family_array(
@@ -988,38 +1042,45 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     # THE INDEX STAYS ON THE DEVICE (DEVIATION 3002): the first call uploads
     # it, every later call classifies against the device copy; a binding
     # without that entry takes the per-call path.
-    var resident = knn_door(binding, "knn_classify_resident")
+    var ops = knn_ops_key(binding)
     var handle = PythonObject(None)
-    if resident is not None:
+    if ops.vendor != 0:
         handle = _resident_handle(model, binding, idx)
-    # n_index, n_queries, n_features, k, query_tile, n_outputs, want_proba,
-    # then n_classes per output (bindings/_mojolearn.mojo::knn_classify_binding).
-    var params = Python.list(idx.shape[0], PythonObject(nq), idx.shape[1], k, family_field(fields, "query_tile"),
-                             PythonObject(n_out), PythonObject(1 if want_proba else 0))
-    _ = py_call(params.extend, n_classes)
-    var used: PythonObject
+    # UNPACK: the plain words of the neighbors operations table's classify
+    # request (core/neighbors_entry_table.mojo NB_OP_CLASSIFY[_RESIDENT]).
+    var call = KnnCallWords(model, idx, nq, dist)
+    var query_tile = Int(py=family_field(fields, "query_tile"))
+    var y_address = Int(py=classical_address(y_cols))
+    var labels_address = Int(py=classical_address(labels))
+    var proba_address = Int(py=classical_address(proba))
+    var uniq_address = Int(py=classical_address(uniq))
+    var entry = neighbors_ops_entry(ops)
+    var used_word = 0
     # Two words: the finite word, and for a fold the index-range word.
     var status = List[Int32](length=2, fill=Int32(0))
     if handle is not None:
-        # The handle rides at the front of `params`: a binding takes at most
-        # eight arguments and the classifier uses all eight.
-        var front = Python.list(handle)
-        _ = py_call(front.extend, params)
         # Lane a7b: the queries are tested behind the entry's upload; lane
         # a8b-device-x-neighbors-rest: a fold is gathered and tested there.
-        var words = _with_fold(dist, status, fold) if fold.active() else (
-            dist if tested else knn_with_status(dist, status))
-        used = family_call(resident, classical_address(idx), PythonObject(q_addr), classical_address(y_cols),
-                           classical_address(labels), classical_address(proba), classical_address(uniq), front,
-                           words)
+        var handle_word = Int(py=handle)
+        var status_address = Int(status.unsafe_ptr()) if (fold.active() or not tested) else 0
+        var fold_words = NbFold(1, fold.base_id, fold.base_rows, fold.index_id) if fold.active() else NbFold.none()
+        with GILReleased(Python()):
+            used_word = nb_classify_resident_call(
+                entry, handle_word, call.index, q_addr, y_address, labels_address, proba_address, uniq_address,
+                status_address, call.n_index, nq, call.n_features, call.k, query_tile, want_proba, class_counts,
+                call.metric, call.metric_arg, call.weights, fold_words)
     else:
         if fold.active():
             raise Error("RuntimeError: a resident k-NN fold needs the binding's resident entries")
         if not tested:
-            knn_host_finite_at(model, q_addr, nq * Int(py=idx.shape[1]))
-        used = family_call(knn_door(binding, "knn_classify"), classical_address(idx),
-                           PythonObject(q_addr), classical_address(y_cols), classical_address(labels),
-                           classical_address(proba), classical_address(uniq), params, dist)
+            knn_host_finite_at(model, q_addr, nq * call.n_features)
+        with GILReleased(Python()):
+            used_word = nb_classify_call(
+                entry, call.index, q_addr, y_address, labels_address, proba_address, uniq_address, call.n_index,
+                nq, call.n_features, call.k, query_tile, want_proba, class_counts, call.metric, call.metric_arg,
+                call.weights)
+    _ = class_counts^
+    var used = PythonObject(used_word)
     if fold.active():
         door_rows_refuse(Int(status[0]), Int(status[1]), _class_name(model), fold.base_rows)
     else:
@@ -1139,37 +1200,45 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     """`_reg_predict` over admitted queries (see `_classify_on`)."""
     var b = _b()
     var fields = py_fields(model)
-    var k = family_field(fields, "n_neighbors")
     var y_cols = family_field(fields, "_y_cols")
     var n_out = Int(py=y_cols.shape[0])
     var out = family_array(Python.tuple(nq, n_out), "<f4", context)
     var idx = family_field(fields, "_index")
     # DEVIATION 3002: the regressor's resident door; see the classifier.
-    var resident = knn_door(binding, "knn_regress_resident")
+    var ops = knn_ops_key(binding)
     var handle = PythonObject(None)
-    if resident is not None:
+    if ops.vendor != 0:
         handle = _resident_handle(model, binding, idx)
-    # n_index, n_queries, n_features, k, query_tile, n_outputs
-    # (bindings/_mojolearn.mojo::knn_regress_binding).
-    var params = Python.list(idx.shape[0], PythonObject(nq), idx.shape[1], k, family_field(fields, "query_tile"),
-                             PythonObject(n_out))
-    var used: PythonObject
+    # UNPACK: the plain words of the neighbors operations table's regress
+    # request (core/neighbors_entry_table.mojo NB_OP_REGRESS[_RESIDENT]).
+    var call = KnnCallWords(model, idx, nq, dist)
+    var query_tile = Int(py=family_field(fields, "query_tile"))
+    var y_address = Int(py=classical_address(y_cols))
+    var out_address = Int(py=classical_address(out))
+    var entry = neighbors_ops_entry(ops)
+    var used_word = 0
     # Two words: the finite word, and for a fold the index-range word.
     var status = List[Int32](length=2, fill=Int32(0))
     if handle is not None:
         # Lane a7b: the queries are tested behind the entry's upload; lane
         # a8b-device-x-neighbors-rest: a fold is gathered and tested there.
-        var words = _with_fold(dist, status, fold) if fold.active() else (
-            dist if tested else knn_with_status(dist, status))
-        used = family_call(resident, handle, classical_address(idx), PythonObject(q_addr), classical_address(y_cols),
-                           classical_address(out), params, words)
+        var handle_word = Int(py=handle)
+        var status_address = Int(status.unsafe_ptr()) if (fold.active() or not tested) else 0
+        var fold_words = NbFold(1, fold.base_id, fold.base_rows, fold.index_id) if fold.active() else NbFold.none()
+        with GILReleased(Python()):
+            used_word = nb_regress_resident_call(
+                entry, handle_word, call.index, q_addr, y_address, out_address, status_address, call.n_index, nq,
+                call.n_features, call.k, query_tile, n_out, call.metric, call.metric_arg, call.weights, fold_words)
     else:
         if fold.active():
             raise Error("RuntimeError: a resident k-NN fold needs the binding's resident entries")
         if not tested:
-            knn_host_finite_at(model, q_addr, nq * Int(py=idx.shape[1]))
-        used = family_call(knn_door(binding, "knn_regress"), classical_address(idx),
-                           PythonObject(q_addr), classical_address(y_cols), classical_address(out), params, dist)
+            knn_host_finite_at(model, q_addr, nq * call.n_features)
+        with GILReleased(Python()):
+            used_word = nb_regress_call(
+                entry, call.index, q_addr, y_address, out_address, call.n_index, nq, call.n_features, call.k,
+                query_tile, n_out, call.metric, call.metric_arg, call.weights)
+    var used = PythonObject(used_word)
     if fold.active():
         door_rows_refuse(Int(status[0]), Int(status[1]), _class_name(model), fold.base_rows)
     else:

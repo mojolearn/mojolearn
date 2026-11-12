@@ -11,27 +11,29 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from x_ann.abi_shell_impl import rabitq_padded_dim
-from x_ann.filter_topk import filter_topk_device
-from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_components, tsne_init_y0
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_ann.abi import check_search, out_f32_to, out_i32_to
-from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int
+from x_ann.abi import out_f32_to, out_i32_to
+from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int, py_int_list
 from x_ann.switches import ANN3_DIRECT_OUT, IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
-from x_ann.ivf_pq_core import IvfPqIndex, pq_len_of
+from x_ann.ivf_pq_core import IvfPqIndex
 from x_ann.stage_timer import AnnStages
-from x_ann.cagra_device import cagra_build_device, cagra_search_device, cagra_search_on
+from x_ann.cagra_device import cagra_build_device
 from x_ann.device_ctx import x_ann_ctx
-from x_ann.io import upload_f32, upload_i32
-from core.abs_sum_blocked import device_any_index_out_of_range
-from x_ann.tsne_device import tsne_fit_device
 from providers.python.x_ann_resident_pyapi import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
 from providers.python.x_ann_resident_pyapi import x_ann_index_export_codes_binding
 from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.resident import x_ann_register_pq_built
-from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
+from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_sq_build_device, refine_device, ivf_rabitq_build_device
+from x_ann.ops_entry_device import (
+    ANN_OPS_DEVICE_API, ann_ops_device_v1, ann_ivf_pq_search_device_run, ann_ivf_sq_search_device_run,
+    ann_ivf_rabitq_search_device_run, ann_cagra_search_device_run, ann_filter_topk_device_run,
+    ann_tsne_fit_device_run,
+)
+from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
+from core.neighbors_entry_table_ann import ann_ops_publish
+from bindings.py_balanced import py_setattr
 from x_ann.ivf_pq_device import IvfPqDevice, ivf_pq_build_device_resident
 # TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
@@ -140,34 +142,15 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     """addrs: centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n, mask
     (int32 per row, 0 removes the row: the sample filter).
     params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes[, status] (status: the host
-    address of the int32 word that receives the queries' finite status)."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var pq_dim = p_int(params, 3)
-    var pq_bits = p_int(params, 4)
-    var m = p_int(params, 5)
-    var k = p_int(params, 6)
-    var n_probes = p_int(params, 7)
-    var status = p_int(params, 8) if len(params) > 8 else 0
-    check_search(n_lists, m, k, n_probes)
-    var pq_len = pq_len_of(dim, pq_dim)
-    var centers = in_f32(addrs, 0, n_lists * dim)
-    var offsets = in_i32(addrs, 1, n_lists + 1)
-    var list_indices = in_i32(addrs, 2, n)
-    var cb = in_f32(addrs, 3, pq_dim * (1 << pq_bits) * pq_len)
-    var codes = in_i32(addrs, 4, n * pq_dim)
-    var queries = in_f32(addrs, 5, m * dim)
-    var mask = in_i32(addrs, 9, n)
-    var od = List[Float32]()
-    var oi = List[Int32]()
-    var on = List[Int32]()
+    address of the int32 word that receives the queries' finite status).
+    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_ivf_pq_search_device_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        ivf_pq_search_device(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
-                             queries, m, k, n_probes, od, oi, on, status)
-    out_f32(od, addrs, 6)
-    out_i32(oi, addrs, 7)
-    out_i32(on, addrs, 8)
+        m = ann_ivf_pq_search_device_run(a, p)
     return PythonObject(m)
 
 
@@ -179,42 +162,26 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     x_ann/tsne_init.mojo; 0 or absent y0 as given). release-0845: the factor is params[7] and the
     init tail moved from 7..9 to 8..10. Lane sk-kernels: an optional params[11], n_components
     (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`). Lane a8d: an
-    optional params[12], the finite flag: 1 asks for X's finite status word, tested on the
-    device over the fit's upload (no host scan in the door); the return is then [n, status
-    word] and a flagged X writes neither output (the door refuses)."""
-    var n = p_int(params, 0)
-    var d = p_int(params, 1)
-    var max_iter = p_int(params, 2)
-    var exploration = p_int(params, 3)
-    var perplexity = Float32(Float64(py=params[4]))
-    var exaggeration = Float32(Float64(py=params[5]))
-    var lr = Float32(Float64(py=params[6]))
-    var post_factor = Float32(Float64(py=params[7]))
-    var x = in_f32(addrs, 0, n * d)
-    var mode = p_int(params, 8) if len(params) > 8 else TSNE_INIT_GIVEN
-    var seed = UInt64(0)
-    if len(params) > 10:
-        seed = (UInt64(p_int(params, 10)) << 32) | UInt64(p_int(params, 9))
-    var k = p_int(params, 11) if len(params) > 11 else 2
-    var y0 = tsne_init_y0(
-        mode, in_f32(addrs, 1, n * k) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed, k
-    )
+    optional params[12], the finite flag: 1 asks for X's finite status word; the return is
+    then [n, status word] and a flagged X writes neither output (the door refuses).
+    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_tsne_fit_device_run`, which the ANN
+    operations table (core/neighbors_entry_table_ann.mojo) also calls with
+    the four float words apart (f) and params[8:] after params[3] (p). The
+    export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = List[Int]()
+    for i in range(len(params)):  # small-loop(no: one call's parameter words): metadata, not data
+        if i < 4 or i > 7:
+            p.append(Int(py=params[i]))
+    var f: List[Float64] = [Float64(py=params[4]), Float64(py=params[5]), Float64(py=params[6]),
+                            Float64(py=params[7])]
     var test = len(params) > 12 and p_int(params, 12) != 0
-    var word = List[Int32](length=1, fill=Int32(0))
-    var word_addr = Int(word.unsafe_ptr()) if test else 0
-    var y = List[Float32]()
-    var kl = Float32(0.0)
+    var status = 0
     with GILReleased(Python()):
-        tsne_fit_device(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl,
-                        word_addr)
+        status = ann_tsne_fit_device_run(a, p, f)
     if test:
-        if word[0] == 0:
-            out_f32(tsne_first_components(y, n, k), addrs, 2)
-            out_f32([kl], addrs, 3)
-        return Python.list(PythonObject(n), PythonObject(Int(word[0])))
-    out_f32(tsne_first_components(y, n, k), addrs, 2)
-    out_f32([kl], addrs, 3)
-    return PythonObject(n)
+        return Python.list(PythonObject(p[0]), PythonObject(status))
+    return PythonObject(p[0])
 
 
 def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -237,46 +204,15 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     """addrs: x, graph, queries, out_d, out_i.
     params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs[, status]]
     (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node;
-    status: the host address of the int32 word that receives the queries' finite status)."""
-    var n = p_int(params, 0)
-    var d = p_int(params, 1)
-    var deg = p_int(params, 2)
-    var m = p_int(params, 3)
-    var k = p_int(params, 4)
-    var L = p_int(params, 5)
-    var width = p_int(params, 6)
-    var max_iter = p_int(params, 7)
-    var n_seeds = p_int(params, 8)
-    var rs = p_int(params, 9) if len(params) > 9 else 0
-    var status = p_int(params, 10) if len(params) > 10 else 0
-    if rs < 0:
-        raise Error("CAGRA search: rs must be >= 0")
-    if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
-        raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
-    var x = in_f32(addrs, 0, n * d)
-    var g = in_i32(addrs, 1, n * deg)
-    var q = in_f32(addrs, 2, m * d)
-    var od = List[Float32]()
-    var oi = List[Int32]()
+    status: the host address of the int32 word that receives the queries' finite status).
+    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_cagra_search_device_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        # cpu3-bindings: `cagra_search_device`'s uploads, then the graph's
-        # row-id range refusal as one device pass over the uploaded graph
-        # (one Int32 back) instead of a host walk over n * deg ids
-        var ctx = x_ann_ctx()
-        var dx = upload_f32(ctx, x)
-        var dg = upload_i32(ctx, g)
-        if device_any_index_out_of_range(ctx, dg, n * deg, n):
-            raise Error("CAGRA search: the graph names a row outside the dataset")
-        cagra_search_on(
-            ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
-            dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, q, m, k, L, width,
-            max_iter, n_seeds, od, oi, rs, status,
-        )
-        _ = dg^
-        _ = dx^
-        _ = ctx^
-    out_f32(od, addrs, 3)
-    out_i32(oi, addrs, 4)
+        m = ann_cagra_search_device_run(a, p)
     return PythonObject(m)
 
 
@@ -318,32 +254,15 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 
 def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, m, k, n_probes[, status] (the queries' finite status word)."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var m = p_int(params, 3)
-    var k = p_int(params, 4)
-    var n_probes = p_int(params, 5)
-    var status = p_int(params, 6) if len(params) > 6 else 0
-    check_search(n_lists, m, k, n_probes)
-    var centers = in_f32(addrs, 0, n_lists * dim)
-    var offsets = in_i32(addrs, 1, n_lists + 1)
-    var list_indices = in_i32(addrs, 2, n)
-    var vmin = in_f32(addrs, 3, dim)
-    var delta = in_f32(addrs, 4, dim)
-    var codes = in_i32(addrs, 5, n * dim)
-    var mask = in_i32(addrs, 6, n)
-    var queries = in_f32(addrs, 7, m * dim)
-    var od = List[Float32]()
-    var oi = List[Int32]()
-    var on = List[Int32]()
+    params: n, dim, n_lists, m, k, n_probes[, status] (the queries' finite status word).
+    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_ivf_sq_search_device_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        ivf_sq_search_device(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
-                             n_probes, od, oi, on, status)
-    out_f32(od, addrs, 8)
-    out_i32(oi, addrs, 9)
-    out_i32(on, addrs, 10)
+        m = ann_ivf_sq_search_device_run(a, p)
     return PythonObject(m)
 
 
@@ -406,57 +325,30 @@ def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -
 
 def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, codes, norms, ips, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, seed, m, k, n_probes[, status] (the queries' finite status word)."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var seed = p_int(params, 3)
-    var m = p_int(params, 4)
-    var k = p_int(params, 5)
-    var n_probes = p_int(params, 6)
-    var status = p_int(params, 7) if len(params) > 7 else 0
-    check_search(n_lists, m, k, n_probes)
-    var D = rabitq_padded_dim(dim)
-    var words = (D + 31) // 32
-    var centers = in_f32(addrs, 0, n_lists * dim)
-    var offsets = in_i32(addrs, 1, n_lists + 1)
-    var list_indices = in_i32(addrs, 2, n)
-    var codes = in_i32(addrs, 3, n * words)
-    var norms = in_f32(addrs, 4, n)
-    var ips = in_f32(addrs, 5, n)
-    var mask = in_i32(addrs, 6, n)
-    var queries = in_f32(addrs, 7, m * dim)
-    var od = List[Float32]()
-    var oi = List[Int32]()
-    var on = List[Int32]()
+    params: n, dim, n_lists, seed, m, k, n_probes[, status] (the queries' finite status word).
+    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_ivf_rabitq_search_device_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        ivf_rabitq_search_device(centers, offsets, list_indices, codes, norms, ips, mask, n_lists, dim, seed,
-                                 queries, m, k, n_probes, od, oi, on, status)
-    out_f32(od, addrs, 8)
-    out_i32(oi, addrs, 9)
-    out_i32(on, addrs, 10)
+        m = ann_ivf_rabitq_search_device_run(a, p)
     return PythonObject(m)
 
 
 def filter_topk_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """CAGRA's filtered compaction (x_ann/filter_topk.mojo, lane
     apple-fast-py2mojo-cluster). addrs: itopk distances (m x L), itopk ids
-    (m x L int32), keep (n int32), out_d, out_i (m x k). params: m, n, L, k."""
-    var m = p_int(params, 0)
-    var n = p_int(params, 1)
-    var L = p_int(params, 2)
-    var k = p_int(params, 3)
-    if m <= 0 or n <= 0 or k <= 0 or L < k:
-        raise Error("CAGRA filtered search: need m, n, k >= 1 and itopk_size >= k")
-    var bd = in_f32(addrs, 0, m * L)
-    var bi = in_i32(addrs, 1, m * L)
-    var keep = in_i32(addrs, 2, n)
-    var od = List[Float32]()
-    var oi = List[Int32]()
+    (m x L int32), keep (n int32), out_d, out_i (m x k). params: m, n, L, k.
+    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_filter_topk_device_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        filter_topk_device(bd, bi, keep, m, n, L, k, od, oi)
-    out_f32(od, addrs, 3)
-    out_i32(oi, addrs, 4)
+        m = ann_filter_topk_device_run(a, p)
     return PythonObject(m)
 
 
@@ -470,6 +362,23 @@ def numeric_mode_binding() raises -> PythonObject:
 
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
+
+
+def _publish_ann_ops(module: PythonObject) raises:
+    # The device column of the ANN operations table
+    # (core/neighbors_entry_table_ann.mojo): the ANN search owner
+    # (bindings/neighbors_ann_query_native.mojo) and the TSNE owner
+    # (bindings/mani_tsne_native.mojo) call this entry with plain values and
+    # read the key from the module attribute `x_ann_native_key`. The Python
+    # exports remain for python/mojolearn/_expansion_ann.py. A build with no
+    # GPU vendor ("none") publishes nothing and records no key.
+    var word = neighbors_vendor_word(COMPILED_VENDOR)
+    if word < 0:
+        return
+    var api = ANN_OPS_DEVICE_API.get_or_create_ptr()
+    ann_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api[].entries.unsafe_ptr()),
+                    ann_ops_device_v1)
+    py_setattr(module, "x_ann_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_ann.mojo
@@ -507,6 +416,7 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
         m.def_function[vendor_binding]("x_ann_vendor")
         var published_module = m.finalize()
+        _publish_ann_ops(published_module)
         comptime if IVF_PQ_RESIDENT_FIT:
             # The archive export table: the archive writer saves a resident
             # IVF-PQ index's codes through this entry natively.

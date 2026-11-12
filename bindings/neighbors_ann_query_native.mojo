@@ -2,12 +2,17 @@
 # Public IVFPQ/IVFSQ/IVFRaBitQ/Cagra search ownership. The caller admits the
 # estimator layout and selects its import-connected x_ann binding natively.
 # Input/fitted metadata is captured once here, with storage owners retained
-# through prepare/search/filter/result conversion. Numerical exports still
-# use the existing packed CPython ABI: this repairs the whole-operation
-# Python wrapper but is NOT completion of the x_ann provider migration.
+# through prepare/search/filter/result conversion. The numerical operations
+# are the ANN operations table's entries (core/neighbors_entry_table_ann.mojo,
+# lane calltable-cn-ann): the binding's key is read once at UNPACK
+# (`ann_ops_key`) and every prepare, search, filter, code export and release
+# is a native call with plain words, no CPython in between. The resident
+# operations run with the GIL held (their registry, x_ann/resident.mojo, is
+# guarded by it); the per-call searches and the filter with it released.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from x_ann.neighbors_ann_query_run import (
-    ANN_SEARCH_CAGRA, AnnSearchRequest, ann_search_owner, ann_search_entry, ann_check_search_dims,
+    ANN_SEARCH_CAGRA, AnnSearchRequest, ann_search_owner, ann_check_search_dims,
     ann_check_query_features, cagra_check_search, ivf_check_search, pq_check_search, pq_check_code_dims,
     cagra_seed_word, ann_check_stored_shape, ann_check_stored_strides, ann_mask_refusal, ann_mask_fill_ones,
     ann_mask_from_bytes, ann_search_plan, ann_handle_addresses, ann_full_addresses, ann_filter_params,
@@ -29,7 +34,13 @@ from bindings.parallel_public_result import parallel_public_result
 from providers.python.array_metadata_pyapi import (
     array_shape_once, array_slot_once, array_owner_once, array_metadata_once,
 )
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.native_ops_key_ann import ann_ops_key
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.neighbors_entry_table_ann import (
+    ANN_OP_IVF_PQ_SEARCH, ANN_OP_IVF_SQ_SEARCH, ANN_OP_IVF_RABITQ_SEARCH, ANN_OP_CAGRA_SEARCH,
+    ANN_OP_FILTER_TOPK, ann_ops_entry, ann_index_prepare_call, ann_index_search_call,
+    ann_index_release_call, ann_index_export_codes_call, ann_search_call,
+)
 from core.cast_in import CAST_KIND_BOOL
 
 
@@ -223,8 +234,21 @@ def _resident(fields: PythonObject) raises -> PythonObject:
     # Validate the complete key even when its first differing cell would make
     # comparison short-circuit. Nothing in an unvisited cell may run on release.
     _ = _key_equal(cached[0], cached[0])
-    _ = neural_descriptor_entry(cached[2], "x_ann_index_release")
+    # The minting image must be a device column (the only one with a
+    # resident index); its key travels with the handle as the module.
+    if ann_ops_key(cached[2]).vendor == 0:
+        raise Error("TypeError: resident ANN state requires its native handle and module owner")
     return cached
+
+
+def _release(cached: PythonObject):
+    """Best-effort release of a resident handle through its minting image's
+    table entry (GIL held: the registry is guarded by it)."""
+    try:
+        var entry = ann_ops_entry(ann_ops_key(cached[2]))
+        ann_index_release_call(entry, Int(py=cached[1]))
+    except:
+        pass  # Preserve the previous best-effort old-handle release.
 
 
 def _key(arrays: List[_StoredArray], device_codes: Bool, binding: PythonObject) raises -> PythonObject:
@@ -237,11 +261,11 @@ def _key(arrays: List[_StoredArray], device_codes: Bool, binding: PythonObject) 
     return Python.tuple(py_call(b.tuple, values), py_call(b.id, binding))
 
 
-def _addresses(arrays: List[_StoredArray]) raises -> PythonObject:
-    var result = Python.list()
+def _addresses(arrays: List[_StoredArray]) -> List[Int]:
+    var result = List[Int](capacity=len(arrays))
     for i in range(len(arrays)):  # driver-loop: over (fixed saved-array schema)
-        _ = py_call(result.append, arrays[i].address)
-    return result
+        result.append(arrays[i].address)
+    return result^
 
 
 def _export_codes(fields: PythonObject, cached: PythonObject, n: Int, pq_dim: Int,
@@ -250,8 +274,9 @@ def _export_codes(fields: PythonObject, cached: PythonObject, n: Int, pq_dim: In
         raise Error("RuntimeError: mojolearn IVFPQIndex: the resident index was released before its codes were read")
     var codes = family_array(Python.tuple(n, pq_dim), "<i4", context)
     var address = Int(py=classical_address(codes))
-    _ = py_call(neural_descriptor_entry(cached[2], "x_ann_index_export_codes"),
-                cached[1], address, n * pq_dim)
+    var entry = ann_ops_entry(ann_ops_key(cached[2]))
+    # GIL held: the resident registry (see the module note).
+    ann_index_export_codes_call(entry, Int(py=cached[1]), address, n * pq_dim)
     py_setitem(fields, "codes_", codes)
     _ = py_call(fields.pop, "_device_codes", PythonObject(None))
     # The resident handle keeps these codes on the device (hazard class A).
@@ -294,18 +319,19 @@ def ann_pq_materialize(model: PythonObject, context: PythonObject) raises -> Pyt
     return exported.value
 
 
-def _handle(fields: PythonObject, kind: Int, binding: PythonObject,
-            mut arrays: List[_StoredArray], params: PythonObject, n: Int,
+def _handle(fields: PythonObject, kind: Int, binding: PythonObject, entry: NativeDescriptorCall,
+            resident: Bool, mut arrays: List[_StoredArray], params: List[Int], n: Int,
             pq_dim: Int, device_codes: Bool, context: PythonObject) raises -> PythonObject:
+    # `resident`: the binding's table is a device column (the CPU column
+    # keeps no resident index and searches per call).
     var cached = _resident(fields)
     var key = _key(arrays, device_codes, binding)
-    var prepare = neural_descriptor_entry(binding, "x_ann_index_prepare", False)
-    if prepare is not None and cached is not None and _key_equal(cached[0], key):
+    if resident and cached is not None and _key_equal(cached[0], key):
         return cached[1]
     if device_codes:
         arrays.append(_export_codes(fields, cached, n, pq_dim, context))
         key = _key(arrays, False, binding)
-    if prepare is None:
+    if not resident:
         return PythonObject(None)
     # p3-neighbors-cluster (hazard class A): the key holds identity, address
     # and shape, never values, so the fitted arrays become read-only when the
@@ -315,22 +341,16 @@ def _handle(fields: PythonObject, kind: Int, binding: PythonObject,
         if not fitted_is_freezable(arrays[i].value, context):
             if cached is not None:
                 _ = py_call(fields.pop, "_resident", PythonObject(None))
-                try:
-                    _ = py_call(neural_descriptor_entry(cached[2], "x_ann_index_release"), cached[1])
-                except:
-                    pass  # Preserve the previous best-effort old-handle release.
+                _release(cached)
             return PythonObject(None)
     for i in range(len(arrays)):  # small-loop(fixed saved-array schema)
         _ = fitted_freeze(arrays[i].value, context)
     if cached is not None:
         _ = py_call(fields.pop, "_resident", PythonObject(None))
-        try:
-            _ = py_call(neural_descriptor_entry(cached[2], "x_ann_index_release"), cached[1])
-        except:
-            pass  # Preserve the previous best-effort old-handle release.
-    var handle = py_call(prepare, kind, _addresses(arrays), params)
-    if py_type(handle) is not py_type(PythonObject(0)):
-        raise Error("TypeError: resident ANN prepare must return an exact native handle")
+        _release(cached)
+    # GIL held: the resident registry (see the module note). The addressed
+    # arrays are retained by `arrays` (the caller's) through the call.
+    var handle = PythonObject(ann_index_prepare_call(entry, kind, _addresses(arrays), params))
     py_setitem(fields, "_resident", Python.tuple(key, handle, binding))
     return handle
 
@@ -353,16 +373,6 @@ def _cagra_seed(fields: PythonObject) raises -> Int:
     for i in range(count):  # driver-loop: over the exact integer's bytes (UNPACK of one scalar)
         seed_bytes.append(Int(py=bytes[i]))
     return cagra_seed_word(seed_bytes)
-
-
-def _py_ints(values: List[Int]) raises -> PythonObject:
-    """PACK: typed parameter or address words as the native list the packed
-    export takes."""
-    var result = Python.list()
-    var append = result.append  # resolved once, not per word
-    for value in values:  # driver-loop: over a fixed export's parameter words
-        _ = py_call(append, value)
-    return result
 
 
 def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
@@ -421,7 +431,11 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
     var distances = family_array(Python.tuple(m, selected), "<f4", context)
     var indices = family_array(Python.tuple(m, selected), "<i4", context)
     var candidates = family_array(Python.tuple(m), "<i4", context)
-    var handle = _handle(fields, kind, binding, arrays, _py_ints(plan.prepare_params), n, request.pq_dim,
+    # The binding's ANN table, read once (UNPACK); every numerical call below
+    # is a native call through it.
+    var ops = ann_ops_key(binding)
+    var entry = ann_ops_entry(ops)
+    var handle = _handle(fields, kind, binding, entry, ops.vendor != 0, arrays, plan.prepare_params, n, request.pq_dim,
                          device_codes, context)
     var q_address = q.source.addr
     var distances_address = Int(py=classical_address(distances))
@@ -431,29 +445,30 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
         var mask_address = 0 if mask is None else Int(py=classical_address(mask))
         var addrs = ann_handle_addresses(kind, q_address, distances_address, indices_address, candidates_address,
                                          mask_address, args[2] is not None)
-        _ = py_call(neural_descriptor_entry(binding, "x_ann_index_search"), handle, _py_ints(addrs),
-                    _py_ints(plan.search_params))
+        var handle_word = Int(py=handle)
+        # GIL held: the resident registry (see the module note).
+        _ = ann_index_search_call(entry, handle_word, addrs, plan.search_params)
     else:
         if kind != ANN_SEARCH_CAGRA and mask is None:
             mask = _mask(PythonObject(None), n, owner, context)
         var mask_address = 0 if mask is None else Int(py=classical_address(mask))
-        var stored = List[Int](capacity=len(arrays))
-        for i in range(len(arrays)):  # driver-loop: over (fixed saved-array schema)
-            stored.append(arrays[i].address)
-        var addrs = ann_full_addresses(kind, stored, mask_address, q_address, distances_address, indices_address,
-                                       candidates_address)
-        _ = py_call(neural_descriptor_entry(binding, ann_search_entry(kind)), _py_ints(addrs),
-                    _py_ints(plan.full_params))
+        var addrs = ann_full_addresses(kind, _addresses(arrays), mask_address, q_address, distances_address,
+                                       indices_address, candidates_address)
+        var operation = ANN_OP_IVF_PQ_SEARCH if kind == 0 else (ANN_OP_IVF_SQ_SEARCH if kind == 1 else (ANN_OP_IVF_RABITQ_SEARCH if kind == 2 else ANN_OP_CAGRA_SEARCH))
+        with GILReleased(Python()):
+            _ = ann_search_call(entry, operation, addrs, plan.full_params)
     # The queries' finite status word (0 when a cast tested them already).
     admitted_finite_refuse(Int(status[0]), owner, "queries")
     _ = status^
     if request.filtered:
         var filtered_distances = family_array(Python.tuple(m, k), "<f4", context)
         var filtered_indices = family_array(Python.tuple(m, k), "<i4", context)
-        _ = py_call(neural_descriptor_entry(binding, "x_ann_filter_topk"),
-                    Python.list(classical_address(distances), classical_address(indices), classical_address(mask),
-                                classical_address(filtered_distances), classical_address(filtered_indices)),
-                    _py_ints(ann_filter_params(m, n, selected, k)))
+        var filter_addrs: List[Int] = [distances_address, indices_address, Int(py=classical_address(mask)),
+                                       Int(py=classical_address(filtered_distances)),
+                                       Int(py=classical_address(filtered_indices))]
+        var filter_words = ann_filter_params(m, n, selected, k)
+        with GILReleased(Python()):
+            _ = ann_search_call(entry, ANN_OP_FILTER_TOPK, filter_addrs, filter_words)
         # These owners are replaced below. Their raw addresses in the call's
         # argument list do not retain the original candidate buffers; keep
         # both alive until native filtering has consumed every candidate.

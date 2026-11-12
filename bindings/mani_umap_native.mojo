@@ -14,7 +14,8 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
+from std.python._cpython import GILReleased
+from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -31,9 +32,14 @@ from x_ann.mani_umap_run import (
     umap_check_transform_state, umap_check_transform_input, umap_transform_reuses_fit, umap_check_transform_output,
 )
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_is_str, family_call, family_array, family_field,
+    FAMILY_F32P, family_repr, family_is_str, family_array, family_field,
 )
-from bindings.spectral_umap_routes import spectral_umap_route, spectral_umap_entry as family_entry
+from bindings.spectral_umap_routes import spectral_umap_route
+from core.neighbors_entry_table import NeighborsEntryKey
+from core.neighbors_entry_table_umap import (
+    UmapConfigWords, UmapTargetWords, umap_ops_entry, umap_fit_call, umap_fit_ex_call, umap_transform_call,
+    UMAP_TAIL_LEGACY, UMAP_TAIL_RATES, UMAP_TAIL_EXTRAS,
+)
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_FLOAT
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
 from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
@@ -59,42 +65,37 @@ def _umap_mode(settings: ManifoldSettings, context: PythonObject) raises -> Stri
     return String(py=py_call(py_call(want.strip).lower))
 
 
-def _umap_check_mode(binding: PythonObject, mode: String, message: String, context: PythonObject) raises:
-    """`binding.umap_numeric_mode() != {"fast": 0, "identical": 1}[mode]`."""
+def _umap_check_mode(binding: PythonObject, mode: String, message: String) raises -> NeighborsEntryKey:
+    """`binding.umap_numeric_mode() != {"fast": 0, "identical": 1}[mode]`, as
+    a key comparison: the UMAP operations table key
+    (core/neighbors_entry_table_umap.mojo) the image behind `binding` recorded
+    as its module attribute `umap_native_key` when it published, one exact
+    dictionary read at UNPACK. Returns the key; the UMAP entries are then
+    called natively."""
     var want = umap_mode_code(mode)
     if want < 0:
         raise Error("KeyError: " + family_repr(PythonObject(mode)))
-    var got = family_call(family_entry(binding, "umap_numeric_mode", context))
-    if Bool(py=py_call(native_loaded_module("operator").ne, got, PythonObject(want))):
+    var b = native_loaded_module("builtins")
+    if py_type(binding) is not py_type(b):
+        raise Error("TypeError: spectral/UMAP binding must be an exact module")
+    var key = py_get(py_fields(binding), PythonObject("umap_native_key"))
+    if key is None or py_type(key) is not b.tuple or len(key) != 2:
+        raise Error("ImportError: mojolearn: the UMAP binding publishes no native UMAP table; rebuild it")
+    var native_key = NeighborsEntryKey(Int(py=key[0]), Int(py=key[1]))
+    if native_key.mode != want:
         raise Error("RuntimeError: " + message)
+    return native_key^
 
 
-def _umap_legacy_tail(config: PythonObject) raises -> Bool:
-    """`config[8:] == [1.0, 1.0, 5]`."""
-    var op = native_loaded_module("operator")
-    return (Bool(py=py_call(op.eq, config[8], PythonObject(1.0))) and Bool(py=py_call(op.eq, config[9], PythonObject(1.0)))
-            and Bool(py=py_call(op.eq, config[10], PythonObject(5))))
-
-
-def _umap_default_extras(extras: PythonObject) raises -> Bool:
-    """`extras == (-1, 2.0, 0.0, 0.0)`."""
-    return Bool(py=py_call(native_loaded_module("operator").eq, extras,
-                           Python.tuple(PythonObject(-1), PythonObject(2.0), PythonObject(0.0), PythonObject(0.0))))
-
-
-def _umap_head(config: PythonObject, count: Int) raises -> PythonObject:
-    """`config[:count]` as a list."""
-    var out = Python.list()
-    for i in range(count):  # driver-loop: over (config: the UMAP parameter words): 11
-        _ = py_call(out.append, config[i])
-    return out
-
-
-def _umap_concat(a: PythonObject, b: PythonObject) raises -> PythonObject:
-    """`[*a, *b]`."""
-    var out = py_call(native_loaded_module("builtins").list, a)
-    _ = py_call(out.extend, b)
-    return out
+def _umap_config_words(config: PythonObject, extras: PythonObject) raises -> UmapConfigWords:
+    """UNPACK of the validated `config` (11 values) and `extras` (4 values)
+    of `umap_parameters_fields`, read once as plain words."""
+    return UmapConfigWords(
+        Int(py=config[0]), Int(py=config[1]), Int(py=config[2]), Float64(py=config[3]), Float64(py=config[4]),
+        Float64(py=config[5]), Float64(py=config[6]), Int(py=config[7]), Float64(py=config[8]),
+        Float64(py=config[9]), Int(py=config[10]), Int(py=extras[0]), Float64(py=extras[1]),
+        Float64(py=extras[2]), Float64(py=extras[3]),
+    )
 
 
 def _umap_copy(shape: PythonObject, address: Int, count: Int, context: PythonObject) raises -> PythonObject:
@@ -177,7 +178,8 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
         return Optional(admit_family_meta(mk_out2(k.ew2(OP_ADD, coords, noise), context), 2, "init", context))
     var a = admit_family_meta(init, 2, "init", context)
     if not umap_init_shape_matches(a.source.rows, a.source.cols, n, nc):
-        raise umap_init_shape_refusal(family_repr(a.python_shape()), n, nc)
+        var refusal = umap_init_shape_refusal(family_repr(a.python_shape()), n, nc)
+        raise refusal^
     umap_check_init_finite(a.source.addr, a.count)
     return Optional(a^)
 
@@ -390,47 +392,36 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var embedding = family_array(Python.tuple(n, nc), "<f4", context)
     var embedding_address = Int(py=classical_address(embedding))
     var mode = _umap_mode(settings, context)
-    _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with requested mode", context)
-    var legacy = umap_legacy_abi(True if initial else False, not (target is None), _umap_default_extras(extras), nc)
-    var columns: PythonObject
+    var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with requested mode")
+    var cfg = _umap_config_words(config, extras)
+    var legacy = umap_legacy_abi(True if initial else False, not (target is None), cfg.default_extras(), nc)
+    var entry = umap_ops_entry(key)
+    var x_address = x.source.addr
+    var columns = 0
     if legacy:
-        # Preserve the legacy ABI for default controls and existing wheels.
-        var native_config = _umap_head(config, 8) if _umap_legacy_tail(config) else config
-        var params = _umap_concat(Python.list(PythonObject(n), PythonObject(d)), native_config)
-        columns = family_call(family_entry(binding, "umap_fit_transform", context), PythonObject(x.source.addr),
-                              PythonObject(embedding_address), params)
+        # Preserve the legacy layout for default controls: the rates go only
+        # when they differ from `[1.0, 1.0, 5]`.
+        var rates = not cfg.legacy_rates()
+        with GILReleased(Python()):
+            columns = umap_fit_call(entry, x_address, embedding_address, n, d, cfg, rates)
         _ = x  # keep the Python object alive through the native call above
         _ = embedding  # keep the Python object alive through the native call above
     else:
-        var tkind = PythonObject(0)
-        var tdims = PythonObject(1)
-        var tarr = PythonObject(None)
-        var tk = PythonObject(0)
-        var tw = PythonObject(0.5)
+        var target_words = UmapTargetWords.none()
         if not (target is None):
-            tkind = target[0]
-            tdims = target[1]
-            tarr = target[2]
-            tk = target[3]
-            tw = target[4]
-        var addrs = Python.list(PythonObject(x.source.addr), PythonObject(embedding_address),
-                                PythonObject(0) if not initial else PythonObject(initial.value().source.addr),
-                                PythonObject(0) if target is None else target[6])
-        _ = embedding  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = initial  # keep the Python object alive through the native call above
-        _ = tarr  # keep the Python object alive through the native call above
-        var params = _umap_concat(_umap_concat(Python.list(PythonObject(n), PythonObject(d)), config), extras)
-        _ = py_call(params.extend, Python.list(tkind, tdims, tk, tw))
-        columns = family_call(family_entry(binding, "umap_fit_transform_ex", context), addrs, params)
-        _ = tarr  # keep the Python object alive through the native call above
+            target_words = UmapTargetWords(Int(py=target[0]), Int(py=target[1]), Int(py=target[3]),
+                                           Float64(py=target[4]), Int(py=target[6]))
+        var initial_address = 0 if not initial else initial.value().source.addr
+        with GILReleased(Python()):
+            columns = umap_fit_ex_call(entry, x_address, embedding_address, initial_address, n, d, cfg,
+                                       target_words)
+        _ = target  # keep the Python object alive through the native call above
         _ = embedding  # keep the Python object alive through the native call above
         _ = initial  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
     _ = initial^
     _ = target^
-    umap_check_embedding(not Bool(py=py_call(native_loaded_module("operator").ne, columns, PythonObject(nc))),
-                         embedding_address, n * nc)
+    umap_check_embedding(columns == nc, embedding_address, n * nc)
     # Prepare all retained state before publishing a successful fit. Copies
     # prevent caller edits of X or embedding_ from changing transform's model.
     var training = _umap_copy(x.python_shape(), x.source.addr, x.count, context)
@@ -484,16 +475,21 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     # the C-order bytes compared (`x.tobytes() == training.tobytes()`)
     if umap_transform_reuses_fit(x.source.addr, training.source.addr, nq, nt, d):
         return _umap_copy(fitted_embedding.python_shape(), fitted_embedding.source.addr, fitted_embedding.count, context)
-    _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with fitted mode", context)
+    var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with fitted mode")
     var output = family_array(Python.tuple(nq, nc), "<f4", context)
     var output_address = Int(py=classical_address(output))
-    var native_config = _umap_head(config, 8) if _umap_legacy_tail(config) else config
-    if not _umap_default_extras(extras):
-        native_config = _umap_concat(config, extras)
-    var params = _umap_concat(Python.list(PythonObject(nt), PythonObject(nq), PythonObject(d)), native_config)
-    var columns = family_call(family_entry(binding, "umap_transform", context),
-                              Python.list(PythonObject(training.source.addr), PythonObject(fitted_embedding.source.addr),
-                                          PythonObject(x.source.addr), PythonObject(output_address)), params)
+    var cfg = _umap_config_words(config, extras)
+    var tail = UMAP_TAIL_LEGACY if cfg.legacy_rates() else UMAP_TAIL_RATES
+    if not cfg.default_extras():
+        tail = UMAP_TAIL_EXTRAS
+    var entry = umap_ops_entry(key)
+    var training_address = training.source.addr
+    var fitted_address = fitted_embedding.source.addr
+    var query_address = x.source.addr
+    var columns = 0
+    with GILReleased(Python()):
+        columns = umap_transform_call(entry, training_address, fitted_address, query_address, output_address,
+                                      nt, nq, d, cfg, tail)
     _ = fitted_embedding  # keep the Python object alive through the native call above
     _ = training  # keep the Python object alive through the native call above
     _ = output  # keep the Python object alive through the native call above
@@ -501,7 +497,7 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     _ = x^
     _ = training^
     _ = fitted_embedding^
-    umap_check_transform_output(not Bool(py=py_call(op.ne, columns, PythonObject(nc))), output_address, nq * nc)
+    umap_check_transform_output(columns == nc, output_address, nq * nc)
     return output
 
 
