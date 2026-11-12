@@ -787,7 +787,7 @@ def _text_buffer_labels_into[S: _TextCodeStorage](y: PythonObject, context: Pyth
     var table = StrTable()
     var index = List[Int](length=rank, fill=0)
     var offset = 0
-    for _ in range(n):  # driver-loop: the explicit label input step, one native read per label
+    for _ in range(n):  # one native read per label, no CPython call (a data loop, not a driver loop)
         var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address + offset)
         var count = width
         while count > 0 and source[count - 1] == 0:  # driver-loop: over one label's trailing NUL padding
