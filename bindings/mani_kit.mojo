@@ -123,7 +123,7 @@ def mk_owner(mut run: MRun, a: Int) raises -> PythonObject:
         owner.device_entry = run.images[ex.image].entry
         owner.on_device = True
     else:
-        owner.words = ex.words^
+        swap(owner.words, ex.words)  # transfer the field, leaving `ex` whole
         owner.has_words = True
     return PythonObject(alloc=owner^)
 
