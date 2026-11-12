@@ -82,8 +82,7 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
-from std.python.bindings import lookup_py_type_object
-from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
 from core.gp_native_provider import GPProviderAPI
 from core.gp_native_device import GPDeviceKernels
 from core.shared_slot import SharedSlot
@@ -1508,7 +1507,6 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
         # Device-resident fitted state (lane ne1-a-gp-svm).
         _ = m.add_type[GpResidentLease]("_GpResidentLease")
-        register_native_owner(lookup_py_type_object[GpResidentLease](), m.module, native_owner_no_pins)
         m.def_function[gp_resident_lease_binding]("gp_resident_lease")
         m.def_function[gp_resident_stats_binding]("gp_resident_stats")
         m.def_function[gpr_predict_resident_binding]("gpr_predict_resident")
@@ -1519,6 +1517,10 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         m.def_function[cholesky_factor_binding]("cholesky_factor")
         m.def_function[cholesky_solve_binding]("cholesky_solve")
-        return m.finalize()
+        # The owner identity needs the finalized type object (Mojo 1.2 creates
+        # it in finalize(); see bindings/native_owner_registry.mojo).
+        var published = m.finalize()
+        register_native_owner_type[GpResidentLease](published, native_owner_no_pins)
+        return published
     except e:
         abort(String("failed to create _mojolearn_gp: ", e))
