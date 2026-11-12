@@ -96,6 +96,11 @@ def _scalar_types() raises -> UnsafePointer[_ScalarTypeWords, MutUntrackedOrigin
 
 
 def _pending_error() raises -> Error:
+    # Callers hold the result in a `var` and then raise it
+    # (`var pending = _pending_error()` then `raise pending^`). Never write
+    # `raise _pending_error()`: Mojo 1.2 refuses it ("aliasing values passed
+    # mutably to '__error__' argument and constructed as a result"), because
+    # this raising call would construct the very error being raised.
     # The exception the failed C-API call set, stashed and restored
     # unchanged at the door (the `family_call` convention), so a read keeps
     # the class and message the builtin call it replaces raised.
@@ -483,13 +488,15 @@ def read_str_points(obj: PythonObject) raises -> List[UInt32]:
     var t = cpython_table()
     var count = t[].PyUnicode_GetLength(obj._obj_ptr)
     if count < 0:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     var result = List[UInt32](length=count, fill=0)
     if count == 0:
         return result^
     var address = t[].PyUnicode_AsUCS4Copy(obj._obj_ptr)
     if address == 0:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(result.unsafe_ptr())),
         src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=count * 4)
     t[].PyMem_Free(address)
@@ -502,7 +509,8 @@ def pack_ucs4_str(points_address: Int, count: Int) raises -> PythonObject:
     which picks the narrowest storage, as `str()` of a NumPy 'U' element does)."""
     var raw = cpython_table()[].PyUnicode_FromKindAndData(Int32(4), points_address, count)
     if not raw:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     return PythonObject(from_owned=raw)
 
 
@@ -604,7 +612,8 @@ def read_exact_int_items(seq: PythonObject, count: Int, is_tuple: Bool, type_err
             raise Error(type_error)
         var value = t[].PyLong_AsLongLong(raw)
         if value == -1 and t[].PyErr_Occurred():
-            raise _pending_error()
+            var pending = _pending_error()
+            raise pending^
         var n = Int(value)
         if n < lo or n > hi:
             raise Error(range_error)
