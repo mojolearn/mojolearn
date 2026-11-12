@@ -7,7 +7,7 @@ from bindings.family_common import family_array
 from core.spectral_affinity_plan import SpectralRBFRequest, spectral_rbf_affinity
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, XD_CAPABILITIES, XD_CAP_RESIDENT
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
 
 

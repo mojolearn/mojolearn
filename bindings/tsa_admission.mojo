@@ -6,15 +6,16 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_validate import classical_view
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.native_scalar_decode import native_scalar_buffer
-from bindings.arena_materialize_native import _prepare, _array_layout
-from bindings.native_array_storage import native_array_from_bytes
-from bindings.classical_arrays import classical_wrap_array, _store_code
-from bindings.arena_array_metadata import arena_array_metadata
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.native_numpy_metadata_pack import native_numpy_module_fields
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.native_scalar_decode_unpack import native_scalar_buffer
+from bindings.arena_materialize_native_door import _prepare, _array_layout
+from bindings.native_array_storage_door import native_array_from_bytes
+from bindings.classical_arrays_door import classical_wrap_array, _store_code
+from bindings.arena_array_metadata_pack import arena_array_metadata
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.sequential_admission import _one_of, _ctypes_array_owner
 from bindings.admitted_input import admit_view, admitted_view_kind

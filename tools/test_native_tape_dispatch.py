@@ -23,7 +23,7 @@ def test_tape_consumption_and_original_numerical_owners_are_preserved():
 
 
 def test_provider_retains_tape_origin_instead_of_rereading_replaced_bindings():
-    source = (ROOT/'bindings/neural_prefill_native.mojo').read_text()
+    source = (ROOT/'bindings/neural_prefill_native_door.mojo').read_text()
     assert 'native, PythonObject(opaque), PythonObject(tape_base)' in source
     assert source.count('neural_descriptor_reserved_execute(') == 3
     backward = source.split('def neural_prefill_backward')[1].split('def neural_prefill_close')[0]

@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: Apache-2.0
+"""`xcnn_native_call(layer, operation, args, context)`: the one native call
+of every migrated public operation of the CNN layers
+(python/mojolearn/_native_xcnn_bridge.py connects it at import; the
+operations are in bindings/xcnn_pool_native.mojo)."""
+from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
+from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries, xcnn_ref, xcnn_word
+from std.python._cpython import GILReleased
+from x_cnn.tensor_run import xcnn_tensor_run_free
+from bindings.native_loaded_module import native_interpreter_finalizing
+from bindings.py_balanced import py_type, py_call, py_setitem
+from bindings.xcnn_tensor_native_pack import xcnn_tensor_operation
+from bindings.xcnn_pool_native import xcnn_pool_layers
+from bindings.xcnn_bn_native import xcnn_bn_layers
+from bindings.xcnn_conv_native import xcnn_conv_layers
+from bindings.xcnn_graph_native import xcnn_graph_layers
+from bindings.xcnn_classifier_native import cnnclf_fit, cnnclf_predict, cnnclf_predict_proba, cnnclf_initialize, cnnclf_weights
+
+
+def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject) -> PythonObject:
+    try:
+        # A DeviceTensor or resident-handle owner collected during interpreter
+        # teardown (a tensor held in `__main__` or a closure at exit) releases
+        # nothing: the process is ending, and xcnn_builtins() and the layout
+        # check read loaded modules, a fatal error once the interpreter's
+        # modules are cleared, which `except` cannot catch. The 0.8.66 AMD
+        # measurement smoke's own-host reference child (MOJOLEARN_VENDOR=cpu)
+        # exited nonzero with "<no Python frame>" (a fatal error with no
+        # Python frame on the main thread: teardown) on every CNN lane whose
+        # layer takes DeviceTensors (conv,
+        # pools, batch norm, GCN, SAGE, BasicBlock), and those 13 races were
+        # refused. Same rule as host_archive_lifetime.mojo and
+        # embedding_layer_native.mojo.
+        if native_interpreter_finalizing():
+            return PythonObject(None)
+        if operation == "tensor_finalize":
+            return xcnn_tensor_operation(owner, operation, Python.tuple(), context)
+        if operation == "dev_finalize":
+            var fields = xcnn_dev_fields(owner, context)
+            var entries = xcnn_module_entries(fields["b"], context)
+            var key = xcnn_ref(entries)
+            var table = fields["h"]
+            var names = py_call(xcnn_builtins().list, table.keys())
+            py_setitem(fields, "h", Python.dict())
+            for i in range(len(names)):  # driver-loop: release the owner's native allocation handles
+                var word = xcnn_word(table[names[i]][0])
+                var py = Python()
+                with GILReleased(py):
+                    xcnn_tensor_run_free(key, word)
+    except:
+        pass  # partially initialized owner or interpreter shutdown
+    return PythonObject(None)
+
+
+def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var call = PythonObject(from_borrowed=args_ptr)
+        # Import-time native descriptors bind (context, operation); CPython
+        # decref then enters this C finalizer directly, without a Python body.
+        if len(call) == 2:
+            var bound = call[0]
+            if py_type(bound) is not py_type(Python.tuple()) or len(bound) != 2:
+                raise Error("TypeError: CNN finalizer requires its native bound context")
+            return _xcnn_finalize(call[1], String(bound[1]), bound[0]).steal_data()
+        var context = call[3]
+        var operation = String(py=call[1])
+        if operation != "tensor_finalize":
+            xcnn_connect_numpy(context)
+        if operation.startswith("tensor_"):
+            return xcnn_tensor_operation(call[0], operation, call[2], context).steal_data()
+        if operation.startswith("conv_") or operation.startswith("block_"):
+            return xcnn_conv_layers(call[0], operation, call[2], context).steal_data()
+        if operation == "cnnclf_init":
+            return cnnclf_initialize(call[0], call[2], context).steal_data()
+        if operation == "cnnclf_weights":
+            return cnnclf_weights(call[0], context).steal_data()
+        if operation == "cnnclf_fit":
+            return cnnclf_fit(call[0], call[2], context).steal_data()
+        if operation == "cnnclf_predict":
+            return cnnclf_predict(call[0], call[2], context).steal_data()
+        if operation == "cnnclf_predict_proba":
+            return cnnclf_predict_proba(call[0], call[2], context).steal_data()
+        if operation.startswith("gcn_") or operation.startswith("sage_") or operation.startswith("linear_") or operation.startswith("relu_"):
+            return xcnn_graph_layers(call[0], operation, call[2], context).steal_data()
+        if operation.startswith("bn_"):
+            return xcnn_bn_layers(call[0], operation, call[2], context).steal_data()
+        return xcnn_pool_layers(call[0], operation, call[2], context).steal_data()
+    except error:
+        var text = String(error)
+        if text.startswith("TypeError:"):
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        if text.startswith("RuntimeError:"):
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if text.startswith("ImportError:"):
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
+        if text.startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
+        if text.startswith("NotImplementedError:"):
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
+        if text.startswith("IndexError:"):
+            return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

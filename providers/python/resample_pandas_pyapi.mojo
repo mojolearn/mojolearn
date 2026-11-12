@@ -10,15 +10,16 @@ from std.memory import bitcast, unsafe_memcpy
 from std.sys import size_of
 from std.sys.info import CompilationTarget
 from bindings.sequence_string_storage import sequence_storage_image, sequence_string_nan_raw
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.arena_materialize_native import _address
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.arena_materialize_native_door import _address
 from bindings.py_attr import py_attr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_type
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.native_numpy_metadata_pack import native_numpy_type
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_locations, _pd_type_fields
-from bindings.msel_inputs import _pandas_empty_rows
+from bindings.msel_inputs_unpack import _pandas_empty_rows
 from bindings.sequential_arrays import sequential_address
 from bindings.sequential_inputs import _promote
 from core.classical_pandas_impl import pd_raw_at, _pd_double

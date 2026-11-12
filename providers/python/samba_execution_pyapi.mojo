@@ -9,8 +9,12 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_typ
 from bindings.generation_buffers import generation_address, generation_array
 from bindings.causal_lm_public import _native_function, _mutable
 from bindings.neural_block_public import neural_training_selection
-from providers.python.transformer_block_session_pyapi import (
-    transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
+from providers.python.transformer_block_session_pyapi_door import (
+    transformer_block_session_handle,
+    transformer_block_session_serves,
+)
+from providers.python.transformer_block_session_pyapi_door import (
+    transformer_block_session_open,
 )
 from core.neural_entry_table import neural_ref, NEURAL_TABLE_BLOCK_TRAIN
 from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct, neural_descriptor_execute
@@ -19,7 +23,7 @@ from providers.python.native_execution_pyapi import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi import OperationLockLease
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from providers.python.generation_metadata_pyapi import GenerationLayerSnapshot
-from bindings.native_buffer_address import native_buffer_address
+from bindings.native_buffer_address_unpack import native_buffer_address
 from training.native_samba_execution import NativeSambaLayer, NativeSambaModel
 
 

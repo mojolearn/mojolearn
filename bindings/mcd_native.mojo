@@ -18,17 +18,18 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.math import ceil, floor, inf
 from std.memory import bitcast
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import classical_accuracy, labels_shape_of
 from bindings.admitted_input import classical_view
-from bindings.classical_arrays import classical_address, classical_wrap_array
+from bindings.classical_arrays_door import classical_address, classical_wrap_array
 from bindings.admitted_input import admit_x
-from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish
+from bindings.decomp_public_lifecycle_unpack import decomp_public_begin
+from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
-from bindings.public_lifecycle_owner import lifecycle_end
+from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
     decomp_input, decomp_is_a, XD_SUB, XD_ADD, XD_MUL, XD_SCALE, XD_ABS, XD_RECIP, XD_SELECT, XD_LOGS,

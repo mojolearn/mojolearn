@@ -20,27 +20,28 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array, classical_dtype_str
+from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array, classical_dtype_str
 from core.cast_in import CAST_KIND_SIGNED
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.byte_lm_state_admission import byte_state_admit
 from bindings.native_class_admission import class_record, class_admit
-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
 from bindings.neural_block_public import _neural_lengths
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.host_helpers_impl import argmax_rows_f32
 from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_config_operation
-from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
+from providers.python.training_metadata_pyapi_unpack import training_f32_scalar, training_schedule_json
 from providers.python.training_buffer_pyapi import training_f32_owned, training_i32_owned
 from core.training_state_validation import training_admit_moments_and_flags, training_byte_shape_validate
 from bindings.native_json import native_json_parse, native_path_exists
 from bindings.native_transport import _transport_json
 from core.sha256_file import sha256_file
-from bindings.byte_checkpoint_io import ByteCheckpointIOError
-from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
+from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoint_load
-from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
+from providers.python.byte_lm_json_checkpoint_pyapi_door import byte_json_arrays, byte_json_write
+from providers.python.byte_lm_json_checkpoint_pyapi_door import BYTE_JSON_LIMIT, byte_json_payload, byte_json_encode, byte_json_read
 from bindings.tsa_hw_native import tsa_array
 from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers import byte_int_list_from_i64
@@ -48,7 +49,7 @@ from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from bindings.native_model_records import records_get, records_put, RECORDS_PREPARED
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
 from core.byte_lm_entry_table_sessions import byte_lm_sessions_published, byte_lm_resident_run
-from bindings.byte_lm_session_owner import byte_lm_session_owner_new
+from bindings.byte_lm_session_owner_pack import byte_lm_session_owner_new
 from training.byte_lm_session_owner_run import ByteLmSessionOwner
 from core.entry_table import EntryRef
 from training.byte_lm_glue_abi import (

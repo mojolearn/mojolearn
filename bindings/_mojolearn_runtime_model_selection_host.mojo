@@ -8,7 +8,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.runtime_model_selection_entry import (
+from bindings.runtime_model_selection_entry_pack import (
     runtime_model_selection_c, RUNTIME_MODEL_SELECTION_SABOTAGE,
 )
 

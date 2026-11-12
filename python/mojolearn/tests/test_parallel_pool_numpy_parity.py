@@ -7,7 +7,7 @@ none and the pooled Gram PCA (`parallel_classical.fit_gram_estimator`, lane
 par-gram-pca) failed there with "PCA requires optional NumPy support"
 although the parent had NumPy (identity record, AMD MI325X, 5b1606ab1). The
 cooperative drivers are now one native call in this process
-(bindings/family_native.mojo `family_par_run`), so they see the caller's
+(bindings/family_native_door.mojo `family_par_run`), so they see the caller's
 NumPy and return the caller's native types.
 """
 import sys

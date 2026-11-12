@@ -4,7 +4,7 @@
 Every multi-GPU driver is one native call (docs/plans/
 NATIVE_PARALLEL_DRIVER_20261024.md): a cooperative driver binds a device plan
 in its family's binding around the plain native owner
-(bindings/family_native.mojo `family_par_run`), a Python-sharded driver runs
+(bindings/family_native_door.mojo `family_par_run`), a Python-sharded driver runs
 its shards on the native local process pool (bindings/parallel_shard_native.mojo,
 parallel_forecast_native.mojo). The Python `DevicePool` and its pickle worker
 (`_parallel_worker.py`) that did this until 2026-10-24 are removed.

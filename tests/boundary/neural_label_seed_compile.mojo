@@ -3,7 +3,7 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
-from bindings.xseq_native_common import XseqStream
+from bindings.xseq_native_common_door import XseqStream
 
 def encode_compile(args: PythonObject) raises -> PythonObject:
     return neural_encode_labels(args[0], args[1], args[2])

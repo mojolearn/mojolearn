@@ -289,7 +289,7 @@ _KMEANS_FOREIGN = ("ols", "logistic", "mamba1", "transformer", "gbdt-rmse", "rf-
 def test_a_one_kernel_change_selects_its_lanes_and_explains_every_extra():
     # REQUIRED HALF (tools/LANE_SELECTOR_PRECISION.md, 7dcef380b/ac345e398): the
     # change is attributed, its own lane is selected, and every lane that the
-    # shared classical native owner (bindings/family_native.mojo, one dispatcher
+    # shared classical native owner (bindings/family_native_door.mojo, one dispatcher
     # for every family_* operation) retains carries an unresolved-dispatch record.
     sel = lane_select.select(["cluster/host/kmeans_oracle.mojo"])
     assert not sel["unattributed"] and not sel["every_rules"]

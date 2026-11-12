@@ -72,7 +72,7 @@ def test_tsne_pca_and_optimizer_share_one_x_snapshot():
 
 
 def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
-    source = _source("bindings/manifold_settings_native.mojo")
+    source = _source("bindings/manifold_settings_native_door.mojo")
     assert source.index('self.fields = classical_family_admit(model)') < source.index('self.values = py_call(b.dict, self.fields)')
     assert source.count('context["backend_fields"]["_DEFAULT_MODE"]') == 1
     assert 'operation.endswith("_fit_transform")' in source
@@ -83,7 +83,7 @@ def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
     # Private byte copy of the configuration array, now through the CPython
     # buffer API instead of a bound tobytes call.
     assert 'native_array_from_bytes(String("B"), manifold_buffer_bytes(value))' in source
-    assert '"PyBuffer_ToContiguous"' in _source("bindings/manifold_scalar_native.mojo")
+    assert '"PyBuffer_ToContiguous"' in _source("bindings/manifold_scalar_native_door.mojo")
     assert 'py_setitem(output, i, item)' in source
     # The private-buffer array is now snapshotted before it is returned (8c25f09b2c).
     assert ('var result = py_call(cls, shape, dtype=dtype, buffer=store)\n'

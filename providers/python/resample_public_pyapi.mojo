@@ -2,7 +2,7 @@
 # Import-connected resampling binding selection inside the public operation.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from providers.python.estimator_binding_pyapi import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 
 
 def resample_arguments(operation: String, args: PythonObject,
@@ -50,7 +50,7 @@ def resample_result_initialize(args: PythonObject, context: PythonObject) raises
     from bindings.mode_metadata_native import _fields, _class_fields
     from bindings.py_balanced import py_contains, py_setitem, py_get
     from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
-    from bindings.native_instance_item import native_instance_item
+    from bindings.native_instance_item_pack import native_instance_item
     from bindings.classical_attributes import classical_connect_numpy
     from bindings.py_attr import py_attr
     from bindings.native_loaded_module import native_loaded_module

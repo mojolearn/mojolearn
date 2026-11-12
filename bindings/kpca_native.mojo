@@ -4,15 +4,15 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.classical_arrays import classical_address, classical_typed_native
+from bindings.classical_arrays_door import classical_address, classical_typed_native
 from bindings.admitted_input import AdmittedX, admit_f32
 from bindings.decomp_inputs import decomp_admit
-from bindings.decomp_owner_common import F32P, decomp_attr
-from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
-from bindings.decomp_scalar_compare import decomp_name_admitted
-from bindings.decomp_truth_boundary import decomp_truth
+from bindings.decomp_owner_common_unpack import F32P, decomp_attr
+from bindings.decomp_scalar_admission_unpack import decomp_scalar_admit, decomp_scalar_repr
+from bindings.decomp_scalar_compare_unpack import decomp_name_admitted
+from bindings.decomp_truth_boundary_unpack import decomp_truth
 from x_decomp.kpca_run import _f32_scalar
-from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from core.kpca_native_api import KPCAEigenRequest
 from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCAScratch, KPCADenseFit,

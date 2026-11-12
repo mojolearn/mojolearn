@@ -14,7 +14,7 @@ _PCA_FORMAT = "mojolearn-pca-1"
 _TSVD_FORMAT = "mojolearn-tsvd-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -165,7 +165,7 @@ class PCA(NumericModeMixin):
     _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS + _RANDOM_SOLVERS
 
     #: Every public operation below is one call into the compiled PCA owner
-    #: (bindings/pca_native.mojo), connected once at import. It validates the
+    #: (bindings/pca_native_unpack.mojo), connected once at import. It validates the
     #: arguments and inputs, chooses the solver and numeric-mode binding, runs
     #: the one compiled fit (projecting inside it for fit_transform) and
     #: stores the fitted attributes; NumericModeMixin leaves these unwrapped.
@@ -566,7 +566,7 @@ __getattr__ = _lazy_exports("decomposition")
 
 # The compiled PCA owner, connected once at import: every public PCA
 # operation (fit, fit_transform, transform, inverse_transform) is one call
-# into it (bindings/pca_native.mojo).
+# into it (bindings/pca_native_unpack.mojo).
 _PCA_ENTRY, _PCA_CONTEXT = _native_pca_bridge.connect_public(PCA)
 
 # The compiled TruncatedSVD owner, connected once at import: fit,

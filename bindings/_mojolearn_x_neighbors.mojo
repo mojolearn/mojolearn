@@ -1,7 +1,7 @@
 """THE NEIGHBORS EXPANSION LANE'S GPU BINDING:
 every export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -31,17 +31,17 @@ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kerne
 from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
-from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding
-from providers.python.x_neighbors_dev_pyapi import nc_fit_lean_binding
+from providers.python.x_neighbors_dev_pyapi_pack import kpca_resident_binding
+from providers.python.x_neighbors_dev_pyapi_pack import nc_fit_lean_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
-from providers.python.x_neighbors_dev_pyapi import ocsvm_resident_binding
+from providers.python.x_neighbors_dev_pyapi_pack import ocsvm_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
-from providers.python.x_neighbors_dev_pyapi import ocsvm_alpha_init_binding
+from providers.python.x_neighbors_dev_pyapi_pack import ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
-from providers.python.x_neighbors_dev_pyapi import unit_ff_binding
-from providers.python.x_neighbors_dev_pyapi import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
+from providers.python.x_neighbors_dev_pyapi_pack import unit_ff_binding
+from providers.python.x_neighbors_dev_pyapi_pack import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
-from providers.python.x_neighbors_dev_pyapi import (
+from providers.python.x_neighbors_dev_pyapi_pack import (
     kfeat_first_negative_binding,
     kfeat_flags_binding,
     kfeat_schi2_draw_binding,

@@ -4,8 +4,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get, py_contains, py_call, py_fields
 from bindings.classical_pandas import classical_admit_value
-from bindings.classifier_public_lifecycle import classifier_label_list
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.classifier_public_lifecycle_door import classifier_label_list
+from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.native_loaded_module import NativeModules
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_fields

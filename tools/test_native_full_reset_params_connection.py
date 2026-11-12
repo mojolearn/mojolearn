@@ -462,7 +462,7 @@ def test_full_reset_is_separate_from_existing19_and_all_layout_snapshots_follow_
 
 
 def test_native_reset_never_invokes_python_constructor_or_clones_parameters():
-    source = (ROOT / 'bindings/full_reset_params_native.mojo').read_text()
+    source = (ROOT / 'bindings/full_reset_params_native_door.mojo').read_text()
     for forbidden in ('Python.import_module', '.__init__(', 'clone_parameter', 'msel_native_set_params', 'fields['):
         assert forbidden not in source
     assert source.index('_release_owned(previous, retained, context)') < source.index('py_call(fields.clear)')
@@ -471,7 +471,7 @@ def test_native_reset_never_invokes_python_constructor_or_clones_parameters():
     method = cls.body[0]
     assert len(method.body) == 2 and ast.unparse(method.body[1]) == 'return _ENTRY(self, params, _CONTEXT)'
     registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    assert 'from bindings.full_reset_params_native import full_reset_params_c\n' in registration
+    assert 'from bindings.full_reset_params_native_door import full_reset_params_c\n' in registration
     assert 'module.def_py_c_function(full_reset_params_c, "full_reset_params_native_call")' in registration
 
 
@@ -484,7 +484,7 @@ def test_compile_invalidation_is_only_host_tokenizer():
         for name, members in partitions.items():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
-            if 'bindings/full_reset_params_native.mojo' in closure['files']:
+            if 'bindings/full_reset_params_native_door.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'tokenizer')}
 
@@ -495,7 +495,7 @@ def test_native_constructor_is_one_call_and_never_runs_python_initializers():
     wrapper = factory.body[0]
     assert isinstance(wrapper, ast.FunctionDef) and len(wrapper.body) == 1
     assert ast.unparse(wrapper.body[0]) == 'return _INIT_ENTRY(self, args, kwargs, _CONTEXT, owner)'
-    source = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    source = (ROOT / 'bindings/full_reset_constructor_native_door.mojo').read_text()
     for forbidden in ('Python.import_module', '.__init__(', '.__setattr__(', 'fields[', 'fields.clear',
                       'native_storage_allocate', 'py_setattr(', 'b.hasattr', 'Python.evaluate'):
         assert forbidden not in source, forbidden
@@ -506,7 +506,7 @@ def test_native_constructor_is_one_call_and_never_runs_python_initializers():
     body = source[source.index('def _construct('):]
     assert body.index('_bind(positional, keywords, plan)') < body.index('_admit(model, owner, plan, context)') < body.index('_fields(model)')
     registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    assert 'from bindings.full_reset_constructor_native import full_reset_constructor_c\n' in registration
+    assert 'from bindings.full_reset_constructor_native_door import full_reset_constructor_c\n' in registration
     assert '\n        module.def_py_c_function(full_reset_constructor_c, "full_reset_constructor_native_call")\n' in registration
 
 
@@ -519,7 +519,7 @@ def test_constructor_compile_invalidation_is_only_host_tokenizer():
         for name, members in partitions.items():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
-            if 'bindings/full_reset_constructor_native.mojo' in closure['files']:
+            if 'bindings/full_reset_constructor_native_door.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'tokenizer')}
 
@@ -533,10 +533,10 @@ def test_umap_validation_is_connected_without_a_python_callback():
     # NumericModeMixin wrapper); validation still precedes that write.
     assert plan['events'][-1] == ('numeric_mode', 'parameter', 'numeric_mode', False)
     assert all('validation_kind' in p for p in ns['_CONTEXT']['plans'].values())
-    constructor = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    constructor = (ROOT / 'bindings/full_reset_constructor_native_door.mojo').read_text()
     body = constructor.split('var validated = False', 1)[1]
     assert body.index('umap_parameters_fields(fields,') < body.index('py_setitem(fields, targets[i], sources[i])')
-    reset = (ROOT / 'bindings/full_reset_params_native.mojo').read_text()
+    reset = (ROOT / 'bindings/full_reset_params_native_door.mojo').read_text()
     assert reset.index('umap_parameters_fields(fresh,') < reset.index('_release_owned(previous, retained, context)')
     validation = (ROOT / 'bindings/umap_parameters_native.mojo').read_text()
     for forbidden in ('._parameters(', '._extras(', 'operator.index', 'operator.le', 'operator.eq'):

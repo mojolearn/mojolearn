@@ -31,7 +31,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.p3_lm_tokenizer_cpython import lm_try_index
+from bindings.p3_lm_tokenizer_cpython_unpack import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder

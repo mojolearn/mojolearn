@@ -473,7 +473,7 @@ class _Former(ml.IterativeImputer if ml is not None else object):
 
     def _truncnorm_draws(self, mus, sig, lo, hi):
         """`_impute_one_feature`'s rule per entry, in Mojo (the core helper
-        `truncnorm_draws`, bindings/normal_dist_helpers.mojo; lane py-runtime
+        `truncnorm_draws`, bindings/normal_dist_helpers_pack.mojo; lane py-runtime
         round 3, it was Python float64 per entry): mu beyond a bound -> the
         bound, sigma <= 0 -> mu, else the inversion of the truncated normal
         at a 53-bit splitmix64 uniform on the pinned normal cdf / inverse cdf

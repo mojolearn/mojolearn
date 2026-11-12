@@ -8,8 +8,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type
 from bindings.neural_block_public import neural_block_c
-from bindings.trees_constructor_native import forest_construct
-from bindings.sequence_device_native import sequence_device_operation, sequence_device_finalize
+from bindings.trees_constructor_native_pack import forest_construct
+from bindings.sequence_device_native_pack import sequence_device_operation, sequence_device_finalize
 from bindings.optimizer_admission import opt_guards
 from bindings.optimizer_public_door import door_ready
 

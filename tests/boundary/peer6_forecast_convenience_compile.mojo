@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.xseq_native import xseq_c
+from bindings.xseq_native_pack import xseq_c
 
 @export
 def PyInit__peer6_forecast_compile() abi("C") -> PythonObject:

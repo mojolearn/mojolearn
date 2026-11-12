@@ -3,8 +3,8 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.trees_gbdt_parameters import gbdt_adapter_construct, gbdt_adapter_set_params
-from bindings.trees_constructor_native import forest_construct
+from bindings.trees_gbdt_parameters_pack import gbdt_adapter_construct, gbdt_adapter_set_params
+from bindings.trees_constructor_native_pack import forest_construct
 from bindings.params_metadata_native import params_metadata_c
 
 @export

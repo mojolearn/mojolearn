@@ -83,10 +83,10 @@ def test_reached_needs_a_specific_value_or_the_owner_entry():
 
 
 def test_reached_relays_an_owner_operation_named_by_a_branch():
-    records = [((frozenset({"family_msel_split"}),), frozenset(), "bindings/model_selection_native.mojo",
+    records = [((frozenset({"family_msel_split"}),), frozenset(), "bindings/model_selection_native_door.mojo",
                 frozenset({"family_msel_split_loo_at"})),
                ((frozenset({"family_msel_split_loo_at"}),), frozenset({"leave_range_i64"}),
-                "bindings/model_selection_native.mojo", frozenset())]
+                "bindings/model_selection_native_door.mojo", frozenset())]
     od = _dispatch(set(), records)
     ents, _ = od.reached(frozenset({"family_msel_split"}), frozenset())
     assert ents == {"leave_range_i64"}

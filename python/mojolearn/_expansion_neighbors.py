@@ -47,7 +47,7 @@ _OP = _operation_codes()
 
 # PolynomialCountSketch's NumPy RandomState metadata (random_state=None or a
 # RandomState) is connected natively at the first such call
-# (providers/python/pcs_rng_pyapi.mojo _pcs_connect); importing the package
+# (providers/python/pcs_rng_pyapi_pack.mojo _pcs_connect); importing the package
 # never loads NumPy (NUMPY_FREE_CONTRACT.md).
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
@@ -742,7 +742,7 @@ class OneClassSVM(_XNeighbors):
     >>> labels = model.predict(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "outlier_detector"
@@ -930,7 +930,7 @@ class KernelPCA(_XNeighbors):
     >>> Z = mojolearn.KernelPCA(n_components=2, kernel="rbf").fit_transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
@@ -1219,7 +1219,7 @@ class AdditiveChi2Sampler(_XNeighbors):
     >>> Z = mojolearn.AdditiveChi2Sampler(sample_steps=2).fit_transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`: stateless, non-negative input
     _sklearn_input_tags = {"positive_only": True}
@@ -1346,7 +1346,7 @@ class SkewedChi2Sampler(_XNeighbors):
     >>> Z = mojolearn.SkewedChi2Sampler(n_components=64, random_state=0).fit_transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, *, skewedness=1.0, n_components=100, random_state=None, numeric_mode=None):
@@ -1447,7 +1447,7 @@ class SkewedChi2Sampler(_XNeighbors):
 class _LabelPropagationBase(_XNeighbors):
     """Shared implementation of LabelPropagation and LabelSpreading."""
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "classifier"
@@ -1929,7 +1929,7 @@ class PageRank(_XNeighbors):
     >>> scores = mojolearn.PageRank(alpha=0.85).fit(A).pagerank_
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, nstart=None, weight=True,
@@ -2072,7 +2072,7 @@ class Louvain(_XNeighbors):
     >>> labels = mojolearn.Louvain().fit_predict(A)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, numeric_mode=None):
@@ -2188,7 +2188,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
     >>> mean, var = model.predict_y(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"

@@ -18,17 +18,17 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_typed
-from bindings.native_buffer_address import native_buffer_address
+from bindings.classical_arrays_door import classical_typed
+from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.admitted_input import admit_x, AdmittedX, admitted_finite_refuse
 from bindings.device_rows_door import door_rows_refuse
 from bindings.decomp_inputs import decomp_admit, decomp_input_copied
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
-from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.decomp_scalar_admission_unpack import decomp_scalar_admit, decomp_scalar_repr
 from x_decomp.tsvd_run import _too_small
 from core.pca_native_api import PCAFoldStore
 from core.tsvd_native_api import (

@@ -2,21 +2,22 @@
 # Native array-like admission preserving ndarray, standard buffer, and
 # rectangular scalar/array sequence inputs. Container traversal and scalar
 # serialization are host ABI work; existing kernels still own model math.
-from bindings.native_array_storage import native_array_zeros, native_scratch_bytes
-from bindings.native_buffer_address import native_buffer_address
+from bindings.native_array_storage_door import native_array_zeros, native_scratch_bytes
+from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.cpython_borrowed import borrowed_item as p3_item, borrowed_type_word as p3_type_word
+from bindings.cpython_borrowed_unpack import borrowed_type_word as p3_type_word
+from bindings.cpython_borrowed_pack import borrowed_item as p3_item
 from bindings.cpython_table import cpython_table
 from core.sequential_input_plan import sequence_promote as _promote, SequenceInputPlan, sequence_write, SequenceBufferFormat, sequence_buffer_shape
 from bindings.sequential_admission import _one_of
 from std.python._cpython import GILReleased, PyObjectPtr
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
-from providers.python.array_layout_boundary import native_shape_pack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from core.native_array_layout import NativeArrayLayout
 
 

@@ -22,13 +22,13 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native import _read, _resolved
 from bindings.classical_pandas import classical_admit_value
-from bindings.trees_public_state import _release_tree_values
+from bindings.trees_public_state_unpack import _release_tree_values
 from bindings.py_typed_call import py_call_typed
 from bindings.boundary_read import read_int, read_float, exact_ndarray_view, view_kind_fits_i64, view_kind_real
-from bindings.cpython_borrowed import borrowed_type_word
+from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.host_archive_native import host_archive_gbdt_state
-from bindings.classical_arrays import classical_wrap_array
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.classical_arrays_door import classical_wrap_array
+from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.trees_public_inputs import (
     TreesLabels, trees_builtins, trees_entry, trees_need, trees_helper, trees_address,
     trees_forest_x, trees_finite_f32, trees_call, trees_encode_labels,
@@ -36,20 +36,21 @@ from bindings.trees_public_inputs import (
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_vector, admitted_array, classical_view, admitted_dtype,
 )
-from bindings.classical_arrays import classical_address, classical_c_order
+from bindings.classical_arrays_door import classical_address, classical_c_order
 # TOMBSTONE: TreesView / trees_view / trees_check_rank / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_gbdt import gbdt_table, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
-from bindings.gbdt_fit_boundary import gbdt_fit_params_py, gbdt_fit_strs_py
+from bindings.gbdt_fit_boundary_unpack import gbdt_fit_params_py, gbdt_fit_strs_py
 from std.memory import unsafe_memcpy
 from core.trees_entry_table import TreesEntryKey
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from core.entry_table import EntryRef, entry_ref_vendor
 from gbdt.fit_calls import xg_ref, xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
-from bindings.trees_boost_constructor_native import tree_constructor_storage
-from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
-from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
-from bindings.label_list_words import label_list_store, label_store_address
+from bindings.trees_boost_constructor_native_door import tree_constructor_storage
+from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
+from bindings.p3_labels_metrics_native_door import p3_text_codes, P3_TEXT_OK
+from bindings.label_list_words_unpack import label_store_address
+from bindings.label_list_words_pack import label_list_store
 from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
 from gbdt.trees_gbdt_fit_run import (
     GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,

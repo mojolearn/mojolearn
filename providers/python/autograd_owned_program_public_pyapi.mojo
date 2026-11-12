@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
-from providers.python.autograd_program_arrays_pyapi import program_admission_context
+from providers.python.autograd_program_arrays_pyapi_door import program_admission_context
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_entry,
     neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_adopt,

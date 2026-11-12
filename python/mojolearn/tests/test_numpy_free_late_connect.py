@@ -3,7 +3,7 @@
 at import connect it natively at their first call instead.
 
 PolynomialCountSketch (random_state=None or a RandomState) reads NumPy's RNG
-metadata at its first such fit (providers/python/pcs_rng_pyapi.mojo
+metadata at its first such fit (providers/python/pcs_rng_pyapi_pack.mojo
 _pcs_connect). The CNN layers import an installed NumPy at their first
 operation (bindings/xcnn_common.mojo xcnn_connect_numpy). A child process
 imports mojolearn first and must return the bits of this NumPy-first process.

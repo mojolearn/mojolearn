@@ -154,7 +154,7 @@ REFUSED = [
 
 # A parameter that is not a native value (a callable here) is refused by the
 # native state admission before any Python conversion hook can run
-# (bindings/host_inference_scalars.mojo); the former path refused it with a
+# (bindings/host_inference_scalars_door.mojo); the former path refused it with a
 # ValueError built from its repr.
 _HOOK_REFUSAL = (TypeError, "scalar model state requires native values without Python conversion hooks")
 
@@ -218,7 +218,7 @@ def test_predict_refusals_keep_class_and_wording():
     native.set_params(n_neighbors=3)
     # issubclass, not `is`: once scikit-learn is imported the raised class is
     # the bridge that also derives from sklearn's NotFittedError
-    # (mojolearn.exceptions, bindings/classical_exceptions.mojo).
+    # (mojolearn.exceptions, bindings/classical_exceptions_door.mojo).
     assert issubclass(_error(native.predict, Q)[0], mojolearn.exceptions.NotFittedError)
 
 

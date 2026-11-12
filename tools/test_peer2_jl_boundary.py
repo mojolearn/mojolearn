@@ -16,7 +16,7 @@ def test_public_jl_only_forwards_original_inputs():
 
 
 def test_native_jl_has_no_python_numeric_helper_or_caller_protocol_dispatch():
-    owner = (ROOT / "bindings/jl_native.mojo").read_text()
+    owner = (ROOT / "bindings/jl_native_pack.mojo").read_text()
     assert 'jl_scalar(eps, True, context)' in owner
     assert 'jl_scalar(n_samples, False, context)' in owner
     assert 'PyLong_FromDouble' in owner
@@ -27,7 +27,7 @@ def test_native_jl_has_no_python_numeric_helper_or_caller_protocol_dispatch():
 
 
 def test_scalar_metadata_requires_exact_native_admission_before_buffer_decode():
-    provider = (ROOT / "providers/python/jl_scalar_pyapi.mojo").read_text()
+    provider = (ROOT / "providers/python/jl_scalar_pyapi_unpack.mojo").read_text()
     assert '_one_of(cls, context["scalar_types"])' in provider
     assert 'if not scalar and not array:' in provider
     assert provider.index('if not scalar and not array:') < provider.index('native_scalar_buffer(value)')
@@ -38,7 +38,7 @@ def test_scalar_metadata_requires_exact_native_admission_before_buffer_decode():
 
 
 def test_random_projection_uses_the_same_admitted_jl_owner():
-    owner = (ROOT / "bindings/rp_native.mojo").read_text()
+    owner = (ROOT / "bindings/rp_native_door.mojo").read_text()
     assert 'jl_min_dim(PythonObject(n), eps, context)' in owner
     bridge = (ROOT / "python/mojolearn/_native_jl_bridge.py").read_text()
     assert 'context = _numpy_free_context()' in bridge

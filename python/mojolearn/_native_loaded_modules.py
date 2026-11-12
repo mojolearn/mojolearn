@@ -80,9 +80,9 @@ connect_module('array', array, ('array',))
 # Resident fold storage admits an exact native thread-local object before
 # reading its dictionary. This standard-library owner is needed even when
 # NumPy is absent; connect the consumed type once rather than importing at use.
-connect_module('_thread', _thread, ('_local', 'LockType', 'RLock'))  # LockType, RLock: PCS RNG lock admission (providers/python/pcs_rng_pyapi.mojo; NumPy 2.5 holds an RLock)
+connect_module('_thread', _thread, ('_local', 'LockType', 'RLock'))  # LockType, RLock: PCS RNG lock admission (providers/python/pcs_rng_pyapi_pack.mojo; NumPy 2.5 holds an RLock)
 # SmallMLP item iteration over a 1-D float16 Array reads _struct.unpack
-# (bindings/small_mlp_items.mojo); without this connection it always refused.
+# (bindings/small_mlp_items_door.mojo); without this connection it always refused.
 connect_module('_struct', _struct, ('unpack',))
 connect_module('operator', operator, tuple(name for name in vars(operator)  # glue: fixed scalar/index operator exports
                                           if not name.startswith('_')))

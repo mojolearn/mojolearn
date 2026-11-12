@@ -7,15 +7,15 @@ from std.python import Python, PythonObject
 from bindings.py_attr import py_attr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields, _mode
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
-from bindings.trees_public_state import _release_tree_values
+from bindings.trees_public_state_unpack import _release_tree_values
 from bindings.trees_public_inputs import trees_table, trees_call, trees_cast, trees_full_f32, trees_address, trees_reshape
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype, classical_view
-from bindings.classical_arrays import classical_address, classical_c_order
+from bindings.classical_arrays_door import classical_address, classical_c_order
 # TOMBSTONE: trees_view / trees_check_rank / trees_empty / trees_vector uses (the trees admission aliases; the serial strided element copy of _snapshot) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 

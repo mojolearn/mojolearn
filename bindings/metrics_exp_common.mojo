@@ -20,36 +20,36 @@
 from std.memory import unsafe_memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.admitted_family import admit_family
-from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
+from bindings.metrics_plan_admission_unpack import MetricPlanOpcodes, MetricArenaOwner
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi import metric_score_matrix
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.classical_arrays import (
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.classical_arrays_door import (
     classical_address, classical_is_array, classical_dtype_str, classical_wrap_array, classical_cast_kind,
     classical_c_order,
 )
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run_plan
-from bindings.optimizer_public_words import stash_python_error
+from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
     family_call_kw, family_array, family_shape_repr,
 )
 from bindings.metrics_reg_native import _reg_weights
-from bindings.metrics_native_support import (
+from bindings.metrics_native_support_door import (
     metric_is_real, metric_float, metric_integer, metric_is_integral, metric_is_integral_type, metric_warn, metric_undefined,
 )
-from bindings.metrics_native_inputs import metric_shape, metric_flatten
+from bindings.metrics_native_inputs_door import metric_shape, metric_flatten
 from core.host_finite_scan import host_all_finite_f32
 from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
 from core.label_cast import host_unique_inverse_cast
 from core.metrics_exp_impl import mexp_gather_i32
-from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
-from bindings.p3_labels_metrics_native import p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK
+from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
+from bindings.p3_labels_metrics_native_door import p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK
 
 comptime MX_NONE = -1
 comptime MX_PARAMS = 14

@@ -1117,7 +1117,7 @@ def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
 def test_a_mojo_file_something_imports_is_never_unreachable():
     """A Mojo import is a compile-time fact and does not need the corpus to be
     believed. `core/forest_inference_model.mojo` is imported by
-    `bindings/forest_inference_binding.mojo`, which is ITSELF outside the map,
+    `bindings/forest_inference_binding_door.mojo`, which is ITSELF outside the map,
     so nothing in the corpus named either and the model file read "nothing
     reaches it" while being part of a shipped binding's tree. An importer that
     is a standalone program still does not count, which is what keeps three
@@ -1224,7 +1224,7 @@ def test_no_docstring_is_read_back_at_run_time():
     documentation: it is read only to become a `__doc__`, never a value.
     Since 81a34c4e5 the bridge class is built natively: the doc rides in the
     native context as a keyword (`not_fitted_doc=NotFittedError.__doc__`) and
-    bindings/classical_exceptions.mojo stores it as the class's `__doc__`. A
+    bindings/classical_exceptions_door.mojo stores it as the class's `__doc__`. A
     keyword is a doc copy only when every native read of that context key is
     such a store."""
     mojo_texts = []
@@ -1500,7 +1500,7 @@ def test_a_shipped_inference_file_is_in_the_map_of_the_lanes_that_run_it():
     reverse map held this file under NO lane at all."""
     rev = lane_select.reverse_map()
     for rel in ("core/forest_inference.mojo", "core/forest_inference_model.mojo",
-                "bindings/forest_inference_binding.mojo"):
+                "bindings/forest_inference_binding_door.mojo"):
         lanes = rev.get(rel, set())
         assert lanes, f"{rel} is a shipped forest inference source and is in no lane's map"
         missing = [lane for lane in FOREST_INFERENCE_LANES if lane not in lanes]
@@ -1510,13 +1510,13 @@ def test_a_shipped_inference_file_is_in_the_map_of_the_lanes_that_run_it():
 def test_a_mojo_import_resolves_against_the_importing_files_own_directory():
     """Every binding is built `-I . -I bindings` (bindings/build_rf.sh:123),
     so `bindings/_mojolearn_rf.mojo` writing `from forest_inference_binding
-    import ...` means `bindings/forest_inference_binding.mojo`.
+    import ...` means `bindings/forest_inference_binding_door.mojo`.
 
     THE FAILING SIDE, run here rather than asserted: resolving against the
     repository root ALONE finds no such file, and the import is dropped as one
     of the toolchain's own."""
     rel = "bindings/_mojolearn_rf.mojo"
-    assert "bindings/forest_inference_binding.mojo" in lane_select._mojo_imports(rel), \
+    assert "bindings/forest_inference_binding_door.mojo" in lane_select._mojo_imports(rel), \
         "the sibling import the build's -I bindings resolves is not in the map"
 
     def root_only(dotted, _rel, _names=()):
@@ -1530,7 +1530,7 @@ def test_a_mojo_import_resolves_against_the_importing_files_own_directory():
     try:
         lane_select.reset_caches()
         blind = lane_select._mojo_imports(rel)
-        assert "bindings/forest_inference_binding.mojo" not in blind, \
+        assert "bindings/forest_inference_binding_door.mojo" not in blind, \
             ("root-only resolution still found the sibling import, so this test "
              "cannot fail and is not a check")
         assert "core/hostptr.mojo" in blind, \
@@ -1575,7 +1575,7 @@ def test_an_export_reaches_what_its_impl_reaches():
     both are the ordinary spelling here:
 
     * the impl is IMPORTED, not defined in the binding. `forest_prepare_gpu`
-      is `forest_prepare_gpu_binding` from bindings/forest_inference_binding.mojo,
+      is `forest_prepare_gpu_binding` from bindings/forest_inference_binding_door.mojo,
       so `blocks.get` returned "" and the export contributed nothing;
     * the impl calls a file-local helper which is where the imported symbol
       appears. `rf_classifier_fit_shard_binding` calls `_rf_classifier_fit`,
@@ -1589,7 +1589,7 @@ def test_an_export_reaches_what_its_impl_reaches():
     # the imported impl
     assert exports["forest_prepare_gpu"] not in blocks, \
         "forest_prepare_gpu's impl is defined in the binding now; pick a new case"
-    assert "bindings/forest_inference_binding.mojo" in syms.get(exports["forest_prepare_gpu"], set()), \
+    assert "bindings/forest_inference_binding_door.mojo" in syms.get(exports["forest_prepare_gpu"], set()), \
         "the imported impl does not resolve to the file that defines it"
 
     # the file-local helper
@@ -1621,10 +1621,10 @@ def test_native_door_walk_preserves_required_dependencies():
     assert {"array_native_call", "user_objects_native_call"} <= set(exports)
     assert "array_native_call" in lane_select._read("python/mojolearn/_array.py")
     assert "user_objects_native_call" in lane_select._read("python/mojolearn/_user_objects.py")
-    expected = {"bindings/array_native.mojo", "bindings/native_buffer_owner.mojo",
+    expected = {"bindings/array_native_door.mojo", "bindings/native_buffer_owner_pack.mojo",
                 "bindings/native_loaded_module.mojo", "bindings/py_typed_call.mojo",
                 "bindings/user_objects_native.mojo", "bindings/py_attr.mojo", "core/user_objects.mojo"}
-    assert expected <= lane_select._mojo_closure(["bindings/array_native.mojo",
+    assert expected <= lane_select._mojo_closure(["bindings/array_native_door.mojo",
                                                 "bindings/user_objects_native.mojo"])
 
 
@@ -2550,9 +2550,9 @@ def dispatched(module):
 def test_mojo_import_lists_ignore_comment_parentheses_and_keep_aliases():
     path = "bindings/_probe_import_layout.mojo"
     text = '''"""Documentation only:
-from bindings.hotpath_helpers import not_a_real_import
+from bindings.hotpath_helpers_door import not_a_real_import
 """
-from bindings.hotpath_device import (
+from bindings.hotpath_device_door import (
     # A comment (with parentheses) must not end the import statement.
     equal_elements_binding,
     cast_elements_binding as cast_alias,  # another comment (after an alias)
@@ -2573,8 +2573,8 @@ def nested():
         for local, original in (("equal_elements_binding", "equal_elements_binding"),
                                 ("cast_alias", "cast_elements_binding"),
                                 ("reduce_stat_binding", "reduce_stat_binding")):
-            assert ("bindings/hotpath_device.mojo", original) in targets.get(local, ()), targets
-            assert "bindings/hotpath_device.mojo" in symbols.get(local, ()), symbols
+            assert ("bindings/hotpath_device_door.mojo", original) in targets.get(local, ()), targets
+            assert "bindings/hotpath_device_door.mojo" in symbols.get(local, ()), symbols
         assert ("core/input_device.mojo", None) in targets.get("input_alias", ()), targets
         assert "not_a_real_import" not in targets, targets
     finally:

@@ -8,11 +8,11 @@ from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.native_error_class import error_without_class
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
-from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order
+from bindings.classical_arrays_door import classical_address, classical_is_array, classical_c_order
 from bindings.classical_labels import labels_reshape
 from bindings.admitted_input import classical_view
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_values
@@ -26,10 +26,10 @@ from bindings.neighbors_knn_native import knn_door, knn_state_values, knn_state_
 from bindings.neighbors_ann_native import _ivf_metric, _ann_release, IVF_QUERY_STATE_SLOT
 from bindings.neighbors_ann_query_native import ann_pq_materialize
 from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, neighbor_radius_rows, _i32_vector, _flag
-from bindings.host_inference_scalars import host_inference_scalar
-from bindings.parallel_public_result import parallel_public_result
+from bindings.host_inference_scalars_door import host_inference_scalar
+from bindings.parallel_public_result_door import parallel_public_result
 from bindings.scaler_lifecycle_native import _outside
-from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.py_optional import py_present
 
 

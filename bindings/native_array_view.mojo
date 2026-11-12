@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.sequential_admission import sequential_admit_value, _one_of, _ctypes_array_owner
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 

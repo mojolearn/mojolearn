@@ -54,7 +54,7 @@ from ._mode import NumericModeMixin
 #: the thing it checks.
 _MODE_CODE = {"fast": 0, "identical": 1}
 
-# The compiled family owner (bindings/linalg_native.mojo), connected once at
+# The compiled family owner (bindings/linalg_native_door.mojo), connected once at
 # import: each public operation selects its binding inside the native owner.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 from ._native_owner_lifetime import connect_owner_context as _connect_chol_owner_context
@@ -65,7 +65,7 @@ _native_family_bridge.tables(family_chol_mode_codes=dict(_MODE_CODE))
 _CHOLESKY_FORMAT = "mojolearn-cholesky-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -229,7 +229,7 @@ _native_archive_bridge.register(Cholesky, _CHOLESKY_FORMAT, "native_cholesky")
 __all__ = ["Cholesky"]
 
 
-# The class the multi-GPU Cholesky drivers admit (bindings/linalg_native.mojo
+# The class the multi-GPU Cholesky drivers admit (bindings/linalg_native_door.mojo
 # `family_chol_par_*`).
 _native_family_bridge.tables(family_chol_par_class=Cholesky)
 

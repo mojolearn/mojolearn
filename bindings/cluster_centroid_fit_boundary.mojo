@@ -5,7 +5,7 @@ from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
-from providers.python.x_cluster_out_pyapi import _py_array
+from providers.python.x_cluster_out_pyapi_pack import _py_array
 from core.cluster_centroid_fit_api import (
     CENTROID_FIT_ABI, CENTROID_FIT_COUNT, CentroidFitDriver, CentroidFitResultSlot,
 )

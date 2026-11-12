@@ -11,7 +11,7 @@
 # _mojolearn_runtime_linear_host), each its own merged group. The Python types
 # their code allocates stay registered HERE, unchanged: import setup loads this
 # owner before them (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES order).
-from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_run import native_owner_no_pins
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
@@ -22,13 +22,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.trees_lifetime import TreesResident, trees_resident_pins
+from bindings.trees_lifetime_door import TreesResident, trees_resident_pins
 from bindings.trees_resident_table import TreesResidentDeath
 from bindings.trees_explainer_native import TreeShapOwner
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
-from bindings.host_archive_lifetime import host_archive_finalize_c
+from bindings.host_archive_lifetime_door import host_archive_finalize_c
 from providers.python.preprocessing_input_pyapi import register_scaler_snapshot
 from bindings.admitted_input import register_admitted_buffer_pin
 from providers.python.linear_entry_boundary import register_linear_entry_owner, register_linear_entry_owner_identity, linear_entry_connect

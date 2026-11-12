@@ -313,7 +313,7 @@ class IVFIndex(NumericModeMixin):
         self._release_resident()
         n, dim = self.n_rows_, self.n_features_in_
         handle = int(prepare(
-            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_index_prepare).
+            # ORDER MATCHES bindings/ivf_index_arrays_unpack.mojo (ivf_flat_index_prepare).
             [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
              addr_ro(self.center_norms_, name="center_norms_"),
              addr_ro(self.list_offsets_, name="list_offsets_"),
@@ -340,7 +340,7 @@ class IVFIndex(NumericModeMixin):
 
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected below the class
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no handle: the integer means

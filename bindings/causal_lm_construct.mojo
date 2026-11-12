@@ -10,7 +10,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
-from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
 from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
@@ -30,7 +30,7 @@ from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 from std.python._cpython import GILReleased
 from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
-from providers.python.transformer_block_session_pyapi import transformer_block_session_open
+from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open
 from core.causal_lm_entry_table import (
     CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_ref, causal_table_entry, CAUSAL_TABLE_LINALG,
     CAUSAL_LIN_TO_BF16, CAUSAL_LIN_QUANTIZE_INT8, CAUSAL_LIN_FROM_BF16, CAUSAL_LIN_DEQUANTIZE_INT8,

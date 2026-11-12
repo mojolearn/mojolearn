@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the stationarity functions
-(`kpss_test`, `select_d`; bindings/tsa_public_native.mojo). Python here
+(`kpss_test`, `select_d`; bindings/tsa_public_native_door.mojo). Python here
 only connects the compiled `_mojolearn_tsa` entries of both tiers (the lane
 is identical only: a tier without a binary keeps its refusal, raised by the
 call that asks for it) and the shared context, once, at import."""

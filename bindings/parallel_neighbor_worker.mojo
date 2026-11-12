@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_cast, labels_reshape, classical_decode_labels
 from bindings.admitted_input import admit_ids
@@ -22,7 +22,7 @@ from bindings.neighbors_knn_native import (
 from bindings.admitted_input import admitted_finite_refuse
 from bindings.neighbors_kde_native import _kde_scores, _kde_release
 from bindings.neighbors_ann_native import _ivf_metric, _ann_key_entry
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 from core.shared_slot import SharedSlot
 
 

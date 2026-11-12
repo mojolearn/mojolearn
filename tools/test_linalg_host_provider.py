@@ -34,6 +34,6 @@ def test_host_and_device_have_identical_transport_contract():
 
 
 def test_shared_family_admission_import_is_executable_source():
-    source=(ROOT/'bindings/family_native.mojo').read_text()
-    assert '\nfrom providers.python.estimator_binding_pyapi import estimator_arguments\n' in source
+    source=(ROOT/'bindings/family_native_door.mojo').read_text()
+    assert '\nfrom providers.python.estimator_binding_pyapi_door import estimator_arguments\n' in source
     assert '\nfrom the ' not in source

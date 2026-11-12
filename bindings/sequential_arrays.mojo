@@ -6,7 +6,8 @@ from bindings.py_balanced import py_call, py_type
 from bindings.sequential_inputs import sequential_input
 from core.cast_in import CastIn, CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from core.native_array_layout import NativeArrayLayout
-from providers.python.array_layout_boundary import native_shape_unpack, native_shape_pack
+from providers.python.array_layout_boundary_unpack import native_shape_unpack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 
 
 def sequential_array(mut mods: NativeModules, shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:

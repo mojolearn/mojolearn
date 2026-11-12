@@ -66,7 +66,7 @@ def test_fit_state_equals_former_path(which, data):
     former = make()
     old(former, x)
     # The public fit's shared lifecycle epilogue marks the model fitted
-    # (providers/python/estimator_lifecycle_pyapi.mojo estimator_fit_complete);
+    # (providers/python/estimator_lifecycle_pyapi_unpack.mojo estimator_fit_complete);
     # the frozen former helpers are the inner fit only, so the marker is
     # checked on its own and the rest of the state must be equal.
     assert vars(native).get("_mojolearn_fitted") is True

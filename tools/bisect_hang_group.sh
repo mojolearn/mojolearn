@@ -88,26 +88,26 @@ DEFAULT_SUSPECTS="bindings/admitted_call.mojo
 bindings/classical_archive_read.mojo
 bindings/classical_native.mojo
 bindings/classical_pandas.mojo
-bindings/family_native.mojo
+bindings/family_native_door.mojo
 bindings/gp_classifier_native.mojo
-bindings/host_inference_native.mojo
+bindings/host_inference_native_unpack.mojo
 bindings/logistic_native.mojo
 bindings/mcd_native.mojo
-bindings/mcls_cluster.mojo
+bindings/mcls_cluster_door.mojo
 bindings/mcls_common.mojo
-bindings/native_scalar_decode.mojo
+bindings/native_scalar_decode_unpack.mojo
 bindings/neighbors_ann_native.mojo
 bindings/neighbors_semi_native.mojo
 bindings/pca_fit_native.mojo
 bindings/prep_classify_native.mojo
-bindings/prep_composition_lifecycle.mojo
+bindings/prep_composition_lifecycle_door.mojo
 bindings/prep_labels_native.mojo
 bindings/prep_lda_admission.mojo
 bindings/prep_stateless_native.mojo
-bindings/trees_bagging_members_native.mojo
+bindings/trees_bagging_members_native_pack.mojo
 bindings/trees_public_meta.mojo
-bindings/trees_public_native.mojo
-providers/python/estimator_lifecycle_pyapi.mojo
+bindings/trees_public_native_door.mojo
+providers/python/estimator_lifecycle_pyapi_unpack.mojo
 providers/python/pca_input_pyapi.mojo"
 
 die() { echo "bisect_hang_group: $*" >&2; exit 2; }

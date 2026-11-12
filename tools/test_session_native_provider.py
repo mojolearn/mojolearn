@@ -40,7 +40,7 @@ def test_generic_resource_pins_provider_and_closes_with_admitted_context():
 
 
 def test_public_handle_is_checked_against_native_owner_before_execution():
-    source = (ROOT / 'providers/python/autograd_ops_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_ops_frontend_pyapi_door.mojo').read_text()
     method = source.split('def ops_session_call_py[', 1)[1]
     assert method.index('neural_descriptor_resource_handle(') < method.index('var s = ops_session[')
     assert 'admitted_id != Int(py=fields["_id"])' in method
@@ -57,7 +57,7 @@ def test_public_probe_has_cleanup_poisoned_entry_and_owner_checks():
 
 def test_imported_constructor_shares_public_session_connection_and_owner():
     bridge = (ROOT / 'python/mojolearn/importers/_native_import_bridge.py').read_text()
-    native = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    native = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
     assert 'connections=ops._SESSION_CONNECTIONS' in bridge
     assert 'session=session, program=program' in bridge
     assert 'ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], context["backend"], context["program"])' in native

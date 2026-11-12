@@ -7,7 +7,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.lm_corpus_metadata import (corpus_context, corpus_connect, corpus_int, corpus_dict,
+from bindings.lm_corpus_metadata_door import (corpus_context, corpus_connect, corpus_int, corpus_dict,
     corpus_plain, corpus_fields, corpus_new, corpus_empty, corpus_mapped, corpus_ids_snapshot, corpus_batch_base)
 from bindings.lm_corpus_files import (corpus_path, corpus_path_object, corpus_read, corpus_write,
     corpus_hash_bytes, corpus_hash_file, corpus_read_json, corpus_write_json, corpus_exists,
@@ -18,7 +18,7 @@ from bindings.tokenizer_public_native import (tokenizer_bpe_identity_file, token
 from std.os import getenv
 from bindings.native_json import native_json_parse
 from core.sha256 import sha256_hex_addr
-from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.parallel_byte_native import parallel_byte_shard_words, parallel_byte_step_shards
 
 comptime TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"

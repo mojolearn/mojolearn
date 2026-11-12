@@ -3,7 +3,7 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.sequence_layers_native import sequence_layers_operation
-from bindings.sequence_device_native import sequence_tensor_finalize_c
+from bindings.sequence_device_native_pack import sequence_tensor_finalize_c
 
 def operation(op: PythonObject, owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     return sequence_layers_operation(String(op), owner, values, mode, context)

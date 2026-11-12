@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.sequential_admission import sequential_admit_value
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
+from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_admit
 from bindings.pca_descriptor_boundary import pca_connection, pca_mode_name
 
 

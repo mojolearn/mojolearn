@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The Python door of the public optimizers on the GPU binding
+(`_mojolearn_training`; lane neural-optimizers, 2026-10-21; lane
+optimizers-thin-glue): the kernels behind bindings/optimizer_public_door.mojo
+(`GpuOptKernels`, each one typed entry of training/optimizer_public.mojo with
+the GIL released) and the C entries of the public methods. Each public
+method of `SGD` / `Adam` / `AdamW`, `clip_grad_norm_` and `accumulate_grads`
+is one of these entries: the door reads the optimizer object and the
+caller's tensors, calls ONE kernel entry here and assigns the result."""
+# The PACK half of the former `bindings/optimizer_public_pyapi.mojo` (fence-flip split, 2026-11-12);
+# the UNPACK half is `bindings/optimizer_public_pyapi_unpack.mojo`.
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased, PyObjectPtr
+
+from core.neural_context import neural_ctx
+from training.optimizer_public import (
+    public_accumulate, public_clip, public_io, public_step, resident_close,
+    resident_download, resident_get, resident_open, resident_put, resident_step, resident_step_io,
+    resident_upload,
+)
+from training.optimizer_public_common import F32P, I32P
+from training.optimizer_kernels_gpu import _NEURAL_CTX
+from bindings.optimizer_public_door import (
+    entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
+    entry_step,
+)
+
+
+from bindings.optimizer_public_pyapi_unpack import (
+    _step_params,
+)
+
+
+def optimizer_resident_open_binding(n_total: PythonObject) raises -> PythonObject:
+    """Allocate a resident `(m, v)` pair of `n_total` floats each, zero
+    filled. Returns the handle."""
+    var n = Int(py=n_total)
+    var h = -1
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        h = resident_open(ctx, n)
+    return PythonObject(h)
+
+
+def optimizer_resident_close_binding(handle: PythonObject) raises -> PythonObject:
+    """Free a handle's slot (after the queue drains). Returns the handle."""
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        h = resident_close(ctx, h)
+    return PythonObject(h)
+
+
+def optimizer_resident_download_binding(
+    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """The slot's moments to host memory (`n_total` floats each; an address of 0 leaves that
+    moment). Returns `n_total`."""
+    var h = Int(py=handle)
+    var n = Int(py=n_total)
+    var ma = Int(py=m_addr)
+    var va = Int(py=v_addr)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        n = resident_download(ctx, h, ma, va, n)
+    return PythonObject(n)
+
+
+def optimizer_resident_upload_binding(
+    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """Host memory (`n_total` floats each) into the slot's moments. Returns `n_total`."""
+    var h = Int(py=handle)
+    var n = Int(py=n_total)
+    var ma = Int(py=m_addr)
+    var va = Int(py=v_addr)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        n = resident_upload(ctx, h, ma, va, n)
+    return PythonObject(n)
+
+
+def maximize_dev_available_binding() raises -> PythonObject:
+    """Present when `Optimizer.step` runs maximize through the resident step
+    with its transfers named (the sign flip on the device)."""
+    return PythonObject(1)
+
+
+def optimizer_resident_step_binding(
+    param_addr: PythonObject,
+    grad_addr: PythonObject,
+    offsets_addr: PythonObject,
+    init_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+    handle: PythonObject,
+) raises -> PythonObject:
+    """`optimizer_step` with `m` and `v` taken from the handle's resident
+    pair: the same `params` list (its 12 or 13 slots, word for word).
+    Returns `N`."""
+    var w = _step_params(params, "optimizer_resident_step")
+    var i = w[0].copy()
+    var f = w[1].copy()
+    var h = Int(py=handle)
+    var pp = F32P(unsafe_from_address=Int(py=param_addr))
+    var gp = F32P(unsafe_from_address=Int(py=grad_addr))
+    var op = I32P(unsafe_from_address=Int(py=offsets_addr))
+    var ip = I32P(unsafe_from_address=Int(py=init_addr))
+    var fp = F32P(unsafe_from_address=Int(py=info_addr))
+    var n_total = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        n_total = resident_step(
+            ctx, h, pp, gp, op, ip, fp, i[0], i[1], i[2], i[3], f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], w[2],
+        )
+    return PythonObject(n_total)
+
+
+def optimizer_resident_step_io_binding(
+    param_addr: PythonObject,
+    grad_addr: PythonObject,
+    offsets_addr: PythonObject,
+    init_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+    handle_io: PythonObject,
+) raises -> PythonObject:
+    """`optimizer_resident_step` moving only the transfers `io` names
+    (handle_io = [handle, io]; io bits: 1 parameters up, 2 gradient up, 4
+    parameters down, 8 clipped gradient down). Returns `N`."""
+    var w = _step_params(params, "optimizer_resident_step_io")
+    var i = w[0].copy()
+    var f = w[1].copy()
+    if len(handle_io) != 2:
+        raise Error("optimizer_resident_step_io: the last argument is [handle, io]")
+    var h = Int(py=handle_io[0])
+    var io = Int(py=handle_io[1])
+    var pp = F32P(unsafe_from_address=Int(py=param_addr))
+    var gp = F32P(unsafe_from_address=Int(py=grad_addr))
+    var op = I32P(unsafe_from_address=Int(py=offsets_addr))
+    var ip = I32P(unsafe_from_address=Int(py=init_addr))
+    var fp = F32P(unsafe_from_address=Int(py=info_addr))
+    var n_total = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        n_total = resident_step_io(
+            ctx, h, io, pp, gp, op, ip, fp, i[0], i[1], i[2], i[3], f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7],
+            w[2],
+        )
+    return PythonObject(n_total)
+
+
+# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_training.patch

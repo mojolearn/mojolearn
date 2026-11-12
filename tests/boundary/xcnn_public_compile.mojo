@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.xcnn_native import xcnn_c
+from bindings.xcnn_native_pack import xcnn_c
 from bindings.xseq_neural_native import xseq_labels, xseq_take
 from bindings.xcnn_bn_native import xcnn_bn_backward_dev
 

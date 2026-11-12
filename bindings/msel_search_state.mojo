@@ -4,16 +4,16 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.msel_inputs import msel_input, msel_admit
-from bindings.arena_materialize_native import _array, _cast
+from bindings.msel_inputs_unpack import msel_input, msel_admit
+from bindings.arena_materialize_native_door import _array, _cast
 from bindings.msel_estimator_native import msel_estimator_plan
 from bindings.msel_scorer_native import msel_scorer_fields
 from bindings.native_owner_lifetime import native_release_weakrefs
-from bindings.declared_params_native import _release as declared_release
+from bindings.declared_params_native_door import _release as declared_release
 from bindings.params_metadata_native import _resolved
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from bindings.msel_plan_records import msel_fields_admitted, msel_fields_admit
+from bindings.msel_plan_records_unpack import msel_fields_admitted, msel_fields_admit
 
 
 # perf3-nbr-msel-trees: the search plan's class rows are checked once per

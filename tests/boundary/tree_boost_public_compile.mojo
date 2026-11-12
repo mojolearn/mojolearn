@@ -1,7 +1,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.trees_public_native import trees_public_operation
+from bindings.trees_public_native_door import trees_public_operation
 from bindings.public_attributes_native import _plan, _lookup
 from bindings.mode_metadata_native import _fields
 

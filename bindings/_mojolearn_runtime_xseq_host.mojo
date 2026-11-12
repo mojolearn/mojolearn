@@ -12,8 +12,8 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from bindings.xseq_native import xseq_c
-from bindings.xcnn_native import xcnn_c
+from bindings.xseq_native_pack import xseq_c
+from bindings.xcnn_native_pack import xcnn_c
 
 comptime RUNTIME_XSEQ_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 

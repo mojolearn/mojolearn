@@ -31,7 +31,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.gp_host_predict import gpc_ovr_combine_binding, gpc_predict_binding, gpr_predict_binding
+from bindings.gp_host_predict_pack import gpc_ovr_combine_binding, gpc_predict_binding, gpr_predict_binding
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

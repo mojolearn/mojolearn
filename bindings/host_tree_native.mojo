@@ -11,12 +11,12 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order, classical_wrap_array
+from bindings.classical_arrays_door import classical_input, classical_address, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order, classical_wrap_array
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.host_archive_native import host_archive_check_layout, host_archive_typed, host_archive_allocate, host_archive_class_values, host_archive_gbdt_state
-from bindings.host_archive_lifetime import host_archive_finalize
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.host_archive_lifetime_door import host_archive_finalize
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from core.scaler_fit_impl import scaler_cast
 from core.host_tree_impl import host_label_first_unconverted, host_label_gather_i64, host_label_gather_f64, host_tree_widen, host_tree_argmax, host_tree_column_copy
 from core.sha256 import Sha256

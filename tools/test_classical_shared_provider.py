@@ -84,7 +84,7 @@ def test_pair_fold_and_calibration_calls_use_same_native_provider():
 
 
 def test_epilogue_typed_bridge_retains_numerical_owners():
-    old = (ROOT / 'providers/python/svm_impl_svc_epilogue_pyapi.mojo').read_text()
+    old = (ROOT / 'providers/python/svm_impl_svc_epilogue_pyapi_door.mojo').read_text()
     new = (ROOT / 'svm/native_epilogue_dispatch.mojo').read_text()
     numerical = r'\b(?:device_gather|device_select|device_fold_split|device_fold_finish|device_c_rows|device_pair_epilogue|device_platt_train|device_splitmix_perm)\('
     assert re.findall(numerical, old) == re.findall(numerical, new)
@@ -122,7 +122,7 @@ def test_svc_auxiliary_dispatch_retains_native_owners_and_operation_metadata():
     admit=body('_svc_provider')
     assert admit.count('neural_descriptor_execute(native, 8,')==1
     assert 'CompiledBindingSnapshot(native, binding' in admit
-    adapter=(ROOT/'providers/python/svc_descriptor_pyapi.mojo').read_text()
+    adapter=(ROOT/'providers/python/svc_descriptor_pyapi_door.mojo').read_text()
     assert 'neural_descriptor_execute(owner[].provider, op, a, p, f)' in adapter
     assert 'neural_descriptor_connect' not in adapter
 
@@ -178,7 +178,7 @@ def test_cpu_svm_table_uses_same_schema_and_existing_host_owners():
     assert 'svm.estimator' not in host
     assert 'neural_descriptor_capsule(table[].name, table[].entries)' in (ROOT/'bindings/_mojolearn_svm_host.mojo').read_text()
     native=(ROOT/'svm/host/native_epilogue_dispatch.mojo').read_text()
-    old=(ROOT/'providers/python/svm_host_svc_proba_pyapi.mojo').read_text()
+    old=(ROOT/'providers/python/svm_host_svc_proba_pyapi_door.mojo').read_text()
     calls=r'\bhost_(?:gather|select|fold_split|fold_finish|c_rows|check_pairs|pair_epilogue|platt_train|splitmix_perm)\('
     assert re.findall(calls,native)==re.findall(calls,old)
     assert 'dec_addr if nsr * nsc > 0 else dst' in native

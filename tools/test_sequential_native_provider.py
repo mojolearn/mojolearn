@@ -29,7 +29,7 @@ def test_sequential_no_longer_dispatches_whole_model_through_cpython():
 
 
 def test_legacy_packed_doors_and_native_dispatch_share_engine():
-    packed = (ROOT / 'providers/python/autograd_pyapi.mojo').read_text()
+    packed = (ROOT / 'providers/python/autograd_pyapi_door.mojo').read_text()
     direct = (ROOT / 'autograd/model_descriptor.mojo').read_text()
     for name in ('model_fit_native', 'model_predict_native', 'model_class_count'):
         assert name in packed and name in direct

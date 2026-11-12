@@ -31,21 +31,21 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_typed_call import py_call_typed
 from core.host_parallel_copy import host_parallel_copy_bytes
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.trees_public_inputs import (
     trees_builtins, trees_table, trees_entry, trees_address, trees_call,
 )
 from bindings.admitted_input import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view
-from bindings.classical_arrays import classical_is_f32, classical_c_order
+from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 # TOMBSTONE: trees_f32 / trees_all_finite / TreesMatrix / trees_vector / trees_empty uses and _copied (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from bindings.trees_lifetime import trees_resident_new
+from bindings.trees_lifetime_door import trees_resident_new
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_finite_known
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
-from bindings.host_inference_scalars import host_inference_scalar
-from bindings.metrics_native_support import metric_is_integral, metric_is_bool
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
+from bindings.host_inference_scalars_door import host_inference_scalar
+from bindings.metrics_native_support_door import metric_is_integral, metric_is_bool
 
 comptime _WANT_SCORE_SAMPLES = 0
 comptime _WANT_DECISION_FUNCTION = 1

@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_setattr
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.native_model_records import model_generation, records_open
-from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.ipca_descriptor_boundary import ipca_provider, ipca_driver, ipca_run_free
 from x_decomp.ipca_owner_boundary_run import _slot
 

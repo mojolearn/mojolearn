@@ -23,13 +23,13 @@ where `xcnn_call` released it before the split.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.mode_metadata_native import _fields
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.neural_block_admission import neural_plain_value, neural_string_keys
 from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
-from bindings.xseq_native_common import XseqStream
+from bindings.xseq_native_common_door import XseqStream
 from bindings.xcnn_conv_native import _snapshot, _dimension, _relu_backward, xcnn_relu_forward
 from core.cast_in import cast_in_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem

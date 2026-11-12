@@ -81,7 +81,7 @@ class CompositionDoors(unittest.TestCase):
         self.assertIn('py_type(keys[k]) is not b.str', section)
 
     def test_lifecycle_admits_before_conversion_and_dispatch(self):
-        source = (ROOT / 'bindings/prep_composition_lifecycle.mojo').read_text()
+        source = (ROOT / 'bindings/prep_composition_lifecycle_door.mojo').read_text()
         before = source.split('def composition_before(', 1)[1]
         self.assertLess(before.index('composition_value(args[2][keys[i]], context)'),
                         before.index('classical_check_x(args[0]'))
@@ -95,7 +95,7 @@ class CompositionDoors(unittest.TestCase):
         self.assertIn('parallel_public_result(result, operation, PythonObject(None), context)', owner)
 
     def test_instance_dictionary_type_is_checked_before_iteration(self):
-        source = (ROOT / 'bindings/prep_composition_lifecycle.mojo').read_text()
+        source = (ROOT / 'bindings/prep_composition_lifecycle_door.mojo').read_text()
         fields = source.split('def composition_fields(', 1)[1].split('def composition_require_fitted(', 1)[0]
         descriptor = fields.index('var fields = py_call(plan["fields_get"], model, cls)')
         guard = fields.index('if py_type(fields) is not b.dict:')

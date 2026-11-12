@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """JSON parsing owned by Mojo, returning ordinary native CPython containers."""
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_buffer_address import native_buffer_address
+from bindings.native_buffer_address_unpack import native_buffer_address
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

@@ -841,7 +841,7 @@ _LR_BEYOND = 5
 
 
 def _lr_native(key):
-    """A core-binding entry of the schedules (bindings/lr_table_helpers.mojo)."""
+    """A core-binding entry of the schedules (bindings/lr_table_helpers_door.mojo)."""
     return _buffers._native(key)
 
 
@@ -860,7 +860,7 @@ class _LrTable(object):
             raise ValueError("mojolearn schedule: step t is ONE-BASED, got %d" % t)
         _lr_status(st)
 
-    #: whose refusal messages `lr_at` / `lr_values` raise (bindings/lr_table_helpers.mojo)
+    #: whose refusal messages `lr_at` / `lr_values` raise (bindings/lr_table_helpers_door.mojo)
     _LR_STYLE = 0
 
     def lr_at(self, t):
@@ -974,7 +974,7 @@ class WarmupLinearLR(_Schedule):
 # DEFINED as the float32 nearest the exact rational value (the interval
 # route below), and that definition does not change. The binary64 table
 # (`_LrTable`, in Mojo since lane py-runtime round 2:
-# bindings/lr_table_helpers.mojo) answers every step whose rigorous error
+# bindings/lr_table_helpers_door.mojo) answers every step whose rigorous error
 # interval rounds to one float32; the exact route decides the rest.
 # MOJOLEARN_LR_EXACT_ONLY=1 restores the exact route for every step.
 # The value is the float32 nearest the exact rational expression (the interval route, never
@@ -1417,7 +1417,7 @@ def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
     stay on the device. The same kernels on the same operands in the same
     order, so the same bits. None when the loaded binding has no fused
     entry; the caller then runs the three calls."""
-    # One native operation (bindings/samba_head_native.mojo) admits, sizes and
+    # One native operation (bindings/samba_head_native_unpack.mojo) admits, sizes and
     # allocates; no probe, conversion or shape arithmetic in Python.
     return _OPT_NATIVE("samba_head_loss", None, (a, weight, targets, num_items), numeric_mode, _OPT_CONTEXT)
 

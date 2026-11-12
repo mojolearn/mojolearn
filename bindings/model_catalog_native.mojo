@@ -8,7 +8,7 @@ from core.borrowed_buffer import BorrowedBufferLayout
 from core.sha256 import Sha256
 from autograd.model_verify import verify_file_sha256
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.native_json import native_json_read, native_path, native_path_exists
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -16,7 +16,7 @@ from bindings.causal_model_config import model_dict, model_plain, model_string, 
 from bindings.causal_checkpoint import checkpoint_array
 from bindings.neural_block_admission import neural_array_slots
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
-from providers.python.autograd_import_frontend_pyapi import _import
+from providers.python.autograd_import_frontend_pyapi_door import _import
 from providers.python.autograd_program_pyapi import ops_imported_run_py
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_or_none

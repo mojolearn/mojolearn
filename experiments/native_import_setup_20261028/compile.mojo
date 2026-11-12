@@ -3,11 +3,11 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.robust_native import robust_lifecycle_c
-from bindings.maxabs_native import maxabs_lifecycle_c
-from bindings.host_svc_native import host_svc_attribute_c
+from bindings.robust_native_pack import robust_lifecycle_c
+from bindings.maxabs_native_door import maxabs_lifecycle_c
+from bindings.host_svc_native_door import host_svc_attribute_c
 from bindings.svc_linear_native import svc_linear_operation
-from bindings.device_plan_binding import device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_log_binding
 
 
 def svc_operation(model: PythonObject, operation: PythonObject, args: PythonObject,

@@ -14,11 +14,11 @@ from bindings.native_model_records import (
 from bindings.py_balanced import py_type, py_get, py_fields
 from bindings.mode_metadata_native import _fields
 from bindings.classical_pandas import classical_admit_value
-from bindings.host_inference_scalars import host_inference_scalar
-from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.host_inference_scalars_door import host_inference_scalar
+from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.gp_kernel_public_native import gp_kernel_snapshot, gp_admit_kernel
 from bindings.gp_kernel_cache_boundary import gp_packed_kernel_reused, GPKernelKey, gp_key_fields
-from bindings.gp_state_cache_boundary import GPPreparedState
+from bindings.gp_state_cache_boundary_unpack import GPPreparedState
 from bindings.gp_svm_records import gpsvm_builtin_scalar
 from core.shared_slot import SharedSlot
 

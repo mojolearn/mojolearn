@@ -6,11 +6,11 @@ shape, physical order and bytes. Bounds are checked before allocation; tensor
 ranges must cover the payload exactly in traversal order. Object identity and
 arbitrary Python classes are deliberately outside this private wire format.
 """
-from bindings.native_array_storage import native_array_empty
+from bindings.native_array_storage_door import native_array_empty
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_array_snapshot import native_array_snapshot, native_array_slots
-from bindings.native_buffer_address import native_buffer_address
-from bindings.native_instance_item import native_instance_item
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from std.python import Python, PythonObject

@@ -5,10 +5,11 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_type, py_get, py_call
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from core.shared_slot import SharedSlot
-from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_type
-from bindings.decomp_scalar_compare import decomp_equal_admitted
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.native_numpy_metadata_pack import native_numpy_type
+from bindings.decomp_scalar_compare_unpack import decomp_equal_admitted
 from bindings.family_common import family_repr
-from bindings.p3_array_arena_records import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
+from bindings.p3_array_arena_records_unpack import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 
 
 struct OcScalarTypes(Defaultable, Movable):

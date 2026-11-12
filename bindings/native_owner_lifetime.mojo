@@ -7,12 +7,13 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
 from bindings.cpython_table import cpython_table
-from bindings.native_resident_capsule import resident_capsule_owned
-from bindings.native_owner_registry import NativeOwnerPins, registered_native_owner_pins, borrowed_native_owner
+from bindings.native_resident_capsule_unpack import resident_capsule_owned
+from bindings.native_owner_registry_unpack import NativeOwnerPins, registered_native_owner_pins
+from bindings.native_owner_registry_pack import borrowed_native_owner
 
 
 comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"

@@ -3,7 +3,7 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.public_attributes_native import public_attribute_c
-from bindings.full_reset_params_native import full_reset_params_c
+from bindings.full_reset_params_native_door import full_reset_params_c
 
 @export
 def PyInit__mojolearn_mode_boundaries_compile() abi("C") -> PythonObject:

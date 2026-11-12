@@ -9,8 +9,8 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
-from providers.python.forecast_initialize_pyapi import _scalar
-from providers.python.forecast_owner_pyapi import forecast_commit
+from providers.python.forecast_initialize_pyapi_unpack import _scalar
+from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 
 
 comptime _PROPHET_LAYOUT_SLOT = "xseq_prophet_layout_v1"  # p3-cnn-sequence-tsa class record

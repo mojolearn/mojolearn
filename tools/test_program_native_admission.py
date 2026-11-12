@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_program_reuses_shared_registry_before_metadata_or_conversion():
-    arrays = (ROOT / 'providers/python/autograd_program_arrays_pyapi.mojo').read_text()
+    arrays = (ROOT / 'providers/python/autograd_program_arrays_pyapi_door.mojo').read_text()
     assert 'classical_connect_numpy(admission)' in arrays
     assert 'sequential_admit_value(value, state[].admission)' in arrays
     assert 'native_array_ndarray_view(value, state[].admission)' in arrays
@@ -20,7 +20,7 @@ def test_program_reuses_shared_registry_before_metadata_or_conversion():
 
 
 def test_embedding_reuses_admitted_descriptor_instead_of_dtype_hook():
-    source = (ROOT / 'providers/python/autograd_ops_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_ops_frontend_pyapi_door.mojo').read_text()
     assert 'hasattr, args[1], "dtype"' not in source
     assert 'input.src.itemsize == 4 else 10' in source
     assert '_ = args  # retain original external array exporters' in source

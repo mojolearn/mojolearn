@@ -12,7 +12,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_check_layout
-from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_has, prep_estimator_call
+from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_has, prep_estimator_call
 from bindings.trees_public_inputs import trees_table, trees_call, trees_address, trees_reshape
 from bindings.admitted_input import admitted_vector, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.

@@ -5,7 +5,7 @@ from check_generation_native_boundary import audit
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = (ROOT / 'mamba/native_block_dispatch.mojo').read_text()
 PUBLIC = (ROOT / 'bindings/neural_block_public.mojo').read_text()
-PREFILL = (ROOT / 'bindings/neural_prefill_native.mojo').read_text()
+PREFILL = (ROOT / 'bindings/neural_prefill_native_door.mojo').read_text()
 
 
 def test_native_dependencies_resolve():

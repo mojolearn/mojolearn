@@ -4,8 +4,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
 from providers.python.classical_family_admission_pyapi import classical_family_admit
-from providers.python.svc_public_state_pyapi import svc_public_state_operation
-from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.svc_public_state_pyapi_pack import svc_public_state_operation
+from providers.python.estimator_binding_pyapi_door import estimator_binding
 from bindings.svc_kernel_native import svc_kernel_operation
 from bindings.public_attributes_native import public_attribute_c
 

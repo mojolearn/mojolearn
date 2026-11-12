@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the sequence-expansion
-estimators (bindings/xseq_native.mojo): the recurrent models, the
+estimators (bindings/xseq_native_pack.mojo): the recurrent models, the
 multi-layer perceptrons and the theta, Croston, ETS, GARCH, VAR and STL
 forecasters. Each public method of those classes is one call,
 `_XSEQ(self, "<operation>", args, _XSEQ_CONTEXT)`; Python here only

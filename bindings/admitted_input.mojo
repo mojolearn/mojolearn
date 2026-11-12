@@ -95,21 +95,21 @@ from bindings.native_type_module import native_type_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
 from bindings.admitted_finite_wording import admitted_finite_wording, admitted_finite_refuse
 from bindings.py_balanced import py_call, py_type
-from bindings.classical_arrays import (
+from bindings.classical_arrays_door import (
     classical_wrap_array, classical_wrap_layout, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
     classical_is_array, classical_is_f32, classical_c_order, classical_numpy, classical_dtype_str,
 )
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
-from bindings.classical_warnings import classical_warn_column
+from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.native_array_storage import native_scratch_bytes, native_array_zeros, native_array_from_values, native_array_from_bytes
+from bindings.native_array_storage_door import native_scratch_bytes, native_array_zeros, native_array_from_values, native_array_from_bytes
 from bindings.py_attr import py_attr
 from bindings.admitted_registry import (
     admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols, admitted_held_finite,
 )
-from bindings.admitted_meta_scope import admitted_held_verify
+from bindings.admitted_meta_scope_unpack import admitted_held_verify
 from bindings.device_rows_door import door_is_device_rows, DoorRows, door_rows_store
 from bindings.device_rows_door_run import DoorRowsStore
 from core.admitted_f32_plan import (
@@ -126,16 +126,17 @@ from std.sys.compile import is_defined
 from bindings.py_balanced import py_setattr, py_get, py_setitem
 from bindings.py_attr import py_attr
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_owner_lifetime import native_release_admit, _released_dtype
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.tensor_view import TensorView, shape_text, _contiguous, base_format, _array_code
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.array_metadata_pyapi import array_owner_once
 from core.admitted_convert import admitted_convert
 from core.cast_in import CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
 from core.native_array_layout import NativeArrayLayout, native_matrix_shape, native_array_itemsize as _array_itemsize
-from providers.python.array_layout_boundary import native_shape_unpack, native_shape_pack
+from providers.python.array_layout_boundary_unpack import native_shape_unpack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.py_optional import py_present
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."

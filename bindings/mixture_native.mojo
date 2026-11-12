@@ -22,8 +22,9 @@ from bindings.admitted_family import admit_family, admit_family_refuse_empty
 from bindings.admitted_input import classical_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
-from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
-from bindings.classical_arrays import (
+from bindings.family_raw_attr_unpack import family_raw_has
+from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
+from bindings.classical_arrays_door import (
     classical_address, classical_wrap_array, classical_is_array, classical_is_f32, classical_c_order,
     classical_cast_kind,
 )
@@ -38,12 +39,13 @@ from checks.numerics import pinned_mul_f64, portable_log64
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from bindings.classical_exceptions import classical_require_fitted
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.classical_exceptions_door import classical_require_fitted
+from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.svm_mixture_native import svm_mixture_operation
-from providers.python.estimator_binding_pyapi import estimator_binding, _estimator_mode_word
+from providers.python.estimator_binding_pyapi_door import _estimator_mode_word
+from providers.python.estimator_binding_pyapi_door import estimator_binding
 from bindings.cluster_side_records import (
     cluster_is_subclass, cluster_refuse_fit_callbacks, cluster_record_key, cluster_record_get,
     cluster_record_put, cluster_record_drop,
@@ -62,8 +64,8 @@ from core.mixture_native_api import (
 )
 from bindings.kmeans_variants_boundary import variants_span
 from bindings.boundary_read import read_int_like, read_float_like, read_bool, pack_room
-from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
+from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
 from bindings.py_optional import py_or_none
 
 comptime _GMM = "mojolearn GaussianMixture: "

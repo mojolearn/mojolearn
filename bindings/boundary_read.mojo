@@ -38,12 +38,12 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
-from bindings.cpython_borrowed import borrowed_type_word
-from bindings.native_instance_item import native_instance_item
-from bindings.optimizer_public_words import stash_python_error
-from bindings.native_array_storage import native_array_zeros
-from bindings.native_buffer_address import native_buffer_address
-from bindings.classical_arrays import classical_wrap_layout
+from bindings.cpython_borrowed_unpack import borrowed_type_word
+from bindings.native_instance_item_pack import native_instance_item
+from bindings.optimizer_public_words_unpack import stash_python_error
+from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.classical_arrays_door import classical_wrap_layout
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.native_array_layout import NativeArrayLayout, native_array_code, native_array_itemsize
 from core.native_string import unsafe_string_from_utf8_cstr

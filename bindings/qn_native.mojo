@@ -13,30 +13,31 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_owner_lifetime import native_release_admit
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_exceptions import classical_require_fitted
+from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classical_attributes import _type_mro
 from bindings.mode_metadata_native import _class_fields
-from bindings.family_raw_attr import family_raw_get_or
+from bindings.family_raw_attr_pack import family_raw_get_or
 from bindings.classical_labels import labels_cast
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, _neural_descriptor_module_fields, _neural_descriptor_function_owner
-from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete, estimator_feature_check
-from providers.python.estimator_tabular_boundary_pyapi import _refusal
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete, estimator_feature_check
+from providers.python.estimator_tabular_boundary_pyapi_unpack import _refusal
 from std.python._cpython import PyObjectPtr, GILReleased
 from glm.qn_door_run import QnDoorFitResult, qn_door_fit_run, qn_door_predict_run
-from bindings.qn_boundary import qn_fit_unpack, qn_fit_pack, qn_predict_unpack, qn_predict_pack
+from bindings.qn_boundary_unpack import qn_fit_unpack, qn_predict_unpack, qn_predict_pack
+from bindings.qn_boundary_pack import qn_fit_pack
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed
+from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from providers.python.linear_score_boundary import classical_r2_score
+from providers.python.linear_score_boundary_pack import classical_r2_score
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 
 comptime _QN_AFTER_FIT_SLOT = "qn_no_after_fit_v1"

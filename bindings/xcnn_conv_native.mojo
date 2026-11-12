@@ -12,7 +12,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value, neural_string_keys
 from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value, _one_of
-from bindings.xseq_native_common import XseqStream
+from bindings.xseq_native_common_door import XseqStream
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xcnn_common import (
     XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed,

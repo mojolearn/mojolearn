@@ -7,8 +7,8 @@ from bindings.native_model_records import ContentRecord, content_object, content
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_type
-from bindings.gp_mapping_boundary import gp_mapping_snapshot
-from bindings.gp_common_native import gp_kernel_arrays
+from bindings.gp_mapping_boundary_unpack import gp_mapping_snapshot
+from bindings.gp_common_native_unpack import gp_kernel_arrays
 from bindings.gp_kernel_public_native import gp_kernel_snapshot
 
 comptime GP_KERNEL_PACK_SLOT = "gp_kernel_pack_v1"

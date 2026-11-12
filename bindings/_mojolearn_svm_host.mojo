@@ -88,7 +88,7 @@ from isolation_forest.impl.rng.xorwow import (
     XORWOW_HOST_SABOTAGE,
     build_xorwow_tables,
 )
-from providers.python.svm_host_svc_proba_pyapi import (
+from providers.python.svm_host_svc_proba_pyapi_door import (
     svc_pair_epilogue_binding,
     svc_platt_train_binding,
     svc_splitmix_perm_binding,
@@ -130,8 +130,8 @@ from svm.host.svm_host_impl import (
 
 
 from svm.host.svm_host_binding_run import iforest_host_outputs_run, iforest_host_resident_outputs_run
-from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
-from providers.python.svm_host_svc_ovo_host_pyapi import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
+from providers.python.svm_host_scale_gamma_host_pyapi_pack import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from providers.python.svm_host_svc_ovo_host_pyapi_pack import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
 
 def _index(value: PythonObject) raises -> Int:
     # An exact int (every address and count the owners pass) is read

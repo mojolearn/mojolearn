@@ -40,7 +40,7 @@ class ResidentSourceContract(unittest.TestCase):
         self.assertIn("kit.owner = model", als)
         self.assertIn("kit.resident_derived(", als)
         self.assertIn("kit.resident_keep(", als)
-        rp = _read("bindings/rp_native.mojo")
+        rp = _read("bindings/rp_native_door.mojo")
         self.assertIn("decomp_resident_operand(", rp)
         self.assertIn("decomp_resident_drop(model)", rp)
         ipca = _read("bindings/ipca_native.mojo")

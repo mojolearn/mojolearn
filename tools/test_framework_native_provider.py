@@ -7,7 +7,7 @@ def test_device_execution_is_shared_and_native():
     owner = (ROOT / 'autograd/program_device_execution.mojo').read_text()
     for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
         assert forbidden not in owner
-    packed = (ROOT / 'providers/python/autograd_program_device_pyapi.mojo').read_text()
+    packed = (ROOT / 'providers/python/autograd_program_device_pyapi_unpack.mojo').read_text()
     assert 'program_device_execute[KIND](' in packed
     assert 'replay_values(s[]' not in packed
     table = (ROOT / 'sequence/model_device_dispatch.mojo').read_text()
@@ -21,7 +21,7 @@ def test_torch_uses_common_provider_without_internal_packed_execution():
     frontend = (ROOT / 'providers/python/autograd_torch_program_pyapi.mojo').read_text()
     assert 'imported_device_provider_run(snapshot, descriptors, addresses)' in frontend
     assert 'py_call(run,' not in frontend
-    provider = (ROOT / 'providers/python/autograd_device_provider_pyapi.mojo').read_text()
+    provider = (ROOT / 'providers/python/autograd_device_provider_pyapi_unpack.mojo').read_text()
     assert 'neural_descriptor_execute(owner[].provider, PROGRAM_DEVICE_RUN,' in provider
     assert 'NativeDescriptorResource' in provider and 'neural_descriptor_entry(provider[].module,' in provider
     assert 'List[Float64](), False)' in provider  # preserve GIL-held Session semantics
@@ -51,7 +51,7 @@ def test_python_export_is_replaced_by_explicit_artifact_admission():
 
 
 def test_import_and_cleanup_use_the_same_session_provider():
-    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
     body = source.split('def _import(')[1].split('def ops_import_model_c(')[0]
     assert 'neural_descriptor_execute(owner[].provider, PROGRAM_IMPORT,' in body
     assert 'py_call(entries["onnx_import' not in body
@@ -105,7 +105,7 @@ def test_host_trainer_public_frontdoors_and_shared_metadata():
     # The cast-owned training buffer is the one admission path's
     # admit_nd_owned_f32 (lane A4): metadata read once, one parallel cast
     # whose finite flag is the refusal.
-    shared = (ROOT / 'bindings/admitted_sequence.mojo').read_text().split('def admit_nd_owned_f32(')[1]
+    shared = (ROOT / 'bindings/admitted_sequence_door.mojo').read_text().split('def admit_nd_owned_f32(')[1]
     assert shared.count('value.shape') == 1 and shared.count('value.strides') == 1
     assert 'native_strides, item, kind, pointer)' in shared
 
@@ -182,7 +182,7 @@ def test_imported_program_constructor_enters_native_metadata_boundary():
     constructor = source.split('def __init__(self, session, info, inputs, outputs):')[1].split('    def run(')[0]
     assert '_IMPORT_NATIVE(self, session, info, inputs, outputs, _IMPORT_CONTEXT)' in constructor
     assert 'super()' not in constructor and 'getattr' not in constructor
-    native = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    native = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
     assert 'program_admit_value(info)' in native
     assert 'neural_descriptor_entry(binding, "ops_imported_run")' in native
     assert '_initialize(pending, session, info, inputs, outputs, entries, context)' in native
@@ -217,7 +217,7 @@ def test_framework_setup_helpers_enter_native_metadata_directly():
                 statements = [s for s in node.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
                 assert len(statements) == 1 and isinstance(statements[0], ast.Return)
                 assert ast.unparse(statements[0].value.func).endswith('_NATIVE')
-    source = (ROOT / 'providers/python/framework_metadata_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/framework_metadata_pyapi_pack.mojo').read_text()
     assert 'native_json_parse(raw)' in source
     assert 'native_storage_allocate(layout["class"])' in source
     assert 'Path.__init__' in source  # explanatory prohibition, not an invocation
@@ -228,7 +228,7 @@ def test_onnx_reader_and_resolver_use_common_native_resource():
     assert 'onnx_read(request[].path)' in table and 'onnx_resolve(addresses[0]' in table
     assert 'words[0] != onnx_registry_token()' in table
     assert 'PythonObject' not in table and 'std.python' not in table
-    owner = (ROOT / 'providers/python/autograd_reader_frontend_pyapi.mojo').read_text()
+    owner = (ROOT / 'providers/python/autograd_reader_frontend_pyapi_door.mojo').read_text()
     assert 'neural_descriptor_adopt(selected[1], handle, 3, scope.copy())' in owner
     assert 'py_setattr(array, "owner", resource)' in owner
     assert 'resource.downcast_value_ptr[NativeDescriptorResource]()[].close()' in owner
@@ -242,7 +242,7 @@ def test_onnx_reader_and_resolver_use_common_native_resource():
 
 
 def test_cpu_profile_preserves_public_default_shape_independently_of_build_toggle():
-    source = (ROOT / 'providers/python/byte_lm_host_compat_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/byte_lm_host_compat_pyapi_door.mojo').read_text()
     assert 'ByteConfig(chunked_lm_head_v2=False).profile()' in source
 
 

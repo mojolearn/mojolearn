@@ -2,7 +2,7 @@
 # One retained metadata capture for the classification metric vector loaders.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type, py_get
-from bindings.classical_arrays import classical_is_array
+from bindings.classical_arrays_door import classical_is_array
 from bindings.admitted_input import AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.tensor_view import base_format
 from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I64P

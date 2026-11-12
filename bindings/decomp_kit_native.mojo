@@ -19,13 +19,13 @@ from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
-from bindings.native_resident_capsule import resident_capsule
+from bindings.native_resident_capsule_pack import resident_capsule
 from bindings.native_model_records import records_open, model_generation
-from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
-from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_kind
+from bindings.classical_arrays_door import classical_array, classical_typed, classical_address, classical_kind
 from bindings.admitted_input import admit_x, admitted_finite_refuse
 from std.python._cpython import GILReleased
 from core.linear_entry_table import LinearEntryKey

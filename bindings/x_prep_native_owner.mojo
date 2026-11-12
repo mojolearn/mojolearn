@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native owner for the established _Prog transport contract. Arithmetic and
 # stream synchronization remain in the same x_prep exported implementations.
-from bindings.native_array_storage import native_array_empty, native_array_zeros
+from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from std.memory import unsafe_memcpy
 from std.os import getenv
@@ -10,18 +10,18 @@ from bindings.arena_prog_run import _merge_pairs
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
-from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order, classical_wrap_array
+from bindings.classical_arrays_door import classical_address, classical_is_array, classical_c_order, classical_wrap_array
 from bindings.sequential_admission import sequential_admit_value
-from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields
+from bindings.x_prep_native_inputs_door import _dense_values, _values, _rows_fields
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_namespace_string_keys
-from bindings.p3_array_arena_records import (
+from bindings.p3_array_arena_records_unpack import (
     P3_CACHE_LAYOUT, p3_layout_admitted, p3_layout_admit,
     P3_DICT_BINDING_IDS, P3_DICT_ENTRY_TUPLE_INTS, p3_dict_admitted, p3_dict_admit,
 )
 
 from std.python._cpython import GILReleased
-from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
+from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from core.entry_table import EntryRef
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from x_prep.transport_abi import (

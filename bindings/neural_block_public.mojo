@@ -33,9 +33,13 @@ from bindings.native_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_reserved_execute, neural_descriptor_handle,
 )
-from providers.python.transformer_block_session_pyapi import (
-    transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
+from providers.python.transformer_block_session_pyapi_door import (
+    transformer_block_session_handle,
+    transformer_block_session_serves,
     transformer_block_session_close,
+)
+from providers.python.transformer_block_session_pyapi_door import (
+    transformer_block_session_open,
 )
 from bindings.causal_lm_public import _causal_array_guard
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call

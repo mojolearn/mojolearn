@@ -41,7 +41,7 @@ def test_python_lock_frontend_only_installs_compiled_descriptors():
 
 
 def test_neural_layer_boundaries_use_lease_without_preacquiring_models():
-    for name in ('bindings/neural_block_public.mojo','bindings/neural_prefill_native.mojo'):
+    for name in ('bindings/neural_block_public.mojo','bindings/neural_prefill_native_door.mojo'):
         source = (ROOT/name).read_text()
         assert 'OperationLockLease(lock)' in source
         assert 'lock.acquire()' not in source and 'lock.release()' not in source

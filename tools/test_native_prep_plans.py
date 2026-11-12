@@ -106,7 +106,7 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
                             'StackingRegressor', 'MultiOutputRegressor', 'MultiOutputClassifier',
                             'OneVsRestClassifier', 'CalibratedClassifierCV'}
             assert operation == 'trees_meta_fit', name
-            lifecycle = (ROOT / 'bindings/trees_public_meta_lifecycle.mojo').read_text()
+            lifecycle = (ROOT / 'bindings/trees_public_meta_lifecycle_pack.mojo').read_text()
             assert 'if operation == "trees_public_meta_fit":\n        method = "fit"' in lifecycle
             assert 'meta_operation(model, "trees_meta_" + method, call_args, context)' in lifecycle
         elif public_operation == 'trees_public_boost_fit':
@@ -114,10 +114,10 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             # lifecycle and forward to the internal trees_boost_* ABI, the
             # same split as the meta doors above.
             assert operation == 'trees_boost_fit', name
-            lifecycle = (ROOT / 'providers/python/tree_boost_public_lifecycle_pyapi.mojo').read_text()
+            lifecycle = (ROOT / 'providers/python/tree_boost_public_lifecycle_pyapi_pack.mojo').read_text()
             assert 'var method = String(operation[byte=String("trees_public_boost_").byte_length():])' in lifecycle
             assert 'boost_operation(model, "trees_boost_" + method, call_args, context)' in lifecycle
-            dispatch = (ROOT / 'bindings/trees_public_native.mojo').read_text()
+            dispatch = (ROOT / 'bindings/trees_public_native_door.mojo').read_text()
             assert 'if operation.startswith("trees_public_boost_"):\n        return tree_boost_public_operation(' in dispatch
         else:
             assert operation == public_operation, name
@@ -157,7 +157,7 @@ def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks()
     assert 'len(fit_params) != 0' not in source
     assert 'attrgetter' not in source
     assert '_call(b.getattr, Python.tuple(est' not in source
-    helper = (ROOT / "bindings/prep_native_estimator.mojo").read_text()
+    helper = (ROOT / "bindings/prep_native_estimator_door.mojo").read_text()
     assert 'plan["fields_get"]' in helper
 
 

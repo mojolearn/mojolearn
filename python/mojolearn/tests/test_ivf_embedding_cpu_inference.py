@@ -60,7 +60,7 @@ def test_gpu_and_reference_bindings_register_build_and_search():
     for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo"):
         names = _registered(rel)
         assert {"ivf_flat_build", "ivf_flat_search"} <= names, rel
-    shared = _read("bindings/ivf_index_arrays.mojo")
+    shared = _read("bindings/ivf_index_arrays_unpack.mojo")
     assert "ivf_validate_index_arrays" in shared
     # Both bindings take their search from the ONE shared source, and since
     # lane/laneless-public-classes (2026-09-19) that source carries the
@@ -77,7 +77,7 @@ def test_gpu_and_reference_bindings_register_build_and_search():
             assert re.search(r"\b%s\b" % name, head.group(1)), f"{rel}: {name}"
         assert {"ivf_flat_partial_search", "ivf_finalize_distances"} <= _registered(rel), rel
     for rel in ("bindings/_mojolearn_embedding_host.mojo", "bindings/_mojolearn_embedding_infer_host.mojo"):
-        assert "from bindings.embedding_host_forward import" in _read(rel), rel
+        assert "from bindings.embedding_host_forward_door import" in _read(rel), rel
 
 
 def _fake_index(n=12, dim=3, n_lists=3):

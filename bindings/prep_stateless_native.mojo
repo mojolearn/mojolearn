@@ -12,13 +12,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
-from bindings.prep_context_native import prep_operation_context
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.prep_context_native_door import prep_operation_context
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
-from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.classical_arrays_door import classical_address, classical_typed, classical_wrap_array
+from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
 from x_prep.prep_stateless_native_run import (
@@ -45,17 +45,17 @@ from x_prep.prep_stateless_native_run import (
     _quantile_program,
     _power_program,
 )
-from bindings.p3_prep_fitted import prep_fitted_vector
+from bindings.p3_prep_fitted_unpack import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries
-from bindings.prep_entry_cache import prep_entry_word
+from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.py_typed_call import py_call_typed
 from bindings.cpython_table import cpython_table
-from bindings.prep_support_native import prep_support
+from bindings.prep_support_native_pack import prep_support
 from bindings.prep_normalizer_lifecycle import normalizer_transform
-from bindings.prep_normalizer_fit import normalizer_fit
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.prep_normalizer_fit_pack import normalizer_fit
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
 
 

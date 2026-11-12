@@ -2,7 +2,7 @@
 # Optimizer admission runs before native code encounters any Python hook.
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
-from bindings.p3_numpy_types import numpy_admitted_type
+from bindings.p3_numpy_types_unpack import numpy_admitted_type
 from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

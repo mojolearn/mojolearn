@@ -6,7 +6,7 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.pca_query_native import pca_query_operation
+from bindings.pca_query_native_unpack import pca_query_operation
 
 
 @export

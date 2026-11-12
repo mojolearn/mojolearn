@@ -173,7 +173,7 @@ class IncrementalPCA(_Base):
     (1000, 3)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode")
@@ -304,7 +304,7 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
     """
     # DEVIATION 6900: eps ** 2, eps ** 3 correctly rounded and the pinned log,
     # not the platform pow / log (a host's last bit can move the floor), in
-    # the compiled owner (bindings/jl_native.mojo)
+    # the compiled owner (bindings/jl_native_pack.mojo)
     return _JL_CALL(None, "min_dim", (n_samples, eps), _JL_CONTEXT)
 
 
@@ -318,12 +318,12 @@ class _RandomProjection(_Base):
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
 
     # The fitted matrix lives in the native owner's `_rp_components` field
-    # (bindings/rp_native.mojo); reading, assigning and pickling it are each
+    # (bindings/rp_native_door.mojo); reading, assigning and pickling it are each
     # one native call.
     @property
     def components_(self):
@@ -615,7 +615,7 @@ class NMF(_Base):
     >>> H = model.components_
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # scikit-learn tags, read by `_mode.sklearn_tags`
@@ -771,7 +771,7 @@ class FastICA(_Base):
     >>> S = mojolearn.FastICA(n_components=3, random_state=0).fit_transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
@@ -845,7 +845,7 @@ class FastICA(_Base):
 
 # ================================================================ FactorAnalysis
 # Every public FactorAnalysis operation is one call into the compiled owner
-# (bindings/fa_native.mojo, driver x_decomp/fa_owner.mojo).
+# (bindings/fa_native_unpack.mojo, driver x_decomp/fa_owner.mojo).
 # Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
 # `transform`, `get_covariance`, `get_precision`, `score_samples`,
 # `_ortho_rotation`. Each iteration's SVD of the scaled data is the QR +
@@ -911,7 +911,7 @@ class FactorAnalysis(_Base):
     >>> Z = fa.transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
@@ -1650,7 +1650,7 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
 
 class _SparseCoding(_Base):
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     def transform(self, X):
@@ -1938,7 +1938,7 @@ class MiniBatchDictionaryLearning(_SparseCoding):
 
 class _BaseSparsePCA(_Base):
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # fit, fit_transform, transform and inverse_transform are one call each
@@ -2248,7 +2248,7 @@ class LatentDirichletAllocation(_Base):
     >>> doc_topics = lda.transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # scikit-learn tags, read by `_mode.sklearn_tags`
@@ -2923,7 +2923,7 @@ class MinCovDet(_Base):
     >>> d = mcd.mahalanobis(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
@@ -3214,7 +3214,7 @@ class AlternatingLeastSquares(_Base):
     >>> ids, scores = als.recommend(0, R, N=5)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",

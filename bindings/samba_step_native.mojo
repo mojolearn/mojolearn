@@ -5,14 +5,15 @@ This public execution owner accepts native built-in schedule configurations;
 arbitrary Python callbacks are refused before state mutation.
 """
 from providers.python.samba_execution_pyapi import samba_provider_accumulated_gradients
-from providers.python.samba_resident_pyapi import samba_resident_provider, samba_resident_native_step
+from providers.python.samba_resident_pyapi_door import samba_resident_native_step
+from providers.python.samba_resident_pyapi_door import samba_resident_provider
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease
+from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease
 from bindings.optimizer_descriptor_boundary import optimizer_driver
-from bindings.samba_optimizer_boundary import samba_optimizer_provider, samba_optimizer_primitives, samba_optimizer_execute, samba_optimizer_transfer
+from bindings.samba_optimizer_boundary_unpack import samba_optimizer_provider, samba_optimizer_primitives, samba_optimizer_execute, samba_optimizer_transfer
 from core.samba_optimizer_plan import SambaOptimizerPlan
 from training.optimizer_public_common import OptHyper
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -20,11 +21,11 @@ from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP
 from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
-from bindings.generator_state_native import generator_next
-from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view
+from bindings.generator_state_native_pack import generator_next
+from bindings.samba_state_native_door import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view
 from training.samba_state_run import samba_optimizer_device_plan
 from core.device_plan import DevicePlan
-from bindings.samba_training_native import samba_ids, samba_gradients_admitted, _samba_count
+from bindings.samba_training_native_door import samba_ids, samba_gradients_admitted, _samba_count
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type

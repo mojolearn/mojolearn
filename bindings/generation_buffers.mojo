@@ -14,9 +14,9 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_contains
 from bindings.native_array_snapshot import native_array_slots, native_array_snapshot
-from bindings.native_array_storage import native_array_zeros
-from bindings.native_buffer_address import native_buffer_address
-from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
+from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_foreign
 from core.weight_epoch import weight_epoch_bump
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into

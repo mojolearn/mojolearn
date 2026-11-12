@@ -42,7 +42,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.hdbscan_host_predict import (
+from bindings.hdbscan_host_predict_pack import (
     hdbscan_all_points_membership_vectors_binding,
     hdbscan_approximate_predict_binding,
     hdbscan_membership_vector_binding,

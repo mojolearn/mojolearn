@@ -5,7 +5,7 @@ from bindings.msel_search import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check,
     msel_sampler_list, msel_sampler_len, msel_candidates,
 )
-from bindings.model_selection_native import msel_operation
+from bindings.model_selection_native_door import msel_operation
 
 @export
 def compile_grid_admit(grid: PythonObject, context: PythonObject) raises -> PythonObject:

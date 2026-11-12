@@ -25,7 +25,7 @@ _PLAN_CODE = {"scan": 0, "sort": 1, "auto": 2}
 _EMBEDDING_FORMAT = "mojolearn-embedding-1"
 
 # The compiled saved-model owner, connected once at import: `save` is one
-# native call (bindings/archive_schema_native.mojo writes the schema
+# native call (bindings/archive_schema_native_door.mojo writes the schema
 # registered after the class).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 

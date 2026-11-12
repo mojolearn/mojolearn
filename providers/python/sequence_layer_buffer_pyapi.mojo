@@ -6,10 +6,10 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_value
-from providers.python.array_layout_boundary import native_shape_pack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native import device_shape, shape_count
-from bindings.sequence_optimizer_native import seq_binding
-from bindings.classical_arrays import classical_input, classical_typed, classical_address
+from bindings.sequence_optimizer_native_door import seq_binding
+from bindings.classical_arrays_door import classical_input, classical_typed, classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.sequence_optimizer_inputs import sequence_optimizer_cast

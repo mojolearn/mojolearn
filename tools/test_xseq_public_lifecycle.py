@@ -9,7 +9,7 @@ def test_markers_exist_only_with_a_native_lifecycle_envelope():
         tree=ast.parse((ROOT/'python/mojolearn'/filename).read_text())
         cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name==base)
         assert any(isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_mojolearn_native_public' for t in n.targets) and isinstance(n.value,ast.Constant) and n.value.value is True for n in cls.body)
-    source=(ROOT/'bindings/xseq_native.mojo').read_text()
+    source=(ROOT/'bindings/xseq_native_pack.mojo').read_text()
     for required in ('XseqPublicLifecycle(model, operation, args, context)','estimator_fit_begin(py_fields(model))','finally:\n                    estimator_fit_end(model, depth)','lifecycle.finish(model, result, context)','NotFittedError:','active_not_fitted_class'):
         assert required in source
     assert 'xseq_rnn(model, "rnn_predict", predict_args, context)' in source
@@ -27,8 +27,8 @@ def test_validation_and_output_semantics_are_native_not_removed():
 
 
 def test_common_feature_and_caller_boundary_are_reused():
-    forest=(ROOT/'bindings/trees_public_lifecycle_native.mojo').read_text()
-    assert 'from providers.python.estimator_lifecycle_pyapi import' in forest
+    forest=(ROOT/'bindings/trees_public_lifecycle_native_door.mojo').read_text()
+    assert 'from providers.python.estimator_lifecycle_pyapi_unpack import' in forest
     assert 'def _outside(' not in forest and 'def _feature_check(' not in forest
     bridge=(ROOT/'python/mojolearn/_native_xseq_bridge.py').read_text()
     assert 'xseq_lifecycle_context=lifecycle' in bridge
@@ -53,7 +53,7 @@ def test_recurrent_state_is_one_native_call_with_atomic_native_packing():
         body = [node for node in function.body if not isinstance(node, ast.Expr)]
         assert len(body) == 1 and isinstance(body[0], ast.Return)
         assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == '_XSEQ'
-    source = (ROOT/'providers/python/recurrent_state_pyapi.mojo').read_text()
+    source = (ROOT/'providers/python/recurrent_state_pyapi_door.mojo').read_text()
     assert 'memcpy(dest=' in source
     assert 'state[PythonObject(names[i])]' in source
     assert source.index('py_setitem(fields, "params_", packed)') > source.index('for i in range(len(names)):', source.index('var offset = 0'))

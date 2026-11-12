@@ -17,7 +17,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call
 from bindings.family_common import FAMILY_F32P, FAMILY_I64P, family_array
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from core.metrics_exp_impl import mexp_cast_i64
 from bindings.metrics_exp_common import (

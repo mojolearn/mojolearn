@@ -11,11 +11,11 @@ on data: the record names the fitted objects by identity, never by content.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
-from bindings.native_resident_capsule import resident_capsule
-from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
+from bindings.native_resident_capsule_pack import resident_capsule
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.py_balanced import py_call, py_get, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 
 # The resident fitted state of a fitted model (lane ne1-a-decomp-tsa, plan
 # section A, rows N028/N029): one prepared-owner record per model, outside

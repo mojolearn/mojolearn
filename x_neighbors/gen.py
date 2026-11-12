@@ -778,12 +778,12 @@ def gpu_binding():
             + BIND_HEAD + "from x_neighbors.native_descriptor_device import XN_NATIVE_API\n" + "from x_neighbors.ocsvm_resident_native_device import OcDeviceResident as OcResidentBackend\ncomptime OC_RESIDENT_DEVICE = True\n" + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
-            + "from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi_pack import kpca_resident_binding\n"
             + "from x_neighbors.kapprox_dev import XN_KPCA_RESIDENT\ncomptime KPCA_NEIGHBOR_DEVICE = True\ncomptime KPCA_NEIGHBOR_RESIDENT = XN_KPCA_RESIDENT\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
-            + "from providers.python.x_neighbors_dev_pyapi import ocsvm_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi_pack import ocsvm_resident_binding\n"
             + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
-            + "from providers.python.x_neighbors_dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi_pack import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -824,7 +824,7 @@ def host_binding():
             + BIND_HEAD + "from x_neighbors.native_descriptor_host import XN_NATIVE_API\n" + "from x_neighbors.ocsvm_resident_native_host import OcHostResident as OcResidentBackend\ncomptime OC_RESIDENT_DEVICE = False\n" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
-            + "from providers.python.x_neighbors_host_pyapi import kpca_resident_binding\n"
+            + "from providers.python.x_neighbors_host_pyapi_pack import kpca_resident_binding\n"
             + "comptime KPCA_NEIGHBOR_DEVICE = False\ncomptime KPCA_NEIGHBOR_RESIDENT = False\n"
             + wrappers() + """
 

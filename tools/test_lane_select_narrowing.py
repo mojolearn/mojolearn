@@ -685,7 +685,7 @@ def test_the_max_ops_package_is_attributed_to_no_lane_and_refuses_otherwise():
 
 
 def test_a_docstring_edit_is_docstring_only_and_a_deleted_or_added_one_is_not():
-    """bindings/classical_exceptions.mojo admits NotFittedError's doc only as a
+    """bindings/classical_exceptions_door.mojo admits NotFittedError's doc only as a
     str, so a docstring's presence is read at run time; its text is not."""
     path = "ns_test/doc_only.py"
     old = 'class A:\n    """one"""\n    def f(self):\n        return 1\n'
@@ -1048,7 +1048,7 @@ def test_the_real_feature_names_gate_keeps_lanes_without_a_process_proof():
     """The real gate is recognized, but computed package imports (including
     _backend.py's f-string import_module calls) prevent a process-wide absence
     proof. Keep both gated-body and ordinary lifecycle changes selected."""
-    path = "bindings/classifier_public_lifecycle.mojo"
+    path = "bindings/classifier_public_lifecycle_door.mojo"
     text = ls._read(path)
     units = ls._mojo_units(text)
     assert units is not None and ls._pandas_gate(units["top"]["_feature_names"][1][0]) is not None

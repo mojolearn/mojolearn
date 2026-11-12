@@ -16,7 +16,7 @@ from bindings.native_transport import transport_initialize
 from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
 from bindings.byte_lm_trainer_native import byte_lm_trainer_c, byte_lm_pooled_finalize_c
 from bindings.parallel_byte_native import parallel_byte_c, ParallelByteOwner
-from bindings.byte_lm_session_owner import register_bytelmsessionowner
+from bindings.byte_lm_session_owner_pack import register_bytelmsessionowner
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 

@@ -12,17 +12,17 @@
 # scoring program instead of a second program over a downloaded block (the same
 # matmul stage over the same words).
 from std.memory import unsafe_memcpy
-from bindings.native_array_storage import native_array_empty
+from bindings.native_array_storage_door import native_array_empty
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_wrap_array, classical_typed
+from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
 from bindings.admitted_input import admit_x
 from bindings.classical_validate import classical_view
 from bindings.prep_lda_admission import (
@@ -30,18 +30,19 @@ from bindings.prep_lda_admission import (
     lda_native_get_params, lda_native_set_params, lda_require_fitted,
     lda_native_fields_plain, prep_plain_classes,
 )
-from bindings.classifier_public_lifecycle import classifier_label_list, classifier_after_fit
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.classifier_public_lifecycle_door import classifier_label_list, classifier_after_fit
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.public_lifecycle_owner_run import lifecycle_fitting
 from bindings.classical_validate import classical_estimator_name
-from providers.python.linear_metadata_boundary import classical_is_fitted
+from providers.python.linear_metadata_boundary_door import classical_is_fitted
 from bindings.classical_pandas import classical_admit_value
-from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
+from bindings.msel_fixed_owner_unpack import fixed_owner_context, fixed_owner_fields
+from bindings.msel_fixed_owner_pack import fixed_owner_set_params
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_score_from_codes
 from bindings.admitted_input import admit_weight_words
-from bindings.x_prep_native_inputs import _values, _rows_fields
-from bindings.arena_cache_release import arena_cache_release_operation
+from bindings.x_prep_native_inputs_door import _values, _rows_fields
+from bindings.arena_cache_release_pack import arena_cache_release_operation
 from bindings.prep_classify_prog import ClsProg, NONE, f32_array, i32_array, f32_input
 from bindings.prep_classify_common import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_entry,

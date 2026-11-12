@@ -69,10 +69,10 @@ def test_attribute_helpers_share_the_door_modules():
 
 
 def test_bindings_resolve_once_per_call():
-    text = _read("providers/python/estimator_binding_pyapi.mojo")
+    text = _read("providers/python/estimator_binding_pyapi_door.mojo")
     assert "def estimator_binding_mode(mut call: AdmittedCall" in text
     assert "def estimator_arguments(mut call: AdmittedCall" in text
-    gp = _read("providers/python/gp_public_lifecycle_pyapi.mojo")
+    gp = _read("providers/python/gp_public_lifecycle_pyapi_door.mojo")
     door = _function(gp, "def gp_public_operation(")
     assert door.count("AdmittedCall()") == 1
     assert 'estimator_binding_mode(call, PythonObject("identical"), "_mojolearn", context)' in door
@@ -80,14 +80,14 @@ def test_bindings_resolve_once_per_call():
 
 
 def test_second_admissions_removed():
-    boost = _read("providers/python/tree_boost_public_lifecycle_pyapi.mojo")
+    boost = _read("providers/python/tree_boost_public_lifecycle_pyapi_pack.mojo")
     operation = _function(boost, "def tree_boost_public_operation(")
     assert "labels_shape_of(" not in operation
     assert "classical_check_x(call, args[0], name, context, 0, admitted=True)" in operation
     assert "labels_shape_of(" not in _function(boost, "def _boost_classifier_target(").split('"""', 2)[2]
     admission = _read("bindings/admitted_input.mojo")
     assert "AdmittedTyped(prepared, context, prepared is source)" in _function(admission, "def admit_typed(")
-    projection = _function(_read("bindings/host_projection_native.mojo"), "def host_projection_inference(")
+    projection = _function(_read("bindings/host_projection_native_door.mojo"), "def host_projection_inference(")
     assert "host_tree_cast(raw, context)" in projection
     assert re.search(r"lin_operand\(args\[0\], \"a\", context\)(?!, True)", _read("bindings/linalg_ops_decomp.mojo")) is None
 

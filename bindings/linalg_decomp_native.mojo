@@ -12,12 +12,12 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import unsafe_memcpy
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
 from bindings.admitted_input import admit_ids
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_wrap_array, classical_typed
+from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
 from bindings.admitted_input import admit_x
 from bindings.host_sparse_native import host_sparse_format
 from bindings.classical_validate import classical_view

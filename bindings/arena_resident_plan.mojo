@@ -9,9 +9,9 @@ remain on their separately checked, mutable lifecycle path.
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.arena_cache_release import FirstFailure
-from bindings.arena_materialize_native import _native_call, _prepare, _prepared_info, _cast, _slot, _empty
-from bindings.msel_inputs import msel_input
+from bindings.arena_cache_release_unpack import FirstFailure
+from bindings.arena_materialize_native_door import _native_call, _prepare, _prepared_info, _cast, _slot, _empty
+from bindings.msel_inputs_unpack import msel_input
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 
 

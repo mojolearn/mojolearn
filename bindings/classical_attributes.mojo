@@ -13,7 +13,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.native_error_class import error_without_class
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
-from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
+from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
 
 
 def _type_fields(cls: PythonObject) raises -> PythonObject:

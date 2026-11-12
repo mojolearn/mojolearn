@@ -55,7 +55,7 @@ def test_resident_lifecycle_uses_shared_owner_and_validates_before_reserving():
                      'resident_upload', 'resident_download', 'resident_close'):
         assert f'return {function}(' in native
     assert 'owner[].busy = True' in native and 'owner[].busy = False' in native
-    boundary=(ROOT/'providers/python/samba_resident_pyapi.mojo').read_text()
+    boundary=(ROOT/'providers/python/samba_resident_pyapi_door.mojo').read_text()
     assert 'neural_descriptor_adopt(provider, handle, 13, [12])' in boundary
     step=boundary.split('def samba_resident_native_step(')[1]
     assert step.index('neural_descriptor_execute(provider, 19,') < step.index('neural_descriptor_reserved_execute(')

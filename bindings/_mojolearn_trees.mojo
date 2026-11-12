@@ -27,7 +27,7 @@ entrypoints are comparison arms; they do not run on the default fit path.
 """
 
 from core.experiment_guards_trees import TREES_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from ensemble.device_finite import FOREST_DEVICE_FINITE
 from ensemble.instruments import StageTimes
@@ -48,7 +48,7 @@ from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
 )
-from bindings.forest_fit_boundary import forest_fit_args_py
+from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, forest_export_verify_lists
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_ET

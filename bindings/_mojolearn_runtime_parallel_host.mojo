@@ -16,7 +16,7 @@ from bindings.native_transport import transport_initialize
 from bindings.parallel_shard_native import parallel_shard_c
 from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
 from bindings.parallel_forecast_native import parallel_forecast_c
-from bindings.tsa_public_native import tsa_c
+from bindings.tsa_public_native_door import tsa_c
 from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_mlp_native import parallel_mlp_c
 from bindings.small_mlp_native import small_mlp_c, small_mlp_finalize_c

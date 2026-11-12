@@ -74,7 +74,7 @@ def test_attention_report_uses_one_native_status_snapshot():
 
 
 def test_json_checkpoint_retains_bounded_format_and_native_codec():
-    source = (ROOT / 'providers/python/byte_lm_json_checkpoint_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/byte_lm_json_checkpoint_pyapi_door.mojo').read_text()
     assert 'BYTE_JSON_LIMIT = 2097152' in source
     assert 'native_json_parse_unique(encoded)' in source
     assert 'sha256_hexdigest(_canonical(payload))' in source

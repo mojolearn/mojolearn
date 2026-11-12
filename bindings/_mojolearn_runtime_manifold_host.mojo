@@ -11,8 +11,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.runtime_manifold_entry import (
     runtime_manifold_c, RUNTIME_MANIFOLD_SABOTAGE,
 )
-from bindings.manifold_storage_native import ManifoldMatrix, ManifoldDevice
-from bindings.manifold_scalar_native import ManifoldScalarSnapshot
+from bindings.manifold_storage_native_unpack import ManifoldMatrix, ManifoldDevice
+from bindings.manifold_scalar_native_door import ManifoldScalarSnapshot
 
 
 def runtime_manifold_host_numeric_mode_binding() raises -> PythonObject:

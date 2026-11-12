@@ -11,20 +11,20 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from providers.python.pca_query_cache_pyapi import PCAQueryCache
+from providers.python.pca_query_cache_pyapi_unpack import PCAQueryCache
 from bindings.tsvd_owner_boundary import TSVDResidentOwner
 from bindings.ipca_owner_boundary import IPCAResidentOwner
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from bindings.pca_native import pca_c
+from bindings.pca_native_pack import pca_c
 from bindings.decomp_native import decomp_c
 from bindings.linalg_decomp_native import linalg_decomp_c
 from bindings.als_native import als_c
 from bindings.mcd_native import mcd_c
 from bindings.pls_native import pls_c
 from bindings.dict_learning_native import dict_learning_c
-from bindings.jl_native import jl_c
+from bindings.jl_native_pack import jl_c
 from bindings.ipca_native import ipca_c
 from bindings.tsvd_native import tsvd_c
 

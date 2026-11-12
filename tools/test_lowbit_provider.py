@@ -29,7 +29,7 @@ def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
     assert 'if binding is None:' in source
     assert 'low_admit(native_instance_item(fields' in source
     assert 'native_storage_allocate(context[' in source
-    assert 'family_low_' in (ROOT/'bindings/family_native.mojo').read_text()
+    assert 'family_low_' in (ROOT/'bindings/family_native_door.mojo').read_text()
 
 
 def test_once_captured_foreign_metadata_retains_zero_copy_owner():

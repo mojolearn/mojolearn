@@ -96,7 +96,7 @@ _mojolearn_tsa = _Binding()
 
 # The stationarity functions' compiled owner, connected once at import:
 # `kpss_test` and `select_d` are one native call each
-# (bindings/tsa_public_native.mojo).
+# (bindings/tsa_public_native_door.mojo).
 from . import _native_tsa_bridge  # noqa: E402
 _TSA, _TSA_CONTEXT = _native_tsa_bridge.connect()
 
@@ -105,7 +105,7 @@ _TSA, _TSA_CONTEXT = _native_tsa_bridge.connect()
 _HW_FORMAT = "mojolearn-holtwinters-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after the class; host_archive_native.mojo
 # `host_archive_holtwinters` builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -117,7 +117,7 @@ _HW_INIT_CODES = {"estimated": 1, "heuristic": 0, "cuml": 0}
 _TSA_CONTEXT["hw_init_codes"] = _HW_INIT_CODES
 
 
-# TOMBSTONE: _series_major (Python admission helper, zero callers: the TSA doors admit y natively in bindings/tsa_public_native.mojo) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+# TOMBSTONE: _series_major (Python admission helper, zero callers: the TSA doors admit y natively in bindings/tsa_public_native_door.mojo) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A4_ADMISSION_HELPERS.patch.
 
 

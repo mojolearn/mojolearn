@@ -9,23 +9,23 @@
 # same integer/float words and launch order through native descriptors.
 # Private scratch is Mojo-owned; public arrays remain at the boundary.
 # Numerical implementations are unchanged; execution is owed to integration.
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit, xn_module, xn_is_module, xn_capabilities
-from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit, xn_module, xn_is_module, xn_capabilities
+from providers.python.estimator_binding_pyapi_door import estimator_binding
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.memory import unsafe_memcpy
-from bindings.ocsvm_provider import OcConnection
+from bindings.ocsvm_provider_unpack import OcConnection
 from bindings.labels_descriptor_boundary import labels_gather
 from core.ocsvm_plan import (OcMatrix, OcWeights, OcFitState, oc_f32_address, oc_i32_address,
     oc_take_rows, oc_take_rows_into, oc_take_cols, oc_kernel, oc_variance, OcQueryState,
     oc_kernel_product, oc_fused_labels, oc_product, oc_decision, oc_sign)
-from bindings.ocsvm_output_boundary import OcOutput
+from bindings.ocsvm_output_boundary_unpack import OcOutput
 from bindings.ocsvm_scalar_boundary import oc_dictionary, oc_name, oc_kernel_admit, oc_parameter_repr, oc_mode_value, oc_scalar_admit, oc_precomputed
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import _loaded_fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_type, py_get, py_setitem, py_fields
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_call, family_array, family_min,

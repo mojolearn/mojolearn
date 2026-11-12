@@ -5,10 +5,10 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_is_array
+from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_pandas import classical_admit_value
 from bindings.admitted_input import AdmittedTyped, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
@@ -18,7 +18,7 @@ from core.resample_rows_gather import resample_gather_rows
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.cpython_table import cpython_table
-from bindings.native_buffer_address import native_buffer_address
+from bindings.native_buffer_address_unpack import native_buffer_address
 
 
 # _row_dtype_admit moved to bindings/admitted_input.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).

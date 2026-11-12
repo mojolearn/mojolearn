@@ -29,7 +29,7 @@ def connect(tsvd_class):
     context["output_context"] = _numpy_free_context()
     # glue (lane a8d): the Gram fit of a cross-validation fold resident on
     # the device, exported by the identical GPU base binding next to the
-    # fold store it reads (bindings/msel_device.mojo); a build without it
+    # fold store it reads (bindings/msel_device_unpack.mojo); a build without it
     # (the CPU column) leaves None and the door gathers host rows.
     from ._buffer import _native
     try:

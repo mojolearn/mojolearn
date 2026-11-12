@@ -10,8 +10,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_type
-from bindings.classical_archive import _archive_methods, _archive_file_call
-from bindings.optimizer_public_words import stash_python_error
+from bindings.classical_archive_door import _archive_methods, _archive_file_call
+from bindings.optimizer_public_words_unpack import stash_python_error
 from core.native_archive_span import ArchiveSpan
 
 

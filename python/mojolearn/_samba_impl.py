@@ -476,7 +476,7 @@ class SambaDecodeSession(object):
     ...         logits = session.step(ids_t)
     """
 
-    # Every method is one native call (bindings/samba_decode_native.mojo); the
+    # Every method is one native call (bindings/samba_decode_native_unpack.mojo); the
     # resident device session, the open flag and the row count live in the
     # instance record the native door writes.
     def __init__(self, stack, state):

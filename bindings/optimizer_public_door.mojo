@@ -36,13 +36,14 @@ from bindings.admitted_input import admitted_storage_native
 from training.optimizer_config import optimizer_keyword_refusal
 from training.optimizer_owner_control import OptimizerOwnerControl
 from training.optimizer_native_api import OptimizerNativeDriver
-from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_new, optimizer_owner_idle
+from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_idle
+from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
 from training.optimizer_state_plan import (
     OptimizerStateSnapshot, optimizer_state_span, optimizer_checkpoint_spans,
     optimizer_state_download_needed, optimizer_host_moment_plan, OptimizerRegistryPlan, optimizer_registry_plan,
 )
 
-from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
+from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error
 from bindings.py_balanced import py_call, py_setitem, py_type, py_get, py_fields
 from bindings.tensor_view import (
     TensorView, shape_text, _contiguous, base_format, _format_name, _typestr_name, _array_code,
@@ -55,8 +56,9 @@ from training.optimizer_public_common import (
 )
 from core.shared_slot import SharedSlot
 from bindings.optimizer_descriptor_boundary import optimizer_provider, optimizer_driver
-from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_truth, optimizer_integer
-from bindings.optimizer_container_boundary import optimizer_sequence_items, optimizer_pack_list, OptimizerInputOwners, OptimizerBufferLease
+from bindings.optimizer_scalar_boundary_unpack import optimizer_float, optimizer_truth, optimizer_integer
+from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners, OptimizerBufferLease
+from bindings.optimizer_container_boundary_pack import optimizer_sequence_items, optimizer_pack_list
 from training.optimizer_input_plan import (
     check_views, _check_view, _addrs_of, optimizer_gradient_count, optimizer_gradient_shape, optimizer_accumulation_shapes, optimizer_contiguous_address,
 )

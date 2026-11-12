@@ -9,7 +9,7 @@ from core.nmf_native_api import (
     NMFNativeDriver, NMFFitRequest, NMFFitResult, NMFInverseRequest,
 )
 from bindings.py_balanced import py_call, py_type
-from bindings.decomp_owner_common import decomp_attr
+from bindings.decomp_owner_common_unpack import decomp_attr
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 

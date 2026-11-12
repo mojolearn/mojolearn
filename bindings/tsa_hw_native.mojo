@@ -20,13 +20,13 @@ forecast host binding from the module table.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_array_storage import native_array_zeros
-from bindings.arena_materialize_native import _owned
-from bindings.native_numpy_metadata import native_numpy_module_fields
-from bindings.classical_archive import classical_archive_write
+from bindings.native_array_storage_door import native_array_zeros
+from bindings.arena_materialize_native_door import _owned
+from bindings.native_numpy_metadata_pack import native_numpy_module_fields
+from bindings.classical_archive_door import classical_archive_write
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
+from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_pandas import classical_admit_value
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.tsa_admission import tsa_hw_fields, tsa_hw_class, tsa_scalar, tsa_component_index
@@ -34,15 +34,15 @@ from bindings.admitted_input import admit_view, admitted_view_kind, AdmittedType
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.classical_attributes import classical_connect_numpy
-from providers.python.forecast_owner_pyapi import forecast_commit
+from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 from core.xseq_marshal import xseq_column_copy_f32
 from tsa.tsa_hw_run import hw_component_gather
 from core.admitted_input_nd import admitted_cast_nd_f32
-from bindings.admitted_sequence import admitted_array_f32
+from bindings.admitted_sequence_door import admitted_array_f32
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
-from bindings.native_resident_capsule import resident_capsule
-from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
+from bindings.native_resident_capsule_pack import resident_capsule
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _HW = "mojolearn ExponentialSmoothing: "

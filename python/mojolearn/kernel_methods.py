@@ -48,7 +48,7 @@ _NYSTROEM_FORMAT = "mojolearn-nystroem-1"
 _RBF_SAMPLER_FORMAT = "mojolearn-rbf-sampler-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()

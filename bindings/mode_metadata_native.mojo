@@ -10,7 +10,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules, n
 from bindings.native_error_class import error_without_class
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
-from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
 
 def _native_read(entry: PythonObject) raises -> PythonObject:

@@ -18,7 +18,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_type, py_setit
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str,
 )
-from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
+from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_validate import classical_view
 from core.family_cast_impl import family_min_f32, family_max_f32
 from bindings.metrics_exp_common import (
@@ -503,7 +503,7 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
     var b = mx_b()
     if py_type(args[5]) is not b.str or String(args[5]) != "identical":
         raise Error("ranking_report requires numeric_mode='identical'")
-    from bindings.host_inference_scalars import host_inference_scalar
+    from bindings.host_inference_scalars_door import host_inference_scalar
     host_inference_scalar(args[4], context, True)
     var include_curves = Bool(py=args[4])
     var true = mx_targets(args[0], "ranking_report", context)

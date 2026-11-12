@@ -11,11 +11,11 @@ from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_instance_item import native_instance_item
-from bindings.native_array_storage import native_array_empty, native_array_zeros
+from bindings.native_instance_item_pack import native_instance_item
+from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from std.memory import unsafe_memcpy
-from bindings.native_buffer_address import native_buffer_address
-from bindings.native_numpy_metadata import native_numpy_type
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.native_numpy_metadata_pack import native_numpy_type
 from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot
 from bindings.mode_metadata_native import _class_fields
 from bindings.native_class_admission import class_record, class_admit

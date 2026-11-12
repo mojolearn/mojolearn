@@ -14,7 +14,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, 
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints
-from bindings.samba_state_native import samba_fields, samba_entries, samba_entry_key, samba_primitive
+from bindings.samba_state_native_door import samba_fields, samba_entries, samba_entry_key, samba_primitive
 from core.entry_table import EntryRef, entry_ref_call
 from core.mamba_state_entry_table import Mamba3StateRoute, MAMBA3_STATE_FORWARD, MAMBA3_STATE_DECODE
 from core.samba_entry_table import (
@@ -22,7 +22,7 @@ from core.samba_entry_table import (
     SambaEntryKey, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST, SAMBA_PRIM_EMBEDDING_FORWARD,
     SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD, SAMBA_PRIM_CE_LOSS,
 )
-from bindings.samba_training_native import samba_ids
+from bindings.samba_training_native_door import samba_ids
 from std.python._cpython import GILReleased
 from core.samba_entry_table_programs import (
     samba_programs_ref, samba_programs_call, samba_programs_available,
@@ -30,7 +30,7 @@ from core.samba_entry_table_programs import (
 )
 from core.samba_program_handle import SambaProgramHandle
 from bindings.neural_block_public import neural_training_entries, neural_training_selection, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
-from bindings.neural_prefill_native import _prefill_mamba3
+from bindings.neural_prefill_native_door import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type

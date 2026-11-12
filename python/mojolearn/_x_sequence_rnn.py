@@ -56,7 +56,7 @@ class _RecurrentBase(ParamsMixin):
                  optimizer_options=None, nonlinearity="tanh", numeric_mode=None,
                  predict_chunk=4096, lr_schedule=None):
         # One native call: the full-reset owner replays this constructor's field
-        # writes (bindings/full_reset_constructor_native.mojo). connect_module
+        # writes (bindings/full_reset_constructor_native_door.mojo). connect_module
         # installs the same entry as each concrete class's __init__.
         return _FULL_RESET_INIT(self, (), {"hidden_size": hidden_size, "num_layers": num_layers, "optimizer": optimizer, "learning_rate": learning_rate, "batch_size": batch_size, "max_epochs": max_epochs, "shuffle": shuffle, "random_state": random_state, "optimizer_options": optimizer_options, "nonlinearity": nonlinearity, "numeric_mode": numeric_mode, "predict_chunk": predict_chunk, "lr_schedule": lr_schedule}, _FULL_RESET_CONTEXT, type(self))
 

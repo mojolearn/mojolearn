@@ -43,7 +43,7 @@ def registered_types(member):
 
 
 def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
-    closure = SourceGraph(ROOT).closure(['host_array_native'])
+    closure = SourceGraph(ROOT).closure(['host_array_native_pack'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/host_archive_native.mojo' not in closure['files']
     assert 'core/host_archive_gbdt.mojo' not in closure['files']
@@ -51,10 +51,10 @@ def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
 
 
 def test_model_selection_does_not_pull_archive_readers_through_sparse_allocation():
-    closure = SourceGraph(ROOT).closure(['model_selection_native'])
+    closure = SourceGraph(ROOT).closure(['model_selection_native_door'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/host_sparse_native.mojo' in closure['files']
-    assert 'bindings/host_array_native.mojo' in closure['files']
+    assert 'bindings/host_array_native_pack.mojo' in closure['files']
     assert 'bindings/host_archive_native.mojo' not in closure['files']
     assert not any(path.startswith('gbdt/') for path in closure['files'])
 
@@ -115,7 +115,7 @@ def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency
     closure = SourceGraph(ROOT).closure(['_mojolearn_runtime_manifold_host'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/mani_kit.mojo' in closure['files']
-    assert 'bindings/family_native.mojo' not in closure['files']
+    assert 'bindings/family_native_door.mojo' not in closure['files']
     assert 'bindings/host_archive_native.mojo' not in closure['files']
     assert 'bindings/_mojolearn_tokenizer_host.mojo' not in closure['files']
     own, shared = registered_types('_mojolearn_runtime_manifold_host')
@@ -177,9 +177,9 @@ def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development
     # one unit (the import graph at file level).
     expected = {'bindings/classical_native.mojo': {('host', 'runtime_classical')},
                 'bindings/classical_trees_door.mojo': {('host', 'runtime_trees')},
-                'bindings/trees_public_native.mojo': {('host', 'runtime_trees')},
+                'bindings/trees_public_native_door.mojo': {('host', 'runtime_trees')},
                 'bindings/classical_family_door.mojo': {('host', 'runtime_family')},
-                'bindings/family_native.mojo': {('host', 'runtime_family')}}
+                'bindings/family_native_door.mojo': {('host', 'runtime_family')}}
     owners = {path: set() for path in expected}
     for mode, partitions in groups.items():
         for name, members in partitions.items():
@@ -208,7 +208,7 @@ def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development
         for name in exports:
             closure = defs.closure(source, name)
             assert closure is not None, (unit, name)
-            if any(node[1] == 'bindings/trees_lifetime.mojo' for node in closure):
+            if any(node[1] == 'bindings/trees_lifetime_door.mojo' for node in closure):
                 reached.add((unit, name))
             if unit != 'runtime_trees':
                 archive = {node[2] for node in closure if node[1] == 'bindings/host_archive_native.mojo'}

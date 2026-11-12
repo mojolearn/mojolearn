@@ -25,7 +25,7 @@ Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_f32, xcnn_addr, xcnn_readonly
-from bindings.xseq_native_common import XseqStream, xseq_neural_provider
+from bindings.xseq_native_common_door import XseqStream, xseq_neural_provider
 from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
 from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value

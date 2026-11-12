@@ -24,19 +24,19 @@ from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.cpython_table import cpython_table
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
-from bindings.native_array_storage import native_array_zeros, native_scratch_bytes, native_scratch_address
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.classical_arrays_door import classical_wrap_array, _store_code, _buffer_typestr
+from bindings.native_array_storage_door import native_array_zeros, native_scratch_bytes, native_scratch_address
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
 from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
-from bindings.classifier_public_lifecycle import classifier_label_list
-from bindings.metrics_native_support import metric_is_bool, metric_is_integral, metric_is_real
+from bindings.classifier_public_lifecycle_door import classifier_label_list
+from bindings.metrics_native_support_door import metric_is_bool, metric_is_integral, metric_is_real
 from bindings.classical_labels import ClassicalLabels, classical_encode_labels
-from bindings.class_weight_boundary import CLASS_WEIGHT_TREES
-from bindings.class_weight_rows_boundary import class_weight_rows_admitted
-from bindings.label_weights_boundary import label_weights_run
+from bindings.class_weight_boundary_unpack import CLASS_WEIGHT_TREES
+from bindings.class_weight_rows_boundary_pack import class_weight_rows_admitted
+from bindings.label_weights_boundary_unpack import label_weights_run
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
 # The array admission helpers (lane consol-a0-admission, 2026-11-08): this
 # file kept a near-verbatim copy of bindings/classical_labels.mojo's block;
@@ -61,7 +61,7 @@ from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_x_unrecorded, admit_weight_words, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype, classical_view,
 )
-from bindings.classical_arrays import classical_is_f32, classical_c_order
+from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 
 
@@ -85,8 +85,8 @@ def trees_forest_x(source: PythonObject, name: String, context: PythonObject) ra
     var x = admit_f32(view, 2, name, context, order="C" if row_major else "F", finite=False, admitted=True)
     _ = view^
     return x^
-from bindings.label_input_sources import labels_storage_source
-from bindings.perf3_label_doors_text import labels_all_exact_str
+from bindings.label_input_sources_unpack import labels_storage_source
+from bindings.perf3_label_doors_text_unpack import labels_all_exact_str
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_or_none, py_present
 

@@ -21,7 +21,7 @@
 # Numerics: none (the same words reach the same kernels).
 from std.python import PythonObject
 from bindings.admitted_family import admit_family
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.device_rows_door_run import DoorRowsStore

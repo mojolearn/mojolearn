@@ -1957,7 +1957,7 @@ ANNOTATIONS_BY_SRC.update({
         "covered (new lane)", ["training-device-cross-entropy"],
         "_native_optimizer_bridge retains it at import with the training binding's entries; "
         "training.cross_entropy on a TrainDeviceArray of logits takes it "
-        "(bindings/training_cross_entropy_native.mojo, `ce_loss_dev`); GPU columns only"),
+        "(bindings/training_cross_entropy_native_unpack.mojo, `ce_loss_dev`); GPU columns only"),
 })
 
 
@@ -2129,7 +2129,7 @@ ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_h
 # each checked in the source.
 _ARENA_ROWS = ("_native_arena_rows connects msel_put, msel_free and msel_take_rows together as the "
                "owner context's arena_msel_put / _free / _take_rows; the arena owners "
-               "(bindings/arena_resident_native.mojo, arena_materialize_native.mojo) put, gather and free "
+               "(bindings/arena_resident_native_unpack.mojo, arena_materialize_native.mojo) put, gather and free "
                "every model_selection._Resident snapshot with them, which GridSearchCV and cross_validate "
                "take per fold (x-metrics-search reaches msel_free by name)")
 ANNOTATIONS.update({

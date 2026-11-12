@@ -10,27 +10,27 @@ from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
-from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
-from bindings.classical_arrays import classical_address, classical_wrap_array
+from bindings.optimizer_public_words_unpack import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
+from bindings.classical_arrays_door import classical_address, classical_wrap_array
 from bindings.family_common import (
     FAMILY_I64P, FAMILY_I32P, FAMILY_F64P, family_array, family_call, family_call_kw, family_isinstance,
     family_is_str, family_repr, family_str, family_type_name,
 )
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
-from bindings.native_buffer_owner import native_storage_allocate
-from bindings.arena_materialize_native import _prepared_info, _slot
+from bindings.native_buffer_owner_pack import native_storage_allocate
+from bindings.arena_materialize_native_door import _prepared_info, _slot
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
-from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
+from bindings.msel_inputs_unpack import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission import _one_of
 from bindings.classical_labels import _label_list, classical_encode_labels
-from bindings.label_input_sources import labels_list_scalar_kind, labels_text_storage, LABELS_LIST_OTHER
-from bindings.native_typed_context import native_typed_context
+from bindings.label_input_sources_unpack import labels_list_scalar_kind, labels_text_storage, LABELS_LIST_OTHER
+from bindings.native_typed_context_pack import native_typed_context
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.metrics_native_support import metric_warn
+from bindings.metrics_native_support_door import metric_warn
 from bindings.native_torch_admission import native_torch_exact
-from bindings.msel_helpers_key import msel_helpers_key
+from bindings.msel_helpers_key_unpack import msel_helpers_key
 from core.entry_table import EntryRef
-from bindings.msel_helpers_released import (
+from bindings.msel_helpers_released_unpack import (
     msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8, msel_fold_ids,
     msel_select_fold_i64, msel_select_folds_i64, msel_gather_i32,
 )
@@ -1091,7 +1091,7 @@ def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: Pyt
 # ---------------------------------------------------------------- scorers
 from bindings.msel_estimator_native import msel_estimator_call
 from bindings.msel_scorer_native import msel_scorer_fields, msel_scorer_call, msel_scorer_value, MselMetricPrepared
-from bindings.metrics_native_support import metric_float
+from bindings.metrics_native_support_door import metric_float
 
 
 def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:

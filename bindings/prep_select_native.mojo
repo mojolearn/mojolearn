@@ -20,14 +20,14 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
-from bindings.optimizer_public_words import stash_python_error
+from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_typed, classical_input
+from bindings.classical_arrays_door import classical_address, classical_typed, classical_input
 from bindings.admitted_input import admit_x
 from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end
-from bindings.admitted_meta_scope import admitted_hold_array_f32
-from bindings.classical_arrays import classical_is_array
+from bindings.admitted_meta_scope_unpack import admitted_hold_array_f32
+from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import classical_encode_labels
 from bindings.admitted_input import admit_f32, admitted_vector
@@ -43,7 +43,7 @@ from bindings.prep_classify_prog import ClsProg, f32_array
 from bindings.prep_classify_common import cls_x2d, cls_mode, XIn
 from bindings.prep_classify_native import resident_enter_min, _resident_exit
 from bindings.py_optional import py_or_none, py_present
-from bindings.prep_native_estimator import (
+from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute)
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]

@@ -11,25 +11,25 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.hdbscan_query_boundary import HdbscanQueryRecord
+from bindings.hdbscan_query_boundary_unpack import HdbscanQueryRecord
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.classical_family_door import classical_family_c
-from bindings.host_svr_native import host_svr_attribute_c
-from bindings.host_svc_native import host_svc_attribute_c
+from bindings.host_svr_native_pack import host_svr_attribute_c
+from bindings.host_svc_native_door import host_svc_attribute_c
 from bindings.gp_resident_boundary import GPPreparedLease
 from bindings.svr_native_boundary import SvrPreparedLease
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.gp_kernel_cache_boundary import GPPreparedKernel
-from bindings.gp_state_cache_boundary import GPPreparedState
-from bindings.gp_class_table_boundary import GPPreparedClassTable
+from bindings.gp_state_cache_boundary_unpack import GPPreparedState
+from bindings.gp_class_table_boundary_unpack import GPPreparedClassTable
 from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
-from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
+from bindings.kde_native_boundary_unpack import KDEResidentOwner, kde_resident_owner_pins
 from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
-from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.agglo_native_boundary import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
-from bindings.kde_admission_boundary import KDEAdmissionOwner
+from bindings.kde_admission_boundary_unpack import KDEAdmissionOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 

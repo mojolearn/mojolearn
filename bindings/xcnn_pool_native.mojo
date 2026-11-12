@@ -14,7 +14,7 @@ moves. The layer state the Python `backward` methods read (`_xshape`,
 `_idx_dev`, `_idx_shape`, `_mask_dev`, `_layer`, `_dev`) is written under
 the same names.
 """
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.sequential_admission import _one_of, sequential_admit_value

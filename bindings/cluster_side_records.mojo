@@ -36,7 +36,7 @@ from bindings.mode_metadata_native import _class_fields
 from bindings.classical_attributes import _type_mro
 from bindings.py_balanced import py_call, py_type, py_contains, py_get
 from bindings.native_loaded_module import native_loaded_module
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.trees_side_records import trees_key_same, trees_key_shallow
 from bindings.native_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_CLUSTER
 

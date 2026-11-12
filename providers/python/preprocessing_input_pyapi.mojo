@@ -7,8 +7,8 @@ from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.py_balanced import py_call, py_type, py_setattr, py_setitem
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
-from bindings.classical_arrays import classical_input, classical_is_array, classical_is_f32, classical_address, classical_typed
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
+from bindings.classical_arrays_door import classical_input, classical_is_array, classical_is_f32, classical_address, classical_typed
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, sequential_admit_value

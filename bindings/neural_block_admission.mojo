@@ -8,7 +8,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_array_snapshot import native_array_slots as neural_array_slots, native_array_snapshot as neural_array_snapshot
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.generation_buffers import generation_array, py_ints
-from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
+from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32
 from core.hostptr import f32_ptr
 from std.memory import unsafe_memcpy

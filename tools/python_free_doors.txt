@@ -5,6 +5,13 @@
 # `PythonObject` type) fails the build and the push. A literal path (no glob)
 # that does not exist fails too, so the list follows renames.
 #
+# `allow: <path>` lines are the other direction: binding files that import
+# Python although they are not boundary files (`bindings/_mojolearn*.mojo`,
+# `bindings/entry/*.mojo`, `bindings/py_*.mojo`, `*_unpack.mojo`, `*_pack.mojo`,
+# `*_door.mojo`). Each names the lane that owns its untangling. The list only
+# shrinks: the owning lane deletes its line when the file's RUN work is typed
+# and the file is renamed or split.
+#
 # The doorsplit lanes add each RUN module here as it moves out of its
 # UNPACK/PACK binding. Every `*_run.mojo` file is checked whether listed or
 # not (the script adds that pattern itself).
@@ -13,3 +20,307 @@
 core/*_entry_table*.mojo
 # RUN modules (also built into the script).
 *_run.mojo
+
+# Dated allowlist (fence-flip, 2026-11-12): files whose RUN work still uses a
+# Python-holding construct (kits and programs: entangled-kits; ArrayMetadata,
+# AdmittedBorrowedBuffer, AdmittedX, AdmittedTyped, BufferView, _RPArray:
+# entangled-array-owner; NativeModules: entangled-native-modules), files a
+# sibling wave-9 lane is rewriting, and entangled files no lane owns yet
+# ("unassigned": the orchestrator assigns them).
+allow: bindings/admitted_call.mojo  # entangled-native-modules
+allow: bindings/admitted_family.mojo  # entangled-array-owner
+allow: bindings/admitted_input.mojo  # entangled-array-owner
+allow: bindings/admitted_registry.mojo  # unassigned, entangled on AdmittedRegistry
+allow: bindings/affinity_preference_boundary.mojo  # entangled-array-owner
+allow: bindings/agglo_native_boundary.mojo  # unassigned, entangled on AggloBindings
+allow: bindings/als_native.mojo  # entangled-kits
+allow: bindings/apple_fast_bf16_public.mojo  # unassigned, entangled on _Boundary
+allow: bindings/arena_prog_native.mojo  # entangled-kits
+allow: bindings/arena_resident_plan.mojo  # entangled-array-owner
+allow: bindings/array_from_buffer_native.mojo  # entangled-array-owner
+allow: bindings/boundary_read.mojo  # entangled-array-owner
+allow: bindings/byte_checkpoint_native.mojo  # unassigned, entangled on ByteCheckpointBoundary
+allow: bindings/byte_lm_host_trainer_native.mojo  # entangled-native-modules
+allow: bindings/byte_lm_state_admission.mojo  # entangled-native-modules
+allow: bindings/byte_lm_trainer_native.mojo  # entangled-native-modules
+allow: bindings/byte_perf_helpers.mojo  # entangled-array-owner
+allow: bindings/causal_checkpoint.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/causal_lm_construct.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/causal_lm_public.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/causal_model_config.mojo  # entangled-native-modules
+allow: bindings/causal_operation_owner.mojo  # entangled-native-modules
+allow: bindings/cfb_agglo.mojo  # entangled-array-owner
+allow: bindings/cfb_spectral.mojo  # unassigned, entangled on _Coo
+allow: bindings/classical_archive_input.mojo  # unassigned, entangled on ArchiveReadInput
+allow: bindings/classical_archive_read.mojo  # unassigned, entangled on _ArchiveReprFailure
+allow: bindings/classical_attributes.mojo  # entangled-native-modules
+allow: bindings/classical_labels.mojo  # entangled-array-owner
+allow: bindings/classical_native.mojo  # entangled-native-modules
+allow: bindings/classical_pandas.mojo  # entangled-native-modules
+allow: bindings/classical_validate.mojo  # entangled-array-owner
+allow: bindings/cluster_centroid_fit_boundary.mojo  # unassigned, entangled on CentroidFitConnection
+allow: bindings/cluster_native.mojo  # entangled-native-modules
+allow: bindings/cluster_resident_table.mojo  # unassigned, entangled on CresHeld
+allow: bindings/cluster_side_records.mojo  # entangled-native-modules
+allow: bindings/cpython_table.mojo  # unassigned, entangled on cpython_table
+allow: bindings/cross_vendor_native.mojo  # entangled-array-owner
+allow: bindings/dbscan_native_boundary.mojo  # unassigned, entangled on DBSCANConnection
+allow: bindings/decomp_inputs.mojo  # entangled-array-owner
+allow: bindings/decomp_kit_native.mojo  # entangled-kits; entangled-array-owner; entangled-native-modules
+allow: bindings/decomp_native.mojo  # entangled-native-modules
+allow: bindings/dict_learning_native.mojo  # entangled-kits
+allow: bindings/embedding_layer_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/family_common.mojo  # entangled-array-owner
+allow: bindings/generation_buffers.mojo  # entangled-native-modules
+allow: bindings/gp_classifier_native.mojo  # unassigned, entangled on GPCBinaryPublication
+allow: bindings/gp_kernel_cache_boundary.mojo  # entangled-native-modules
+allow: bindings/gp_kernel_public_native.mojo  # unassigned, entangled on GPKernelSnapshot
+allow: bindings/gp_labels_native.mojo  # entangled-native-modules
+allow: bindings/gp_mixed_label_boundary.mojo  # unassigned, entangled on GPScalarIndex
+allow: bindings/gp_native_boundary.mojo  # unassigned, entangled on GPConnection
+allow: bindings/gp_query_x.mojo  # unassigned, entangled on GpQuery
+allow: bindings/gp_regressor_native.mojo  # unassigned, entangled on GPRNormalizedTargets
+allow: bindings/gp_resident_boundary.mojo  # entangled-native-modules
+allow: bindings/gp_score_boundary.mojo  # entangled-kits
+allow: bindings/gp_score_labels_boundary.mojo  # unassigned, entangled on _gp_score_integer
+allow: bindings/gp_state_admission_native.mojo  # entangled-native-modules
+allow: bindings/gp_svm_gp_state.mojo  # entangled-native-modules
+allow: bindings/gp_svm_records.mojo  # entangled-native-modules
+allow: bindings/host_archive_native.mojo  # unassigned, entangled on HostArchivePacked
+allow: bindings/host_archive_predict_native.mojo  # entangled-native-modules
+allow: bindings/host_inference_state.mojo  # entangled-native-modules
+allow: bindings/host_logistic_native.mojo  # unassigned, entangled on _LabelAliases
+allow: bindings/host_sparse_native.mojo  # unassigned, entangled on _SparseArraySnapshot
+allow: bindings/host_tree_native.mojo  # entangled-native-modules
+allow: bindings/iforest_public_lifecycle.mojo  # entangled-native-modules
+allow: bindings/ipca_descriptor_boundary.mojo  # unassigned, entangled on IPCAConnection
+allow: bindings/ipca_native.mojo  # entangled-array-owner
+allow: bindings/ipca_owner_boundary.mojo  # entangled-native-modules
+allow: bindings/kernel_methods_native.mojo  # entangled-array-owner
+allow: bindings/kmeans_descriptor_boundary.mojo  # unassigned, entangled on KMeansConnection
+allow: bindings/kmeans_native.mojo  # entangled-array-owner
+allow: bindings/kmeans_owner_boundary.mojo  # unassigned, entangled on KMeansResidentOwner
+allow: bindings/kmeans_variants_boundary.mojo  # unassigned, entangled on KMeansVariantsConnection
+allow: bindings/kpca_descriptor_boundary.mojo  # unassigned, entangled on KPCANearConnection
+allow: bindings/kpca_native.mojo  # entangled-array-owner
+allow: bindings/label_snapshot_native.mojo  # entangled-array-owner
+allow: bindings/labels_descriptor_boundary.mojo  # unassigned, entangled on _LabelsProvider
+allow: bindings/labels_score_boundary.mojo  # unassigned, entangled on ScoreKeyOwner
+allow: bindings/linalg_decomp_native.mojo  # entangled-kits
+allow: bindings/linalg_ops_buffers.mojo  # entangled-array-owner
+allow: bindings/linalg_ops_decomp.mojo  # entangled-kits
+allow: bindings/linalg_ops_kit.mojo  # entangled-kits
+allow: bindings/linalg_ops_lowbit.mojo  # entangled-array-owner
+allow: bindings/linalg_ops_resample.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/linear_constructor_native.mojo  # entangled-native-modules
+allow: bindings/lm_corpus_files.mojo  # unassigned, entangled on CorpusFileConnection
+allow: bindings/lm_corpus_public_native.mojo  # unassigned, entangled on LmCorpusIteratorHandle
+allow: bindings/logistic_descriptor_boundary.mojo  # unassigned, entangled on LogisticConnection
+allow: bindings/logistic_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/mamba_public_native.mojo  # entangled-native-modules
+allow: bindings/mani_decomp_native.mojo  # entangled-kits; entangled-array-owner
+allow: bindings/mani_kit.mojo  # entangled-kits; entangled-array-owner
+allow: bindings/mani_tsne_native.mojo  # entangled-array-owner
+allow: bindings/mani_umap_native.mojo  # entangled-kits; entangled-array-owner
+allow: bindings/manifold_lifecycle_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/manifold_native.mojo  # entangled-array-owner
+allow: bindings/mcd_native.mojo  # entangled-kits
+allow: bindings/mcls_classify.mojo  # unassigned, entangled on McPair
+allow: bindings/mcls_common.mojo  # entangled-kits
+allow: bindings/mcls_ranking.mojo  # unassigned, entangled on mc_fold_stages
+allow: bindings/metrics_exp_cls.mojo  # entangled-kits
+allow: bindings/metrics_exp_cluster.mojo  # entangled-kits
+allow: bindings/metrics_exp_common.mojo  # entangled-kits
+allow: bindings/metrics_exp_curve.mojo  # entangled-kits
+allow: bindings/metrics_exp_rank.mojo  # entangled-kits
+allow: bindings/metrics_reg_native.mojo  # entangled-kits
+allow: bindings/minmax_native.mojo  # entangled-native-modules
+allow: bindings/mixture_native.mojo  # unassigned, entangled on _BgmmConnection
+allow: bindings/mode_metadata_native.mojo  # entangled-native-modules
+allow: bindings/model_catalog_native.mojo  # entangled-array-owner
+allow: bindings/msel_common.mojo  # entangled-kits; entangled-array-owner
+allow: bindings/msel_cv.mojo  # unassigned, entangled on MselFoldRows
+allow: bindings/msel_estimator_native.mojo  # entangled-native-modules
+allow: bindings/msel_parameter_grid.mojo  # unassigned, entangled on ParameterGridRow
+allow: bindings/msel_scorer_native.mojo  # entangled-native-modules
+allow: bindings/msel_search.mojo  # entangled-kits
+allow: bindings/msel_search_state.mojo  # entangled-native-modules
+allow: bindings/msel_split.mojo  # entangled-kits; entangled-native-modules
+allow: bindings/native_array_snapshot.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/native_array_view.mojo  # entangled-native-modules
+allow: bindings/native_class_admission.mojo  # entangled-native-modules
+allow: bindings/native_codec.mojo  # entangled-array-owner
+allow: bindings/native_identity_key.mojo  # entangled-native-modules
+allow: bindings/native_idna.mojo  # unassigned, entangled on IdnaBoundary
+allow: bindings/native_json.mojo  # unassigned, entangled on NativeJSON
+allow: bindings/native_loaded_module.mojo  # entangled-native-modules
+allow: bindings/native_model_records.mojo  # unassigned, entangled on StampedRecord
+allow: bindings/native_owner_lifetime.mojo  # entangled-native-modules
+allow: bindings/native_posix_transport.mojo  # parallel-payload-transport
+allow: bindings/native_prepared_owner.mojo  # entangled-native-modules
+allow: bindings/native_process_pool.mojo  # unassigned, entangled on ProcessBoundary
+allow: bindings/native_torch_admission.mojo  # entangled-native-modules
+allow: bindings/native_transport.mojo  # unassigned, entangled on TransportBoundary
+allow: bindings/native_type_module.mojo  # entangled-native-modules
+allow: bindings/native_worker_inventory.mojo  # unassigned, entangled on _inventory_utf8
+allow: bindings/neighbor_query_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/neighbors_ann_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/neighbors_ann_query_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/neighbors_graph_native.mojo  # unassigned, entangled on _Csr
+allow: bindings/neighbors_kde_native.mojo  # unassigned, entangled on KDEDense
+allow: bindings/neighbors_knn_native.mojo  # entangled-array-owner
+allow: bindings/neighbors_local_native.mojo  # entangled-native-modules
+allow: bindings/neighbors_native.mojo  # entangled-array-owner
+allow: bindings/neighbors_semi_native.mojo  # unassigned, entangled on _SemiKfeatCache
+allow: bindings/neural_block_admission.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/neural_block_public.mojo  # entangled-native-modules
+allow: bindings/neural_labels_native.mojo  # entangled-array-owner
+allow: bindings/nmf_descriptor_boundary.mojo  # unassigned, entangled on NMFConnection
+allow: bindings/nmf_native.mojo  # entangled-array-owner
+allow: bindings/numeric_profile_native.mojo  # unassigned, entangled on ProfileAdmission
+allow: bindings/ocsvm_scalar_boundary.mojo  # unassigned, entangled on OcScalarTypes
+allow: bindings/optics_fit_boundary.mojo  # unassigned, entangled on OpticsFitConnection
+allow: bindings/optimizer_admission.mojo  # entangled-native-modules
+allow: bindings/optimizer_descriptor_boundary.mojo  # unassigned, entangled on OptimizerConnection
+allow: bindings/optimizer_device_native.mojo  # unassigned, entangled on DeviceAllocation
+allow: bindings/p3_guard_records.mojo  # entangled-native-modules
+allow: bindings/p3_samba_caps.mojo  # entangled-native-modules
+allow: bindings/parallel_byte_native.mojo  # entangled-array-owner
+allow: bindings/parallel_causal_native.mojo  # entangled-native-modules
+allow: bindings/parallel_forecast_native.mojo  # unassigned, entangled on ParallelForecastBoundary
+allow: bindings/parallel_mlp_native.mojo  # unassigned, entangled on ParallelMlpBoundary
+allow: bindings/parallel_neighbor_worker.mojo  # unassigned, entangled on NeighborSnapshots
+allow: bindings/parallel_neural_native.mojo  # unassigned, entangled on ParallelNeuralBoundary
+allow: bindings/parallel_shard_common.mojo  # unassigned, entangled on ShardTrace
+allow: bindings/parallel_shard_native.mojo  # entangled-native-modules
+allow: bindings/params_metadata_native.mojo  # entangled-native-modules
+allow: bindings/pca_descriptor_boundary.mojo  # unassigned, entangled on PCAConnection
+allow: bindings/pca_fit_native.mojo  # unassigned, entangled on PCAFitOutput
+allow: bindings/pca_metadata.mojo  # entangled-native-modules
+allow: bindings/perf2_shared_fitted_field.mojo  # entangled-native-modules
+allow: bindings/pls_native.mojo  # entangled-kits; entangled-array-owner
+allow: bindings/prep_classify_common.mojo  # entangled-kits
+allow: bindings/prep_classify_native.mojo  # entangled-kits
+allow: bindings/prep_classify_prog.mojo  # entangled-kits
+allow: bindings/prep_encode_native.mojo  # entangled-kits; entangled-native-modules
+allow: bindings/prep_iterimp_native.mojo  # entangled-kits
+allow: bindings/prep_labels_native.mojo  # entangled-kits
+allow: bindings/prep_lda_admission.mojo  # entangled-native-modules
+allow: bindings/prep_normalizer_lifecycle.mojo  # entangled-native-modules
+allow: bindings/prep_owner_native.mojo  # entangled-native-modules
+allow: bindings/prep_select_native.mojo  # entangled-kits
+allow: bindings/prep_stateless_native.mojo  # entangled-kits
+allow: bindings/public_attributes_native.mojo  # entangled-native-modules
+allow: bindings/qn_native.mojo  # entangled-native-modules
+allow: bindings/runtime_manifold_entry.mojo  # entangled-kits
+allow: bindings/samba_admission.mojo  # entangled-native-modules
+allow: bindings/samba_checkpoint_native.mojo  # entangled-array-owner
+allow: bindings/samba_inference_native.mojo  # mamba3-prefill-handle
+allow: bindings/samba_step_native.mojo  # entangled-native-modules
+allow: bindings/scaler_lifecycle_native.mojo  # entangled-native-modules
+allow: bindings/scaler_native.mojo  # unassigned, entangled on ScalerDoorCalls
+allow: bindings/sequence_layers_native.mojo  # entangled-native-modules
+allow: bindings/sequence_moe_native.mojo  # entangled-native-modules
+allow: bindings/sequence_string_storage.mojo  # unassigned, entangled on SequenceStringStorage
+allow: bindings/sequential_admission.mojo  # entangled-native-modules
+allow: bindings/sequential_arrays.mojo  # entangled-native-modules
+allow: bindings/sequential_checkpoint.mojo  # entangled-native-modules
+allow: bindings/sequential_description.mojo  # entangled-native-modules
+allow: bindings/sequential_execution.mojo  # entangled-native-modules
+allow: bindings/sequential_inputs.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/sequential_native.mojo  # entangled-native-modules
+allow: bindings/sequential_weights.mojo  # entangled-native-modules
+allow: bindings/small_mlp_native.mojo  # entangled-native-modules
+allow: bindings/spectral_affinity_boundary.mojo  # unassigned, entangled on SpectralAffinityRoom
+allow: bindings/svc_common.mojo  # entangled-kits; entangled-array-owner
+allow: bindings/svc_kernel_native.mojo  # entangled-array-owner
+allow: bindings/svc_linear_native.mojo  # unassigned, entangled on _qn_row_weights
+allow: bindings/svc_ocsvm_native.mojo  # unassigned, entangled on OcIndexPin
+allow: bindings/svc_score_boundary.mojo  # unassigned, entangled on SvcDecodedScore
+allow: bindings/svm_mixture_native.mojo  # unassigned, entangled on QnScoreInput
+allow: bindings/svr_native_boundary.mojo  # entangled-native-modules
+allow: bindings/tokenizer_public_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/training_embedding_native.mojo  # unassigned, entangled on embedding_indices
+allow: bindings/training_extra_native.mojo  # unassigned, entangled on training_mlp_sessions
+allow: bindings/transformer_public_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/trees_agnostic_native.mojo  # unassigned, entangled on _State
+allow: bindings/trees_boost_admission.mojo  # entangled-native-modules
+allow: bindings/trees_explainer_native.mojo  # entangled-native-modules
+allow: bindings/trees_gbdt_adapter_lifecycle.mojo  # entangled-native-modules
+allow: bindings/trees_public_boost.mojo  # entangled-array-owner
+allow: bindings/trees_public_forest.mojo  # entangled-array-owner
+allow: bindings/trees_public_gbdt.mojo  # entangled-array-owner
+allow: bindings/trees_public_gbdt_fit.mojo  # entangled-array-owner
+allow: bindings/trees_public_iforest.mojo  # entangled-array-owner
+allow: bindings/trees_public_inputs.mojo  # entangled-array-owner
+allow: bindings/trees_public_meta.mojo  # entangled-array-owner
+allow: bindings/trees_public_score.mojo  # entangled-array-owner
+allow: bindings/trees_resident_table.mojo  # unassigned, entangled on TreesResidentEntry
+allow: bindings/trees_side_records.mojo  # entangled-native-modules
+allow: bindings/tsa_admission.mojo  # entangled-native-modules
+allow: bindings/tsa_arima_native.mojo  # entangled-native-modules
+allow: bindings/tsa_arima_resident.mojo  # entangled-native-modules
+allow: bindings/tsa_autoarima_native.mojo  # entangled-array-owner
+allow: bindings/tsa_hw_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/tsvd_descriptor_boundary.mojo  # unassigned, entangled on TSVDConnection
+allow: bindings/tsvd_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/tsvd_owner_boundary.mojo  # entangled-native-modules
+allow: bindings/umap_parameters_native.mojo  # entangled-array-owner
+allow: bindings/user_object_flatten.mojo  # entangled-native-modules
+allow: bindings/user_objects_native.mojo  # unassigned, entangled on _Env
+allow: bindings/x_linear_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/x_prep_native_owner.mojo  # entangled-kits
+allow: bindings/xcnn_bn_native.mojo  # entangled-native-modules
+allow: bindings/xcnn_classifier_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/xcnn_common.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/xcnn_conv_native.mojo  # entangled-native-modules
+allow: bindings/xcnn_graph_native.mojo  # entangled-array-owner; entangled-native-modules
+allow: bindings/xcnn_pool_native.mojo  # entangled-native-modules
+allow: bindings/xseq_forecast_native.mojo  # entangled-native-modules
+allow: bindings/xseq_neural_native.mojo  # entangled-native-modules
+allow: providers/python/arima_buffer_pyapi.mojo  # unassigned, entangled on ArimaBuffer
+allow: providers/python/array_metadata_pyapi.mojo  # entangled-array-owner
+allow: providers/python/autoarima_lifecycle_pyapi.mojo  # entangled-array-owner; entangled-native-modules
+allow: providers/python/autograd_import_metadata_pyapi.mojo  # entangled-native-modules
+allow: providers/python/autograd_owned_program_public_pyapi.mojo  # entangled-native-modules
+allow: providers/python/autograd_program_pyapi.mojo  # entangled-array-owner
+allow: providers/python/autograd_session_frontend_pyapi.mojo  # entangled-native-modules
+allow: providers/python/autograd_torch_program_pyapi.mojo  # unassigned, entangled on TorchDeviceSnapshot
+allow: providers/python/borrowed_buffer_pyapi.mojo  # entangled-array-owner
+allow: providers/python/byte_lm_metadata_pyapi.mojo  # unassigned, entangled on _shape_of
+allow: providers/python/classical_family_admission_pyapi.mojo  # entangled-native-modules
+allow: providers/python/cluster_public_lifecycle_pyapi.mojo  # entangled-native-modules
+allow: providers/python/compiled_binding_snapshot_pyapi.mojo  # unassigned, entangled on CompiledBindingSnapshot
+allow: providers/python/generation_metadata_pyapi.mojo  # entangled-array-owner; entangled-native-modules
+allow: providers/python/hierarchy_connectivity_pyapi.mojo  # unassigned, entangled on HierarchyConnectivity
+allow: providers/python/hierarchy_public_lifecycle_pyapi.mojo  # entangled-array-owner; entangled-native-modules
+allow: providers/python/kernel_public_lifecycle_pyapi.mojo  # entangled-array-owner; entangled-native-modules
+allow: providers/python/linalg_result_pyapi.mojo  # entangled-native-modules
+allow: providers/python/linear_entry_boundary.mojo  # unassigned, entangled on LinearEntryOwner
+allow: providers/python/linear_state_boundary.mojo  # unassigned, entangled on LinearStateOwner
+allow: providers/python/lowbit_weight_pyapi.mojo  # entangled-array-owner
+allow: providers/python/metrics_matrix_input_pyapi.mojo  # entangled-array-owner
+allow: providers/python/metrics_vector_input_pyapi.mojo  # entangled-array-owner
+allow: providers/python/native_execution_pyapi.mojo  # unassigned, entangled on AdmittedNativeExecution
+allow: providers/python/neighbors_public_lifecycle_pyapi.mojo  # unassigned, entangled on NeighborPublicCall
+allow: providers/python/neural_descriptor_pyapi.mojo  # unassigned, entangled on NeuralDescriptorProvider
+allow: providers/python/operation_lock_pyapi.mojo  # unassigned, entangled on OperationLockBoundary
+allow: providers/python/pca_fit_model_pyapi.mojo  # entangled-native-modules
+allow: providers/python/pca_input_pyapi.mojo  # entangled-array-owner
+allow: providers/python/pca_model_pyapi.mojo  # entangled-native-modules
+allow: providers/python/pcs_public_lifecycle_pyapi.mojo  # entangled-array-owner; entangled-native-modules
+allow: providers/python/prep_arrow_target_pyapi.mojo  # entangled-array-owner
+allow: providers/python/prep_category_pyapi.mojo  # entangled-array-owner
+allow: providers/python/prep_metadata_pyapi.mojo  # entangled-array-owner
+allow: providers/python/prep_target_pyapi.mojo  # entangled-array-owner
+allow: providers/python/prep_transform_pyapi.mojo  # entangled-array-owner; entangled-native-modules
+allow: providers/python/preprocessing_input_pyapi.mojo  # entangled-array-owner
+allow: providers/python/prophet_lifecycle_pyapi.mojo  # entangled-native-modules
+allow: providers/python/resample_pandas_pyapi.mojo  # entangled-array-owner
+allow: providers/python/resample_public_pyapi.mojo  # entangled-native-modules
+allow: providers/python/resample_rows_pyapi.mojo  # entangled-array-owner
+allow: providers/python/samba_execution_pyapi.mojo  # entangled-array-owner
+allow: providers/python/sequence_layer_buffer_pyapi.mojo  # entangled-array-owner
+allow: providers/python/training_buffer_pyapi.mojo  # unassigned, entangled on training_words32_owned
+allow: providers/python/transformer_decode_pyapi.mojo  # entangled-array-owner
+allow: providers/python/xseq_public_lifecycle_pyapi.mojo  # entangled-native-modules

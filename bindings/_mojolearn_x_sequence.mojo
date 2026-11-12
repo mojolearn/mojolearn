@@ -11,19 +11,20 @@ from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
 from sequence.model_device_dispatch import NATIVE_MODEL_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.autograd_python_errors_pyapi import graph_python_error
-from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
-from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
-from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
+from providers.python.autograd_python_errors_pyapi_unpack import graph_python_error
+from providers.python.autograd_session_public_request_pyapi_unpack import ops_session_public_connect_py
+from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
+from providers.python.autograd_program_public_request_pyapi_pack import ops_program_public_call_py
+from providers.python.autograd_session_public_dispatch_pyapi_unpack import NativeSessionPublicAPI
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from providers.python.autograd_owned_program_public_pyapi import ops_owned_program_connect_py, ops_owned_program_call_py
-from providers.python.autograd_owned_program_dispatch_pyapi import NativeOwnedProgramPublicAPI, owned_program_public_native_v1
-from providers.python.autograd_owned_program_factory_pyapi import owned_program_create_envelope, owned_program_create_devices, owned_program_create_execute
+from providers.python.autograd_owned_program_dispatch_pyapi_unpack import NativeOwnedProgramPublicAPI, owned_program_public_native_v1
+from providers.python.autograd_owned_program_factory_pyapi_unpack import owned_program_create_envelope, owned_program_create_devices, owned_program_create_execute
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
-from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
-from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, small_mlp_program_run_py, small_mlp_sessions_py
+from providers.python.autograd_session_lifetime_pyapi_pack import ops_session_create_py
+from providers.python.small_mlp_program_pyapi_pack import small_mlp_program_open_py, small_mlp_program_run_py, small_mlp_sessions_py
 from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -32,51 +33,73 @@ from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
 from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
 from sequence.xseq_glue_device import publish_x_sequence_device
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
+from providers.python.sequence_pyapi_pack import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
-from providers.python.sequence_opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
+from providers.python.sequence_opt_resident_pyapi_unpack import adafactor_resident_open_py, lamb_resident_open_py, opt_resident_open_py
+from providers.python.sequence_opt_resident_pyapi_pack import adafactor_resident_step_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_step_py
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
-from providers.python.autograd_program_device_pyapi import ops_imported_run_device_py
+from providers.python.autograd_program_device_pyapi_unpack import ops_imported_run_device_py
 from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
-from providers.python.autograd_program_control_pyapi import ops_program_control_py
-from providers.python.autograd_distributed_pyapi import (
+from providers.python.autograd_program_control_pyapi_pack import ops_program_control_py
+from providers.python.autograd_distributed_pyapi_unpack import (
     distributed_object,
-    distributed_devices, distributed_open, distributed_load, distributed_fit_py,
-    distributed_run_py, distributed_state_py, distributed_residency_py,
-    distributed_save_py, distributed_close_py, distributed_enter_py,
+    distributed_devices,
+    distributed_fit_py,
+    distributed_enter_py,
 )
-from providers.python.autograd_partition_pyapi import (
-    partition_open, partition_load, partition_fit_py, partition_run_py,
-    partition_state_py, partition_residency_py, partition_save_py,
-    partition_close_py, partition_enter_py, partition_profile_py,
+from providers.python.autograd_distributed_pyapi_pack import (
+    distributed_open,
+    distributed_load,
+    distributed_run_py,
+    distributed_state_py,
+    distributed_residency_py,
+    distributed_save_py,
+    distributed_close_py,
+)
+from providers.python.autograd_partition_pyapi_unpack import (
+    partition_fit_py,
+    partition_enter_py,
+)
+from providers.python.autograd_partition_pyapi_pack import (
+    partition_open,
+    partition_load,
+    partition_run_py,
+    partition_state_py,
+    partition_residency_py,
+    partition_save_py,
+    partition_close_py,
+    partition_profile_py,
 )
 from sequence.x_sequence_impl import device_executors
-from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
-from providers.python.autograd_pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
-from providers.python.autograd_pyapi import model_gather_labels_py
-from providers.python.autograd_pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
-from providers.python.autograd_pyapi import model_import_params_py
+from providers.python.autograd_program_control_grad_pyapi_pack import ops_program_control_vjp_py
+from providers.python.autograd_pyapi_door import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
+from providers.python.autograd_pyapi_door import model_gather_labels_py
+from providers.python.autograd_pyapi_door import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
+from providers.python.autograd_pyapi_door import model_import_params_py
 from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
-from providers.python.autograd_pyapi import ops_shape_py
+from providers.python.autograd_pyapi_door import ops_shape_py
 from autograd.ops_api import OPS_DEVICE
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py, onnx_native_api_py
-from providers.python.autograd_import_resolve_pyapi import onnx_resolve_py
+from providers.python.autograd_import_reader_pyapi_unpack import onnx_native_api_py
+from providers.python.autograd_import_reader_pyapi_pack import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
+from providers.python.autograd_import_resolve_pyapi_pack import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
-from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
-from providers.python.autograd_graph_metadata_pyapi import graph_record_c
-from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
-from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
-from providers.python.sequence_pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
-from providers.python.sequence_pyapi import moe_backward_py, moe_backward_resident
-from providers.python.sequence_opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
-from providers.python.sequence_seq_tensor_pyapi import (
+from providers.python.autograd_import_frontend_pyapi_door import ops_import_model_c
+from providers.python.autograd_graph_metadata_pyapi_door import graph_record_c
+from providers.python.autograd_import_lower_pyapi_unpack import onnx_import_py, onnx_import_file_py
+from providers.python.autograd_model_verify_pyapi_pack import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
+from providers.python.autograd_model_checkpoint_pyapi_pack import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
+from providers.python.sequence_pyapi_unpack import ival, _getenv_seq, moe_forward_check, fptr
+from providers.python.sequence_pyapi_pack import moe_forward_run
+from providers.python.sequence_pyapi_pack import moe_backward_py, moe_backward_resident
+from providers.python.sequence_opt_resident_pyapi_pack import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
+from providers.python.sequence_seq_tensor_pyapi_pack import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
-from providers.python.sequence_layernorm_dev_pyapi import layer_norm_dev_py, layer_norm_dev_alloc_py
+from providers.python.sequence_layernorm_dev_pyapi_unpack import layer_norm_dev_alloc_py
+from providers.python.sequence_layernorm_dev_pyapi_pack import layer_norm_dev_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -84,7 +107,8 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 # TOMBSTONE: sched_exp_block (MOJOLEARN_SCHED_FAST_TABLE) (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/sched_exp_block.patch
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
-from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py, moe_forward_dev_alloc_py
+from providers.python.sequence_moe_dev_pyapi_unpack import moe_forward_dev_alloc_py
+from providers.python.sequence_moe_dev_pyapi_pack import moe_forward_dev_py
 from core.shared_slot import SharedSlot
 from sequence.small_mlp_entry_device import publish_neural_small_mlp_device
 

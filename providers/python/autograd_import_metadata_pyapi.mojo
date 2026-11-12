@@ -4,8 +4,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
-from bindings.optimizer_public_words import stash_python_error
-from providers.python.autograd_python_errors_pyapi import graph_int
+from bindings.optimizer_public_words_unpack import stash_python_error
+from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from providers.python.neural_descriptor_pyapi import NativeDescriptorResource
 from bindings.native_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_stampable, records_stamped_get, records_stamped_put,

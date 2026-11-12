@@ -6,7 +6,7 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.mode_metadata_native import _class_fields
 from bindings.classical_attributes import _type_mro
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.classical_pandas import classical_admit_value
 
 

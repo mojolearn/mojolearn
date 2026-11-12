@@ -10,10 +10,10 @@ from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_array_snapshot, generation_buffer_view
-from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
+from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_foreign
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.causal_model_config import model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
@@ -357,7 +357,8 @@ struct GenerationOperationSnapshot(Copyable, Movable):
 from bindings.py_balanced import py_setitem
 from bindings.generation_buffers import generation_mutable
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
-from providers.python.transformer_block_session_pyapi import transformer_block_session_open, transformer_block_session_handle
+from providers.python.transformer_block_session_pyapi_door import transformer_block_session_handle
+from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open
 from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
 from providers.python.native_execution_pyapi import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi import OperationLockLease

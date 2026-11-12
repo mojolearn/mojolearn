@@ -5,31 +5,33 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
-from bindings.cpython_borrowed import borrowed_type_word as p3_type_word, borrowed_item as p3_item
+from bindings.cpython_borrowed_unpack import borrowed_type_word as p3_type_word
+from bindings.cpython_borrowed_pack import borrowed_item as p3_item
 from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
-from providers.python.autograd_execution_profile_pyapi import execution_profile_object
+from providers.python.autograd_execution_profile_pyapi_pack import execution_profile_object
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from autograd.rankn import ShapeN
-from providers.python.autograd_program_arrays_pyapi import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input, program_native_input, program_admit_value, program_numeric_scalar
+from providers.python.autograd_program_arrays_pyapi_door import is_ndarray, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
+from providers.python.autograd_program_arrays_pyapi_door import output_array, output_array_dims, program_native_input
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
-from providers.python.autograd_program_arrays_pyapi import host_arrays_py
+from providers.python.autograd_program_arrays_pyapi_door import host_arrays_py
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
 from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_optimize import ProgramOptimization, program_optimize
 from autograd.program_runtime import replay_values, parameter_buffers, train_program_control
-from providers.python.autograd_pyapi import _dims_out
+from providers.python.autograd_pyapi_door import _dims_out
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
-from providers.python.autograd_host_provider_pyapi import imported_host_provider_request
+from providers.python.autograd_host_provider_pyapi_unpack import imported_host_provider_request
 from autograd.program_host_request import NativeProgramHostRun
 # wave 8 run split: the typed halves of this file's input readers and fit
 # options live in autograd/autograd_program_run.mojo.

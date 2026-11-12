@@ -8,7 +8,7 @@ from bindings.arena_prog_native import _family_entries
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 from bindings.family_common import family_array
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 
 
 struct GPRPredictionRoom(Movable):

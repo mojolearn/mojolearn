@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get
-from bindings.classical_arrays import classical_input
+from bindings.classical_arrays_door import classical_input
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.prep_metadata_pyapi import _array_snapshot, _description, prep_numeric_vector

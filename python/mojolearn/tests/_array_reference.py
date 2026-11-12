@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Python definitions of `mojolearn.Array`'s public operations: the test
-oracles of `bindings/array_native.mojo` (test_hotpath_native.py,
+oracles of `bindings/array_native_door.mojo` (test_hotpath_native.py,
 test_native_array_operations.py, tools/test_native_array_connection.py).
 
 Moved out of the product package (lane p5-cpu-route-relabel-and-dead-code,
@@ -26,7 +26,7 @@ import sys
 
 
 # The Python definitions of the shape, stride and layout helpers whose product
-# copies moved to bindings/array_native.mojo (lane pyout-runtime-boundary,
+# copies moved to bindings/array_native_door.mojo (lane pyout-runtime-boundary,
 # 2026-11-11): oracles of `_c_strides`, `_f_strides`, `_prod`,
 # `_checked_shape`, `_new_store`, `_strided_copy`, `_set_meta`, `_init_owned`,
 # `_both_orders` and the `row` operation there.
@@ -305,7 +305,7 @@ def _no_reduce(self, what):
 
 class _ArrayReference:
     """The Python definitions of Array's public operations, kept ONLY as the
-    test oracles of `bindings/array_native.mojo` (test_hotpath_native.py,
+    test oracles of `bindings/array_native_door.mojo` (test_hotpath_native.py,
     test_native_array_operations.py). The product never calls them: every
     public Array operation is one `array_native_call`. Called as
     `_ArrayReference.<name>(array, ...)`; never instantiated."""

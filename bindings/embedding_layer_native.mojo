@@ -35,11 +35,12 @@ from core.neural_entry_table import (
 from bindings.optimizer_public_door import new_array, door_ready
 from bindings.tensor_view import base_format
 from training.optimizer_input_plan import same_shape
-from providers.python.array_layout_boundary import native_shape_pack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native import shape_count, device_shape
 from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
-from bindings.sequence_device_native import seq_device_make, sequence_device_operation
-from bindings.sequence_optimizer_native import seq_device_get
+from bindings.sequence_device_native_unpack import seq_device_make
+from bindings.sequence_device_native_pack import sequence_device_operation
+from bindings.sequence_optimizer_native_door import seq_device_get
 from bindings.optimizer_admission import opt_value, opt_scalar, opt_guards, opt_exact, opt_numpy
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.neural_block_admission import neural_record_fields
@@ -52,7 +53,7 @@ from core.training_embedding_inputs import embedding_pack, embedding_cast_refusa
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
 from bindings.classical_archive_read import classical_archive_read, _archive_string, _archive_exact
-from bindings.optimizer_public_words import optimizer_python_error
+from bindings.optimizer_public_words_unpack import optimizer_python_error
 from core.shared_slot import SharedSlot
 
 comptime _NO_PADDING = -1

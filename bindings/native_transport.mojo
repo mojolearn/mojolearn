@@ -14,8 +14,8 @@ from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from bindings.native_json import native_json_parse
 from bindings.native_idna import idna_initialize, idna_encode
-from bindings.native_buffer_address import native_buffer_address
-from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
 from bindings.native_posix_transport import (
     posix_sleep, posix_open, posix_accept, posix_transfer, posix_spawn, posix_wait,
 )

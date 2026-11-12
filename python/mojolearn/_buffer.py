@@ -1040,7 +1040,7 @@ _FOREST_HOST_EXTENSION = "_mojolearn_forest_host"
 #: only ones `_native` may resolve from it.
 _HOST_NATIVE_KEYS = frozenset({"all_finite_f32", "all_finite_f64", "cast_f64_to_f32"})
 #: The forest host binding (the forest host lane, 2026-09-13,
-#: `bindings/host_helpers.mojo`) exports those three and the four
+#: `bindings/host_helpers_pack.mojo`) exports those three and the four
 #: `_labels.argmax_rows` and `_labels.decode_labels` resolve, so a saved
 #: forest's class labels decode on a CPU-only install through the same native
 #: helper the GPU path uses.

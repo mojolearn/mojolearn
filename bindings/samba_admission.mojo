@@ -2,7 +2,7 @@
 """Native admission before Samba can encounter a Python-defined protocol."""
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.p3_numpy_types import numpy_admitted_type
+from bindings.p3_numpy_types_unpack import numpy_admitted_type
 from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from core.shared_slot import SharedSlot

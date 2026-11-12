@@ -10,7 +10,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.sequential_native import sequential_c
-from bindings.native_identity_type import native_identity_type
+from bindings.native_identity_type_unpack import native_identity_type
 from bindings.sequential_admission import SequentialAdmissions
 from bindings.sequential_description import SequentialDescription
 

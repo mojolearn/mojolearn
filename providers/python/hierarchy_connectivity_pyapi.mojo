@@ -8,7 +8,7 @@ from bindings.cpython_table import cpython_table
 from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module import native_loaded_module
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_pandas import _pd_type_fields
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields, _sparse_aliases, _SparseKinds, _sparse_scalar_word_k, _sparse_coordinate_k
 from core.cast_in import cast_in_kind

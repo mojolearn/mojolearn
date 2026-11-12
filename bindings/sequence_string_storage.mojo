@@ -7,8 +7,8 @@ from std.sys import size_of
 from std.sys.info import CompilationTarget
 from std.memory import bitcast
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
-from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.sequence_array_warnings import sequence_array_exception, sequence_array_report
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.sequence_array_warnings_unpack import sequence_array_exception, sequence_array_report
 from core.sequence_array_format import sequence_float_text
 from core.sequence_array_cast import sequence_signaling, SEQ_CAST_INVALID
 from bindings.cpython_table import cpython_table

@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
-from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, program_admission_context, program_numeric_scalar
+from providers.python.autograd_program_arrays_pyapi_door import initialize_program_arrays, program_admission_context, program_numeric_scalar
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_connect, neural_descriptor_entry, neural_descriptor_matches,
     neural_descriptor_execute, neural_descriptor_adopt, NeuralDescriptorProvider,

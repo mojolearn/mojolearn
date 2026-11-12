@@ -17,23 +17,41 @@ from std.ffi import c_int
 from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.cpython_table import cpython_table
-from bindings.manifold_storage_native import (
-    ManifoldMatrix, ManifoldDevice, matrix_rows, matrix_cols, matrix_store, matrix_device,
-    matrix_set_store, matrix_set_device, device_binding, device_identifier,
-    device_alloc, device_release, device_upload, device_download, device_move,
-    words_new, words_count, words_address,
+from bindings.manifold_storage_native_unpack import (
+    ManifoldMatrix,
+    ManifoldDevice,
+    matrix_rows,
+    matrix_cols,
+    matrix_store,
+    matrix_device,
+    matrix_set_store,
+    matrix_set_device,
+    device_binding,
+    device_identifier,
+    device_alloc,
+    device_release,
+    device_upload,
+    device_download,
+    device_move,
+    words_count,
+    words_address,
+)
+from bindings.manifold_storage_native_pack import (
+    words_new,
 )
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array
 from core.host_finite_scan import host_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module
-from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_optional_entry
+from bindings.spectral_umap_routes_unpack import spectral_umap_entry
+from bindings.spectral_umap_routes_pack import spectral_umap_optional_entry
 # The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows
 # N290-N301): the kit's primitive operations call one abi("C") dispatch
 # function per operation (bindings/kit_call.mojo).
-from bindings.kit_call import kit_connect, kit_provider, kit_call
-from bindings.manifold_storage_native import (
+from bindings.kit_call_unpack import kit_provider, kit_call
+from bindings.kit_call_pack import kit_connect
+from bindings.manifold_storage_native_unpack import (
     matrix_frozen, matrix_freeze, matrix_kept_store, matrix_kept_device,
     matrix_set_kept_store, matrix_set_kept_device,
 )

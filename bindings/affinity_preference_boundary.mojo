@@ -3,14 +3,14 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.cpython_table import cpython_table
-from bindings.classical_arrays import classical_numpy
+from bindings.classical_arrays_door import classical_numpy
 from bindings.classical_pandas import native_pandas_exact
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_array_snapshot import native_array_snapshot
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.sequential_admission import _one_of
 from bindings.sequential_inputs import SequenceBoundaryCapture, sequential_capture_row_items
-from bindings.pandas_preference_items import pandas_preference_items
+from bindings.pandas_preference_items_door import pandas_preference_items
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.affinity_preference_plan import AffinityPreferencePlan

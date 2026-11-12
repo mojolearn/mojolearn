@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.forecast_initialize_pyapi import forecast_initialize
+from providers.python.forecast_initialize_pyapi_pack import forecast_initialize
 from providers.python.autoarima_lifecycle_pyapi import autoarima_initialize
 from bindings.xseq_forecast_native import xseq_forecast
 

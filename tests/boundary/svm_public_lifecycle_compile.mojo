@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.family_native import family_operation
+from bindings.family_native_door import family_operation
 from bindings.public_attributes_native import public_attribute_c
 
 @export

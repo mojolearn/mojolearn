@@ -168,7 +168,7 @@ class _LinearRegressorMixin(NativeParamsSetter):
         score : float
             R^2; 1.0 is a perfect fit.
         """
-        # Predict and R^2 in one native call (bindings/linear_score_native.mojo):
+        # Predict and R^2 in one native call (bindings/linear_score_native_unpack.mojo):
         # the x_linear decision kernel, then the default metrics binding's r2_score.
         return _LINEAR_SCORE(self, "linear_regressor_score", (X, y), _LINEAR_SCORE_CONTEXT)
 

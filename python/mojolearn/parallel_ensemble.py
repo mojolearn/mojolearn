@@ -236,7 +236,7 @@ class ParallelForestPredictor:
     #
     # The snapshot is a private copy of the estimator, taken here (no device
     # state is copied: the copy builds its own resident pool). Each predict is
-    # one native call (bindings/family_native.mojo `family_par_run`, driver
+    # one native call (bindings/family_native_door.mojo `family_par_run`, driver
     # `forest_predict`): the plain predict of the copy with the device plan
     # bound, so its first predict builds the parallel_groves pool on the
     # selected devices (core/forest_inference_pool.mojo) and later predicts

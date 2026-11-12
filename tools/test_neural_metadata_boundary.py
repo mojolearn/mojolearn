@@ -23,7 +23,7 @@ def test_native_execution_closures_have_no_provider_dependencies():
 
 
 @pytest.mark.parametrize('dependency', ['std.python', 'bindings.py_balanced',
-                                       'providers.python.autograd_program_arrays_pyapi', 'adapters.torch',
+                                       'providers.python.autograd_program_arrays_pyapi_door', 'adapters.torch',
                                        'providers.python.buffers'])
 def test_transitive_provider_dependency_is_rejected(tmp_path, dependency):
     (tmp_path / 'core').mkdir()
@@ -67,10 +67,10 @@ def test_program_input_reads_provider_fields_before_native_rank_loop():
 
 
 def test_samba_dropout_consumes_native_metadata_in_both_directions():
-    source = function('bindings/samba_training_native.mojo', '_samba_dropout')
+    source = function('bindings/samba_training_native_door.mojo', '_samba_dropout')
     for token in ('samba_fields(', 'config[', 'value.shape', 'value.size', 'fields['):
         assert token not in source
-    whole = function('bindings/samba_training_native.mojo', 'samba_gradients')
+    whole = function('bindings/samba_training_native_door.mojo', 'samba_gradients')
     assert whole.count('SambaDropoutMetadata(fields, dropout_probability, stream)') == 1
     assert whole.count('dropout_metadata.value()') == 2
     assert 'var i = layer_count - reverse - 1' in whole

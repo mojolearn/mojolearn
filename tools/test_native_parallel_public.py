@@ -209,7 +209,7 @@ def test_bindings_are_the_exact_compiled_modules(connected):
 
 
 def test_native_boundary_admits_before_hooks_and_scopes_predictor_lifetime():
-    source = (ROOT / 'bindings/parallel_public_native.mojo').read_text()
+    source = (ROOT / 'bindings/parallel_public_native_door.mojo').read_text()
     for unsafe in ('Python.import_module', 'copy.copy', 'threading', '._finalizer', 'model.fit(', 'model.predict(', '._bind(', 'public_method_result'):
         assert unsafe not in source
     assert source.index('py_type(value) is not b.tuple') < source.index('py_call(b.tuple, value)')
@@ -219,6 +219,6 @@ def test_native_boundary_admits_before_hooks_and_scopes_predictor_lifetime():
     assert 'finally:\n        _ = py_call(lock.release)' in source
     assert 'py_setitem(saved, "_resident_holder", Python.dict())' in source
     assert 'parallel_public_result(result,' in source
-    result = (ROOT / 'bindings/parallel_public_result.mojo').read_text()
+    result = (ROOT / 'bindings/parallel_public_result_door.mojo').read_text()
     assert 'String(value.dtype.kind) == "f"' in result
     assert '_outside(context, 1)' in result

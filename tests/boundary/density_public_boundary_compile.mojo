@@ -4,7 +4,7 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
 from providers.python.classical_family_admission_pyapi import classical_family_admit
-from providers.python.density_public_lifecycle_pyapi import density_public_operation
+from providers.python.density_public_lifecycle_pyapi_pack import density_public_operation
 from bindings.public_attributes_native import public_attribute_c
 
 @export

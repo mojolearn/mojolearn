@@ -5,7 +5,7 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, raise_python_exception
 from providers.python.classical_family_admission_pyapi import classical_family_admit
-from bindings.archive_schema_native import archive_schema_save
+from bindings.archive_schema_native_door import archive_schema_save
 
 
 def archive_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

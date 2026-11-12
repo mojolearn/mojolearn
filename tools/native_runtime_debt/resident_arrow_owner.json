@@ -9,10 +9,10 @@
     "dropped": "bindings/pandas_owner_lifetime.mojo owner-graph admission and its pandas class registry; recoverable at 0f7e10729"
   },
   "code": [
-    "bindings/arena_cache_release.mojo",
-    "bindings/arena_resident_native.mojo",
-    "bindings/arena_materialize_native.mojo (arena_resident_take, arena_resident_entry)",
-    "bindings/arena_rows_native.mojo (dispatch)"
+    "bindings/arena_cache_release_unpack.mojo",
+    "bindings/arena_resident_native_unpack.mojo",
+    "bindings/arena_materialize_native_door.mojo (arena_resident_take, arena_resident_entry)",
+    "bindings/arena_rows_native_unpack.mojo (dispatch)"
   ],
   "tests": [
     "python/mojolearn/tests/test_resident_lifecycle_native.py::test_arrow_owner_finalizer_runs_after_every_free_and_publication",

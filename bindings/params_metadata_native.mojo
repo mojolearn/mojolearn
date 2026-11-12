@@ -8,10 +8,10 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.cpython_table import cpython_table
 from bindings.native_error_class import error_without_class
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
-from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
 
 def _resolved(cls: PythonObject, name: PythonObject, missing: PythonObject) raises -> PythonObject:

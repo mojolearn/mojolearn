@@ -25,16 +25,18 @@ from core.hostptr import read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.parallel_ivf_entry_host import publish_parallel_ivf_host
-from bindings.ivf_host_search import (
-    ivf_flat_index_prepare_binding,
-    ivf_flat_index_release_binding,
+from bindings.ivf_host_search_unpack import (
     ivf_flat_index_search_binding,
-    ivf_finalize_distances_binding,
-    ivf_flat_extend_binding,
     ivf_flat_partial_search_binding,
     ivf_flat_search_binding,
 )
-from bindings.ivf_index_arrays import ivf_build_extents, ivf_write_index_arrays
+from bindings.ivf_host_search_pack import (
+    ivf_flat_index_prepare_binding,
+    ivf_flat_index_release_binding,
+    ivf_finalize_distances_binding,
+    ivf_flat_extend_binding,
+)
+from bindings.ivf_index_arrays_unpack import ivf_build_extents, ivf_write_index_arrays
 from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build
 
 

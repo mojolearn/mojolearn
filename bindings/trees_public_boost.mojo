@@ -31,10 +31,10 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
-from bindings.trees_staged_input import trees_stage_members, trees_stage_rounds, trees_unstage
-from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.trees_staged_input_door import trees_stage_members, trees_stage_rounds, trees_unstage
+from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same
-from bindings.classical_arrays import classical_wrap_array, _store_code
+from bindings.classical_arrays_door import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
     trees_helper, trees_env, trees_reshape, trees_address,
@@ -62,7 +62,7 @@ from bindings.trees_resident_table import (
     trees_resident_forget, trees_resident_unpin,
 )
 from bindings.native_model_records import model_identity_key, model_generation
-from bindings.p3nc_fitted_freeze import fitted_freeze
+from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from core.trees_entry_table import TreesEntryKey
 from xtrees.dart_abi import XD_CAP_ROUND, XD_CAP_RESIDENT, XD_FOREST_RELEASE
 from xtrees.dart_calls import (

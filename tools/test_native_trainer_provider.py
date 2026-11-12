@@ -23,7 +23,7 @@ def test_small_mlp_runs_one_captured_program():
 
 
 def test_neural_gemm_both_doors_share_native_transport():
-    door=(ROOT/'bindings/neural_gemm_boundary.mojo').read_text()
+    door=(ROOT/'bindings/neural_gemm_boundary_pack.mojo').read_text()
     assert 'neural_gemm_native(aa, ba, ca, shape)' in door
     assert 'identical_gemm_into(' not in door
     owner=(ROOT/'training/neural_gemm_native.mojo').read_text()

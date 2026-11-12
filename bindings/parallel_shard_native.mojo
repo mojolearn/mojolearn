@@ -33,15 +33,16 @@ from bindings.admitted_family import admit_family, admit_family_meta, admit_fami
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
-from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
+from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native import _public_result, _entries, scaler_standard_rows
 from bindings.scaler_native import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
 from bindings.minmax_native import minmax_rows, minmax_fit_publish, _configuration as minmax_configuration
-from bindings.minmax_metadata import _flag as _minmax_flag, minmax_range_pair
+from bindings.minmax_metadata_unpack import _flag as _minmax_flag
+from bindings.minmax_metadata_pack import minmax_range_pair
 from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core, scaler_transform_core
-from bindings.parallel_public_result import parallel_public_result
+from bindings.parallel_public_result_door import parallel_public_result
 from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common import family_call
 from bindings.native_process_pool import (
@@ -68,7 +69,7 @@ from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
     gpc_validate, gpc_worker_fit, gpc_worker_latent, _gpc_binary_result, GPCFitPublication, _gpc_set_fitted, _gpc_ovr_combine,
 )
-from bindings.gp_common_native import gp_kernel_arrays_transport
+from bindings.gp_common_native_unpack import gp_kernel_arrays_transport
 from bindings.gp_labels_native import gp_encode_labels_transport, gp_decode_labels
 from bindings.trees_public_inputs import trees_encode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols

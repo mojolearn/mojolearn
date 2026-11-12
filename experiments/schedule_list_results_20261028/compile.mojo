@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only public schedule operation root. Never execute.
 from std.python import PythonObject
-from bindings.optimizer_schedule_native import schedule_operation
+from bindings.optimizer_schedule_native_door import schedule_operation
 
 
 def main() raises:

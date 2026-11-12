@@ -8,7 +8,7 @@ shape/dtype/placement/preparation decisions live in core.pandas_input_plan.
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from std.python import Python, PythonObject
 from bindings.device_rows_door import door_is_device_rows
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view
 from core.cast_in import cast_in_kind
 from core.classical_pandas_impl import pd_raw_at, _pd_double
 from core.pandas_input_plan import PandasBlock, PandasInputPlan, PandasObjectWriter, pandas_block_count, pandas_nullable_check, pandas_positions_slice, pandas_positions_array
@@ -19,7 +19,7 @@ from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
-from bindings.p3_labels_metrics_native import p3_type_word, p3_item
+from bindings.p3_labels_metrics_native_door import p3_type_word, p3_item
 
 
 def _pd_native_metaclass(cls: PythonObject) raises -> Bool:

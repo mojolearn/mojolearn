@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_pandas import classical_admit_value, _pd_class, _pd_fields, _pd_get
 from bindings.sequential_admission import sequential_admit_value
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once

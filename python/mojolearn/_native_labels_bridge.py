@@ -83,7 +83,7 @@ def label_context():
     return dict(_LABEL_CONTEXT)
 
 
-#: `bindings/labels_native_entry.mojo` operation codes (lane ne1-h-labels).
+#: `bindings/labels_native_entry_pack.mojo` operation codes (lane ne1-h-labels).
 LABELS_OP_ENCODE = 0
 LABELS_OP_UNION_ENCODE = 1
 LABELS_OP_SCORE_FROM_CODES = 2
@@ -99,7 +99,7 @@ _LABELS_ENTRY = []
 
 def labels_entry():
     """`(entry, context)`: the compiled label entry `labels_native_call`
-    (bindings/labels_native_entry.mojo) and the context it reads: the
+    (bindings/labels_native_entry_pack.mojo) and the context it reads: the
     classical shared admission context, the label context above and the
     `classes_` list class. Connected once, at the first label call (the
     label module is imported before the binding and its classes exist)."""

@@ -1,6 +1,6 @@
 # Compile the actual C entry used by shipped adapter metadata through x_sequence.
 from std.python._cpython import PyObjectPtr
-from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
+from providers.python.autograd_import_frontend_pyapi_pack import ops_import_model_c
 
 
 @export

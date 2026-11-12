@@ -19,7 +19,7 @@ from bindings.native_process_pool import (
 )
 from bindings.native_transport import transport_close
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
-from bindings.parallel_neural_admission import neural_admit
+from bindings.parallel_neural_admission_unpack import neural_admit
 from core.sha256 import Sha256
 from bindings.cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text

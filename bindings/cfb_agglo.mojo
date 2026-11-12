@@ -8,21 +8,22 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_validate import classical_view
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str,
     family_is_str,
 )
 from bindings.mode_metadata_native import _fields
-from bindings.metrics_native_support import metric_warn
+from bindings.metrics_native_support_door import metric_warn
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_metadata_once, array_shape_once
-from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
-from providers.python.host_estimator_binding_pyapi import host_estimator_binding_mode
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding_mode
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit
 from providers.python.hierarchy_public_lifecycle_pyapi import hierarchy_public_begin, hierarchy_public_end, hierarchy_public_finish, hierarchy_public_refusal
 from providers.python.hierarchy_connectivity_pyapi import HierarchyConnectivity, hierarchy_connectivity
-from providers.python.hierarchy_settings_pyapi import AggloSettings
+from providers.python.hierarchy_settings_pyapi_unpack import AggloSettings
 from bindings.agglo_native_boundary import (
     AggloBindings, AggloSolverConnection, AggloClusterConnection, AggloZeroRowsConnection,
     agglo_solver_run, agglo_cluster_run, agglo_zero_rows_run, agglo_array, agglo_publish, agglo_scalar_repr,
@@ -42,8 +43,8 @@ from cluster.cfb_agglo_run import (
     agglo_publishes_distances, agglo_cut_counts, agglo_fitted_clusters, agglo_x_predicts, agglo_check_reference_width,
     agglo_check_label_rank, agglo_check_label_words,
 )
-from bindings.decomp_scalar_compare import decomp_equal_admitted
-from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.decomp_scalar_compare_unpack import decomp_equal_admitted
+from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_loaded_module import native_loaded_module
 

@@ -17,11 +17,11 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
-from bindings.classical_arrays import classical_address, classical_is_array
+from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.family_common import (
     family_call, family_is_str, family_array, FAMILY_F64P, FAMILY_I64P,
 )
-from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer_address
+from bindings.label_integer_storage_unpack import labels_float_storage, _ndarray_buffer_address
 from bindings.boundary_read import admitted_buffer_view
 from core.boundary_layout import BufferLayout, gather_i64, BOUNDARY_KIND_INT, BOUNDARY_KIND_UINT
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
@@ -32,17 +32,17 @@ from bindings.classical_labels import (
     ClassicalLabels, NativeTextLabels, _TextCodeStorage, _TextLabels, _PythonTextCodes, _NativeTextCodes,
     _text_buffer_labels_into, _text_list_labels_into,
 )
-from bindings.label_input_sources import labels_storage_source, labels_list_scalar_kind, LABELS_LIST_OTHER, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
-from bindings.perf3_label_doors_text import labels_all_exact_str
-from bindings.gp_label_snapshot_native import gp_label_pins
-from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.label_input_sources_unpack import labels_storage_source, labels_list_scalar_kind, LABELS_LIST_OTHER, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
+from bindings.perf3_label_doors_text_unpack import labels_all_exact_str
+from bindings.gp_label_snapshot_native_unpack import gp_label_pins
+from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, _label_same, _labels_recordable
-from bindings.gp_class_table_boundary import GPPreparedClassTable
-from bindings.gp_score_label_storage import GPDecodedScoreLabels
+from bindings.gp_class_table_boundary_unpack import GPPreparedClassTable
+from bindings.gp_score_label_storage_unpack import GPDecodedScoreLabels
 from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
-from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
-from bindings.gp_label_input_boundary import gp_label_input
-from bindings.gp_label_order_boundary import gp_integer_classes
+from bindings.gp_labels_boundary_unpack import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
+from bindings.gp_label_input_boundary_unpack import gp_label_input
+from bindings.gp_label_order_boundary_unpack import gp_integer_classes
 from bindings.gp_mixed_label_boundary import gp_mixed_classes, gp_mixed_index, gp_mixed_codes
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
 

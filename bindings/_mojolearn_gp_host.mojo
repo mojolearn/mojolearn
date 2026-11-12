@@ -103,7 +103,7 @@ from gaussian_process.host.gp_host_fit_entries import (
     gp_theta_params_list,
 )
 from bindings.py_lists import py_list_f64
-from bindings.gp_host_predict import (
+from bindings.gp_host_predict_pack import (
     gpc_ovr_combine_binding,
     gpc_predict_binding,
     gpr_predict_binding,

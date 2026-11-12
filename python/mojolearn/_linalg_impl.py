@@ -817,7 +817,7 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
 
 
 # The compiled owner of this module's public functions
-# (bindings/linalg_ops_native.mojo), connected once at import: each public
+# (bindings/linalg_ops_native_unpack.mojo), connected once at import: each public
 # function is one native call; that boundary admits the connected binding.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()

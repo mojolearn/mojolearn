@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.tsa_public_native import tsa_c
+from bindings.tsa_public_native_door import tsa_c
 
 @export
 def PyInit__peer6_autoarima_compile() abi("C") -> PythonObject:

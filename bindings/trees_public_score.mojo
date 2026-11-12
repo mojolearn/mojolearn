@@ -16,9 +16,9 @@
 # before. What is gone is the Python between predict and score and the
 # re-materialization of y and the prediction.
 from std.python import Python, PythonObject
-from bindings.base_helpers_key import base_helpers_key
-from bindings.labels_stat_boundary import labels_stat_pack
-from bindings.base_helpers_released import base_reduce_stat
+from bindings.base_helpers_key_unpack import base_helpers_key
+from bindings.labels_stat_boundary_pack import labels_stat_pack
+from bindings.base_helpers_released_unpack import base_reduce_stat
 from bindings.py_balanced import py_call, py_type, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import trees_builtins, trees_table, trees_entry, trees_address

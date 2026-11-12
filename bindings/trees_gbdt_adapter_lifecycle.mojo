@@ -2,7 +2,7 @@
 # Public GBDT adapter boundary. The compiled tree owners retain training and
 # prediction; this envelope replaces _mode's Python validation, fit tracking,
 # feature-name checks and output conversion. NaN X remains the learner's policy.
-from bindings.native_typed_context import native_typed_context
+from bindings.native_typed_context_pack import native_typed_context
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
@@ -13,13 +13,14 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_refuse_sparse, classical_check_y, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
 from bindings.classical_labels import labels_shape_of, _flatten_labels
-from bindings.classical_exceptions import classical_require_fitted
-from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list, _feature_names
+from bindings.classical_exceptions_door import classical_require_fitted
+from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list, _feature_names
 from bindings.prep_lda_admission import lda_native_labels
-from bindings.parallel_public_result import parallel_public_result
-from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
-from bindings.trees_constructor_native import tree_parameter_storage
-from bindings.trees_public_state import _release_tree_values, tree_is_fitted
+from bindings.parallel_public_result_door import parallel_public_result
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_check
+from bindings.trees_constructor_native_unpack import tree_parameter_storage
+from bindings.trees_public_state_unpack import _release_tree_values
+from bindings.trees_public_state_pack import tree_is_fitted
 from bindings.admitted_input import admit_f32, classical_view
 # TOMBSTONE: trees_view / trees_check_rank / trees_f32_view uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -33,7 +34,7 @@ from bindings.trees_public_gbdt_fit import adapter_classifier_fit, adapter_regre
 from bindings.trees_public_gbdt_fit import gbdt_fit, _tables as _gbdt_tables, _in as _gbdt_in
 from bindings.trees_public_gbdt import adapter_decision_function, adapter_predict, adapter_predict_proba
 from bindings.trees_public_gbdt import gbdt_predict, gbdt_predict_proba, ordered_rmse_fit, feature_freq_fit
-from bindings.trees_public_mixin_score import gbdt_adapter_score
+from bindings.trees_public_mixin_score_unpack import gbdt_adapter_score
 
 
 def _context(context: PythonObject) raises -> PythonObject:

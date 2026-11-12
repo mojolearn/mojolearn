@@ -6,8 +6,8 @@ from bindings.native_json import native_path, native_path_exists, native_json_pa
 from bindings.native_transport import _transport_json
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.causal_checkpoint import checkpoint_array
-from bindings.samba_state_native import samba_snapshot, samba_from_state, _samba_registry
-from bindings.samba_config_native import samba_config_from_dict
+from bindings.samba_state_native_door import samba_snapshot, samba_from_state, _samba_registry
+from bindings.samba_config_native_door import samba_config_from_dict
 from bindings.sha256_door import sha256_update, sha256_digest
 from core.sha256 import sha256_hex_addr
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer

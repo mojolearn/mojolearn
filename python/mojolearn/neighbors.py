@@ -33,7 +33,7 @@ _DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
 
 #: The model file format (the knn host inference lane, 2026-09-14). `save`
 #: writes exactly what `kneighbors` / `predict` read, raw bytes and exact
-#: dtypes, natively (bindings/archive_schema_native.mojo), so equal models give
+#: dtypes, natively (bindings/archive_schema_native_door.mojo), so equal models give
 #: equal file hashes on every machine; `load` refuses a cast. The
 #: index is the fitted `<f4` `(n_samples_fit_, n_features_in_)` block, the
 #: classifier's labels the `<i4` `(n_outputs, n_samples_fit_)` column block
@@ -51,7 +51,7 @@ _KNN_FORMAT = "mojolearn-knn-1"
 _RADIUS_FORMAT = "mojolearn-radius-1"
 
 # The compiled saved-model owner, connected once at import: RadiusNeighbors'
-# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model with `load`'s refusals). The k-NN classes are
 # connected the same way: their device index is released by the native
@@ -656,7 +656,7 @@ class NearestNeighbors(NumericModeMixin):
 
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected below the class
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle: the integer is

@@ -7,9 +7,9 @@ from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.native_scalar_decode import native_scalar_buffer
+from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.sequential_admission import _one_of
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, cast_w64_bits

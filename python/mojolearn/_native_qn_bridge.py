@@ -73,7 +73,7 @@ def connect(losses):
 def _qn_fold_key():
     # glue (lane a7c; table key since lane calltable-solver-estimators): the
     # (tier, vendor) key of the resident-fold QN entry the GPU base binding
-    # publishes next to the fold store it reads (bindings/msel_device.mojo,
+    # publishes next to the fold store it reads (bindings/msel_device_unpack.mojo,
     # core/estimators_entry_table.mojo ESTIMATORS_TABLE_QN_FOLD); a build
     # without it (the CPU column) leaves None and the door gathers host rows.
     from ._buffer import _native

@@ -17,12 +17,13 @@ from bindings.admitted_family import admit_family_meta
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_drop
-from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
+from bindings.native_buffer_owner_pack import native_storage_allocate, native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
-from bindings.classical_arrays import classical_address, classical_is_array
+from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_validate import classical_view, classical_refuse_sparse, classical_estimator_name
-from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_arguments
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
@@ -32,11 +33,11 @@ from bindings.family_common import (
 )
 # TOMBSTONE: ann_candidates_i32 / _ann_item (core/neighbors_ann_impl.mojo, a two-pass serial byte walk, merged into admit_ids) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
-from bindings.parallel_public_result import parallel_public_result
+from bindings.parallel_public_result_door import parallel_public_result
 from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_materialize, ann_stored_drop
 from bindings.mode_metadata_native import _fields
-from bindings.p3nc_fitted_freeze import fitted_freeze
-from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
+from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_fit_begin
 from providers.python.neighbors_public_lifecycle_pyapi import (
     NeighborPublicCall, _target, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal,
 )

@@ -2117,10 +2117,10 @@ def _mojo_module_files(dotted, rel, names=()):
     with `-I . -I bindings` (bindings/build_rf.sh:123, build_trees.sh:134,
     build_gbdt.sh:268), so `bindings/_mojolearn_rf.mojo` writing
     `from forest_inference_binding import forest_prepare_gpu_binding` means
-    `bindings/forest_inference_binding.mojo`, which is compiled into the
+    `bindings/forest_inference_binding_door.mojo`, which is compiled into the
     shipped `.so`. Resolving against the root alone found no such file and
     dropped the import as one of the toolchain's own, so the whole resident
-    forest inference tree (`bindings/forest_inference_binding.mojo` ->
+    forest inference tree (`bindings/forest_inference_binding_door.mojo` ->
     `core/forest_inference_model.mojo` -> `core/forest_inference.mojo`) was in
     no lane's map while being a shipped surface.
 
@@ -2437,7 +2437,7 @@ _CACHES.append(_SYMBOL_KEY)
 # served by `_mojolearn_runtime_classical_host` through HOST_IMPORT_ALIASES on
 # every install), selects what it runs from a runtime string:
 # `if operation == "ridge_fit"`, `elif operation.startswith("family_")`, then
-# `family_operation` (bindings/family_native.mojo) again by prefix, and so on
+# `family_operation` (bindings/family_native_door.mojo) again by prefix, and so on
 # down to each family's owner. Read as plain text, the entry's body names every
 # family's kernels, so every lane that calls it at all (nearly all of them, for
 # `vendor_used`, `archive_save` and the like) took every export name those
@@ -3139,7 +3139,7 @@ def _binding_exports(rel):
 def _delegated_exports(rel):
     """export name -> (file, impl) for the exports a binding registers through
     a function it IMPORTS: `bindings/_mojolearn_x_trees.mojo` calls
-    `providers.python.xtrees_api_pyapi.register(module)`, which holds 87
+    `providers.python.xtrees_api_pyapi_door.register(module)`, which holds 87
     `m.def_function[impl]("name")` lines. `_binding_exports` reads the
     binding's own file only, so those exports were invisible to the per-export
     scan and reached a lane only through the whole closure of whatever else
@@ -3975,7 +3975,7 @@ def _mojo_node_label(node):
 
 # ------------------------------------------------- pandas-gated Mojo edits
 # A GLUE EDIT BEHIND A PANDAS TYPE GATE (lane-select-glue-attribution,
-# 2026-11-05). `bindings/classifier_public_lifecycle.mojo:_feature_names` runs
+# 2026-11-05). `bindings/classifier_public_lifecycle_door.mojo:_feature_names` runs
 # after EVERY estimator fit (the shared public lifecycle providers call it), so
 # the definition graph rightly reaches it from all 513 lanes. Its body opens
 # with `if py_type(source) is not _pd_class("pandas.core.frame", "DataFrame"):
@@ -4702,7 +4702,7 @@ def context_doors():
     A native owner reaches another compiled entry through its context:
     `_native_runtime_manifold_bridge.connect` stores the manifold owner's
     `manifold_native_call` as `context["family_mani_door"]`, and
-    bindings/family_native.mojo calls `py_get(context, "family_mani_door")`
+    bindings/family_native_door.mojo calls `py_get(context, "family_mani_door")`
     for every `family_mani_*` operation. The key is all the native text
     names, so the UMAP lane reached no file of the manifold owner and no
     umap/ kernel (tools/test_lane_select.py::test_an_aliased_mojo_import_is_
@@ -5215,7 +5215,7 @@ def lane_sources():
                     # miss, and both are the ordinary spelling here:
                     #  * the impl is IMPORTED, not defined in the binding file.
                     #    `def_function[forest_prepare_gpu_binding[True]]` names
-                    #    a function in bindings/forest_inference_binding.mojo,
+                    #    a function in bindings/forest_inference_binding_door.mojo,
                     #    so `blocks.get` returned "" and the export
                     #    contributed nothing at all.
                     #  * the impl calls a helper DEFINED IN THE SAME FILE which
@@ -6081,7 +6081,7 @@ def docstring_only(ref, path):
         return False
     a, b = code_dump(old), code_dump(new)
     # A DOCSTRING'S PRESENCE IS READ (lane identity-attribution, 2026-10-31):
-    # bindings/classical_exceptions.mojo admits the NotFittedError bridge's
+    # bindings/classical_exceptions_door.mojo admits the NotFittedError bridge's
     # doc (`not_fitted_doc`) only as a str, so deleting or adding a docstring
     # can raise where editing one cannot. Only edits that keep every
     # docstring where it was are docstring-only.
@@ -6424,7 +6424,7 @@ def unreachable(path):
         # IMPORTED BY SOMETHING, EVEN SOMETHING THE MAP DOES NOT HAVE. The
         # corpus is what a lane reaches, and a chain of files the map is
         # missing votes nowhere: `core/forest_inference_model.mojo` is
-        # imported by `bindings/forest_inference_binding.mojo`, which is
+        # imported by `bindings/forest_inference_binding_door.mojo`, which is
         # itself outside the map, so nothing in the corpus named either and
         # the model file read "nothing reaches it". A Mojo import is a
         # compile-time fact and does not need the corpus to be believed.

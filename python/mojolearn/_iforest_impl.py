@@ -256,7 +256,7 @@ class IsolationForest(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes this schema, the members, dtypes and order of the 0.8.55 Python
 # `save`; bindings/host_archive_native.mojo `host_archive_public_iforest`
 # builds the loaded model with the Python loader's refusals, the saved knobs

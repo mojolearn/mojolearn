@@ -44,7 +44,7 @@ def connect(context, resident_context):
     from ._native_owner_lifetime import connect_owner_context
     connect_owner_context(context)
     context.update(family_msel_entries=entries, family_msel_resident_context=resident_context)
-    # The resident row owner (bindings/arena_resident_rows.mojo) materializes
+    # The resident row owner (bindings/arena_resident_rows_door.mojo) materializes
     # a foreign fold container through this same native input owner.
     resident_context['arena_msel_input_context'] = context
     layouts = {}

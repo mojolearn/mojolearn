@@ -3,12 +3,12 @@
 # staged fitted-model replacement. Search and output have separate providers.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from providers.python.autoarima_owner_pyapi import autoarima_model_class, autoarima_commit
+from providers.python.autoarima_owner_pyapi_unpack import autoarima_model_class, autoarima_commit
 from providers.python.autoarima_lifecycle_pyapi import _fields, _integer, _number, _packed, _buffer
 from bindings.classical_pandas import classical_admit_value
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_typed
+from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.tsa_arima_native import arima_fit, _adopt, _no_exog
 from bindings.tsa_hw_native import tsa_array
 from providers.python.array_metadata_pyapi import ArrayMetadata

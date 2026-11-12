@@ -8,17 +8,17 @@ from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.admitted_call import AdmittedCall
-from bindings.native_caller_frame import native_frame_globals
+from bindings.native_caller_frame_pack import native_frame_globals
 from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _class_fields, _truth, _instance_fields
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
 from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
 from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item
 from bindings.native_error_class import error_without_class
-from bindings.native_instance_item import native_instance_find_admitted
-from bindings.native_mode_recipe import mode_recipe_call
-from bindings.optimizer_public_words import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.native_instance_item_pack import native_instance_find_admitted
+from bindings.native_mode_recipe_pack import mode_recipe_call
+from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
+from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
 

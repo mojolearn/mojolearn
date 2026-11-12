@@ -92,7 +92,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from core.hostptr import f32_ptr, f64_ptr, u32_ptr
-from bindings.gbdt_fit_boundary import gbdt_fit_args_py, gbdt_fit_outcome_py
+from bindings.gbdt_fit_boundary_unpack import gbdt_fit_args_py
+from bindings.gbdt_fit_boundary_pack import gbdt_fit_outcome_py
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.mojolearn_gbdt_host_run import (
     gbdt_fit_native_run,

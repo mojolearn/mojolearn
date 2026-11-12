@@ -33,14 +33,16 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.ivf_host_search import (
-    ivf_flat_index_prepare_binding,
-    ivf_flat_index_release_binding,
+from bindings.ivf_host_search_unpack import (
     ivf_flat_index_search_binding,
-    ivf_finalize_distances_binding,
-    ivf_flat_extend_binding,
     ivf_flat_partial_search_binding,
     ivf_flat_search_binding,
+)
+from bindings.ivf_host_search_pack import (
+    ivf_flat_index_prepare_binding,
+    ivf_flat_index_release_binding,
+    ivf_finalize_distances_binding,
+    ivf_flat_extend_binding,
 )
 from ivf.host.ivf_host import IVF_HOST_SABOTAGE
 

@@ -4,7 +4,7 @@
 SimpleImputer, IterativeImputer, RFE, TargetEncoder and SelectKBest are one
 native call each. A wrapped estimator (IterativeImputer, RFE) is cloned,
 fitted and asked to predict through its connected native plan
-(bindings/prep_native_estimator.mojo), a mojolearn cv splitter
+(bindings/prep_native_estimator_door.mojo), a mojolearn cv splitter
 (TargetEncoder) yields its folds from the model-selection owner directly, and
 a Python callable (SimpleImputer strategy, SelectKBest score_func) is refused.
 

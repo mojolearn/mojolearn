@@ -14,7 +14,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes import classical_connect_numpy
@@ -22,9 +22,10 @@ from bindings.prep_encode_native import prep_encode_c, prep_encode_scores_call
 from bindings.prep_labels_native import prep_labels_call
 from bindings.prep_iterimp_native import prep_iterimp_call
 from bindings.prep_select_native import prep_rfe_call, prep_mutual_info_call
-from bindings.prep_composition_lifecycle import composition_before, composition_after_fit
-from bindings.parallel_public_result import parallel_public_result
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.prep_composition_lifecycle_door import composition_after_fit
+from bindings.prep_composition_lifecycle_door import composition_before
+from bindings.parallel_public_result_door import parallel_public_result
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
 
 def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:

@@ -13,10 +13,10 @@
 # release of every device slot it acquired. It replaces the Python bodies of
 # `_expansion_prep._Prog.run` and `_expansion_metrics._execute` step for
 # step: the same entries are called with the same words, so no bit moves.
-from bindings.native_array_storage import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros
 from std.memory import unsafe_memcpy
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.metrics_plan_admission import MetricArenaOwner
+from bindings.metrics_plan_admission_unpack import MetricArenaOwner
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
@@ -25,16 +25,16 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
-from bindings.optimizer_public_words import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
+from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner import xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
-from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
+from bindings.x_prep_native_inputs_door import _values, _rows_fields, _dense_values
 from bindings.x_prep_native_owner import xprep_drop_resident
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.cpython_table import cpython_table
-from bindings.p3_array_arena_records import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
+from bindings.p3_array_arena_records_unpack import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 from bindings.arena_prog_run import _switch, _add_input, _merge_pairs, _pad
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]

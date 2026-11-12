@@ -6,7 +6,7 @@ from std.collections import Dict
 from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.native_owner_registry import borrowed_native_owner
+from bindings.native_owner_registry_pack import borrowed_native_owner
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys, shared_dict_watch, shared_dict_epoch

@@ -8,8 +8,8 @@ Only the private dictionary/index containers become typed Mojo storage.
 """
 from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
-from bindings.cpython_borrowed import borrowed_item
-from bindings.decomp_scalar_compare import decomp_equal_admitted
+from bindings.cpython_borrowed_pack import borrowed_item
+from bindings.decomp_scalar_compare_unpack import decomp_equal_admitted
 
 
 @fieldwise_init

@@ -4,20 +4,20 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.manifold_settings_native import ManifoldSettings
+from bindings.manifold_settings_native_door import ManifoldSettings
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _classical_admit, _ClassicalAdmitTypes
 from bindings.sequential_admission import _SequentialValueTypes
-from bindings.classical_exceptions import classical_not_fitted_class
-from bindings.classical_warnings import _warning_category, COLUMN_WARNING
-from bindings.classifier_public_lifecycle import _feature_names
-from bindings.metrics_native_support import metric_warn
+from bindings.classical_exceptions_door import classical_not_fitted_class
+from bindings.classical_warnings_unpack import _warning_category, COLUMN_WARNING
+from bindings.classifier_public_lifecycle_door import _feature_names
+from bindings.metrics_native_support_door import metric_warn
 from bindings.sequential_admission import _one_of, _ordinary_torch
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
 from bindings.family_common import FAMILY_F32P, family_array, family_repr
-from bindings.classical_arrays import classical_address
-from bindings.parallel_public_result import parallel_public_result
+from bindings.classical_arrays_door import classical_address
+from bindings.parallel_public_result_door import parallel_public_result
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import cast_in_kind
 from core.admitted_input import admitted_cast_f32

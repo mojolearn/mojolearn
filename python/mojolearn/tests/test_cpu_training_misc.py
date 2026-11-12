@@ -195,7 +195,7 @@ def test_core_host_binding_registers_the_fold_gather():
     src = _read(host_surface.binding_source("core"))
     assert '("gather_rows_bytes")' in src
     assert "gather_rows_bytes" in host_surface.family("core")["exports"]
-    helpers = _read("bindings/host_helpers.mojo")
+    helpers = _read("bindings/host_helpers_pack.mojo")
     assert "def gather_rows_bytes_binding(" in helpers
     # lane cpu2-l4-modelsel: cross-validation's fold rows are the msel store's
     # device gather; the core host binding carries its host column. The entry

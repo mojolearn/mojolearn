@@ -115,7 +115,7 @@ def release_resident_fit(self):
 
 # No Python `__del__`: dropping an instance releases its device fit
 # through the native finalizer connected below the class
-# (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+# (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
 def fit(self, X, y=None, sample_weight=None):
     """Store the training data.

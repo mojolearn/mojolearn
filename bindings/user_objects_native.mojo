@@ -44,7 +44,8 @@ from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
 from bindings.cpython_table import cpython_table
-from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
+from bindings.cpython_borrowed_unpack import borrowed_type_word
+from bindings.cpython_borrowed_pack import borrowed_item
 
 comptime KIND_STR = 0         # isinstance(v, str)
 comptime KIND_BOOL = 1        # bool or NumPy bool_ (_labels.is_bool)

@@ -3,37 +3,37 @@
 # migration; this private entry is exercised directly by strict audit tests.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.classical_error_boundary import classical_python_error
+from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.sequential_description import sequential_fields
-from providers.python.linear_parameter_boundary import classical_ridge_parameters
-from providers.python.linear_fit_boundary import classical_ridge_fit
-from providers.python.linear_predict_boundary import classical_linear_predict, classical_linear_predict_public
-from providers.python.linear_ols_boundary import classical_ols_fit
-from providers.python.linear_score_boundary import classical_linear_score
-from providers.python.linear_metadata_boundary import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
+from providers.python.linear_parameter_boundary_unpack import classical_ridge_parameters
+from providers.python.linear_fit_boundary_unpack import classical_ridge_fit
+from providers.python.linear_predict_boundary_unpack import classical_linear_predict, classical_linear_predict_public
+from providers.python.linear_ols_boundary_unpack import classical_ols_fit
+from providers.python.linear_score_boundary_unpack import classical_linear_score
+from providers.python.linear_metadata_boundary_door import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
 from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
-from bindings.classical_archive import classical_archive_save, classical_archive_hash as classical_host_hash
+from bindings.classical_archive_door import classical_archive_save, classical_archive_hash as classical_host_hash
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
-from bindings.archive_schema_native import archive_schema_save
-from bindings.linear_score_native import linear_regressor_score
+from bindings.archive_schema_native_door import archive_schema_save
+from bindings.linear_score_native_unpack import linear_regressor_score
 from bindings.native_operation_codes import operation_table
 from bindings.classical_native_run import classical_coded_trees
 from bindings.classical_door_routes import (
     CLASSICAL_TREES_DOOR, CLASSICAL_FAMILY_DOOR, classical_trees_operation, classical_family_operation,
 )
-from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
+from bindings.classical_exceptions_door import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.classical_pandas import classical_admit_value, classical_admit_fields
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
-from bindings.classical_host_owner import classical_host_entries
+from bindings.classical_host_owner_unpack import classical_host_entries
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.classical_caller import classical_caller_outside
+from bindings.classical_caller_unpack import classical_caller_outside
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.admitted_call import AdmittedCall
 from core.linear_fit_types import LF_MODE, LF_VENDOR
 from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
-from providers.python.linear_execution_boundary import linear_execution_word
+from providers.python.linear_execution_boundary_unpack import linear_execution_word
 from providers.python.linear_entry_boundary import linear_entry_identity
 
 

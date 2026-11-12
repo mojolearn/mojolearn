@@ -18,12 +18,12 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
 from bindings.classical_attributes import classical_connect_numpy
-from providers.python.estimator_binding_pyapi import estimator_binding_mode
-from bindings.manifold_settings_native import ManifoldSettings
-from bindings.manifold_storage_native import matrix_device, device_identifier
-from bindings.manifold_scalar_native import manifold_number
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.manifold_storage_native_unpack import matrix_device, device_identifier
+from bindings.manifold_scalar_native_door import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.metrics_native_support import metric_warn
+from bindings.metrics_native_support_door import metric_warn
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
     family_field,

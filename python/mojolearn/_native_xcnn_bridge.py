@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the CNN layers
-(bindings/xcnn_native.mojo). A migrated layer method is one call,
+(bindings/xcnn_native_pack.mojo). A migrated layer method is one call,
 `_XCNN(self, "<operation>", args, _XCNN_CONTEXT)`; Python here only connects
 the compiled `_mojolearn_x_cnn` entries of both numeric modes, the switch
 words the binary reports and the layer classes, once, at import. NumPy is not

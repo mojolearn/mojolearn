@@ -5,11 +5,11 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.classical_pandas import classical_admit_value
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_wrap_array
+from bindings.classical_arrays_door import classical_wrap_array
 from bindings.sequential_inputs import sequential_sequence_f32
 from bindings.linalg_ops_buffers import lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32

@@ -12,7 +12,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.glue_runs import publish_x_trees_glue, x_trees_glue_vendor
 from xtrees.dart_runs_device import publish_x_trees_dart_device
-from providers.python.xtrees_api_pyapi import register, tree_shap_cache_values_args
+from providers.python.xtrees_api_pyapi_door import register, tree_shap_cache_values_args
 from xtrees import shap_device as shap_dev
 from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values, shap_pair_count
 

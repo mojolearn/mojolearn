@@ -45,9 +45,9 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_setattr
-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
-from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
-from bindings.classical_arrays import (
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
+from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
+from bindings.classical_arrays_door import (
     classical_address, classical_is_array, classical_cast_kind, classical_dtype_str, classical_c_order,
 )
 from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view, admit_x_unrecorded

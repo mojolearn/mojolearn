@@ -156,7 +156,7 @@ def test_extended_probes_reuse_fit_and_detect_drift(flags):
 
 def test_select_d_cpu_chooses_first_stationary_order_and_preserves_input(monkeypatch):
     """`select_d` is ONE native entry since lane py-runtime-b (the host
-    binding's `select_d`, bindings/kpss_host_test.mojo), no longer a Python
+    binding's `select_d`, bindings/kpss_host_test_unpack.mojo), no longer a Python
     loop over `kpss_test`, so a faked `kpss_test` cannot steer it. The
     reference is the rule itself stated over the real `kpss_test`: the first
     order `d < d_max` at which a series tests stationary, else `d_max`."""

@@ -7,11 +7,11 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_admission import opt_value, opt_scalar
 from bindings.optimizer_public_door import new_array, TensorView, tensor_view
-from bindings.optimizer_container_boundary import OptimizerInputOwners
-from bindings.optimizer_scalar_boundary import optimizer_integer
+from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
+from bindings.optimizer_scalar_boundary_unpack import optimizer_integer
 from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_driver, optimizer_device_available
-from bindings.optimizer_public_words import optimizer_python_error
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.optimizer_public_words_unpack import optimizer_python_error
+from bindings.native_buffer_owner_pack import native_storage_allocate
 from training.optimizer_input_plan import optimizer_contiguous_address
 from training.optimizer_native_api import OptimizerNativeDriver
 from training.optimizer_device_handle import OptimizerDeviceHandle

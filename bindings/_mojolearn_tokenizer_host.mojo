@@ -67,7 +67,7 @@ tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
 it; the `break_ties_high` flag in `dims` is the Python door's environment
 spelling of the same arm.
 """
-from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_unpack import register_native_owner_type
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import unsafe_memcpy
 from std.os import abort
@@ -86,7 +86,7 @@ from bindings.native_json import native_json_parse, native_path
 from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_operation_owner import CausalExecutionEntries
-from bindings.native_identity_type import native_identity_type
+from bindings.native_identity_type_unpack import native_identity_type
 from bindings.neural_block_public import NativeBlockPlan
 from bindings.lm_corpus_public_native import LmCorpusIteratorHandle
 from bindings.tokenizer_public_native import (
@@ -98,31 +98,31 @@ from bindings.native_transport import transport_c, transport_initialize
 from bindings.cross_vendor_native import cross_vendor_c
 from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
-from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
-from bindings.optimizer_native_router import optimizer_native_c
-from bindings.optimizer_owner_boundary import OptimizerOwner
+from bindings.optimizer_lifecycle_unpack import optimizer_finalize_descriptor_binding
+from bindings.optimizer_native_router_door import optimizer_native_c
+from bindings.optimizer_owner_boundary_unpack import OptimizerOwner
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
-from bindings.sequence_device_native import sequence_tensor_finalize_c
-from bindings.runtime_sequential_forward import runtime_sequential_forward_c
-from bindings.runtime_classical_unavailable import runtime_classical_unavailable_c
+from bindings.sequence_device_native_pack import sequence_tensor_finalize_c
+from bindings.runtime_sequential_forward_pack import runtime_sequential_forward_c
+from bindings.runtime_classical_unavailable_unpack import runtime_classical_unavailable_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.mode_metadata_native import mode_metadata_c
-from bindings.backend_public_native import backend_public_c
+from bindings.backend_public_native_door import backend_public_c
 from bindings.numeric_profile_native import numeric_profile_c
 from bindings.params_metadata_native import params_metadata_c
 from bindings.public_attributes_native import public_attribute_c, public_attribute_generic_c, public_attribute_generic_slot_c
 from bindings.linear_constructor_native import linear_constructor_c
-from bindings.full_reset_params_native import full_reset_params_c
-from bindings.full_reset_constructor_native import full_reset_constructor_c
-from bindings.array_native import array_native_c
-from bindings.params_setter_native import params_setter_c
-from bindings.declared_params_native import declared_params_c
-from bindings.arena_rows_native import arena_rows_c
+from bindings.full_reset_params_native_door import full_reset_params_c
+from bindings.full_reset_constructor_native_door import full_reset_constructor_c
+from bindings.array_native_door import array_native_c
+from bindings.params_setter_native_door import params_setter_c
+from bindings.declared_params_native_door import declared_params_c
+from bindings.arena_rows_native_pack import arena_rows_c
 from bindings.arena_prog_native import arena_prog_c
-from bindings.generator_draw_native import generator_draw_c
+from bindings.generator_draw_native_door import generator_draw_c
 # the user-object reader (lane purge-user-objects): label lists, index pairs, group ids
 from bindings.user_objects_native import user_objects_c
 from checks.kernel_matrix import (
@@ -206,7 +206,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     vocab_fingerprint_hex,
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
-from providers.python.transformer_block_session_pyapi import transformer_block_session_type
+from providers.python.transformer_block_session_pyapi_door import transformer_block_session_type
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info, neural_descriptor_provider_pins, native_descriptor_resource_pins
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_operation_owner import CausalExecutionEntries

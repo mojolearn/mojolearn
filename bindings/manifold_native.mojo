@@ -8,18 +8,18 @@ from std.python import Python, PythonObject
 from bindings.mani_tsne_native import tsne_operation
 from bindings.mani_umap_native import umap_operation
 from bindings.mani_decomp_native import mani_decomp_operation
-from bindings.manifold_settings_native import ManifoldSettings
+from bindings.manifold_settings_native_door import ManifoldSettings
 from bindings.manifold_lifecycle_native import (
     manifold_method, manifold_require_fitted, manifold_input, manifold_ignored_target,
     manifold_check_width, manifold_finish,
 )
-from bindings.classifier_public_lifecycle import _feature_names
+from bindings.classifier_public_lifecycle_door import _feature_names
 from bindings.py_balanced import py_type, py_call, py_setitem, py_get
 from bindings.native_loaded_module import native_loaded_module
-from bindings.sequence_array_native import sequence_array_release
+from bindings.sequence_array_native_unpack import sequence_array_release
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.manifold_errors_native import manifold_error
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end
+from bindings.manifold_errors_native_unpack import manifold_error
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end
 
 
 def manifold_operation(model: PythonObject, operation: String, args: PythonObject,

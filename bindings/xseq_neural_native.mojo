@@ -24,16 +24,16 @@ from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_
 from bindings.native_model_records import records_open, model_generation
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
-from providers.python.autograd_pyapi import cast_in_of
+from providers.python.autograd_pyapi_door import cast_in_of
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_descriptor
 from bindings.optimizer_admission import opt_schedule
-from bindings.optimizer_schedule_native import schedule_operation
-from bindings.xseq_native_common import (
+from bindings.optimizer_schedule_native_door import schedule_operation
+from bindings.xseq_native_common_door import (
     XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
     XseqStream, xseq_neural_provider, xseq_output_provider,
 )
-from bindings.admitted_sequence import admit_nd_f32
+from bindings.admitted_sequence_door import admit_nd_f32
 from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token

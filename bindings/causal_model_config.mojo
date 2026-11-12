@@ -5,10 +5,10 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
-from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.native_json import native_json_read, native_path, native_path_exists
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_class_admission import class_record, class_admit
 from core.shared_slot import SharedSlot

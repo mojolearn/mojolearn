@@ -3,13 +3,13 @@
 # registry shapes/names and profile spelling are owned here after admission.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.p3_lm_tokenizer_cpython import lm_try_index
+from bindings.p3_lm_tokenizer_cpython_unpack import lm_try_index
 from bindings.py_balanced import py_call, py_type, py_contains, py_fields, py_setitem
 from bindings.classical_pandas import classical_admit_value
-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
 from bindings.classical_attributes import classical_connect_numpy
 from core.training_state_validation import training_byte_shape_validate
-from bindings.optimizer_public_words import stash_python_error
+from bindings.optimizer_public_words_unpack import stash_python_error
 
 
 def _b() raises -> PythonObject:

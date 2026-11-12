@@ -37,7 +37,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.native_model_records import model_generation
-from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.py_balanced import py_call, py_type
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 

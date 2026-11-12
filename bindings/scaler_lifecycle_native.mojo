@@ -5,7 +5,7 @@ from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
@@ -13,18 +13,18 @@ from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
-from bindings.native_caller_frame import native_caller_globals
+from bindings.native_caller_frame_pack import native_caller_globals
 from bindings.classical_attributes import classical_connect_numpy, classical_getattribute, classical_check_layout
-from bindings.classical_arrays import classical_typed, classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_i64, classical_dtype_str
-from bindings.classical_archive import _archive_class_name_unpack
-from bindings.standard_archive_native import standard_archive_write, standard_archive_load as scaler_archive_load
+from bindings.classical_arrays_door import classical_typed, classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_i64, classical_dtype_str
+from bindings.classical_archive_door import _archive_class_name_unpack
+from bindings.standard_archive_native_unpack import standard_archive_write, standard_archive_load as scaler_archive_load
 from core.native_archive_standard import NativeStandardArchiveSaved, native_standard_statistic_names
-from bindings.classical_exceptions import classical_not_fitted_class
-from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.classical_exceptions_door import classical_not_fitted_class
+from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import native_pandas_exact, classical_admit_value
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
-from bindings.prep_entry_cache import prep_mode_checked
+from bindings.prep_entry_cache_unpack import prep_mode_checked
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy

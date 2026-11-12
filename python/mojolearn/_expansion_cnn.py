@@ -19,7 +19,7 @@ from ._labels import unique_inverse
 from . import _native_xcnn_bridge
 
 # Package-import connection: the migrated layer methods are ONE call each
-# into the compiled owner (bindings/xcnn_native.mojo).
+# into the compiled owner (bindings/xcnn_native_pack.mojo).
 _XCNN, _XCNN_CONTEXT = _native_xcnn_bridge.connect()
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",

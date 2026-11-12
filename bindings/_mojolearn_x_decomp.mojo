@@ -6,21 +6,21 @@ bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
 from x_decomp.publish_device_run import _publish_linear_entry_table
 from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
-from providers.python.x_decomp_api_pyapi import (
+from providers.python.x_decomp_api_pyapi_pack import (
     colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
-from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
+from providers.python.x_decomp_tsvd_owner_pyapi_pack import tsvd_randomized_py, tsvd_tsqr_py
 from x_decomp.ipca_owner_dev import DevIpcaDev
-from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+from providers.python.x_decomp_ipca_owner_pyapi_door import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
-from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
+from providers.python.x_decomp_decomp_owner_pyapi_pack import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
 
 # TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b (its reach counter x_decomp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
@@ -34,42 +34,42 @@ from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project
 # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
-from providers.python.x_decomp_mds_dev_pyapi import mds_fit_dev_py
-from providers.python.x_decomp_lle_iter_dev_pyapi import lle_iterate_dev_py, lle_gemm_ordered_py, lle_lu_ordered_py
+from providers.python.x_decomp_mds_dev_pyapi_pack import mds_fit_dev_py
+from providers.python.x_decomp_lle_iter_dev_pyapi_pack import lle_iterate_dev_py, lle_gemm_ordered_py, lle_lu_ordered_py
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
-from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
-from providers.python.x_decomp_select_dev_pyapi import (
+from providers.python.x_decomp_select_ops_pyapi_pack import order_small_py, reduce_py
+from providers.python.x_decomp_select_dev_pyapi_pack import (
     dev_argmin_all_py, dev_dsum_sq_py, dev_order_f_py, dev_order_small_py, dev_pca_mle_rank_py, dev_reduce_py, dev_select_smallest_py,
 )
-from providers.python.x_decomp_graph_device_pyapi import (
+from providers.python.x_decomp_graph_device_pyapi_pack import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py, dev_graph_join_py, dev_graph_dijkstra_py,
 )
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
-from providers.python.x_decomp_resident_pyapi import (
+from providers.python.x_decomp_resident_pyapi_pack import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
 )
 from x_decomp.resident import GRP_CLS2_ANY
-from providers.python.x_decomp_resident_pyapi import grp_cls2_py
-from providers.python.x_decomp_lanczos_dev_pyapi import dev_eigh_tridiag_py, dev_lanczos_py
+from providers.python.x_decomp_resident_pyapi_pack import grp_cls2_py
+from providers.python.x_decomp_lanczos_dev_pyapi_pack import dev_eigh_tridiag_py, dev_lanczos_py
 from x_decomp.resident import IDN_SVD_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_svd_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_svd_py
 from x_decomp.resident import IDN_LU_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_lu_py, dev_lu_aux_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_lu_py, dev_lu_aux_py
 from x_decomp.resident import IDN_CODE_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_code_rows_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_code_rows_py
 from x_decomp.resident import IDN_EIGH_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_eigh_py, dev_eigh_to_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_eigh_py, dev_eigh_to_py
 # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
 # IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 from x_decomp.qfix import LU_QFIX
-from providers.python.x_decomp_qfix_pyapi import lu_resid_py, qfix_flags_py
+from providers.python.x_decomp_qfix_pyapi_pack import lu_resid_py, qfix_flags_py
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: TSVD_QFIX's R from shifted CholeskyQR3 on the matrix unit (x_decomp/tsvd_fast.mojo) instead of the Householder TSQR; tsvd istella +19.9% (verdicts batch 6).
 # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
 from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT
-from providers.python.x_decomp_s_linalg_fast_pyapi import (
+from providers.python.x_decomp_s_linalg_fast_pyapi_pack import (
     dev_orth_ws_py, s_flags_py,
 )
 

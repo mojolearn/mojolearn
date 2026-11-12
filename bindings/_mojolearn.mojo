@@ -80,7 +80,7 @@ device through the estimators binding (glm/impl/center_device.mojo).
 """
 
 from core.experiment_guards_base import BASE_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_shell_impl import (
     cast_f64_to_f32_host,
@@ -105,13 +105,13 @@ from core.hotpath_device import (
     HPD_U8,
 )
 from core.label_rows_device import LRD_MAX_N, device_argmax_last_f32
-from bindings.normal_dist_helpers import truncnorm_draws_binding
-from bindings.lr_table_helpers import (
+from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
+from bindings.lr_table_helpers_door import (
     lr_schedule_exact_binding,
     lr_schedule_at_c, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
-from bindings.array_helpers import (
+from bindings.array_helpers_pack import (
     nsum_f64_binding,
     row_means_f64_binding,
     fsum_f64_binding,
@@ -119,7 +119,7 @@ from bindings.array_helpers import (
 )
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
 from core.ic_min_device import device_ic_running_min
-from bindings.hotpath_helpers import (
+from bindings.hotpath_helpers_door import (
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
@@ -131,7 +131,7 @@ from bindings.hotpath_helpers import (
 # this binding (bindings/hotpath_device.mojo, same names and signatures; each
 # falls back to its host helper of bindings/hotpath_helpers.mojo when its
 # -D MOJOLEARN_IDN_HPDEV_*_OFF switch or -D MOJOLEARN_IDN_ALL_OFF is given).
-from bindings.hotpath_device import (
+from bindings.hotpath_device_door import (
     check_indices_i64_binding,
     equal_elements_binding,
     fold_ids_binding,
@@ -165,7 +165,15 @@ from core.hotpath_device_run import hpdev_try_cast_f64_to_f32, hpdev_try_transpo
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_device.mojo).
-from bindings.msel_device import (
+from bindings.msel_device_unpack import (
+    logistic_fold_native_api_v1_binding,
+    pca_fold_native_api_v1_binding,
+    tsvd_fold_native_api_v1_binding,
+    kmeans_fit_fold_binding,
+    kmeans_predict_fold_binding,
+    kmeans_transform_fold_binding,
+)
+from bindings.msel_device_pack import (
     msel_put_binding,
     msel_alloc_binding,
     msel_read_binding,
@@ -176,13 +184,7 @@ from bindings.msel_device import (
     pca_transform_fold_binding,
     pca_fit_fold_binding,
     tsvd_fit_fold_binding,
-    logistic_fold_native_api_v1_binding,
-    pca_fold_native_api_v1_binding,
-    tsvd_fold_native_api_v1_binding,
     qn_infer_fold_binding,
-    kmeans_fit_fold_binding,
-    kmeans_predict_fold_binding,
-    kmeans_transform_fold_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_split_table_i32_binding,
@@ -203,7 +205,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.labels_native_api import LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
 from core.labels_native_device import LabelsDeviceKernels
 from core.labels_admission import labels_argmax_shape, labels_gather_shape, labels_ratio_shape
-from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_prepare, labels_legacy_address
+from bindings.labels_legacy_boundary_unpack import labels_legacy_prepare, labels_legacy_address
+from bindings.labels_legacy_boundary_pack import labels_legacy_unique
 
 from checks.vendor import COMPILED_VENDOR
 from core.base_helpers_device import publish_base_helpers_device

@@ -1,0 +1,159 @@
+# SPDX-License-Identifier: Apache-2.0
+# KDE bandwidth conversion policy; bytes are decoded by the shared native
+# scalar implementation, while warning/error timing stays at the consumer.
+from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.native_numpy_metadata_pack import native_numpy_module_fields
+from bindings.native_scalar_decode_unpack import native_scalar_buffer
+from bindings.classical_warnings_unpack import classical_warning
+from bindings.native_caller_frame_pack import native_frame_globals
+from core.host_kde_bandwidth_run import kde_temporal_unit_run, kde_temporal_decode_run
+
+
+def kde_bandwidth_code(value: PythonObject, context: PythonObject) raises -> String:
+    var cls = py_type(value)
+    if py_get(context, "ndarray") is None:
+        return String("")
+    # p3-neighbors-cluster: an exact builtin float, int, bool or str is never
+    # a NumPy scalar or array, so no code matches; answered before the dtypes.
+    if (cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(0))
+            or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(""))):
+        return String("")
+    var codes = Python.tuple("?", "b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "e", "f", "d", "g", "F", "D", "G", "M", "m")
+    # The twenty dtype objects are built once per connected context (they are
+    # NumPy's own singletons for these codes) instead of on every call.
+    var dtypes = py_get(context, "p3nc_kde_bandwidth_dtypes")
+    if dtypes is None:
+        var constructor = native_numpy_dtype(context)
+        var built = Python.list()
+        for i in range(len(codes)):  # driver-loop: the fixed dtype codes, once per context
+            _ = py_call(built.append, py_call(constructor, codes[i]))
+        dtypes = py_call(py_type(Python.tuple()), built)
+        py_setitem(context, "p3nc_kde_bandwidth_dtypes", dtypes)
+    var array = cls is context["ndarray"]
+    for i in range(len(codes)):  # driver-loop: exact built-in numeric and temporal scalar/dtype identities
+        var dtype = dtypes[i]
+        if cls is dtype.type or (array and py_type(value.dtype) is py_type(dtype)):
+            return String(codes[i])
+    return String("")
+
+
+def kde_bandwidth_warning(message: String, category: PythonObject, context: PythonObject) raises:
+    # Match the existing _getframe(1) warning location without sys._getframe
+    # or frame.f_code access: their audit events run application Python.
+    # This is the same public CPython path as host feature-name warnings.
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyEval_GetFrame")()
+    if not pointer:
+        raise Error("ValueError: call stack is not deep enough")
+    var current = PythonObject(from_borrowed=pointer)
+    pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(current._obj_ptr)
+    _ = current^
+    if not pointer:
+        if cpython_table()[].PyErr_Occurred():
+            var failure = cpy.unsafe_get_error()
+            raise failure^
+        raise Error("ValueError: call stack is not deep enough")
+    var frame = PythonObject(from_owned=pointer)
+    pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetCode")(frame._obj_ptr)
+    if not pointer:
+        var failure = cpy.unsafe_get_error()
+        raise failure^
+    var code = PythonObject(from_owned=pointer)
+    var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
+    var module = py_get(native_frame_globals(frame), "__name__", "")
+    if py_type(module) is not py_type(PythonObject("")):
+        module = PythonObject("")
+    classical_warning(message, category, context,
+        Python.tuple(code.co_filename, Int(line), module), "HostInferenceWarning")
+
+
+def kde_numpy_release(context: PythonObject) raises -> Int:
+    var numpy = py_get(context["modules"], "numpy")
+    if numpy is None or py_type(numpy) is not context["native_module_type"]:
+        raise Error("TypeError: KDE scalar conversion requires native NumPy metadata")
+    var version = py_get(native_numpy_module_fields(numpy), "__version__")
+    if py_type(version) is not py_type(PythonObject("")):
+        raise Error("TypeError: KDE scalar conversion requires native NumPy version text")
+    var parts = String(version).split(".")
+    if len(parts) < 2:
+        raise Error("TypeError: KDE scalar conversion requires NumPy major.minor metadata")
+    return Int(String(parts[0])) * 100 + Int(String(parts[1]))
+
+
+def kde_bandwidth_array_policy(value: PythonObject, context: PythonObject) raises:
+    if py_type(value) is context["ndarray"]:
+        var ndim = Int(py=value.ndim)
+        if ndim > 0:
+            if kde_numpy_release(context) >= 204:
+                raise Error("TypeError: only 0-dimensional arrays can be converted to Python scalars")
+        if Int(py=value.size) != 1:
+            raise Error("TypeError: only length-1 arrays can be converted to Python scalars")
+        if ndim > 0:
+            kde_bandwidth_warning("Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)",
+                context["warning_deprecation_type"], context)
+
+
+def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
+    var dtype = value.dtype
+    var text = String(dtype.str)
+    var unit = String("generic")
+    var multiplier = 1
+    kde_temporal_unit_run(text, unit, multiplier)
+    # Acquire only an admitted exact native temporal owner. Public no-format
+    # buffers support byte-swapped temporals even where memoryview formatting
+    # does not. Both storage allocations precede acquisition; every export
+    # is released before decoding or raising a conversion error.
+    var view = List[Int](length=10, fill=0)
+    var bytes = List[UInt8](length=8, fill=UInt8(0))
+    var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    ref cpy = Python().cpython()
+    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x118))
+    if status != 0:
+        var failure = cpy.unsafe_get_error()
+        raise failure^
+    try:
+        # Exact NumPy temporal scalars expose their signed word as eight byte
+        # elements; temporal ndarrays expose one eight-byte element. The
+        # admitted dtype fixes the interpretation independently of that view.
+        if view[2] != 8 or (view[3] != 1 and view[3] != 8):
+            raise Error("TypeError: temporal scalar decoding requires one native element")
+        status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(data, pointer, 8, Int8(67))
+        if status != 0:
+            var failure = cpy.unsafe_get_error()
+            raise failure^
+    finally:
+        cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
+    var little = String(dtype.byteorder) != ">"
+    var release = kde_numpy_release(context)
+    var number = kde_temporal_decode_run(bytes, data, little, code, unit, multiplier, release)
+    _ = bytes^
+    _ = view^
+    return PythonObject(number)
+
+
+def kde_native_bandwidth(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
+    kde_bandwidth_array_policy(value, context)
+    if code == "M" or code == "m":
+        return kde_temporal_bandwidth(value, code, context)
+    if code != "F" and code != "D" and code != "G":
+        return native_scalar_buffer(value).to_python_number(False)
+    if py_type(value) is context["ndarray"]:
+        # NumPy boxes F/D ndarray elements as builtin complex, whose float
+        # conversion refuses them. G retains an extended complex scalar even
+        # on ABIs where its component width happens to equal double.
+        if code != "G":
+            raise Error("TypeError: float() argument must be a string or a real number, not 'complex'")
+    var exceptions = py_get(context["modules"], "numpy.exceptions")
+    if exceptions is None or py_type(exceptions) is not context["native_module_type"]:
+        raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
+    var category = py_get(native_numpy_module_fields(exceptions), "ComplexWarning")
+    kde_bandwidth_warning("Casting complex values to real discards the imaginary part", category, context)
+    return native_scalar_buffer(value).to_python_number(False)

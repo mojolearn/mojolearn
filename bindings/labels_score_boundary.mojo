@@ -4,7 +4,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import ExternalFunction, PyObjectPtr, GILReleased
 from core.shared_slot import SharedSlot
 from bindings.cpython_table import cpython_table
-from bindings.cpython_borrowed import borrowed_item, borrowed_type_word
+from bindings.cpython_borrowed_unpack import borrowed_type_word
+from bindings.cpython_borrowed_pack import borrowed_item
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get
 from core.labels_score_keys import (

@@ -57,7 +57,7 @@ wrapper reads it once.
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
 from std.os import abort, getenv
 from std.time import perf_counter_ns

@@ -17,10 +17,10 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type, py_fields
 from bindings.py_attr import py_attr
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.pca_exact import pca_copied
-from bindings.manifold_settings_native import ManifoldSettings
+from bindings.pca_exact_unpack import pca_copied
+from bindings.manifold_settings_native_door import ManifoldSettings
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_validate import classical_view
 from bindings.umap_parameters_native import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
@@ -34,16 +34,17 @@ from x_ann.mani_umap_run import (
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_is_str, family_array, family_field,
 )
-from bindings.spectral_umap_routes import spectral_umap_route
+from bindings.spectral_umap_routes_pack import spectral_umap_route
 from core.neighbors_entry_table import NeighborsEntryKey
 from core.neighbors_entry_table_umap import (
     UmapConfigWords, UmapTargetWords, umap_ops_entry, umap_fit_call, umap_fit_ex_call, umap_transform_call,
     UMAP_TAIL_LEGACY, UMAP_TAIL_RATES, UMAP_TAIL_EXTRAS,
 )
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_FLOAT
-from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
-from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
-from bindings.label_list_words import label_list_store, label_store_address
+from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
+from bindings.p3_labels_metrics_native_door import p3_text_codes, P3_TEXT_OK
+from bindings.label_list_words_unpack import label_store_address
+from bindings.label_list_words_pack import label_list_store
 from core.label_words_impl import label_words_f64, label_words_i64, label_dense_codes, label_codes_i32_to_f32
 from bindings.mani_kit import (
     MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,

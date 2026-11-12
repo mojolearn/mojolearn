@@ -32,7 +32,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_forward_words
+from bindings.embedding_host_forward_door import embedding_forward_binding, embedding_host_forward_words
 from core.shared_slot import SharedSlot
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report

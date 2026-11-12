@@ -22,7 +22,7 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
     from .tokenizer import _binding
 
     context = _state_context()
-    # Native warning delivery (bindings/classical_warnings.mojo): filters read
+    # Native warning delivery (bindings/classical_warnings_unpack.mojo): filters read
     # natively, standard display hooks only, no warnings.warn call.
     from ._native_classical_warnings import connect_warnings
     context.update(connect_warnings())

@@ -6,7 +6,7 @@ are written in providers/python/x_ann_abi_pyapi.mojo's callers below and in
 python/mojolearn/_expansion_ann.py. `bindings/_mojolearn_x_ann_host.mojo`
 exports the same names with the same contract on the CPU."""
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -14,15 +14,15 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.mojolearn_x_ann_run import ivf_pq_build_run, ivf_pq_build_resident_run
-from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int, py_int_list
+from providers.python.x_ann_abi_pyapi_unpack import a_int, in_f32, in_i32, out_f32, out_i32, p_int, py_int_list
 from x_ann.switches import ANN3_DIRECT_OUT, IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
 from x_ann.ivf_pq_core import IvfPqIndex
 from x_ann.stage_timer import AnnStages
 from x_ann.cagra_device import cagra_build_device
 from x_ann.device_ctx import x_ann_ctx
-from providers.python.x_ann_resident_pyapi import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
-from providers.python.x_ann_resident_pyapi import x_ann_index_export_codes_binding
+from providers.python.x_ann_resident_pyapi_pack import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
+from providers.python.x_ann_resident_pyapi_pack import x_ann_index_export_codes_binding
 from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.resident import x_ann_register_pq_built
 from x_ann.ivf_pq_device import ivf_sq_build_device, refine_device, ivf_rabitq_build_device

@@ -1,24 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 """Agglomerative provider, buffer and retained-reference unpack/pack boundary."""
 from std.python import Python, PythonObject
-from bindings.native_owner_registry import borrowed_native_owner
+from bindings.native_owner_registry_pack import borrowed_native_owner
 from std.python._cpython import GILReleased, PyObjectPtr, ExternalFunction
 from bindings.py_balanced import py_get, py_setitem, py_type
 from bindings.native_loaded_module import native_interpreter_finalizing
-from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.cpython_table import cpython_table
-from bindings.optimizer_public_words import stash_python_error
+from bindings.optimizer_public_words_unpack import stash_python_error
 from core.shared_slot import SharedSlot
-from bindings.classical_arrays import classical_address, classical_wrap_layout
-from bindings.native_array_storage import native_array_zeros
-from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
+from bindings.classical_arrays_door import classical_address, classical_wrap_layout
+from bindings.native_array_storage_door import native_array_zeros
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.dbscan_native_boundary import DBSCANConnection
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
-from providers.python.hierarchy_solver_descriptor_pyapi import hierarchy_solver_admit
-from providers.python.hierarchy_cluster_descriptor_pyapi import hierarchy_cluster_admit
-from providers.python.x_neighbors_admission_pyapi import xn_is_module, xn_module
+from providers.python.hierarchy_solver_descriptor_pyapi_pack import hierarchy_solver_admit
+from providers.python.hierarchy_cluster_descriptor_pyapi_pack import hierarchy_cluster_admit
+from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.neighbors_native_driver import XnDriver
 from core.dbscan_native_api import DBSCAN_CAP_RESIDENT

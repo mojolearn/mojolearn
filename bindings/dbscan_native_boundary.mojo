@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """DBSCAN unpack/pack storage and provider pins around native requests."""
 from std.python import Python, PythonObject
-from bindings.native_owner_registry import borrowed_native_owner
+from bindings.native_owner_registry_pack import borrowed_native_owner
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_fields, py_get, py_setitem
 from bindings.native_loaded_module import native_interpreter_finalizing
-from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.native_owner_lifetime import native_release_admit
-from bindings.classical_arrays import classical_address, classical_wrap_layout
-from bindings.native_array_storage import native_array_zeros
-from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
+from bindings.classical_arrays_door import classical_address, classical_wrap_layout
+from bindings.native_array_storage_door import native_array_zeros
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.dbscan_native_api import (

@@ -1142,7 +1142,7 @@ class GradientBoosting(NumericModeMixin):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-# `save` and `load` are one native call each: bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each: bindings/archive_schema_native_door.mojo
 # writes this schema, the members, dtypes and refusals of the 0.8.55 Python
 # `save` (the model text as UTF-8 `<u1` bytes, the numeric mode `predict` would
 # use now, the int64 meta and the float64 bias), and

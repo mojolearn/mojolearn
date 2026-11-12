@@ -18,7 +18,7 @@ from providers.python.classical_family_admission_pyapi import classical_family_a
 from bindings.decomp_inputs import decomp_admit
 from bindings.admitted_input import admitted_finite_refuse
 from bindings.device_rows_door import door_rows_refuse
-from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_capture
+from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_capture
 from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight
 
 

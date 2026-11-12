@@ -40,7 +40,7 @@ def test_aux_operations_exist_on_both_targets_with_capability_bits():
 
 def test_exports_registered_on_both_bindings_and_listed():
     surface = _read('python/mojolearn/_surface_neighbors.py')
-    execute = _read('providers/python/x_neighbors_descriptor_pyapi.mojo')
+    execute = _read('providers/python/x_neighbors_descriptor_pyapi_door.mojo')
     for suffix in ('', '_host'):
         binding = _read(f'bindings/_mojolearn_x_neighbors{suffix}.mojo')
         for name, _, _, export, _ in NEW:
@@ -57,7 +57,7 @@ def test_fused_doors_keep_the_op_chain_fallback():
     assert '_nc_fused_available(binding)' in local and '"row_argmax"' in local and '"knn_select"' in local
     semi = _read('bindings/neighbors_semi_native.mojo')
     assert '_lp_dense_available(binding)' in semi and '"row_normalize"' in semi
-    cluster = _read('bindings/mcls_cluster.mojo')
+    cluster = _read('bindings/mcls_cluster_door.mojo')
     assert '"homogeneity_completeness_v_measure", False' in cluster and '"v_measure_score"' in cluster
     for path in ('bindings/_mojolearn_metrics.mojo', 'bindings/_mojolearn_metrics_host.mojo'):
         assert '("homogeneity_completeness_v_measure")' in _read(path)

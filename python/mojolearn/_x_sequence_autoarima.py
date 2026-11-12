@@ -80,7 +80,7 @@ class AutoARIMA(ParamsMixin):
 
     # Every public method is one native call whose owner does the whole
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
-    # bindings/tsa_public_native.mojo), so no `_mode` class-creation wrappers are installed.
+    # bindings/tsa_public_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
 
     def __init__(self, endog):

@@ -6,8 +6,8 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.jl_native import jl_c
-from bindings.rp_native import rp_fit
+from bindings.jl_native_pack import jl_c
+from bindings.rp_native_door import rp_fit
 
 
 @export

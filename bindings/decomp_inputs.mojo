@@ -8,7 +8,7 @@
 from std.python import PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_get, py_type
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input import AdmittedX, admit_x, admit_x_unrecorded
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 

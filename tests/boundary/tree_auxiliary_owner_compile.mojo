@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.trees_public_auxiliary import forest_shape, embedding_apply, tree_export_state
+from bindings.trees_public_auxiliary_door import forest_shape, embedding_apply, tree_export_state
 
 def shape_call(model: PythonObject, operation: PythonObject,
                context: PythonObject) raises -> PythonObject:

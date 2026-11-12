@@ -113,7 +113,7 @@ _STR_LABELS = []
 
 
 def str_labels(operation, *args):
-    """The native str-label encoder (bindings/str_labels_native.mojo): ONE
+    """The native str-label encoder (bindings/str_labels_native_door.mojo): ONE
     call over a flat list of label objects. ("encode", labels) gives
     `(classes, int32 codes Array)`; ("lookup", classes, values, as_float)
     gives `(codes Array, first missing labels, missing count)`. None when a

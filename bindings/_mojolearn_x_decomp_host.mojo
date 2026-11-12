@@ -12,21 +12,21 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from providers.python.x_decomp_api_pyapi import (
+from providers.python.x_decomp_api_pyapi_pack import (
     colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py,  move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
-from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py
+from providers.python.x_decomp_tsvd_owner_pyapi_pack import tsvd_randomized_py
 from x_decomp.ipca_owner import NoIpcaDev
-from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+from providers.python.x_decomp_ipca_owner_pyapi_door import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_host import HostDecomp
-from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
-from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
-from providers.python.x_decomp_mds_pyapi import mds_fit_py
-from providers.python.x_decomp_lle_iter_pyapi import lle_iterate_py
-from providers.python.x_decomp_lanczos_host_pyapi import eigh_tridiag_py, lanczos_py
-from providers.python.x_decomp_graph_host_pyapi import (
+from providers.python.x_decomp_decomp_owner_pyapi_pack import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
+from providers.python.x_decomp_select_ops_pyapi_pack import order_small_py, reduce_py
+from providers.python.x_decomp_mds_pyapi_pack import mds_fit_py
+from providers.python.x_decomp_lle_iter_pyapi_pack import lle_iterate_py
+from providers.python.x_decomp_lanczos_host_pyapi_pack import eigh_tridiag_py, lanczos_py
+from providers.python.x_decomp_graph_host_pyapi_pack import (
     graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py, graph_dijkstra_py,
 )
 

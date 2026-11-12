@@ -7,7 +7,7 @@ classes (the shuffle and leave-P splitters), have constructors that only
 store their parameters. The resample results are owned by the resample
 provider's native result initializer instead. Their public `__init__` is one call to the
 same native constructor as the full-reset owners
-(bindings/full_reset_constructor_native.mojo); re-initialization releases an
+(bindings/full_reset_constructor_native_door.mojo); re-initialization releases an
 overwritten value under the declared setter's own admission. The write events
 are derived from source by tools/declared_constructor_schemas.py and checked
 against it by tools/test_native_declared_constructor_connection.py.

@@ -19,7 +19,7 @@ as its arrays and scalars; the scalars widen float32 to float64 exactly.
 """
 
 from core.experiment_guards_series import SERIES_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from core.hostptr import i32_ptr, read_f32
 from core.resample_impl import resample_store_indices

@@ -25,7 +25,7 @@ from std.python.bindings import PythonModuleBuilder
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from hdbscan.native_query_host import HDBSCAN_QUERY_INFER_HOST_API
 
-from bindings.hdbscan_host_predict import (
+from bindings.hdbscan_host_predict_pack import (
     hdbscan_all_points_membership_vectors_binding,
     hdbscan_approximate_predict_binding,
     hdbscan_membership_vector_binding,

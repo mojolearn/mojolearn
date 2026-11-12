@@ -18,15 +18,16 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import unsafe_memcpy
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_typed, classical_address
+from bindings.classical_arrays_door import classical_typed, classical_address
 from bindings.admitted_input import admit_x
-from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish, decomp_coder_width
+from bindings.decomp_public_lifecycle_unpack import decomp_public_begin, decomp_coder_width
+from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
-from bindings.public_lifecycle_owner import lifecycle_end
+from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode,
     decomp_entries, decomp_input, decomp_shape, XD_SPARSE_ALGOS,

@@ -4,7 +4,7 @@
 from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -14,10 +14,10 @@ from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.mode_metadata_native import _fields
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
-from bindings.classical_arrays import classical_address, classical_typed, classical_is_array, classical_c_order
+from bindings.classical_arrays_door import classical_address, classical_typed, classical_is_array, classical_c_order
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_exceptions import classical_not_fitted_class
-from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.classical_exceptions_door import classical_not_fitted_class
+from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
 from bindings.scaler_native import _ptr, _copy_row, scaler_door_calls, scaler_transform_calls, ScalerDoorCalls
 from core.scaler_core import (
@@ -26,8 +26,9 @@ from core.scaler_core import (
 )
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _write_back, _public_result
-from bindings.minmax_metadata import _flag, minmax_range_pair
-from bindings.minmax_archive_native import minmax_archive_load, minmax_archive_save
+from bindings.minmax_metadata_unpack import _flag
+from bindings.minmax_metadata_pack import minmax_range_pair
+from bindings.minmax_archive_native_unpack import minmax_archive_load, minmax_archive_save
 from bindings.py_optional import py_or_none, py_present
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.

@@ -14,7 +14,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.family_common import family_call
 from bindings.linalg_ops_buffers import lin_truth
 from bindings.admitted_input import admitted_zeros
@@ -23,7 +23,8 @@ from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_copy_columns, tsqr
 # N294): alloc / upload / download / free, ew, gemm, the sums and the moves
 # call one abi("C") dispatch function (bindings/kit_call.mojo) instead of a
 # Python entry call with a Python parameter list per operation.
-from bindings.kit_call import kit_connect, kit_provider, kit_call
+from bindings.kit_call_unpack import kit_provider, kit_call
+from bindings.kit_call_pack import kit_connect
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES,
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_MOVE,

@@ -30,7 +30,7 @@ if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('full-reset parameter setters require a compiled native entry')
 # The same event schemas are the whole original constructors: the public
 # __init__ of every class below is one call to this entry
-# (bindings/full_reset_constructor_native.mojo).
+# (bindings/full_reset_constructor_native_door.mojo).
 _INIT_ENTRY = _binding()._module.full_reset_constructor_native_call
 if type(_INIT_ENTRY) is not BuiltinFunctionType:
     raise TypeError('full-reset constructors require a compiled native entry')

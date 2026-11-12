@@ -13,27 +13,27 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
-from bindings.classical_arrays import (
+from bindings.classical_arrays_door import (
     classical_address, classical_wrap_array, classical_c_bytes, classical_is_f32, classical_c_order,
 )
 from core.admitted_weights import admitted_fill
 from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.agglo_native_boundary import agglo_reference_labels, agglo_scalar_repr, agglo_hash_admitted
 from core.agglo_native_state import agglo_metric_code
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
-from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.cluster_resident_table import (
     cres_variant_lookup, cres_variant_store,
 )
 from bindings.kmeans_variants_boundary import (
     variants_connection, variants_span, variants_pack_f32, variants_pack_i32,
 )
-from bindings.kmeans_variants_resident_boundary import VariantsResidentLease, variants_resident_prepare, variants_resident_retire
-from bindings.native_buffer_address import native_buffer_address
+from bindings.kmeans_variants_resident_boundary_unpack import VariantsResidentLease, variants_resident_prepare, variants_resident_retire
+from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.py_optional import py_or_none
 from core.kmeans_variants_api import (
     VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectPredictRequest, VARIANTS_CAP_RESIDENT,

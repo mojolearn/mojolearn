@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the compiled owner of the classical estimator
-families' public methods (bindings/family_native.mojo): k-means,
+families' public methods (bindings/family_native_door.mojo): k-means,
 neighbors, kernels, model selection and the rest of lane
 migrate-classical-b. A public method of a connected class is one call,
 `_NATIVE(self, "family_<op>", args, _NATIVE_CONTEXT)`; the native owner

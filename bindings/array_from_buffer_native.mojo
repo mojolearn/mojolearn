@@ -5,12 +5,12 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
-from bindings.native_array_storage_admission import (
+from bindings.native_array_storage_admission_door import (
     array_storage_namespace as _namespace, array_storage_class, array_storage_admit,
 )
 

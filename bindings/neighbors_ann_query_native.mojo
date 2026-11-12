@@ -24,17 +24,17 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.mode_metadata_native import _fields
-from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_is_array
+from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_view
 from bindings.family_common import FAMILY_I32P, family_array, family_call_kw
-from bindings.parallel_public_result import parallel_public_result
+from bindings.parallel_public_result_door import parallel_public_result
 from providers.python.array_metadata_pyapi import (
     array_shape_once, array_slot_once, array_owner_once, array_metadata_once,
 )
-from bindings.native_ops_key_ann import ann_ops_key
+from bindings.native_ops_key_ann_unpack import ann_ops_key
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.neighbors_entry_table_ann import (
     ANN_OP_IVF_PQ_SEARCH, ANN_OP_IVF_SQ_SEARCH, ANN_OP_IVF_RABITQ_SEARCH, ANN_OP_CAGRA_SEARCH,

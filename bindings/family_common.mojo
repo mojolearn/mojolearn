@@ -8,14 +8,14 @@
 # stashed and restored unchanged at the door (`stash_python_error`), so the
 # caller sees the class and message it saw before the migration.
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.native_array_storage import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
-from bindings.classical_arrays import classical_address, classical_wrap_array, _store_code
+from bindings.classical_arrays_door import classical_address, classical_wrap_array, _store_code
 from core.family_cast_impl import family_min_f32
-from bindings.optimizer_public_words import stash_python_error
+from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.native_class_admission import static_builtin_type
 
 comptime FAMILY_F32P = MutPointer[Float32, MutUntrackedOrigin]

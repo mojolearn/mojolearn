@@ -37,9 +37,9 @@ def test_artifact_setup_passes_raw_values_to_one_native_owner():
 def test_both_sequence_bindings_register_the_same_native_setup():
     for name in ('_mojolearn_x_sequence.mojo', '_mojolearn_x_sequence_host.mojo'):
         source = (ROOT / 'bindings' / name).read_text()
-        assert 'from providers.python.autograd_import_frontend_pyapi import ops_import_model_c' in source
+        assert 'from providers.python.autograd_import_frontend_pyapi_door import ops_import_model_c' in source
         assert 'm.def_py_c_function(ops_import_model_c, "ops_import_model")' in source
-    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
     for prohibited in ('torch.onnx', 'SerializeToString', 'session._sid(', 'ImportedProgram(', 'Session(', 'buffer_address(', 'Python.import_module('):
         assert prohibited not in source
     assert 'ops_session_initialize_py(session,' in source

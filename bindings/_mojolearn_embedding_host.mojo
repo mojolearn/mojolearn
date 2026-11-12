@@ -35,7 +35,8 @@ from embedding.checks.embedding_oracle import (
     emb_refuse_shape,
     refuse_nonfinite_at,
 )
-from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_forward_words, embedding_host_words
+from bindings.embedding_host_forward_door import embedding_host_words
+from bindings.embedding_host_forward_door import embedding_forward_binding, embedding_host_forward_words
 # RUN (lane rs-embedding-bytelm): typed Mojo only, no Python import.
 from embedding.host.embedding_host_words_run import embedding_host_backward_released, embedding_host_config
 from core.shared_slot import SharedSlot

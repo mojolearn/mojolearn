@@ -1099,7 +1099,7 @@ TRAINING_LANE_NAMES = {
     # lane/laneless-public-classes (2026-09-19): DistributedIVFIndex, the
     # disjoint-shard driver over a built index. Its workers call the ivf
     # binding's `ivf_flat_partial_search` and `ivf_finalize_distances`,
-    # which the host bindings now register from bindings/ivf_host_search.mojo
+    # which the host bindings now register from bindings/ivf_host_search_unpack.mojo
     # over `host_ivf_search`'s partial_storage arms, and which
     # `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` admits, so the driver's Python
     # partition, its local-id maps and its global merge run unchanged on a
@@ -1965,8 +1965,8 @@ FAMILIES = (
         ),
         display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances",
         host_modules=(
-            "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
-            "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers.mojo",
+            "core/knn_host_predict.mojo", "bindings/host_helpers_pack.mojo",
+            "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers_door.mojo",
             "core/dense_coo.mojo", "core/msel_host.mojo",
         ),
         exports=(
@@ -1983,7 +1983,7 @@ FAMILIES = (
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64", "argmax_last_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
-            # of bindings/hotpath_helpers.mojo that stand in for per-row Python
+            # of bindings/hotpath_helpers_door.mojo that stand in for per-row Python
             # (the ORDER RULE's label encoder, DEVIATION 2500, runs inside
             # prepare_targets).
             "cast_elements", "reduce_stat", "equal_elements",
@@ -1996,7 +1996,7 @@ FAMILIES = (
             "nonzero_f32_count", "nonzero_f32_fill", "knn_affinity_f32",
             # lane cpu2-l4-modelsel (2026-10-04): model selection's fold store,
             # fold-row gather, prediction scatter, proba column and forest
-            # offset merge (bindings/msel_host.mojo, the host column)
+            # offset merge (bindings/msel_host_pack.mojo, the host column)
             "msel_put", "msel_alloc", "msel_read", "msel_free", "msel_live",
             # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
             "msel_free_bytes",
@@ -2353,8 +2353,8 @@ FAMILIES = (
         classes=("ExponentialSmoothing", "kpss_test", "select_d"),
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
-                      "bindings/kpss_host_test.mojo"),
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_door.mojo",
+                      "bindings/kpss_host_test_unpack.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage", "holtwinters_fit",
@@ -2368,7 +2368,7 @@ FAMILIES = (
             "so the holtwinters, kpss and select-d lanes can be "
             "checked on an installed CPU. A saved ExponentialSmoothing still forecasts through the "
             "shipped forecast binding, which registers kpss_test from the same shared module "
-            "(bindings/kpss_host_test.mojo), so the two binaries cannot drift."
+            "(bindings/kpss_host_test_unpack.mojo), so the two binaries cannot drift."
         ),
         ships_in_wheel=True,
     ),
@@ -2703,7 +2703,7 @@ FAMILIES = (
         classes=("GaussianMixture",),
         display="the Gaussian mixture's scores, probabilities, labels and samples",
         host_modules=(
-            "bindings/mixture_host_scoring.mojo",
+            "bindings/mixture_host_scoring_pack.mojo",
             "mixture/host/gmm_native_infer_host.mojo",
             "mixture/host/gmm_host_oracle.mojo",
             "mixture/checks/sample.mojo",
@@ -2719,7 +2719,7 @@ FAMILIES = (
         gate="tools/classical_host_gate.py",
         wheel_note=(
             "Ships: inference-only binding. The mixture family's fit stays a source reference build; "
-            "the scoring and sampling entries are shared through bindings/mixture_host_scoring.mojo "
+            "the scoring and sampling entries are shared through bindings/mixture_host_scoring_pack.mojo "
             "and carry no fit symbol."
         ),
         ships_in_wheel=True,
@@ -2771,7 +2771,7 @@ FAMILIES = (
     dict(
         # The neighbors and density inference lane (2026-09-15): the
         # INFERENCE-ONLY gp binding a wheel ships, gpr_predict from a saved
-        # model (bindings/gp_host_predict.mojo, the function the reference
+        # model (bindings/gp_host_predict_pack.mojo, the function the reference
         # binding registers) and no fit, log marginal likelihood or Cholesky
         # door. normalize_y's scale-back is host Python. Loaded like
         # mixture_infer.
@@ -2787,7 +2787,7 @@ FAMILIES = (
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
         display="the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities",
         host_modules=(
-            "bindings/gp_host_predict.mojo",
+            "bindings/gp_host_predict_pack.mojo",
             "gaussian_process/host/gp_host_entries.mojo",
             "gaussian_process/host/gpr_oracle.mojo",
             "gaussian_process/host/gpc_oracle.mojo",
@@ -2811,7 +2811,7 @@ FAMILIES = (
         # The neighbors and density inference lane (2026-09-15): the
         # INFERENCE-ONLY hdbscan binding a wheel ships, approximate_predict,
         # membership_vector and all_points_membership_vectors from a saved
-        # model (bindings/hdbscan_host_predict.mojo, the same functions the
+        # model (bindings/hdbscan_host_predict_pack.mojo, the same functions the
         # reference binding registers) and no fit, prediction data
         # generation or tree building. Loaded like mixture_infer.
         family="hdbscan_infer",
@@ -2828,7 +2828,7 @@ FAMILIES = (
         ),
         display="HDBSCAN's approximate_predict, membership_vector and all_points_membership_vectors",
         host_modules=(
-            "bindings/hdbscan_host_predict.mojo",
+            "bindings/hdbscan_host_predict_pack.mojo",
             "hdbscan/host/hdbscan_host_oracle.mojo",
         ),
         exports=(
@@ -3242,7 +3242,7 @@ FAMILIES = (
         # lookup in a saved embedding table, with no backward in the binary.
         # The reference embedding family above carries the backward fold and
         # stays out of the wheels; this binding registers embedding_forward
-        # from the same source (bindings/embedding_host_forward.mojo) and
+        # from the same source (bindings/embedding_host_forward_door.mojo) and
         # ships. It serves `_mojolearn_embedding` on a CPU-only install when
         # the reference binding is not built.
         family="embedding_infer",
@@ -3257,7 +3257,7 @@ FAMILIES = (
         classes=("Embedding",),
         display="Embedding lookup in a saved table",
         host_modules=(
-            "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward.mojo",
+            "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward_door.mojo",
             "embedding/host/embedding_host_words_run.mojo", "embedding/checks/embedding_oracle.mojo",
         ),
         exports=(
@@ -3322,7 +3322,7 @@ FAMILIES = (
         # search over a saved, GPU-built IVF-Flat index, with no build in the
         # binary. The reference ivf family above carries the k-means
         # quantizer fit and stays out of the wheels; this binding registers
-        # ivf_flat_search from the same source (bindings/ivf_host_search.mojo)
+        # ivf_flat_search from the same source (bindings/ivf_host_search_unpack.mojo)
         # and ships. It serves `_mojolearn_ivf` on a CPU-only install when the
         # reference binding is not built.
         family="ivf_search",
@@ -3337,8 +3337,8 @@ FAMILIES = (
         classes=("IVFIndex",),
         display="IVF-Flat search over a saved index and extending it",
         host_modules=(
-            "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
-            "bindings/ivf_index_arrays.mojo", "ivf/index_arrays_impl.mojo",
+            "ivf/host/ivf_host.mojo", "bindings/ivf_host_search_unpack.mojo", "bindings/ivf_host_search_pack.mojo",
+            "bindings/ivf_index_arrays_unpack.mojo", "ivf/index_arrays_impl.mojo",
             "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
         ),
         exports=(
@@ -3362,13 +3362,13 @@ FAMILIES = (
         # for saved ARIMA models, with no fit in the binary. The reference
         # arima family above carries the whole fit and stays out of the
         # wheels; this binding registers arima_predict and arima_forecast
-        # from the same source (bindings/arima_host_predict.mojo) and ships.
+        # from the same source (bindings/arima_host_predict_pack.mojo) and ships.
         # `routes` is None because `_mojolearn_arima` routes to the reference
         # binding when it is built; `serves` names the route this binding
         # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
         # an installed CPU-only wheel. lane/inference-holtwinters (2026-09-15)
         # adds saved Holt-Winters models the same way: holtwinters_forecast
-        # and holtwinters_predict from bindings/holtwinters_host_predict.mojo,
+        # and holtwinters_predict from bindings/holtwinters_host_predict_door.mojo,
         # the source the reference tsa binding registers them from, and the
         # `_mojolearn_tsa` route when that binding is not built.
         family="forecast",
@@ -3385,9 +3385,9 @@ FAMILIES = (
         display=("batched ARIMA prediction, in sample and out of sample, and forecasts, with or without"
                  " exogenous regressors, and Holt-Winters"
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
-        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
-                      "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test.mojo"),
+        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict_pack.mojo",
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_door.mojo",
+                      "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test_unpack.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
@@ -3403,7 +3403,7 @@ FAMILIES = (
             "lane/expose-inference-surface (2026-09-16) it also carries kpss_test, which trains no "
             "model at all: it computes a statistic from the caller's own series, so it belongs on "
             "the shipped side, and registering it here puts it there without shipping the tsa "
-            "family's holtwinters_fit. Both bindings register it from bindings/kpss_host_test.mojo, "
+            "family's holtwinters_fit. Both bindings register it from bindings/kpss_host_test_unpack.mojo, "
             "so they answer through one source."
         ),
         ships_in_wheel=True,
@@ -3467,7 +3467,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=(),
         display="native classical orchestration and resident tree ownership",
-        host_modules=("bindings/classical_native.mojo", "bindings/trees_lifetime.mojo",
+        host_modules=("bindings/classical_native.mojo", "bindings/trees_lifetime_door.mojo",
                       "bindings/classical_door_routes.mojo"),
         exports=(
             # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
@@ -3497,8 +3497,8 @@ FAMILIES = (
         classes=(),
         display="the classical tree, density, saved-model inference and host archive operations",
         host_modules=("bindings/classical_trees_door.mojo",
-                      "bindings/trees_public_native.mojo",
-                      "bindings/host_inference_native.mojo",),
+                      "bindings/trees_public_native_door.mojo",
+                      "bindings/host_inference_native_unpack.mojo",),
         exports=(
             "trees_native_call",
             "runtime_trees_host_numeric_mode", "runtime_trees_host_vendor", "runtime_trees_host_column", "runtime_trees_host_sabotage",
@@ -3521,9 +3521,9 @@ FAMILIES = (
         classes=(),
         display="the classical estimator families' public operations and the host SVM attributes",
         host_modules=("bindings/classical_family_door.mojo",
-                      "bindings/family_native.mojo",
-                      "bindings/host_svr_native.mojo",
-                      "bindings/host_svc_native.mojo",),
+                      "bindings/family_native_door.mojo",
+                      "bindings/host_svr_native_unpack.mojo", "bindings/host_svr_native_pack.mojo",
+                      "bindings/host_svc_native_door.mojo",),
         exports=(
             "family_native_call",
             "host_svr_attribute_call",
@@ -3549,7 +3549,7 @@ FAMILIES = (
         display="native scalers, preprocessing transforms, encoders and labels",
         host_modules=("bindings/scaler_lifecycle_native.mojo",
                       "bindings/prep_owner_native.mojo",
-                      "bindings/labels_native_entry.mojo",),
+                      "bindings/labels_native_entry_pack.mojo",),
         exports=(
             "standard_scaler_fit_native",
             "standard_scaler_native_call",
@@ -3581,7 +3581,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=(),
         display="native PCA and the decomposition estimators",
-        host_modules=("bindings/pca_native.mojo",
+        host_modules=("bindings/pca_native_unpack.mojo", "bindings/pca_native_pack.mojo",
                       "bindings/decomp_native.mojo",
                       "bindings/tsvd_native.mojo",),
         exports=(
@@ -3664,8 +3664,8 @@ FAMILIES = (
         forest_kinds=(),
         classes=(),
         display="the sequence and convolution expansion estimators",
-        host_modules=("bindings/xseq_native.mojo",
-                      "bindings/xcnn_native.mojo",),
+        host_modules=("bindings/xseq_native_pack.mojo",
+                      "bindings/xcnn_native_pack.mojo",),
         exports=(
             "xseq_native_call",
             "xcnn_native_call",
@@ -3718,7 +3718,7 @@ FAMILIES = (
         host_modules=("bindings/parallel_shard_native.mojo",
                       "bindings/neighbor_query_native.mojo",
                       "bindings/parallel_forecast_native.mojo",
-                      "bindings/tsa_public_native.mojo",
+                      "bindings/tsa_public_native_door.mojo",
                       "bindings/small_mlp_native.mojo",),
         exports=(
             "parallel_shard_call",
@@ -3815,7 +3815,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("model_selection.KFold", "model_selection.LeavePOut", "model_selection.GridSearchCV"),
         display="native splitters, cross-validation and model selection",
-        host_modules=("bindings/runtime_model_selection_entry.mojo", "bindings/model_selection_native.mojo"),
+        host_modules=("bindings/runtime_model_selection_entry_pack.mojo", "bindings/model_selection_native_door.mojo"),
         exports=("model_selection_native_call", "runtime_model_selection_host_numeric_mode",
                  "runtime_model_selection_host_vendor", "runtime_model_selection_host_column",
                  "runtime_model_selection_host_sabotage"),

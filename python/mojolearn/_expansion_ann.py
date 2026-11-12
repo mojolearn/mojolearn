@@ -21,7 +21,7 @@ from ._mode import NumericModeMixin
 # The compiled saved-model owner, connected once at import: `save` of
 # CagraIndex, IVFSQIndex and IVFRaBitQIndex is one native call that writes
 # the schema registered at the end of this module
-# (bindings/archive_schema_native.mojo).
+# (bindings/archive_schema_native_door.mojo).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: TSNE's `fit` and
 # `fit_transform` are one native call each (bindings/mani_tsne_native.mojo).
@@ -64,7 +64,7 @@ class _AnnResident:
 
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected at the end of this module
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
     def __getstate__(self):
         """No handle crosses a pickle or a deepcopy: it means something only

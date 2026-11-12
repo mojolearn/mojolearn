@@ -119,7 +119,7 @@ def test_actual_connector_retains_schemas_and_owners_without_calling_models():
 
 
 def test_native_owner_preserves_order_and_uses_existing_storage_and_lifetime_guards():
-    source = (ROOT / 'bindings/declared_params_native.mojo').read_text()
+    source = (ROOT / 'bindings/declared_params_native_door.mojo').read_text()
     operation = source.split('def _assign(', 1)[1].split('def declared_params_c(', 1)[0]
     loop = operation.split('for i in range(len(pairs)):', 1)[1]
     assert loop.index('native parameter names must be exact strings') < loop.index('py_contains(names, name)')

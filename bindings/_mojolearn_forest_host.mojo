@@ -69,7 +69,7 @@ from bindings.py_balanced import py_call as _balanced_call, py_type as _exact_ty
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.host_helpers import (
+from bindings.host_helpers_pack import (
     all_finite_f32_binding,
     all_finite_f64_binding,
     argmax_rows_f32_binding,

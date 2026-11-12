@@ -10,21 +10,21 @@ from core.spectral_native_api import (
     SpectralEmbeddingOptions, SpectralEmbeddingRequest, SpectralQueryShape,
     SpectralQueryRequest, SpectralPrepareRequest, SpectralResidentQueryRequest,
 )
-from bindings.spectral_native_boundary import (
+from bindings.spectral_native_boundary_unpack import (
     SpectralConnection, SpectralStatePins, SpectralRoutePins, SpectralPredictionPins,
     spectral_fit_run, spectral_embedding_run, spectral_query_run,
 )
 from std.python import Python, PythonObject
-from providers.python.host_estimator_binding_pyapi import host_estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding
 from bindings.admitted_family import admit_family, admit_family_f64, admit_family_input
 from bindings.admitted_input import admit_typed
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from core.family_cast_impl import family_min_f32
 from core.spectral_embedding_config import SpectralEmbeddingConfig
 from core.spectral_clustering_config import SpectralClusteringConfig, spectral_assignment_method
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.admitted_family import admit_family_refuse_empty
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_call, family_array,
@@ -32,37 +32,40 @@ from bindings.family_common import (
 )
 from bindings.cluster_native import _reference_queries
 from core.spectral_assignment_api import SpectralAssignmentRequest
-from bindings.spectral_assignment_boundary import spectral_assignment_run, spectral_assignment_pack
+from bindings.spectral_assignment_boundary_unpack import spectral_assignment_run
+from bindings.spectral_assignment_boundary_pack import spectral_assignment_pack
 from bindings.spectral_affinity_boundary import SpectralAffinityRoom, spectral_rbf_run
 from core.spectral_preparation_api import (
     SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest, SpectralAffinityStatus, SpectralCOOStorage,
 )
-from bindings.spectral_preparation_boundary import (
+from bindings.spectral_preparation_boundary_unpack import (
     SpectralPreparationConnection, spectral_coo_count_run, spectral_coo_fill_run, spectral_knn_run,
 )
 from bindings.cluster_resident_table import CRES_SPECTRAL, cres_spectral_lookup, cres_spectral_store, cres_forget
-from bindings.spectral_resident_boundary import (
+from bindings.spectral_resident_boundary_unpack import (
     SpectralResidentLease, spectral_resident_prepare, spectral_resident_query, spectral_resident_retire,
 )
-from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
-from bindings.spectral_umap_routes import (
+from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
+from bindings.spectral_umap_routes_pack import (
     spectral_umap_route,
 )
-from bindings.cfb_dbscan import cfb_borrow_copy
-from bindings.cfb_sparse_read import cfb_sparse_triples
+from bindings.cfb_dbscan_door import cfb_borrow_copy
+from bindings.cfb_sparse_read_unpack import cfb_sparse_triples
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.native_loaded_module import native_loaded_module
-from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
+from bindings.family_raw_attr_unpack import family_raw_has
+from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from bindings.classical_exceptions import classical_require_fitted
+from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.native_owner_lifetime import native_release_admit
-from providers.python.spectral_lifecycle_pyapi import spectral_admit, spectral_input
-from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
+from providers.python.spectral_lifecycle_pyapi_unpack import spectral_input
+from providers.python.spectral_lifecycle_pyapi_pack import spectral_admit
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
+from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
 from bindings.py_optional import py_present
 
 comptime _DENSE_EMPTY = -1

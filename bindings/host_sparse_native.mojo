@@ -6,13 +6,13 @@ from std.math import isfinite
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_setattr
 from bindings.classical_pandas import _pd_type_fields
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.sequential_admission import _one_of
-from bindings.host_array_native import host_archive_typed
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.host_array_native_pack import host_archive_typed
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from core.cast_in import cast_in_kind, cast_f32_bits, cast_w64_bits
 from core.classical_pandas_impl import _pd_double
 from core.scaler_fit_impl import scaler_cast

@@ -22,17 +22,18 @@
 # this prefix by the lane's skeleton) is not served here: its dispatch is the
 # Python `DevicePool` (python/mojolearn/_parallel_pool.py), whose workers run
 # Python handlers.
-from providers.python.estimator_binding_pyapi import estimator_arguments
+from providers.python.estimator_binding_pyapi_door import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.python import PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
-from bindings.kde_admission_boundary import kde_admission_hit, kde_admission_remember, kde_admission_drop
-from bindings.kde_native_boundary import KDEConnection, KDEResidentOwner, kde_owner_admit, kde_owner_prepare, kde_run_query, kde_run_resident, kde_array
-from bindings.public_lifecycle_owner import lifecycle_admit_fields
-from bindings.decomp_scalar_compare import decomp_equal_admitted, decomp_name_admitted
-from bindings.decomp_scalar_admission import decomp_scalar_repr
-from bindings.decomp_truth_boundary import decomp_truth
+from bindings.kde_admission_boundary_unpack import kde_admission_hit, kde_admission_remember, kde_admission_drop
+from bindings.kde_native_boundary_unpack import KDEConnection, KDEResidentOwner, kde_owner_admit, kde_run_query, kde_run_resident
+from bindings.kde_native_boundary_pack import kde_owner_prepare, kde_array
+from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
+from bindings.decomp_scalar_compare_unpack import decomp_equal_admitted, decomp_name_admitted
+from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
+from bindings.decomp_truth_boundary_unpack import decomp_truth
 from neighbors.neighbors_kde_run import (
     KDE_DEFAULT_LEAF_SIZE, kde_refuse_bandwidth_name, kde_bandwidth_positive, kde_refuse_bandwidth,
     kde_refuse_algorithm, kde_refuse_tree_knobs, kde_refuse_names, kde_check_metric_params_count,
@@ -42,10 +43,10 @@ from neighbors.neighbors_kde_run import (
 )
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields, py_type
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_pandas import classical_admit_value
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.family_common import (
     family_repr, family_str, family_call, family_field, family_is_str,
 )
@@ -54,7 +55,7 @@ from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.admitted_input import admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
-from bindings.p3nc_fitted_freeze import fitted_freeze
+from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 
 
 comptime _KDE_STATE_SLOT = "neighbors_kde_state_v2"

@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: Apache-2.0
+# `score` of the tree ensembles that inherit scikit-learn's mixin answer
+# (`_mode.ClassifierScoreMixin.score`: the accuracy of `predict(X)`;
+# `_mode.RegressorScoreMixin.score`: the float32 R^2 of `predict(X)`), in one
+# native call: the estimator's native predict (bindings/trees_public_boost.mojo)
+# and the native accuracy / R^2 (bindings/trees_public_score.mojo), with no
+# Python between the prediction and the metric. The metric kernels and their
+# order are the ones the mixins called, so the score keeps its bits.
+from std.python import Python, PythonObject
+from bindings.base_helpers_key_unpack import base_helpers_key
+from bindings.base_helpers_released_unpack import base_reduce_stat_int
+from bindings.py_balanced import py_call, py_get, py_fields, py_contains
+from bindings.classifier_public_lifecycle_door import classifier_label_list
+from bindings.py_typed_call import py_call_typed
+from bindings.trees_public_inputs import (
+    trees_builtins, trees_table, trees_entry,
+    trees_address, trees_cast, trees_decode_labels,
+)
+from bindings.admitted_input import admit_f32, admitted_vector
+from core.host_finite_scan import host_all_finite_f32
+# TOMBSTONE: trees_f32 / trees_all_finite / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+from bindings.trees_public_score import (
+    trees_r2, trees_shape_of, trees_sample_weight_f32, _metrics_mode, trees_class_codes,
+)
+from bindings.classical_labels import classical_score_from_codes, _classification_encoded as labels_classification_encoded
+from bindings.trees_public_gbdt import _adapter_fitted, adapter_codes, adapter_decision_function
+from bindings.trees_public_boost import boost_operation, boost_kind, boost_predict_codes
+
+
+def _metrics_table(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_metrics_impl._get_binding(numeric_mode)`: the metrics binding of the
+    requested mode, refused when the binary reports another."""
+    var selected = _metrics_mode(mode, context)
+    var metrics = trees_table(context, selected, "_mojolearn_metrics")
+    var read_mode = trees_entry(metrics, "metrics_numeric_mode")
+    if read_mode is None:
+        read_mode = trees_entry(metrics, "umap_numeric_mode")
+    if read_mode is not None:
+        var code = Int(py=py_call_typed(read_mode))
+        var actual = String("fast") if code == 0 else (String("identical") if code == 1 else String("None"))
+        if actual != selected:
+            raise Error("RuntimeError: mojolearn metrics: requested " + selected + ", binary reports "
+                        + actual + "; rebuild it")
+    return metrics
+
+
+def _codes_i32(codes: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """`_as_i32_1d` of the adapter's integer class codes: int32 as they
+    are, int64 range-checked and narrowed by `cast_elements`."""
+    var dtype = String(codes.dtype)
+    if dtype == "<i4":
+        return codes
+    if dtype != "<i8":
+        raise Error("mojolearn metrics: y_pred must be an integer label array, got " + dtype
+                    + "; the ported kernels take int32 labels")
+    if n:
+        var bkey = base_helpers_key(context["trees_helpers"])
+        var low = base_reduce_stat_int(bkey, trees_address(codes), 3, n, 0)
+        var high = base_reduce_stat_int(bkey, trees_address(codes), 3, n, 1)
+        _ = codes  # keep the code store alive through the native calls above
+        if low < -2147483648 or high > 2147483647:
+            raise Error("mojolearn metrics: y_pred does not fit in int32; the implemented "
+                        + "kernels are the int32 instantiation (the int64 overload of "
+                        + "adjusted_rand_index is the same code at a wider type and is "
+                        + "not instantiated, metrics/NOT_IMPLEMENTED.tsv)")
+    var out = admitted_vector(n, "<i4", context)
+    trees_cast(trees_address(codes), "<i8", trees_address(out), "<i4", n, context)
+    _ = out  # keep the Python object alive through the native call above
+    return out
+
+
+# Lane loops-trees-ab (2026-11-11): `_vocabulary_codes` (a dict lookup per row
+# for unencoded labels, through the trees score's private label copy) is
+# `trees_class_codes` (bindings/trees_public_score.mojo): one lookup per
+# distinct label, the per-row codes native. Code recoverable at bf33328698.
+
+
+def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`GradientBoostingClassifier.score` (the accuracy of the class codes
+    against `y` mapped through `classes_`) and `GradientBoostingRegressor.score`
+    (the float32 R^2 of `predict`)."""
+    var X = args[0]
+    var y = args[1]
+    var sample_weight = args[2]
+    _ = _adapter_fitted(model, context)
+    var fields = py_fields(model)
+    var mode = fields["numeric_mode_"]
+    if py_contains(fields, "classes_"):
+        var target = labels_classification_encoded(y, "y", context)
+        if not Bool(py=PythonObject(target.kind) == fields["_label_kind_"]):
+            raise Error("TypeError: score labels must have the training label type")
+        var encoded = trees_class_codes(target, classifier_label_list(fields["classes_"], context), context)
+        _ = target^
+        var predicted = adapter_codes(model, X, context)
+        var n = Int(py=encoded.size)
+        var m = Int(py=predicted.size)
+        if n != m:
+            raise Error("mojolearn metrics: y_true has " + String(n) + " entries and "
+                        + "y_pred has " + String(m) + "; they must be the same length")
+        var yp = _codes_i32(predicted, m, context)
+        var metrics = _metrics_table(mode, context)
+        var result = PythonObject(None)
+        if sample_weight is not None:
+            var w = trees_sample_weight_f32(sample_weight, n, "accuracy_score", context)
+            result = py_call_typed(metrics["accuracy_score_weighted"], PythonObject(trees_address(encoded)),
+                                   PythonObject(trees_address(yp)), PythonObject(w.address), Python.list(PythonObject(n)))
+            _ = encoded  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
+            _ = yp  # keep the Python object alive through the native call above
+            _ = w^
+        else:
+            result = py_call_typed(metrics["accuracy_score"], PythonObject(trees_address(encoded)),
+                                   PythonObject(trees_address(yp)), Python.list(PythonObject(n)))
+            _ = encoded  # keep the Python object alive through the native call above
+            _ = yp  # keep the Python object alive through the native call above
+        return py_call(trees_builtins().float, result)
+    # `as_f32_c(y, ndim=None)` then `_regression_target`.
+    var target = admit_f32(y, -1, "y", context, finite=False)
+    var shape = trees_shape_of(target.array, context)
+    if len(shape) != 1 or target.rows * target.cols == 0:
+        raise Error("y must be nonempty one-dimensional targets")
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=target.address),
+                               target.rows):
+        raise Error("y must be finite")
+    _ = target  # keep the Python object alive through the native calls above
+    var prediction = adapter_decision_function(model, X, context)
+    var result = trees_r2(target.array, prediction, sample_weight, mode, context)
+    _ = target^
+    return PythonObject(result)

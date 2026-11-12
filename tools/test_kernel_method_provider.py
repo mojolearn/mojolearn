@@ -30,7 +30,7 @@ def test_public_frontdoors_only_enter_native_owner():
             assert isinstance(calls[0].func, ast.Name) and calls[0].func.id == '_NATIVE'
 
 def test_shared_binding_admission_uses_live_registry_without_load_callbacks():
-    source = read('providers/python/estimator_binding_pyapi.mojo')
+    source = read('providers/python/estimator_binding_pyapi_door.mojo')
     assert 'backend["_SETS"]' in source and 'fields["_modules"]' in source
     assert 'context["family_mode_set_fields"]' in source
     assert 'py_type(module) is not py_type(bi)' in source
@@ -39,7 +39,7 @@ def test_shared_binding_admission_uses_live_registry_without_load_callbacks():
         assert text not in source
 
 def test_computation_transport_reuses_common_provider_and_resource():
-    source = read('providers/python/kernel_method_descriptor_pyapi.mojo')
+    source = read('providers/python/kernel_method_descriptor_pyapi_door.mojo')
     assert 'struct ' not in source
     assert 'neural_descriptor_reuse(previous, factory' in source
     assert 'neural_descriptor_execute(native, operation' in source
@@ -91,7 +91,7 @@ def test_private_span_bounds_and_scalar_schemas_are_checked_before_dispatch():
     assert 'nf != np' in source
     assert 'operation == 6 and na != 3' in source
     assert 'operation == 5 and (na != 1 or np != 0)' in source
-    source = read('providers/python/kernel_method_descriptor_pyapi.mojo')
+    source = read('providers/python/kernel_method_descriptor_pyapi_door.mojo')
     assert source.index('len(params) != schema[0]') < source.index('params[i]')
 
 

@@ -43,7 +43,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.identity_trace import IdentityTrace
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from kernel_methods.estimator import (
     KernelRidgeModel,
     NystroemModel,
@@ -75,7 +75,7 @@ from kernel_methods.km_binding_impl import (
 )
 
 
-from providers.python.svm_impl_scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from providers.python.svm_impl_scale_gamma_device_pyapi_pack import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from kernel_methods.estimator import _family_ctx as _sg_family_ctx
 from kernel_methods.rbf_resident import KM_FAST_RBF_RESIDENT
 from kernel_methods.krr_resident import (
@@ -83,7 +83,7 @@ from kernel_methods.krr_resident import (
     kernel_ridge_resident_release,
     kernel_ridge_predict_resident,
 )
-from providers.python.kernel_methods_rbf_resident_pyapi import rbf_sampler_fit_transform_binding, rbf_staged_binding
+from providers.python.kernel_methods_rbf_resident_pyapi_pack import rbf_sampler_fit_transform_binding, rbf_staged_binding
 
 from kernel_methods.native_descriptor_dispatch import KERNEL_METHOD_NATIVE_API
 from kernel_methods.kernel_methods_binding_run import (

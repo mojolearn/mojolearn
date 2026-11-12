@@ -68,7 +68,7 @@ def ivf_fit(self, X, y=None):
         return self
     data = empty((n * dim,), "<f4")
     self._entry(native, "ivf_flat_build")(
-        # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_build).
+        # ORDER MATCHES bindings/ivf_index_arrays_unpack.mojo (ivf_flat_build).
         # x, centers_out, center_norms_out, offsets_out, indices_out, list_data_out
         [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(norms, name="center_norms_"),
          addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_"),

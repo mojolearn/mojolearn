@@ -8,12 +8,12 @@
 # operand layout (`_operand`, `as_*_c`) and outputs, and calls the same binding
 # entries with the same address and params lists in the same order. The same
 # kernels on the same bytes: the bits do not move.
-from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info, neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
 from bindings.family_common import family_call, family_repr, family_str, family_type_name, family_isinstance

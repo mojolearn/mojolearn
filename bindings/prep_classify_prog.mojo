@@ -5,11 +5,11 @@
 # runner (bindings/arena_prog_native.mojo `_prep_run`) on a `_Prog` record built
 # from these words, so the arena, inputs, ranges, resident and device-gathered
 # inputs and the run are the ones the Python `_Prog.run` made: no bit moves.
-from bindings.native_array_storage import native_array_empty, native_array_zeros
+from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
-from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_is_array
+from bindings.classical_arrays_door import classical_address, classical_typed, classical_wrap_array, classical_is_array
 from bindings.admitted_input import admit_x
 from bindings.arena_prog_native import prep_run_words
 from bindings.x_prep_native_owner import xprep_take, xprep_address

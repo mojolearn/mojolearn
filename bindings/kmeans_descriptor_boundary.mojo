@@ -5,8 +5,8 @@ from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
 from bindings.cpython_table import cpython_table
 from bindings.family_common import family_type_name
-from bindings.host_inference_scalars import host_inference_scalar
-from bindings.optimizer_public_words import stash_python_error
+from bindings.host_inference_scalars_door import host_inference_scalar
+from bindings.optimizer_public_words_unpack import stash_python_error
 from core.kmeans_native_api import (
     KMEANS_NATIVE_ABI, KMEANS_NATIVE_COUNT, KMEANS_MODE, KMEANS_CAPABILITIES,
     KMeansNativeDriver, KMeansFitRequest, KMeansFitResult, KMeansQueryRequest, KMeansQueryResult,

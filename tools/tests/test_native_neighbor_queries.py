@@ -135,5 +135,5 @@ def test_native_owner_replaces_lazy_python_getter_and_keeps_host_classes():
 
 
 def test_shared_scalar_admission_does_not_import_python_at_runtime():
-    scalar = (ROOT / "bindings/host_inference_scalars.mojo").read_text()
+    scalar = (ROOT / "bindings/host_inference_scalars_door.mojo").read_text()
     assert 'Python.import_module("builtins")' not in scalar

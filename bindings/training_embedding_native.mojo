@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public embedding input preparation and ownership; numerical entries unchanged.
 from std.python import Python, PythonObject
-from bindings.optimizer_container_boundary import OptimizerInputOwners
+from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.optimizer_admission import opt_value, opt_numpy
-from bindings.optimizer_public_words import stash_python_error
+from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView
 from training.optimizer_input_plan import optimizer_contiguous_address
-from providers.python.array_layout_boundary import native_shape_pack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from std.memory import unsafe_memcpy
 from bindings.optimizer_device_native import shape_count
-from bindings.training_rms_native import rms_host_view
-from bindings.training_scalar_native import training_scalar_number
-from bindings.native_numpy_metadata import native_numpy_type
-from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
+from bindings.training_rms_native_unpack import rms_host_view
+from bindings.training_scalar_native_door import training_scalar_number
+from bindings.native_numpy_metadata_pack import native_numpy_type
+from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
 from gemm.f16_widen import f16_bits_to_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
 from bindings.cpython_table import cpython_table

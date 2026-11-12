@@ -45,10 +45,10 @@ there.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_run import native_owner_no_pins
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.device_plan import device_plan_current
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
@@ -94,7 +94,7 @@ comptime _IF_RESIDENT_ROUTE = IDN_IF_RESIDENT or (
 )
 # cgfin-c-svm: the epilogues, Platt, the shuffle and the row glue run on
 # the device (the CPU binding runs svm/host/svc_proba.mojo's host twin)
-from providers.python.svm_impl_svc_epilogue_pyapi import (
+from providers.python.svm_impl_svc_epilogue_pyapi_door import (
     svc_pair_epilogue_device_binding,
     svc_platt_train_device_binding,
     svc_splitmix_perm_device_binding,
@@ -110,7 +110,7 @@ from svm.estimator import (
 )
 
 
-from providers.python.svm_impl_scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from providers.python.svm_impl_scale_gamma_device_pyapi_pack import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from svm.estimator import _family_ctx as _sg_family_ctx
 from core.device_query_x import QueryFold
 from svm.svm_resident_state import (
@@ -128,7 +128,7 @@ from svm.svm_binding_run import (
     iforest_resident_info_run,
     iforest_outputs_run,
 )
-from providers.python.svm_impl_svc_ovo_layout_pyapi import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
+from providers.python.svm_impl_svc_ovo_layout_pyapi_pack import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
 
 def svr_native_api_binding() raises -> PythonObject:
     var table = SVR_DEVICE_API.get_or_create_ptr()

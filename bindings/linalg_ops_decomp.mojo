@@ -12,11 +12,11 @@ from std.memory import unsafe_memcpy, unsafe_memset_zero
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
-from bindings.host_inference_scalars import host_inference_scalar
-from providers.python.estimator_binding_pyapi import estimator_binding
+from bindings.host_inference_scalars_door import host_inference_scalar
+from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.family_common import family_call, family_repr
 from bindings.linalg_ops_buffers import lin_truth
 from bindings.admitted_input import AdmittedBuf, admitted_zeros

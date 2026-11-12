@@ -128,7 +128,7 @@ def _fold_entry(name):
     # glue (lanes a7c, a8c): the QN fit (`qn_fit_fold`) and inference
     # (`qn_infer_fold`) of a cross-validation fold resident on the device,
     # exported by the identical GPU base binding next to the fold store they
-    # read (bindings/msel_device.mojo); a build without them (the CPU
+    # read (bindings/msel_device_unpack.mojo); a build without them (the CPU
     # column) leaves None and the door gathers host rows.
     from types import BuiltinFunctionType
     from ._buffer import _native

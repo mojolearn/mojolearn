@@ -86,7 +86,7 @@ def test_python_sharded_drivers_are_native_pools():
     # a cooperative driver binds a device plan and refuses the CPU route
     door = _read("bindings/parallel_plan_door.mojo")
     assert '"NotImplementedError: no CPU implementation of the cooperative multi-GPU driver "' in door
-    family = _read("bindings/family_native.mojo")
+    family = _read("bindings/family_native_door.mojo")
     assert "var devices = plan_devices(args[1], driver, True, context)" in family
     # ParallelNeural's public API now enters one native owner. Its native
     # owner retains the same plain gradient / cooperative update distinction;
@@ -110,7 +110,7 @@ def test_python_sharded_drivers_are_native_pools():
     cv = _read("python/mojolearn/parallel_model_selection.py")
     assert "DevicePool" not in cv and "cooperative=True" not in cv and "MOJOLEARN_" not in cv
     assert "_selection._NATIVE(None, 'family_msel_parallel_score'," in cv
-    cv_owner = _read("bindings/parallel_cv_native.mojo")
+    cv_owner = _read("bindings/parallel_cv_native_door.mojo")
     assert 'var pool = process_pool_create(devices, False, "mojolearn._native_parallel_cv_worker")' in cv_owner
     assert "native_require_worker_inventory(identities, " in cv_owner
     assert not (ROOT / "python/mojolearn/_parallel_worker.py").exists()

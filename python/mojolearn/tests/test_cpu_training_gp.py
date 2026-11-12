@@ -83,10 +83,10 @@ def test_binding_registers_the_gpu_names():
         assert name in exports, f"the manifest does not list {name} for gp"
     assert '("gp_parallel_available")' not in src, "gp_parallel_available must stay absent so it refuses by name"
     # The address and params contract, word for word. The host predict entries
-    # live in bindings/gp_host_predict.mojo since lane/inference-neighbors-density
+    # live in bindings/gp_host_predict_pack.mojo since lane/inference-neighbors-density
     # moved them there (the gp host binding imports and registers them), so the
     # host side of the contract is that module and the binding read together.
-    host = src + _read("bindings/gp_host_predict.mojo") + _read("gaussian_process/host/gp_host_entries.mojo")
+    host = src + _read("bindings/gp_host_predict_pack.mojo") + _read("gaussian_process/host/gp_host_entries.mojo")
     for sentence in ("addrs must contain 9 addresses", "params must contain 5 values",
                      "addrs must contain 12 addresses", "params must contain 7 values",
                      "params must contain 6 values (n, nrhs, info,"):

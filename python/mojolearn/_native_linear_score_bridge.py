@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native `score` of the linear expansion
-regressors (bindings/linear_score_native.mojo): predict and R^2 in one call
+regressors (bindings/linear_score_native_unpack.mojo): predict and R^2 in one call
 into the compiled classical owner. Python here only retains the compiled
 entries, once, at import."""
 

@@ -50,7 +50,7 @@ def test_default_dependency_inventory_allows_native_capi_in_providers(tmp_path):
 # transformer/native_session_call.mojo, `transformer_native_api_v1`) is deleted;
 # a layer's session forward is the block table's op 11 on the session handle.
 def test_session_reserved_before_gil_release_and_released_on_both_outcomes():
-    run = source("providers/python/transformer_block_session_pyapi.mojo").split("def transformer_block_session_run(")[1]
+    run = source("providers/python/transformer_block_session_pyapi_door.mojo").split("def transformer_block_session_run(")[1]
     assert run.index("NEURAL_BLOCK_RESERVE") < run.index("with GILReleased")
     assert run.count("NEURAL_BLOCK_RELEASE") == 2
     assert "except problem:" in run

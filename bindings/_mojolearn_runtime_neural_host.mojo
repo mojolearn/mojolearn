@@ -17,9 +17,9 @@ from bindings.native_transport import transport_initialize
 from bindings.transformer_public_native import transformer_public_c
 from providers.python.transformer_decode_pyapi import transformer_decode_native_c
 from bindings.mamba_public_native import mamba_native_c
-from bindings.samba_config_native import samba_config_c
-from bindings.samba_public_native import samba_public_c
-from providers.python.samba_program_handle_pyapi import samba_program_handle_type
+from bindings.samba_config_native_door import samba_config_c
+from bindings.samba_public_native_pack import samba_public_c
+from providers.python.samba_program_handle_pyapi_unpack import samba_program_handle_type
 from bindings.neural_block_public import neural_block_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.causal_lm_public import causal_public_c

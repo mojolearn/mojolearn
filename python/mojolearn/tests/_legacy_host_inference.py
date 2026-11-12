@@ -430,7 +430,7 @@ _STR_LABELS = []
 
 
 def _decode_list_native(classes, codes):
-    """`[classes[c] for c in codes]` as ONE native call (bindings/str_labels_native.mojo
+    """`[classes[c] for c in codes]` as ONE native call (bindings/str_labels_native_door.mojo
     "decode"): a presized list filled in C from an int32 or int64 vector code
     `Array`. None for any other codes, or a code out of range."""
     if type(classes) not in (list, tuple) or not isinstance(codes, Array):

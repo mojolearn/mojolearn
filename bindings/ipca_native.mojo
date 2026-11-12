@@ -6,19 +6,20 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed_native
+from bindings.classical_arrays_door import classical_address, classical_typed_native
 from bindings.admitted_input import AdmittedX, admit_f32
 from bindings.decomp_inputs import decomp_admit
-from bindings.decomp_scalar_admission import decomp_scalar_admit
-from bindings.decomp_truth_boundary import decomp_truth as _truth
-from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish
+from bindings.decomp_scalar_admission_unpack import decomp_scalar_admit
+from bindings.decomp_truth_boundary_unpack import decomp_truth as _truth
+from bindings.decomp_public_lifecycle_unpack import decomp_public_begin
+from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from x_decomp.ipca_run import _state_name
-from bindings.public_lifecycle_owner import lifecycle_end, lifecycle_admit_fields
+from bindings.public_lifecycle_owner_door import lifecycle_end, lifecycle_admit_fields
 from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPrevious, IPCAQueryRequest, IPCAFitResult, IPCAStateIds
 from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
 from bindings.ipca_descriptor_boundary import ipca_connection, ipca_resident, ipca_run_fit, ipca_run_partial, ipca_run_query, ipca_run_free

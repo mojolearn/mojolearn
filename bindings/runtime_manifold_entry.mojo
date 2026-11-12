@@ -5,7 +5,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.sys.compile import is_defined
-from bindings.classical_error_boundary import classical_python_error
+from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.manifold_native import manifold_operation
 
 # This owner reports the existing whole-host-set negative-control flag. Its

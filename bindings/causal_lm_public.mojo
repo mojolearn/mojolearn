@@ -27,7 +27,8 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse
-from providers.python.transformer_block_session_pyapi import transformer_block_session_open, transformer_block_session_run
+from providers.python.transformer_block_session_pyapi_door import transformer_block_session_run
+from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open
 from core.neural_entry_table import (
     NeuralEntryKey, neural_ref, neural_table_entry, NEURAL_TABLE_BLOCK_FORWARD,
     NEURAL_BLOCK_SESSION_FORWARD, NEURAL_BLOCK_SESSION_FORWARD_INT15,

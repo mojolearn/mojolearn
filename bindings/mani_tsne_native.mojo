@@ -13,16 +13,16 @@
 # with the GIL released and no CPython in between.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.native_ops_key_ann import ann_ops_key, decomp_pca_ops_key
+from bindings.native_ops_key_ann_unpack import ann_ops_key, decomp_pca_ops_key
 from core.neighbors_entry_table_ann import ann_ops_entry, ann_tsne_fit_call
 from core.decomp_entry_table_pca import pca_ops_entry, pca_fit_owned_call
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem
-from bindings.classical_arrays import classical_address, classical_word
+from bindings.classical_arrays_door import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
-from providers.python.estimator_binding_pyapi import estimator_binding_mode
-from bindings.manifold_settings_native import ManifoldSettings
-from bindings.manifold_scalar_native import manifold_number
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.manifold_scalar_native_door import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
