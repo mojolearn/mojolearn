@@ -11,7 +11,6 @@
 # as the Python called them. Same helpers, same arguments, same order: the
 # folds, the gathered rows and every score are unchanged.
 from std.memory import unsafe_memcpy
-from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
 from bindings.base_helpers_released import base_check_indices_i64
@@ -57,6 +56,7 @@ from bindings.msel_common import (
     msel_resident_release, msel_resident_close, msel_get_scorer, msel_score, msel_score_value, MselMetricPrepared, msel_lazy,
 )
 from bindings.msel_split import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
+from bindings.msel_cv_run import msel_seconds, _numeric_dtype
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
 comptime MSEL_CV_SLICE_BIT = 32
@@ -82,12 +82,6 @@ def msel_fit_planned(estimator: PythonObject, plan: PythonObject, x: PythonObjec
                      context: PythonObject) raises:
     """`msel_fit` of a fresh `msel_native_clone_planned` clone and its plan."""
     _ = msel_planned_call(estimator, plan, "fit", Python.tuple(x, y), context)
-
-
-def msel_seconds() -> Float64:
-    """`time.perf_counter()`."""
-    return Float64(perf_counter_ns()) / 1e9
-
 
 # ---------------------------------------------------------------- folds
 
@@ -1102,11 +1096,6 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
 
 
 # ---------------------------------------------------------------- cross_val_predict
-
-
-def _numeric_dtype(dtype: String) -> Bool:
-    return dtype == "<f4" or dtype == "<f8" or dtype == "<i4" or dtype == "<i8" or dtype == "<u4" or dtype == "<u1"
-
 
 def _numeric_pred(pred: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_numeric_pred`: a numeric buffer or list as an Array, else `pred`."""

@@ -27,6 +27,7 @@ from bindings.cholesky_archive_native import cholesky_archive_pack
 from core.native_archive_cholesky import native_cholesky_archive_plan, native_cholesky_archive_error
 from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_finite_scan import host_finite_status
+from umap.host_archive_native_run import _umap_whole, _umap_real
 
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -1550,21 +1551,6 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonO
     py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_components_", k)
     return model
-
-
-def _umap_whole(value: Int, name: String, minimum: Int, maximum: Int) raises -> Int:
-    """UMAP `_integer`'s range refusal for a saved integer control."""
-    if value < minimum or value > maximum:
-        raise Error("ValueError: UMAP " + name + " must be in [" + String(minimum) + ", " + String(maximum) + "]")
-    return value
-
-
-def _umap_real(value: Float64, name: String) raises -> Float64:
-    """UMAP `_scalar`: a finite float32 value, rounded once to binary32."""
-    if not isfinite(value) or abs(value) > 3.4028234663852886e38:
-        raise Error("ValueError: UMAP " + name + " must be a finite float32 value")
-    return Float64(Float32(value))
-
 
 def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                       context: PythonObject) raises -> PythonObject:
