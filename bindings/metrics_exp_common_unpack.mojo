@@ -1,12 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
-# The shared pieces of the classification, ranking and clustering metrics'
-# native owner (bindings/metrics_exp_native.mojo): the x_metrics PROGRAM
-# (`_expansion_metrics._Prog`, with the counted output ranges), its run
-# through the shared program runner (bindings/arena_prog_native.mojo
-# `_metrics_run`, the one native call the Python `_run` made), the arena
-# reads, and the label input step the Python made in `_metrics_impl`
-# (`_classification_encoded`, `_classification_labels`, `_selected_labels`,
-# `_label_map`) and `_buffer.shape_of`.
+# UNPACK shared by the classification, ranking and clustering metric doors
+# (bindings/metrics_exp_{cls,curve,rank,cluster}_door.mojo): the label input
+# step the Python made in `_metrics_impl` (`_classification_encoded`,
+# `_classification_labels`, `_selected_labels`, `_label_map`),
+# `_buffer.shape_of`, the shared refusals and the admitted score matrices.
+#
+# Lane metric-programs-2 (2026-11-12): split from metrics_exp_common.mojo.
+# TOMBSTONE: `MxProg` (a metric program holding its caller buffers and a
+# per-program Python opcode snapshot), `MxArena`, `mx_run`, `mx_f64_scores`
+# (unused) and `mx_zeros_i32` deleted 2026-11-12 by lane metric-programs-2:
+# the door program is bindings/metrics_program_door.mojo `MetricDoorProg`
+# (typed plan + pins), the arena reads are `MetricArenaOwner`'s, the PACK is
+# bindings/metrics_program_pack.mojo, the typed helpers are
+# bindings/metrics_exp_common_run.mojo; code recoverable at 4f5a5ae6d8.
 #
 # Labels: an integer or bool buffer (a mojolearn Array or an ndarray of one
 # dimension) is encoded by the host label encoder (core/label_cast.mojo,
@@ -17,11 +23,8 @@
 # map, dict): # cpu-route: Python object labels, the explicit label input step.
 # Both give the sorted distinct classes and the codes into them, which is
 # all the metrics read, so the programs below see the same words.
-from std.memory import unsafe_memcpy, bitcast
-from core.metrics_program_plan import MetricProgramPlan
 from bindings.admitted_family_door import admit_family
-from bindings.metrics_plan_admission_unpack import MetricPlanOpcodes
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.metrics_exp_common_run import mx_nan, mx_isnan, mx_class_code
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi_unpack import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi_pack import metric_score_matrix
@@ -34,7 +37,6 @@ from bindings.classical_arrays_door import (
 )
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_validate_unpack import classical_view
-from bindings.arena_prog_native_door import _metrics_run_plan
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.family_common_unpack import (
     FAMILY_F32P,
@@ -63,8 +65,6 @@ from core.metrics_exp_impl import mexp_gather_i32
 from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
 from bindings.p3_labels_metrics_native_door import p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK
 
-comptime MX_NONE = -1
-comptime MX_PARAMS = 14
 
 
 # ---------------------------------------------------------------- small Python helpers
@@ -122,22 +122,6 @@ def mx_is_integral(value: PythonObject, context: PythonObject) raises -> Bool:
 def mx_float(value: PythonObject, context: PythonObject) raises -> Float64:
     """`float(value)`."""
     return metric_float(value, context)
-
-
-def mx_nan() -> Float64:
-    return bitcast[DType.float64](UInt64(0x7FF8000000000000))
-
-
-def mx_inf() -> Float64:
-    return bitcast[DType.float64](UInt64(0x7FF0000000000000))
-
-
-def mx_isnan(x: Float64) -> Bool:
-    return x != x
-
-
-def mx_isinf(x: Float64) -> Bool:
-    return x == x and x - x != 0.0
 
 
 def mx_raise_obj(cls: PythonObject, argument: PythonObject) raises:
@@ -201,130 +185,6 @@ def mx_label_order(chosen: PythonObject, present: PythonObject) raises -> Python
 def mx_str_list(values: PythonObject) raises -> PythonObject:
     """`[str(v) for v in values]`."""
     return mx_list(py_call(mx_b().map, mx_b().str, values))
-
-
-# ---------------------------------------------------------------- the program
-
-
-struct MxProg(Movable):
-    # Pure native stage/layout words; only boundary input owners live here.
-    var plan: MetricProgramPlan
-    var inputs: List[PythonObject]
-    var ops: MetricPlanOpcodes
-
-    def __init__(out self, context: PythonObject) raises:
-        self.plan = MetricProgramPlan()
-        self.inputs = List[PythonObject]()
-        self.ops = MetricPlanOpcodes(context["family_metrics_ops"])
-
-    def alloc(mut self, n: Int) raises -> Int:
-        return self.plan.alloc(n)
-
-    def put(mut self, array: PythonObject) raises -> Int:
-        """A float32 (or int32, stored as its bits) C-ordered array -> its offset."""
-        var off = self.plan.input(Int(py=array.size))
-        self.inputs.append(array)
-        return off
-
-    def put_i32(mut self, array: PythonObject) raises -> Int:
-        return self.put(array)
-
-    def scratch(mut self, n: Int) raises -> Int:
-        return self.plan.scratch(n)
-
-    def stage(mut self, op: String, total: Int, params: List[Int]) raises:
-        if len(params) > MX_PARAMS:
-            raise Error("ValueError: x_metrics: too many stage parameters")
-        var opcode = self.ops.get(op)
-        self.plan.stage(opcode, total, params)
-
-    def want_count(mut self, off: Int, n: Int, count: Int, mult: Int) raises -> Int:
-        """`_Prog.want(off, n, count, mult)`: declare an output range."""
-        return self.plan.want(off, n, count, mult)
-
-    def want(mut self, off: Int, n: Int) raises -> Int:
-        return self.want_count(off, n, -1, 1)
-
-    def group(mut self, key: Int, n: Int, m: Int, values: Int, vstride: Int, weights: Int,
-              width: Int) raises -> Tuple[Int, Int]:
-        """`_group`: the stable counting sort and the PairSums; (OFF, OUT)."""
-        var off = self.alloc(m + 1)
-        var order = self.scratch(n)
-        var out = self.alloc(m * width)
-        self.stage("group_sort", 1, [key, n, m, off, order])
-        if m * width:
-            self.stage("group_sum", m * width, [off, order, values, vstride, weights, out, width])
-        return (off, out)
-
-    def counts(mut self, off: Int, m: Int) raises -> Int:
-        """`_counts`: the m group sizes as an Int32 slot (off_diff)."""
-        var out = self.alloc(m)
-        if m:
-            self.stage("off_diff", m, [off, m, out])
-        return out
-
-    def scan_flag(mut self, src: Int, n: Int, mode: Int) raises -> Int:
-        var flag = self.alloc(1)
-        if n:
-            self.stage("flag_scan", n, [src, n, mode, flag])
-        return flag
-
-    def f64_words(mut self, value: Float64, context: PythonObject) raises -> Int:
-        """`_f64_words`: a binary64 scalar as two Int32 words (low first), an input."""
-        return self.plan.input_f64(value)
-
-
-struct MxArena(Copyable, Movable):
-    """A run program's arena: the native store `_metrics_run_plan` returns
-    (lane entangled-programs, 2026-11-12: was the Python `array.array`).
-    Every read takes the base from the store this value owns."""
-    var arena: MetricArenaOwner
-
-    def __init__(out self, var arena: MetricArenaOwner):
-        self.arena = arena^
-
-    def i32(self, off: Int) -> Int:
-        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)[0])
-
-    def i64(self, off: Int) -> Int:
-        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)[0])
-
-    def f64(self, off: Int) -> Float64:
-        """The binary64 value of arena[off], arena[off + 1], low first (`words(off, 2, "d")`)."""
-        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)
-        return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
-
-    def f32(self, off: Int) -> Float64:
-        """`floats(off, 1)[0]`: the Float32 word, widened."""
-        return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off)[0])
-
-    def words(self, off: Int, words: Int, shape: PythonObject, typestr: String,
-              context: PythonObject) raises -> PythonObject:
-        """PACK `Array._owned(words(off, words, code), shape, typestr)`: a
-        copy of the arena words as a new Array."""
-        var result = family_array(shape, typestr, context)
-        if words > 0:
-            unsafe_memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
-                   src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.arena.base() + 4 * off), count=words)
-            _ = result  # keep the Python object alive through the native copy above
-        return result
-
-
-def mx_run(prog: MxProg, mode: PythonObject, context: PythonObject) raises -> MxArena:
-    """`_run(prog, numeric_mode)`: one program handed to the shared runner."""
-    var prog_context = context["family_metrics_prog_context"]
-    return MxArena(_metrics_run_plan(prog.plan, prog.inputs, mode, prog_context))
-
-
-def mx_f64_scores(values: List[Float64], context: PythonObject) raises -> PythonObject:
-    """binary64 values as an Int32 word array (low words first): `_f64_bits`."""
-    var words = family_array(Python.tuple(2 * len(values)), "<i4", context)
-    var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words)))
-    _ = words  # keep the Python object alive through the native call above
-    for i in range(len(values)):  # driver-loop: over the metric's per-class scores
-        dst[i] = values[i]
-        _ = words  # keep the Python object alive through the native call above
-    return words
 
 
 # ---------------------------------------------------------------- labels
@@ -395,25 +255,6 @@ def mx_list_labels(values: PythonObject, name: String, allow_empty: Bool,
                 + "floating labels, missing labels and mixed types are unsupported")
 
 
-def _mx_class_code(kind: Int, item: Int) -> String:
-    """The `array.array` code holding one class item of a label buffer."""
-    if kind == 1:  # signed
-        if item == 1:
-            return "b"
-        if item == 2:
-            return "h"
-        if item == 4:
-            return "i"
-        return "q"
-    if item == 1:
-        return "B"
-    if item == 2:
-        return "H"
-    if item == 4:
-        return "I"
-    return "Q"
-
-
 def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_native_classification_labels`: (classes, codes) of a 1-D integer or
     bool buffer through the host label encoder, or None for anything the
@@ -457,7 +298,7 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     _ = source  # keep the Python object alive through the native call above
     var lk = label_kind_of(kind, item, name)
     var code_kind = 1 if kind == 1 else 0
-    var raw = py_call(context["array_type"], PythonObject(_mx_class_code(code_kind, item)),
+    var raw = py_call(context["array_type"], PythonObject(mx_class_code(code_kind, item)),
                       py_call(context["native_bytes_type"], n * item))
     var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
     var k = host_unique_inverse_cast(src, lk, Int(py=py_call(raw.buffer_info)[0]),
@@ -561,10 +402,6 @@ def mx_map_eq(lab: MxLab, pos: PythonObject, context: PythonObject) raises -> Py
                        py_call(native_loaded_module("itertools").repeat, pos))
     var table = py_call(context["array_type"], PythonObject("i"), py_call(b.map, b.int, py_call(b.map, b.bool, hits)))
     return _mx_gather(lab, table, False, context)
-
-
-def mx_zeros_i32(n: Int, context: PythonObject) raises -> PythonObject:
-    return family_array(Python.tuple(PythonObject(n)), "<i4", context)
 
 
 # ---------------------------------------------------------------- shared validation

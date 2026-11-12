@@ -17,56 +17,35 @@ from bindings.family_common_unpack import FAMILY_F32P, family_str
 from bindings.family_common_pack import family_array
 from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f32
-from bindings.metrics_exp_common import (
-    MX_NONE, MxProg, MxArena, MxLab, MxMat, mx_run, mx_b, mx_len, mx_truthy, mx_is_str, mx_float, mx_nan,
-    mx_zero_division, mx_undefined, mx_sorted, mx_list, mx_missing, mx_selected, mx_codes, mx_map_eq, mx_targets,
-    mx_pos_label, mx_pos_label_ok, mx_scores, mx_weights, mx_f32_view, mx_shape_text, mx_zeros_i32,
+from bindings.metrics_exp_common_run import MX_NONE, mx_nan
+from bindings.metrics_exp_rank_run import (
+    _ROW_BRIER, _ROW_LOGLOSS, _ROW_HINGE_BIN, _ROW_HINGE_MC, _ROW_DCG, _ROW_COVERAGE, _ROW_LRAP, _ROW_RANKLOSS,
+    _ROW_DCG_IGNORE_TIES, _RANK_MEAN, _RANK_NDCG_ROW, _RANK_D2_LOG, _RANK_D2_BRIER, _SCAN_INDICATOR, _SCAN_NEGATIVE,
+    ProbaShape, row_fold, row_mean_stage, proba_stages, proba_check, dcg_table,
+)
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.arena_prog_run import MetricArenaOwner
+from bindings.metrics_exp_common_unpack import (
+    MxLab, MxMat, mx_b, mx_len, mx_truthy, mx_is_str, mx_float, mx_zero_division, mx_undefined, mx_sorted, mx_list,
+    mx_missing, mx_selected, mx_codes, mx_map_eq, mx_targets, mx_pos_label, mx_pos_label_ok, mx_scores, mx_weights,
+    mx_f32_view, mx_shape_text,
 )
 
-# row_metric kinds (`_ROW`)
-comptime _ROW_BRIER = 1
-comptime _ROW_LOGLOSS = 2
-comptime _ROW_HINGE_BIN = 3
-comptime _ROW_HINGE_MC = 4
-comptime _ROW_DCG = 5
-comptime _ROW_COVERAGE = 6
-comptime _ROW_LRAP = 7
-comptime _ROW_RANKLOSS = 8
-comptime _ROW_DCG_IGNORE_TIES = 9
-# rank_epi kinds (x_metrics/rank_epi.mojo)
-comptime _RANK_MEAN = 0
-comptime _RANK_NDCG_ROW = 1
-comptime _RANK_D2_LOG = 2
-comptime _RANK_D2_BRIER = 3
-comptime _RANK_DCG_DISC = 4
-# flag_scan tests (x_metrics/tail.mojo)
-comptime _SCAN_INDICATOR = 1
-comptime _SCAN_NEGATIVE = 2
+# TOMBSTONE: the Python-holding `_Proba` fields beside its shape, `_row_fold`, `_row_mean_stage`,
+# `_proba_check` and the stage half of `_put_proba` / `_dcg_table` moved to the typed
+# bindings/metrics_exp_rank_run.mojo 2026-11-12 by lane metric-programs-2; code recoverable at 4f5a5ae6d8.
 
 
-def _row_fold(mut prog: MxProg, S: Int, cols: Int, Y: Int, n: Int, kind: Int, w: PythonObject,
-              K: Int, Dt: Int) raises -> Tuple[Int, Int, Int]:
-    """`_row_fold`: (TOT, SW, W)."""
-    var out = prog.scratch(n)
-    prog.stage("row_metric", n, [S, cols, Y, out, kind, K, Dt])
-    var zero = prog.scratch(n)
-    prog.stage("pair_key", n, [0, 0, zero, 1, 2])
-    var W = MX_NONE
+def _pin_weights(mut prog: MetricDoorProg, w: PythonObject):
+    """Pin the weights a typed fold declared as the plan's next input."""
     if w is not None:
-        W = prog.put(w)
-    var tot = prog.group(zero, n, 1, out, 1, W, 1)[1]
-    var sw = MX_NONE
-    if w is not None:
-        sw = prog.group(zero, n, 1, MX_NONE, 1, W, 1)[1]
-    return (tot, sw, W)
+        prog.pins.append(w)
 
 
-def _row_mean_stage(mut prog: MxProg, S: Int, cols: Int, Y: Int, n: Int, kind: Int, w: PythonObject,
-                    K: Int, Dt: Int, normalize: Bool, half: Bool) raises -> Int:
-    """`_row_mean` up to the run: the folds and the MEAN unit; the result slot."""
-    var f = _row_fold(prog, S, cols, Y, n, kind, w, K, Dt)
-    var res = prog.alloc(2)
-    prog.stage("rank_epi", 1, [_RANK_MEAN, f[0], n, f[1], 1 if normalize else 0, 1 if half else 0, res])
+def _row_mean(mut prog: MetricDoorProg, S: Int, cols: Int, Y: Int, n: Int, kind: Int, w: PythonObject,
+              K: Int, Dt: Int, normalize: Bool, half: Bool) raises -> Int:
+    var res = row_mean_stage(prog.plan, S, cols, Y, n, kind, w is not None, K, Dt, normalize, half)
+    _pin_weights(prog, w)
     return res
 
 
@@ -74,19 +53,16 @@ def _row_mean_stage(mut prog: MxProg, S: Int, cols: Int, Y: Int, n: Int, kind: I
 
 
 struct _Proba(Movable):
-    """`_proba`'s (codes, a, k, binary)."""
+    """`_proba`'s answer: the typed shape and the two arrays the program
+    reads (the door's pins: the probabilities, then the codes)."""
     var codes: PythonObject
     var a: PythonObject
-    var n: Int
-    var k: Int
-    var binary: Bool
+    var shape: ProbaShape
 
-    def __init__(out self, codes: PythonObject, a: PythonObject, n: Int, k: Int, binary: Bool):
+    def __init__(out self, codes: PythonObject, a: PythonObject, shape: ProbaShape):
         self.codes = codes
         self.a = a
-        self.n = n
-        self.k = k
-        self.binary = binary
+        self.shape = shape
 
 
 def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, pos_label: PythonObject,
@@ -131,50 +107,32 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
         raise Error("y_true and y_proba have different numbers of rows")
     # the rank and emptiness refusals and the cast in one admission (family_view deleted)
     var a = admit_family(view, -1, "y_proba", context).array
-    return _Proba(codes, a, n, k, binary)
+    return _Proba(codes, a, ProbaShape(n, k, binary))
 
 
-def _put_proba(mut prog: MxProg, p: _Proba) raises -> Tuple[Int, Int]:
-    """`_put_proba`: (S, FLAGS)."""
+def _put_proba(mut prog: MetricDoorProg, p: _Proba) raises -> Tuple[Int, Int]:
+    """`_put_proba`: (S, FLAGS); the probabilities pinned, the stages typed."""
     var A = prog.put(p.a)
-    var flags = prog.alloc(3)
-    var S = A
-    if p.binary:
-        S = prog.scratch(2 * p.n)
-    if p.n:
-        prog.stage("proba_rows", p.n, [A, p.n, 1 if p.binary else p.k, 1 if p.binary else 0, S, flags])
-    return (S, flags)
-
-
-def _proba_check(arena: MxArena, flags: Int, caller: String) raises:
-    var reason = String("")
-    if arena.i32(flags) != 0:
-        reason = "must be finite"
-    elif arena.i32(flags + 1) != 0:
-        reason = "must lie in [0, 1]"
-    elif arena.i32(flags + 2) != 0:
-        reason = "rows must sum to one within sqrt(float32 eps)"
-    if reason.byte_length() > 0:
-        raise Error("mojolearn " + caller + ": y_proba " + reason)
+    return proba_stages(prog.plan, A, p.shape)
 
 
 def _brier(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_proba, sample_weight, pos_label, labels, scale_by_half, mode)."""
     var caller = String("brier_score_loss")
     var p = _proba(args[0], args[1], args[4], args[3], caller, context)
-    var w = mx_weights(args[2], p.n, caller, context)
+    var w = mx_weights(args[2], p.shape.n, caller, context)
     var sbh = args[5]
     var half: Bool
     if mx_is_str(sbh) and String(py=sbh) == "auto":
-        half = p.binary or p.k < 3
+        half = p.shape.binary or p.shape.k < 3
     else:
         half = mx_truthy(sbh)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var put = _put_proba(prog, p)
     var Y = prog.put_i32(p.codes)
-    var res = _row_mean_stage(prog, put[0], p.k, Y, p.n, _ROW_BRIER, w, 0, MX_NONE, True, half)
-    var arena = mx_run(prog, args[6], context)
-    _proba_check(arena, put[1], caller)
+    var res = _row_mean(prog, put[0], p.shape.k, Y, p.shape.n, _ROW_BRIER, w, 0, MX_NONE, True, half)
+    var arena = metric_door_run(prog, args[6], context)
+    proba_check(arena, put[1], caller)
     return PythonObject(arena.f64(res))
 
 
@@ -182,24 +140,26 @@ def _d2_proba(args: PythonObject, caller: String, logloss: Bool, context: Python
     """d2_log_loss_score / d2_brier_score; args = (y_true, y_proba,
     sample_weight, labels, pos_label, mode)."""
     var p = _proba(args[0], args[1], args[3], args[4], caller, context)
-    if p.n < 2:
+    if p.shape.n < 2:
         mx_undefined("D^2 score is not well-defined with less than two samples.", context)
         return PythonObject(mx_nan())
-    var w = mx_weights(args[2], p.n, caller, context)
-    var prog = MxProg(context)
+    var w = mx_weights(args[2], p.shape.n, caller, context)
+    var prog = MetricDoorProg()
     var put = _put_proba(prog, p)
     var Y = prog.put_i32(p.codes)
-    var f = _row_fold(prog, put[0], p.k, Y, p.n, _ROW_LOGLOSS if logloss else _ROW_BRIER, w, 0, MX_NONE)
-    var g = prog.group(Y, p.n, p.k, MX_NONE, 1, f[2], 1)
+    var f = row_fold(prog.plan, put[0], p.shape.k, Y, p.shape.n, _ROW_LOGLOSS if logloss else _ROW_BRIER, w is not None,
+                     0, MX_NONE)
+    _pin_weights(prog, w)
+    var g = prog.group(Y, p.shape.n, p.shape.k, MX_NONE, 1, f[2], 1)
     var PER = g[0] if w is None else g[1]
     var weighted = 0 if w is None else 1
     var res = prog.alloc(2)
     if logloss:
-        prog.stage("rank_epi", 1, [_RANK_D2_LOG, f[0], PER, weighted, p.k, res])
+        prog.stage("rank_epi", 1, [_RANK_D2_LOG, f[0], PER, weighted, p.shape.k, res])
     else:
-        prog.stage("rank_epi", 1, [_RANK_D2_BRIER, f[0], p.n, f[1], PER, weighted, p.k, res])
-    var arena = mx_run(prog, args[5], context)
-    _proba_check(arena, put[1], caller)
+        prog.stage("rank_epi", 1, [_RANK_D2_BRIER, f[0], p.shape.n, f[1], PER, weighted, p.shape.k, res])
+    var arena = metric_door_run(prog, args[5], context)
+    proba_check(arena, put[1], caller)
     return PythonObject(arena.f64(res))
 
 
@@ -212,7 +172,7 @@ def _hinge(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var uniq = true.classes if labels is None else mx_sorted(mx_selected(labels, true.kind, true.classes, context))
     var s = mx_scores(args[1], n, caller, -1, "pred_decision", context)
     var w = mx_weights(args[3], n, caller, context)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var nu = mx_len(uniq)
     if nu > 2:
         if s.ndim != 2:
@@ -224,20 +184,20 @@ def _hinge(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var codes = mx_codes(true, uniq, True, context)
         var S = prog.put(s.a)
         var Y = prog.put_i32(codes)
-        var res = _row_mean_stage(prog, S, s.cols, Y, n, _ROW_HINGE_MC, w, 0, MX_NONE, True, False)
-        var arena = mx_run(prog, args[4], context)
+        var res = _row_mean(prog, S, s.cols, Y, n, _ROW_HINGE_MC, w, 0, MX_NONE, True, False)
+        var arena = metric_door_run(prog, args[4], context)
         return PythonObject(arena.f64(res))
     if s.ndim == 2 and s.cols != 1:
         raise Error("pred_decision must be 1-D for a binary target")
-    var codes: PythonObject
-    if nu == 2:
-        codes = mx_map_eq(true, uniq[nu - 1], context)
-    else:
-        codes = mx_zeros_i32(n, context)
     var S = prog.put(s.a)
-    var Y = prog.put_i32(codes)
-    var res = _row_mean_stage(prog, S, 1, Y, n, _ROW_HINGE_BIN, w, 0, MX_NONE, True, False)
-    var arena = mx_run(prog, args[4], context)
+    var Y: Int
+    if nu == 2:
+        Y = prog.put_i32(mx_map_eq(true, uniq[nu - 1], context))
+    else:
+        # all-zero codes: program-owned words (was a zeroed Array pinned as a caller buffer)
+        Y = prog.put_words(List[Int32](length=n, fill=0))
+    var res = _row_mean(prog, S, 1, Y, n, _ROW_HINGE_BIN, w, 0, MX_NONE, True, False)
+    var arena = metric_door_run(prog, args[4], context)
     return PythonObject(arena.f64(res))
 
 
@@ -265,20 +225,14 @@ def _relevance(y_true: PythonObject, y_score: PythonObject, caller: String,
     return (MxMat(y, n, c, 2), s^)
 
 
-def _dcg_table(mut prog: MxProg, c: Int, log_base: PythonObject, context: PythonObject) raises -> Int:
+def _dcg_table(mut prog: MetricDoorProg, c: Int, log_base: PythonObject, context: PythonObject) raises -> Int:
     """`_dcg_table`: the device discount table's slot."""
     var b = mx_float(log_base, context)
     if not b > 0.0:
         raise Error("math domain error")
     if b == 1.0:
         mx_zero_division("float division by zero")
-    var B = prog.f64_words(b, context)
-    _ = b  # keep the Python object alive through the native call above
-    var D = prog.scratch(c)
-    if c:
-        prog.stage("rank_epi", c, [_RANK_DCG_DISC, c, B, D])
-        _ = b  # keep the Python object alive through the native call above
-    return D
+    return dcg_table(prog.plan, c, b)
 
 
 def _top_k_param(k: PythonObject) raises -> Int:
@@ -292,13 +246,13 @@ def _dcg(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var n = r[0].rows
     var c = r[0].cols
     var w = mx_weights(args[4], n, caller, context)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var S = prog.put(r[1].a)
     var Y = prog.put(r[0].a)
     var Dt = _dcg_table(prog, c, args[3], context)
     var kind = _ROW_DCG_IGNORE_TIES if mx_truthy(args[5]) else _ROW_DCG
-    var res = _row_mean_stage(prog, S, c, Y, n, kind, w, _top_k_param(args[2]), Dt, True, False)
-    var arena = mx_run(prog, args[6], context)
+    var res = _row_mean(prog, S, c, Y, n, kind, w, _top_k_param(args[2]), Dt, True, False)
+    var arena = metric_door_run(prog, args[6], context)
     return PythonObject(arena.f64(res))
 
 
@@ -313,7 +267,7 @@ def _ndcg(args: PythonObject, context: PythonObject) raises -> PythonObject:
                     + String(c) + " instead.")
     var w = mx_weights(args[3], n, caller, context)
     var K = _top_k_param(args[2])
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var S = prog.put(r[1].a)
     var Y = prog.put(r[0].a)
     var neg = prog.scan_flag(Y, n * c, _SCAN_NEGATIVE)
@@ -336,7 +290,7 @@ def _ndcg(args: PythonObject, context: PythonObject) raises -> PythonObject:
         sw = prog.group(zero, n, 1, MX_NONE, 1, W, 1)[1]
     var res = prog.alloc(2)
     prog.stage("rank_epi", 1, [_RANK_MEAN, tot, n, sw, 1, 0, res])
-    var arena = mx_run(prog, args[5], context)
+    var arena = metric_door_run(prog, args[5], context)
     if arena.i32(neg) != 0:
         raise Error("ndcg_score should not be used on negative y_true values.")
     return PythonObject(arena.f64(res))
@@ -349,12 +303,12 @@ def _label_ranking(args: PythonObject, kind: Int, caller: String, context: Pytho
     var n = r[0].rows
     var c = r[0].cols
     var w = mx_weights(args[2], n, caller, context)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var S = prog.put(r[1].a)
     var Y = prog.put(r[0].a)
     var flag = prog.scan_flag(Y, n * c, _SCAN_INDICATOR)
-    var res = _row_mean_stage(prog, S, c, Y, n, kind, w, 0, MX_NONE, True, False)
-    var arena = mx_run(prog, args[3], context)
+    var res = _row_mean(prog, S, c, Y, n, kind, w, 0, MX_NONE, True, False)
+    var arena = metric_door_run(prog, args[3], context)
     if arena.i32(flag) != 0:
         raise Error(caller + " requires a binary label indicator y_true")
     return PythonObject(arena.f64(res))

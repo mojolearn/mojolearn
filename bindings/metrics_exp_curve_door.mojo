@@ -27,11 +27,14 @@ from bindings.family_common_pack import (
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_validate_unpack import classical_view
 from core.family_cast_impl import family_min_f32, family_max_f32
-from bindings.metrics_exp_common import (
-    MX_NONE, MxProg, MxArena, MxLab, MxMat, mx_run, mx_b, mx_len, mx_truthy, mx_is_bool, mx_is_str,
-    mx_is_integral, mx_float, mx_nan, mx_isnan, mx_zero_division, mx_warn, mx_undefined, mx_sorted, mx_list,
-    mx_missing, mx_encode, mx_selected, mx_codes, mx_map_eq, mx_targets, mx_pos_label, mx_scores, mx_weights,
-    mx_eq, mx_list_labels,
+from bindings.metrics_exp_common_run import MX_NONE, mx_nan, mx_isnan
+from bindings.metrics_program_pack import metric_arena_array, metric_f64_array
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.arena_prog_run import MetricArenaOwner
+from bindings.metrics_exp_common_unpack import (
+    MxLab, MxMat, mx_b, mx_len, mx_truthy, mx_is_bool, mx_is_str, mx_is_integral, mx_float, mx_zero_division,
+    mx_warn, mx_undefined, mx_sorted, mx_list, mx_missing, mx_encode, mx_selected, mx_codes, mx_map_eq, mx_targets,
+    mx_pos_label, mx_scores, mx_weights, mx_eq, mx_list_labels,
 )
 
 comptime _CF_OUT = 10
@@ -69,7 +72,7 @@ def _curve_out(args: PythonObject, caller: String, kind: Int,
     var flags = mx_map_eq(true, pos, context)
     if n <= 0:
         raise Error("mojolearn metrics: an empty curve has no thresholds")
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var S = prog.put(s.a)
     var POS = prog.put_i32(flags)
     var W = MX_NONE
@@ -98,7 +101,7 @@ def _curve_out(args: PythonObject, caller: String, kind: Int,
         prog.stage("curve_out", 1, [kind, n, CF, CF + n, CF + 2 * n, CM, drop_flag, OUT, LEN])
     else:
         prog.stage("curve_out", 1, [kind, n, fps, tps, thr, cnt, drop_flag, OUT, LEN])
-    var arena = mx_run(prog, args[5], context)
+    var arena = metric_door_run(prog, args[5], context)
     var m = arena.i32(LEN)
     var status = arena.i32(LEN + 1)
     if status == _CO_EMPTY:
@@ -110,7 +113,7 @@ def _curve_out(args: PythonObject, caller: String, kind: Int,
     var arrays = Python.list()
     for b in range(3):  # small-loop(3: the three output arrays): fixed
         var length = m - 1 if (kind == _CO_PR and b == 2) else m
-        _ = py_call(arrays.append, arena.words(OUT + 2 * b * (n + 1), 2 * length, Python.tuple(PythonObject(length)),
+        _ = py_call(arrays.append, metric_arena_array(arena, OUT + 2 * b * (n + 1), 2 * length, Python.tuple(PythonObject(length)),
                                                "<f8", context))
     return (py_call(mx_b().tuple, arrays), F, T, true.classes)
 
@@ -182,16 +185,14 @@ def _auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("x and y must have the same length")
     if n < 2:
         raise Error("At least 2 points are needed to compute area under curve, but x.shape = (" + String(n) + ",)")
-    var prog = MxProg(context)
-    var X = prog.put_i32(_f64_words(xa, n, context))
-    _ = xa  # keep the Python object alive through the native call above
-    var Y = prog.put_i32(_f64_words(ya, n, context))
-    _ = ya  # keep the Python object alive through the native call above
+    var prog = MetricDoorProg()
+    var X = prog.put_words(_f64_word_list(xa, n))
+    var Y = prog.put_words(_f64_word_list(ya, n))
     var OUT = prog.want(prog.alloc(3), 3)
     prog.stage("auc_xy", 1, [n, X, Y, OUT, _AX_CHUNK])
     _ = ya  # keep the Python object alive through the native call above
     _ = xa  # keep the Python object alive through the native call above
-    var arena = mx_run(prog, PythonObject(None), context)
+    var arena = metric_door_run(prog, PythonObject(None), context)
     var flags = arena.i32(OUT + 2)
     if (flags & _AX_NEG) and (flags & _AX_POS):
         var store = py_call(context["array_type"], PythonObject("d"), py_call(context["native_bytes_type"], 8 * n))
@@ -202,13 +203,15 @@ def _auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     return PythonObject(arena.f64(OUT))
 
 
-def _f64_words(values: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_f64_array_words`: the float64 values as an Int32 word array."""
-    var words = family_array(Python.tuple(PythonObject(2 * n)), "<i4", context)
-    unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
+def _f64_word_list(values: PythonObject, n: Int) raises -> List[Int32]:
+    """UNPACK `_f64_array_words`: the n float64 values of an admitted Array
+    as program-owned Int32 words, one buffer read (was a second Python Array
+    pinned as a caller buffer)."""
+    var words = List[Int32](length=2 * n, fill=0)
+    unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(words.unsafe_ptr())),
            src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values))), count=n)
-    _ = words  # keep the Python object alive through the native call above
-    return words
+    _ = values  # keep the Python object alive through the native copy above
+    return words^
 
 
 # ---------------------------------------------------------------- the device curve fold
@@ -218,7 +221,7 @@ def _f32_bits(x: Float32) -> Int:
     return Int(bitcast[DType.int32](x))
 
 
-def _fold_stages(mut prog: MxProg, S: Int, stride: Int, POS: Int, W: Int, n: Int, problems: Int, auc: Bool,
+def _fold_stages(mut prog: MetricDoorProg, S: Int, stride: Int, POS: Int, W: Int, n: Int, problems: Int, auc: Bool,
                  has_max_fpr: Bool, max_fpr: Float64, out_in: Int) raises -> Int:
     """`_fold_stages`: the curve and its fold; the fold's CF_OUT words per problem."""
     var N = n * problems
@@ -269,7 +272,7 @@ struct _Fold(Copyable, Movable):
     var v: Float64
     var c: Int
 
-    def __init__(out self, arena: MxArena, off: Int):
+    def __init__(out self, arena: MetricArenaOwner, off: Int):
         self.s = arena.f32(off) + arena.f32(off + 1)
         self.F = arena.f32(off + 2)
         self.T = arena.f32(off + 3)
@@ -281,7 +284,7 @@ struct _Fold(Copyable, Movable):
         self.c = arena.i32(off + 9)
 
 
-def _fold_ap(arena: MxArena, off: Int) raises -> Float64:
+def _fold_ap(arena: MetricArenaOwner, off: Int) raises -> Float64:
     """`_FoldCurve.ap`."""
     var f = _Fold(arena, off)
     if f.c <= 0 or f.T == 0:
@@ -292,7 +295,7 @@ def _fold_ap(arena: MxArena, off: Int) raises -> Float64:
     return q if q > 0.0 else 0.0
 
 
-def _stage_average(mut prog: MxProg, SC: Int, SUP: Int, m: Int, weighted: Bool) raises -> Int:
+def _stage_average(mut prog: MetricDoorProg, SC: Int, SUP: Int, m: Int, weighted: Bool) raises -> Int:
     var res = prog.want(prog.alloc(2), 2)
     prog.stage("rank_epi", 1, [_RANK_AVERAGE, SC, SUP, m, 1 if weighted else 0, res])
     return res
@@ -313,14 +316,14 @@ def _ap_binary(true: MxLab, args: PythonObject, context: PythonObject) raises ->
     var s = mx_scores(args[1], n, caller, 1, "y_score", context)
     var w = mx_weights(args[3], n, caller, context)
     var flags = mx_map_eq(true, pos_label, context)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var S = prog.put(s.a)
     var POS = prog.put_i32(flags)
     var W = MX_NONE
     if w is not None:
         W = prog.put(w)
     var out = _fold_stages(prog, S, 1, POS, W, n, 1, False, False, 0.0, -1)
-    var arena = mx_run(prog, args[4], context)
+    var arena = metric_door_run(prog, args[4], context)
     return PythonObject(_fold_ap(arena, out))
 
 
@@ -351,7 +354,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
         raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
     var w = mx_weights(args[3], n, caller, context)
     var codes = mx_codes(true, classes, True, context)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     if avg == "micro":
         # `_micro_inputs` + `_curves(s.reshape((n*k,)), ...)`: the row-major
         # one-hot flags and the repeated weights, formed by stages
@@ -365,7 +368,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
             W = prog.scratch(n * k)
             prog.stage("rep_rows", n * k, [W0, W, k])
         var out = _fold_stages(prog, S, 1, POS, W, n * k, 1, False, False, 0.0, -1)
-        var arena = mx_run(prog, args[4], context)
+        var arena = metric_door_run(prog, args[4], context)
         return PythonObject(_fold_ap(arena, out))
     # one-vs-rest: the class-major one-hot flags, the folds and the tail
     var S = prog.put(s.a)
@@ -386,14 +389,14 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
     var res = MX_NONE
     if average is not None:
         res = _stage_average(prog, sc, sup, k, avg == "weighted")
-    var arena = mx_run(prog, args[4], context)
+    var arena = metric_door_run(prog, args[4], context)
     var edge = False
     for c in range(k):  # driver-loop: over the classes' fold flags
         if arena.i32(fl + c) == 2:
             edge = True
     if not edge:
         if average is None:
-            var _keep_ret_sc = arena.words(sc, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
+            var _keep_ret_sc = metric_arena_array(arena, sc, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
             _ = sc  # keep the Python object alive through the native call above
             return _keep_ret_sc^
         return PythonObject(arena.f64(res))
@@ -404,25 +407,16 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
             scores.append(_fold_ap(arena, out + _CF_OUT * c))
         else:
             scores.append(arena.f64(sc + 2 * c))
-    var words = family_array(Python.tuple(PythonObject(2 * k)), "<i4", context)
-    var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words)))
-    _ = words  # keep the Python object alive through the native call above
-    for c in range(k):  # driver-loop: over the classes' scores
-        dst[c] = scores[c]
-        _ = words  # keep the Python object alive through the native call above
     if average is None:
-        var result = family_array(Python.tuple(PythonObject(k)), "<f8", context)
-        unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))), src=dst, count=k)
-        _ = result  # keep the Python object alive through the native call above
-        _ = words  # keep the Python object alive through the native call above
-        return result
-    var p2 = MxProg(context)
-    var SC = p2.put_i32(words)
-    var SUP = p2.put_i32(arena.words(sup, 2 * k, Python.tuple(PythonObject(2 * k)), "<i4", context))
-    _ = sup  # keep the Python object alive through the native call above
+        return metric_f64_array(scores, context)
+    # the second program reads the scores and the support as its own words
+    # (were an Array of the scores and an Array copy of the arena words,
+    # pinned as caller buffers)
+    var p2 = MetricDoorProg()
+    var SC = p2.put_f64s(scores)
+    var SUP = p2.put_words(arena.i32_words(sup, 2 * k))
     var res2 = _stage_average(p2, SC, SUP, k, avg == "weighted")
-    _ = sup  # keep the Python object alive through the native call above
-    var a2 = mx_run(p2, args[4], context)
+    var a2 = metric_door_run(p2, args[4], context)
     return PythonObject(a2.f64(res2))
 
 
@@ -461,7 +455,7 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
                      + ") will result in a perfect score and is therefore meaningless.", context)
     var w = mx_weights(args[4], n, caller, context)
     var codes = mx_codes(true, classes, True, context)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var S: Int
     var kk: Int
     var cols: Int
@@ -494,7 +488,7 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var sw = MX_NONE
     if w is not None:
         sw = prog.group(zero, n, 1, MX_NONE, 1, W, 1)[1]
-    var arena = mx_run(prog, args[6], context)
+    var arena = metric_door_run(prog, args[6], context)
     var hits = arena.f32(tot)
     if not mx_truthy(args[3]):
         return PythonObject(hits)
@@ -522,7 +516,7 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
     var scores = mx_scores(args[1], n, "ranking_report", 1, "y_score", context)
     var weights = mx_weights(args[3], n, "ranking_report", context)
     var flags = mx_map_eq(true, pos, context)
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var S = prog.put(scores.a)
     var POS = prog.put_i32(flags)
     var W = MX_NONE
@@ -559,7 +553,7 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
                 _ = prog.want_count(output + 2 * channel * (n + 1), 2 * (n + 1), lengths, 2)
             prog.stage("curve_out", 1, [_CO_ROC if fold == 0 else _CO_PR, n, fps, tps, thr, count, 0, output, lengths])
             curve_outputs.extend([output, lengths])
-    var arena = mx_run(prog, args[5], context)
+    var arena = metric_door_run(prog, args[5], context)
     if arena.i32(outputs[1]) == 1:
         mx_undefined(String(_ROC_ONE_CLASS), context)
     if arena.i32(outputs[3]) == 2:
@@ -576,7 +570,7 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
             var arrays = Python.list()
             for channel in range(3):  # driver-loop: fixed curve channels with their reported lengths
                 var size = length - 1 if kind == 1 and channel == 2 else length
-                py_call(arrays.append, arena.words(output + 2 * channel * (n + 1), 2 * size, Python.tuple(size), "<f8", context))
+                py_call(arrays.append, metric_arena_array(arena, output + 2 * channel * (n + 1), 2 * size, Python.tuple(size), "<f8", context))
             py_setitem(result, "roc_curve" if kind == 0 else "precision_recall_curve", py_call(b.tuple, arrays))
     return result
 

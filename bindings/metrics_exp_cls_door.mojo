@@ -19,11 +19,15 @@ from bindings.py_balanced import py_call, py_contains, py_setitem
 from bindings.family_common_unpack import FAMILY_F32P, FAMILY_I32P, family_str, family_repr
 from bindings.family_common_pack import family_array, family_call_kw
 from bindings.classical_arrays_door import classical_address
-from bindings.metrics_exp_common import (
-    MX_NONE, MxProg, MxArena, MxLab, MxPair, mx_run, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str,
-    mx_is_real, mx_float, mx_nan, mx_inf, mx_isnan, mx_isinf, mx_raise_obj, mx_zero_division, mx_warn, mx_undefined,
-    mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode, mx_selected, mx_codes, mx_pair, mx_pair_encoded,
-    mx_list_labels, mx_union_sorted, mx_zero_division_value, mx_attr,
+from bindings.metrics_exp_common_run import MX_NONE, mx_nan, mx_inf, mx_isnan, mx_isinf
+from bindings.metrics_program_pack import metric_arena_array
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.arena_prog_run import MetricArenaOwner
+from bindings.metrics_exp_common_unpack import (
+    MxLab, MxPair, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str, mx_is_real, mx_float, mx_raise_obj,
+    mx_zero_division, mx_warn, mx_undefined, mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode,
+    mx_selected, mx_codes, mx_pair, mx_pair_encoded, mx_list_labels, mx_union_sorted, mx_zero_division_value,
+    mx_attr,
 )
 
 # cm_epi kinds (x_metrics/cm_epi.mojo, op 59)
@@ -42,7 +46,7 @@ comptime _WSUM_BLOCK = 256
 struct MxSums(Movable):
     """`_Sums`: the program with the per-label tp / true / pred groupings
     (and the weighted total's), their count slots and the staged epilogues."""
-    var prog: MxProg
+    var prog: MetricDoorProg
     var n: Int
     var L: Int
     var weighted: Bool
@@ -53,7 +57,7 @@ struct MxSums(Movable):
     var cnt: List[Int]
     var eos: List[Int]
 
-    def __init__(out self, var prog: MxProg, n: Int, L: Int, weighted: Bool):
+    def __init__(out self, var prog: MetricDoorProg, n: Int, L: Int, weighted: Bool):
         self.prog = prog^
         self.n = n
         self.L = L
@@ -98,7 +102,7 @@ def _sums(pair: MxPair, order: PythonObject, context: PythonObject) raises -> Mx
     var L = mx_len(order)
     var yt = mx_codes(pair.true, order, False, context)
     var yp = mx_codes(pair.pred, order, False, context)
-    var s = MxSums(MxProg(context), n, L, pair.w is not None)
+    var s = MxSums(MetricDoorProg(), n, L, pair.w is not None)
     var a = s.prog.put_i32(yt)
     var b = s.prog.put_i32(yp)
     var matched = s.prog.scratch(n)
@@ -229,20 +233,20 @@ def _prf_warn(bad: Int, warn_for: PythonObject, zero_division: PythonObject, con
                          + "samples. Use `zero_division` parameter to control this behavior.", context)
 
 
-def _prf_result(s: MxSums, arena: MxArena, eo: Int, k: Int, average: PythonObject,
+def _prf_result(s: MxSums, arena: MetricArenaOwner, eo: Int, k: Int, average: PythonObject,
                 context: PythonObject) raises -> PythonObject:
     """The answer of one set-wise epilogue: per-label arrays, or the scalars."""
     if average is None:
-        var p = arena.words(eo + 8, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
-        var r = arena.words(eo + 8 + 2 * k, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
-        var f = arena.words(eo + 8 + 4 * k, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
+        var p = metric_arena_array(arena, eo + 8, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
+        var r = metric_arena_array(arena, eo + 8 + 2 * k, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
+        var f = metric_arena_array(arena, eo + 8 + 4 * k, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
         var support = _support_array(s, arena, k, context)
         return Python.tuple(p, r, f, support)
     return Python.tuple(PythonObject(arena.f64(eo + 2)), PythonObject(arena.f64(eo + 4)),
                         PythonObject(arena.f64(eo + 6)), PythonObject(None))
 
 
-def _support_array(s: MxSums, arena: MxArena, k: Int, context: PythonObject) raises -> PythonObject:
+def _support_array(s: MxSums, arena: MetricArenaOwner, k: Int, context: PythonObject) raises -> PythonObject:
     """`s.true[:k]` as float64 (weighted PairSums) or int64 (counts)."""
     if s.weighted:
         var out = family_array(Python.tuple(PythonObject(k)), "<f8", context)
@@ -274,7 +278,7 @@ def _prfs(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var k = mx_len(chosen)
     var s = _sums(pair, order, context)
     s.add_epi(2, k, _epi_avg(average), _epi_zd(args[8], context), _fmode(fb), fb * fb, context)
-    var arena = mx_run(s.prog, args[9], context)
+    var arena = metric_door_run(s.prog, args[9], context)
     var eo = s.eos[0]
     _prf_warn(arena.i32(eo), args[6], args[8], context)
     return _prf_result(s, arena, eo, k, average, context)
@@ -298,13 +302,13 @@ def _jaccard(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var k = mx_len(chosen)
     var s = _sums(pair, mx_label_order(chosen, pair.present), context)
     s.add_epi(0, k, _epi_avg(average), _epi_zd(args[6], context), 0, 0.0, context)
-    var arena = mx_run(s.prog, args[7], context)
+    var arena = metric_door_run(s.prog, args[7], context)
     var eo = s.eos[0]
     if arena.i32(eo) != 0 and mx_is_str(args[6]):
         mx_undefined("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
                      + "predicted samples. Use `zero_division` parameter to control this behavior.", context)
     if average is None:
-        return arena.words(eo + 8, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
+        return metric_arena_array(arena, eo + 8, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
     return PythonObject(arena.f64(eo + 2))
 
 
@@ -314,7 +318,7 @@ def _balanced_accuracy(args: PythonObject, context: PythonObject) raises -> Pyth
     var L = mx_len(pair.present)
     var s = _sums(pair, pair.present, context)
     s.add_epi(1, L, 0, 1 if mx_truthy(args[3]) else 0, 0, 0.0, context)
-    var arena = mx_run(s.prog, args[4], context)
+    var arena = metric_door_run(s.prog, args[4], context)
     var eo = s.eos[0]
     if arena.i32(eo + 1) != L:
         mx_warn("y_pred contains classes not in y_true", mx_b().UserWarning, 2, context)
@@ -326,7 +330,7 @@ def _matthews(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var pair = mx_pair(args[0], args[1], args[2], "matthews_corrcoef", context)
     var s = _sums(pair, pair.present, context)
     var tail = _cm_stage(s, mx_len(pair.present), _CM_MCC, 4)
-    var arena = mx_run(s.prog, args[3], context)
+    var arena = metric_door_run(s.prog, args[3], context)
     if arena.i32(tail) != 0:
         raise Error("math domain error")
     return PythonObject(arena.f64(tail + 2))
@@ -342,23 +346,23 @@ def _mlcm(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var k = mx_len(chosen)
     var s = _sums(pair, mx_label_order(chosen, pair.present), context)
     var tail = _cm_stage(s, k, _CM_MLCM, 8 * k)
-    var arena = mx_run(s.prog, args[5], context)
+    var arena = metric_door_run(s.prog, args[5], context)
     var shape = Python.tuple(PythonObject(k), PythonObject(2), PythonObject(2))
-    var _keep_ret_tail_r338 = arena.words(tail, 8 * k, shape, "<f8" if s.weighted else "<i8", context)
+    var _keep_ret_tail_r338 = metric_arena_array(arena, tail, 8 * k, shape, "<f8" if s.weighted else "<i8", context)
     _ = tail  # keep the Python object alive through the native call above
     var _keep_ret_tail = _keep_ret_tail_r338^
     _ = tail  # keep the Python object alive through the native call above
     return _keep_ret_tail^
 
 
-def _cm_count(args: PythonObject, caller: String, context: PythonObject) raises -> Tuple[MxArena, Int, Bool]:
+def _cm_count(args: PythonObject, caller: String, context: PythonObject) raises -> Tuple[MetricArenaOwner, Int, Bool]:
     """`_cm_count`; args = (y_true, y_pred, sample_weight, ...): the arena,
     the COUNT tail's 11-word slot and whether it is weighted."""
     var pair = mx_pair(args[0], args[1], args[2], caller, context)
     var s = _sums(pair, pair.present, context)
     var out = _cm_stage(s, mx_len(pair.present), _CM_COUNT, 11)
     var weighted = s.weighted
-    return (mx_run(s.prog, args[mx_len(args) - 1], context), out, weighted)
+    return (metric_door_run(s.prog, args[mx_len(args) - 1], context), out, weighted)
 
 
 def _hamming(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -389,11 +393,11 @@ def _zero_one(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 struct MxConf(Movable):
     """`_confusion`'s program: the k*k groupings over `order`."""
-    var prog: MxProg
+    var prog: MetricDoorProg
     var cells: Int
     var col: Int
 
-    def __init__(out self, var prog: MxProg, cells: Int, col: Int):
+    def __init__(out self, var prog: MetricDoorProg, cells: Int, col: Int):
         self.prog = prog^
         self.cells = cells
         self.col = col
@@ -404,7 +408,7 @@ def _confusion(pair: MxPair, order: PythonObject, context: PythonObject) raises 
     var k = mx_len(order)
     if k > 4096:
         raise Error("mojolearn metrics: at most 4096 labels in a confusion matrix")
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var a = prog.put_i32(mx_codes(pair.true, order, False, context))
     var b = prog.put_i32(mx_codes(pair.pred, order, False, context))
     var key = prog.scratch(n)
@@ -443,7 +447,7 @@ def _kappa(args: PythonObject, context: PythonObject) raises -> PythonObject:
     for i in range(4):  # small-loop(4: the four kappa stages): fixed
         if units[i]:
             c.prog.stage("cm_epi", units[i], [_CM_KAPPA, c.cells, k, c.col, phases[i], wm, out, sc])
-    var arena = mx_run(c.prog, args[6], context)
+    var arena = metric_door_run(c.prog, args[6], context)
     var flags = arena.i32(out)
     if flags & 1:
         mx_undefined("`y2` contains no labels that are present in both `y1` and `labels`.", context)
@@ -497,7 +501,7 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
     var c = _confusion(pair, chosen, context)
     var out = c.prog.want(c.prog.alloc(6), 6)
     c.prog.stage("cm_epi", 1, [_CM_CLR, c.cells, c.col, out])
-    var arena = mx_run(c.prog, args[5], context)
+    var arena = metric_door_run(c.prog, args[5], context)
     var flags = arena.i32(out)
     if flags & 1:
         mx_undefined("No samples of the positive class are present in `y_true`.", context)
@@ -573,7 +577,7 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # downloads and every epilogue result would read back as zero.
     var total_out = s.prog.alloc(2)
     s.prog.stage("cm_epi", 1, [_CM_TOTAL, total_src, k, 1 if s.weighted else 0, total_out])
-    var arena = mx_run(s.prog, mode, context)
+    var arena = metric_door_run(s.prog, mode, context)
     var all_for = Python.tuple(PythonObject("precision"), PythonObject("recall"), PythonObject("f-score"))
     _prf_warn(arena.i32(s.eos[0]), all_for, zero_division, context)
     var per = _prf_result(s, arena, s.eos[0], k, PythonObject(None), context)

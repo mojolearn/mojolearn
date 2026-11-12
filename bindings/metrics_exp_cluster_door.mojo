@@ -21,9 +21,12 @@ from bindings.family_common_pack import family_array
 from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from core.metrics_exp_impl import mexp_cast_i64
-from bindings.metrics_exp_common import (
-    MX_NONE, MxProg, MxArena, MxLab, mx_run, mx_b, mx_len, mx_truthy, mx_is_str, mx_float,
-    mx_refuse_multilabel, mx_encode,
+from bindings.metrics_exp_common_run import MX_NONE
+from bindings.metrics_program_pack import metric_arena_array
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.arena_prog_run import MetricArenaOwner
+from bindings.metrics_exp_common_unpack import (
+    MxLab, mx_b, mx_len, mx_truthy, mx_is_str, mx_float, mx_refuse_multilabel, mx_encode,
 )
 
 comptime _CL_CENT = 0
@@ -55,7 +58,7 @@ def _clusterings(labels_true: PythonObject, labels_pred: PythonObject, caller: S
 
 struct _Cont(Movable):
     """`_contingency`'s program offsets and arena."""
-    var arena: MxArena
+    var arena: MetricArenaOwner
     var ka: Int
     var kb: Int
     var C: Int
@@ -67,7 +70,7 @@ struct _Cont(Movable):
     var MI: Int
     var EMI: Int
 
-    def __init__(out self, var arena: MxArena, ka: Int, kb: Int, C: Int, F: Int, R: Int, K: Int, P: Int, E: Int,
+    def __init__(out self, var arena: MetricArenaOwner, ka: Int, kb: Int, C: Int, F: Int, R: Int, K: Int, P: Int, E: Int,
                  MI: Int, EMI: Int):
         self.arena = arena^
         self.ka = ka
@@ -89,7 +92,7 @@ def _contingency(c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float6
     var kb = mx_len(c.b.classes)
     if ka * kb > 16777216:
         raise Error("mojolearn metrics: the contingency matrix exceeds 2^24 cells")
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var A = prog.put_i32(c.a.codes)
     var B = prog.put_i32(c.b.codes)
     var key = prog.scratch(n)
@@ -102,7 +105,7 @@ def _contingency(c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float6
     var cells = ka * kb
     var EPS = MX_NONE
     if has_eps:
-        EPS = prog.f64_words(eps, context)
+        EPS = prog.f64_words(eps)
     var C = prog.want(prog.alloc(2 * cells), 2 * cells)
     var F = MX_NONE
     if has_eps:
@@ -118,7 +121,7 @@ def _contingency(c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float6
     if emi:
         EMI = prog.want(prog.alloc(2), 2)
     prog.stage("cont_stats", 1, [off, ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n])
-    var arena = mx_run(prog, mode, context)
+    var arena = metric_door_run(prog, mode, context)
     return _Cont(arena^, ka, kb, C, F, R, K, P, E, MI, EMI)
 
 
@@ -138,8 +141,8 @@ def _contingency_matrix(args: PythonObject, context: PythonObject) raises -> Pyt
     var shape = Python.tuple(PythonObject(r.ka), PythonObject(r.kb))
     var cells = r.ka * r.kb
     if has_eps:
-        return r.arena.words(r.F, 2 * cells, shape, "<f8", context)
-    var counts = r.arena.words(r.C, 2 * cells, shape, "<i8", context)
+        return metric_arena_array(r.arena, r.F, 2 * cells, shape, "<f8", context)
+    var counts = metric_arena_array(r.arena, r.C, 2 * cells, shape, "<i8", context)
     # the dtype's name: a string, or a type's __name__, or its str()
     var dtype = args[4]
     var name: String
@@ -164,7 +167,7 @@ def _pair_confusion(args: PythonObject, context: PythonObject) raises -> PythonO
     """args = (labels_true, labels_pred, mode)."""
     var c = _clusterings(args[0], args[1], "pair_confusion_matrix", context)
     var r = _contingency(c, args[2], False, 0.0, False, False, context)
-    return r.arena.words(r.P, 8, Python.tuple(PythonObject(2), PythonObject(2)), "<i8", context)
+    return metric_arena_array(r.arena, r.P, 8, Python.tuple(PythonObject(2), PythonObject(2)), "<i8", context)
 
 
 def _average_method(method: PythonObject) raises -> Int:
@@ -225,7 +228,7 @@ def _cluster_score(args: PythonObject, caller: String, db: Bool, context: Python
     var k = mx_len(lab.classes)
     if not (1 < k and k < n):
         raise Error("Number of labels is " + String(k) + ". Valid values are 2 to n_samples - 1 (inclusive)")
-    var prog = MxProg(context)
+    var prog = MetricDoorProg()
     var X0 = prog.put(Xa)
     var L = prog.put_i32(lab.codes)
     var g = prog.group(L, n, k, X0, d, MX_NONE, d)
@@ -249,7 +252,7 @@ def _cluster_score(args: PythonObject, caller: String, db: Bool, context: Python
         var inner = prog.scratch(2 * k)
         prog.stage("cl_epi", k, [_CL_CH_ROW, CB, gsum, n, d, k, inner])
         prog.stage("cl_epi", 1, [_CL_CH_FIN, off, inner, per, n, k, res])
-    var arena = mx_run(prog, args[2], context)
+    var arena = metric_door_run(prog, args[2], context)
     return PythonObject(arena.f64(res))
 
 
