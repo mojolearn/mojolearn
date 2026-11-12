@@ -66,9 +66,11 @@ def _reserve(owner: MutPointer[SambaStackProgram, MutUntrackedOrigin], name: Str
     shared_slot_lock(lock)
     try:
         if owner[].busy:
-            raise Error(name + ": " + ("program" if lost == "" else "session") + " busy")
+            var holder = String("program") if lost == "" else String("session")
+            raise Error(name + ": " + holder + " busy")
         if need_usable and not owner[].usable:
-            raise Error(name + (": the program was lost after a failed call" if lost == "" else lost))
+            var why = String(": the program was lost after a failed call") if lost == "" else lost
+            raise Error(name + why)
         owner[].busy = True
     finally:
         shared_slot_unlock(lock)
@@ -86,19 +88,19 @@ def _unreserve(owner: MutPointer[SambaStackProgram, MutUntrackedOrigin], lose: B
 
 
 def _nonnull(words: List[Int], begin: Int, name: String) raises -> List[Int]:
-    var out = List[Int](capacity=len(words) - begin)
+    var kept = List[Int](capacity=len(words) - begin)
     for i in range(begin, len(words)):  # small-loop(state addresses of one program call): argument words, not data
         if words[i] == 0:
             raise Error(name + ": null state address at slot " + String(i - begin))
-        out.append(words[i])
-    return out^
+        kept.append(words[i])
+    return kept^
 
 
 def _tail(words: List[Int], begin: Int) -> List[Int]:
-    var out = List[Int](capacity=len(words) - begin)
+    var kept = List[Int](capacity=len(words) - begin)
     for i in range(begin, len(words)):  # small-loop(cursor words of one program call): argument words, not data
-        out.append(words[i])
-    return out^
+        kept.append(words[i])
+    return kept^
 
 
 def _write_words(address: Int, words: List[Int], capacity: Int, name: String) raises:
@@ -175,7 +177,7 @@ def _forward(owner: MutPointer[SambaStackProgram, MutUntrackedOrigin], a: List[I
     if stateful and a[3] == 0:
         raise Error(name + ": null cursor output address")
     _reserve(owner, name, True, "")
-    var out = List[Int]()
+    var exported = List[Int]()
     try:
         owner[].refresh_weights(registry)
         if stateful:
@@ -186,14 +188,14 @@ def _forward(owner: MutPointer[SambaStackProgram, MutUntrackedOrigin], a: List[I
         if len(reports) > 0:
             owner[].enqueue_reports(reports)
         if stateful:
-            out = owner[].enqueue_export(sp)
+            exported = owner[].enqueue_export(sp)
         owner[].finish()
     except error:
         _unreserve(owner, True, False)
         raise error
     _unreserve(owner, False, False)
     if stateful:
-        _write_words(a[3], out, len(sc), name)
+        _write_words(a[3], exported, len(sc), name)
     return 0
 
 
