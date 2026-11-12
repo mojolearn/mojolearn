@@ -82,7 +82,8 @@ def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool
     # Perf (perf2-neighbors): returns that admitted label list (None when the
     # model has no `classes_` or at fit), so NearestCentroid predict/score
     # reuse it instead of building it a second time per call.
-    var labels = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546); PACK returns None when absent.
+    var labels = Optional[PythonObject]()
     classical_check_layout(model, context)
     var fields = py_fields(model)
     var scalars = Python.tuple("metric", "p", "contamination", "n_neighbors", "novelty", "shrink_threshold",
@@ -102,8 +103,9 @@ def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool
     if record is not None and prepared_key_same(record, stamp):
         var classes = py_get(fields, "classes_")
         if classes is not None:
-            labels = classifier_label_list(classes, context)
-            classical_admit_value(labels, context)
+            var listed = classifier_label_list(classes, context)
+            classical_admit_value(listed, context)
+            labels = listed
     else:
         for i in range(len(scalars)):  # small-loop(fixed scalar parameter and fitted-state schema)
             var value = py_get(fields, scalars[i])
@@ -113,8 +115,9 @@ def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool
             var value = py_get(fields, values[i])
             if value is not None:
                 if String(values[i]) == "classes_":
-                    labels = classifier_label_list(value, context)
-                    classical_admit_value(labels, context)
+                    var listed = classifier_label_list(value, context)
+                    classical_admit_value(listed, context)
+                    labels = listed
                 else:
                     classical_admit_value(value, context)
     if fitting:
@@ -124,9 +127,13 @@ def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool
     if record is None or not prepared_key_same(record, stamp):
         for i in range(len(stamp)):  # driver-loop: over the stamp objects, refusing a self-reference
             if stamp[i] is model:
-                return labels
+                if labels:
+                    return labels.value()
+                return PythonObject(None)
         prepared_put(mods, _LOCAL_STATE_SLOT, model, stamp)
-    return labels
+    if labels:
+        return labels.value()
+    return PythonObject(None)
 
 
 def _b() raises -> PythonObject:
