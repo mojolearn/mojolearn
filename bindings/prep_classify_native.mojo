@@ -31,7 +31,8 @@ from bindings.prep_lda_admission import (
     lda_native_fields_plain, prep_plain_classes,
 )
 from bindings.classifier_public_lifecycle import classifier_label_list, classifier_after_fit
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result, lifecycle_fitting
+from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.public_lifecycle_owner_run import lifecycle_fitting
 from bindings.classical_validate import classical_estimator_name
 from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_pandas import classical_admit_value

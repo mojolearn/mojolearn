@@ -23,18 +23,7 @@ from providers.python.array_metadata_pyapi import array_slot_once
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete,
 )
-
-
-def lifecycle_fitting(method: String) -> Bool:
-    """The methods that fit (`_mode._FITS`)."""
-    return method == "fit" or method == "partial_fit" or method == "fit_transform" or method == "fit_predict"
-
-
-def lifecycle_needs_fit(method: String) -> Bool:
-    """The methods that refuse an unfitted instance (`_mode._NEEDS_FIT`)."""
-    return (method == "predict" or method == "predict_proba" or method == "predict_log_proba"
-            or method == "decision_function" or method == "transform" or method == "inverse_transform"
-            or method == "score" or method == "score_samples" or method == "predict_joint_log_proba")
+from bindings.public_lifecycle_owner_run import lifecycle_fitting, lifecycle_needs_fit
 
 
 def lifecycle_not_fitted(model: PythonObject, method: String, context: PythonObject) raises:

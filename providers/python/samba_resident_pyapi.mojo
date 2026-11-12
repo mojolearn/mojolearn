@@ -8,6 +8,8 @@ from bindings.causal_lm_public import _native_function
 from bindings.generation_buffers import generation_array
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from core.samba_optimizer_plan import SambaOptimizerPlan
+# RUN (lane rs-neural): the resident step words, no Python import.
+from training.samba_resident_run import samba_resident_step_words
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
 
 
@@ -71,14 +73,7 @@ def samba_resident_native_step(fields: PythonObject, config: PythonObject, provi
     # the existing binding. The numerical operation consumes the validated slot.
     var h = neural_descriptor_execute(provider, 19, [], [optimizer_handle, Int(py=fields["n_total"])], [], False)
     var shape = ids.shape
-    var p: List[Int] = [h, Int(py=shape[0]), Int(py=shape[1])]
-    if accumulation > 1:
-        p.append(accumulation)
-        p.append(total_count)
-    p.append(plan.tensors)
-    p.append(plan.hyper.kind)
-    p.append(plan.step)
-    p.append(plan.hyper.nesterov)
+    var p = samba_resident_step_words(h, Int(py=shape[0]), Int(py=shape[1]), accumulation, total_count, plan)
     var f = plan.floats()
     if plan.hyper.maximize:
         raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")

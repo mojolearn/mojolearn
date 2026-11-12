@@ -47,18 +47,6 @@ def _model_shape(value: PythonObject, shape: List[Int], name: String) raises:
             raise Error("CausalLM: " + name + " has the wrong shape")
 
 
-def _model_dtype_refusal(name: String, code: String) -> String:
-    var label = String(code)
-    if code == "<f8" or code == "d" or code == "<d" or code == "=d" or code == "@d":
-        label = "float64"
-    elif code == "<f2" or code == "e" or code == "<e" or code == "=e" or code == "@e":
-        label = "float16"
-    elif code == "<u2" or code == "H":
-        label = "uint16 (bfloat16 bits)"
-    return ("TypeError: CausalLM tensor " + name + " has dtype " + label + "; float32 only: bfloat16, "
-            + "float16 and float64 are refused by name rather than converted. Convert to float32.")
-
-
 def _model_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     # Shared native admission captures the original Array slots/export once,
     # retains their owner and preserves C-view versus F/foreign-copy behavior.

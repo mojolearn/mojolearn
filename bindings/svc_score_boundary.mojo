@@ -30,7 +30,8 @@ from bindings.labels_score_boundary import ScoreKeyOwner, score_keys_unpack, sco
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
 from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words, SvcUsedClasses
 from core.gp_native_accuracy import GPCAccuracyProgram
-from bindings.arena_prog_native import _family_entries, _switch
+from bindings.arena_prog_native import _family_entries
+from bindings.arena_prog_run import _switch
 from bindings.x_prep_native_owner import _resident_scope
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT

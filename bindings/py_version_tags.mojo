@@ -47,39 +47,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_attr import py_attr
-from core.shared_slot import SharedSlot
-
-comptime _DICT_USED = 16
-comptime _DICT_VERSION = 24
-comptime _TYPE_FLAGS = 176
-comptime _TYPE_VERSION = 392
-#: Py_TPFLAGS_VALID_VERSION_TAG (Include/object.h, 3.10 and 3.11)
-comptime _TPFLAGS_VALID_VERSION_TAG = UInt64(1 << 19)
-
-
-struct VersionTagMode(Defaultable, Movable):
-    # -2 not probed yet, 0 off, 1 on (proven on this interpreter)
-    var dicts: Int
-    var types: Int
-
-    def __init__(out self):
-        self.dicts = -2
-        self.types = -2
-
-
-# Shared by every Mojo extension in the process: bump the name's version
-# whenever VersionTagMode's layout changes.
-comptime VERSION_TAG_MODE = SharedSlot[VersionTagMode, "MojolearnVersionTagModeV2"]
-
-
-@always_inline
-def _word64(address: Int) -> UInt64:
-    return MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=address)[0]
-
-
-@always_inline
-def _word32(address: Int) -> UInt32:
-    return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)[0]
+from bindings.py_version_tags_run import (
+    _DICT_USED, _DICT_VERSION, _TYPE_FLAGS, _TYPE_VERSION, _TPFLAGS_VALID_VERSION_TAG,
+    VERSION_TAG_MODE, _word64, _word32,
+)
 
 
 def _python_310_or_311() raises -> Bool:
@@ -121,12 +92,6 @@ def dict_version_tags() raises -> Bool:
         g = VERSION_TAG_MODE.get_or_create_ptr()
         g[].dicts = 1
     return proven
-
-
-def dict_version_tag(address: Int) -> Int:
-    """The `ma_version_tag` of the live exact dictionary at `address` (call
-    only while `dict_version_tags()` is True and the caller holds it)."""
-    return Int(_word64(address + _DICT_VERSION))
 
 
 def type_version_tags() raises -> Bool:

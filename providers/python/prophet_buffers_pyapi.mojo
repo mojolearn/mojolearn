@@ -14,6 +14,7 @@ from providers.python.array_metadata_pyapi import array_shape_once, array_metada
 from providers.python.prophet_lifecycle_pyapi import prophet_scalar
 from core.cast_in import cast_in_kind
 from core.prophet_input_marshal import prophet_numeric_copy, prophet_datetime_copy
+from sequence.prophet_buffers_run import prophet_time_unit
 
 
 def _admit(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -198,23 +199,8 @@ def prophet_contiguous(source: PythonObject, wide: Bool, context: PythonObject) 
 
 
 def _time_unit(dtype: PythonObject) raises -> PythonObject:
-    var text = String(dtype.str)
-    var parts = text.split("[")
-    var unit = String("generic")
-    var multiplier = 1
-    if len(parts) == 2:
-        var tail = String(parts[1])
-        var stop = tail.byte_length() - 1
-        var start = 0
-        while start < stop:  # driver-loop: native datetime dtype unit metadata
-            var digit = String(tail[byte=start:start + 1])
-            if digit < "0" or digit > "9":
-                break
-            start += 1
-        if start > 0:
-            multiplier = Int(String(tail[byte=0:start]))
-        unit = String(tail[byte=start:stop])
-    return Python.tuple(unit, multiplier)
+    var parsed = prophet_time_unit(String(dtype.str))
+    return Python.tuple(parsed[0], parsed[1])
 
 
 def prophet_temporal_into(source: PythonObject, target_dtype: PythonObject, destination: Int,

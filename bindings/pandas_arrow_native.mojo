@@ -7,7 +7,6 @@
 # The values are copied into a fresh NumPy-layout block, so no Arrow buffer
 # is retained past the read and Arrow ownership stays with the caller's
 # pandas object.
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
@@ -15,6 +14,7 @@ from bindings.classical_pandas import _pd_class, _pd_fields
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.sequential_arrays import sequential_address
 from bindings.arena_materialize_native import _address
+from bindings.pandas_arrow_run import _itemsize, _arrow_copy_values, _arrow_fill_missing
 
 
 def _arrow_extension_class() raises -> PythonObject:
@@ -73,16 +73,6 @@ def _arrow_typestr(chunk: PythonObject) raises -> String:
     raise Error("TypeError: model selection requires numeric Arrow storage (float, integer or boolean)")
 
 
-def _itemsize(typestr: String) -> Int:
-    if typestr == "<f8" or typestr == "<i8" or typestr == "<u8":
-        return 8
-    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
-        return 4
-    if typestr == "<i2" or typestr == "<u2":
-        return 2
-    return 1
-
-
 def pandas_arrow_ndarray(values: PythonObject, context: PythonObject) raises -> PythonObject:
     """A one-dimensional NumPy copy of exact numeric Arrow-backed pandas
     storage, with the column's own dtype. Missing floats read as NaN (as
@@ -138,29 +128,12 @@ def pandas_arrow_ndarray(values: PythonObject, context: PythonObject) raises -> 
             var data_view = native_buffer_view(buffers[1])
             var data = _address(data_view)
             var dst = out + position * item
-            if boolean:
-                var bits = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data)
-                var target = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst)
-                for r in range(length):  # driver-loop: storage unpack only, one Arrow bit per output byte
-                    var bit = offset + r
-                    target[r] = (bits[bit >> 3] >> UInt8(bit & 7)) & UInt8(1)
-            else:
-                unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst),
-                       src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data + offset * item),
-                       count=length * item)
+            _arrow_copy_values(data, dst, offset, length, item, boolean)
             if nulls > 0:
                 if buffer_class is None or py_type(buffers[0]) is not buffer_class:
                     raise Error("TypeError: Arrow storage with missing values requires an exact validity Buffer")
                 var valid_view = native_buffer_view(buffers[0])
-                var valid = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=_address(valid_view))
-                for r in range(length):  # driver-loop: storage only, missing float slots become NaN
-                    var bit = offset + r
-                    if ((valid[bit >> 3] >> UInt8(bit & 7)) & UInt8(1)) == UInt8(0):
-                        # NumPy's canonical quiet NaN, the value pandas exports.
-                        if item == 8:
-                            MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=dst)[r] = UInt64(0x7FF8000000000000)
-                        else:
-                            MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=dst)[r] = UInt32(0x7FC00000)
+                _arrow_fill_missing(_address(valid_view), dst, offset, length, item)
                 _ = valid_view^
             _ = data_view^
         _ = buffers^

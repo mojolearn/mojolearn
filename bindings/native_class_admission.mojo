@@ -36,20 +36,7 @@ from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module, shared_dict_watcher, shared_dict_epoch, shared_dict_watch
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call
-
-
-struct ClassWatch(Defaultable, Movable):
-    # watcher: -2 not set up yet, -1 unavailable (Python < 3.12 or no free
-    # watcher slot), otherwise the interpreter's type watcher ID.
-    var watcher: Int
-    var epochs: Dict[Int, Int]
-
-    def __init__(out self):
-        self.watcher = -2
-        self.epochs = Dict[Int, Int]()
-
-
-comptime CLASS_WATCH = SharedSlot[ClassWatch, "MojolearnClassWatchV2"]
+from bindings.native_class_admission_run import CLASS_WATCH, DICT_WATCH
 
 
 def _class_modified_c(type_ptr: PyObjectPtr) abi("C") -> Int32:
@@ -183,19 +170,6 @@ from core.shared_slot import SharedSlot
 # watched dictionary; each event bumps the dictionary's epoch, so a recycled
 # address or any edit forces the full scan again. Python 3.10 and 3.11 keep
 # the full scan on every call.
-
-
-struct DictWatch(Defaultable, Movable):
-    # address -> watch epoch at the last full key admission. The watcher and
-    # the epochs are the process-wide shared dictionary watcher in
-    # native_loaded_module (one CPython watcher slot for both uses).
-    var admitted: Dict[Int, Int]
-
-    def __init__(out self):
-        self.admitted = Dict[Int, Int]()
-
-
-comptime DICT_WATCH = SharedSlot[DictWatch, "MojolearnDictWatchV3"]
 
 
 def dict_keys_admitted(fields: PythonObject) raises -> Bool:

@@ -79,6 +79,7 @@ THE GIL is released around every device call, and nothing inside a
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_series import SERIES_GUARDS_OK
 from core.hostptr import f32_ptr, i32_ptr
+from arima.mojolearn_arima_run import _f32_ptr, _i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -267,14 +268,6 @@ def arima_ndiffs_kpss_binding(y_addr: PythonObject, out_addr: PythonObject,
 # 2026-10-09 on lane/owed-deletions-D1 (arima_order_search_css / arima_order_search_stepwise); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CSS_SEARCH.patch; record in docs/TOMBSTONES.md.
 
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
 
 
 def arima_numeric_mode_binding() raises -> PythonObject:

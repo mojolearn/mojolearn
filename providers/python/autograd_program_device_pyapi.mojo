@@ -31,36 +31,12 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from bindings.py_balanced import py_call
-from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
+from core.cast_in import CastIn
+from autograd.autograd_program_device_run import _device_kind
 from autograd.rankn import ShapeN
 from autograd.program_device_execution import program_device_execute
 from providers.python.autograd_program_pyapi import _imported_repr, _imported_tuple
 from autograd.autograd_program_run import _imported_session_dims
-
-
-def _device_kind(dtype: String, what: String) raises -> Tuple[Int, Int]:
-    """(CastIn kind, item size) of a dtype name (torch's names, which are
-    NumPy's): the same kinds cast_in_kind gives the host path's arrays."""
-    if dtype == "float32":
-        return (CAST_KIND_FLOAT, 4)
-    if dtype == "float16":
-        return (CAST_KIND_FLOAT, 2)
-    if dtype == "float64":
-        return (CAST_KIND_FLOAT, 8)
-    if dtype == "int8":
-        return (CAST_KIND_SIGNED, 1)
-    if dtype == "int16":
-        return (CAST_KIND_SIGNED, 2)
-    if dtype == "int32":
-        return (CAST_KIND_SIGNED, 4)
-    if dtype == "int64":
-        return (CAST_KIND_SIGNED, 8)
-    if dtype == "uint8":
-        return (CAST_KIND_UNSIGNED, 1)
-    if dtype == "bool":
-        return (CAST_KIND_BOOL, 1)
-    raise Error("TypeError: " + what + ": dtype " + dtype + " is not supported; pass a float16, float32, "
-                + "float64, integer or bool tensor")
 
 
 def ops_imported_run_device_py[KIND: Int](

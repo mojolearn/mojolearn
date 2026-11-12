@@ -36,6 +36,7 @@ from bindings.native_owner_lifetime import native_release_admit
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.forecast_owner_pyapi import forecast_commit
 from core.xseq_marshal import xseq_column_copy_f32
+from tsa.tsa_hw_run import hw_component_gather
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.admitted_sequence import admitted_array_f32
 from bindings.native_loaded_module import NativeModules
@@ -563,9 +564,7 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
         return _shaped(fields, comps.keep, which * rows * b, rows, index, context)
     var out = tsa_array("f", "<f4", Python.tuple(b, rows), b * rows, 4, context)
     var base = Int(py=classical_address(out))
-    for series in range(b):  # driver-loop: gather each native component column into its series-major output
-        xseq_column_copy_f32(_F32P(unsafe_from_address=comps.view.addr + which * rows * b * 4),
-            _F32P(unsafe_from_address=base + series * rows * 4), rows, b, series)
+    hw_component_gather(comps.view.addr, base, which, rows, b)
     if cached is None:
         var updates = Python.dict()
         py_setitem(updates, name, out)

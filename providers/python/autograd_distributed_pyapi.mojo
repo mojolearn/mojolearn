@@ -19,6 +19,7 @@ from providers.python.autograd_owned_program_public_pyapi import owned_program_o
 from autograd.rankn import ShapeN
 from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
+from autograd.autograd_distributed_run import distributed_loss_kind
 
 
 def distributed_object(cls: PythonObject, binding: PythonObject, handle: PythonObject) raises -> PythonObject:
@@ -64,21 +65,7 @@ def distributed_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
     owned_program_fit_admission(id, arrays, loss, epochs, batch, shuffle, delta)
     var retained = List[ProgramInput]()
     var name = String(py=loss)
-    var kind = -1
-    if name == "output":
-        kind = 0
-    elif name == "mse":
-        kind = 1
-    elif name == "mae":
-        kind = 2
-    elif name == "huber":
-        kind = 3
-    elif name == "bce_with_logits":
-        kind = 4
-    elif name == "cross_entropy":
-        kind = 5
-    else:
-        raise Error("distributed fit: unknown loss")
+    var kind = distributed_loss_kind(name)
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
     for k in range(len(arrays)):  # small-loop(arrays: one descriptor per program input): argument parsing, no data

@@ -48,7 +48,8 @@ from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from bindings.native_model_records import records_get, records_put, RECORDS_PREPARED
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
 from core.byte_lm_entry_table_sessions import byte_lm_sessions_published, byte_lm_resident_run
-from bindings.byte_lm_session_owner import ByteLmSessionOwner, byte_lm_session_owner_new
+from bindings.byte_lm_session_owner import byte_lm_session_owner_new
+from training.byte_lm_session_owner_run import ByteLmSessionOwner
 from core.entry_table import EntryRef
 from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_ABSENT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX,

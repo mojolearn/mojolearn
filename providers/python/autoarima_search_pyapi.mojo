@@ -12,7 +12,7 @@ from bindings.sequential_arrays import sequential_array
 from bindings.tsa_autoarima_native import _new_arima
 from bindings.tsa_arima_native import arima_fit, _arima_entries
 from providers.python.autoarima_lifecycle_pyapi import _fields, _integer, _integer_object, _number, _packed, _buffer
-from x_metrics.epilogue import portable_log_c
+from arima.autoarima_search_run import _penalty
 from providers.python.autoarima_owner_pyapi import autoarima_commit
 from bindings.py_optional import py_present
 
@@ -121,18 +121,6 @@ def _options(name: String, value: PythonObject, low: Int, high: Int, context: Py
 def _optional(entries: PythonObject, name: String) raises -> Int:
     var value = py_get(entries, name)
     return 0 if value is None else Int(py=py_call_typed(value))
-
-
-def _penalty(complexity: Int, criterion: String, observations: Int, d: Int, D: Int, period: Int) raises -> Float64:
-    var size = Float64(complexity)
-    var n = Float64(observations - d - period * D)
-    if criterion == "aic":
-        return 2.0 * size
-    if criterion == "aicc":
-        if n - size - 1.0 == 0:
-            raise Error("ZeroDivisionError: AutoARIMA information criterion denominator is zero")
-        return 2.0 * size + 2.0 * size * (size + 1.0) / (n - size - 1.0)
-    return portable_log_c(n) * size
 
 
 def _string(value: PythonObject, name: String) raises -> String:

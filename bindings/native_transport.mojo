@@ -17,9 +17,10 @@ from bindings.native_idna import idna_initialize, idna_encode
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
 from bindings.native_posix_transport import (
-    PosixBytes, PosixWords, posix_clock, posix_sleep, posix_open, posix_accept,
-    posix_close, posix_transfer, posix_spawn, posix_wait, posix_terminate,
-    posix_errno, posix_failure,
+    posix_sleep, posix_open, posix_accept, posix_transfer, posix_spawn, posix_wait,
+)
+from bindings.native_posix_transport_run import (
+    PosixBytes, PosixWords, posix_clock, posix_close, posix_terminate, posix_errno, posix_failure,
 )
 from bindings.cpython_table import cpython_table
 from core.shared_slot import SharedSlot

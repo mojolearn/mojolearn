@@ -5,6 +5,8 @@ from bindings.native_array_storage import native_array_empty, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from std.memory import unsafe_memcpy
 from std.os import getenv
+from bindings.x_prep_native_owner_run import xprep_r3
+from bindings.arena_prog_run import _merge_pairs
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
@@ -66,21 +68,6 @@ def _store_free(entries: PythonObject, prefix: String, slot: Int) raises:
     if prefix != "x_prep":
         raise Error("RuntimeError: arena family " + prefix + " has no resident store")
     _ = xprep_call(xprep_key(entries), XP_DEV_FREE, List[Int](), [slot])
-
-
-def xprep_r3(name: String) -> Bool:
-    # These three existing R3 choices default on; OFF wins over ON.
-    # p3-array-arena: the switch stays a live read (the transport tests and
-    # A/B jobs flip it inside one process), but the usual unset case returns
-    # before any parsing or allocation.
-    var raw = String(getenv("MOJOLEARN_XPREP_R3_OFF",""))
-    if raw.byte_length() == 0:
-        return True
-    var names = raw.replace("+",",").split(",")
-    for i in range(len(names)):  # driver-loop: configured transport-switch names
-        if String(names[i]).strip() == name or String(names[i]).strip() == "all":
-            return False
-    return True
 
 
 def xprep_address(value: PythonObject) raises -> Int:
@@ -396,37 +383,6 @@ def _release_owned(owned: List[Int], key: EntryRef) -> String:
     return failures
 
 
-def _xprep_merge(var pairs: List[Int]) -> List[Int32]:
-    # `_arena_io.output_ranges`: [lo, hi, -1, 1] quads of the sorted, merged
-    # non-empty pairs (bindings/arena_prog_native.mojo `_merge_pairs`).
-    var n = len(pairs) // 2
-    for i in range(1, n):  # driver-loop: insertion sort of the program's output range pairs
-        var lo = pairs[2 * i]
-        var hi = pairs[2 * i + 1]
-        var j = i - 1
-        while j >= 0 and (pairs[2 * j] > lo or (pairs[2 * j] == lo and pairs[2 * j + 1] > hi)):  # driver-loop: insertion shift over range pairs
-            pairs[2 * j + 2] = pairs[2 * j]
-            pairs[2 * j + 3] = pairs[2 * j + 1]
-            j -= 1
-        pairs[2 * j + 2] = lo
-        pairs[2 * j + 3] = hi
-    var out = List[Int32]()
-    for i in range(n):  # driver-loop: merge of the sorted output range pairs
-        var lo = pairs[2 * i]
-        var hi = pairs[2 * i + 1]
-        if hi <= lo:
-            continue
-        var m = len(out) // 4
-        if m > 0 and lo <= Int(out[4 * m - 3]):
-            out[4 * m - 3] = Int32(max(Int(out[4 * m - 3]), hi))
-        else:
-            out.append(Int32(lo))
-            out.append(Int32(hi))
-            out.append(-1)
-            out.append(1)
-    return out^
-
-
 def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
               var program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
               logical_output: Int = 0, inout_ranges: List[Int] = List[Int]()) raises:
@@ -525,7 +481,7 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                 pairs.append(Int(outs[4 * i + 1]))
             for j in range(len(inout_ranges)):  # driver-loop: over the program's in-out input ranges
                 pairs.append(inout_ranges[j])
-            outs = _xprep_merge(pairs^)
+            outs = _merge_pairs(pairs^)
         var nst = len(program)//16
         var pa = Int(program.unsafe_ptr())
         kernel_start = Int(perf_counter_ns()) if profile else 0

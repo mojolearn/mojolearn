@@ -26,6 +26,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, ne
 from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, MODEL_UNIFORM
 from autograd.model_descriptor import MODEL_ABI_NAME
 from core.xseq_marshal import xseq_column_copy_f32, xseq_column_copy_i64
+from sequence.xseq_native_common_run import xseq_stream_child_seed
 
 comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -343,8 +344,6 @@ struct XseqStream(Movable):
     def child_seed(mut self) -> UInt64:
         """A derived 63-bit seed (splitmix64 of the seed and the counter),
         advancing the counter by one."""
-        var z = self.seed + UInt64(self.offset + 1) * UInt64(0x9E3779B97F4A7C15)
-        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+        var child = xseq_stream_child_seed(self.seed, self.offset)
         self.offset += 1
-        return (z ^ (z >> 31)) >> 1
+        return child
