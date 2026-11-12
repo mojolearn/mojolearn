@@ -82,7 +82,8 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
-from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_run import native_owner_no_pins
 from core.gp_native_provider import GPProviderAPI
 from core.gp_entry_table import GPEntryKey, GP_COLUMN_DEVICE, gp_entry_vendor, gp_table_publish
 from bindings.py_balanced import py_setattr
