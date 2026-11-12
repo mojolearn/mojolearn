@@ -28,7 +28,7 @@ from bindings.gp_class_table_boundary import GPPreparedClassTable
 from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
 from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
 from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
-from bindings.native_owner_registry import register_native_owner
+from bindings.native_owner_registry import register_native_owner_type
 from bindings.agglo_native_boundary import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
 from bindings.kde_admission_boundary import KDEAdmissionOwner
 
@@ -79,12 +79,10 @@ def register_kmeans_resident_owner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[KMeansResidentOwner].name())):
             raise error
         _ = module.add_type[KMeansResidentOwner]("_KMeansResidentOwner")
-        register_native_owner(lookup_py_type_object[KMeansResidentOwner](), module.module, kmeans_resident_owner_pins)
         return
     # The same initializer can be reached through both package namespaces.
     # Attach the canonical type; never create a second native Python type.
     py_type_attach(module.module, "_KMeansResidentOwner", existing)
-    register_native_owner(existing, module.module, kmeans_resident_owner_pins)
 
 
 
@@ -96,10 +94,8 @@ def register_KDEResidentOwner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[KDEResidentOwner].name())):
             raise error
         _ = module.add_type[KDEResidentOwner]("_KDEResidentOwner")
-        register_native_owner(lookup_py_type_object[KDEResidentOwner](), module.module, kde_resident_owner_pins)
         return
     py_type_attach(module.module, "_KDEResidentOwner", existing)
-    register_native_owner(existing, module.module, kde_resident_owner_pins)
 
 
 def register_KDEAdmissionOwner(mut module: PythonModuleBuilder) raises:
@@ -122,10 +118,8 @@ def register_DBSCANReferenceOwner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[DBSCANReferenceOwner].name())):
             raise error
         _ = module.add_type[DBSCANReferenceOwner]("_DBSCANReferenceOwner")
-        register_native_owner(lookup_py_type_object[DBSCANReferenceOwner](), module.module, dbscan_reference_owner_pins)
         return
     py_type_attach(module.module, "_DBSCANReferenceOwner", existing)
-    register_native_owner(existing, module.module, dbscan_reference_owner_pins)
 
 
 def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
@@ -136,10 +130,8 @@ def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[DBSCANHolder].name())):
             raise error
         _ = module.add_type[DBSCANHolder]("_DBSCANHolder")
-        register_native_owner(lookup_py_type_object[DBSCANHolder](), module.module, dbscan_holder_pins)
         return
     py_type_attach(module.module, "_DBSCANHolder", existing)
-    register_native_owner(existing, module.module, dbscan_holder_pins)
 
 def register_AggloReferenceOwner(mut module: PythonModuleBuilder) raises:
     var existing = PythonObject(None)
@@ -149,10 +141,8 @@ def register_AggloReferenceOwner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[AggloReferenceOwner].name())):
             raise error
         _ = module.add_type[AggloReferenceOwner]("_AggloReferenceOwner")
-        register_native_owner(lookup_py_type_object[AggloReferenceOwner](), module.module, agglo_reference_owner_pins)
         return
     py_type_attach(module.module, "_AggloReferenceOwner", existing)
-    register_native_owner(existing, module.module, agglo_reference_owner_pins)
 
 
 def register_AggloHolder(mut module: PythonModuleBuilder) raises:
@@ -163,10 +153,8 @@ def register_AggloHolder(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[AggloHolder].name())):
             raise error
         _ = module.add_type[AggloHolder]("_AggloHolder")
-        register_native_owner(lookup_py_type_object[AggloHolder](), module.module, agglo_holder_pins)
         return
     py_type_attach(module.module, "_AggloHolder", existing)
-    register_native_owner(existing, module.module, agglo_holder_pins)
 
 
 def register_SvrPreparedLease(mut module: PythonModuleBuilder) raises:
@@ -266,6 +254,15 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         module.def_function[runtime_family_host_vendor_binding]("runtime_family_host_vendor")
         module.def_function[runtime_family_host_column_binding]("runtime_family_host_column")
         module.def_function[runtime_family_host_sabotage_binding]("runtime_family_host_sabotage")
-        return module.finalize()
+        # Owner identities need the finalized type objects (Mojo 1.2 creates
+        # them in finalize(); see bindings/native_owner_registry.mojo).
+        var published = module.finalize()
+        register_native_owner_type[KMeansResidentOwner](published, kmeans_resident_owner_pins)
+        register_native_owner_type[KDEResidentOwner](published, kde_resident_owner_pins)
+        register_native_owner_type[DBSCANReferenceOwner](published, dbscan_reference_owner_pins)
+        register_native_owner_type[DBSCANHolder](published, dbscan_holder_pins)
+        register_native_owner_type[AggloReferenceOwner](published, agglo_reference_owner_pins)
+        register_native_owner_type[AggloHolder](published, agglo_holder_pins)
+        return published
     except error:
         abort(String("failed to create _mojolearn_runtime_family_host: ", error))
