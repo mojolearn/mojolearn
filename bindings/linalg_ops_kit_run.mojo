@@ -1,34 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
-# The x_decomp cells the linalg decompositions (qr, eigh, svdvals, svd) call,
-# driven natively: python/mojolearn/_expansion_decomp.py's `_M` / `_Kit`
-# semantics for the operations `_linalg_impl` used, entry for entry. A matrix
-# lives on the host (a float32 Array) or on the device (a resident buffer of a
-# GPU binding, `x_decomp/resident.mojo`); a host matrix handed to a resident
-# entry is uploaded once and MOVES to the device, a device matrix read on the
-# host is downloaded once and moves back, exactly as `_M.s` / `_Kit._did` moved
-# them. The same entries on the same words in the same order: the bits do not
-# move. Every entry is called through `family_call`, so a cell's own refusal
-# (an unconverged Jacobi, a NaN order) keeps its Python class and words.
+"""RUN piece of the linalg decompositions (qr, eigh, svdvals, svd): the typed
+x_decomp kit, python/mojolearn/_expansion_decomp.py's `_M` / `_Kit` for the
+operations `_linalg_impl` used, entry for entry (lane entangled-kits,
+2026-11-12; was the Python-holding `LinKit` of bindings/linalg_ops_kit.mojo).
+
+A matrix lives on the host (a kit-owned float32 store, or a caller buffer the
+door admitted and keeps alive: `borrow`) or on the device (a pool id of the
+x_decomp image). A host matrix handed to a resident operation is uploaded once
+and MOVES to the device; a device matrix read on the host is downloaded once
+and moves back, exactly as `_M.s` / `_Kit._did` moved them. Every operation is
+one call through the x_decomp image's dispatch (`EntryRef`, resolved by the
+door's UNPACK); no Python object is held or called. The same operations on the
+same words in the same order: the bits do not move.
+
+The door (bindings/linalg_ops_decomp.mojo) releases the GIL around each RUN
+sequence and keeps every admitted owner alive across it; PACK copies a
+matrix's words into the public Array (`lin_kit_out`).
+"""
 from std.memory import unsafe_memcpy
-from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
-from bindings.py_balanced import py_call, py_type
-from bindings.classical_arrays import classical_address
-from bindings.family_common import family_call
-from bindings.linalg_ops_buffers import lin_truth
-from bindings.admitted_input import admitted_zeros
+from core.entry_table import EntryRef, entry_ref_call
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_copy_columns, tsqr_fill_eye
-# The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows N293,
-# N294): alloc / upload / download / free, ew, gemm, the sums and the moves
-# call one abi("C") dispatch function (bindings/kit_call.mojo) instead of a
-# Python entry call with a Python parameter list per operation.
-from bindings.kit_call import kit_connect, kit_provider, kit_call
 from x_decomp.descriptor_schema import (
-    XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES,
+    XD_CAP_RESIDENT, XD_CAP_DEV_SVD,
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_MOVE,
     XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD, XD_DEV_EW, XD_DEV_GEMM,
     XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_MOVE,
+    XD_ORDER, XD_DEV_REDUCE, XD_DEV_ORDER, XD_ORDER_SMALL, XD_DEV_ORDER_SMALL,
+    XD_SVD, XD_DEV_SVD, XD_RANK, XD_ORTH_DIAG, XD_DEV_ORTH_DIAG, XD_GEQRF, XD_ORGQR, XD_EIGH,
 )
 
 comptime KIT_F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -51,109 +49,87 @@ comptime OP_LE = 34
 comptime OP_SELECT = 35
 
 
+struct KitStore(Movable):
+    """A kit-owned host store (at least one word, so an empty matrix keeps a
+    valid address, as `_M._one` did) and the matrices that view it."""
+    var words: List[Float32]
+    var references: Int
+
+    def __init__(out self, cells: Int):
+        self.words = List[Float32](length=max(cells, 1), fill=0.0)
+        self.references = 0
+
+
 struct KitMatrix(Copyable, Movable):
+    # `store`: the kit store holding the host words, -1 when none.
     # `borrowed` (row N293): the address of an admitted caller buffer the
-    # matrix reads in place (no host copy), kept alive by `keep`; 0 when the
-    # matrix owns its words. A borrowed matrix is a host matrix for every
-    # route decision, exactly as the copy it replaces was; it is never a
-    # write target (every kit operation writes a fresh output).
-    var host: PythonObject
+    # matrix reads in place (no host copy), kept alive by the door; 0 when the
+    # matrix does not borrow. A borrowed matrix is a host matrix for every
+    # route decision; it is never a write target (every operation writes a
+    # fresh output).
+    var store: Int
     var device: Int
     var rows: Int
     var cols: Int
     var borrowed: Int
-    var keep: PythonObject
 
-    def __init__(out self, host: PythonObject, device: Int, rows: Int, cols: Int):
-        self.host = host
+    def __init__(out self, store: Int, device: Int, rows: Int, cols: Int):
+        self.store = store
         self.device = device
         self.rows = rows
         self.cols = cols
         self.borrowed = 0
-        self.keep = PythonObject(None)
 
 
 struct LinKit(Movable):
-    """`_Kit(mode)` over the x_decomp binding of the process's default mode."""
-    var b: PythonObject
-    var context: PythonObject
+    """`_Kit(mode)` over the x_decomp image of the process's default mode."""
+    var entry: EntryRef
     var matrices: List[KitMatrix]
+    var stores: List[KitStore]
     var allocations: List[Int]
-    var resident: Bool
-    var handles: Dict[String, PythonObject]  # entry handles resolved by this kit
-    var table: PythonObject  # the binding's x_decomp_native_api_v1 provider, connected once per kit
+    var resident: Bool  # `_Kit._res`: the image has the resident operations (a GPU image)
+    var dev_svd: Bool   # the image registers the resident SVD (IDN_SVD_RESIDENT)
     var zero: Int  # the kit's one 1 x 1 zero operand (row N294), -1 until made
     var minus_one: Int  # neg_signs' constants, made once per kit (-1 until made)
     var plus_one: Int
 
-    def __init__(out self, binding: PythonObject, context: PythonObject) raises:
-        if py_type(binding) is not py_type(native_loaded_module("builtins")):
-            raise Error("TypeError: linalg decomposition requires an exact native provider module")
-        self.b = binding
-        self.context = context
+    def __init__(out self, entry: EntryRef, capabilities: Int):
+        """`entry` and `capabilities` come from the door's UNPACK (the image's
+        connected dispatch and its capability word, read once per binding)."""
+        self.entry = entry
         self.matrices = List[KitMatrix]()
+        self.stores = List[KitStore]()
         self.allocations = List[Int]()
-        self.handles = Dict[String, PythonObject]()
-        self.table = PythonObject(None)
+        self.resident = (capabilities & XD_CAP_RESIDENT) != 0
+        self.dev_svd = self.resident and (capabilities & XD_CAP_DEV_SVD) != 0
         self.zero = -1
         self.minus_one = -1
         self.plus_one = -1
-        # `_Kit._res`: the binding has the resident entries (a GPU binding)
-        self.resident = neural_descriptor_entry(binding, "x_decomp_dev_ew", False) is not None
 
-    # ---- the native kernel-call table (x_decomp/descriptor_schema.mojo)
-    def xd(mut self) raises -> PythonObject:
-        if self.table is None:
-            var snapshot = kit_connect(self.b, "x_decomp_native_api_v1", String(XD_ABI_NAME),
-                                       XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES)
-            self.table = kit_provider(snapshot)
-        return self.table
-
+    # ---- the x_decomp dispatch (x_decomp/descriptor_schema.mojo)
     def dcall(mut self, op: Int, ints: List[Int], s: Float64 = 0.0) raises -> Int:
-        """A device-resident operation on pool ids (under the GIL, as the
-        `dev_*_py` doors ran)."""
+        """A device-resident operation on pool ids."""
         var floats = List[Float64]()
         if op == XD_DEV_EW:
             floats.append(s)
-        return kit_call(self.xd(), op, List[Int](), ints, floats, False)
+        return entry_ref_call(self.entry, op, List[Int](), ints, floats)
 
     def hcall(mut self, op: Int, addresses: List[Int], ints: List[Int], s: Float64 = 0.0) raises -> Int:
-        """A host-address operation (the GIL released, as the doors did)."""
+        """A host-address operation; the caller keeps every address alive."""
         var floats = List[Float64]()
         if op == XD_EW:
             floats.append(s)
-        return kit_call(self.xd(), op, addresses, ints, floats, True)
+        return entry_ref_call(self.entry, op, addresses, ints, floats)
 
-    def addr(mut self, a: Int) raises -> Int:
-        """The host address of matrix a (a device matrix moves to the host)."""
-        if self.matrices[a].borrowed != 0 and self.matrices[a].device < 0:
-            return self.matrices[a].borrowed
-        return Int(py=self.address(a))
+    def call(mut self, op: Int, addresses: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
+        return entry_ref_call(self.entry, op, addresses, ints, floats)
 
     def shared_zero(mut self) raises -> Int:
         """The kit's 1 x 1 zero (row N294): the absent-operand and unused-index
-        constant every ew / move used to allocate (and, on a resident kit,
-        upload) once per operation. Read-only, so one per kit serves all."""
+        constant. Read-only, so one per kit serves all."""
         if self.zero < 0:
             self.zero = self.zeros(1, 1)
         return self.zero
-
-    def entry(self, name: String) raises -> PythonObject:
-        return neural_descriptor_entry(self.b, name)
-
-    def _hot(mut self, name: String) raises -> PythonObject:
-        # The kit's own kernel ops resolve each binding entry once per kit
-        # (one descriptor admission), not once per op; a refusal is raised at
-        # first use exactly as `entry` raises it.
-        if name in self.handles:
-            return self.handles[name]
-        var handle = neural_descriptor_entry(self.b, name)
-        self.handles[name] = handle
-        return handle
-
-    def has(self, name: String) raises -> Bool:
-        """`_Kit._opt_dev(name)`."""
-        return self.resident and neural_descriptor_entry(self.b, name, False) is not None
 
     def close(mut self):
         """Return every device buffer this call allocated to the pool."""
@@ -164,10 +140,23 @@ struct LinKit(Movable):
                 pass
         self.allocations.clear()
 
-    def add(mut self, host: PythonObject, rows: Int, cols: Int, device: Int = -1) -> Int:
+    def add(mut self, store: Int, rows: Int, cols: Int, device: Int = -1) -> Int:
+        if store >= 0:
+            self.stores[store].references += 1
         var result = len(self.matrices)
-        self.matrices.append(KitMatrix(host, device, rows, cols))
+        self.matrices.append(KitMatrix(store, device, rows, cols))
         return result
+
+    def _release_store(mut self, a: Int):
+        # A matrix that moved to the device drops its host store; the words go
+        # when no view (reshape) still reads them, as the Python `_M` dropped
+        # its array.
+        var store = self.matrices[a].store
+        if store >= 0:
+            self.stores[store].references -= 1
+            if self.stores[store].references == 0:
+                self.stores[store].words = List[Float32]()
+            self.matrices[a].store = -1
 
     def n(self, a: Int) -> Int:
         return self.matrices[a].rows * self.matrices[a].cols
@@ -181,81 +170,48 @@ struct LinKit(Movable):
     def on_device(self, a: Int) -> Bool:
         return self.matrices[a].device >= 0
 
-    def zeros(mut self, rows: Int, cols: Int) raises -> Int:
-        """`_M.zeros(rows, cols)` (one spare word keeps an empty matrix's
-        address valid, as `_M._one` did)."""
-        var host = admitted_zeros([max(rows * cols, 1)], "<f4", self.context).keep
-        return self.add(host, rows, cols)
+    def zeros(mut self, rows: Int, cols: Int) -> Int:
+        """`_M.zeros(rows, cols)`."""
+        var store = len(self.stores)
+        self.stores.append(KitStore(rows * cols))
+        return self.add(store, rows, cols)
 
-    def borrow(mut self, keep: PythonObject, addr: Int, rows: Int, cols: Int) raises -> Int:
+    def borrow(mut self, addr: Int, rows: Int, cols: Int) -> Int:
         """`_xd_matrix` without the copy (row N293): a host matrix that reads
-        the admitted C-order float32 buffer at `addr` in place; `keep` (the
-        admission's owner) is retained with the matrix. A resident operation
-        uploads straight from `addr`."""
-        var out = self.add(PythonObject(None), rows, cols)
-        self.matrices[out].borrowed = addr
-        self.matrices[out].keep = keep
+        the admitted C-order float32 buffer at `addr` in place (the door keeps
+        its owner alive). A resident operation uploads straight from `addr`."""
         if rows * cols == 0 or addr == 0:
-            # an empty operand keeps of_buffer's owned spare word
-            self.matrices[out].borrowed = 0
-            self.matrices[out].keep = PythonObject(None)
-            self.matrices[out].host = admitted_zeros([max(rows * cols, 1)], "<f4", self.context).keep
-        return out
-
-    def of_buffer(mut self, addr: Int, rows: Int, cols: Int) raises -> Int:
-        """`_xd_matrix`: a host copy of a C-order float32 buffer."""
-        var out = self.zeros(rows, cols)
-        if rows * cols:
-            unsafe_memcpy(dest=self.ptr(out), src=KIT_F32P(unsafe_from_address=addr), count=rows * cols)
-            _ = out  # keep the Python object alive through the native call above
+            # an empty operand keeps an owned spare word
+            return self.zeros(rows, cols)
+        var out = self.add(-1, rows, cols)
+        self.matrices[out].borrowed = addr
         return out
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
         """`_Kit._dout`."""
         var handle = self.dcall(XD_DEV_ALLOC, [max(rows * cols, 1)])
         self.allocations.append(handle)
-        return self.add(PythonObject(None), rows, cols, handle)
+        return self.add(-1, rows, cols, handle)
 
-    def host(mut self, a: Int) raises -> PythonObject:
-        """`_M.s`: the host store, downloading a device matrix once (it moves)."""
-        if self.matrices[a].host is None:
+    def addr(mut self, a: Int) raises -> Int:
+        """`_M.s`: the host address of matrix a's words, downloading a device
+        matrix once (it moves)."""
+        if self.matrices[a].borrowed != 0 and self.matrices[a].device < 0:
+            return self.matrices[a].borrowed
+        if self.matrices[a].store < 0:
             var count = self.n(a)
-            var result = admitted_zeros([max(count, 1)], "<f4", self.context).keep
-            if self.matrices[a].borrowed != 0 and self.matrices[a].device < 0:
-                # a borrowed matrix asked for its owned store (no kit path
-                # does today): one copy of the admitted words, as of_buffer made
-                if count:
-                    unsafe_memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))),
-                           src=KIT_F32P(unsafe_from_address=self.matrices[a].borrowed), count=count)
-                self.matrices[a].borrowed = 0
-                self.matrices[a].keep = PythonObject(None)
-                self.matrices[a].host = result
-                return result
+            var store = len(self.stores)
+            self.stores.append(KitStore(count))
             if count:
-                _ = kit_call(self.xd(), XD_DEV_DOWNLOAD, [Int(py=classical_address(result))],
-                             [self.matrices[a].device, count], List[Float64](), True)
-                _ = result  # keep the Python object alive through the native call above
-            self.matrices[a].host = result
+                _ = self.hcall(XD_DEV_DOWNLOAD, [Int(self.stores[store].words.unsafe_ptr())],
+                               [self.matrices[a].device, count])
+            self.stores[store].references = 1
+            self.matrices[a].store = store
             self.matrices[a].device = -1
-        return self.matrices[a].host
+        return Int(self.stores[self.matrices[a].store].words.unsafe_ptr())
 
     def ptr(mut self, a: Int) raises -> KIT_F32P:
-        if self.matrices[a].borrowed != 0 and self.matrices[a].device < 0:
-            return KIT_F32P(unsafe_from_address=self.matrices[a].borrowed)
-        var owner = self.host(a)
-        var p = KIT_F32P(unsafe_from_address=Int(py=classical_address(owner)))
-        _ = owner  # keep the Python object alive through the native call above
-        _ = owner^
-        return p
-
-    def address(mut self, a: Int) raises -> PythonObject:
-        if self.matrices[a].borrowed != 0 and self.matrices[a].device < 0:
-            return PythonObject(self.matrices[a].borrowed)
-        var owner = self.host(a)
-        var result = classical_address(owner)
-        _ = owner  # keep the Python object alive through the native call above
-        _ = owner^
-        return result
+        return KIT_F32P(unsafe_from_address=self.addr(a))
 
     def device(mut self, a: Int) raises -> Int:
         """`_Kit._did`: the device id, uploading a host matrix (it moves)."""
@@ -263,59 +219,25 @@ struct LinKit(Movable):
             var count = self.n(a)
             var handle = self.dcall(XD_DEV_ALLOC, [max(count, 1)])
             self.allocations.append(handle)
-            if self.matrices[a].borrowed != 0:
-                # straight from the admitted buffer (row N293)
-                if count:
-                    _ = kit_call(self.xd(), XD_DEV_UPLOAD, [self.matrices[a].borrowed], [handle, count],
-                                 List[Float64](), True)
-                _ = self.matrices[a].keep  # keep the admitted owner alive through the upload above
-                self.matrices[a].borrowed = 0
-                self.matrices[a].keep = PythonObject(None)
-            else:
-                var owner = self.host(a)
-                if count:
-                    _ = kit_call(self.xd(), XD_DEV_UPLOAD, [Int(py=classical_address(owner))], [handle, count],
-                                 List[Float64](), True)
-                    _ = owner  # keep the Python object alive through the native call above
-                _ = owner^
+            if count:
+                # straight from the admitted buffer (row N293) or the store
+                var source = self.addr(a)
+                _ = self.hcall(XD_DEV_UPLOAD, [source], [handle, count])
+            self.matrices[a].borrowed = 0
+            self._release_store(a)
             self.matrices[a].device = handle
-            self.matrices[a].host = PythonObject(None)
         return self.matrices[a].device
-
-    def out(mut self, a: Int) raises -> PythonObject:
-        """`_M.out()`: a public float32 Array (C order) of the matrix."""
-        var rows = self.r(a)
-        var cols = self.c(a)
-        var result = admitted_zeros([rows, cols], "<f4", self.context).keep
-        if rows * cols:
-            unsafe_memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
-                   count=rows * cols)
-            _ = result  # keep the Python object alive through the native call above
-        return result
-
-    def out_vector(mut self, a: Int, length: Int) raises -> PythonObject:
-        """`_M.out((length,))`."""
-        var result = admitted_zeros([length], "<f4", self.context).keep
-        if length:
-            unsafe_memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
-                   count=length)
-            _ = result  # keep the Python object alive through the native call above
-        return result
 
     def constant(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
         """`_M.of([value] * (rows * cols), rows, cols)` / `_Kit.const`."""
         var out = self.zeros(rows, cols)
         tsqr_fill_constant(self.ptr(out), rows * cols, value)
-        _ = out  # keep the Python object alive through the native call above
         return out
 
-    def reshape(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
+    def reshape(mut self, a: Int, rows: Int, cols: Int) -> Int:
         """`_M.reshape`: the same words (a view of the same store or buffer)."""
-        var host = self.matrices[a].host
-        var device = self.matrices[a].device
-        var out = self.add(host, rows, cols, device)
+        var out = self.add(self.matrices[a].store, rows, cols, self.matrices[a].device)
         self.matrices[out].borrowed = self.matrices[a].borrowed
-        self.matrices[out].keep = self.matrices[a].keep
         return out
 
     def _mode(self, a: Int, x: Int) -> Int:
@@ -358,7 +280,7 @@ struct LinKit(Movable):
             var pb = self.addr(ib)
             var pc = self.addr(ic)
             var po = self.addr(out)
-            # every owner sits in self.matrices, alive through the call
+            # every store sits in self.stores, alive through the call
             _ = self.hcall(XD_EW, [pa, pb, pc, po], words, scalar)
         return out
 
@@ -406,11 +328,7 @@ struct LinKit(Movable):
         """`_Kit.total(A).s[0]`: rows ascending, then the row sums ascending."""
         var rows = self._sum(a, False)
         var t = self._sum(rows, True)
-        var _keep_ret_t_r279 = self.ptr(t)[0]
-        _ = t  # keep the Python object alive through the native call above
-        var _keep_ret_t = _keep_ret_t_r279^
-        _ = t  # keep the Python object alive through the native call above
-        return _keep_ret_t^
+        return self.ptr(t)[0]
 
     def move(mut self, a: Int, idx: Int, rows: Int, cols: Int, words: List[Int], resident: Bool) raises -> Int:
         """A move into a fresh rows x cols output; words = [op, count, a1,
@@ -450,16 +368,13 @@ struct LinKit(Movable):
         if self.on_device(a) and width and rows * width > 0 and rows < F32_INDEX_MAX and cols < F32_INDEX_MAX:
             var idx = self.zeros(1, width)
             var p = self.ptr(idx)
-            _ = idx  # keep the Python object alive through the native call above
             for t in range(width):  # driver-loop: over the selected column indices (matrix columns)
                 p[t] = Float32(start + t)
-                _ = idx  # keep the Python object alive through the native call above
             return self.move(a, idx, rows, width, [MV_TAKE_COLS, rows * width, width, cols, 0, 0, 0, rows * cols,
                                                    rows * width, width], True)
         var out = self.zeros(rows, width)
         if rows * width:
             tsqr_copy_columns(self.ptr(a), self.ptr(out), rows, cols, start, width)
-            _ = out  # keep the Python object alive through the native call above
         return out
 
     def transpose(mut self, a: Int) raises -> Int:
@@ -500,11 +415,7 @@ struct LinKit(Movable):
         var index = a
         if self.on_device(a) and self.n(a) > 1:
             index = self.strided(a, 1, 1)
-        var _keep_ret_index_r363 = self.ptr(index)[0]
-        _ = index  # keep the Python object alive through the native call above
-        var _keep_ret_index = _keep_ret_index_r363^
-        _ = index  # keep the Python object alive through the native call above
-        return _keep_ret_index^
+        return self.ptr(index)[0]
 
     def order(mut self, a: Int) raises -> Int:
         """`_Kit.order(A)`: the stable ascending order (ties to the lower
@@ -516,21 +427,19 @@ struct LinKit(Movable):
             # `_refuse_nan`: the max is NaN when any value is
             var maximum = self.device_output(1, 1)
             var da = self.device(a)
-            _ = family_call(self._hot("x_decomp_dev_reduce"), PythonObject(da), PythonObject(self.matrices[maximum].device),
-                            Python.list(PythonObject(n), PythonObject(1)))
+            _ = self.dcall(XD_DEV_REDUCE, [da, self.matrices[maximum].device, n, 1])
             var v = self.word(maximum)
             if v != v:
                 raise Error("x_decomp: a NaN has no order (refused)")
             var out = self.device_output(n, 1)
             var count = self.device_output(1, 1)
-            _ = family_call(self._hot("x_decomp_dev_order_f"), PythonObject(da), PythonObject(da),
-                            PythonObject(self.matrices[out].device), PythonObject(self.matrices[count].device),
-                            Python.list(PythonObject(n), PythonObject(0), PythonObject(0)))
+            _ = self.dcall(XD_DEV_ORDER, [da, da, self.matrices[out].device, self.matrices[count].device, n, 0, 0])
             return out
         var out = self.zeros(n, 1)
         if n:
-            _ = family_call(self._hot("x_decomp_order_f"), self.address(a), PythonObject(n), self.address(out))
-            _ = out  # keep the Python object alive through the native call above
+            var pa = self.addr(a)
+            var po = self.addr(out)
+            _ = self.hcall(XD_ORDER, [pa, po], [n])
         return out
 
     def order_small(mut self, a: Int) raises -> Int:
@@ -539,13 +448,13 @@ struct LinKit(Movable):
         if n and self.resident:
             var out = self.device_output(n, 1)
             var da = self.device(a)
-            _ = family_call(self._hot("x_decomp_dev_order_small"), PythonObject(da),
-                            PythonObject(self.matrices[out].device), Python.list(PythonObject(n)))
+            _ = self.dcall(XD_DEV_ORDER_SMALL, [da, self.matrices[out].device, n])
             return out
         var out = self.zeros(n, 1)
         if n:
-            _ = family_call(self._hot("x_decomp_order_small"), self.address(a), self.address(out), Python.list(PythonObject(n)))
-            _ = out  # keep the Python object alive through the native call above
+            var pa = self.addr(a)
+            var po = self.addr(out)
+            _ = self.hcall(XD_ORDER_SMALL, [pa, po], [n])
         return out
 
     def take_cols_m(mut self, a: Int, idx: Int, w: Int) raises -> Int:
@@ -599,7 +508,6 @@ struct LinKit(Movable):
         var out = self.zeros(rows, cols)
         if rows * cols:
             unsafe_memcpy(dest=self.ptr(out), src=self.ptr(a), count=rows * cols)
-            _ = out  # keep the Python object alive through the native call above
         return out
 
     def geqrf(mut self, a: Int, mut tau: Int) raises -> Int:
@@ -607,17 +515,18 @@ struct LinKit(Movable):
         var h = self.copy(a)
         var kk = min(self.r(a), self.c(a))
         tau = self.zeros(1, kk)
-        _ = family_call(self._hot("x_decomp_geqrf"), self.address(h), self.address(tau),
-                        Python.list(PythonObject(self.r(a)), PythonObject(self.c(a))))
-        _ = h  # keep the Python object alive through the native call above
+        var ph = self.addr(h)
+        var pt = self.addr(tau)
+        _ = self.hcall(XD_GEQRF, [ph, pt], [self.r(a), self.c(a)])
         return h
 
     def orgqr(mut self, h: Int, tau: Int, qc: Int) raises -> Int:
         """`_Kit.orgqr(h, tau, qc)`."""
         var q = self.zeros(self.r(h), qc)
-        _ = family_call(self._hot("x_decomp_orgqr"), self.address(h), self.address(tau), self.address(q),
-                        Python.list(PythonObject(self.r(h)), PythonObject(self.c(h)), PythonObject(self.c(tau)), PythonObject(qc)))
-        _ = q  # keep the Python object alive through the native call above
+        var ph = self.addr(h)
+        var pt = self.addr(tau)
+        var pq = self.addr(q)
+        _ = self.hcall(XD_ORGQR, [ph, pt, pq], [self.r(h), self.c(h), self.c(tau), qc])
         return q
 
     def eigh(mut self, a: Int, uplo: Int, mut v: Int) raises -> Int:
@@ -625,14 +534,15 @@ struct LinKit(Movable):
         var n = self.r(a)
         var w = self.zeros(1, n)
         v = self.zeros(n, n)
-        var params = Python.list(PythonObject(n), PythonObject(uplo))
         # TOMBSTONE: the device-resident x_decomp_dev_eigh branch (dead code: both callers,
         # linalg_ops_decomp `_lin_eigh` and `svd(hermitian=True)`, pass a freshly borrowed host
         # matrix, so `on_device(a)` was never true) deleted 2026-11-09 by f2b6b13bd3; code recoverable
         # at f2b6b13bd3^.
         # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
-        _ = family_call(self._hot("x_decomp_eigh"), self.address(a), self.address(w), self.address(v), params)
-        _ = w  # keep the Python object alive through the native call above
+        var pa = self.addr(a)
+        var pw = self.addr(w)
+        var pv = self.addr(v)
+        _ = self.hcall(XD_EIGH, [pa, pw, pv], [n, uplo])
         return w
 
     def svd(mut self, a: Int, mut vt: Int) raises -> Int:
@@ -641,16 +551,16 @@ struct LinKit(Movable):
         var n = self.c(a)
         var s = self.zeros(1, n)
         var v = self.zeros(n, n)
-        var params = Python.list(PythonObject(m), PythonObject(n))
-        if m >= n and n >= 1 and self.has("x_decomp_dev_svd") and self.resident:
+        if m >= n and n >= 1 and self.dev_svd:
             var da = self.device(a)
-            _ = family_call(self._hot("x_decomp_dev_svd"), PythonObject(da), self.address(s), self.address(v), params)
-            _ = v  # keep the Python object alive through the native call above
-            _ = s  # keep the Python object alive through the native call above
+            var ps = self.addr(s)
+            var pv = self.addr(v)
+            _ = self.call(XD_DEV_SVD, [ps, pv], [da, m, n], List[Float64]())
         else:
-            _ = family_call(self._hot("x_decomp_svd"), self.address(a), self.address(s), self.address(v), params)
-            _ = v  # keep the Python object alive through the native call above
-            _ = s  # keep the Python object alive through the native call above
+            var pa = self.addr(a)
+            var ps = self.addr(s)
+            var pv = self.addr(v)
+            _ = self.hcall(XD_SVD, [pa, ps, pv], [m, n])
         # descending, ties to the lower index: the stable ascending order of -s
         var negated = self.ew(OP_SCALE, s, scalar=-1.0)
         var o = self.order(negated)
@@ -666,20 +576,95 @@ struct LinKit(Movable):
         var rows = self.r(a)
         var cols = self.c(a)
         diag = self.zeros(1, cols)
-        var params = Python.list(PythonObject(rows), PythonObject(cols))
         if rows * cols and self.resident:
             var q = self.device_output(rows, cols)
             var da = self.device(a)
-            _ = family_call(self._hot("x_decomp_dev_orth_diag"), PythonObject(da), PythonObject(self.matrices[q].device),
-                            self.address(diag), params)
+            var pd = self.addr(diag)
+            _ = self.call(XD_DEV_ORTH_DIAG, [pd], [da, self.matrices[q].device, rows, cols], List[Float64]())
             return q
         var q = self.copy(a)
-        _ = family_call(self._hot("x_decomp_orth_diag"), self.address(q), self.address(diag), params)
-        _ = q  # keep the Python object alive through the native call above
+        var pq = self.addr(q)
+        var pd = self.addr(diag)
+        _ = self.hcall(XD_ORTH_DIAG, [pq, pd], [rows, cols])
         return q
+
+    def rank_above(mut self, s: Int, n: Int, rtol: Float64) raises -> Int:
+        """How many of the n singular values at s are > 0 and > s[0] * rtol
+        (x_decomp/api.mojo `rank_above_run`)."""
+        var ps = self.addr(s)
+        return self.call(XD_RANK, [ps], [n], [rtol])
 
     def eye(mut self, rows: Int, cols: Int) raises -> Int:
         var out = self.zeros(rows, cols)
         tsqr_fill_eye(self.ptr(out), rows, cols)
-        _ = out  # keep the Python object alive through the native call above
         return out
+
+
+def lin_svd_tall_run(mut kit: LinKit, a: Int, full: Bool, rtol: Float64, mut s_out: Int, mut vt_out: Int) raises -> Int:
+    """`_svd_tall(k, A, full)`: (U, S, Vt) of a tall A; returns U. `rtol` is
+    the module's `_SVD_NULL_RTOL_MODULE`, read by the door's UNPACK."""
+    var m = kit.r(a)
+    var n = kit.c(a)
+    var vt = 0
+    var s = kit.svd(a, vt)
+    s_out = s
+    vt_out = vt
+    var r = 0
+    if n:
+        # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_run)
+        r = kit.rank_above(s, n, rtol)
+    var av = kit.mm(a, vt, tb=True)
+    var num = kit.take_cols(av, 0, r) if r < n else av
+    var den = kit.take_cols(s, 0, r) if r < n else s
+    var ug = kit.ew(OP_DIV, num, den)
+    var width = m if full else n
+    if r == n and width == n:
+        var d = 0
+        var qo = kit.orth_diag(ug, d)
+        var zero = kit.zeros(1, 1)
+        var magnitude = kit.ew(OP_ABS, d)
+        var guarded = kit.ew(OP_LE, magnitude, zero)
+        if kit.total_word(guarded) == 0:
+            var column_signs = kit.neg_signs(d)
+            return kit.ew(OP_MUL, qo, column_signs)
+    if r == 0:
+        return kit.eye(m, width)
+    var tau = 0
+    var h = kit.geqrf(ug, tau)
+    var qc = kit.orgqr(h, tau, width)
+    var diagonal = kit.strided(h, r, r + 1, 0)
+    var sg = kit.neg_signs(diagonal)
+    if width > r:
+        var trailing = kit.constant(1.0, 1, width - r)
+        sg = kit.hstack2(sg, trailing)
+    return kit.ew(OP_MUL, qc, sg)
+
+
+def lin_svd_hermitian_run(mut kit: LinKit, m: Int, rows: Int, mut s_out: Int, mut vt_out: Int) raises -> Int:
+    """`svd(a, hermitian=True)` of the square matrix m: returns U; S and Vt
+    through the out words."""
+    var v = 0
+    var w = kit.eigh(m, 1, v)
+    # numpy: argsort(|w|) (ascending) reversed, so equal magnitudes come
+    # higher index first: the stable ascending order of -|w| read back
+    # to front, on the kit
+    var rev = kit.zeros(1, rows)
+    var rp = kit.ptr(rev)
+    for t in range(rows):  # driver-loop: over the index table n-1 .. 0 (matrix columns)
+        rp[t] = Float32(rows - 1 - t)
+    var wr = kit.take_cols_m(w, rev, rows)
+    var wr_abs = kit.ew(OP_ABS, wr)
+    var keys = kit.ew(OP_SCALE, wr_abs, scalar=-1.0)
+    var o = kit.order_small(keys)
+    var o_row = kit.reshape(o, 1, rows)
+    var o_neg = kit.ew(OP_SCALE, o_row, scalar=-1.0)
+    var order = kit.ew(OP_ADDS, o_neg, scalar=Float64(rows - 1))
+    var w_abs = kit.ew(OP_ABS, w)
+    s_out = kit.take_cols_m(w_abs, order, rows)
+    var u = kit.take_cols_m(v, order, rows)
+    var ut = kit.transpose(u)
+    var w_ordered = kit.take_cols_m(w, order, rows)
+    var w_signs = kit.neg_signs(w_ordered)
+    var signs = kit.reshape(w_signs, rows, 1)
+    vt_out = kit.ew(OP_MUL, ut, signs)
+    return u

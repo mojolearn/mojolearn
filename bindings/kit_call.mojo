@@ -21,8 +21,9 @@
 # descriptor families.
 from std.python import PythonObject
 from providers.python.neural_descriptor_pyapi import (
-    neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute,
+    neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, NeuralDescriptorProvider,
 )
+from core.entry_table import EntryRef, entry_ref_word
 from providers.python.compiled_binding_snapshot_pyapi import (
     CompiledBindingSnapshot, compiled_binding_retained, compiled_binding_retain,
 )
@@ -68,3 +69,19 @@ def kit_call(provider: PythonObject, operation: Int, addresses: List[Int], ints:
     enqueue-only device operations (ew, gemm, move, ...) touch the shared
     device pool and kept it, so they keep it."""
     return neural_descriptor_execute(provider, operation, addresses, ints, floats, release_gil)
+
+
+#: The vendor byte of a kit's EntryRef word: the kit snapshot records the
+#: image's tier and capabilities, not its vendor, and no kit reads it.
+comptime KIT_VENDOR_UNRECORDED = 0xFF
+
+
+def kit_entry_ref(snapshot: PythonObject, operation_count: Int) raises -> EntryRef:
+    """UNPACK: the admitted snapshot's dispatch as a typed `EntryRef`, so a
+    typed kit (RUN) calls the image with plain words and holds no Python
+    object (lane entangled-kits, 2026-11-12). The image is never unloaded, so
+    the pointer outlives the call."""
+    var provider = kit_provider(snapshot)
+    var call = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    _ = provider  # keep the provider alive through the read above
+    return EntryRef(call, entry_ref_word(kit_mode(snapshot), KIT_VENDOR_UNRECORDED, operation_count))

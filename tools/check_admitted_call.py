@@ -205,7 +205,6 @@ DEBT = {
     'bindings/linalg_native.mojo': {'native_loaded_module': 4},
     'bindings/linalg_ops_buffers.mojo': {'native_loaded_module': 1},
     'bindings/linalg_ops_decomp.mojo': {'native_loaded_module': 2},
-    'bindings/linalg_ops_kit.mojo': {'native_loaded_module': 1},
     'bindings/linalg_ops_lowbit.mojo': {'native_loaded_module': 6},
     'bindings/linalg_ops_resample.mojo': {'native_loaded_module': 10},
     'bindings/linear_constructor_native.mojo': {'native_loaded_module': 2},

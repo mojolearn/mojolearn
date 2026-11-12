@@ -117,10 +117,18 @@ comptime XD_LU_GESV = 66          # a: [a, b, info] i: [n, nrhs]
 comptime XD_DEV_LU_FACTOR = 67    # a: [a, lu, piv(int32), info] i: [ia, ilu, ipv, n]   (LU_RESIDENT_ENTRIES)
 comptime XD_DEV_LU_SOLVE = 68     # a: [b, x] i: [ilu, ipv, ia, n, nrhs, refine]        (LU_RESIDENT_ENTRIES)
 comptime XD_RANDOMIZED_SVD = 69   # a: [x, u, s, vt] i: [rows, cols, nc, oversamples, iterations, auto, transpose, flip_sign, seed, deferred]
-comptime XD_OPERATION_COUNT = 70
+# lane entangled-kits (2026-11-12): the order_small doors the linalg kit
+# (bindings/linalg_ops_kit_run.mojo) called as Python entries
+# (`x_decomp_order_small`, `x_decomp_dev_order_small`), appended.
+comptime XD_ORDER_SMALL = 70      # a: [x, dst] i: [n]
+comptime XD_DEV_ORDER_SMALL = 71  # i: [x, dst, n]
+comptime XD_OPERATION_COUNT = 72
 
 comptime XD_CAP_HOST = 1       # the host-address operations
 comptime XD_CAP_RESIDENT = 2   # the device-resident operations
+# The image registers `x_decomp_dev_svd` (IDN_SVD_RESIDENT): the kits read
+# this bit instead of probing the module namespace for the entry.
+comptime XD_CAP_DEV_SVD = 4
 
 # x_decomp/cells.mojo and moves.mojo codes the fused operation uses (the same
 # values bindings/mani_kit.mojo spells as OP_* / MV_*).
@@ -250,6 +258,10 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (2, 6, 0)
     if op == XD_RANDOMIZED_SVD:
         return (4, 10, 0)
+    if op == XD_ORDER_SMALL:
+        return (2, 1, 0)
+    if op == XD_DEV_ORDER_SMALL:
+        return (0, 3, 0)
     raise Error("x_decomp native ABI: unknown operation " + String(op))
 
 
