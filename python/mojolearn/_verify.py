@@ -91,6 +91,11 @@ DEVIATIONS RECORDED BY THIS FILE
 portable conformance bundle; docs/CONFORMANCE.md is its document.
 """
 
+# Verify runs on the loaded set the package had before lazy family import:
+# every family and every unit (lane lazy-family-import), however it is
+# entered (`python -m mojolearn verify`, or a tool importing this module).
+from . import _families as _verify_families
+_verify_families.load_all()
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 import hashlib
