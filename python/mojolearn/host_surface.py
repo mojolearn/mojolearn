@@ -3220,7 +3220,7 @@ FAMILIES = (
         classes=("Embedding",),
         display="the Embedding layer",
         host_modules=(
-            "embedding/host/embedding_host.mojo",
+            "embedding/host/embedding_host.mojo", "embedding/host/embedding_host_words_run.mojo",
             "embedding/checks/embedding_oracle.mojo",
         ),
         exports=(
@@ -3258,7 +3258,7 @@ FAMILIES = (
         display="Embedding lookup in a saved table",
         host_modules=(
             "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward.mojo",
-            "embedding/checks/embedding_oracle.mojo",
+            "embedding/host/embedding_host_words_run.mojo", "embedding/checks/embedding_oracle.mojo",
         ),
         exports=(
             "embedding_infer_host_numeric_mode", "embedding_infer_host_vendor",

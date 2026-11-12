@@ -13,7 +13,8 @@ it in favor of weak promotion:
 https://numpy.org/doc/2.3/release/2.2.0-notes.html#nep-50-promotion-state-option-removed
 """
 from std.python import Python, PythonObject
-from std.math import isfinite
+# RUN (lane rs-embedding-bytelm): the typed floating product, no Python import.
+from training.lm_corpus_scalars_run import corpus_floating_product
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_scalar_promotion import native_scalar_weak_promotion
@@ -42,34 +43,7 @@ def _integer_base(step: PythonObject, batch: Int, length: Int,
 def _floating_base(step: PythonObject, batch: Int, length: Int, width: Int) raises -> Int:
     var bi = native_loaded_module("builtins")
     var value = Float64(py=py_call(bi.float, step))
-    if not isfinite(value):
-        raise Error("ValueError: corpus step multiplication requires a finite native scalar")
-    var result: Float64
-    if width == 2:
-        # NumPy half scalar multiplication rounds each Float32 product back
-        # to Float16 before using that scalar in the following multiplication.
-        var left = Float16(value)
-        var row_count = Float16(batch)
-        var row_length = Float16(length)
-        if not isfinite(Float32(row_count)) or not isfinite(Float32(row_length)):
-            raise Error("ValueError: corpus dimensions overflow NumPy float16 promotion")
-        var first = Float16(Float32(left) * Float32(row_count))
-        var product = Float16(Float32(first) * Float32(row_length))
-        if not isfinite(Float32(first)) or not isfinite(Float32(product)):
-            raise Error("ValueError: corpus step multiplication overflows NumPy float16")
-        result = Float64(product)
-    elif width == 4:
-        var first = Float32(value) * Float32(batch)
-        var product = first * Float32(length)
-        if not isfinite(first) or not isfinite(product):
-            raise Error("ValueError: corpus step multiplication overflows NumPy float32")
-        result = Float64(product)
-    else:
-        var first = value * Float64(batch)
-        var product = first * Float64(length)
-        if not isfinite(first) or not isfinite(product):
-            raise Error("ValueError: corpus step multiplication overflows NumPy float64")
-        result = product
+    var result = corpus_floating_product(value, batch, length, width)
     # Conversion through an exact builtin float retains truncation toward zero
     # and CPython's checked conversion into the native signed indexing word.
     return Int(py=py_call(bi.int, PythonObject(result)))

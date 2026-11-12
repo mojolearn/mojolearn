@@ -1,0 +1,1126 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""RUN pieces of the Embedding door (bindings/_mojolearn_embedding.mojo),
+profile `mojolearn.identical.embedding.fp32.v1`: the resident table and
+scratch pools, the resident tensors, the transfers, the non-finite refusals
+on the device copies, the forward gather and backward fold runs, and the
+typed bodies the door runs with the GIL released. Typed Mojo values and
+addresses only, no Python import (tools/python_free_dirs.sh). The door
+unpacks the argument words, releases the GIL around each `*_released` call
+exactly where it did before the split, and packs the result
+(lane rs-embedding-bytelm, 2026-11-12). The bodies moved unchanged, so the
+bits are unchanged."""
+
+from std.atomic import Atomic, Ordering
+from std.sys.compile import is_defined
+from core.hostptr import f32_ptr
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.neural_context import neural_ctx
+from core.device_scan import device_first_nonfinite
+from core.staged_download import download_f32_into
+from embedding.checks.embedding_identical import (
+    identical_embedding_forward_into,
+    identical_embedding_forward_prerefused_into,
+)
+from autograd.kernels.embedding import (
+    identical_embedding_backward_into,
+    identical_embedding_backward_prerefused_into,
+)
+#: lane afn-mlp (2026-10-03): the Apple FAST atomic backward, compiled only
+#: under FAST + Apple + `-D MOJOLEARN_AFN_EMB_ATOMIC_BWD`; every other build
+#: runs the paths below unchanged (embedding/checks/embedding_fast_apple.mojo).
+from embedding.checks.embedding_fast_apple import (
+    EMB_ATOMIC_BWD,
+    AFN26_EMB_RESIDENT,
+    AFN26_EMB_SCRATCH,
+    fast_embedding_backward_into,
+    fast_embedding_forward_into,
+)
+from sequence.ops import FP
+from sequence.exec_device import DeviceExec
+from autograd.embedding_ops import AG_EMB_PLAN_SORT, embedding_backward_into, embedding_perm_words
+from embedding.checks.embedding_oracle import (
+    EmbConfig,
+    EMB_NO_PADDING_IDX,
+    emb_refuse_ids_at,
+    nonfinite_refusal,
+)
+from core.shared_slot import SharedSlot
+
+# One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+comptime _NEURAL_CTX = "MojolearnNeuralEmbeddingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralEmbeddingContextFastV3"
+# The pinned stages of this binding's downloads (core/staged_download.mojo),
+# one pool per binding and tier like the context above.
+comptime _STAGE_POOL = "MojolearnDownloadStagesEmbeddingIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesEmbeddingFastV1"
+
+
+# ---- transfers (lane neural-pass28, 2026-10-01) ----------------------------------
+# These helpers moved every value through a pinned host buffer ONE SCALAR AT A
+# TIME in a host loop, both ways (32 million stores and 32 million reads of
+# write-combined memory per call at the board's 32,768 x 1,024 table), after
+# copying the caller's table into a list first: forward 270 ms, backward
+# 390 ms on the M4 for a gather and a scatter. Now: an upload is one raw
+# host-pointer copy (1.6-2.4 ms per 64 MB here); a download is one DMA into
+# pinned memory and a read out over host tasks (one thread reads pinned
+# memory at ~3 GB/s, four or more at 10 GB/s and more). Copies: no bit moves.
+comptime EMB_COPY_TASKS_MAX = 16
+
+# ---- per-call overhead (lane neural-pass138, 2026-10-02) ---------------------------------
+# The board's embedding cell (V = 32,768, d = 1,024, T = 32,768; one forward
+# and one dense backward) read 208 ms on the L40S against torch eager's
+# 2.2 ms. Per call this binding paid, besides the PCIe copies the host
+# contract needs (W and dY up, Y and dW down, 128 MB each):
+#   * a NEW pinned host buffer of the whole output in every download
+#     (`_download_into`: 128 MB pinned, then freed, twice per cell); on CUDA
+#     a pinned allocation of that size costs tens of ms (lane neural-pass40
+#     measured 64 MB pinned allocations dominating the L40S layernorm cell);
+#   * a host scan of all of W (forward) and all of dY (backward) for
+#     non-finite values, 128 MB of host reads each.
+# Now: downloads go through `core/staged_download.mojo::download_f32_into`
+# (two pooled pinned stages, a chunk pipeline, the copy-out over host tasks;
+# MOJOLEARN_DOWNLOAD_STAGE=0 is the raw host-pointer copy), and the non-
+# finite scan runs ON THE DEVICE over the uploaded buffer
+# (`core/device_scan.device_first_nonfinite`); only a hit pays the host
+# scan, which raises the oracle's own message for the same first index, so
+# the refusal (name, index, order: dY before the carried dW) is unchanged.
+# Copies and a read-only scan: no bit moves. (The A/B switch back to the
+# per-call pinned download and the host scans is removed, lane
+# gap-neural-overhead2.)
+
+
+# ---- resident table and pooled device scratch (lane idn-embedding, 2026-10-04) ----
+# The board's cell (V = 32,768, d = 1,024, T = 32,768) still paid, per
+# forward + backward: the whole 128 MB table uploaded and scanned for
+# non-finite values in every forward; three zero lists built on the host and
+# uploaded as the backward's run scratch, each with its own wait; a device
+# +0.0 fill of dW that the seed kernel (E0) then wrote again; the ids read
+# back from the device into a new pinned buffer and walked on the host a
+# second time in both calls; new 128 MB device buffers for Y, dW and dY in
+# every call; and the scan plan's 2 * V * T id reads. IDENTICAL tier only
+# (the FAST paths are untouched):
+#   EMB_RESIDENT (off: -D MOJOLEARN_EMB_RESIDENT_OFF). The Python layer
+#     passes a table token (a new one whenever its `weight` is assigned).
+#     The table is uploaded and scanned once per token and its device copy
+#     kept in this binding's pool; later forwards gather from that copy.
+#     The same bytes in the same kernel: no bit moves. Token 0 (or the
+#     three-value params list) is the per-call upload and scan.
+#   EMB_DEVICE_SCRATCH (off: -D MOJOLEARN_EMB_DEVICE_SCRATCH_OFF). Y, dW,
+#     dY, the ids and the run scratch (counts, run_begin, perm) are device
+#     buffers kept in the pool by size and never filled from the host: the
+#     seed kernel writes every dW cell of a fresh gradient and both plans
+#     write every scratch cell the fold reads. The uploads do not wait (the
+#     caller's arrays outlive the call on the one in-order queue), and the
+#     ids, refused on the host list before the upload, are not read back.
+#     The same kernels on the same values: no bit moves.
+#   PLAN_AUTO (embedding_identical.mojo; off: -D MOJOLEARN_EMB_AUTO_SORT_OFF).
+comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# E09-E10: not tested. FAST opts into token-owned tables and fully written
+# scratch separately; the IDENTICAL controls retain their existing policy.
+comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+#: buffers kept per element type (the oldest is retired past these)
+comptime EMB_POOL_F32_KEEP = 3
+comptime EMB_POOL_I32_KEEP = 6
+#: resident tables kept at once, one per layer token (the least recently
+#: used is retired past this). Lane p3-neural-blocks: the pool held ONE
+#: table, so two Embedding layers used in turn (token and position tables)
+#: evicted each other and every forward re-uploaded and re-scanned its
+#: table. Four covers the usual embedding stacks; a layer's table also goes
+#: when the layer is finalized or its weight is assigned.
+comptime EMB_RESIDENT_KEEP = 4
+
+
+def _emb_lock(mut lock: List[Int64]) raises:
+    """Take a pool's lock word. The pools are process globals and the
+    forward / backward entries use them with the GIL released, so two
+    Python threads could otherwise pop one buffer twice or clear a table
+    the other is reading (lane p3-neural-blocks; the pattern of
+    cluster/resident_centers.mojo). Held for one list step only, never
+    across a device call."""
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](lock.unsafe_ptr())
+    while True:  # driver-loop: spin on the pool's lock word (held for one list step only)
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, Int64(1)):
+            return
+
+
+def _emb_unlock(mut lock: List[Int64]):
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](lock.unsafe_ptr())
+    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
+
+
+struct _EmbPool(Defaultable, Movable):
+    #: the resident tables (at most EMB_RESIDENT_KEEP, most recent last)
+    #: and their keys: layer token, host address and cell count
+    var w: List[DeviceBuffer[DType.float32]]
+    var w_token: List[Int]
+    var w_addr: List[Int]
+    var w_cells: List[Int]
+    #: pooled work buffers and their element counts
+    var f: List[DeviceBuffer[DType.float32]]
+    var f_n: List[Int]
+    var i: List[DeviceBuffer[DType.int32]]
+    var i_n: List[Int]
+    #: the lock word (see `_emb_lock`)
+    var lock: List[Int64]
+
+    def __init__(out self):
+        self.w = List[DeviceBuffer[DType.float32]]()
+        self.w_token = List[Int]()
+        self.w_addr = List[Int]()
+        self.w_cells = List[Int]()
+        self.f = List[DeviceBuffer[DType.float32]]()
+        self.f_n = List[Int]()
+        self.i = List[DeviceBuffer[DType.int32]]()
+        self.i_n = List[Int]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+
+
+comptime _EMB_POOL_NAME = "MojolearnEmbeddingResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEmbeddingResidentFastV1"
+comptime _EMB_POOL = SharedSlot[_EmbPool, _EMB_POOL_NAME]
+
+
+def _pool_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A device buffer of exactly max(n, 1) floats, contents unspecified:
+    the pooled one of that size, else a new one."""
+    var nb = n if n > 0 else 1
+    var pool = _EMB_POOL.get_or_create_ptr()
+    var got = List[DeviceBuffer[DType.float32]]()
+    _emb_lock(pool[].lock)
+    for k in range(len(pool[].f_n)):  # small-loop(f_n: pooled buffer sizes, at most EMB_POOL_F32_KEEP): buffer pool lookup, not data
+        if pool[].f_n[k] == nb:
+            _ = pool[].f_n.pop(k)
+            got.append(pool[].f.pop(k))
+            break
+    _emb_unlock(pool[].lock)
+    if len(got) > 0:
+        return got.pop()
+    return ctx.enqueue_create_buffer[DType.float32](nb)
+
+
+def _give_f32(var buf: DeviceBuffer[DType.float32], n: Int) raises:
+    var pool = _EMB_POOL.get_or_create_ptr()
+    var retired = List[DeviceBuffer[DType.float32]]()
+    _emb_lock(pool[].lock)
+    if len(pool[].f) >= EMB_POOL_F32_KEEP:
+        _ = pool[].f_n.pop(0)
+        retired.append(pool[].f.pop(0))
+    pool[].f.append(buf^)
+    pool[].f_n.append(n if n > 0 else 1)
+    _emb_unlock(pool[].lock)
+    _ = retired^
+
+
+def _pool_i32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.int32]:
+    """`_pool_f32` for int32."""
+    var nb = n if n > 0 else 1
+    var pool = _EMB_POOL.get_or_create_ptr()
+    var got = List[DeviceBuffer[DType.int32]]()
+    _emb_lock(pool[].lock)
+    for k in range(len(pool[].i_n)):  # small-loop(i_n: pooled buffer sizes, at most EMB_POOL_I32_KEEP): buffer pool lookup, not data
+        if pool[].i_n[k] == nb:
+            _ = pool[].i_n.pop(k)
+            got.append(pool[].i.pop(k))
+            break
+    _emb_unlock(pool[].lock)
+    if len(got) > 0:
+        return got.pop()
+    return ctx.enqueue_create_buffer[DType.int32](nb)
+
+
+def _give_i32(var buf: DeviceBuffer[DType.int32], n: Int) raises:
+    var pool = _EMB_POOL.get_or_create_ptr()
+    var retired = List[DeviceBuffer[DType.int32]]()
+    _emb_lock(pool[].lock)
+    if len(pool[].i) >= EMB_POOL_I32_KEEP:
+        _ = pool[].i_n.pop(0)
+        retired.append(pool[].i.pop(0))
+    pool[].i.append(buf^)
+    pool[].i_n.append(n if n > 0 else 1)
+    _emb_unlock(pool[].lock)
+    _ = retired^
+
+
+def _table_slot(pool_w_token: List[Int], token: Int) -> Int:
+    """The index of `token`'s resident table, or -1."""
+    for k in range(len(pool_w_token)):  # small-loop(pool_w_token: resident table tokens, at most EMB_RESIDENT_KEEP): table lookup, not data
+        if pool_w_token[k] == token:
+            return k
+    return -1
+
+
+def _table_take(
+    ctx: DeviceContext,
+    token: Int,
+    addr: Int,
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """The device copy of the caller's table, refused for non-finite values:
+    the resident one when (token, address, cells) match, else a new upload
+    and scan. The pool gives the buffer up for the call (`_table_give`
+    returns it), so a raise in between leaves no resident table behind.
+    The layer's stored table is read-only storage (bindings/
+    embedding_layer_native.mojo `_freeze`), so a resident copy cannot go
+    stale through an in-place write; assigning `weight` takes a new token."""
+    comptime if EMB_RESIDENT:
+        if token > 0:
+            var pool = _EMB_POOL.get_or_create_ptr()
+            var got = List[DeviceBuffer[DType.float32]]()
+            var hit = False
+            _emb_lock(pool[].lock)
+            var k = _table_slot(pool[].w_token, token)
+            if k >= 0:
+                hit = pool[].w_addr[k] == addr and pool[].w_cells[k] == n
+                _ = pool[].w_token.pop(k)
+                _ = pool[].w_addr.pop(k)
+                _ = pool[].w_cells.pop(k)
+                got.append(pool[].w.pop(k))
+            _emb_unlock(pool[].lock)
+            if hit:
+                return got.pop()
+            _ = got^
+    var d = _upload_f32_ptr(ctx, wp, n)
+    _refuse_nonfinite_device(ctx, String("W"), d, wp, n)
+    return d^
+
+
+def _table_give(var d: DeviceBuffer[DType.float32], token: Int, addr: Int, n: Int) raises:
+    comptime if EMB_RESIDENT:
+        if token > 0:
+            var pool = _EMB_POOL.get_or_create_ptr()
+            var retired = List[DeviceBuffer[DType.float32]]()
+            _emb_lock(pool[].lock)
+            # A second thread on the same layer may have given its own copy
+            # back first: keep one per token.
+            var k = _table_slot(pool[].w_token, token)
+            if k < 0 and len(pool[].w) >= EMB_RESIDENT_KEEP:
+                k = 0
+            if k >= 0:
+                _ = pool[].w_token.pop(k)
+                _ = pool[].w_addr.pop(k)
+                _ = pool[].w_cells.pop(k)
+                retired.append(pool[].w.pop(k))
+            pool[].w.append(d^)
+            pool[].w_token.append(token)
+            pool[].w_addr.append(addr)
+            pool[].w_cells.append(n)
+            _emb_unlock(pool[].lock)
+            _ = retired^
+            return
+    _ = d^
+
+
+def embedding_table_release_words(token: Int) raises -> Int:
+    """Drop the resident table of `token` (a layer that is going away or
+    whose weight was replaced). Returns 1 when one was dropped."""
+    comptime if EMB_RESIDENT:
+        var pool = _EMB_POOL.get_or_create_ptr()
+        var retired = List[DeviceBuffer[DType.float32]]()
+        _emb_lock(pool[].lock)
+        var k = _table_slot(pool[].w_token, token) if token > 0 else -1
+        if k >= 0:
+            _ = pool[].w_token.pop(k)
+            _ = pool[].w_addr.pop(k)
+            _ = pool[].w_cells.pop(k)
+            retired.append(pool[].w.pop(k))
+        _emb_unlock(pool[].lock)
+        if k >= 0:
+            _ = retired^
+            return 1
+    return 0
+
+
+def _download_out(
+    ctx: DeviceContext,
+    mut buf: DeviceBuffer[DType.float32],
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises:
+    if n > 0:
+        download_f32_into[_STAGE_POOL](ctx, buf, n, dst)
+
+
+def _refuse_nonfinite_device(
+    ctx: DeviceContext,
+    name: String,
+    mut buf: DeviceBuffer[DType.float32],
+    p: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises:
+    """The non-finite refusal of the caller's `p[0:n]`, scanned on its
+    device copy `buf`. A hit re-runs the host refusal on `p` (the same
+    bytes), so the error is the oracle's message at the same first index."""
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    nonfinite_refusal(name, idx, p.unsafe_load(idx))
+    raise Error(
+        String("embedding: the device scan found a non-finite value in ") + name
+        + " at flat index " + String(idx) + " that the host scan did not (a scan defect)"
+    )
+
+
+def _upload_f32_ptr(
+    ctx: DeviceContext, p: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """A device copy of the caller's n floats (at least one cell)."""
+    var n_buf = n if n > 0 else 1
+    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.float32](0, n), src_ptr=p)
+    else:
+        enqueue_fill(ctx, dev, Float32(0.0))
+    ctx.synchronize()
+    return dev^
+
+
+def _zero_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A device buffer of n +0.0 cells (at least one), filled on the device."""
+    var dev = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    enqueue_fill(ctx, dev, Float32(0.0))
+    ctx.synchronize()
+    return dev^
+
+
+def _upload_i32(
+    ctx: DeviceContext, values: List[Int32]
+) raises -> DeviceBuffer[DType.int32]:
+    var n = len(values)
+    var n_buf = n if n > 0 else 1
+    var dev = ctx.enqueue_create_buffer[DType.int32](n_buf)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.int32](0, n), src_ptr=values.unsafe_ptr())
+    if n_buf > n:
+        var pad = List[Int32](length=1, fill=Int32(0))
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.int32](n, 1), src_ptr=pad.unsafe_ptr())
+        ctx.synchronize()
+        _ = pad^
+    ctx.synchronize()
+    return dev^
+
+
+def _upload_i32_ptr(
+    ctx: DeviceContext, p: MutPointer[Int32, MutUntrackedOrigin], n: Int
+) raises -> DeviceBuffer[DType.int32]:
+    """`_upload_i32` from the caller's buffer (lane ne3-c-blocks-embedding,
+    row N158: the ids are no longer copied into a host list first); at
+    least one cell, a zero-position call gets one +0 word."""
+    var n_buf = n if n > 0 else 1
+    var dev = ctx.enqueue_create_buffer[DType.int32](n_buf)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.int32](0, n), src_ptr=p)
+    else:
+        var pad = List[Int32](length=1, fill=Int32(0))
+        ctx.enqueue_copy(dst_buf=dev, src_ptr=pad.unsafe_ptr())
+        ctx.synchronize()
+        _ = pad^
+    ctx.synchronize()
+    return dev^
+
+
+def _refuse_nonfinite_upload(
+    name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises:
+    """The non-finite refusal of `p[0:n]` when no run uploads it (an empty
+    output): a device copy and the device scan, as the runs do."""
+    if n <= 0:
+        return
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var d = _upload_f32_ptr(ctx, p, n)
+    _refuse_nonfinite_device(ctx, name, d, p, n)
+    _ = d^
+    _ = ctx^
+
+
+def _zeros_i32(n: Int) -> List[Int32]:
+    return List[Int32](length=n if n > 0 else 1, fill=Int32(0))
+
+
+def _config(vocab: Int, width: Int, padding_idx: Int, accumulate: Bool) raises -> EmbConfig:
+    if padding_idx != EMB_NO_PADDING_IDX and (padding_idx < 0 or padding_idx >= vocab):
+        raise Error(
+            String("embedding: padding_idx = ")
+            + String(padding_idx)
+            + " is outside [0, "
+            + String(vocab)
+            + ") REFUSED (contract 8; -1 means no padding row)"
+        )
+    return EmbConfig(vocab, width, padding_idx, accumulate)
+
+
+def _forward_run(
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    yp: MutPointer[Float32, MutUntrackedOrigin],
+    token: Int = 0,
+    w_addr: Int = 0,
+) raises:
+    var cells = n_positions * cfg.width
+    if cells <= 0:
+        return
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    comptime if EMB_ATOMIC_BWD:
+        # lane afn-mlp: the uploads do not wait (the caller's arrays outlive
+        # the call on the one in-order queue); the W scan keeps its wait;
+        # the gather; the download with the final wait. Two waits, not four.
+        # E09: not tested; token/address/extent own the cached table. A
+        # refused upload is never returned to the pool as valid state.
+        var a_w: DeviceBuffer[DType.float32]
+        comptime if AFN26_EMB_RESIDENT:
+            a_w = _table_take(ctx, token, w_addr, wp, cfg.vocab * cfg.width)
+        else:
+            a_w = ctx.enqueue_create_buffer[DType.float32](cfg.vocab * cfg.width)
+            ctx.enqueue_copy(dst_buf=a_w, src_ptr=wp)
+            _refuse_nonfinite_device(ctx, String("W"), a_w, wp, cfg.vocab * cfg.width)
+        # E10: not tested; all output/ID cells are overwritten before use.
+        var a_ids: DeviceBuffer[DType.int32]
+        var a_y: DeviceBuffer[DType.float32]
+        comptime if AFN26_EMB_SCRATCH:
+            a_ids = _pool_i32(ctx, n_positions)
+            a_y = _pool_f32(ctx, cells)
+        else:
+            a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions)
+            a_y = ctx.enqueue_create_buffer[DType.float32](cells)
+        ctx.enqueue_copy(dst_buf=a_ids, src_ptr=idsp)
+        fast_embedding_forward_into(ctx, a_y, a_w, a_ids, n_positions, cfg)
+        ctx.enqueue_copy(dst_ptr=yp, src_buf=a_y)
+        ctx.synchronize()
+        comptime if AFN26_EMB_RESIDENT:
+            _table_give(a_w^, token, w_addr, cfg.vocab * cfg.width)
+        else:
+            _ = a_w^
+        comptime if AFN26_EMB_SCRATCH:
+            _give_i32(a_ids^, n_positions)
+            _give_f32(a_y^, cells)
+        else:
+            _ = a_ids^
+            _ = a_y^
+        _ = ctx^
+        return
+    comptime if EMB_DEVICE_SCRATCH:
+        # the table (resident by token, else uploaded and scanned), the ids
+        # up without a wait, the gather into a pooled Y, the download (it
+        # waits; the ids list is the caller's and outlives this call)
+        var w_cells = cfg.vocab * cfg.width
+        var r_w = _table_take(ctx, token, w_addr, wp, w_cells)
+        var r_ids = _pool_i32(ctx, n_positions)
+        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
+        var r_y = _pool_f32(ctx, cells)
+        identical_embedding_forward_prerefused_into(ctx, r_y, r_w, r_ids, n_positions, cfg)
+        _download_out(ctx, r_y, yp, cells)
+        _table_give(r_w^, token, w_addr, w_cells)
+        _give_i32(r_ids^, n_positions)
+        _give_f32(r_y^, cells)
+        _ = ctx^
+        return
+    var d_w = _table_take(ctx, token, w_addr, wp, cfg.vocab * cfg.width)
+    var d_ids = _upload_i32_ptr(ctx, idsp, n_positions)
+    var d_y = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.synchronize()
+    identical_embedding_forward_into(ctx, d_y, d_w, d_ids, n_positions, cfg)
+    ctx.synchronize()
+    _download_out(ctx, d_y, yp, cells)
+    _table_give(d_w^, token, w_addr, cfg.vocab * cfg.width)
+    _ = d_ids^
+    _ = d_y^
+    _ = ctx^
+
+
+# Lane ag-embedding-op (2026-10-19, TAPE_EVERYWHERE path 4), default on:
+# THE IDENTICAL DEVICE BACKWARD IS THE EMBEDDING TAPE OP'S VJP. With at least
+# one position, `embedding_backward` and `embedding_backward_dev` run
+# autograd/embedding_ops.mojo embedding_backward_into on this binding's
+# buffers (the body Tape.embedding's backward runs, through a DeviceExec on
+# this context) in place of identical_embedding_backward[_prerefused]_into.
+# Bits: identical by construction (the profile's seeded ascending fold and
+# +0.0 padding row, word for word; the same resolved plan, and both plans
+# give the same runs); the gate is embedding_check's tape clause, digests
+# equal to the hand kernels'. The ids are the host list the binding already
+# refused. Launches (scan): runs 2 + fold 1, the hand scan's counts, prefix
+# and perm 3 + seed 1 + fold 1 (+ padding row 1). FAST on Apple (the atomic
+# backward) is unchanged. -D MOJOLEARN_AUTOGRAD_EMBEDDING_OFF keeps the
+# hand kernels (arm A).
+comptime AUTOGRAD_EMBEDDING = not is_defined["MOJOLEARN_AUTOGRAD_EMBEDDING_OFF"]()
+
+
+def _tape_backward(
+    ctx: DeviceContext,
+    mut dw: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    plan: Int,
+) raises:
+    """dW of the tape op's VJP (AUTOGRAD_EMBEDDING): from dW's bits when
+    cfg.accumulate, else from +0.0; `plan` resolved (PLAN_SCAN or
+    PLAN_SORT); n_positions >= 1. Waits for the queue before returning; the
+    caller keeps the three buffers alive until then."""
+    var ex = DeviceExec(ctx)
+    var begin = ex.alloc(cfg.vocab + 1)
+    var words = embedding_perm_words(plan, n_positions)
+    var perm = ex.alloc(words)
+    var keys = perm
+    if plan == AG_EMB_PLAN_SORT:
+        keys = ex.alloc(words)
+    embedding_backward_into(
+        ex,
+        FP(unsafe_from_address=Int(ids.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dy.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dw.unsafe_ptr())),
+        n_positions, cfg.vocab, cfg.width, cfg.padding_idx, cfg.accumulate, plan, begin, perm, keys,
+    )
+    ex.sync()
+
+
+def _tape_backward_pooled(
+    ctx: DeviceContext,
+    mut dw: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    plan: Int,
+) raises:
+    """`_tape_backward` on this binding's pooled run scratch (lane
+    ne3-c-blocks-embedding, row N161). The tape route used to allocate new
+    device scratch through its DeviceExec on every call (begin V + 1 words,
+    perm, and the sort's keys) while the pooled counts / begin / perm taken
+    just before went unused. Here begin, perm and (sort only) keys are
+    pooled int32 buffers of the sizes `embedding_backward_into` names, and
+    no counts buffer is taken. Every scratch word is written by a kernel
+    before any kernel reads it (scan: run_begin over [0, V], perm inside each
+    run; sort: the pack writes every padded slot), so the unspecified
+    contents of a pooled buffer move no bit. Waits before returning."""
+    var words = embedding_perm_words(plan, n_positions)
+    var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+    var r_perm = _pool_i32(ctx, words)
+    var begin = FP(unsafe_from_address=Int(r_begin.unsafe_ptr()))
+    var perm = FP(unsafe_from_address=Int(r_perm.unsafe_ptr()))
+    var has_keys = plan == AG_EMB_PLAN_SORT
+    var r_keys = _pool_i32(ctx, words if has_keys else 1)
+    var keys = perm
+    if has_keys:
+        keys = FP(unsafe_from_address=Int(r_keys.unsafe_ptr()))
+    var ex = DeviceExec(ctx)
+    embedding_backward_into(
+        ex,
+        FP(unsafe_from_address=Int(ids.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dy.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dw.unsafe_ptr())),
+        n_positions, cfg.vocab, cfg.width, cfg.padding_idx, cfg.accumulate, plan, begin, perm, keys,
+    )
+    ex.sync()
+    _ = ex^
+    # Back to the pool only after the queue drained (ex.sync).
+    _give_i32(r_begin^, cfg.vocab + 1)
+    _give_i32(r_perm^, words)
+    _give_i32(r_keys^, words if has_keys else 1)
+
+
+def _backward_run(
+    dyp: MutPointer[Float32, MutUntrackedOrigin],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    dwp: MutPointer[Float32, MutUntrackedOrigin],
+    plan: Int,
+) raises:
+    var cells = cfg.vocab * cfg.width
+    if cells <= 0:
+        return
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    comptime if EMB_ATOMIC_BWD:
+        # lane afn-mlp: dY up (no wait), its scan (one wait), the carried dW
+        # up when accumulating (no wait; else the device seed), the ids up,
+        # the scatter-add, the padding row, the download, the final wait.
+        # E10: not tested. Fresh gradients still execute the full device
+        # seed, and accumulated gradients still upload the caller's dW.
+        var a_dw: DeviceBuffer[DType.float32]
+        var a_dy: DeviceBuffer[DType.float32]
+        var a_ids: DeviceBuffer[DType.int32]
+        comptime if AFN26_EMB_SCRATCH:
+            a_dw = _pool_f32(ctx, cells)
+            a_dy = _pool_f32(ctx, n_positions * cfg.width)
+            a_ids = _pool_i32(ctx, n_positions)
+        else:
+            a_dw = ctx.enqueue_create_buffer[DType.float32](cells)
+            a_dy = ctx.enqueue_create_buffer[DType.float32](n_positions * cfg.width)
+            a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions if n_positions > 0 else 1)
+        if cfg.accumulate:
+            ctx.enqueue_copy(dst_buf=a_dw, src_ptr=dwp)
+        comptime if AFN26_EMB_SCRATCH:
+            # A zero-position call owns one dummy cell but reads no dY.
+            if n_positions > 0:
+                ctx.enqueue_copy(dst_buf=a_dy, src_ptr=dyp)
+        else:
+            ctx.enqueue_copy(dst_buf=a_dy, src_ptr=dyp)
+        _refuse_nonfinite_device(ctx, String("dY"), a_dy, dyp, n_positions * cfg.width)
+        if cfg.accumulate:
+            _refuse_nonfinite_device(ctx, String("the carried dW"), a_dw, dwp, cells)
+        if n_positions > 0:
+            ctx.enqueue_copy(
+                dst_buf=a_ids.create_sub_buffer[DType.int32](0, n_positions),
+                src_ptr=idsp,
+            )
+        fast_embedding_backward_into(ctx, a_dw, a_dy, a_ids, n_positions, cfg)
+        ctx.enqueue_copy(dst_ptr=dwp, src_buf=a_dw)
+        ctx.synchronize()
+        comptime if AFN26_EMB_SCRATCH:
+            # Pool only after the consumed output's completion boundary.
+            _give_f32(a_dw^, cells)
+            _give_f32(a_dy^, n_positions * cfg.width)
+            _give_i32(a_ids^, n_positions)
+        else:
+            _ = a_dw^
+            _ = a_dy^
+            _ = a_ids^
+        _ = ctx^
+        return
+    comptime if EMB_DEVICE_SCRATCH:
+        # the carried dW up when accumulating (else the seed kernel writes
+        # every cell +0.0), dY up, their scans (dY first: the refusals'
+        # order), the ids up, pooled run scratch with no host fill, the
+        # launches, the download (it waits)
+        var ty = n_positions * cfg.width
+        var r_dw = _pool_f32(ctx, cells)
+        if cfg.accumulate:
+            ctx.enqueue_copy(dst_buf=r_dw, src_ptr=dwp)
+        var r_dy = _pool_f32(ctx, ty)
+        if ty > 0:
+            ctx.enqueue_copy(dst_buf=r_dy, src_ptr=dyp)
+        _refuse_nonfinite_device(ctx, String("dY"), r_dy, dyp, ty)
+        if cfg.accumulate:
+            _refuse_nonfinite_device(ctx, String("the carried dW"), r_dw, dwp, cells)
+        var r_ids = _pool_i32(ctx, n_positions)
+        if n_positions > 0:
+            ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
+        var tape_route = False
+        comptime if AUTOGRAD_EMBEDDING:
+            tape_route = n_positions > 0
+        if tape_route:
+            # Row N161: the tape route runs on pooled begin / perm / keys and
+            # takes no counts buffer.
+            _tape_backward_pooled(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
+        else:
+            var r_counts = _pool_i32(ctx, cfg.vocab)
+            var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+            var r_perm = _pool_i32(ctx, n_positions)
+            identical_embedding_backward_prerefused_into(
+                ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
+            )
+            ctx.synchronize()
+            _give_i32(r_counts^, cfg.vocab)
+            _give_i32(r_begin^, cfg.vocab + 1)
+            _give_i32(r_perm^, n_positions)
+        _download_out(ctx, r_dw, dwp, cells)
+        _give_f32(r_dw^, cells)
+        _give_f32(r_dy^, ty)
+        _give_i32(r_ids^, n_positions)
+        _ = ctx^
+        return
+    # the carried dW starts from the caller's bits; a fresh one from +0.0
+    # (filled on the device: the same +0.0 cells the host list held)
+    var d_dw: DeviceBuffer[DType.float32]
+    if cfg.accumulate:
+        d_dw = _upload_f32_ptr(ctx, dwp, cells)
+    else:
+        d_dw = _zero_f32(ctx, cells)
+    var d_dy = _upload_f32_ptr(ctx, dyp, n_positions * cfg.width)
+    # dY first, then the carried dW: the host refusals' order
+    _refuse_nonfinite_device(ctx, String("dY"), d_dy, dyp, n_positions * cfg.width)
+    if cfg.accumulate:
+        _refuse_nonfinite_device(ctx, String("the carried dW"), d_dw, dwp, cells)
+    var d_ids = _upload_i32_ptr(ctx, idsp, n_positions)
+    var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
+    var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
+    var perm = _upload_i32(ctx, _zeros_i32(n_positions))
+    var tape_route = False
+    comptime if AUTOGRAD_EMBEDDING:
+        tape_route = n_positions > 0
+    if tape_route:
+        _tape_backward(ctx, d_dw, d_dy, d_ids, n_positions, cfg, plan)
+    else:
+        identical_embedding_backward_into(
+            ctx, d_dw, d_dy, d_ids, counts, run_begin, perm, n_positions, cfg, plan
+        )
+    ctx.synchronize()
+    _download_out(ctx, d_dw, dwp, cells)
+    _ = d_dw^
+    _ = d_dy^
+    _ = d_ids^
+    _ = counts^
+    _ = run_begin^
+    _ = perm^
+    _ = ctx^
+
+
+
+def embedding_forward_released(
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    y_addr: Int,
+    no_run: Bool,
+    token: Int,
+    w_addr: Int,
+) raises:
+    """The typed body of `embedding_forward` that the door runs with the
+    GIL released: the id refusal, then the W refusal when nothing is
+    gathered, then the run (the order of the refusals is unchanged)."""
+    emb_refuse_ids_at(idsp, n_positions, cfg)
+    var yp = f32_ptr(y_addr)
+    if no_run:
+        _refuse_nonfinite_upload(String("W"), wp, cfg.vocab * cfg.width)
+    _forward_run(wp, idsp, n_positions, cfg, yp, token, w_addr)
+
+
+def embedding_backward_released(
+    dyp: MutPointer[Float32, MutUntrackedOrigin],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    dw_addr: Int,
+    no_run: Bool,
+    plan: Int,
+) raises:
+    """The typed body of `embedding_backward` that the door runs with the
+    GIL released: the id refusal, the dY and carried-dW refusals when
+    nothing is folded, then the run."""
+    emb_refuse_ids_at(idsp, n_positions, cfg)
+    var dwp = f32_ptr(dw_addr)
+    if no_run:
+        _refuse_nonfinite_upload(String("dY"), dyp, n_positions * cfg.width)
+        if cfg.accumulate:
+            _refuse_nonfinite_upload(String("the carried dW"), dwp, cfg.vocab * cfg.width)
+    _backward_run(dyp, idsp, n_positions, cfg, dwp, plan)
+
+
+# ---- device I/O (lane gap-neural-io, 2026-10-08) ----------------------------------
+# Plan docs/plans/gaps-2026-10-08.md Section 4. The board's cell (V = 32,768,
+# d = 1,024, T = 32,768) moved ~400 MB over the bus per forward + backward:
+# y down (134 MB), dy up (134 MB), the dense dW down (134 MB), into fresh
+# host arrays page-faulted per call, against torch's kernel-only clock on
+# device tensors (399x on the L40S board). Here y, dy and dW are RESIDENT
+# TENSORS of this binding (one pool on this binding's context, the same
+# `seq_tensor_*` entry names the sequence binding exports, so the Python
+# `SequenceDeviceTensor` serves both): `embedding_forward_dev` gathers into
+# a resident y, `embedding_backward_dev` folds a resident dy into a
+# resident dW (a carried dW is that tensor's own bits). The ids (T int32,
+# 128 KB) still go up from the host list the shape and id refusals walked;
+# the table stays resident by token. The kernels are the host-array
+# entries' on the same values: no bit moves. A non-finite refusal reads the
+# one offending word back for the oracle's message.
+
+
+struct _EmbTensors(Defaultable, Movable):
+    var bufs: List[DeviceBuffer[DType.float32]]
+    #: floats per handle (0 marks a free handle)
+    var n: List[Int]
+    #: the lock word (see `_emb_lock`): the forward / backward device
+    #: entries read handles with the GIL released while another thread can
+    #: allocate (the list may move) or free one
+    var lock: List[Int64]
+
+    def __init__(out self):
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.n = List[Int]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+
+
+comptime _EMB_TENSORS_NAME = "MojolearnEmbeddingTensorsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEmbeddingTensorsFastV1"
+comptime _EMB_TENSORS = SharedSlot[_EmbTensors, _EMB_TENSORS_NAME]
+
+
+def _tensor_n(h: Int) raises -> Int:
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    _emb_lock(pool[].lock)
+    var have = 0
+    if h >= 1 and h <= len(pool[].n):
+        have = pool[].n[h - 1]
+    _emb_unlock(pool[].lock)
+    if have == 0:
+        raise Error("embedding: tensor handle " + String(h) + " is not open")
+    return have
+
+
+def _tensor_sub(h: Int, n: Int, refusal: String) raises -> DeviceBuffer[DType.float32]:
+    """A view of the first n floats of open handle h (which must hold at
+    least n), taken under the lock: the view shares the handle's memory and
+    keeps it alive if the handle is freed meanwhile."""
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    _emb_lock(pool[].lock)
+    var have = 0
+    if h >= 1 and h <= len(pool[].n):
+        have = pool[].n[h - 1]
+    if have == 0 or n < 1 or n > have:
+        _emb_unlock(pool[].lock)
+        if have == 0:
+            raise Error("embedding: tensor handle " + String(h) + " is not open")
+        raise Error(refusal)
+    try:
+        var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+        _emb_unlock(pool[].lock)
+        return view^
+    except error:
+        _emb_unlock(pool[].lock)
+        raise error^
+
+
+def _tensor_view(h: Int, n: Int, what: String) raises -> DeviceBuffer[DType.float32]:
+    """A view of open handle h, which must hold exactly n floats."""
+    var have = _tensor_n(h)
+    if have != n:
+        raise Error("embedding: " + what + " holds " + String(have) + " floats, the call needs " + String(n))
+    return _tensor_sub(h, n, "embedding: " + what + " does not fit its tensor")
+
+
+def seq_tensor_alloc_words(n: Int, zero_code: Int) raises -> Int:
+    """A resident tensor of n >= 1 floats (+0.0 filled when zero = 1).
+    Returns its handle (>= 1)."""
+    if n < 1:
+        raise Error("seq_tensor_alloc: n must be >= 1")
+    var zero = zero_code != 0
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    if zero:
+        enqueue_fill(ctx, buf, Float32(0.0))
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    _emb_lock(pool[].lock)
+    var h = -1
+    for j in range(len(pool[].n)):  # small-loop(pool: resident tensor handles): free handle slot search, no data
+        if pool[].n[j] == 0 and h < 0:
+            h = j
+    if h < 0:
+        pool[].bufs.append(buf^)
+        pool[].n.append(n)
+        h = len(pool[].n) - 1
+    else:
+        pool[].bufs[h] = buf^
+        pool[].n[h] = n
+    _emb_unlock(pool[].lock)
+    ctx.synchronize()
+    return h + 1
+
+
+def seq_tensor_free_words(h: Int) raises -> Int:
+    _ = _tensor_n(h)
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    ctx.synchronize()
+    var placeholder = ctx.enqueue_create_buffer[DType.float32](1)
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    _emb_lock(pool[].lock)
+    if h >= 1 and h <= len(pool[].n) and pool[].n[h - 1] != 0:
+        pool[].bufs[h - 1] = placeholder^
+        pool[].n[h - 1] = 0
+    _emb_unlock(pool[].lock)
+    return h
+
+
+def seq_tensor_upload_words(h: Int, addr: Int, n: Int) raises -> Int:
+    var view = _tensor_sub(h, n, "seq_tensor_upload: n must fit the tensor")
+    var src = f32_ptr(addr)
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    ctx.enqueue_copy(dst_buf=view, src_ptr=src)
+    ctx.synchronize()
+    _ = view^
+    return n
+
+
+
+def seq_tensor_download_words(h: Int, addr: Int, n: Int) raises -> Int:
+    var view = _tensor_sub(h, n, "seq_tensor_download: n must fit the tensor")
+    var dst = f32_ptr(addr)
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
+    ctx.synchronize()
+    _ = view^
+    return n
+
+
+def seq_tensor_copy_words(hd: Int, hs: Int, n: Int) raises -> Int:
+    var vd = _tensor_sub(hd, n, "seq_tensor_copy: n must fit both tensors")
+    var vs = _tensor_sub(hs, n, "seq_tensor_copy: n must fit both tensors")
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
+    ctx.synchronize()
+    _ = vd^
+    _ = vs^
+    return n
+
+
+def _refuse_nonfinite_resident(
+    ctx: DeviceContext, name: String, mut buf: DeviceBuffer[DType.float32], n: Int
+) raises:
+    """The non-finite refusal of a resident buffer: the device scan, and on
+    a hit the one offending word read back for the oracle's message (the
+    same name, index and wording as the host-array entries)."""
+    if n <= 0:
+        return
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var one = buf.create_sub_buffer[DType.float32](idx, 1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=one)
+    ctx.synchronize()
+    var v = h.unsafe_ptr().unsafe_load(0)
+    _ = one^
+    _ = h^
+    nonfinite_refusal(name, idx, v)
+    raise Error(
+        String("embedding: the device scan found a non-finite value in ") + name
+        + " at flat index " + String(idx) + " that the word read back is not (a scan defect)"
+    )
+
+
+def _forward_dev_run(
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    y_h: Int,
+    token: Int,
+    w_addr: Int,
+) raises:
+    var cells = n_positions * cfg.width
+    if cells <= 0:
+        return
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var w_cells = cfg.vocab * cfg.width
+    var r_w = _table_take(ctx, token, w_addr, wp, w_cells)
+    var r_ids = _pool_i32(ctx, n_positions)
+    ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
+    var r_y = _tensor_view(y_h, cells, "y")
+    comptime if EMB_ATOMIC_BWD:
+        fast_embedding_forward_into(ctx, r_y, r_w, r_ids, n_positions, cfg)
+    else:
+        identical_embedding_forward_prerefused_into(ctx, r_y, r_w, r_ids, n_positions, cfg)
+    # the ids list is the caller's: the wait keeps it alive past its copy
+    ctx.synchronize()
+    _table_give(r_w^, token, w_addr, w_cells)
+    _give_i32(r_ids^, n_positions)
+    _ = r_y^
+    _ = ctx^
+
+
+def _backward_dev_run(
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    dy_h: Int,
+    dw_h: Int,
+    plan: Int,
+) raises:
+    var cells = cfg.vocab * cfg.width
+    if cells <= 0:
+        return
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var ty = n_positions * cfg.width
+    var r_dw = _tensor_view(dw_h, cells, "dw")
+    # TOMBSTONE: MOJOLEARN_IDN_EMB_SCAN_DEFERRED (DROPPED-slower) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+    # Tried: the deferred-scan branch for a fresh gradient (_backward_dev_deferred).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch; record in docs/TOMBSTONES.md.
+    # dY first, then the carried dW: the host refusals' order
+    if ty > 0:
+        var r_dy0 = _tensor_view(dy_h, ty, "dy")
+        _refuse_nonfinite_resident(ctx, String("dY"), r_dy0, ty)
+        _ = r_dy0^
+    if cfg.accumulate:
+        _refuse_nonfinite_resident(ctx, String("the carried dW"), r_dw, cells)
+    # a zero-position call reads no dY (one placeholder cell)
+    var r_dy: DeviceBuffer[DType.float32]
+    if ty > 0:
+        r_dy = _tensor_view(dy_h, ty, "dy")
+    else:
+        r_dy = _pool_f32(ctx, 1)
+    var r_ids = _pool_i32(ctx, n_positions)
+    if n_positions > 0:
+        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
+    comptime if EMB_ATOMIC_BWD:
+        fast_embedding_backward_into(ctx, r_dw, r_dy, r_ids, n_positions, cfg)
+        ctx.synchronize()
+    else:
+        var tape_route = False
+        comptime if AUTOGRAD_EMBEDDING:
+            tape_route = n_positions > 0
+        if tape_route:
+            # Row N161: pooled begin / perm / keys, no counts buffer.
+            _tape_backward_pooled(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
+        else:
+            var r_counts = _pool_i32(ctx, cfg.vocab)
+            var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+            var r_perm = _pool_i32(ctx, n_positions)
+            identical_embedding_backward_prerefused_into(
+                ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
+            )
+            ctx.synchronize()
+            _give_i32(r_counts^, cfg.vocab)
+            _give_i32(r_begin^, cfg.vocab + 1)
+            _give_i32(r_perm^, n_positions)
+    _give_i32(r_ids^, n_positions)
+    _ = r_dy^
+    _ = r_dw^
+    _ = ctx^
+
+
+
+def embedding_forward_dev_released(
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    y_h: Int,
+    no_run: Bool,
+    token: Int,
+    w_addr: Int,
+) raises:
+    """The typed body of `embedding_forward_dev` that the door runs with the
+    GIL released."""
+    # Row N158: the ids refused through the caller's buffer (order: ids,
+    # then the y handle, then W, as before).
+    emb_refuse_ids_at(idsp, n_positions, cfg)
+    if n_positions * cfg.width > 0:
+        _ = _tensor_view(y_h, n_positions * cfg.width, "y")
+    if no_run:
+        _refuse_nonfinite_upload(String("W"), wp, cfg.vocab * cfg.width)
+    _forward_dev_run(wp, idsp, n_positions, cfg, y_h, token, w_addr)
+
+
+def embedding_backward_dev_released(
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
+    n_positions: Int,
+    cfg: EmbConfig,
+    dy_h: Int,
+    dw_h: Int,
+    plan: Int,
+) raises:
+    """The typed body of `embedding_backward_dev` that the door runs with
+    the GIL released."""
+    # Row N158: the ids refused through the caller's buffer (order: ids,
+    # then the two handles, as before).
+    emb_refuse_ids_at(idsp, n_positions, cfg)
+    if n_positions * cfg.width > 0:
+        _ = _tensor_view(dy_h, n_positions * cfg.width, "dy")
+    if cfg.vocab * cfg.width > 0:
+        _ = _tensor_view(dw_h, cfg.vocab * cfg.width, "dw")
+    _backward_dev_run(idsp, n_positions, cfg, dy_h, dw_h, plan)
+
+
+def _emb_tail(p: List[Int], start: Int) -> List[Int]:
+    var out = List[Int]()
+    for i in range(start, len(p)):  # small-loop(descriptor scalar tail)
+        out.append(p[i])
+    return out^
+
+

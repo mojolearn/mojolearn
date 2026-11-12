@@ -13,35 +13,17 @@ host surface tests glob only `_mojolearn_*_host.mojo`.
 The contract is `bindings/_mojolearn_embedding.mojo`'s: `addrs` = [weight
 (V * d f32, read), ids (T i32, read), y_out (T * d f32, WRITTEN)]; `params`
 = [V, d, T]. The refusals are the GPU binding's, in its words and order,
-through `embedding/checks/embedding_oracle.mojo`.
+through `embedding/checks/embedding_oracle.mojo`. The typed bodies are RUN
+code in `embedding/host/embedding_host_words_run.mojo`.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr, i32_ptr
-from embedding.checks.embedding_oracle import (
-    EMB_NO_PADDING_IDX,
-    EmbConfig,
-    emb_refuse_ids_at,
-    emb_refuse_shape,
-    refuse_nonfinite_at,
-)
-from embedding.host.embedding_host import host_embedding_forward
-
-
-def embedding_host_config(
-    vocab: Int, width: Int, padding_idx: Int, accumulate: Bool
-) raises -> EmbConfig:
-    """The GPU binding's `_config`, in its words."""
-    if padding_idx != EMB_NO_PADDING_IDX and (padding_idx < 0 or padding_idx >= vocab):
-        raise Error(
-            String("embedding: padding_idx = ")
-            + String(padding_idx)
-            + " is outside [0, "
-            + String(vocab)
-            + ") REFUSED (contract 8; -1 means no padding row)"
-        )
-    return EmbConfig(vocab, width, padding_idx, accumulate)
+from embedding.checks.embedding_oracle import EMB_NO_PADDING_IDX, emb_refuse_shape
+# RUN (lane rs-embedding-bytelm): the configuration refusal and the body run
+# with the GIL released, typed Mojo only.
+from embedding.host.embedding_host_words_run import embedding_host_config, embedding_host_forward_released
 
 
 def embedding_host_forward_words(a: List[Int], p: List[Int]) raises -> Int:
@@ -72,10 +54,7 @@ def embedding_host_forward_words(a: List[Int], p: List[Int]) raises -> Int:
     var idsp = i32_ptr(a[1])
     var y_addr = a[2]
     with GILReleased(Python()):
-        emb_refuse_ids_at(idsp, n_positions, cfg)
-        refuse_nonfinite_at(String("W"), wp, vocab * width)
-        var yp = f32_ptr(y_addr)
-        host_embedding_forward(wp, idsp, n_positions, cfg, yp)
+        embedding_host_forward_released(wp, idsp, n_positions, cfg, y_addr)
     return n_positions * width
 
 

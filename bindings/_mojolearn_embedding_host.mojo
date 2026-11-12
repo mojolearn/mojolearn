@@ -31,12 +31,13 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from embedding.checks.embedding_oracle import (
     EMB_NO_PADDING_IDX,
-    EmbConfig,
     emb_refuse_ids,
     emb_refuse_shape,
     refuse_nonfinite_at,
 )
-from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_config, embedding_host_forward_words, embedding_host_words
+from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_forward_words, embedding_host_words
+# RUN (lane rs-embedding-bytelm): typed Mojo only, no Python import.
+from embedding.host.embedding_host_words_run import embedding_host_backward_released, embedding_host_config
 from core.shared_slot import SharedSlot
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -48,8 +49,6 @@ from embedding.host.embedding_host import (
     EMBEDDING_HOST_SABOTAGE,
     HOST_PLAN_SCAN,
     HOST_PLAN_SORT,
-    host_embedding_backward,
-    host_embedding_forward,
 )
 
 
@@ -148,8 +147,7 @@ def embedding_host_backward_words(a: List[Int], p: List[Int]) raises -> Int:
         refuse_nonfinite_at(String("the carried dW"), dwp, vocab * width)
     var cells = vocab * width
     with GILReleased(Python()):
-        if cells > 0:
-            host_embedding_backward(dwp, dyp, ids, n_positions, cfg, plan)
+        embedding_host_backward_released(dwp, dyp, ids, n_positions, cfg, plan, cells)
     return vocab * width
 
 

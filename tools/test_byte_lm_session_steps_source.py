@@ -93,7 +93,9 @@ def test_ragged_next_bytes_picks_on_the_device_and_natively_on_the_host():
 
 def test_pool_and_offload_exports_write_into_the_caller():
     binding = _read('bindings/_mojolearn_byte_lm.mojo')
-    assert 'export_values(' not in binding
-    assert binding.count('.export_into([0, 1, 2],') == 4
+    # lane rs-embedding-bytelm: the export bodies are RUN code beside the door.
+    run = _read('training/byte_lm_door_run.mojo')
+    assert 'export_values(' not in binding and 'export_values(' not in run
+    assert run.count('.export_into([0, 1, 2],') == 4
     for name in ('training/byte_lm_model_pool.mojo', 'training/byte_lm_offload.mojo'):
         assert 'def export_into(' in _read(name)

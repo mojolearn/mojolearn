@@ -40,6 +40,8 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 # back as a sabotage build too.
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
+# RUN (lane rs-embedding-bytelm): typed shape completion, no Python import.
+from training.byte_lm_config_run import byte_config_words
 from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
 from training.byte_lm_host_dispatch import BYTE_HOST_NATIVE_TABLE
 from providers.python.byte_lm_host_compat_pyapi import register
@@ -88,18 +90,7 @@ def _host_config(shape: PythonObject) raises -> ByteConfig:
     var values = List[Int]()
     for i in range(len(shape)):  # small-loop(shape: 7 to 10 configuration words)
         values.append(_index(shape[i]))
-    if len(values) == 7:
-        values.append(2)
-        values.append(256)
-    var chunked = False
-    if len(values) == 10:
-        if values[9] != 0 and values[9] != 1:
-            raise Error("byte LM host: chunked head selector must be 0 or 1")
-        chunked = values[9] == 1
-    var cfg = ByteConfig(values[0], values[1], values[2], values[3],
-                         values[4], values[5], values[6], values[7], values[8], chunked)
-    cfg.validate()
-    return cfg^
+    return byte_config_words(values^, "byte LM host")
 
 
 def byte_lm_host_native_api_binding() raises -> PythonObject:
