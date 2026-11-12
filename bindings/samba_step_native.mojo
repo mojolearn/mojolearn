@@ -21,7 +21,8 @@ from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.generator_state_native import generator_next
-from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_optimizer_device_plan
+from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view
+from training.samba_state_run import samba_optimizer_device_plan
 from core.device_plan import DevicePlan
 from bindings.samba_training_native import samba_ids, samba_gradients_admitted, _samba_count
 from bindings.causal_lm_construct import _model_f32, _model_shape

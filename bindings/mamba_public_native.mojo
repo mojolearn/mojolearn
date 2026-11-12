@@ -40,7 +40,8 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_handle, neural_descriptor_reserved_execute,
     neural_descriptor_execute, neural_descriptor_matches, neural_descriptor_reuse,
 )
-from bindings.samba_inference_native import _m3_shapes, _m3_names, _m3_state_call
+from bindings.samba_inference_native import _m3_state_call
+from training.samba_inference_run import _m3_shapes, _m3_names
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from core.mamba_state_entry_table import Mamba3StateRoute

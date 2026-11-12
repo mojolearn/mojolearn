@@ -14,6 +14,8 @@ from core.hostptr import f32_ptr
 from std.memory import unsafe_memcpy
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
+# RUN (lane rs-neural): the dtype refusal text, no Python import.
+from training.neural_block_admission_run import _neural_dtype_refusal
 
 # The uses of admit_block_f32 (below): read in place when possible, kept for
 # the operation, or retained by the model.
@@ -151,7 +153,6 @@ def neural_record_fields(value: PythonObject, names: PythonObject) raises -> Pyt
     # Classical and other callers keep their per-call module checks.
     var mods = NativeModules()
     return neural_record_fields(mods, value, names)
-
 
 
 def neural_admit_weights(mut mods: NativeModules, values: PythonObject, context: PythonObject) raises:
@@ -345,7 +346,6 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
     return result
 
 
-
 # THE ONE NEURAL INPUT DOOR (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
 # section 3.3 row A4, lane a4-admit-sequence-tsa-neural, 2026-11-08): every
 # float32 tensor a neural block, model or session operation admits goes
@@ -368,20 +368,6 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
 # TOMBSTONE: neural_block_f32, neural_block_f32_owned and neural_block_f32_input (admission helpers, merged into admit_block_f32) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A4_ADMISSION_HELPERS.patch.
 # (BLOCK_READ / BLOCK_OPERATION / BLOCK_RETAINED are defined after the imports.)
-
-
-def _neural_dtype_refusal(name: String, code: String) -> String:
-    # code is captured native Array metadata or the admitted buffer format,
-    # never an arbitrary object's dtype attribute or a coercion callback.
-    var label = String(code)
-    if code == "<f8" or code == ">f8" or code == "d" or code == "<d" or code == ">d" or code == "=d" or code == "@d":
-        label = "float64"
-    elif code == "<f2" or code == ">f2" or code == "e" or code == "<e" or code == ">e" or code == "=e" or code == "@e":
-        label = "float16"
-    elif code == "<u2" or code == ">u2" or code == "H" or code == "<H" or code == ">H" or code == "=H" or code == "@H":
-        label = "uint16 (bfloat16 bits)"
-    return ("TypeError: neural " + name + " has dtype " + label + "; float32 only: bfloat16, "
-            + "float16 and float64 are refused rather than converted. Convert to float32.")
 
 
 def _block_view(mut mods: NativeModules, store: PythonObject, address: Int, dims: List[Int], count: Int,

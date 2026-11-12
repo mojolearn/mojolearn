@@ -76,7 +76,7 @@ from bindings.native_class_admission import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API
-from core.mojolearn_neural_host_impl import _finite, _opt_read, _transformer_weights_from, _write, _run_forward, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
+from core.mojolearn_neural_host_impl import _opt_read, _write, _run_forward, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -88,9 +88,8 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.samba_entry_table_neural_host import publish_samba_neural_host_primitives
-from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 from gemm.host.neural_gemm import gemm_oracle
-from gemm.host.neural_gemm import gemm_host_rows
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
@@ -113,7 +112,6 @@ from mamba.checks.mamba3_fixture import (
     Mamba3Weights,
 )
 from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
-from training.host.mlp_oracle import host_mlp_bias_activation
 from training.host.samba_ops_oracle import (
     host_samba_embedding_forward,
     host_samba_linear_forward,
@@ -144,6 +142,9 @@ from transformer.block_options import (
 )
 from core.neural_entry_neural_host import publish_neural_block_neural_host
 from core.causal_entry_neural_host import publish_causal_neural_host
+# RUN (lane rs-neural): the GIL-released bodies of the stateless MLP and
+# transformer prefill entries, typed Mojo only.
+from core.mojolearn_neural_host_run import mlp_forward_logits_run, transformer_forward_fresh_run
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -274,19 +275,7 @@ def mlp_forward_logits_binding(
         raise Error("mlp_forward_logits: rows must be in [1, 256], got " + String(rows))
     var wrote = 0
     with GILReleased(Python()):
-        var x = read_f32(a[0], rows * 8)
-        var w1 = read_f32(a[1], 16 * 8)
-        var b1 = read_f32(a[2], 16)
-        var w2 = read_f32(a[3], 3 * 16)
-        var b2 = read_f32(a[4], 3)
-        var p1 = gemm_host_rows(x, w1, OP_NT, rows, 16, 8)
-        _finite(p1, String("mlp_forward_logits: the first projection"))
-        var hidden = host_mlp_bias_activation(p1, b1, rows, 16, 1)
-        var p2 = gemm_host_rows(hidden, w2, OP_NT, rows, 3, 16)
-        _finite(p2, String("mlp_forward_logits: the second projection"))
-        var logits = host_mlp_bias_activation(p2, b2, rows, 3, 0)
-        copy_f32(logits.unsafe_ptr(), f32_ptr(a[5]), rows * 3)
-        wrote = rows * 3
+        wrote = mlp_forward_logits_run(a, rows)
     return PythonObject(wrote)
 
 
@@ -325,13 +314,7 @@ def transformer_forward_fresh_binding(
         raise Error("transformer: d_model, n_heads, n_kv_heads, head_dim and intermediate must be positive")
     var out_len = 0
     with GILReleased(Python()):
-        var w = _transformer_weights_from(a, dm, nh, nkv, hd, it, l, opts, what)
-        var x = read_f32(a[0], b * l * dm)
-        var out = transformer_host_forward(
-            w, x, b, l, l, 0, window, List[Float32](), List[Float32](), False
-        )
-        copy_f32(out.y.unsafe_ptr(), f32_ptr(a[12]), len(out.y))
-        out_len = out.cached_tokens
+        out_len = transformer_forward_fresh_run(a, b, l, dm, nh, nkv, hd, it, window, opts, what)
     return PythonObject(out_len)
 
 

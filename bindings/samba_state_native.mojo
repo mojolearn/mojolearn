@@ -20,8 +20,6 @@ from core.entry_table import EntryRef, entry_ref_call
 from core.samba_entry_table import (
     SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_OPTIMIZER_STEP,
 )
-from core.device_plan import DevicePlan
-from training.optimizer_device_plan import optimizer_device_plan
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_copy, py_ints
 from bindings.causal_lm_construct import _model_f32, _model_shape, _model_block, _model_bindings, _model_native_buffer
 from bindings.causal_lm_public import _native_function
@@ -29,6 +27,8 @@ from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_MODE, SAMBA_CAP_VENDOR
 from bindings.samba_config_native import samba_config_dict, samba_config_from_dict, samba_registry, samba_block_shapes
 from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_new
 from bindings.samba_optimizer_boundary import samba_optimizer_transfer
+# RUN (lane rs-neural): typed pieces, no Python import.
+from training.samba_state_run import samba_optimizer_device_plan
 
 
 def samba_fields(value: PythonObject) raises -> PythonObject:
@@ -476,12 +476,6 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
     samba_build_blocks(model, context)
     py_setattr(model, "last_", PythonObject(None))
     return _samba_publish_checked(model, checked, context)
-
-
-def samba_optimizer_device_plan() raises -> DevicePlan:
-    """The optimizer device plan of one Samba entry: `optimizer_device_plan`,
-    read once here and passed down as a value."""
-    return optimizer_device_plan()
 
 
 def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObject, context: PythonObject) raises -> PythonObject:

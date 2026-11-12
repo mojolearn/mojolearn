@@ -16,6 +16,8 @@ from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkp
 from bindings.samba_cpu_inference import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
 from bindings.samba_admission import samba_admit
 from core.weight_epoch import weight_epoch_bump
+# RUN (lane rs-neural): typed operation predicate, no Python import.
+from training.samba_public_run import _samba_writes_registry
 from bindings.samba_decode_native import (
     samba_decode_open, samba_decode_init, samba_decode_step, samba_decode_tokens, samba_decode_sync, samba_decode_load,
     samba_decode_close, samba_decode_drop, samba_decode_is_open, samba_decode_state, samba_decode_device,
@@ -40,19 +42,6 @@ def _samba_public_items(value: PythonObject) raises -> PythonObject:
     if items < 1:
         raise Error("Samba: num_items must be a positive integer")
     return PythonObject(items)
-
-
-def _samba_writes_registry(operation: String) -> Bool:
-    """The operations that write the stack's flat registry in place (integ-w4,
-    lane x45c's weight key in SambaStackProgram): each one is native code
-    writing by address and moves the weight epoch, so a resident program
-    reloads at its next call. Lane x56d (the contract of every neural
-    family, decided 2026-11-09): the registry and the public parameter views
-    are read-only to callers (bindings/samba_state_native.mojo `samba_view`),
-    so no write outside these operations can leave a resident copy stale:
-    the bump-only key no longer has a hole."""
-    return (operation == "model_train_step" or operation == "apply" or operation == "publish"
-            or operation == "checkpoint_load" or operation == "load_weights")
 
 
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

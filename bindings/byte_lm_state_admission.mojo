@@ -24,24 +24,12 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_loaded_module import NativeModules
 from bindings.classical_pandas import classical_admit_value
+# RUN (lane rs-neural): the step-field names, no Python import.
+from training.byte_lm_state_admission_run import _byte_state_step_fields, _byte_state_is_step_field
 
 # Bound on the per-connection table; dead trainers' entries are dropped when
 # it fills (one clear, then the live trainers re-record on their next call).
 comptime _BYTE_STATE_RECORDS_MAX = 64
-
-
-def _byte_state_step_fields() -> List[String]:
-    # The fields every step, session adoption or load rewrites.
-    return [String("parameters"), String("m"), String("v"), String("flags"), String("completed_steps"),
-            String("next_batch_index")]
-
-
-def _byte_state_is_step_field(name: String) -> Bool:
-    var steps = _byte_state_step_fields()
-    for i in range(len(steps)):  # small-loop(the six step fields)
-        if steps[i] == name:
-            return True
-    return False
 
 
 def _byte_state_size(value: PythonObject, bi: PythonObject) raises -> Int:
