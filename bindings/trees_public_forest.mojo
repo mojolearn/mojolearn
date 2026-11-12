@@ -34,7 +34,7 @@ from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, classical_view,
     admitted_finite_refuse, admitted_finite_entry_refuse,
 )
-from bindings.classical_validate import classical_estimator_name
+from bindings.classical_validate import classical_estimator_name, classical_check_y
 from bindings.classical_arrays import classical_address
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_view / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -1176,6 +1176,168 @@ def forest_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         result = rf_fit(model, args, kind, context)
     _report_engine(model, context)
     return result
+
+
+# ------------------------------------------------------ tree-range shards
+# Lane forest-typed-fit (2026-11-12): `parallel_ensemble.fit_forest`
+# (bindings/parallel_shard_native.mojo `_fit_forest`) fits whole global
+# tree-ID ranges in worker processes. The driver runs this door's UNPACK once
+# (`forest_shard_prepare`: the refresh, the labels or targets, the class
+# weights and the typed request words); each worker receives the words and
+# the arrays and calls the one typed fit core (`forest_shard_fit` ->
+# `forest_fit_core`), never building an estimator; the driver's PACK
+# (`forest_shard_publish`) stores the joined model as the plain fit does.
+
+
+@fieldwise_init
+struct ForestShardPlan(Movable):
+    """The driver's prepared tree-range fit: the refreshed instance
+    dictionary, the kind, the encoded class list (None for a regressor),
+    the targets every shard fits (int32 codes for RF, float32 codes for ET,
+    float32 targets), the class-weight row weights (None when unweighted),
+    the worker state record `(rf, classifier, request words)` and X's
+    width."""
+    var fields: PythonObject
+    var kind: String
+    var classifier: Bool
+    var classes: PythonObject
+    var y: PythonObject
+    var weights: PythonObject
+    var state: PythonObject
+    var cols: Int
+
+
+def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: PythonObject,
+                         context: PythonObject) raises -> ForestShardPlan:
+    """UNPACK of a tree-range fit, once in the driver: the constructor
+    checks and refresh the plain fit runs (IDENTICAL only), the labels or
+    the checked targets, the class weights, and the one typed request
+    (`forest_fit_request`) as words for the workers."""
+    var kind = forest_kind(model, context)
+    forest_check_fit_device(model, context)
+    var params = forest_get_params(model, context)
+    var mode = py_get(params, PythonObject("numeric_mode"), PythonObject(None))
+    if mode is not None and (py_type(mode) is not trees_builtins().str or String(mode) != "identical"):
+        raise Error("ValueError: parallel forests require IDENTICAL numeric mode")
+    py_setitem(py_fields(model), "numeric_mode", PythonObject("identical"))
+    trees_resident_forget(model_identity_key(model))
+    var fields = forest_refresh(model, kind, context)
+    var captured = forest_capture_mode(fields, context)
+    var et = _family(kind) == "et"
+    var native = trees_table(context, captured, "_mojolearn_trees" if et else "_mojolearn_rf")
+    var cfg = fields["_cfg"]
+    var params_cfg = cfg
+    var classifier = _classifier(kind)
+    var classes = PythonObject(None)
+    var y = PythonObject(None)
+    var weights = PythonObject(None)
+    var k = 0
+    if classifier:
+        var labels = trees_encode_labels(y_source, context)
+        _y_rows_check(labels.n, rows)
+        py_setitem(fields, "classes_", labels.classes)
+        k = len(labels.classes)
+        py_setitem(fields, "n_classes_", PythonObject(k))
+        if k < 2:
+            raise Error("y has fewer than 2 classes")
+        classes = labels.classes
+        var xtrees = trees_table(context, captured, "_mojolearn_x_trees")
+        if et:
+            # `codes.astype('<f4')`: the ET classifier reads float32 class codes.
+            var codes = admitted_vector(labels.n, "<f4", context)
+            trees_cast(trees_address(labels.codes), "<i4", trees_address(codes), "<f4", labels.n, context)
+            y = codes
+            var class_weight = cfg["class_weight"]
+            if class_weight is not None:
+                weights = trees_weighted_rows(PythonObject(None), class_weight, labels, xtrees, context).array
+                params_cfg = py_call(trees_builtins().dict, cfg)
+                py_setitem(params_cfg, "class_weight", PythonObject(None))
+        else:
+            y = labels.codes
+            var class_weight = py_get(fields, "class_weight")
+            if class_weight is not None:
+                var rows_only = trees_class_rows_only(class_weight, labels, xtrees, context)
+                if rows_only:
+                    weights = rows_only.value().array
+    else:
+        var checked = classical_check_y(y_source, rows, classical_estimator_name(model), context)
+        var y32 = admit_f32(checked, 1, "y", context, finite=False)
+        _y_rows_check(y32.rows, rows)
+        var code = Int(py=fields["_criterion_code"]) if et else Int(py=cfg["criterion"])
+        _check_regression_target(y32, code, fields["criterion"], "et" if et else "rf", context)
+        y = y32.array
+    if not et and _truthy(cfg["oob_score"]):
+        raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
+    # The addresses are the worker's own (forest_shard_fit); the words carry
+    # the params views and the criterion.
+    var request = forest_fit_request(fields, params_cfg, kind, rows, cols, k, 0, 0, ForestFit(classifier), native,
+                                     context)
+    var state = Python.tuple(PythonObject(not et), PythonObject(classifier), forest_request_words_py(request))
+    return ForestShardPlan(fields, kind, classifier, classes, y, weights, state, cols)
+
+
+def forest_shard_fit(state: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A tree-range worker's fit: `state` is the plan's `(rf, classifier,
+    request words)`, `args` `(X, y, weights or None, tree_start, trees)`.
+    UNPACK (X as the column-major float32 copy the shard fit reads, the
+    finiteness check, the request on the local addresses), the typed fit
+    core, PACK the export as `{_offsets, _colid, _quesval, _left_child,
+    _leaves, meta}`. No estimator object is built."""
+    var rf = Bool(py=py_item(state, PythonObject(0)))
+    var classifier = Bool(py=py_item(state, PythonObject(1)))
+    var native = trees_table(context, "identical", "_mojolearn_rf" if rf else "_mojolearn_trees")
+    var key = forest_key(native)
+    var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
+    var x = admit_f32(py_item(args, PythonObject(0)), 2, "X", context, order="F", finite=False)
+    var y = py_item(args, PythonObject(1))
+    var weights = py_item(args, PythonObject(2))
+    _y_rows_check(Int(py=y.shape[0]), x.rows)
+    _finite_or_refuse(x, device_scan, context)
+    var request = forest_request_from_words_py(py_item(state, PythonObject(2)), x.address, trees_address(y),
+                                               Int(py=py_item(args, PythonObject(4))))
+    request.weights = 0 if weights is None else trees_address(weights)
+    request.tree_start = Int(py=py_item(args, PythonObject(3)))
+    var selection = forest_export_selection()
+    var handle = forest_fit_core(key, classifier, False, request, device_scan)
+    _ = x.array  # keep X, y and the weights alive through the fit above
+    _ = y
+    _ = weights
+    var exported = forest_export_handle(key, handle, selection, context)
+    var out = Python.dict()
+    var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
+        py_setitem(out, names[i], exported[i])
+    py_setitem(out, "meta", exported[5])
+    return out
+
+
+def forest_shard_publish(plan: ForestShardPlan, merged: PythonObject, parts: PythonObject, count: Int,
+                         context: PythonObject) raises:
+    """PACK of a tree-range fit in the driver: the joined model arrays
+    (`merged`, by field name) stored as the plain fit stores its export,
+    `count` trees, the first range's metadata for the rest (the ET fitted
+    fields; the RF notices), the ET depth-cap flag of any range."""
+    var fields = plan.fields
+    var meta = py_call(trees_builtins().list, parts[0]["meta"])
+    py_setitem(meta, PythonObject(0), PythonObject(count))
+    var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+    var arrays = Python.list()
+    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
+        _ = py_call(arrays.append, merged[names[i]])
+    _ = py_call(arrays.append, meta)
+    _store_model(fields, arrays, plan.cols)
+    if _family(plan.kind) == "et":
+        var bound = False
+        for r in range(len(parts)):  # driver-loop: one flag per tree range
+            if _truthy(parts[r]["meta"][2]):
+                bound = True
+        py_setitem(fields, "depth_cap_bound_", PythonObject(bound))
+        py_setitem(fields, "max_depth_resolved_", _int(meta[3]))
+        py_setitem(fields, "max_features_", _int(meta[4]))
+        var bootstrap_rows = _int(meta[5])
+        py_setitem(fields, "_n_samples_bootstrap", bootstrap_rows if Int(py=bootstrap_rows) != 0 else PythonObject(None))
+    else:
+        _rf_fit_notices(meta, context)
 
 
 def _report_engine(model: PythonObject, context: PythonObject) raises:
