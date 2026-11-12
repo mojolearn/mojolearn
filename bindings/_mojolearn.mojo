@@ -81,7 +81,7 @@ device through the estimators binding (glm/impl/center_device.mojo).
 
 from core.experiment_guards_base import BASE_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_shell_impl import (
     cast_f64_to_f32_host,
     nonzero_f64_count_host,
@@ -199,16 +199,13 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
-from core.native_descriptor_abi import NativeDescriptorCall
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from core.labels_native_api import LABELS_NATIVE_ABI_NAME, LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
-from core.labels_native_device import LabelsDeviceKernels, labels_device_native_v2 as labels_native_entry
+from core.labels_native_api import LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
+from core.labels_native_device import LabelsDeviceKernels
 from core.labels_admission import labels_argmax_shape, labels_gather_shape, labels_ratio_shape
 from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_prepare, labels_legacy_address
 
 from checks.vendor import COMPILED_VENDOR
-from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_v1
-from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN_FOLD
 from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
@@ -222,7 +219,7 @@ from bindings.parallel_base_entry_device import CORE_DEVCTX_SLOT, publish_parall
 comptime _DEVCTX_SLOT = CORE_DEVCTX_SLOT
 
 
-from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
+from cluster.estimator import kmeans_predict, kmeans_transform
 from cluster.resident_centers import (
     kmeans_centers_prepare,
     kmeans_centers_release,
@@ -250,45 +247,16 @@ from neighbors.estimator import (
     rbc_knn_search,
 )
 from core.shared_slot import SharedSlot
-from core.kmeans_native_api import KMEANS_NATIVE_ABI
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish, neighbors_vendor_word
 from neighbors.ops_entry_device import NEIGHBORS_OPS_DEVICE_API, neighbors_ops_device_v1
 from bindings.py_balanced import py_setattr
-from core.kmeans_native_device import kmeans_device_native_v1
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    """A caller's float32 buffer, borrowed, never owned.
-
-    The origin is untracked because the owner is a NumPy array on the other
-    side of the boundary and Mojo cannot see it. The wrapper holds that array
-    throughout the call, which is the whole contract.
-    """
-    if addr == 0:
-        raise Error("mojolearn: null buffer address")
-    return f32_ptr(addr)
-
-
-def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    """A caller's float64 buffer, borrowed, never owned; `_f32_ptr`'s twin
-    (DEVIATION 2321). The same helper, spelled the same way, sits in
-    `bindings/_mojolearn_gbdt.mojo`, `_mojolearn_estimators.mojo`,
-    `_mojolearn_svm.mojo` and `_mojolearn_gp.mojo`."""
-    if addr == 0:
-        raise Error("mojolearn: null buffer address")
-    return f64_ptr(addr)
-
-
-def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null buffer address")
-    return u32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return i32_ptr(addr)
+# wave 8 run split: the RUN half of this binding (address helpers, the
+# KMeans/labels native tables, the QN fold publish, the KMeans fits and the
+# device label encoder) lives in core/mojolearn_run.mojo.
+from core.mojolearn_run import (
+    _f32_ptr, _f64_ptr, _u32_ptr, _i32_ptr, KMEANS_NATIVE_TABLE, LABELS_NATIVE_TABLE,
+    _publish_qn_fold_table, kmeans_fit_run, kmeans_fit_transform_run, encode_labels_run,
+)
 
 
 # ===========================================================================
@@ -745,19 +713,6 @@ def knn_regress_resident_binding(
     return PythonObject(used)
 
 
-struct KMeansDeviceNativeTable(Defaultable, Movable):
-    var name: String
-    var entries: List[NativeDescriptorCall]
-
-    def __init__(out self):
-        self.name = String(KMEANS_NATIVE_ABI)
-        self.entries = List[NativeDescriptorCall]()
-        self.entries.append(kmeans_device_native_v1)
-
-
-comptime KMEANS_NATIVE_TABLE = SharedSlot[KMeansDeviceNativeTable, ("MojolearnKMeansDeviceNativeIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKMeansDeviceNativeFastV1")]
-
-
 def kmeans_native_api_v1_binding() raises -> PythonObject:
     var table = KMEANS_NATIVE_TABLE.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -839,21 +794,11 @@ def kmeans_fit_binding(
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var r = kmeans_fit(
-            ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
-            0.0, ovs,
-            # TOMBSTONE: MOJOLEARN_KMEANS_FAST_LAZY_SHIFT (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
-            # Tried: the lazy convergence read (shift tested every KMEANS_LAZY_EVERY iterations) on the KMeans estimator's fits; kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8, inertia equal.
-            # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch; record in docs/TOMBSTONES.md.
-            lazy_shift=False,
-            finite_word=word_addr,
-        )
+        var r = kmeans_fit_run(xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm, ovs, word_addr)
         inertia = r.inertia
         n_iter = r.n_iter
         sum_scale = r.sum_scale
         weight_scale = r.weight_scale
-        ctx.synchronize()
 
     var out = Python.list()
     out.append(PythonObject(inertia))
@@ -989,19 +934,11 @@ def kmeans_fit_transform_binding(
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var r = kmeans_fit(
-            ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
-            0.0, ovs,
-            lazy_shift=False,
-            transform_out=tp,
-            finite_word=word_addr,
-        )
+        var r = kmeans_fit_transform_run(xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm, ovs, tp, word_addr)
         inertia = r.inertia
         n_iter = r.n_iter
         sum_scale = r.sum_scale
         weight_scale = r.weight_scale
-        ctx.synchronize()
     var out = Python.list()
     out.append(PythonObject(inertia))
     out.append(PythonObject(n_iter))
@@ -1651,24 +1588,9 @@ def _encode_labels_binding[dt: DType](src_addr: PythonObject, n: PythonObject,
     var source = Int(py=src_addr)
     var classes = Int(py=classes_addr)
     var codes = Int(py=codes_addr)
-    var code = -1
-    comptime if dt == DType.float32:
-        code = 0
-    comptime if dt == DType.float64:
-        code = 1
-    comptime if dt == DType.int32:
-        code = 2
-    comptime if dt == DType.int64:
-        code = 3
-    comptime if dt == DType.uint32:
-        code = 4
-    comptime if dt == DType.uint8:
-        code = 5
-    if code < 0:
-        raise Error("encode_labels: dtype without a device encoder")
     var result = 0
     with GILReleased(Python()):
-        result = LabelsDeviceKernels.encode(source, code, count, classes, capacity, codes)
+        result = encode_labels_run[dt](source, count, classes, capacity, codes)
     return PythonObject(result)
 
 
@@ -2002,23 +1924,6 @@ def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: Pytho
 # ===========================================================================
 
 
-struct LabelsNativeTable[ABI: StaticString](Defaultable, Movable):
-    var name: String
-    var entries: List[NativeDescriptorCall]
-
-    def __init__(out self):
-        self.name = String(Self.ABI)
-        self.entries = List[NativeDescriptorCall]()
-        self.entries.append(labels_native_entry)
-
-
-# The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
-# IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
-# TOMBSTONE: LABELS_NATIVE_API_V1_V2 (DELETED: no reader; the label doors admit labels_native_api_v3 only) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
-# Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
-comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable[LABELS_NATIVE_ABI_NAME], ("MojolearnLabelsNativeTableIdenticalV4" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV4")]
-
-
 def labels_native_api_v3_binding() raises -> PythonObject:
     var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -2058,19 +1963,7 @@ def _publish_neighbors_ops(module: PythonObject) raises:
     py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
 
 
-def _publish_qn_fold_table() raises:
-    # The resident-fold QN entry (core/estimators_entry_table.mojo family
-    # ESTIMATORS_TABLE_QN_FOLD, the former `qn_fit_fold` export's body):
-    # QNRegressor's owner (bindings/qn_native.mojo) fits a device fold
-    # through it. LogisticRegression's door still reaches the same entry
-    # through the `logistic_fold_native_api_v1` capsule. A build with no GPU
-    # vendor ("none") publishes nothing.
-    var word = estimators_vendor_word(String(COMPILED_VENDOR))
-    if word < 0:
-        return
-    var api = LOGISTIC_FOLD_API.get_or_create_ptr()
-    estimators_table_publish[ESTIMATORS_TABLE_QN_FOLD](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word),
-        Int(api[].entries.unsafe_ptr()), logistic_fold_v1)
+
 
 
 def build__mojolearn() -> PythonObject:
