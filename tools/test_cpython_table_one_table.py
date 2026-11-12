@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TABLE = ROOT / "bindings" / "cpython_table.mojo"
+TABLE = ROOT / "bindings" / "py_cpython_table.mojo"
 # Version-dependent symbols resolved by existence check, never on a hot path.
 EXTERNAL_ALLOWED = {
     "bindings/py_cpython_table.mojo",
