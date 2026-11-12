@@ -2428,10 +2428,11 @@ def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
     if Int(py=offsets._mv[0]) != 0 or Int(py=offsets._mv[trees]) != nodes:
         raise Error("saved forest offsets do not cover its node array")
     var classifier = Bool(py=metadata[1])
-    var classes = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var classes = Optional[PythonObject]()
     if py_contains(arrays, "classes"):
         classes = host_archive_class_values(arrays["classes"], context)
-    if classifier and (classes is None or len(classes) != outputs):
+    if classifier and (not classes or len(classes.value()) != outputs):
         raise Error("saved forest classifier must carry num_outputs classes")
     if not classifier and outputs != 1:
         raise Error("saved forest regressor must carry one output")
@@ -2458,8 +2459,8 @@ def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
     py_setitem(fields, "_num_outputs", outputs)
     py_setitem(fields, "_binding", module)
     if classifier:
-        py_setitem(fields, "classes_", classes)
-        py_setitem(fields, "n_classes_", len(classes))
+        py_setitem(fields, "classes_", classes.value())
+        py_setitem(fields, "n_classes_", len(classes.value()))
     return model
 
 
@@ -2697,13 +2698,15 @@ def host_archive_public_owner(path: PythonObject, members: List[NativeArchiveDec
         raise Error("TypeError: native archive loading requires an ordinary class")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var connected = context["archive_class_formats"]
-    var owner = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var format_owner = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: loading class ancestry metadata
         if py_contains(connected, mro[i]):
-            owner = mro[i]
+            format_owner = mro[i]
             break
-    if owner is None:
+    if not format_owner:
         raise Error("TypeError: " + _archive_class_name_unpack(cls) + " has no connected saved format")
+    var owner = format_owner.value()
     var native_hooks = py_get(context, "host_archive_native_loader_hooks")
     if native_hooks is not None and py_contains(native_hooks, owner):
         # These native loaders publish the vetted package hook's state in
@@ -2746,14 +2749,15 @@ struct HostArchivePacked(Movable):
     # PACK result. The public class retains hook identity across the boundary;
     # no probe instance or decoded payload owner enters this envelope.
     var cls: PythonObject
-    var public_owner: PythonObject
+    # Optional, not a PythonObject(None) sentinel: no connected public class is absent (modular/modular#7546).
+    var public_owner: Optional[PythonObject]
     var value: PythonObject
     var fmt: String
     var estimator: String
 
     def __init__(out self):
         self.cls = PythonObject(None)
-        self.public_owner = PythonObject(None)
+        self.public_owner = Optional[PythonObject]()
         self.value = PythonObject(None)
         self.fmt = ""
         self.estimator = ""
@@ -2781,15 +2785,15 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
     # A public class's own `load` (the context _native_archive_bridge
     # connects) keys the schema on the class, not on the saved name: a
     # subclass loads its base's file, as the Python loaders did.
-    var public_owner = PythonObject(None)
+    var public_owner = Optional[PythonObject]()
     if requested_class is not None and py_get(context, "archive_class_formats") is not None:
         public_owner = host_archive_public_owner(path, members, requested_class, context, numpy, print_mode)
     var fmt = native_archive_string(members, "format", numpy, print_mode)
     if classical_only and not py_contains(context["host_archive_classical_formats"], fmt):
         raise Error("model archive format does not name a classical host model")
     var estimator = native_archive_string(members, "estimator", numpy, print_mode)
-    if public_owner is not None:
-        estimator = _archive_class_name_unpack(public_owner)
+    if public_owner:
+        estimator = _archive_class_name_unpack(public_owner.value())
     # Historical explicit CPU saves used their Host* class name. Admit only
     # these exact aliases within their matching unchanged archive schemas.
     if fmt == "mojolearn-kde-1" and estimator == "HostKernelDensity":
@@ -2803,7 +2807,7 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
     var cls = py_get(classes, estimator)
     if cls is None:
         raise Error("mojolearn: " + String(py_call(native_loaded_module("builtins").repr, path)) + " was saved by " + estimator + ", which " + fmt + " does not hold")
-    if public_owner is not None:
+    if public_owner:
         cls = requested_class
     elif requested_class is not None:
         var b = native_loaded_module("builtins")
@@ -2818,7 +2822,7 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
         cls = requested_class
     var result = HostArchivePacked()
     result.cls = cls
-    result.public_owner = public_owner
+    result.public_owner = public_owner^
     result.fmt = fmt
     result.estimator = estimator
     if fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler":
@@ -2840,7 +2844,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject, classical_only: Bool = False) raises -> PythonObject:
     var decoded = host_archive_unpack(path, context, requested_class, classical_only)
     var cls = decoded.cls
-    var public_owner = decoded.public_owner
+    var public_owner = decoded.public_owner.copy()
     var fmt = decoded.fmt
     var estimator = decoded.estimator
     var arrays = decoded.value
@@ -2885,14 +2889,14 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         # public class's own `load` also set `used_query_tile_ = None`.
         var holder = Python.dict()
         var native_hooks = py_get(context, "host_archive_native_loader_hooks")
-        if public_owner is not None and (native_hooks is None or not py_contains(native_hooks, public_owner)):
+        if Bool(public_owner) and (native_hooks is None or not py_contains(native_hooks, public_owner.value())):
             py_setitem(holder, "used_query_tile_", PythonObject(None))
         # The admitted native public loaders replace the former post-load
         # NearestNeighbors._mojolearn_after_fit wrapper, whose final state was
         # an empty holder. Build that final state once, without a callback or
         # a second dictionary allocation that discards used_query_tile_.
         py_setitem(sequential_fields(model), "_resident_holder", holder)
-    elif fmt == "mojolearn-iforest-1" and public_owner is not None:
+    elif fmt == "mojolearn-iforest-1" and Bool(public_owner):
         model = host_archive_public_iforest(cls, arrays, path, context)
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
@@ -2906,9 +2910,9 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_gpc(cls, arrays, path, context)
     elif fmt == "mojolearn-svc-1" or fmt == "mojolearn-svr-1":
         model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", path, context)
-    elif public_owner is not None and (fmt.startswith("mojolearn-randomforest-1") or fmt.startswith("mojolearn-extratrees-1")):
+    elif Bool(public_owner) and (fmt.startswith("mojolearn-randomforest-1") or fmt.startswith("mojolearn-extratrees-1")):
         model = host_archive_public_forest(cls, arrays, fmt, fmt.startswith("mojolearn-extratrees-1"), path, context)
-    elif public_owner is not None and fmt == "mojolearn-gbdt-1":
+    elif Bool(public_owner) and fmt == "mojolearn-gbdt-1":
         model = host_archive_public_gbdt(cls, arrays, path, context)
     elif fmt == "mojolearn-gbdt-1":
         model = host_archive_gbdt(cls, arrays, context)
