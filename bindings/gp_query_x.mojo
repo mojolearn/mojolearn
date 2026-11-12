@@ -23,7 +23,8 @@ from std.python import PythonObject
 from bindings.admitted_family import admit_family
 from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse
-from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
+from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
+from bindings.device_rows_door_run import DoorRowsStore
 from bindings.gp_svm_gp_state import gp_x_known, gp_x_deferred
 
 

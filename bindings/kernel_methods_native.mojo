@@ -32,7 +32,8 @@ from bindings.host_inference_scalars import host_inference_primitive_number
 from core.cast_in import CAST_KIND_SIGNED
 from core.host_finite_scan import host_all_finite_f32_strided
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
-from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
+from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
+from bindings.device_rows_door_run import DoorRowsStore
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end
 from providers.python.kernel_public_lifecycle_pyapi import kernel_public_admit, kernel_public_finite, kernel_public_ignored_target, kernel_public_result, kernel_public_column_target, kernel_public_refusal, kernel_public_feature_snapshot, kernel_public_fit_complete
