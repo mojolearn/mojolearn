@@ -65,14 +65,6 @@ def hierarchy_solver_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
-
-
 def cd_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -230,10 +222,10 @@ def linkage_fit_binding(
             "linkage_fit: params must contain 5 values, got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var chp = _i32_ptr(Int(py=children_addr))
-    var lp = _i32_ptr(Int(py=labels_addr))
-    var ip = _i32_ptr(Int(py=info_addr))
+    var xp = f32_ptr(Int(py=x_addr))
+    var chp = i32_ptr(Int(py=children_addr))
+    var lp = i32_ptr(Int(py=labels_addr))
+    var ip = i32_ptr(Int(py=info_addr))
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     var k = Int(py=params[2])

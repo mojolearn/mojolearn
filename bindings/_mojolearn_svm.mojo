@@ -51,7 +51,6 @@ from bindings.device_plan_binding import device_plan_enter_binding, device_plan_
 from core.device_plan import device_plan_current
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -120,19 +119,15 @@ from svm.svm_resident_state import (
     svc_predict_resident_host,
     svr_predict_resident_host,
 )
+from svm.svm_binding_run import (
+    svm_c_rows_run,
+    svm_predict_inputs_run,
+    svc_fit_store_run,
+    svr_fit_store_run,
+    iforest_resident_info_run,
+    iforest_outputs_run,
+)
 from providers.python.svm_impl_svc_ovo_layout_pyapi import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
-
-
-def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    return f64_ptr(addr)
-
 
 def svr_native_api_binding() raises -> PythonObject:
     var table = SVR_DEVICE_API.get_or_create_ptr()
@@ -160,14 +155,10 @@ def _c_rows(params: PythonObject, slot: Int, n_rows: Int, who: String) raises ->
     rounded once by the caller; `InitPenalty`'s weighted arm) at the address
     in `params[slot]`; absent or 0 is the unweighted arm. The solver checks
     them (`check_c_rows`)."""
-    var out = List[Float32]()
-    if len(params) <= slot:
-        return out^
-    var a = Int(py=params[slot])
-    if a == 0:
-        return out^
-    out = read_f32(a, n_rows)
-    return out^
+    var a = 0
+    if len(params) > slot:
+        a = Int(py=params[slot])
+    return svm_c_rows_run(a, n_rows)
 
 def svc_fit_binding(
     x_addr: PythonObject,
@@ -243,11 +234,11 @@ def svc_fit_binding(
         fold = QueryFold(Int(py=params[11]), Int(py=params[12]), Int(py=params[13]))
         scale_gamma = Int(py=params[14]) != 0
     var x_word = 0 if fold.active() else Int(py=x_addr)
-    var yp = _f32_ptr(Int(py=y_addr))
-    var dp = _f32_ptr(Int(py=dual_addr))
-    var sip = _i32_ptr(Int(py=support_idx_addr))
-    var smp = _f32_ptr(Int(py=support_matrix_addr))
-    var ip = _f64_ptr(Int(py=info_addr))
+    var yp = f32_ptr(Int(py=y_addr))
+    var dp = f32_ptr(Int(py=dual_addr))
+    var sip = i32_ptr(Int(py=support_idx_addr))
+    var smp = f32_ptr(Int(py=support_matrix_addr))
+    var ip = f64_ptr(Int(py=info_addr))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
     var kernel = Int(py=params[2])
@@ -271,22 +262,8 @@ def svc_fit_binding(
             x_word, fold, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
             nochange_steps, degree, coef0, c_rows, scale_gamma,
         )
-    copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
-    unsafe_memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
-    copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
-    ip.unsafe_store(0, Float64(res.b))
-    ip.unsafe_store(1, Float64(res.n_support))
-    ip.unsafe_store(2, Float64(res.n_iter))
-    ip.unsafe_store(3, Float64(res.label0))
-    ip.unsafe_store(4, Float64(res.label1))
-    if device_form:
-        ip.unsafe_store(5, Float64(res.finite_word))
-        ip.unsafe_store(6, Float64(res.range_word))
-        ip.unsafe_store(7, res.gamma)
-    elif res.finite_word != 0:
-        # The short forms carry no status slots: refuse in admit_x's wording.
-        raise Error("Input X contains NaN or infinity (SVC).")
-    return PythonObject(res.n_support)
+    var n_support = svc_fit_store_run(res, dp, sip, smp, ip, n_cols, device_form)
+    return PythonObject(n_support)
 
 
 def svc_predict_binding(
@@ -327,8 +304,8 @@ def svc_predict_binding(
         raise Error(
             "svc_predict: params must contain 12 values, got " + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
+    var xp = f32_ptr(Int(py=x_addr))
+    var op = f32_ptr(Int(py=out_addr))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
     var n_support = Int(py=params[2])
@@ -345,18 +322,17 @@ def svc_predict_binding(
         raise Error("svc_predict: n_rows and n_features must both be positive")
     if n_support < 0:
         raise Error("svc_predict: n_support cannot be negative")
+    var dual_word = 0
+    var support_word = 0
+    if n_support > 0:
+        dual_word = Int(py=dual_addr)
+        support_word = Int(py=support_matrix_addr)
     var x = List[Float32]()
-    x = read_f32(Int(xp), max(0, n_rows * n_cols))
     var dual = List[Float32]()
     var support = List[Float32]()
-    if n_support > 0:
-        var dp = _f32_ptr(Int(py=dual_addr))
-        var smp = _f32_ptr(Int(py=support_matrix_addr))
-        dual = read_f32(Int(dp), max(0, n_support))
-        if kernel != 4:
-            # kernel='precomputed' (4) reads no support rows: X is the
-            # cross-kernel and the caller passes no support matrix.
-            support = read_f32(Int(smp), max(0, n_support * n_cols))
+    svm_predict_inputs_run(
+        Int(xp), n_rows, n_cols, n_support, kernel, dual_word, support_word, x, dual, support
+    )
     var out = List[Float32]()
     with GILReleased(Python()):
         out = svc_predict_host(
@@ -448,11 +424,11 @@ def svr_fit_binding(
         fold = QueryFold(Int(py=params[12]), Int(py=params[13]), Int(py=params[14]))
         scale_gamma = Int(py=params[15]) != 0
     var x_word = 0 if fold.active() else Int(py=x_addr)
-    var yp = _f32_ptr(Int(py=y_addr))
-    var dp = _f32_ptr(Int(py=dual_addr))
-    var sip = _i32_ptr(Int(py=support_idx_addr))
-    var smp = _f32_ptr(Int(py=support_matrix_addr))
-    var ip = _f64_ptr(Int(py=info_addr))
+    var yp = f32_ptr(Int(py=y_addr))
+    var dp = f32_ptr(Int(py=dual_addr))
+    var sip = i32_ptr(Int(py=support_idx_addr))
+    var smp = f32_ptr(Int(py=support_matrix_addr))
+    var ip = f64_ptr(Int(py=info_addr))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
     var kernel = Int(py=params[2])
@@ -479,20 +455,8 @@ def svr_fit_binding(
             x_word, fold, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
             nochange_steps, c_rows, degree, coef0, scale_gamma,
         )
-    copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
-    unsafe_memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
-    copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
-    ip.unsafe_store(0, Float64(res.b))
-    ip.unsafe_store(1, Float64(res.n_support))
-    ip.unsafe_store(2, Float64(res.n_iter))
-    if device_form:
-        ip.unsafe_store(3, Float64(res.finite_word))
-        ip.unsafe_store(4, Float64(res.range_word))
-        ip.unsafe_store(5, res.gamma)
-    elif res.finite_word != 0:
-        # The short forms carry no status slots: refuse in admit_x's wording.
-        raise Error("Input X contains NaN or infinity (SVR).")
-    return PythonObject(res.n_support)
+    var n_support = svr_fit_store_run(res, dp, sip, smp, ip, n_cols, device_form)
+    return PythonObject(n_support)
 
 
 def svr_predict_binding(
@@ -535,8 +499,8 @@ def svr_predict_binding(
             "svr_predict: params must contain 7 values (9 with degree and coef0), got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
+    var xp = f32_ptr(Int(py=x_addr))
+    var op = f32_ptr(Int(py=out_addr))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
     var n_support = Int(py=params[2])
@@ -553,18 +517,17 @@ def svr_predict_binding(
         raise Error("svr_predict: n_rows and n_features must both be positive")
     if n_support < 0:
         raise Error("svr_predict: n_support cannot be negative")
+    var dual_word = 0
+    var support_word = 0
+    if n_support > 0:
+        dual_word = Int(py=dual_addr)
+        support_word = Int(py=support_matrix_addr)
     var x = List[Float32]()
-    x = read_f32(Int(xp), max(0, n_rows * n_cols))
     var dual = List[Float32]()
     var support = List[Float32]()
-    if n_support > 0:
-        var dp = _f32_ptr(Int(py=dual_addr))
-        var smp = _f32_ptr(Int(py=support_matrix_addr))
-        dual = read_f32(Int(dp), max(0, n_support))
-        if kernel != 4:
-            # kernel='precomputed' (4) reads no support rows: X is the
-            # cross-kernel and the caller passes no support matrix.
-            support = read_f32(Int(smp), max(0, n_support * n_cols))
+    svm_predict_inputs_run(
+        Int(xp), n_rows, n_cols, n_support, kernel, dual_word, support_word, x, dual, support
+    )
     var out = List[Float32]()
     with GILReleased(Python()):
         out = svr_predict_host(
@@ -774,9 +737,9 @@ def iforest_run_binding(
         raise Error(
             "iforest_run: params must contain 16 values, got " + String(len(params))
         )
-    var tp = _f32_ptr(Int(py=train_addr))
-    var qp = _f32_ptr(Int(py=query_addr))
-    var ip = _f64_ptr(Int(py=info_addr))
+    var tp = f32_ptr(Int(py=train_addr))
+    var qp = f32_ptr(Int(py=query_addr))
+    var ip = f64_ptr(Int(py=info_addr))
     var n_train = Int(py=params[0])
     var n_features = Int(py=params[1])
     var n_query = Int(py=params[2])
@@ -846,10 +809,7 @@ def iforest_run_binding(
                     if_resident_put(held)
                 raise e
             if_resident_put(held)
-            ip.unsafe_store(0, res.offset_)
-            ip.unsafe_store(1, Float64(res.max_samples_))
-            ip.unsafe_store(2, Float64(res.n_features_in_))
-            ip.unsafe_store(3, Float64(res.token))
+            iforest_resident_info_run(res, ip)
             return PythonObject(n_query)
     with GILReleased(Python()):
         res = iforest_run_host(
@@ -859,15 +819,13 @@ def iforest_run_binding(
             bootstrap, random_state, contamination_auto, contamination,
             want, train_addr=Int(tp), query_addr=q_addr,
         )
+    var out_i32_word = 0
+    var out_f32_word = 0
     if want == IF_WANT_PREDICT:
-        var oi = _i32_ptr(Int(py=out_i32_addr))
-        unsafe_memcpy(dest=oi, src=res.labels.unsafe_ptr(), count=n_query)
+        out_i32_word = Int(py=out_i32_addr)
     else:
-        var of = _f32_ptr(Int(py=out_f32_addr))
-        unsafe_memcpy(dest=of, src=res.values.unsafe_ptr(), count=n_query)
-    ip.unsafe_store(0, res.offset_)
-    ip.unsafe_store(1, Float64(res.max_samples_))
-    ip.unsafe_store(2, Float64(res.n_features_in_))
+        out_f32_word = Int(py=out_f32_addr)
+    iforest_outputs_run(res, want, out_i32_word, out_f32_word, n_query, ip)
     return PythonObject(n_query)
 
 
