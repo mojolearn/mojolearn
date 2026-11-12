@@ -110,15 +110,14 @@ from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
 from gemm.afn_apple_fast import (
     AFN_EPI_BIAS,
     AFN_EPI_BIAS_GELU,
-    AFN_EPI_BIAS_RESID,
     AFN_EPI_BIAS_SILU,
     AFN_EPI_NONE,
     AFN_GEMM_BF16_MMA,
     AFN_GEMM_EPILOGUE,
     afn_gemm_bf16_bits_into,
-    afn_gemm_fused_into,
 )
 from decomposition.linalg_door_impl import from_f16_device, qr_r_device_into, svdvals_device_into
+from gemm.linalg_fused_run import gemm_fused_run
 from max.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
@@ -347,23 +346,7 @@ def gemm_fused_binding(
         raise Error("gemm_fused: this binding was built without MOJOLEARN_AFN_GEMM_EPILOGUE")
     else:
         with GILReleased(Python()):
-            var ctx = process_ctx[_DEVCTX_SLOT]()
-            var da = _dev_f32(ctx, a_address, m * k)
-            var db = _dev_f32(ctx, b_address, n * k)
-            var dbias = _dev_f32(ctx, bias_address, n if epi != AFN_EPI_NONE else 0)
-            var dres = _dev_f32(ctx, resid_address, m * n if epi == AFN_EPI_BIAS_RESID else 0)
-            var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
-            if not afn_gemm_fused_into(ctx, dc, da, db, dbias, dres, m, n, k, op, epi):
-                raise Error("gemm_fused: the fused route declined the shape")
-            ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-            ctx.synchronize()
-            _ = da^
-            _ = db^
-            _ = dbias^
-            _ = dres^
-            _ = dc^
-            # DEVIATION 3010: drain the frees before the block ends.
-            ctx.synchronize()
+            gemm_fused_run(c_address, a_address, b_address, bias_address, resid_address, m, n, k, op, epi)
         return PythonObject(m * n)
 
 
