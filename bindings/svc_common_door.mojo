@@ -10,7 +10,7 @@
 # resolved through `_buffer._native` (the module registers it as
 # `family_svc_native`), and the x_metrics programs of `_r2_sums` and
 # `accuracy_fraction`, rebuilt here stage for stage (the `_Prog` of
-# bindings/metrics_reg_native.mojo, run by the shared runner). The label
+# bindings/metrics_reg_door.mojo, run by the shared runner). The label
 # ORDER RULE (`_labels.sorted_classes`) is the builtins' `sorted` over the
 # first-seen labels, as the Python label input step ran it: the classes and
 # codes are the ones `encode_labels` returned for a flat label list.
@@ -45,7 +45,9 @@ from bindings.family_common_pack import (
     family_entry,
     family_array,
 )
-from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
+from bindings.metrics_reg_run import _Reg, _RE_DIV
+from bindings.metrics_program_door import metric_plan_run
+from core.metrics_program_plan import metric_term
 from core.host_finite_scan import host_all_finite_f32
 from bindings.svc_common_run import svc_r2_check
 
@@ -396,9 +398,12 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     var n = Int(py=t.size)
     var m = Int(py=p.size)
     svc_r2_check(Int(py=classical_address(t)), n, Int(py=classical_address(p)), m)
-    var r = _Reg(t, p, n, 1, PythonObject(None), "uniform_average", PythonObject(None), context["family_metrics_ops"])
-    var sq = Int(py=context["family_metrics_terms"]["sq"])
-    r.program(0.0, context)
+    var pins = List[PythonObject]()
+    pins.append(t)
+    pins.append(p)
+    var r = _Reg(n, 1, False, "uniform_average", List[Float64]())
+    var sq = metric_term("sq")
+    r.program(0.0)
     var y_off = r.y_off
     var p_off = r.p_off
     var y_sums = r.sums(y_off)
@@ -409,11 +414,11 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     var tot_terms = r.term(sq, y_off, y_mean, True)
     var tot_sums = r.sums(tot_terms)
     var den = r.fin(tot_sums, 0)
-    _ = r.prog.want(num, 2)
-    _ = r.prog.want(den, 2)
-    var arena = _reg_run(r.prog, PythonObject(None), context)
-    var ss_res = _arena_double(arena, num)
-    var ss_tot = _arena_double(arena, den)
+    _ = r.plan.want(num, 2, -1, 1)
+    _ = r.plan.want(den, 2, -1, 1)
+    var arena = metric_plan_run(r.plan, pins, PythonObject(None), context)
+    var ss_res = arena.f64(num)
+    var ss_tot = arena.f64(den)
     _ = t^
     _ = p^
     return Python.tuple(PythonObject(ss_res), PythonObject(ss_tot))

@@ -27,7 +27,7 @@ from bindings.family_common_pack import (
     family_call,
     family_call_kw,
 )
-from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.arena_materialize_native_door import _prepared_info, _slot
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
@@ -832,7 +832,7 @@ struct MselRng(Movable):
         self.draws += 1
         return s
 
-    def permute_stage(mut self, mut prog: _Prog, n: Int) raises -> Int:
+    def permute_stage(mut self, mut prog: MetricDoorProg, n: Int) raises -> Int:
         """The next draw as a `permute` stage of `prog`; returns its slot."""
         var s = self.salt()
         var out = prog.alloc(max(n, 1))
@@ -841,7 +841,7 @@ struct MselRng(Movable):
 
     def permutation_rows(mut self, sizes: List[Int], context: PythonObject) raises -> PythonObject:
         """One draw per size, in order, as int64 row Arrays (`permutation_rows`)."""
-        var prog = _Prog(context["family_metrics_ops"])
+        var prog = MetricDoorProg()
         var outs = List[Int]()
         for i in range(len(sizes)):  # driver-loop: over the requested draws
             var o = self.permute_stage(prog, sizes[i])
@@ -853,8 +853,8 @@ struct MselRng(Movable):
         var result = Python.list()
         if len(outs) == 0:
             return result
-        var arena = _reg_run(prog, PythonObject(None), context)
-        var base = _arena_base(arena)
+        var arena = metric_door_run(prog, PythonObject(None), context)
+        var base = arena.base()
         for i in range(len(sizes)):  # driver-loop: over the requested draws
             var rows = msel_new(sizes[i], "<i8", context)
             if sizes[i] > 0:
@@ -870,15 +870,15 @@ struct MselRng(Movable):
     def permutation(mut self, size: Int, context: PythonObject) raises -> PythonObject:
         """`permutation(size)`: one draw read back as a list of ints (the
         arena words as `array('i')`, as `_Prog.ints` read them)."""
-        var prog = _Prog(context["family_metrics_ops"])
+        var prog = MetricDoorProg()
         var slot = self.permute_stage(prog, size)
         var o = prog.want(slot, size)
-        var arena = _reg_run(prog, PythonObject(None), context)
+        var arena = metric_door_run(prog, PythonObject(None), context)
         _ = prog^
         # PACK: the words o..o+size of the native arena as one bytes object,
         # read as `array('i')` (lane entangled-programs: the arena is native).
         ref cpy = Python().cpython()
-        var raw = cpython_table()[].PyBytes_FromStringAndSize(_arena_base(arena) + 4 * o, 4 * size)
+        var raw = cpython_table()[].PyBytes_FromStringAndSize(arena.base() + 4 * o, 4 * size)
         if not raw:
             raise cpy.unsafe_get_error()
         var chunk = PythonObject(from_owned=raw)
@@ -893,7 +893,7 @@ struct MselRng(Movable):
         `approx_mode` stages of one program; the draws they report are
         consumed). Returns n_i followed by t_i."""
         var k = len(counts)
-        var prog = _Prog(context["family_metrics_ops"])
+        var prog = MetricDoorProg()
         var c = prog.put_i32(msel_i32_list(counts, context))
         var out_slot = prog.alloc(2 * k)
         var out = prog.want(out_slot, 2 * k)
@@ -905,9 +905,9 @@ struct MselRng(Movable):
         var w3 = msel_signed32(self.draws >> 32)
         prog.stage("approx_mode", k, [k, c, MSEL_NONE, n_train, out, MSEL_NONE, used, w0, w1, w2, w3])
         prog.stage("approx_mode", k, [k, c, out, n_test, out + k, used, used + 1, w0, w1, w2, w3])
-        var arena = _reg_run(prog, PythonObject(None), context)
+        var arena = metric_door_run(prog, PythonObject(None), context)
         # Completed arena metadata is invariant across the class-count loop.
-        var words = FAMILY_I32P(unsafe_from_address=_arena_base(arena))
+        var words = FAMILY_I32P(unsafe_from_address=arena.base())
         self.draws += UInt64(Int(words[used]) + Int(words[used + 1]))
         var both = List[Int]()
         for i in range(2 * k):  # driver-loop: over classes (train and test counts)

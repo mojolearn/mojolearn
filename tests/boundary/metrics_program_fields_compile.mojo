@@ -4,7 +4,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.arena_prog_native_door import _metrics_run
-from bindings.metrics_reg_native import metrics_reg_operation
+from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.metrics_exp_native_unpack import metrics_exp_operation
 
 def classifications(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

@@ -14,6 +14,12 @@
 # Python `_run` made). The result words are read back from the arena as the
 # Python `words(out, 2, "d")` read them. Same program, same kernels: the
 # bits do not move.
+#
+# Lane metric-programs-2 (2026-11-12): renamed from metrics_reg_native.mojo.
+# This is the door: UNPACK (the refusals, the admitted y / p / w arrays and
+# the custom weights read once), the typed program (`_Reg` in
+# bindings/metrics_reg_run.mojo, stage records through the typed op and term
+# tables), the run with y / p / w as the only pins, and PACK.
 from std.memory import unsafe_memcpy, bitcast
 from bindings.admitted_family_door import admit_family, admit_family_f64
 from bindings.native_loaded_module_door import native_loaded_module
@@ -28,10 +34,13 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.metrics_native_support_door import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate_unpack import classical_view
-from bindings.arena_prog_native_door import _metrics_run_plan
 from bindings.arena_prog_run import MetricArenaOwner
-from bindings.metrics_plan_admission_unpack import MetricPlanOpcodes
-from core.metrics_program_plan import MetricProgramPlan
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_plan_run
+from bindings.metrics_program_pack import metric_f64_array
+from bindings.metrics_reg_run import (
+    _Reg, _NONE, _RE_DIV, _RE_ROOT, reg_raw_values, tweedie_check,
+)
+from core.metrics_program_plan import metric_term
 from bindings.family_common_unpack import (
     FAMILY_F32P,
     FAMILY_F64P,
@@ -49,258 +58,17 @@ from bindings.family_common_pack import (
 from core.family_cast_impl import family_max_f32
 from core.host_finite_scan import host_all_finite_f32
 
-comptime _NONE = -1
-comptime _PARAMS = 14
-# reg_epi (op 60, x_metrics/reg_epi.mojo): kinds, MEAN modes, AVG modes.
-comptime _RE_MEAN = 0
-comptime _RE_PCT = 1
-comptime _RE_ASM = 2
-comptime _RE_AVG = 3
-comptime _RE_SIGN = 4
-comptime _RE_DIV = 1
-comptime _RE_ROOT = 2
-comptime _RE_UNIFORM = 1
-comptime _RE_CUSTOM = 2
-comptime _RE_VARIANCE = 3
-# flag_scan tests (x_metrics/tail.mojo).
-comptime _SCAN_LOG_DOMAIN = 0
-
-
-struct _Prog(Movable):
-    """`_expansion_metrics._Prog`: an arena layout, the inputs copied into
-    it, the stage records and the declared outputs, held as native words
-    (the MetricProgramPlan the classification metrics build) instead of
-    Python lists the runner read back word by word. Same layout, same
-    records, same declared outputs: the same program."""
-    var plan: MetricProgramPlan
-    var inputs: List[PythonObject]
-    var ops: MetricPlanOpcodes
-
-    def __init__(out self, ops: PythonObject) raises:
-        self.plan = MetricProgramPlan()
-        self.inputs = List[PythonObject]()
-        self.ops = MetricPlanOpcodes(ops)
-
-    def alloc(mut self, n: Int) raises -> Int:
-        return self.plan.alloc(n)
-
-    def put(mut self, array: PythonObject) raises -> Int:
-        """A float32 C-ordered array -> its offset."""
-        var off = self.plan.input(Int(py=array.size))
-        self.inputs.append(array)
-        return off
-
-    def put_i32(mut self, array: PythonObject) raises -> Int:
-        """int32 words (read with ldi), copied in as their bits."""
-        return self.put(array)
-
-    def scratch(mut self, n: Int) raises -> Int:
-        return self.plan.scratch(n)
-
-    def stage(mut self, op: String, total: Int, params: List[Int]) raises:
-        if len(params) > _PARAMS:
-            raise Error("ValueError: x_metrics: too many stage parameters")
-        var opcode = self.ops.get(op)
-        self.plan.stage(opcode, total, params)
-
-    def want(mut self, off: Int, n: Int) raises -> Int:
-        return self.plan.want(off, n, -1, 1)
-
-
-# TOMBSTONE: `_f32_scalar_array` (a one-word Python Array per program scalar) deleted 2026-11-12 by lane
-# entangled-programs: scalars are program-owned words (`MetricProgramPlan.input_f32`); code recoverable at
-# e561a66d6b.
-
-
-struct _Reg(Movable):
-    """`_expansion_metrics._Reg`: validated (n, D) float32 targets, the
-    weights, the multioutput rule, and the program being built."""
-    var y: PythonObject
-    var p: PythonObject
-    var w: PythonObject
-    var n: Int
-    var d: Int
-    var mo: String               # "raw_values", "uniform_average", "variance_weighted" or "custom"
-    var custom: PythonObject     # the custom weights as an <f8 Array (mo == "custom")
-    var prog: _Prog
-    var y_off: Int
-    var p_off: Int
-    var s_off: Int
-    var w_off: Int
-    var key: Int
-    var sw: Int
-
-    def __init__(out self, y: PythonObject, p: PythonObject, n: Int, d: Int, w: PythonObject, mo: String,
-                 custom: PythonObject, ops: PythonObject) raises:
-        self.y = y
-        self.p = p
-        self.w = w
-        self.n = n
-        self.d = d
-        self.mo = String(mo)
-        self.custom = custom
-        self.prog = _Prog(ops)
-        self.y_off = _NONE
-        self.p_off = _NONE
-        self.s_off = _NONE
-        self.w_off = _NONE
-        self.key = _NONE
-        self.sw = _NONE
-
-    def group(mut self, key: Int, n: Int, m: Int, values: Int, vstride: Int, weights: Int, width: Int) raises -> Int:
-        """`_group`: the stable counting sort and the PairSums; returns OUT."""
-        var off = self.prog.alloc(m + 1)
-        var order = self.prog.scratch(n)
-        var out = self.prog.alloc(m * width)
-        self.prog.stage("group_sort", 1, [key, n, m, off, order])
-        if m * width:
-            self.prog.stage("group_sum", m * width, [off, order, values, vstride, weights, out, width])
-        return out
-
-    def program(mut self, scalar: Float64, context: PythonObject) raises:
-        """`_Reg.program`: y, p, the kind's scalar (Float32), the weights,
-        the one-group key and the weight total."""
-        self.y_off = self.prog.put(self.y)
-        self.p_off = self.prog.put(self.p)
-        self.s_off = self.prog.plan.input_f32(scalar)
-        if self.w is not None:
-            self.w_off = self.prog.put(self.w)
-        self.key = self.prog.scratch(self.n)
-        self.prog.stage("pair_key", self.n, [0, 0, self.key, 1, 2])
-        if self.w is not None:
-            self.sw = self.group(self.key, self.n, 1, _NONE, 1, self.w_off, 1)
-
-    def term(mut self, kind: Int, v: Int, p: Int, broadcast: Bool) raises -> Int:
-        var out = self.prog.scratch(self.n * self.d)
-        self.prog.stage("reg_term", self.n * self.d, [v, p, out, self.d, kind, self.s_off, 1 if broadcast else 0])
-        return out
-
-    def sums(mut self, v: Int) raises -> Int:
-        return self.group(self.key, self.n, 1, v, self.d, self.w_off, self.d)
-
-    def fin(mut self, sums: Int, mode: Int) raises -> Int:
-        """reg_epi MEAN without the Float32 column: dst."""
-        var dst = self.prog.alloc(2 * self.d)
-        self.prog.stage("reg_epi", self.d, [_RE_MEAN, self.d, sums, self.sw, self.n, dst, _NONE, mode])
-        return dst
-
-    def fin32(mut self, sums: Int, mode: Int) raises -> Int:
-        """reg_epi MEAN with the Float32 broadcast column: d32."""
-        var dst = self.prog.alloc(2 * self.d)
-        var d32 = self.prog.scratch(self.d)
-        self.prog.stage("reg_epi", self.d, [_RE_MEAN, self.d, sums, self.sw, self.n, dst, d32, mode])
-        return d32
-
-    def stage_mean(mut self, kind: Int, mode: Int, v: Int, p: Int, broadcast: Bool) raises -> Int:
-        var terms = self.term(kind, v, p, broadcast)
-        var sums = self.sums(terms)
-        return self.fin(sums, mode)
-
-    def percentile(mut self, v: Int, rank: Float64, f32: Bool, context: PythonObject) raises -> Int:
-        """`_Reg.percentile` (average=True): dst, or d32 with f32."""
-        var n = self.n
-        var d = self.d
-        var order = self.prog.scratch(n * d)
-        self.prog.stage("col_sort", d, [v, n, d, order])
-        var r = self.prog.plan.input_f32(rank)
-        var out = self.prog.scratch(d)
-        var cdf = self.prog.scratch(n * d)
-        self.prog.stage("wpercentile", d, [v, n, d, order, self.w_off, r, 1, out, cdf])
-        var dst = self.prog.alloc(2 * d)
-        var d32 = self.prog.scratch(d) if f32 else _NONE
-        self.prog.stage("reg_epi", d, [_RE_PCT, d, out, cdf, n, dst, d32])
-        return d32 if f32 else dst
-
-    def scan_sign(mut self, v: Int) raises -> Int:
-        var flags = self.prog.alloc(2)
-        self.prog.stage("reg_epi", self.n * self.d, [_RE_SIGN, self.n * self.d, v, flags])
-        return self.prog.want(flags, 2)
-
-    def scan_log_domain(mut self) raises -> Int:
-        var total = self.n * self.d
-        var flag = self.prog.alloc(1)
-        if total:
-            self.prog.stage("flag_scan", total, [self.y_off, total, _SCAN_LOG_DOMAIN, flag])
-        self.prog.stage("flag_scan", total, [self.p_off, total, _SCAN_LOG_DOMAIN, flag])
-        return self.prog.want(flag, 1)
-
-    def average(mut self, vals: Int, nan_rule: Bool, variance: Int, context: PythonObject) raises -> Int:
-        """`_Reg.average`: the values themselves (raw_values) or one reg_epi AVG unit."""
-        var d = self.d
-        if self.mo == "raw_values":
-            return self.prog.want(vals, 2 * d)
-        var mode = _RE_UNIFORM
-        var w = _NONE
-        if self.mo == "variance_weighted":
-            mode = _RE_VARIANCE
-            w = variance
-        elif self.mo == "custom":
-            mode = _RE_CUSTOM
-            # `_words64`: the binary64 weights as their Int32 word pairs, low first.
-            # (program-owned words; was a Python Array per call)
-            var words = List[Int32](length=2 * d, fill=0)
-            unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(words.unsafe_ptr())),
-                   src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(self.custom))), count=d)
-            _ = self.custom  # keep the Python object alive through the native copy above
-            w = self.prog.plan.input_words(words^)
-        var dst = self.prog.alloc(2)
-        self.prog.stage("reg_epi", 1, [_RE_AVG, d, vals, mode, w, dst, 1 if nan_rule else 0])
-        return self.prog.want(dst, 2)
-
-    def assemble(mut self, num: Int, den: Int, force_finite: Bool, average: Bool, context: PythonObject) raises -> Int:
-        """`_assemble`: the per-output `1 - num / den` and their average."""
-        var scores = self.prog.alloc(2 * self.d)
-        self.prog.stage("reg_epi", self.d, [_RE_ASM, self.d, num, den, 1 if force_finite else 0, scores])
-        if average:
-            return self.average(scores, True, den, context)
-        return scores
-
-
-def _reg_run(prog: _Prog, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
-    """`_run(prog, numeric_mode)`: the program handed to the shared runner's
-    native plan entry (UNPACK + typed RUN, bindings/arena_prog_native.mojo);
-    returns the native arena (lane entangled-programs, 2026-11-12: was the
-    Python store, read through a CPython buffer export per word read)."""
-    var prog_context = context["family_metrics_prog_context"]
-    return _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
-
-
-def _arena_base(arena: MetricArenaOwner) -> Int:
-    # Lane entangled-programs (2026-11-12): the native arena's base (was one
-    # CPython buffer export of the Python arena store per read). The caller
-    # holds `arena` across every read through the address.
-    return arena.base()
-
-
-def _arena_double(arena: MetricArenaOwner, off: Int) raises -> Float64:
-    """The binary64 value whose words are arena[off], arena[off + 1], low first."""
-    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)
-    return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
-
-
-def _arena_float(arena: MetricArenaOwner, off: Int) raises -> Float32:
-    """The binary32 value at arena[off], read while `arena` is borrowed."""
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0]
-
-
-def _arena_int(arena: MetricArenaOwner, off: Int) raises -> Int:
-    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0])
+# TOMBSTONE: `_Prog` (the third copy of the metric program builder, with a per-program Python opcode
+# snapshot), the Python-holding `_Reg`, `_reg_run` and the `_arena_*` readers deleted 2026-11-12 by lane
+# metric-programs-2: one door program (bindings/metrics_program_door.mojo `MetricDoorProg`), a typed `_Reg`
+# (bindings/metrics_reg_run.mojo) and the typed reads on `MetricArenaOwner`; code recoverable at 4f5a5ae6d8.
 
 
 def _reg_result(r: _Reg, out_buf: Int, arena: MetricArenaOwner, context: PythonObject) raises -> PythonObject:
-    """`_Reg.result`'s answer: a float, or the per-output float64 Array for raw_values."""
+    """PACK `_Reg.result`'s answer: a float, or the per-output float64 Array for raw_values."""
     if r.mo == "raw_values":
-        var values = family_array(Python.tuple(r.d), "<f8", context)
-        var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values)))
-        # The completed arena is private to this operation. Resolve its
-        # storage once, keeping the existing low-word-first binary64 decoding
-        # without a Python/CPython address lookup for each reported output.
-        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * out_buf)
-        for i in range(r.d):  # driver-loop: over the metric's outputs
-            dst[i] = bitcast[DType.float64](UInt64(words[2 * i]) | (UInt64(words[2 * i + 1]) << 32))
-        _ = values
-        return values
-    return PythonObject(_arena_double(arena, out_buf))
+        return metric_f64_array(reg_raw_values(r, out_buf, arena), context)
+    return PythonObject(arena.f64(out_buf))
 
 
 # ---------------------------------------------------------------- validation
@@ -384,9 +152,10 @@ def _reg_weights(source: PythonObject, n: Int, caller: String, context: PythonOb
 
 
 def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, variance_ok: Bool,
-             context: PythonObject) raises -> _Reg:
-    """`_Reg(y_true, y_pred, sample_weight, multioutput, caller)` from
-    args = (y_true, y_pred, sample_weight, ...)."""
+             mut pins: List[PythonObject], context: PythonObject) raises -> _Reg:
+    """UNPACK `_Reg(y_true, y_pred, sample_weight, multioutput, caller)` from
+    args = (y_true, y_pred, sample_weight, ...): the typed `_Reg`, with the
+    admitted y, p (and w) appended to `pins` in the program's input order."""
     var b = native_loaded_module("builtins")
     var y = _reg_target(args[0], "y_true", caller, context)
     var p = _reg_target(args[1], "y_pred", caller, context)
@@ -398,7 +167,7 @@ def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, vari
                     + String(Int(py=p[2])) + ")")
     var w = _reg_weights(args[2], n, caller, context)
     var mo = String("uniform_average")
-    var custom = PythonObject(None)
+    var custom = List[Float64]()
     if family_isinstance(multioutput, b.str):
         var allowed = Python.tuple(PythonObject("raw_values"), PythonObject("uniform_average"))
         if variance_ok:
@@ -417,8 +186,17 @@ def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, vari
         if count != d:
             raise Error("There must be equally many custom weights (" + String(count) + ") as outputs (" + String(d) + ").")
         mo = "custom"
-        custom = values
-    return _Reg(y[0], p[0], n, d, w, mo, custom, context["family_metrics_ops"])
+        # the custom weights read once (one buffer read): the program's own words
+        var src = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values)))
+        custom = List[Float64](capacity=d)
+        for i in range(d):  # driver-loop: over the metric's outputs
+            custom.append(src[i])
+        _ = values  # keep the Python object alive through the native reads above
+    pins.append(y[0])
+    pins.append(p[0])
+    if w is not None:
+        pins.append(w)
+    return _Reg(n, d, w is not None, mo, custom^)
 
 
 def _metric_real(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -444,70 +222,70 @@ def _mean_error(args: PythonObject, kind: String, caller: String, root: Bool, sc
                 log_domain: String, context: PythonObject) raises -> PythonObject:
     """`_mean_error`: the per-output (root) mean of the term, averaged, in
     one program; args = (y_true, y_pred, sample_weight, multioutput, mode)."""
-    var r = _reg_new(args, args[3], caller, False, context)
-    var terms = context["family_metrics_terms"]
-    r.program(scalar, context)
+    var pins = List[PythonObject]()
+    var r = _reg_new(args, args[3], caller, False, pins, context)
+    r.program(scalar)
     var flag = _NONE
     if log_domain.byte_length() > 0:
         flag = r.scan_log_domain()
     var mode = _RE_DIV | (_RE_ROOT if root else 0)
     var y_off = r.y_off
     var p_off = r.p_off
-    var mean = r.stage_mean(Int(py=terms[PythonObject(kind)]), mode, y_off, p_off, False)
-    var out = r.average(mean, False, _NONE, context)
-    var arena = _reg_run(r.prog, args[4], context)
-    if flag != _NONE and _arena_int(arena, flag) != 0:
+    var mean = r.stage_mean(metric_term(kind), mode, y_off, p_off, False)
+    var out = r.average(mean, False, _NONE)
+    var arena = metric_plan_run(r.plan, pins, args[4], context)
+    if flag != _NONE and arena.i32(flag) != 0:
         raise Error(log_domain + " cannot be used when targets contain values less than or equal to -1.")
     return _reg_result(r, out, arena, context)
 
 
 def _median_absolute_error(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, sample_weight, multioutput, mode)."""
-    var r = _reg_new(args, args[3], "median_absolute_error", False, context)
-    var terms = context["family_metrics_terms"]
-    r.program(0.0, context)
+    var pins = List[PythonObject]()
+    var r = _reg_new(args, args[3], "median_absolute_error", False, pins, context)
+    r.program(0.0)
     var y_off = r.y_off
     var p_off = r.p_off
-    var t = r.term(Int(py=terms["abs"]), y_off, p_off, False)
-    var median = r.percentile(t, 50.0, False, context)
-    var out = r.average(median, False, _NONE, context)
-    var arena = _reg_run(r.prog, args[4], context)
+    var t = r.term(metric_term("abs"), y_off, p_off, False)
+    var median = r.percentile(t, 50.0, False)
+    var out = r.average(median, False, _NONE)
+    var arena = metric_plan_run(r.plan, pins, args[4], context)
     return _reg_result(r, out, arena, context)
 
 
 def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, mode): the largest |y - p| (single output)."""
+    var pins = List[PythonObject]()
     var r = _reg_new(Python.tuple(args[0], args[1], PythonObject(None)), PythonObject("uniform_average"),
-                     "max_error", False, context)
+                     "max_error", False, pins, context)
     if r.d != 1:
         raise Error("Multioutput not supported in max_error")
-    var terms = context["family_metrics_terms"]
-    var prog = _Prog(context["family_metrics_ops"])
-    var y = prog.put(r.y)
-    var p = prog.put(r.p)
+    var prog = MetricDoorProg()
+    var y = prog.put(pins[0])
+    var p = prog.put(pins[1])
     var t = prog.scratch(r.n)
-    prog.stage("reg_term", r.n, [y, p, t, 1, Int(py=terms["abs"]), y, 0])
+    prog.stage("reg_term", r.n, [y, p, t, 1, metric_term("abs"), y, 0])
     var out = prog.want(prog.alloc(1), 1)
     prog.stage("col_max", 1, [t, r.n, 1, out])
-    var arena = _reg_run(prog, args[2], context)
+    var arena = metric_door_run(prog, args[2], context)
     # Read through the helper: `arena` is the only owner of the store, and
     # Mojo releases a local at its last named use, so a pointer taken from
     # `arena.base()` here would read freed words (different max_error bits
     # run to run on CUDA).
-    return PythonObject(Float64(_arena_float(arena, out)))
+    return PythonObject(arena.f32(out))
 
 
 def _explained_variance(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, sample_weight, multioutput, force_finite, mode)."""
     var b = native_loaded_module("builtins")
-    var r = _reg_new(args, args[3], "explained_variance_score", True, context)
-    var terms = context["family_metrics_terms"]
-    var sq = Int(py=terms["sq"])
-    r.program(0.0, context)
+    var pins = List[PythonObject]()
+    var r = _reg_new(args, args[3], "explained_variance_score", True, pins, context)
+    var sq = metric_term("sq")
+    r.program(0.0)
     var y_off = r.y_off
     var p_off = r.p_off
     # `_diff_and_y_means`, then `_centered` twice.
-    var diff = r.term(Int(py=terms["diff"]), y_off, p_off, False)
+    var diff = r.term(metric_term("diff"), y_off, p_off, False)
     var diff_sums = r.sums(diff)
     var diff_mean = r.fin32(diff_sums, _RE_DIV)
     var y_sums = r.sums(y_off)
@@ -518,8 +296,8 @@ def _explained_variance(args: PythonObject, context: PythonObject) raises -> Pyt
     var den_terms = r.term(sq, y_off, y_mean, True)
     var den_sums = r.sums(den_terms)
     var den = r.fin(den_sums, _RE_DIV)
-    var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True, context)
-    var arena = _reg_run(r.prog, args[5], context)
+    var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True)
+    var arena = metric_plan_run(r.plan, pins, args[5], context)
     return _reg_result(r, out, arena, context)
 
 
@@ -529,37 +307,20 @@ def _tweedie_power(power: PythonObject, context: PythonObject) raises -> Float64
     return Float64(py=family_call(native_loaded_module("builtins").float, power))
 
 
-def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, arena: MetricArenaOwner) raises:
-    """`_tweedie_domain`'s check, after the run."""
-    var msg = "Mean Tweedie deviance error with power=" + shown + " can only be used on "
-    var y_neg = _arena_int(arena, flags_y) != 0
-    var y_nonpos = _arena_int(arena, flags_y + 1) != 0
-    var p_nonpos = _arena_int(arena, flags_p + 1) != 0
-    if power < 0:
-        if p_nonpos:
-            raise Error(msg + "strictly positive y_pred.")
-    elif power >= 1 and power < 2:
-        if y_neg or p_nonpos:
-            raise Error(msg + "non-negative y and strictly positive y_pred.")
-    elif power >= 2:
-        if y_nonpos or p_nonpos:
-            raise Error(msg + "strictly positive y and y_pred.")
-
-
 def _tweedie(args: PythonObject, power_obj: PythonObject, caller: String, d2: Bool,
              context: PythonObject) raises -> PythonObject:
     """mean_tweedie_deviance (d2 False) or d2_tweedie_score (d2 True);
     args = (y_true, y_pred, sample_weight, mode)."""
     var power = _tweedie_power(power_obj, context)
-    var r = _reg_new(Python.tuple(args[0], args[1], args[2]), PythonObject("uniform_average"), caller, False, context)
+    var pins = List[PythonObject]()
+    var r = _reg_new(Python.tuple(args[0], args[1], args[2]), PythonObject("uniform_average"), caller, False, pins, context)
     if r.d != 1:
         raise Error("Multioutput not supported in " + caller)
     if d2 and r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
         return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
-    var terms = context["family_metrics_terms"]
-    var tweedie = Int(py=terms["tweedie"])
-    r.program(power, context)
+    var tweedie = metric_term("tweedie")
+    r.program(power)
     var y_off = r.y_off
     var p_off = r.p_off
     # `_tweedie_domain`: the power refusal now, the sign scans staged.
@@ -576,33 +337,33 @@ def _tweedie(args: PythonObject, power_obj: PythonObject, caller: String, d2: Bo
         var y_sums = r.sums(y_off)
         var y_avg = r.fin32(y_sums, _RE_DIV)
         var den = r.stage_mean(tweedie, _RE_DIV, y_off, y_avg, True)
-        out = r.assemble(num, den, False, False, context)
+        out = r.assemble(num, den, False, False)
     else:
         out = r.stage_mean(tweedie, _RE_DIV, y_off, p_off, False)
-    _ = r.prog.want(out, 2)
-    var arena = _reg_run(r.prog, args[3], context)
+    _ = r.plan.want(out, 2, -1, 1)
+    var arena = metric_plan_run(r.plan, pins, args[3], context)
     if fy != _NONE:
-        _tweedie_check(fy, fp, power, family_str(power_obj), arena)
-    return PythonObject(_arena_double(arena, out))
+        tweedie_check(fy, fp, power, family_str(power_obj), arena)
+    return PythonObject(arena.f64(out))
 
 
 def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObject) raises -> PythonObject:
     """d2_pinball_score; args = (y_true, y_pred, sample_weight, multioutput, mode)."""
     var alpha = _check_alpha(alpha_obj, context)
-    var r = _reg_new(args, args[3], "d2_pinball_score", False, context)
+    var pins = List[PythonObject]()
+    var r = _reg_new(args, args[3], "d2_pinball_score", False, pins, context)
     if r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
         return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
-    var terms = context["family_metrics_terms"]
-    var pinball = Int(py=terms["pinball"])
-    r.program(alpha, context)
+    var pinball = metric_term("pinball")
+    r.program(alpha)
     var y_off = r.y_off
     var p_off = r.p_off
     var num = r.stage_mean(pinball, _RE_DIV, y_off, p_off, False)
-    var quant = r.percentile(y_off, alpha * 100, True, context)
+    var quant = r.percentile(y_off, alpha * 100, True)
     var den = r.stage_mean(pinball, _RE_DIV, y_off, quant, True)
-    var out = r.assemble(num, den, True, True, context)
-    var arena = _reg_run(r.prog, args[4], context)
+    var out = r.assemble(num, den, True, True)
+    var arena = metric_plan_run(r.plan, pins, args[4], context)
     return _reg_result(r, out, arena, context)
 
 
@@ -610,12 +371,13 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     """`r2_score_options`: SS_res over SS_tot per output, one program;
     args = (y_true, y_pred, sample_weight, multioutput, force_finite, mode)."""
     var b = native_loaded_module("builtins")
-    var r = _reg_new(args, args[3], "r2_score", True, context)
+    var pins = List[PythonObject]()
+    var r = _reg_new(args, args[3], "r2_score", True, pins, context)
     if r.n < 2:
         _undefined("R^2 score is not well-defined with less than two samples.", context)
         return py_call(b.float, PythonObject("nan"))
-    var sq = Int(py=context["family_metrics_terms"]["sq"])
-    r.program(0.0, context)
+    var sq = metric_term("sq")
+    r.program(0.0)
     # `_r2_parts`: the y mean (Float32 column), SS_res, SS_tot.
     var y_off = r.y_off
     var p_off = r.p_off
@@ -627,8 +389,8 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var tot_terms = r.term(sq, y_off, y_mean, True)
     var tot_sums = r.sums(tot_terms)
     var den = r.fin(tot_sums, 0)
-    var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True, context)
-    var arena = _reg_run(r.prog, args[5], context)
+    var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True)
+    var arena = metric_plan_run(r.plan, pins, args[5], context)
     return _reg_result(r, out, arena, context)
 
 
@@ -640,26 +402,27 @@ def _regression_report(args: PythonObject, context: PythonObject) raises -> Pyth
         raise Error("regression_report requires numeric_mode='identical'")
     from bindings.host_inference_scalars_door import host_inference_scalar
     host_inference_scalar(args[4], context, True)
-    var r = _reg_new(args, args[3], "regression_report", False, context)
-    r.program(0.0, context)
+    var pins = List[PythonObject]()
+    var r = _reg_new(args, args[3], "regression_report", False, pins, context)
+    r.program(0.0)
     var y = r.y_off
     var p = r.p_off
-    var squared = r.term(Int(py=context["family_metrics_terms"]["sq"]), y, p, False)
-    var absolute = r.term(Int(py=context["family_metrics_terms"]["abs"]), y, p, False)
+    var squared = r.term(metric_term("sq"), y, p, False)
+    var absolute = r.term(metric_term("abs"), y, p, False)
     var squared_sums = r.sums(squared)
     var squared_means = r.fin(squared_sums, _RE_DIV)
-    var mse = r.average(squared_means, False, _NONE, context)
+    var mse = r.average(squared_means, False, _NONE)
     var absolute_sums = r.sums(absolute)
     var absolute_means = r.fin(absolute_sums, _RE_DIV)
-    var mae = r.average(absolute_means, False, _NONE, context)
+    var mae = r.average(absolute_means, False, _NONE)
     var y_sums = r.sums(y)
     var y_mean = r.fin32(y_sums, _RE_DIV)
-    var centered = r.term(Int(py=context["family_metrics_terms"]["sq"]), y, y_mean, True)
+    var centered = r.term(metric_term("sq"), y, y_mean, True)
     var centered_sums = r.sums(centered)
     var denominator = r.fin(centered_sums, 0)
     var numerator = r.fin(squared_sums, 0)
-    var r2 = r.assemble(numerator, denominator, Bool(py=args[4]), True, context)
-    var arena = _reg_run(r.prog, args[5], context)
+    var r2 = r.assemble(numerator, denominator, Bool(py=args[4]), True)
+    var arena = metric_plan_run(r.plan, pins, args[5], context)
     var result = Python.dict()
     py_setitem(result, "mean_squared_error", _reg_result(r, mse, arena, context))
     py_setitem(result, "mean_absolute_error", _reg_result(r, mae, arena, context))

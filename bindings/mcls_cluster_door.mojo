@@ -5,7 +5,7 @@
 # (bindings/mcls_common.mojo), then the SAME cuML-backed entry of the
 # metrics binding the shell resolved (`_get_binding(numeric_mode)`) with the
 # same addresses and parameter lists. The options of the regression errors
-# and r2_score run the x_metrics program of bindings/metrics_reg_native.mojo
+# and r2_score run the x_metrics program of bindings/metrics_reg_door.mojo
 # itself (`_mean_error`, `_r2_options`), as `regression_error_options` and
 # `r2_score_options` did. Same kernels, same operands: the bits do not move.
 from std.python import Python, PythonObject
@@ -23,7 +23,7 @@ from bindings.family_common_pack import (
     family_call,
     family_array,
 )
-from bindings.metrics_reg_native import _mean_error, _r2_options
+from bindings.metrics_reg_door import _mean_error, _r2_options
 from bindings.metrics_native_inputs_door import metric_shape
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.mcls_common import (

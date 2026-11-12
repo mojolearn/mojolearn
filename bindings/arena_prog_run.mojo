@@ -109,7 +109,7 @@ struct MetricArenaOwner(Copyable, Movable):
     # Typed reads of the completed arena (lane metric-programs-2, 2026-11-12:
     # one reader set for every metric owner; were MxArena's methods and the
     # mc_arena_* / _arena_* copies in bindings/mcls_common.mojo and
-    # bindings/metrics_reg_native.mojo). Each read takes the base from the
+    # bindings/metrics_reg_door.mojo). Each read takes the base from the
     # store this value owns.
     def i32(self, off: Int) -> Int:
         """`prog.ints(off, 1)[0]`: the Int32 word at arena[off]."""

@@ -37,7 +37,7 @@ from bindings.family_common_pack import (
     family_call,
     family_call_kw,
 )
-from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.msel_common_door import (
     msel_take_labels, msel_b, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool, msel_is_integral, msel_is_real,
     msel_int, msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr,
@@ -667,7 +667,7 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     inverse) of the groups in sorted-group order, in one program."""
     var gc = MselGroups(groups, n, "groups", context)
     var m = gc.m
-    var prog = _Prog(context["family_metrics_ops"])
+    var prog = MetricDoorProg()
     var key = prog.put_i32(gc.codes)
     var off_slot = prog.alloc(m + 1)
     var off = prog.want(off_slot, m + 1)
@@ -686,8 +686,8 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     # once per call for the per-permutation program (`_group_index`).
     var w_ord32 = prog.want(ordr, n)
     var w_inv32 = prog.want(inv, n)
-    var arena = _reg_run(prog, PythonObject(None), context)
-    var base = _arena_base(arena)
+    var arena = metric_door_run(prog, PythonObject(None), context)
+    var base = arena.base()
     var offsets = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=base + 4 * off)
     var sizes = Python.list()
     for g in range(m):  # driver-loop: over groups
@@ -738,7 +738,7 @@ def _group_index(mut rng: MselRng, order: PythonObject, sizes: List[Int], n: Int
     puts them back in row order: the words the per-group `gather_i64` calls
     and the final inverse gather gave, read back once. Same draws, same
     rows, same order: no bit changes."""
-    var prog = _Prog(context["family_metrics_ops"])
+    var prog = MetricDoorProg()
     var key = prog.put_i32(order[6])
     var ordr = prog.put_i32(order[3])
     var off = prog.put_i32(order[5])
@@ -755,10 +755,10 @@ def _group_index(mut rng: MselRng, order: PythonObject, sizes: List[Int], n: Int
     if n > 0:
         prog.stage("group_take", n, [key, ordr, off, draws, src])
         prog.stage("take_rows64", n, [src, inv, out])
-    var arena = _reg_run(prog, PythonObject(None), context)
+    var arena = metric_door_run(prog, PythonObject(None), context)
     var idx = msel_new(n, "<i8", context)
     if n > 0:
-        unsafe_memcpy(dest=msel_p64(idx), src=FAMILY_I64P(unsafe_from_address=_arena_base(arena) + 4 * out), count=n)
+        unsafe_memcpy(dest=msel_p64(idx), src=FAMILY_I64P(unsafe_from_address=arena.base() + 4 * out), count=n)
     _ = idx  # keep the Python object alive through the native copy above
     # The copied address points into this arena: keep it through the copy.
     _ = arena^

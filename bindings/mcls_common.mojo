@@ -55,7 +55,7 @@ from core.admitted_ids import admitted_ids_i64, admitted_narrow_i32
 from core.labels_score_encode import score_encode_signed as mc_encode_signed
 from core.metrics_exp_impl import mexp_gather_i32
 from providers.python.metrics_vector_input_pyapi_unpack import metric_vector_exact, metric_i32_vector, metric_f32_vector
-from bindings.metrics_reg_native import _reg_weights
+from bindings.metrics_reg_door import _reg_weights
 from bindings.native_array_storage_door import native_array_zeros
 from bindings.p3_labels_metrics_native_door import (
     p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK)

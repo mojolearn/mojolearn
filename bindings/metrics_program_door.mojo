@@ -3,7 +3,7 @@
 # metric-programs-2, 2026-11-12). It replaces the three copies that held the
 # Python owners and a per-program Python opcode snapshot: `MxProg`
 # (bindings/metrics_exp_common.mojo), `McProg` (bindings/mcls_common.mojo)
-# and `_Prog` (bindings/metrics_reg_native.mojo).
+# and `_Prog` (bindings/metrics_reg_door.mojo).
 #
 # The program itself is typed (core/metrics_program_plan.mojo: the arena
 # layout, the stage records through the typed op table, the declared

@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.metrics_reg_native import _Prog
+from bindings.metrics_program_door import MetricDoorProg
 from bindings.msel_common_door import MselGroups, MselRng
 from bindings.msel_split_door import _fold_rows_run, _select_folds, msel_strat_shuffle_split
 from bindings.msel_search_door import _group_order
@@ -21,7 +21,7 @@ def group_plan(values: PythonObject, words: PythonObject, sizes: PythonObject,
 
 def fold_rows(n: PythonObject, k: PythonObject, code: PythonObject, order: PythonObject,
               context: PythonObject) raises -> PythonObject:
-    var prog = _Prog(context["family_metrics_ops"])
+    var prog = MetricDoorProg()
     return _fold_rows_run(prog, Int(py=n), Int(py=k), Int(py=code), Int(py=order), context)
 
 

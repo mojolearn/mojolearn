@@ -51,7 +51,7 @@ from bindings.family_common_pack import (
     family_call_kw,
     family_array,
 )
-from bindings.metrics_reg_native import _reg_weights
+from bindings.metrics_reg_door import _reg_weights
 from bindings.metrics_native_support_door import (
     metric_is_real, metric_float, metric_integer, metric_is_integral, metric_is_integral_type, metric_warn, metric_undefined,
 )

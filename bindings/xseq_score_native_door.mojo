@@ -21,7 +21,7 @@ from bindings.xseq_native_common_door import xseq_addr, xseq_reshape
 from bindings.xseq_neural_native_door import xseq_as_f32_c
 from core.xseq_marshal import xseq_min_max_f32
 from core.host_finite_scan import host_all_finite_f32
-from bindings.metrics_reg_native import metrics_reg_operation
+from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from sequence.xseq_score_run import (
     xseq_run_vector_rows, xseq_run_vector_finite, xseq_run_lengths_check, xseq_run_weights_check,

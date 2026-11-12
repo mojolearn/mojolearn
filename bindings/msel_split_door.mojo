@@ -49,7 +49,7 @@ from bindings.family_common_pack import (
     family_call,
     family_call_kw,
 )
-from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.label_input_sources_unpack import labels_list_integer_storage
 from bindings.label_input_sources_pack import labels_series_values
 from bindings.py_optional import py_present
@@ -347,7 +347,7 @@ def msel_truth(value: PythonObject) raises -> Bool:
 # ---------------------------------------------------------------- fold programs
 
 
-def _fold_rows_run(mut prog: _Prog, n: Int, k: Int, code: Int, order: Int, context: PythonObject) raises -> PythonObject:
+def _fold_rows_run(mut prog: MetricDoorProg, n: Int, k: Int, code: Int, order: Int, context: PythonObject) raises -> PythonObject:
     """`_fold_rows_run`: the `fold_rows` stage, then each fold's (train,
     test) int64 rows read out of the arena."""
     var out_slot = prog.alloc(2 * n * k)
@@ -355,8 +355,8 @@ def _fold_rows_run(mut prog: _Prog, n: Int, k: Int, code: Int, order: Int, conte
     var sz_slot = prog.alloc(k)
     var sz = prog.want(sz_slot, k)
     prog.stage("fold_rows", 1, [n, k, code, order, out, sz])
-    var arena = _reg_run(prog, PythonObject(None), context)
-    var base = _arena_base(arena)
+    var arena = metric_door_run(prog, PythonObject(None), context)
+    var base = arena.base()
     var counts = FAMILY_I32P(unsafe_from_address=base + 4 * sz)
     var res = Python.list()
     for f in range(k):  # driver-loop: over folds
@@ -379,7 +379,7 @@ def msel_fold_rows_shuffled(n: Int, k: Int, mut rng: MselRng, context: PythonObj
     """`fold_rows(n, k, rng=rng)`; None past the table bound (no draw made)."""
     if n < 2 or k < 1 or 2 * n * k > MSEL_FOLD_ROWS_BOUND:
         return PythonObject(None)
-    var prog = _Prog(context["family_metrics_ops"])
+    var prog = MetricDoorProg()
     var order = rng.permute_stage(prog, n)
     var code = prog.scratch(n)
     return _fold_rows_run(prog, n, k, code, order, context)
@@ -393,7 +393,7 @@ def msel_stratified_fold_rows(enc: PythonObject, counts: List[Int], alloc: Pytho
     var m = len(counts)
     if n < 2 or k < 1 or 2 * n * k > MSEL_FOLD_ROWS_BOUND:
         return PythonObject(None)
-    var prog = _Prog(context["family_metrics_ops"])
+    var prog = MetricDoorProg()
     var enc_slot = prog.put_i32(enc)
     var off = prog.alloc(m + 1)
     var ordr = prog.scratch(n)
@@ -1086,7 +1086,7 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
     var rng = MselRng(random_state, context)
     var out = Python.list()
     for _ in range(max(n_splits, 0)):  # driver-loop: over splits (one program each)
-        var prog = _Prog(context["family_metrics_ops"])
+        var prog = MetricDoorProg()
         var cnt = prog.put_i32(counts32)
         var ordr = prog.put_i32(ord32)
         var off = prog.put_i32(off32)
@@ -1119,8 +1119,8 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
         var te_words = prog.want(te_slot, 2 * n_test)
         prog.stage("take_rows64", n_train, [train, last_tr, tr_words])
         prog.stage("take_rows64", n_test, [test, last_te, te_words])
-        var arena = _reg_run(prog, PythonObject(None), context)
-        var base = _arena_base(arena)
+        var arena = metric_door_run(prog, PythonObject(None), context)
+        var base = arena.base()
         var words = FAMILY_I32P(unsafe_from_address=base)
         rng.draws += UInt64(Int(words[used]) + Int(words[used + 1]) + k + 2)
         var out_tr = msel_new(n_train, "<i8", context)
@@ -1143,15 +1143,15 @@ def _class_order(codes: PythonObject, n: Int, k: Int, context: PythonObject) rai
     """(rows class by class, class offsets) as int32 Arrays: a stable
     group_sort of the n int32 class codes (class c's rows ascending at
     OFF[c] ..), in one program, read back once (N086)."""
-    var prog = _Prog(context["family_metrics_ops"])
+    var prog = MetricDoorProg()
     var key = prog.put_i32(codes)
     var off_slot = prog.alloc(k + 1)
     var off = prog.want(off_slot, k + 1)
     var ord_slot = prog.alloc(n)
     var ordr = prog.want(ord_slot, n)
     prog.stage("group_sort", 1, [key, n, k, off_slot, ord_slot])
-    var arena = _reg_run(prog, PythonObject(None), context)
-    var base = _arena_base(arena)
+    var arena = metric_door_run(prog, PythonObject(None), context)
+    var base = arena.base()
     var ord32 = msel_new(n, "<i4", context)
     var off32 = msel_new(k + 1, "<i4", context)
     unsafe_memcpy(dest=msel_p32(ord32), src=FAMILY_I32P(unsafe_from_address=base + 4 * ordr), count=n)

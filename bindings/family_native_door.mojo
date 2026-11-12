@@ -14,7 +14,7 @@ from bindings.kmeans_native_pack import kmeans_operation
 from bindings.kernel_methods_native_door import kernel_methods_operation
 from bindings.linalg_native_door import linalg_operation
 from bindings.neighbors_native_pack import neighbors_operation
-from bindings.metrics_reg_native import metrics_reg_operation
+from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.cluster_native_door import cluster_operation
 from bindings.svm_mixture_native_door import svm_mixture_operation
 from bindings.svc_native_pack import svc_operation
