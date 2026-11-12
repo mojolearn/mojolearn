@@ -23,15 +23,11 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr
-from arima.host.arima_oracle import arima_host_refuse_unrestated
-# The typed bodies (lane thin-trees-metrics, 2026-10-21): moved word for
-# word to arima/host/arima_host_entries.mojo; this file is the Python door.
-from arima.host.arima_host_entries import (
-    _forecast_into,
-    _order,
-    _predict_in_sample_into,
-    _refuse_shape,
-)
+# The typed bodies (lane thin-trees-metrics, 2026-10-21) are in
+# arima/host/arima_host_entries.mojo; the GIL-released predict and forecast
+# sequences are arima/host/arima_host_predict_run.mojo's (wave 8 run split).
+# This file is the Python door.
+from arima.host.arima_host_predict_run import arima_forecast_run, arima_predict_run
 
 
 def arima_predict_binding(
@@ -76,32 +72,10 @@ def arima_predict_binding(
     var n_exog = Int(py=params[12])
     var written = 0
     with GILReleased(Python()):
-        # `arima_predict_ptr_host` then `_predict_into`
-        # (`arima/estimator.mojo:502-506`, `:422-433`), in their order.
-        var order = _order(p, d, q, P, D, Q, s, k, n_exog)
-        _refuse_shape(batch_size, n_obs, "arima_predict")
-        if start < 0 or end <= start:
-            raise Error(
-                "arima_predict: need 0 <= start < end (start=" + String(start)
-                + ", end=" + String(end) + ")"
-            )
-        if start > n_obs:
-            raise Error(
-                "arima_predict: there can't be a gap between the data and the"
-                " prediction (start=" + String(start) + ", n_obs="
-                + String(n_obs) + ")"
-            )
-        arima_host_refuse_unrestated(order, "arima_predict")
-        if start < n_obs:
-            written = _predict_in_sample_into(
-                y_address, exog_address, exog_fut_address, params_address, op,
-                batch_size, n_obs, start, end, order,
-            )
-        else:
-            written = _forecast_into(
-                y_address, exog_address, exog_fut_address, params_address, op,
-                batch_size, n_obs, end - n_obs, order,
-            )
+        written = arima_predict_run(
+            y_address, exog_address, exog_fut_address, params_address, op,
+            batch_size, n_obs, start, end, p, d, q, P, D, Q, s, k, n_exog,
+        )
     return PythonObject(written)
 
 
@@ -156,18 +130,8 @@ def arima_forecast_binding(
         )
     var written = 0
     with GILReleased(Python()):
-        # `arima_forecast_ptr_host` then `_predict_into`
-        # (`arima/estimator.mojo:536-545`, `:422-433`), in their order.
-        if n_steps < 1:
-            raise Error(
-                "arima_forecast: n_steps must be >= 1 (n_steps="
-                + String(n_steps) + ")"
-            )
-        var order = _order(p, d, q, P, D, Q, s, k, n_exog)
-        _refuse_shape(batch_size, n_obs, "arima_forecast")
-        arima_host_refuse_unrestated(order, "arima_forecast")
-        written = _forecast_into(
+        written = arima_forecast_run(
             y_address, exog_address, exog_fut_address, params_address, op,
-            batch_size, n_obs, n_steps, order,
+            batch_size, n_obs, n_steps, p, d, q, P, D, Q, s, k, n_exog,
         )
     return PythonObject(written)
