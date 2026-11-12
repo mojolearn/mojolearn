@@ -226,7 +226,7 @@ def classical_admit_value(values: List[PythonObject], context: PythonObject, dep
     var bool_word = _admitted_word(kinds.bool_type, seq)
     var str_word = _admitted_word(kinds.str_type, seq)
     var none_word = _admitted_word(kinds.none_type, seq)
-    for k in range(len(values)):  # driver-loop: over captured boundary label identities
+    for k in range(len(values)):  # unpack: one type-word read per captured label (data; no CPython call on the scalar path)
         var raw = values[k]._obj_ptr
         var word = p3_type_word(raw)
         if word == int_word or word == float_word or word == bool_word or word == str_word or word == none_word:

@@ -222,7 +222,7 @@ def _archive_unpack_unicode(value: PythonObject, context: PythonObject) raises -
     # One code-point copy (bindings/boundary_read.mojo), then a typed scan
     # for the first surrogate (the same position and refusal as before).
     var words = read_str_points(value)
-    for i in range(len(words)):  # driver-loop: typed scan of the copied code points (no CPython call)
+    for i in range(len(words)):  # unpack: typed scan of the copied path code points (no CPython call)
         if words[i] >= 0xD800 and words[i] <= 0xDFFF:
             _archive_unicode_failure(value, "utf-32-le", i, i + 1, "surrogates not allowed", context, True)
     return words^
