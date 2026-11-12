@@ -5,6 +5,7 @@
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta, admit_family_owned
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows, door_rows_store
 from bindings.native_loaded_module import native_loaded_module
@@ -227,7 +228,8 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
                 _ = py_call(fold_values.append, args[i])
             return NeighborPublicCall(fold_values, fields, source, method, fitting, estimator_outside(),
                                       Int(py=depth), store.rows, store.row_words)
-    var snapshot = admit_family_meta(source, 2, "X", context, True, finite=scan,
+    var pin = ArrayPin()
+    var snapshot = admit_family_meta(source, 2, "X", context, pin, True, finite=scan,
                                      refusal=admitted_finite_wording(name, "X"), defer_finite=defer)
     var rows = snapshot.shape[0]
     var columns = snapshot.shape[1]
@@ -262,7 +264,7 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         if (fitting and not borrow and operation.startswith("family_xn_knn_") and snapshot.f32_c()
                 and not snapshot.copied):
             borrow = True
-        py_setitem(values, PythonObject(first), snapshot.keep if borrow else admit_family_owned(snapshot, context))
+        py_setitem(values, PythonObject(first), pin.keep if borrow else admit_family_owned(snapshot, pin, context))
     elif not fitting and host_sparse_format(source).byte_length() == 0:
         # Perf (perf2-neighbors): a dense KDE query (score_samples/score) only
         # reads X and never reports `input_copied_`, so it takes this float32
@@ -270,7 +272,7 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # (`admit_family(...).array` is this same snapshot's `keep`). A KDE fit keeps
         # its own capture and copy report; a sparse query keeps its exact
         # densification (bindings/neighbors_kde_native.mojo `_kde_dense`).
-        py_setitem(values, PythonObject(first), snapshot.keep)
+        py_setitem(values, PythonObject(first), pin.keep)
     if fitting and Int(py=depth) == 0:
         var target_index = 2
         if operation == "family_xn_knn_nn_fit":

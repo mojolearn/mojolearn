@@ -20,7 +20,7 @@ from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch
-from providers.python.array_metadata_pyapi import array_slot_once, array_owner_once
+from providers.python.array_metadata_pyapi import ArrayPin, array_slot_once, array_owner_once
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
 from core.native_scalar_decode import native_scalar_real
@@ -286,14 +286,15 @@ def radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     # cast, below; a borrowed one by `admit_family_owned_finite`), on the GPU
     # and the CPU column alike; no radius query scans the index again.
     var name = String(py_type(model).__name__)
-    var x = admit_family_meta(args[0], 2, "X", context, False, True,
+    var x_pin = ArrayPin()
+    var x = admit_family_meta(args[0], 2, "X", context, x_pin, False, True,
                               refusal=admitted_finite_wording(name, "X"), defer_finite=True)
     var target = radius_target(args[1] if len(args) > 1 else PythonObject(None), x.shape[0], context,
                                False, PythonObject(None)) if Int(py=depth) == 0 else PythonObject(None)
     var call = NeighborPublicCall(args, fields, args[0], "fit", True, estimator_outside(), estimator_fit_begin(fields), x.shape[0], x.shape[1])
     try:
         _radius_refusals(fields, settings, context)
-        py_setitem(fields, "_index", admit_family_owned_finite(x, name, context))
+        py_setitem(fields, "_index", admit_family_owned_finite(x, x_pin, name, context))
         py_setitem(fields, "n_samples_fit_", PythonObject(x.shape[0]))
         py_setitem(fields, "n_features_in_", PythonObject(x.shape[1]))
     except error:
