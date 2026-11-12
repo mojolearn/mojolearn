@@ -3,7 +3,8 @@
 from std.python import Python,PythonObject
 from std.python._cpython import GILReleased
 from core.hostptr import f32_ptr
-from bindings.residual_dropout_common import residual_dropout_args,residual_dropout_addresses
+from bindings.residual_dropout_common import residual_dropout_args
+from training.residual_dropout_common_run import residual_dropout_addresses
 from training.residual_dropout_host import residual_dropout_host
 
 

@@ -4,7 +4,8 @@ from std.python import Python,PythonObject
 from std.python._cpython import GILReleased
 from core.neural_context import neural_ctx
 from core.hostptr import f32_ptr
-from bindings.residual_dropout_common import residual_dropout_args,residual_dropout_addresses
+from bindings.residual_dropout_common import residual_dropout_args
+from training.residual_dropout_common_run import residual_dropout_addresses
 from training.residual_dropout import residual_dropout_device,residual_dropout_into
 from training.residual_dropout_contract import residual_dropout_admit
 from training.dev_tensors import train_dev_view
