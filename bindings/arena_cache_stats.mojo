@@ -58,8 +58,8 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
     if not admitted:
         for i in range(len(ancestry)):  # driver-loop: a retained native namespace slot applies only to its own owner ancestry
             namespace = namespace or ancestry[i] is context["cache_namespace_class"]
-    var selected = PythonObject(None)
-    var found = False
+    # Optional, not a PythonObject(None) sentinel: its presence is the old `found` flag (modular/modular#7546).
+    var selected = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: ordinary attribute lookup without calling Python hooks
         var mapping = py_call(context["cache_type_dict"],ancestry[i]) if admitted else _mapping(ancestry[i],context)
         if not admitted:
@@ -71,18 +71,18 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
             var native_hook = hook is None or hook is context["cache_object_getattribute"] or (namespace and hook is context["cache_namespace_getattribute"])
             if not native_hook or py_get(mapping,"__getattr__") is not None:
                 raise Error("TypeError: cache metadata requires native attribute access; Python hooks cannot execute")
-        if not found and py_contains(mapping,name):
+        if not selected and py_contains(mapping,name):
             selected = mapping[name]
-            found = True
             if admitted:
                 break
     if not admitted:
         p3_layout_admit(P3_STATS_LAYOUT, cls, context["cache_type_mro"])
-    var member = found and py_type(selected) is context["cache_member_type"]
+    var found = Bool(selected)
+    var member = found and py_type(selected.value()) is context["cache_member_type"]
     var descriptor = False
     var data_descriptor = False
     if found and not member:
-        var descriptor_mro = py_call(context["cache_type_mro"],py_type(selected))
+        var descriptor_mro = py_call(context["cache_type_mro"],py_type(selected.value()))
         for i in range(len(descriptor_mro)):  # driver-loop: inspect descriptor slots without invoking them
             var mapping = _mapping(descriptor_mro[i],context)
             descriptor = descriptor or py_contains(mapping,"__get__")
@@ -120,7 +120,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
     if found:
         if descriptor:
             raise Error("TypeError: cache metadata cannot invoke Python or unregistered native descriptors")
-        return selected
+        return selected.value()
     if required:
         raise Error("AttributeError: cache metadata has no '" + String(name) + "' attribute")
     return default
