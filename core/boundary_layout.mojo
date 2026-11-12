@@ -311,7 +311,7 @@ def gather_f32(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address, imm contiguous}:
         var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_address)
         var stop = min(count, (unit + 1) * BOUNDARY_COPY_CHUNK)
-        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one conversion chunk (native, no Python)
+        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # native data loop (one host-pool chunk of elements, no Python; not a driver loop)
             var at = element_address(flat, lp[], contiguous)
             if kind == BOUNDARY_KIND_FLOAT and itemsize == 4:
                 dst[flat] = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=at)[0]
@@ -338,7 +338,7 @@ def gather_f64(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address, imm contiguous}:
         var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=dst_address)
         var stop = min(count, (unit + 1) * BOUNDARY_COPY_CHUNK)
-        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one conversion chunk (native, no Python)
+        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # native data loop (one host-pool chunk of elements, no Python; not a driver loop)
             dst[flat] = _load_f64(element_address(flat, lp[], contiguous), kind, itemsize)
     host_parallelize(task, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
@@ -364,7 +364,7 @@ def gather_i64(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address, imm contiguous}:
         var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst_address)
         var stop = min(count, (unit + 1) * BOUNDARY_COPY_CHUNK)
-        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one conversion chunk (native, no Python)
+        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # native data loop (one host-pool chunk of elements, no Python; not a driver loop)
             dst[flat] = _load_i64(element_address(flat, lp[], contiguous), kind, itemsize)
     host_parallelize(task, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
@@ -433,14 +433,16 @@ def text_rows_into(layout: BufferLayout, kind: Int, mut points: List[UInt32], mu
     def measure(unit: Int) {imm lp, imm kind, imm width, imm n, imm lengths_address, imm contiguous}:
         var lens = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=lengths_address)
         var stop = min(n, (unit + 1) * BOUNDARY_COPY_CHUNK)
-        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one text chunk (native, no Python)
+        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # native data loop (one host-pool chunk of elements, no Python; not a driver loop)
             lens[flat] = _text_length(element_address(flat, lp[], contiguous), kind, width)
     host_parallelize(measure, units)
     var total = 0
-    for i in range(n):  # driver-loop: prefix sum of the element lengths (native, no Python)
+    for i in range(n):  # native data loop: serial prefix sum of the element lengths (no Python; not a driver loop)
         starts[i] = total
         total += lengths[i]
-    points = List[UInt32](length=total, fill=0)
+    # PERF FIX (perf-audit-3, 2026-11-11): no zero fill; fill_points writes
+    # every code unit (the lengths sum to `total`).
+    points = List[UInt32](unsafe_uninit_length=total)
     var points_address = Int(points.unsafe_ptr())
     var starts_address = Int(starts.unsafe_ptr())
     def fill_points(unit: Int) {imm lp, imm kind, imm n, imm lengths_address, imm starts_address, imm points_address,
@@ -449,16 +451,16 @@ def text_rows_into(layout: BufferLayout, kind: Int, mut points: List[UInt32], mu
         var firsts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=starts_address)
         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=points_address)
         var stop = min(n, (unit + 1) * BOUNDARY_COPY_CHUNK)
-        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one text chunk (native, no Python)
+        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # native data loop (one host-pool chunk of elements, no Python; not a driver loop)
             var at = element_address(flat, lp[], contiguous)
             var first = firsts[flat]
             if kind == BOUNDARY_KIND_UCS4:
                 var wide = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)
-                for k in range(lens[flat]):  # driver-loop: over one element's code points (native)
+                for k in range(lens[flat]):  # native data loop: one element's code points
                     dst[first + k] = wide[k]
             else:
                 var narrow = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at)
-                for k in range(lens[flat]):  # driver-loop: over one element's bytes (native)
+                for k in range(lens[flat]):  # native data loop: one element's bytes
                     dst[first + k] = UInt32(narrow[k])
     host_parallelize(fill_points, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
