@@ -196,7 +196,6 @@ from core.base_helpers_host import publish_base_helpers_host
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
 from core.core_host_impl import (
-    kmeans_fit_host,
     kmeans_predict_host,
     kmeans_transform_host,
     knn_classify_host,
@@ -212,9 +211,9 @@ from core.core_host_impl import (
     transpose_to_f32,
 )
 from core.shared_slot import SharedSlot
-from core.kmeans_native_api import KMEANS_NATIVE_ABI
-from core.kmeans_native_host import kmeans_host_native_v1
-from core.native_descriptor_abi import NativeDescriptorCall
+# wave 8 run split: the int-type slot, the host KMeans table and the host
+# KMeans fit body live in core/mojolearn_core_host_run.mojo.
+from core.mojolearn_core_host_run import _CORE_HOST_INT_TYPE, KMEANS_NATIVE_TABLE, kmeans_fit_host_run
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 
@@ -223,17 +222,6 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 #: entries DO fold (`KNN_HOST_SABOTAGE` in core/knn_host_predict.mojo, the
 #: same define) and a sabotage build walks every distance chain descending.
 comptime CORE_HOST_SABOTAGE_DEFINE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
-
-
-struct _CoreHostIntType(Defaultable, Movable):
-    # Address of CPython's int type (static, immortal), 0 until read.
-    var address: Int
-
-    def __init__(out self):
-        self.address = 0
-
-
-comptime _CORE_HOST_INT_TYPE = SharedSlot[_CoreHostIntType, "MojolearnCoreHostIntTypeV2"]
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -863,19 +851,6 @@ def rbc_knn_search_binding(
 # ===========================================================================
 
 
-struct KMeansHostNativeTable(Defaultable, Movable):
-    var name: String
-    var entries: List[NativeDescriptorCall]
-
-    def __init__(out self):
-        self.name = String(KMEANS_NATIVE_ABI)
-        self.entries = List[NativeDescriptorCall]()
-        self.entries.append(kmeans_host_native_v1)
-
-
-comptime KMEANS_NATIVE_TABLE = SharedSlot[KMeansHostNativeTable, ("MojolearnKMeansHostNativeIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKMeansHostNativeFastV1")]
-
-
 def kmeans_native_api_v1_binding() raises -> PythonObject:
     var table = KMEANS_NATIVE_TABLE.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -945,18 +920,11 @@ def kmeans_fit_binding(
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        if test and ns >= 1 and nf >= 1:
-            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
-            status = 0 if host_all_finite_f32(f32_ptr(x_address), ns * nf) else 1
-        if status == 0:
-            var r = kmeans_fit_host(
-                x_address, centroids_address, lp, weights_address,
-                ns, nf, nc, nw, mi, tl, sd, ninit, ii, mm, ovs,
-            )
-            inertia = r[0]
-            n_iter = r[1]
-            sum_scale = r[2]
-            weight_scale = r[3]
+        kmeans_fit_host_run(
+            x_address, centroids_address, lp, weights_address,
+            ns, nf, nc, nw, mi, tl, sd, ninit, ii, mm, ovs, test,
+            status, inertia, n_iter, sum_scale, weight_scale,
+        )
     var out = Python.list()
     out.append(PythonObject(inertia))
     out.append(PythonObject(n_iter))
