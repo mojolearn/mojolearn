@@ -26,6 +26,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.python import PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.native_loaded_module import native_loaded_module
 from bindings.kde_admission_boundary import kde_admission_hit, kde_admission_remember, kde_admission_drop
 from bindings.kde_native_boundary import KDEConnection, KDEResidentOwner, kde_owner_admit, kde_owner_prepare, kde_run_query, kde_run_resident, kde_array
@@ -328,7 +329,9 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if sample_weight is not None:
         # scikit-learn's _check_sample_weight (shape, finite, >= 0, not all
         # zero, its wording) by the base binding's reductions
-        var w = admit_family_weights(sample_weight, Int(py=x.shape[0]), False, context).keep
+        var w_pin = ArrayPin()
+        _ = admit_family_weights(sample_weight, Int(py=x.shape[0]), False, context, w_pin)
+        var w = w_pin.keep
         # Always an owned snapshot (the resident key holds its address).
         w = _kde_copy(w, context)
         _ = fitted_freeze(w, context)
