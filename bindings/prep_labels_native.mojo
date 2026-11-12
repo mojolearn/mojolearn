@@ -34,7 +34,7 @@ from bindings.boundary_read import text_buffer_view, read_text_rows_into, pack_u
 from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT, gather_i64
 from bindings.classical_pandas import classical_admit_value
 from bindings.label_admission_native import LabelTypeKinds
-from bindings.user_objects_native import _Env, _f32_exact, _indicator
+from bindings.user_objects_native import _Env, _f32_exact, _indicator, _new_list, _list_put
 from bindings.cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
 from core.label_words_impl import label_codes_i32_to_f64
@@ -532,14 +532,32 @@ def _int64_codes(values: PythonObject) raises -> List[Int]:
     """`_user_objects.call("ints", values)`: int(v) of each value, refused
     with OverflowError outside int64."""
     var b = _builtins()
-    var lo = PythonObject(-9223372036854775807 - 1)
-    var hi = PythonObject(9223372036854775807)
-    var out = List[Int]()
-    for i in range(len(values)):  # list-input: one int() per entry of the caller's Python code list (an integer code array takes _code_buffer)
-        var x = py_call(b.int, values[i])
-        if Bool(py=x < lo) or Bool(py=hi < x):
+    # Lane list-input-loops (2026-11-12): an exact list or tuple is read
+    # borrowed, an exact int by one PyLong_AsLongLongAndOverflow (the int64
+    # range check the two Python `<` comparisons made); any other class is
+    # int()-converted first, as before.
+    var t = cpython_table()
+    ref cpy = Python().cpython()
+    var cls = py_type(values)
+    var is_tuple = cls is b.tuple
+    var exact = is_tuple or cls is b.list
+    var int_word = Int(b.int._obj_ptr)
+    var int_fn = b.int
+    var overflow = List[Int32](length=1, fill=0)
+    var n = len(values)
+    var out = List[Int](capacity=n)
+    for i in range(n):  # list-input: one borrowed read per entry of the caller's Python code list (an integer code array takes _code_buffer)
+        var v = PythonObject(from_borrowed=p3_item(values, i, is_tuple)) if exact else values[i]
+        var x = v if p3_type_word(v._obj_ptr) == int_word else py_call(int_fn, v)
+        overflow[0] = 0
+        var word = t[].PyLong_AsLongLongAndOverflow(x._obj_ptr, Int(overflow.unsafe_ptr()))
+        if overflow[0] != 0:
             _raise_python(b.OverflowError, "Python int too large to convert to C long")
-        out.append(Int(py=x))
+        if word == -1 and t[].PyErr_Occurred():
+            var pending = cpy.unsafe_get_error()
+            raise pending^
+        out.append(Int(word))
+    _ = overflow
     return out^
 
 
@@ -792,8 +810,16 @@ def _multilabel_indicator(y: PythonObject, context: PythonObject) raises -> Opti
     if not Bool(py=py_call(b.isinstance, y, Python.tuple(b.list, b.tuple))) or len(y) == 0:
         return None
     var seq = Python.tuple(b.list, b.tuple)
-    for i in range(len(y)):  # list-input: one type check per row of the caller's Python list-of-lists y (no buffer form)
-        if not Bool(py=py_call(b.isinstance, y[i], seq)):
+    # Exact list / tuple rows by class word, read borrowed from an exact y;
+    # any other row class takes isinstance (lane list-input-loops).
+    var list_word = Int(b.list._obj_ptr)
+    var tuple_word = Int(b.tuple._obj_ptr)
+    var y_word = p3_type_word(y._obj_ptr)
+    var y_exact = y_word == list_word or y_word == tuple_word
+    for i in range(len(y)):  # list-input: one borrowed row read and class-word check per row of the caller's Python list-of-lists y (no buffer form)
+        var row = PythonObject(from_borrowed=p3_item(y, i, y_word == tuple_word)) if y_exact else y[i]
+        var w = p3_type_word(row._obj_ptr)
+        if w != list_word and w != tuple_word and not Bool(py=py_call(b.isinstance, row, seq)):
             return None
     if len(y[0]) < 2:
         return None
@@ -1230,20 +1256,38 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
     var nrows = len(y)
     if nrows == 0:
         return None
-    var rows = Python.list()
-    for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
-        var row = y[i]
-        var t = py_type(row)
-        if t is not b.list and t is not b.tuple and t is not b.set and t is not b.frozenset:
+    # Lane list-input-loops (2026-11-12): the rows are held natively (a set
+    # row listed once) with their kind, every label read borrowed from the
+    # row's C storage and its class compared by word: no Python list of
+    # rows, no boxed subscript, no PythonObject per label.
+    var list_word = Int(b.list._obj_ptr)
+    var tuple_word = Int(b.tuple._obj_ptr)
+    var set_word = Int(b.set._obj_ptr)
+    var frozenset_word = Int(b.frozenset._obj_ptr)
+    var int_word = Int(b.int._obj_ptr)
+    var y_word = p3_type_word(y._obj_ptr)
+    var y_exact = y_word == list_word or y_word == tuple_word
+    var list_fn = b.list
+    var rows = List[PythonObject](capacity=nrows)
+    var row_tuple = List[Bool](capacity=nrows)
+    for i in range(nrows):  # list-input: one borrowed read per row of the caller's Python label rows (ragged, no buffer form)
+        var row = PythonObject(from_borrowed=p3_item(y, i, y_word == tuple_word)) if y_exact else y[i]
+        var w = p3_type_word(row._obj_ptr)
+        if w == list_word or w == tuple_word:
+            rows.append(row)
+            row_tuple.append(w == tuple_word)
+        elif w == set_word or w == frozenset_word:
+            rows.append(py_call(list_fn, row))
+            row_tuple.append(False)
+        else:
             return None
-        _ = py_call(rows.append, row if (t is b.list or t is b.tuple) else py_call(b.list, row))
     var total = 0
     for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
-        var row = rows[i]
-        for j in range(len(row)):  # list-input: one read per label of a ragged Python label set
-            if py_type(row[j]) is not b.int:
+        var m = len(rows[i])
+        for j in range(m):  # list-input: one borrowed class-word check per label of a ragged Python label set
+            if p3_type_word(p3_item(rows[i], j, row_tuple[i])) != int_word:
                 return None
-        total += len(row)
+        total += m
     if total == 0 or total > LABEL_WORDS_MAX or 2 * total > LABEL_WORDS_MAX:
         return None
     # Each exact int is read with PyLong_AsLongLong (an int outside int64
@@ -1260,10 +1304,9 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
     _ = offs  # keep the Python object alive through the native call above
     var at = 0
     for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
-        var row = rows[i]
-        for j in range(len(row)):  # list-input: one read per label of a ragged Python label set
-            var v = row[j]
-            var word = table[].PyLong_AsLongLong(v._obj_ptr)
+        var m = len(rows[i])
+        for j in range(m):  # list-input: one borrowed PyLong_AsLongLong per label of a ragged Python label set
+            var word = table[].PyLong_AsLongLong(p3_item(rows[i], j, row_tuple[i]))
             if word == -1 and cpy.PyErr_Occurred():
                 cpython_table()[].PyErr_Clear()
                 return None
@@ -1272,6 +1315,7 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
             at += 1
         od[i + 1] = Int32(at)
         _ = offs  # keep the Python object alive through the native call above
+    _ = len(rows)  # keep the rows (and the listed set rows) alive through the borrowed label reads above
     return MLBFlat(nrows, LabelBuf(3, words, total, nw, False), offs)
 
 
@@ -1305,11 +1349,13 @@ def _fit_flat(fields: PythonObject, mode: PythonObject, fl: Optional[MLBFlat], c
 def _rows_lists(y: PythonObject) raises -> PythonObject:
     # [list(row) for row in y]
     var b = _builtins()
-    var out = Python.list()
     var rows = py_call(b.list, y)
-    for i in range(len(rows)):  # list-input: one read per row of the caller's ragged label sets (no buffer form)
-        _ = py_call(out.append, py_call(b.list, rows[i]))
-    return out
+    var n = len(rows)
+    var list_fn = b.list
+    var result = _new_list(n)
+    for i in range(n):  # list-input: one borrowed row read and one list() per row of the caller's ragged label sets (no buffer form), presized result
+        _list_put(result, i, py_call(list_fn, PythonObject(from_borrowed=p3_item(rows, i, False))))
+    return result
 
 
 def _mlb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1326,8 +1372,9 @@ def _mlb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises
     elif not _fit_flat(fields, mode, _mlb_flat(y, context), context):
         var rows = _rows_lists(y)
         var flat = Python.list()
-        for i in range(len(rows)):  # list-input: one read per row of the caller's ragged label sets (no buffer form)
-            _ = py_call(flat.extend, rows[i])
+        var extend_fn = flat.extend
+        for i in range(len(rows)):  # list-input: one borrowed row read and one list.extend per row of the caller's ragged label sets (no buffer form)
+            _ = py_call(extend_fn, PythonObject(from_borrowed=p3_item(rows, i, False)))
         if len(flat) > 0:
             _set_fit(fields, _label_classes(mode, flat, context), context)
         else:
@@ -1367,10 +1414,12 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
     var K = len(classes)
     var flat = Python.list()
     var owner = List[Float64]()
-    for i in range(n):  # list-input: one read per row of the caller's ragged label sets (no buffer form)
-        var row = rows[i]
-        for j in range(len(row)):  # list-input: one read per label of a ragged Python label set
-            _ = py_call(flat.append, row[j])
+    var extend_fn = flat.extend
+    for i in range(n):  # list-input: one borrowed row read and one list.extend per row of the caller's ragged label sets (no buffer form), not one append per label
+        var row = PythonObject(from_borrowed=p3_item(rows, i, False))
+        var m = len(row)
+        _ = py_call(extend_fn, row)
+        for _ in range(m):  # native data loop (not a driver loop): the row's owner words (no CPython call)
             owner.append(Float64(i))
     var entries = _entries(fields["numeric_mode_"], context)
     var p = EncProg()

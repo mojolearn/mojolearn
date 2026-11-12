@@ -43,6 +43,8 @@ from core.boundary_layout import gather_i64, gather_f64
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
+from bindings.cpython_table import cpython_table
+from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
 
 comptime KIND_STR = 0         # isinstance(v, str)
 comptime KIND_BOOL = 1        # bool or NumPy bool_ (_labels.is_bool)
@@ -68,6 +70,15 @@ struct _Env(Movable):
     var isinstance_fn: PythonObject
     var eq_fn: PythonObject
     var lt_fn: PythonObject
+    # Class words of the exact builtins, read once per operation: an item's
+    # class is compared by pointer (lane list-input-loops, 2026-11-12).
+    var list_word: Int
+    var tuple_word: Int
+    var int_word: Int
+    var float_word: Int
+    var bool_word: Int
+    var str_word: Int
+    var bytes_word: Int
 
     def __init__(out self) raises:
         var b = native_loaded_module("builtins")
@@ -82,6 +93,13 @@ struct _Env(Movable):
         self.isinstance_fn = b.isinstance
         self.eq_fn = self.op.eq
         self.lt_fn = self.op.lt
+        self.list_word = Int(b.list._obj_ptr)
+        self.tuple_word = Int(b.tuple._obj_ptr)
+        self.int_word = Int(b.int._obj_ptr)
+        self.float_word = Int(b.float._obj_ptr)
+        self.bool_word = Int(b.bool._obj_ptr)
+        self.str_word = Int(b.str._obj_ptr)
+        self.bytes_word = Int(b.bytes._obj_ptr)
         self.b = b
 
     def isinstance(self, v: PythonObject, cls: PythonObject) raises -> Bool:
@@ -108,6 +126,120 @@ struct _Env(Movable):
         return py_call(self.array, code, py_call(self.b.bytes, itemsize * max(n, 0)))
 
 
+# ------------------------------------------------------------ item reads
+# Lane list-input-loops (2026-11-12): the list-input loops below read the
+# items of an exact list or tuple borrowed from its C storage
+# (PyList_GetItem / PyTuple_GetItem: no boxed index, no PyObject_GetItem, no
+# new object per item) and convert an exact int / float by its class word
+# with one C call. Any other container is read through its own __getitem__
+# and any other item class keeps the builtin's protocol (PyNumber_Long /
+# PyNumber_Float are exactly what int(v) / float(v) call), so the values,
+# refusals and their texts are the former ones.
+
+comptime SEQ_OTHER = 0   # read through the container's own __getitem__
+comptime SEQ_LIST = 1    # exact list: borrowed PyList_GetItem
+comptime SEQ_TUPLE = 2   # exact tuple: borrowed PyTuple_GetItem
+
+
+def _seq_kind(env: _Env, values: PythonObject) raises -> Int:
+    var word = borrowed_type_word(values._obj_ptr)
+    if word == env.list_word:
+        return SEQ_LIST
+    if word == env.tuple_word:
+        return SEQ_TUPLE
+    return SEQ_OTHER
+
+
+def _item_at(values: PythonObject, kind: Int, i: Int) raises -> PythonObject:
+    """`values[i]`: a new reference to the stored item of an exact list or
+    tuple (one incref; an index past the end raises the same IndexError),
+    else (or for a negative index) the container's own subscript."""
+    if kind == SEQ_OTHER or i < 0:
+        return values[i]
+    return PythonObject(from_borrowed=borrowed_item(values, i, kind == SEQ_TUPLE))
+
+
+def _int_word(env: _Env, v: PythonObject, mut overflow: List[Int32]) raises -> Int64:
+    """`int(v)` as an int64 word, refused with the OverflowError the former
+    `int(v)` range check raised outside int64. An exact int is one
+    PyLong_AsLongLongAndOverflow; any other class one PyNumber_Long first.
+    `overflow` is the caller's one-word flag, allocated once per loop."""
+    var t = cpython_table()
+    ref cpy = Python().cpython()
+    var number = v
+    if borrowed_type_word(v._obj_ptr) != env.int_word:
+        var converted = t[].PyNumber_Long(v._obj_ptr)
+        if not converted:
+            var pending = cpy.unsafe_get_error()
+            raise pending^
+        number = PythonObject(from_owned=converted)
+    overflow[0] = 0
+    var word = t[].PyLong_AsLongLongAndOverflow(number._obj_ptr, Int(overflow.unsafe_ptr()))
+    if overflow[0] != 0:
+        var refused = _refusal("OverflowError", "Python int too large to convert to C long")
+        raise refused^
+    if word == -1 and t[].PyErr_Occurred():
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    _ = number
+    return word
+
+
+def _float_word(env: _Env, v: PythonObject) raises -> Float64:
+    """`float(v)`: an exact float or int is one PyFloat_AsDouble (an int too
+    large raises the OverflowError float() raises); any other class one
+    PyNumber_Float first."""
+    var t = cpython_table()
+    ref cpy = Python().cpython()
+    var word = borrowed_type_word(v._obj_ptr)
+    if word == env.float_word or word == env.int_word:
+        var x = t[].PyFloat_AsDouble(v._obj_ptr)
+        if x == -1.0 and t[].PyErr_Occurred():
+            var pending = cpy.unsafe_get_error()
+            raise pending^
+        return x
+    var converted = t[].PyNumber_Float(v._obj_ptr)
+    if not converted:
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    var owned = PythonObject(from_owned=converted)
+    var y = t[].PyFloat_AsDouble(owned._obj_ptr)
+    if y == -1.0 and t[].PyErr_Occurred():
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    _ = owned
+    return y
+
+
+def _is_real_nonbool(env: _Env, v: PythonObject) raises -> Bool:
+    """`isinstance(v, numbers.Real) and not isinstance(v, bool)`: an exact
+    int or float by class word, any other class through isinstance."""
+    var word = borrowed_type_word(v._obj_ptr)
+    if word == env.int_word or word == env.float_word:
+        return True
+    if word == env.bool_word or word == env.str_word:
+        return False
+    return not env.isinstance(v, env.b.bool) and env.isinstance(v, env.real)
+
+
+def _new_list(n: Int) raises -> PythonObject:
+    """A presized list of n NULL slots that `_list_put` fills, every slot
+    exactly once."""
+    ref cpy = Python().cpython()
+    var raw = cpython_table()[].PyList_New(n)
+    if not raw:
+        var pending = cpy.unsafe_get_error()
+        raise pending^
+    return PythonObject(from_owned=raw)
+
+
+def _list_put(dst: PythonObject, i: Int, v: PythonObject) raises:
+    """`dst[i] = v` into a `_new_list` slot (PyList_SetItem steals the new
+    reference taken here)."""
+    ref cpy = Python().cpython()
+    _ = cpython_table()[].PyList_SetItem(dst._obj_ptr, i, cpy.Py_NewRef(v._obj_ptr))
+
+
 def _address(store: PythonObject) raises -> Int:
     return Int(py=store.buffer_info()[0])
 
@@ -125,14 +257,15 @@ def _index_at(address: Int, k: Int, width: Int) -> Int:
 
 def _take(env: _Env, values: PythonObject, address: Int, count: Int, width: Int) raises -> PythonObject:
     var n = len(values)
-    var out = Python.list()
-    for k in range(count):  # list-input: Python list of label objects read once by user_objects_c (take); a Python list of objects has no buffer form
+    var kind = _seq_kind(env, values)
+    var result = _new_list(max(count, 0))
+    for k in range(count):  # list-input: Python list of label objects read once by user_objects_c (take): borrowed item, presized result
         var i = _index_at(address, k, width)
         var j = i + n if i < 0 else i
         if j < 0 or j >= n:
             raise _refusal("IndexError", "list index out of range")
-        _ = py_call(out.append, values[j])
-    return out
+        _list_put(result, k, _item_at(values, kind, j))
+    return result
 
 
 def _first_seen(env: _Env, values: PythonObject) raises -> PythonObject:
@@ -144,8 +277,9 @@ def _first_seen(env: _Env, values: PythonObject) raises -> PythonObject:
     var codes = env.store("i", n, 4)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
     _ = codes  # keep the Python object alive through the native call above
-    for i in range(n):  # list-input: Python list of label objects read once by user_objects_c (first_seen); a Python list of objects has no buffer form
-        var v = values[i]
+    var kind = _seq_kind(env, values)
+    for i in range(n):  # api-bound-loop: dict.setdefault of each user label object (its own __hash__ / __eq__); items read borrowed
+        var v = _item_at(values, kind, i)
         var k = len(classes)
         var got = py_call(index.setdefault, v, PythonObject(k))
         var code = Int(py=got)
@@ -161,8 +295,9 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     # class keeps its last index, as the comprehension does), and the distinct
     # unseen values in first-seen order
     var index = Python.dict()
-    for i in range(len(classes)):  # list-input: Python list of class objects read once by user_objects_c (lookup); a Python list of objects has no buffer form
-        py_setitem(index, classes[i], PythonObject(i))
+    var class_kind = _seq_kind(env, classes)
+    for i in range(len(classes)):  # api-bound-loop: dict store of each user class object (its own __hash__ / __eq__); items read borrowed
+        py_setitem(index, _item_at(classes, class_kind, i), PythonObject(i))
     var n = len(values)
     var codes = env.store("i", n, 4)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
@@ -170,9 +305,11 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     var unseen = Python.dict()
     var missing = Python.list()
     var none = PythonObject(None)
-    for i in range(n):  # list-input: Python list of label objects read once by user_objects_c (lookup); a Python list of objects has no buffer form
-        var v = values[i]
-        var got = py_call(index.get, v, none)
+    var kind = _seq_kind(env, values)
+    var get_fn = index.get
+    for i in range(n):  # api-bound-loop: dict lookup of each user label object (its own __hash__ / __eq__); items read borrowed
+        var v = _item_at(values, kind, i)
+        var got = py_call(get_fn, v, none)
         if got is none:
             out[i] = Int32(-1)
             _ = codes  # keep the Python object alive through the native call above
@@ -203,8 +340,38 @@ def _is_intval(env: _Env, v: PythonObject) raises -> Bool:
 def _kinds(env: _Env, values: PythonObject) raises -> PythonObject:
     var counts = List[Int](length=N_KINDS, fill=0)
     var n = len(values)
-    for i in range(n):  # list-input: Python list of label objects read once by user_objects_c (kinds); a Python list of objects has no buffer form
-        var v = values[i]
+    var kind = _seq_kind(env, values)
+    var t = cpython_table()
+    for i in range(n):  # list-input: Python list of label objects read once by user_objects_c (kinds): borrowed item, exact str/int/float/bool by class word
+        var v = _item_at(values, kind, i)
+        # The exact builtin classes by class word, with the counts the ABC
+        # checks below give them; any other class takes the checks.
+        var word = borrowed_type_word(v._obj_ptr)
+        if word == env.str_word:
+            counts[KIND_STR] += 1
+            continue
+        if word == env.int_word:
+            counts[KIND_EXACT_INT] += 1
+            counts[KIND_INTEGRAL] += 1
+            counts[KIND_INTVAL] += 1
+            counts[KIND_REAL] += 1
+            counts[KIND_INT_OR_BOOL] += 1
+            counts[KIND_PLAIN_INT] += 1
+            counts[KIND_REAL_NONBOOL] += 1
+            continue
+        if word == env.float_word:
+            counts[KIND_REAL] += 1
+            counts[KIND_REAL_NONBOOL] += 1
+            if _float_is_integer(t[].PyFloat_AsDouble(v._obj_ptr)):
+                counts[KIND_INTVAL] += 1
+            continue
+        if word == env.bool_word:
+            counts[KIND_BOOL] += 1
+            counts[KIND_INTEGRAL] += 1
+            counts[KIND_INTVAL] += 1
+            counts[KIND_REAL] += 1
+            counts[KIND_INT_OR_BOOL] += 1
+            continue
         var is_b = env.is_bool(v)
         var integral = env.isinstance(v, env.integral)
         var real = integral or env.isinstance(v, env.real)
@@ -278,14 +445,11 @@ def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
     var words = env.store("q", n, 8)
     var out = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
-    var lo = PythonObject(-9223372036854775807 - 1)
-    var hi = PythonObject(9223372036854775807)
-    for i in range(n):  # list-input: Python int objects read once by user_objects_c (ints); a Python list of objects has no buffer form
-        var x = py_call(env.b.int, vals[i])
-        if env.lt(x, lo) or env.lt(hi, x):
-            raise _refusal("OverflowError", "Python int too large to convert to C long")
-        out[i] = Int64(Int(py=x))
+    var overflow = List[Int32](length=1, fill=0)
+    for i in range(n):  # list-input: Python int objects read once by user_objects_c (ints): borrowed item, one PyLong_AsLongLongAndOverflow
+        out[i] = _int_word(env, _item_at(vals, SEQ_LIST, i), overflow)
         _ = words  # keep the Python object alive through the native call above
+    _ = overflow
     return words
 
 
@@ -304,24 +468,30 @@ def _floats(env: _Env, values: PythonObject) raises -> PythonObject:
     var words = env.store("d", n, 8)
     var out = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # list-input: Python number objects read once by user_objects_c (floats); a Python list of objects has no buffer form
-        out[i] = Float64(py=py_call(env.b.float, vals[i]))
+    for i in range(n):  # list-input: Python number objects read once by user_objects_c (floats): borrowed item, one PyFloat_AsDouble
+        out[i] = _float_word(env, _item_at(vals, SEQ_LIST, i))
         _ = words  # keep the Python object alive through the native call above
     return words
 
 
 def _strs(env: _Env, values: PythonObject) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(values)):  # list-input: Python str objects read once by user_objects_c (strs); a Python list of objects has no buffer form
-        _ = py_call(out.append, py_call(env.b.str, values[i]))
-    return out
+    var n = len(values)
+    var kind = _seq_kind(env, values)
+    var str_fn = env.b.str
+    var result = _new_list(n)
+    for i in range(n):  # api-bound-loop: str() of each user label object (its own __str__); items read borrowed, the result presized
+        _list_put(result, i, py_call(str_fn, _item_at(values, kind, i)))
+    return result
 
 
 def _column(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(rows)):  # list-input: Python label rows read once by user_objects_c (column); a Python list of objects has no buffer form
-        _ = py_call(out.append, rows[i][j])
-    return out
+    var n = len(rows)
+    var kind = _seq_kind(env, rows)
+    var result = _new_list(n)
+    for i in range(n):  # list-input: Python label rows read once by user_objects_c (column): borrowed row and item, presized result
+        var row = _item_at(rows, kind, i)
+        _list_put(result, i, _item_at(row, _seq_kind(env, row), j))
+    return result
 
 
 def _column_f32(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
@@ -329,32 +499,41 @@ def _column_f32(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # list-input: Python probability rows read once by user_objects_c (column_f32); a Python list of objects has no buffer form
-        out[i] = Float32(Float64(py=py_call(env.b.float, rows[i][j])))
+    var kind = _seq_kind(env, rows)
+    for i in range(n):  # list-input: Python probability rows read once by user_objects_c (column_f32): borrowed row and item, one PyFloat_AsDouble
+        var row = _item_at(rows, kind, i)
+        out[i] = Float32(_float_word(env, _item_at(row, _seq_kind(env, row), j)))
         _ = words  # keep the Python object alive through the native call above
     return words
 
 
 def _transpose(env: _Env, cols: PythonObject) raises -> PythonObject:
     var m = len(cols)
-    var out = Python.list()
     if m == 0:
-        return out
-    var n = len(cols[0])
+        return Python.list()
+    # Each column and its container kind read once, not once per cell.
+    var columns = List[PythonObject](capacity=m)
+    var kinds = List[Int](capacity=m)
+    for c in range(m):  # driver-loop: over the output columns
+        columns.append(cols[c])
+        kinds.append(_seq_kind(env, columns[c]))
+    var n = len(columns[0])
     for c in range(1, m):  # driver-loop: over the output columns
-        n = min(n, len(cols[c]))
-    for i in range(n):  # list-input: Python label columns read once by user_objects_c (transpose); a Python list of objects has no buffer form
-        var row = Python.list()
+        n = min(n, len(columns[c]))
+    var result = _new_list(n)
+    for i in range(n):  # list-input: Python label columns read once by user_objects_c (transpose): borrowed items, presized rows
+        var row = _new_list(m)
         for c in range(m):  # driver-loop: over the output columns
-            _ = py_call(row.append, cols[c][i])
-        _ = py_call(out.append, row)
-    return out
+            _list_put(row, c, _item_at(columns[c], kinds[c], i))
+        _list_put(result, i, row)
+    return result
 
 
 def _scatter(env: _Env, rows: PythonObject, address: Int, count: Int, vals: PythonObject) raises -> PythonObject:
     var n = min(count, len(vals))
-    for k in range(n):  # list-input: Python prediction objects read once by user_objects_c (scatter); a Python list of objects has no buffer form
-        py_setitem(rows, PythonObject(_index_at(address, k, 8)), vals[k])
+    var kind = _seq_kind(env, vals)
+    for k in range(n):  # api-bound-loop: each prediction stored into the caller's own container through its __setitem__; items read borrowed
+        py_setitem(rows, PythonObject(_index_at(address, k, 8)), _item_at(vals, kind, k))
     return PythonObject(None)
 
 
@@ -371,9 +550,9 @@ def _nested_into(env: _Env, obj: PythonObject, array_type: PythonObject, out_buf
     var n = len(seq)
     if n == 0:
         return Python.tuple(PythonObject(0))
-    var first = _nested_into(env, seq[0], array_type, out_buf)
-    for i in range(1, n):  # list-input: ragged user Python list read once by user_objects_c (nested); a Python list of objects has no buffer form
-        var shape = _nested_into(env, seq[i], array_type, out_buf)
+    var first = _nested_into(env, _item_at(seq, SEQ_LIST, 0), array_type, out_buf)
+    for i in range(1, n):  # api-bound-loop: a ragged user list walked through its items' own __len__ protocol (recursive leaves)
+        var shape = _nested_into(env, _item_at(seq, SEQ_LIST, i), array_type, out_buf)
         if not env.eq(shape, first):
             raise _refusal("ValueError", "mojolearn: nested sequence is not rectangular (" + env.text(shape)
                            + " vs " + env.text(first) + ")")
@@ -402,14 +581,17 @@ def _group_runs(env: _Env, ids: PythonObject) raises -> PythonObject:
     var keys = List[UInt8]()
     var starts = List[Int](capacity=n)
     var lengths = List[Int](capacity=n)
-    for i in range(n):  # list-input: group_id objects (int/str/bytes) read once by user_objects_c (group_runs); a Python list of objects has no buffer form
-        var v = ids[i]
+    var kind = _seq_kind(env, ids)
+    for i in range(n):  # list-input: group_id objects (int/str/bytes) read once by user_objects_c (group_runs): borrowed item, exact classes by class word
+        var v = _item_at(ids, kind, i)
+        var word = borrowed_type_word(v._obj_ptr)
+        var exact = word == env.bytes_word or word == env.str_word or word == env.int_word
         var raw: PythonObject
-        if env.isinstance(v, env.b.bytes):
+        if word == env.bytes_word or (not exact and env.isinstance(v, env.b.bytes)):
             raw = v
-        elif env.isinstance(v, env.b.str):
+        elif word == env.str_word or (not exact and env.isinstance(v, env.b.str)):
             raw = py_call(v.encode, "utf-8")
-        elif env.isinstance(v, env.integral) and not env.isinstance(v, env.b.bool):
+        elif word == env.int_word or (env.isinstance(v, env.integral) and not env.isinstance(v, env.b.bool)):
             raw = py_call(py_call(env.b.str, py_call(env.b.int, v)).encode, "ascii")
         else:
             raise _refusal("ValueError", "mojolearn: group_id[" + String(i) + "] object (" + env.py_repr(v)
@@ -438,21 +620,33 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
     var flat = env.store("q", 2 * n, 8)
     var fw = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(flat))
     _ = flat  # keep the Python object alive through the native call above
-    for i in range(n):  # list-input: user pairs (Python index pairs) read once by user_objects_c (pairs); a Python list of objects has no buffer form
-        var pair = rows[i]
+    var kind = _seq_kind(env, rows)
+    var t = cpython_table()
+    ref cpy = Python().cpython()
+    var overflow = List[Int32](length=1, fill=0)
+    for i in range(n):  # list-input: user pairs (Python index pairs) read once by user_objects_c (pairs): borrowed items, exact int by class word, one PyLong_AsLongLongAndOverflow
+        var pair = _item_at(rows, kind, i)
         if len(pair) != 2:
             raise _refusal("ValueError", "mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
+        var pair_kind = _seq_kind(env, pair)
         for j in range(2):  # driver-loop: over the two rows of a pair
-            var index = pair[j]
-            if not env.isinstance(index, env.integral) or env.isinstance(index, env.b.bool):
+            var index = _item_at(pair, pair_kind, j)
+            var exact_int = borrowed_type_word(index._obj_ptr) == env.int_word
+            if not exact_int and (not env.isinstance(index, env.integral) or env.isinstance(index, env.b.bool)):
                 raise _refusal("ValueError", "mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '"
                                + env.text(index) + "' value type=" + env.text(py_type(index))
                                + ": must be an integer.")
-            var x = py_call(env.b.int, index)
-            if env.lt(x, PythonObject(0)) or not env.lt(x, PythonObject(n_rows)):
+            var x = index if exact_int else py_call(env.b.int, index)
+            overflow[0] = 0
+            var word = t[].PyLong_AsLongLongAndOverflow(x._obj_ptr, Int(overflow.unsafe_ptr()))
+            if overflow[0] == 0 and word == -1 and t[].PyErr_Occurred():
+                var pending = cpy.unsafe_get_error()
+                raise pending^
+            # An int beyond int64 is outside the rows too (the former `<` said so).
+            if overflow[0] != 0 or word < 0 or Int(word) >= n_rows:
                 raise _refusal("ValueError", "mojolearn: pairs[" + String(i) + "][" + String(j) + "] = "
                                + env.text(x) + " is outside the " + String(n_rows) + " rows")
-            fw[2 * i + j] = Int64(Int(py=x))
+            fw[2 * i + j] = word
             _ = flat  # keep the Python object alive through the native call above
         if fw[2 * i] == fw[2 * i + 1]:
             raise _refusal("ValueError", "mojolearn: pairs[" + String(i) + "] pairs row " + String(fw[2 * i])
@@ -470,12 +664,16 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
     if len(weights) != n:
         raise _refusal("ValueError", "mojolearn: len(pairs_weight) = " + String(len(weights))
                        + " is not equal to len(pairs) = " + String(n) + " ")
-    for i in range(n):  # list-input: user pairs_weight objects read once by user_objects_c (pairs); a Python list of objects has no buffer form
-        var w = weights[i]
-        var ok = env.isinstance(w, env.real)
+    _ = overflow
+    var weight_kind = _seq_kind(env, weights)
+    for i in range(n):  # list-input: user pairs_weight objects read once by user_objects_c (pairs): borrowed item, exact float/int/bool by class word, one PyFloat_AsDouble
+        var w = _item_at(weights, weight_kind, i)
+        var wword = borrowed_type_word(w._obj_ptr)
+        var ok = wword == env.float_word or wword == env.int_word or wword == env.bool_word or (
+            wword != env.str_word and env.isinstance(w, env.real))
         var x = 0.0
         if ok:
-            x = Float64(py=py_call(env.b.float, w))
+            x = _float_word(env, w)
             ok = x - x == 0.0 and x >= 0.0
         if not ok:
             raise _refusal("ValueError", "mojolearn: pairs_weight[" + String(i)
@@ -492,8 +690,9 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
     var seen = Python.dict()
     var keys = Python.list()
     var none = PythonObject(None)
-    for i in range(n):  # list-input: categorical y label objects read once by user_objects_c (sorted_codes); a Python list of objects has no buffer form
-        var v = values[i]
+    var kind = _seq_kind(env, values)
+    for i in range(n):  # api-bound-loop: equality and hashing of each user label object (its own __eq__ / __hash__); items read borrowed
+        var v = _item_at(values, kind, i)
         if not env.eq(v, unknown):
             var before = len(seen)
             _ = py_call(seen.setdefault, v, none)
@@ -540,8 +739,8 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # list-input: categorical y label objects read once by user_objects_c (sorted_codes); a Python list of objects has no buffer form
-        var v = values[i]
+    for i in range(n):  # api-bound-loop: equality and dict lookup of each user label object (its own __eq__ / __hash__); items read borrowed
+        var v = _item_at(values, kind, i)
         if env.eq(v, unknown):
             out[i] = Float32(-1.0)
             _ = words  # keep the Python object alive through the native call above
@@ -556,7 +755,7 @@ def _group_rows(env: _Env, codes: PythonObject, k: Int) raises -> PythonObject:
     var n = len(codes)
     var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
     var counts = List[Int](length=k, fill=0)
-    for i in range(n):  # list-input: int32 group codes read once by user_objects_c (group_rows); a Python list of objects has no buffer form
+    for i in range(n):  # native data loop (not a driver loop): counts over the caller's int32 code store (no CPython call)
         counts[Int(cp[i])] += 1
     var stores = Python.list()
     var at = List[Int](length=k, fill=0)
@@ -566,7 +765,7 @@ def _group_rows(env: _Env, codes: PythonObject, k: Int) raises -> PythonObject:
         ptrs.append(_address(st) if counts[c] > 0 else 0)
         _ = st  # keep the Python object alive through the native call above
         _ = py_call(stores.append, st)
-    for i in range(n):  # list-input: int32 group codes read once by user_objects_c (group_rows); a Python list of objects has no buffer form
+    for i in range(n):  # native data loop (not a driver loop): row scatter over the caller's int32 code store (no CPython call)
         var c = Int(cp[i])
         MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ptrs[c])[at[c]] = Int64(i)
         at[c] += 1
@@ -577,6 +776,8 @@ def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: P
     # permutation_test_score's groups route: yp = list(values), then per
     # group, yp[rows[a]] = values[rows[perm[a]]]
     var out = py_call(env.b.list, values)
+    var n_out = len(out)
+    var kind = _seq_kind(env, values)
     for g in range(len(rows)):  # driver-loop: over the groups
         var r = rows[g]
         var p = perms[g]
@@ -587,8 +788,13 @@ def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: P
         _ = r  # keep the Python object alive through the native call above
         var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(p))
         _ = p  # keep the Python object alive through the native call above
-        for a in range(m):  # list-input: Python label objects read once by user_objects_c (group_permute); a Python list of objects has no buffer form
-            py_setitem(out, PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
+        for a in range(m):  # list-input: Python label objects read once by user_objects_c (group_permute): borrowed source item, C store into the copy
+            var dst_row = Int(rp[a])
+            var item = _item_at(values, kind, Int(rp[Int(pp[a])]))
+            if dst_row >= 0 and dst_row < n_out:
+                _list_put(out, dst_row, item)
+            else:
+                py_setitem(out, PythonObject(dst_row), item)
             _ = p  # keep the Python object alive through the native call above
             _ = r  # keep the Python object alive through the native call above
     return out
@@ -598,16 +804,17 @@ def _f32_exact(env: _Env, values: PythonObject) raises -> PythonObject:
     # the labels as Python floats when every one is a real number (not a
     # bool) that float32 holds exactly and none is NaN, else None
     var n = len(values)
-    var out = Python.list()
-    for i in range(n):  # list-input: Python label objects read once by user_objects_c (f32_exact); a Python list of objects has no buffer form
-        var v = values[i]
-        if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
+    var kind = _seq_kind(env, values)
+    var result = _new_list(n)
+    for i in range(n):  # list-input: Python label objects read once by user_objects_c (f32_exact): borrowed item, exact float/int by class word, presized result
+        var v = _item_at(values, kind, i)
+        if not _is_real_nonbool(env, v):
             return PythonObject(None)
-        var x = Float64(py=py_call(env.b.float, v))
+        var x = _float_word(env, v)
         if x != x or Float64(Float32(x)) != x:
             return PythonObject(None)
-        _ = py_call(out.append, PythonObject(x))
-    return out
+        _list_put(result, i, PythonObject(x))
+    return result
 
 
 def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
@@ -615,9 +822,10 @@ def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
     # width), (1, None, 0) when the rows' lengths differ, (2, None, 0) when a
     # value is not an integral real or more than two distinct values occur
     var n = len(rows)
-    var w = len(rows[0])
-    for i in range(n):  # list-input: Python list-of-lists y read once by user_objects_c (indicator); a Python list of objects has no buffer form
-        if len(rows[i]) != w:
+    var kind = _seq_kind(env, rows)
+    var w = len(_item_at(rows, kind, 0))
+    for i in range(n):  # list-input: Python list-of-lists y read once by user_objects_c (indicator): borrowed rows
+        if len(_item_at(rows, kind, i)) != w:
             return Python.tuple(PythonObject(1), PythonObject(None), PythonObject(0))
     var words = env.store("f", n * w, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
@@ -625,13 +833,14 @@ def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
     var d0 = 0.0
     var d1 = 0.0
     var nd = 0
-    for i in range(n):  # list-input: Python list-of-lists y read once by user_objects_c (indicator); a Python list of objects has no buffer form
-        var r = rows[i]
+    for i in range(n):  # list-input: Python list-of-lists y read once by user_objects_c (indicator): borrowed row and item, exact float/int by class word
+        var r = _item_at(rows, kind, i)
+        var row_kind = _seq_kind(env, r)
         for j in range(w):  # driver-loop: over one row's columns
-            var v = r[j]
-            if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
+            var v = _item_at(r, row_kind, j)
+            if not _is_real_nonbool(env, v):
                 return Python.tuple(PythonObject(2), PythonObject(None), PythonObject(0))
-            var x = Float64(py=py_call(env.b.float, v))
+            var x = _float_word(env, v)
             if not _float_is_integer(x):
                 return Python.tuple(PythonObject(2), PythonObject(None), PythonObject(0))
             if nd == 0 or (x != d0 and (nd == 1 or x != d1)):
