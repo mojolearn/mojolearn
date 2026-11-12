@@ -2857,7 +2857,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
     for i in range(n):  # cpu-route: the row -> fold table the user splits fill (rows)
         fp[i] = -1
     var trains = List[IndexI64]()
-    for k in range(F):  # driver-loop: over the cv folds (one (train, test) pair each)
+    for k in range(F):  # api-bound-loop: over the folds the user's cv splitter yielded (public type: iterable of (train, test) pairs); one tuple unpack and one native index read per fold
         var pair = py_call(b.tuple, splits[k])
         if len(pair) > 2:
             raise Error("too many values to unpack (expected 2)")

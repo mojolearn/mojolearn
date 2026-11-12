@@ -598,7 +598,7 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     var seen = admitted_vector(n if n > 1 else 1, "<i8", context)
     var seen_addr = trees_address(seen)
     var bkey = base_helpers_key(context["trees_helpers"])
-    for pair in pairs:  # driver-loop: over the cv folds (one (train, test) index-array pair each, read natively per fold)
+    for pair in pairs:  # api-bound-loop: over the folds the user's cv splitter yields (public type: iterable of (train, test) pairs); one tuple unpack and one native index read per fold
         var both = py_call(b.tuple, pair)
         if len(both) != 2:
             raise Error("each cv split must be a (train, test) pair")
