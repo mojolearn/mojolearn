@@ -25,7 +25,7 @@ from std.math import isfinite
 from core.native_array_layout import NativeArrayLayout
 from std.memory import bitcast, unsafe_memcpy
 from core.native_label_codes import NativeLabelCodes
-from std.os import getenv
+from bindings.classical_labels_run import labels_env, _native_code, _encode_code, _LabelsCodeSource, _NativeLabelCodes
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_attr import py_attr
@@ -188,11 +188,6 @@ def labels_argmax_rows(context: PythonObject, wide: Bool, scores_addr: Int, rows
     labels_argmax_run(context, wide, scores_addr, rows, cols, dst_addr)
 
 
-def labels_env(name: String, default: String) -> String:
-    var value = getenv(name)
-    return value if value else default
-
-
 # --------------------------------------------------------------- outputs
 
 
@@ -202,16 +197,8 @@ def labels_env(name: String, default: String) -> String:
 # admit_c_view / admit_ids, admitted_array / admitted_vector), the one path.
 # TOMBSTONE: labels_empty / labels_vector / LabelsView / labels_view / labels_check_rank / labels_shape_repr / _view_of_array / _view_of_buffer / _any_contiguous_address / LabelsMatrix / labels_f32 / labels_f32_view / labels_forest_layout / labels_all_finite / labels_check_sample_weight / labels_prepare_weights (the second admission path, and its trees_* aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-def labels_itemsize(typestr: String) raises -> Int:
-    if typestr == "<f8" or typestr == "<i8":
-        return 8
-    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
-        return 4
-    if typestr == "<f2" or typestr == "<u2":
-        return 2
-    if typestr == "<u1" or typestr == "<i1":
-        return 1
-    raise Error("TypeError: " + typestr + " is not an Array dtype")
+# labels_itemsize (a second copy of admitted_width) deleted 2026-11-12 by lane admitted-x-view:
+# bindings/admitted_input_run.mojo admitted_width is the one Array item width.
 
 
 def labels_full_f32(count: Int, value: Float64, context: PythonObject) raises -> PythonObject:
@@ -287,29 +274,6 @@ def _pandas_values(source: PythonObject) raises -> PythonObject:
     return _pd_get("pandas._libs.internals", "Block", "values", blocks[0])
 
 
-def _native_code(typestr: String) raises -> Int:
-    """`_array._NATIVE_CODE`: the core helpers' dtype numbering."""
-    if typestr == "<f4":
-        return 0
-    if typestr == "<f8":
-        return 1
-    if typestr == "<i4":
-        return 2
-    if typestr == "<i8":
-        return 3
-    if typestr == "<u4":
-        return 4
-    if typestr == "<u1":
-        return 5
-    if typestr == "<u2":
-        return 6
-    if typestr == "<i1":
-        return 7
-    if typestr == "<f2":
-        return 8
-    raise Error("TypeError: " + typestr + " has no native element code")
-
-
 def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, context: PythonObject) raises:
     """`Array.astype(target)` of a contiguous block (`_native_astype`): the
     core cast `cast_elements` in process, one conversion per element in
@@ -328,23 +292,6 @@ def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, 
 
 
 # ----------------------------------------------------------------- labels
-
-
-def _encode_code(typestr: String) -> Int:
-    """`_labels._NATIVE_ENCODE`, or -1."""
-    if typestr == "<f4":
-        return 0
-    if typestr == "<f8":
-        return 1
-    if typestr == "<i4":
-        return 2
-    if typestr == "<i8":
-        return 3
-    if typestr == "<u4":
-        return 4
-    if typestr == "<u1":
-        return 5
-    return -1
 
 
 struct ClassicalLabels(Copyable, Movable):
@@ -995,24 +942,12 @@ def labels_label_kind(var classes: PythonObject, context: PythonObject) raises -
     return String("int") if all_int else String("float") if all_real else String("object")
 
 
-trait _LabelsCodeSource:
-    def address(self) raises -> Int: ...
-
-
 @fieldwise_init
 struct _PythonLabelCodes(Copyable, Movable, _LabelsCodeSource):
     var keep: PythonObject
 
     def address(self) raises -> Int:
         return labels_address(self.keep)
-
-
-@fieldwise_init
-struct _NativeLabelCodes(Copyable, Movable, _LabelsCodeSource):
-    var data: Int
-
-    def address(self) raises -> Int:
-        return self.data
 
 
 def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:

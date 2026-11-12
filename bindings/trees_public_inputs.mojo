@@ -16,7 +16,8 @@
 # and C builtins.
 from std.ffi import c_int
 from std.memory import bitcast
-from std.os import getenv
+from bindings.classical_labels_run import labels_env as trees_env
+from bindings.trees_public_inputs_run import trees_finite_f32, TREES_NONFINITE
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.native_loaded_module_door import native_loaded_module
@@ -45,32 +46,22 @@ from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MUL
 # TOMBSTONE: trees_public_inputs array helpers copy (duplicate of classical_labels) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch.
 from bindings.classical_labels import (
-    labels_itemsize as trees_itemsize,
     labels_full_f32 as trees_full_f32,
     labels_reshape as trees_reshape,
     labels_freeze as trees_freeze,
     labels_address as trees_address,
     _pandas_values,
-    _native_code,
     labels_cast as trees_cast,
 )
 # The X / weight / view admission is the one path (bindings/admitted_input.mojo).
 # TOMBSTONE: trees_empty / trees_vector / TreesView / trees_view / trees_check_rank / trees_shape_repr / TreesMatrix / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_prepare_weights aliases, and the trees label encoder copy (_native_labels, _label_list, _flatten_labels, _flatten_into, _label_kind, _sorted_classes, _numeric_label_view, _list_labels) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+from bindings.admitted_input_run import admitted_width as trees_itemsize
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_x_unrecorded, admit_weight_words, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype, classical_view,
 )
 from bindings.classical_arrays_door import classical_is_f32, classical_c_order
-from core.host_finite_scan import host_all_finite_f32
-
-
-def trees_finite_f32(address: Int, count: Int) -> Bool:
-    """True when the `count` float32 words at `address` are all finite: the
-    one host scan (core/host_finite_scan.mojo), SIMD tasks across cores."""
-    if count <= 0:
-        return True
-    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), count)
 
 
 def trees_forest_x(source: PythonObject, name: String, context: PythonObject) raises -> AdmittedX:
@@ -94,14 +85,6 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
-
-#: The forests' refusal of a non-finite X (randomforest.py / extratrees.py
-#: `_NONFINITE_REFUSAL`).
-comptime TREES_NONFINITE = "X contains NaN or infinity; the forest has no missing-value arm"
-
-
-# ------------------------------------------------------------ connection
-
 
 def trees_builtins() raises -> PythonObject:
     # The admitted builtins module (one stamp compare per call) instead of
@@ -160,31 +143,6 @@ def trees_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     if not result:
         raise typed_python_error()
     return PythonObject(from_owned=result)
-
-
-def trees_env(name: String, default: String) -> String:
-    var value = getenv(name)
-    return value if value else default
-
-
-# ----------------------------------------------------------------- labels
-
-
-def _encode_code(typestr: String) -> Int:
-    """`_labels._NATIVE_ENCODE`, or -1."""
-    if typestr == "<f4":
-        return 0
-    if typestr == "<f8":
-        return 1
-    if typestr == "<i4":
-        return 2
-    if typestr == "<i8":
-        return 3
-    if typestr == "<u4":
-        return 4
-    if typestr == "<u1":
-        return 5
-    return -1
 
 
 struct TreesLabels(Copyable, Movable):
