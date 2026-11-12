@@ -6,6 +6,11 @@ merge (`_xprep_merge`) was a copy of `_merge_pairs` kept so the owner did not
 import the arena runner; it now calls `_merge_pairs` in the Python-free
 bindings/arena_prog_run.mojo."""
 from std.os import getenv
+from std.memory import unsafe_memcpy
+from core.entry_table import EntryRef
+from core.prep_entry_table import xp_transport_call
+from x_prep.transport_abi import XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
+from bindings.arena_prog_run import _merge_pairs
 
 
 def xprep_r3(name: String) -> Bool:
@@ -32,13 +37,20 @@ def xprep_r3(name: String) -> Bool:
 # image's route words) and calls `xprep_execute` with the GIL released. The
 # input copies, puts, row gathers, range descriptors and the run call are the
 # ones `xprep_run` made in the same order per input: no bit moves.
-from std.memory import unsafe_memcpy
-from core.entry_table import EntryRef
-from core.prep_entry_table import xp_transport_call
-from x_prep.transport_abi import XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
-from bindings.arena_prog_run import _merge_pairs
 
 comptime XPREP_F32P = MutPointer[Float32, MutUntrackedOrigin]
+
+
+@fieldwise_init
+struct XprepInput(ImplicitlyCopyable, Movable):
+    """One input record of a program: `words` arena words at `offset`, from
+    the door's owner record `owner` (a `(kind, value, indices, rows, cols)`
+    tuple as `xprep_values` returns it), or, when `owner` is -1, from
+    program-owned native words at `address` (a parameter list)."""
+    var offset: Int
+    var words: Int
+    var address: Int
+    var owner: Int
 
 
 @fieldwise_init
