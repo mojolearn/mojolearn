@@ -1064,6 +1064,8 @@ struct DKit(Movable):
         var params: List[Int] = [DK_TAKE_COLS, rows * w, w, cols, 0, 0, 0, rows * cols, rows * w, w]
         return self._move(a, idx, rows, w, params, rows * w > 0 and self.use(a, idx))
 
+    # TOMBSTONE: DecompKit.orth, order_small and grown (used only by the per-step randomized_svd, now x_decomp/randomized_svd_owner.mojo) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
     def count_gt(mut self, a: Int, s: Float64) raises -> Int:
         # `_Kit.count_gt`: how many values of A are > s.
         if not self.size(a):
