@@ -357,7 +357,8 @@ struct GenerationOperationSnapshot(Copyable, Movable):
 from bindings.py_balanced import py_setitem
 from bindings.generation_buffers import generation_mutable
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
-from providers.python.neural_descriptor_pyapi import neural_descriptor_handle
+from providers.python.transformer_block_session_pyapi import transformer_block_session_open, transformer_block_session_handle
+from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
 from providers.python.native_execution_pyapi import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi import OperationLockLease
 from core.generation_metadata import generation_transformer_addresses
@@ -531,15 +532,18 @@ struct GenerationEngineAdmission(Movable):
                     var session = PythonObject(None)
                     var handle = 0
                     if not cpu:
+                        # The block's session: a native registry handle of its
+                        # GPU image (core/transformer_block_session.mojo, lane
+                        # transformer-session-native), opened through the
+                        # neural table's block entry; its handle word is one
+                        # native read (the former Python entries
+                        # transformer_session_create and
+                        # transformer_native_session_handle_v1).
                         if block["_native_session"] is None:
-                            var create = entries["create"]
-                            if py_type(create) is not py_type(native_loaded_module("builtins").len):
-                                raise Error("TypeError: generation session creation requires its compiled native entry")
-                            py_setitem(block, "_native_session", py_call(create))
-                            py_setitem(block, "_session_binding", entries["block_binding"])
+                            py_setitem(block, "_native_session", transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
+                                NeuralEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"])))))
                         session = block["_native_session"]
-                        handle = neural_descriptor_handle(provider,
-                            entries["transformer_native_session_handle_v1"], session)
+                        handle = transformer_block_session_handle(session)
                     self.owners.append(AdmittedNativeExecution(provider, session, handle,
                         -1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle))
                     native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
