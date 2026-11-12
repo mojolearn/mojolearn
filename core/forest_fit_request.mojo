@@ -96,6 +96,11 @@ comptime XF_W_SESSION = 11
 comptime XF_W_CLS = 12
 comptime XF_FIT_WORDS = 13
 
+#: the params slot holding the fit's tree count in both layouts (the RF
+#: list of `_RandomForestBase._fit_params` and the ET list of
+#: `extratrees._fit_params`): a tree-ID shard's request overwrites it
+comptime XF_P_TREES = 3
+
 comptime XF_SHAPE_CLASSIFIER = 1
 comptime XF_SHAPE_ROWMAJOR = 2
 
@@ -163,6 +168,16 @@ struct ForestFitArgs(Movable, Sized):
         if self.bad[k] & UInt8(FOREST_ARG_NO_FLOAT):
             raise Error("forest fit: params[" + String(k) + "] must be a number")
         return self.floats[k]
+
+
+def forest_set_trees(mut args: ForestFitArgs, trees: Int) raises:
+    """A tree-ID shard's tree count in params slot XF_P_TREES (both views,
+    an integer reading, so its flag clears)."""
+    if len(args.ints) <= XF_P_TREES:
+        raise Error("forest fit: the request has no tree-count slot")
+    args.ints[XF_P_TREES] = trees
+    args.floats[XF_P_TREES] = Float64(trees)
+    args.bad[XF_P_TREES] = UInt8(0)
 
 
 def forest_f64_word(value: Float64) -> Int:
