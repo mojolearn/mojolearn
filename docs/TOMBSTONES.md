@@ -554,6 +554,7 @@ in the tables after the sections.
 | [`make_blocks` (ParallelCausalLM native operation and its Python caller)](#dead-code-found-by-the-python-audits-2026-11-09) | Neural (ParallelCausalLM) | removed (dead code: no caller) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
 | [`x_decomp_dev_eigh` branch of the linalg kit's eigh](#dead-code-found-by-the-python-audits-2026-11-09) | Linalg (eigh, svd hermitian) | removed (dead code: unreachable) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
 | [`_take` (Mamba weight-dict order helper)](#dead-code-found-by-the-python-audits-2026-11-09) | Neural (Mamba blocks) | removed (dead code: no caller) | 2026-11-09 | none (recoverable at `78dffe4a08`^) |
+| [the manifold kit's 35 named x_decomp entries (`x_decomp_graph_*` / `_dev_graph_*`, `_barycenter_rows`, `_lle_apply`, `_lle_local`, `_lle_iterate`, `_lle_gemm_ordered`, `_lle_lu_ordered`, `_mds_fit`, `_lanczos`, `_dev_lanczos`, `_eigh_tridiag`, `_dev_eigh_tridiag`, `_trisolve`, `_dev_trisolve`, `_dsum_sq`, `_dev_dsum_sq`, `_order_f`, `_dev_order_f`) and 8 `*_pyapi.mojo` door files](#the-manifold-kits-named-x_decomp-entries-2026-11-12) | Decomposition / manifold (both bindings) | removed (superseded: x_decomp table operations 120-150, no live caller) | 2026-11-12 | [x_decomp_mani_named_entries.patch](../experiments/removed/x_decomp_mani_named_entries.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -2158,6 +2159,19 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - Guard refusals (core/six_lane_experiment_guards.mojo): one per define, removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, de9ce7b39).
 
 ## Decomp
+
+### The manifold kit's named x_decomp entries (2026-11-12)
+
+Lane entangled-mkit made the manifold kit (was the Python-holding `MKit` of `bindings/mani_kit.mojo`) a typed RUN kit
+(`bindings/mani_kit_run.mojo`) that calls the x_decomp image's table dispatch only. Every named entry it still called through
+`MKit.fn(name)` + `family_call` became a table operation (`x_decomp/descriptor_mani_schema.mojo`, operations 120-150, the same
+typed bodies with the same checks), so the 35 registrations (`bindings/_mojolearn_x_decomp.mojo`,
+`bindings/_mojolearn_x_decomp_host.mojo`), the door files `providers/python/x_decomp_{graph_host,graph_device,lle_iter,
+lle_iter_dev,mds,mds_dev,lanczos_host,lanczos_dev}_pyapi.mojo` and the doors `trisolve_py`, `lle_apply_py`, `lle_local_py`,
+`barycenter_rows_py`, `dsum_sq_py`, `order_f_py`, `dev_trisolve_py`, `dev_dsum_sq_py`, `dev_order_f_py` had no caller left.
+Verdict: superseded (no numeric change: the table operations run the same typed entries). Code recoverable at `e561a66d6b`
+(the lane's base) and `978895a618^`. Restore: `git apply experiments/removed/x_decomp_mani_named_entries.patch`.
+
 
 ### MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE
 
