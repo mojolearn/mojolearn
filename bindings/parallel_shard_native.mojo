@@ -36,7 +36,11 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
-from bindings.scaler_lifecycle_native import _public_result
+from bindings.scaler_lifecycle_native import _public_result, _entries, scaler_standard_rows
+from bindings.scaler_native import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
+from bindings.minmax_native import minmax_rows, minmax_fit_publish, _configuration as minmax_configuration
+from bindings.minmax_metadata import _flag as _minmax_flag, minmax_range_pair
+from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core, scaler_transform_core
 from bindings.parallel_public_result import parallel_public_result
 from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common import family_call
@@ -1369,6 +1373,74 @@ def _ivf_close(obj: PythonObject) raises:
         process_pool_close(pool)
 
 
+# ---------------------------------------------------------------- the scaler worker
+
+def _scaler_worker(operation: String, state: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """One column block's scaler fit or transform through the typed cores
+    (core/scaler_core.mojo) and the identical images' scaler and x_prep table
+    entries (lane scaler-typed-core): UNPACK the block and the state record
+    into typed values once, RUN the core (the public doors' one core, with
+    its NaN handling, statistic checks, overflow refusals and restore step),
+    PACK the fitted state record or the transformed block once. No model
+    object, no Python entry call. The block is the driver's own C-ordered
+    Float32 copy (`_columns`); a fit's state record carries the same fields
+    as the public fit's (`_fit_scaler` merges them)."""
+    var kind = String(state[0])
+    var owner_context = _t(kind + "_context")
+    var calls = scaler_door_calls(_entries(PythonObject("identical"), owner_context))
+    var x = args[0]
+    var n = Int(py=x.shape[0])
+    var w = Int(py=x.shape[1])
+    var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(x)))
+    if operation == "scaler_fit":
+        var init = state[1]
+        var fields = shard_b().dict()
+        if kind == "standard":
+            # init: (copy, with_mean, with_std, "identical")
+            var names = Python.tuple("copy", "with_mean", "with_std", "numeric_mode")
+            for k in range(4):  # small-loop(params: the four stored constructor arguments)
+                py_setitem(fields, names[k], init[k])
+            _ = _scaler_bool(init[0], owner_context)
+            var with_mean = _scaler_bool(init[1], owner_context)
+            var with_std = _scaler_bool(init[2], owner_context)
+            var fit = scaler_standard_fit_core(calls, xp, n, w, with_mean, with_std, 0)
+            _ = x  # keep the block alive through the native calls above
+            scaler_standard_publish(fields, fit, w, with_mean, with_std, PythonObject("identical"), owner_context)
+        else:
+            # init: (feature_range, copy, clip, "identical")
+            var names = Python.tuple("feature_range", "copy", "clip", "numeric_mode")
+            for k in range(4):  # small-loop(params: constructor metadata)
+                py_setitem(fields, names[k], init[k])
+            var configuration = minmax_configuration(fields, owner_context)
+            var rows = scaler_minmax_fit_core(calls, xp, n, w, Float32(Float64(py=configuration[1])),
+                                              Float32(Float64(py=configuration[2])))
+            _ = x  # keep the block alive through the native calls above
+            minmax_fit_publish(fields, rows, n, w, configuration, owner_context)
+        return shard_state(fields, shard_b().frozenset(), context)
+    # scaler_transform: state[1] is the block's fitted fields
+    var fitted = state[1]
+    var inverse = Bool(py=args[1])
+    var rows = List[Float32]()
+    var spec = ScalerTransformSpec(False, inverse, True, True, False, 0, 0)
+    if kind == "standard":
+        var with_mean = _scaler_bool(fitted["with_mean_"], owner_context)
+        var with_std = _scaler_bool(fitted["with_std_"], owner_context)
+        rows = scaler_standard_rows(calls, fitted["mean_"], fitted["scale_"], w, with_mean, with_std, owner_context)
+        spec = ScalerTransformSpec(False, inverse, with_mean, with_std, False, 0, 0)
+    else:
+        var bounds = minmax_range_pair(fitted["feature_range_"], owner_context)
+        var clip = _minmax_flag(fitted["clip_"], "clip_", owner_context)
+        rows = minmax_rows(calls, fitted["min_"], fitted["scale_"], w, owner_context)
+        spec = ScalerTransformSpec(True, inverse, True, True, clip, Float32(Float64(py=bounds[0])), Float32(Float64(py=bounds[1])))
+    var out = shard_array("<f4", Python.tuple(n, w), n * w, context)
+    scaler_transform_core(calls, spec, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(rows.unsafe_ptr())),
+                          xp, n, w, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))))
+    _ = rows^
+    _ = x  # keep the block and the output alive through the native calls above
+    _ = out
+    return out
+
+
 # ---------------------------------------------------------------- the worker
 
 def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
@@ -1392,26 +1464,8 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         var model = shard_model(_t("rbf_class"), state)
         var rows_meta = admit_family_meta(args[0], 2, "X", context, True)
         return _rbf_transform(model, Python.tuple(_worker_binding("_mojolearn_kernel_methods"), rows_meta.keep), context, rows_meta)
-    if operation == "scaler_fit":
-        var kind = String(state[0])
-        var model = py_call(b.object.__new__, _t(kind + "_class"))
-        var entry = _t(kind + "_call")
-        var owner_context = _t(kind + "_context")
-        _ = family_call(entry, model, PythonObject("init"), state[1], owner_context)
-        if kind == "standard":
-            _ = family_call(_t("standard_fit"), model, args[0], PythonObject(None), PythonObject(None), owner_context)
-        else:
-            _ = family_call(entry, model, PythonObject("fit"), Python.tuple(args[0], PythonObject(None)), owner_context)
-        return shard_state(py_fields(model), b.frozenset(), context)
-    if operation == "scaler_transform":
-        var kind = String(state[0])
-        var model = shard_model(_t(kind + "_class"), state[1])
-        var entry = _t(kind + "_call")
-        var owner_context = _t(kind + "_context")
-        if kind == "standard":
-            return family_call(entry, model, PythonObject("transform"), Python.tuple(args[0], args[1], PythonObject(None)),
-                               owner_context)
-        return family_call(entry, model, PythonObject("transform"), Python.tuple(args[0], args[1]), owner_context)
+    if operation == "scaler_fit" or operation == "scaler_transform":
+        return _scaler_worker(operation, state, args, context)
     # The GPC sites call the GP table entry (core/gp_entry_table.mojo) of the
     # connected identical binding with plain arrays and words
     # (bindings/gp_classifier_native.mojo gpc_worker_fit/gpc_worker_latent).

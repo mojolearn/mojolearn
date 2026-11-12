@@ -32,6 +32,8 @@ from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import ScalerProviderAPI
 from core.scaler_native_host import ScalerHostKernels
+from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
+from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import copy_f32, f32_ptr, read_f32
@@ -204,6 +206,14 @@ def scaler_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def publish_scaler_table_host() raises:
+    """Publish this image's scaler kernel entry in the prep entry table
+    (family PREP_TABLE_SCALER, vendor word 0) at module init."""
+    var api = SCALER_HOST_NATIVE_API.get_or_create_ptr()
+    prep_table_publish[PREP_TABLE_SCALER](PrepEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api),
+        [String(SCALER_NATIVE_ABI)], [SCALER_OP_COUNT], api[].entries)
+
+
 def build__mojolearn_preprocessing_host() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
@@ -219,6 +229,8 @@ def build__mojolearn_preprocessing_host() -> PythonObject:
         m.def_function[minmax_transform_binding]("minmax_transform")
         m.def_function[preprocessing_numeric_mode_binding]("preprocessing_numeric_mode")
         m.def_function[preprocessing_vendor_binding]("preprocessing_vendor")
-        return m.finalize()
+        var published_module = m.finalize()
+        publish_scaler_table_host()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_preprocessing_host: ", e))
