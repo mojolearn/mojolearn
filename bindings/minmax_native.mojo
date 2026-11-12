@@ -19,10 +19,13 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
-from bindings.scaler_native import _input, _ptr, _copy_row
+from bindings.scaler_native import _ptr, _copy_row, scaler_door_calls, scaler_transform_calls, ScalerDoorCalls
+from core.scaler_core import (
+    ScalerTransformSpec, scaler_minmax_fit_core, scaler_minmax_keep_extrema, scaler_transform_rows,
+    scaler_transform_rows_valid, scaler_transform_core,
+)
 from core.preprocessing_program import prep_program_stage as _stage
-from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _write_back, _public_result, _nan_fill
-from core.scaler_fit_impl import scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices
+from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _write_back, _public_result
 from bindings.minmax_metadata import _flag, minmax_range_pair
 from bindings.minmax_archive_native import minmax_archive_load, minmax_archive_save
 from bindings.py_optional import py_or_none, py_present
@@ -97,48 +100,26 @@ def minmax_initialize(model: PythonObject, args: PythonObject) raises -> PythonO
     return PythonObject(None)
 
 
-def _fit_fill(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
-    var st = n*d
-    var keep = st+6*d
-    var dest = keep+d
-    var cn = dest+n*d
-    var arena = List[Float32](length=cn+d,fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    unsafe_memcpy(dest=ap,src=_ptr(values),count=n*d)
-    scaler_feature_indices(ap+keep,d)
-    var program = List[Int32]()
-    _stage(program,1,d,0,n,d,st)
-    _stage(program,24,n*d,0,n,d,st+3*d,dest,keep,d)
-    _stage(program,266,d,st,cn)
-    _run(arena,program,entries)
-    scaler_refuse_infinite_columns(ap,st,d)
-    var filled = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
-    unsafe_memcpy(dest=_ptr(filled),src=ap+dest,count=n*d)
-    _ = filled  # keep the Python object alive through the native call above
-    var colnan = _copy_row(ap+cn,d,context)
-    _ = arena^
-    return Python.tuple(filled,colnan)
+# TOMBSTONE: `_fit_fill` moved to core/scaler_core.mojo `scaler_minmax_fit_core` (lane
+# scaler-typed-core, 2026-11-12); the NaN fill runs once there for the door and the shard worker.
+
+
+def _publish_extrema(fields: PythonObject, rows: List[Float32], d: Int, context: PythonObject) raises:
+    """PACK: the five published MinMax rows (core `scaler_minmax_keep_extrema`)."""
+    var rp = F32P(unsafe_from_address=Int(rows.unsafe_ptr()))
+    var names = Python.tuple("data_min_","data_max_","data_range_","scale_","min_")
+    for k in range(5):  # small-loop(stats: five native statistic row publications)
+        py_setitem(fields,names[k],_copy_row(rp+k*d,d,context))
+    _ = rows
 
 
 def _keep_extrema(fields: PythonObject, output: PythonObject, colnan: PythonObject, entries: PythonObject, context: PythonObject) raises:
     var d = Int(py=output.shape[1])
-    var arena = List[Float32](length=12*d+1,fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    if colnan is not None:
-        unsafe_memcpy(dest=ap,src=_ptr(colnan),count=d)
-    unsafe_memcpy(dest=ap+d,src=_ptr(output),count=5*d)
-    var program = List[Int32]()
-    _stage(program,267,d,d,d,0,6*d,11*d)
-    _stage(program,248,1,11*d,d,12*d)
-    _run(arena,program,entries)
-    if bitcast[DType.int32](arena[12*d]) != 0:
-        raise Error("MinMaxScaler fitted statistics overflowed or scale is not positive in Float32")
-    var names = Python.tuple("data_min_","data_max_","data_range_","scale_","min_")
-    for k in range(5):  # small-loop(stats: five native statistic row publications)
-        py_setitem(fields,names[k],_copy_row(ap+(6+k)*d,d,context))
-    _ = arena^
+    var calls = ScalerDoorCalls(entries, False)  # the x_prep program only
+    var rows = scaler_minmax_keep_extrema(calls, _ptr(output), 0 if colnan is None else Int(py=classical_address(colnan)), d)
+    _ = output  # keep the Python objects alive through the native call above
+    _ = colnan
+    _publish_extrema(fields, rows, d, context)
 
 
 def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -164,40 +145,23 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
     var entries = _minmax_entries(mode,context)
     if py_get(entries,"minmax_fit") is None:
         raise Error("ImportError: HostMinMaxScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,"scaler_training_error","minmax_fit is unavailable")))
-    var direct = _direct(entries,"minmax_fit_direct")
+    var calls = scaler_door_calls(entries)
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
     var values = captured[].values
     var n = captured[].metadata.source.rows
     var d = captured[].metadata.source.cols
-    var params = Python.list(n,d,configuration[1],configuration[2])
-    var output = classical_typed(Python.tuple(5,d),"<f4",context["output_context"])
-    var finite = True
-    var colnan = PythonObject(None)
-    if direct is not None:
-        finite = Int(py=py_call(direct,classical_address(values),classical_address(output),params)) != 0
-        _ = output  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-    else:
-        finite = scaler_all_finite(_ptr(values),n*d)
-        _ = values  # keep the Python object alive through the native call above
-        if finite:
-            _ = py_call_typed(entries["minmax_fit"],classical_address(values),classical_address(output),params)
-            _ = output  # keep the Python object alive through the native call above
-            _ = values  # keep the Python object alive through the native call above
-    if not finite:
-        var filled = _fit_fill(values,entries,context)
-        colnan = filled[1]
-        _ = py_call_typed(entries["minmax_fit"],classical_address(filled[0]),classical_address(output),params)
-        _ = output  # keep the Python object alive through the native call above
-        _ = filled^
-    _keep_extrema(fields,output,colnan,entries,context)
+    # RUN: the typed core (kernel, NaN fill, extrema publication program).
+    var rows = scaler_minmax_fit_core(calls, _ptr(values), n, d, Float32(Float64(py=configuration[1])),
+                                      Float32(Float64(py=configuration[2])))
+    _ = values  # keep the Python object alive through the native call above
+    # PACK
+    _publish_extrema(fields, rows, d, context)
     py_setitem(fields,"n_features_in_",d)
     py_setitem(fields,"n_samples_seen_",n)
     py_setitem(fields,"numeric_mode_",mode)
     py_setitem(fields,"feature_range_",Python.tuple(configuration[1],configuration[2]))
     py_setitem(fields,"clip_",configuration[4])
-    _ = output^
     _ = values^
     return model
 
@@ -330,7 +294,7 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         raise Error("NotFittedError: MinMaxScaler is not fitted")
     var mode = fields["numeric_mode_"] if configuration is None else configuration[0]
     var entries = _minmax_entries(mode, context)
-    var direct = _direct(entries, "minmax_transform_direct")
+    var calls = scaler_transform_calls(entries, context)
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
     var values = captured[].values
@@ -343,12 +307,13 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     # The derived and validated rows of the fitted min_ / scale_ (the stage
-    # 264 + 248 program) are kept per model in the prepared-owner registry
-    # (weakly keyed, outside __dict__), keyed by the identity of min_ and
-    # scale_, d and the numeric mode (p3-prep). When the record is taken both
-    # Arrays are made read-only (hazard class A): an in-place write through
-    # the public view raises NumPy's read-only error; replacing min_ or
-    # scale_ (refit, partial_fit, load, assignment) misses and rebuilds.
+    # 264 + 248 program, core `scaler_transform_rows`) are kept per model in
+    # the prepared-owner registry (weakly keyed, outside __dict__), keyed by
+    # the identity of min_ and scale_, d and the numeric mode (p3-prep). When
+    # the record is taken both Arrays are made read-only (hazard class A): an
+    # in-place write through the public view raises NumPy's read-only error;
+    # replacing min_ or scale_ (refit, partial_fit, load, assignment) misses
+    # and rebuilds.
     var mods = NativeModules()
     var min_value = fields["min_"]
     var scale_value = fields["scale_"]
@@ -360,81 +325,24 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     else:
         var mean = _statistic(min_value,d,"min_",context)
         var scale = _statistic(scale_value,d,"scale_",context)
-        unsafe_memcpy(dest=ap, src=_ptr(mean), count=d)
-        _ = mean  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=ap+d, src=_ptr(scale), count=d)
-        _ = scale  # keep the Python object alive through the native call above
-        arena[7*d+4] = 1
-        var program = List[Int32]()
-        _stage(program, 264, d, 0, d, 1, 1, 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
-        _stage(program, 248, 1, 4*d, d, 7*d)
-        _stage(program, 248, 1, 5*d, d, 7*d+1)
-        _stage(program, 248, 1, 6*d, d, 7*d+2)
-        _run(arena, program, entries)
-        if bitcast[DType.int32](arena[7*d+1]) == 0 and bitcast[DType.int32](arena[7*d+2]) == 0:
+        arena = scaler_transform_rows(calls, Int(py=classical_address(mean)), Int(py=classical_address(scale)), d, True, True)
+        ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+        _ = mean  # keep the Python objects alive through the native call above
+        _ = scale
+        if scaler_transform_rows_valid(ap, d):
             var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
             unsafe_memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
             _ = rows  # keep the Python object alive through the copy above
             py_setattr(min_value, "_readonly", PythonObject(True))
             py_setattr(scale_value, "_readonly", PythonObject(True))
             prepared_put(mods, _ROWS_SLOT, model, Python.tuple(min_value, scale_value, rows, d, String(mode)))
-    if bitcast[DType.int32](arena[7*d+1]) != 0:
-        raise Error("MinMaxScaler min_ and scale_ must remain finite (NaN: a feature never seen)")
-    if bitcast[DType.int32](arena[7*d+2]) != 0:
-        raise Error("MinMaxScaler scale_ must remain positive")
-    var colnan = bitcast[DType.int32](arena[7*d]) != 0
     var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
-    var params = Python.list(n,d,Int(inverse),Int(clip),bounds[0],bounds[1])
-    var finite = True
-    if direct is not None:
-        var got = Int(py=py_call(direct, classical_address(values), Int(ap+3*d), Int(ap+2*d), classical_address(output), params))
-        _ = output  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-        if got == 0:
-            raise Error("MinMaxScaler transform overflowed in Float32")
-        _ = output  # keep the Python object alive through the native calls above
-        _ = values  # keep the Python object alive through the native calls above
-        finite = got == 1
-        _ = output  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-        if not finite:
-            var filled = _nan_fill(values, entries, context)
-            if Int(py=py_call(direct, classical_address(filled), Int(ap+3*d), Int(ap+2*d), classical_address(output), params)) != 1:
-                raise Error("MinMaxScaler transform overflowed in Float32")
-            _ = filled  # keep the Python object alive through the native calls above
-            _ = output  # keep the Python object alive through the native calls above
-            _ = filled^
-    else:
-        finite = scaler_all_finite(_ptr(values), n*d)
-        _ = values  # keep the Python object alive through the native call above
-        var filled = values if finite else _nan_fill(values, entries, context)
-        _ = py_call_typed(entries["minmax_transform"], classical_address(filled), Int(ap+3*d), Int(ap+2*d), classical_address(output), params)
-        _ = filled  # keep the Python object alive through the native call above
-        _ = output  # keep the Python object alive through the native call above
-        if not scaler_all_finite(_ptr(output), n*d):
-            raise Error("MinMaxScaler transform overflowed in Float32")
-        _ = output  # keep the Python object alive through the native calls above
-        _ = filled^
-    if not finite or colnan:
-        var keep = List[Float32](length=3*n*d+2*d, fill=0)
-        var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
-        unsafe_memcpy(dest=kp, src=_ptr(values), count=n*d)
-        _ = values  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
-        _ = output  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
-        var restore = List[Int32]()
-        # Match _Prog.put_codes: nan_keep consumes numeric Float32 flags,
-        # not the int32 mask words published by c2_nan_sub.
-        _stage(restore, 10, d, 2*n*d, 2*n*d+d)
-        _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
-        _run(keep, restore, entries)
-        unsafe_memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
-        _ = output  # keep the Python object alive through the native call above
-        _ = keep^
+    # RUN: the typed core (statistic refusals, kernel, NaN fill and restore,
+    # overflow refusal).
+    scaler_transform_core(calls, ScalerTransformSpec(True, inverse, True, True, clip,
+                                                     Float32(Float64(py=bounds[0])), Float32(Float64(py=bounds[1]))),
+                          ap, _ptr(values), n, d, _ptr(output))
     _ = arena^
-    # compile-fix-1: `mean` / `scale` now live only in the uncached branch
-    # above (copied into the arena there); nothing to release here.
     return _write_back(source, values, output, copy, context, snapshot)
 
 
