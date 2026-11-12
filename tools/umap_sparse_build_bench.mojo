@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Repeatable whole-path timing and bit hash for sparse UMAP graph build."""
+"""Repeatable whole-path timing and bit hash for the host sparse UMAP graph
+build (umap/host/sparse_graph_host.mojo, the CPU column's builder; the
+device builder is umap/sparse_graph.mojo `sparse_fuzzy_simplicial_graph_device`)."""
 
 from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns
 
-from umap.sparse_graph import sparse_fuzzy_simplicial_graph
+from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
 
 
 def mix(h: UInt64, x: UInt64) -> UInt64:
