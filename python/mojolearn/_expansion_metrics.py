@@ -36,29 +36,9 @@ __all__ = []
 
 _BINDING = "_mojolearn_x_metrics"
 
-#: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
-_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10,
-            fold_rows=36, rows64=41, strat_codes=45, curve_fold=46, onehot=52, rep_rows=53, pair_cols=54,
-            # lane fam2-prep-metrics (x_metrics/cls_epi.mojo), both numeric modes
-            # since lane cpu2-l7-metrics
-            cls_epi=55,
-            # lane cpu2-l7-metrics: the metric tails and scans on the device
-            # (x_metrics/tail.mojo, cm_epi.mojo, reg_epi.mojo, rank_epi.mojo)
-            off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62,
-            # lane cpu4-python: the curve arrays on the device (x_metrics/curve_out.mojo)
-            curve_out=63, auc_xy=67,
-            # lane cpu4-python: the contingency statistics, MI and expected MI
-            # on the device (x_metrics/contingency.mojo)
-            cont_stats=70,
-            # lane py-runtime-b: StratifiedShuffleSplit's per-class draw counts
-            # (x_metrics/split.mojo approx_mode_unit)
-            approx_mode=81,
-            # lane ne2-b-search-workers: permutation_test_score's within-group
-            # permutation as one program (x_metrics/split.mojo group_take_unit, take_rows64_unit)
-            group_take=85, take_rows64=86,
-            # lane ne2-b-search-workers: one StratifiedShuffleSplit split as one
-            # program (x_metrics/split.mojo permute_drawn_unit, strat_take_unit)
-            permute_drawn=87, strat_take=88)
+# TOMBSTONE: `_OPS` (the x_metrics op name -> id dict, handed to every native metric program as a Python
+# context table and snapshotted per program) deleted 2026-11-12 by lane metric-programs-2: the codes are
+# the typed table core/metrics_program_plan.mojo `metric_opcode`; code recoverable at 4f5a5ae6d8.
 
 
 def _binding(numeric_mode):
@@ -230,7 +210,8 @@ def classification_report(y_true, y_pred, *, labels=None, target_names=None, sam
 # Regression (scikit-learn 1.9 sklearn/metrics/_regression.py)
 # ---------------------------------------------------------------------------
 
-_TERM = dict(sq=0, abs=1, sqlog=2, ape=3, pinball=4, tweedie=5, diff=6)
+# TOMBSTONE: `_TERM` (the reg_term name -> kind dict, a Python context table) deleted 2026-11-12 by lane
+# metric-programs-2: core/metrics_program_plan.mojo `metric_term`; code recoverable at 4f5a5ae6d8.
 
 
 def regression_error_options(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
@@ -607,7 +588,7 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
 
 
 # Import-time connection of the shared native program runner. Every x_metrics
-# program is built in Mojo (bindings/metrics_reg_native.mojo `_Prog`/`_Reg`,
+# program is built in Mojo (bindings/metrics_program_door.mojo `MetricDoorProg`, bindings/metrics_reg_run.mojo `_Reg`,
 # bindings/msel_split_door.mojo `_fold_rows_run`, core/metrics_program_plan.mojo);
 # no Python program object exists, so the runner gets no Python program class.
 # TOMBSTONE: the Python program builders `_Prog`, `_Reg`, `_group`, `_counts`, `_scan_flag`, `_proba`,
@@ -616,18 +597,18 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
 from ._native_arena_prog import connect as _connect_arena_prog
 _PROG_CONTEXT = _connect_arena_prog("x_metrics", None)[1]
 
-# The compiled family owner (bindings/metrics_reg_native.mojo, reached from
+# The compiled family owner (bindings/metrics_reg_door.mojo, reached from
 # the classical door): the regression metrics above are one native call each.
-# It builds each x_metrics program in Mojo, with the fixed op and term codes
-# below, and runs it through the shared program runner connected above.
+# It builds each x_metrics program in Mojo, with the typed op and term codes
+# (core/metrics_program_plan.mojo), and runs it through the shared program
+# runner connected above.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 # Lane ne1-h-labels: operations pass as integer codes from the one native
 # table (bindings/native_operation_codes.mojo), read once at import.
 from ._native_ops import codes as _operation_codes  # noqa: E402
 _OP = _operation_codes()
-_native_family_bridge.tables(family_metrics_ops=dict(_OPS), family_metrics_terms=dict(_TERM),
-                             family_metrics_prog_context=_PROG_CONTEXT,
+_native_family_bridge.tables(family_metrics_prog_context=_PROG_CONTEXT,
                              family_metrics_undefined=UndefinedMetricWarning)
 # TOMBSTONE: family_metrics_real, family_mexp_integral (dead context entries: no native owner read them) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
 # Restore: git apply experiments/removed/dead_code_p5_20261109.patch

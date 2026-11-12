@@ -94,7 +94,7 @@ bindings/host_inference_native_unpack.mojo
 bindings/logistic_native.mojo
 bindings/mcd_native_door.mojo
 bindings/mcls_cluster_door.mojo
-bindings/mcls_common.mojo
+bindings/mcls_common_unpack.mojo
 bindings/native_scalar_decode_unpack.mojo
 bindings/neighbors_ann_native_door.mojo
 bindings/neighbors_semi_native_door.mojo

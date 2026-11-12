@@ -1,28 +1,29 @@
 # SPDX-License-Identifier: Apache-2.0
-# The shared pieces of the classification metrics owner
-# (bindings/metrics_cls_native.mojo, lane mcb2-mcls): what
+# UNPACK shared by the classification metric doors
+# (bindings/mcls_{classify,ranking,cluster}_door.mojo, lane mcb2-mcls): what
 # python/mojolearn/_metrics_impl.py and the _expansion_metrics.py helpers it
 # called did before the public functions became one native call each.
 #
 # - the label input step (`_classification_labels`, `_classification_encoded`,
 #   `_label_set`, `_label_map`, `_selected_labels`): integer label buffers
-#   are encoded by the base binding's `prepare_targets` (the entry
-#   `_labels._encode_labels_native` called) and mapped by its `gather_i32`
-#   (the entry `_label_map` called); str labels and Python ints beyond int64
-#   are the explicit label input step, read through the builtins (C-level
-#   set, sorted, map and dict lookups: no per-label Mojo loop);
+#   are encoded natively and mapped by a native gather; str labels and Python
+#   ints beyond int64 are the explicit label input step, read through the
+#   builtins (C-level set, sorted, map and dict lookups: no per-label Mojo
+#   loop);
 # - the 1-D loaders of the cuML kernels (`_as_i32_1d`, `_as_f32_1d`,
-#   `_as_regression_f32_1d`, `_pair_1d`) with their refusals, word for word;
-# - the x_metrics PROGRAM (`_expansion_metrics._Prog`): the same arena
-#   layout, the same stage records in the same order, the same declared
-#   outputs, run by the shared runner (bindings/arena_prog_native.mojo
-#   `_metrics_run`, the one native call `_run` made); the result words read
-#   back from the arena as `prog.ints` / `prog.words` read them.
-from std.memory import unsafe_memcpy, bitcast
-from core.metrics_program_plan import MetricProgramPlan
+#   `_as_regression_f32_1d`, `_pair_1d`) with their refusals, word for word.
+#
+# Lane metric-programs-2 (2026-11-12): split from mcls_common.mojo.
+# TOMBSTONE: `McProg` (a metric program holding its caller buffers and a
+# per-program Python opcode snapshot), `mc_run`, the `mc_arena_*` reads and
+# copies, `mc_f64_words`, `mc_f64_array` (unused), `mc_group` and
+# `mc_counts` deleted 2026-11-12 by lane metric-programs-2: the door program
+# is bindings/metrics_program_door.mojo `MetricDoorProg` (typed plan + pins),
+# the arena reads are `MetricArenaOwner`'s, the PACK is
+# bindings/metrics_program_pack.mojo `metric_arena_array`, the typed pieces
+# are bindings/mcls_common_run.mojo; code recoverable at 4f5a5ae6d8.
 from bindings.admitted_family_door import admit_family
-from bindings.metrics_plan_admission_unpack import MetricPlanOpcodes
-from bindings.arena_prog_run import MetricArenaOwner
+from bindings.mcls_common_run import MC_NONE, MC_INT32_MAX, mc_view_kind
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support_door import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
 from bindings.metrics_native_inputs_door import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
@@ -35,7 +36,6 @@ from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str, classical_wrap_array
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_validate_unpack import classical_view
-from bindings.arena_prog_native_door import _metrics_run_plan
 from bindings.family_common_unpack import (
     FAMILY_F32P,
     FAMILY_F64P,
@@ -62,9 +62,6 @@ from bindings.p3_labels_metrics_native_door import (
 from bindings.py_cpython_table import cpython_table
 from bindings.py_optional import py_present
 
-comptime MC_NONE = -1
-comptime MC_PARAMS = 14
-comptime MC_INT32_MAX = 2147483647
 
 
 # ---------------------------------------------------------------- Python glue
@@ -185,12 +182,6 @@ def mc_i32_array(values: PythonObject, context: PythonObject) raises -> PythonOb
     table): one `array.array` conversion."""
     var store = family_call(native_loaded_module("array").array, PythonObject("i"), values)
     return classical_wrap_array(store, Python.tuple(mc_len(store)), "<i4", "C", context)
-
-
-def mc_f64_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Array.from_list(values, "<f8")` of a short Python float list."""
-    var store = family_call(native_loaded_module("array").array, PythonObject("d"), values)
-    return classical_wrap_array(store, Python.tuple(mc_len(store)), "<f8", "C", context)
 
 
 # ------------------------------------------------------------ shapes, formats
@@ -359,19 +350,6 @@ def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context
                 + "floating labels, missing labels and mixed types are unsupported")
 
 
-def _view_kind(dtype: String) raises -> Int:
-    """The integer item kind of an array typestr: 1 signed, 2 unsigned
-    (bool bytes read as unsigned), 0 none (floats, str, object, uint64)."""
-    if dtype.byte_length() < 3:
-        return 0
-    var tail = String(dtype[byte=1:dtype.byte_length()])
-    if tail == "i1" or tail == "i2" or tail == "i4" or tail == "i8":
-        return 1
-    if tail == "u1" or tail == "u2" or tail == "u4" or tail == "b1":
-        return 2
-    return 0
-
-
 @fieldwise_init
 struct MetricIntegerView(Movable):
     var view: PythonObject
@@ -390,7 +368,7 @@ def mc_integer_view(values: PythonObject, context: PythonObject) raises -> Optio
         return None
     if Int(py=view.ndim) != 1:
         return None
-    var kind = _view_kind(classical_dtype_str(view, context))
+    var kind = mc_view_kind(classical_dtype_str(view, context))
     if kind == 0:
         return None
     var count = Int(py=view.shape[0])
@@ -726,133 +704,3 @@ def mc_weights(source: PythonObject, n: Int, caller: String, context: PythonObje
     """`_metrics_impl._sample_weight_f32` (None stays None): 1-D, n entries,
     finite and nonnegative, a positive total, cast to float32."""
     return _reg_weights(source, n, caller, context)
-
-
-# ------------------------------------------------------------- the program
-
-
-struct McProg(Movable):
-    # Pure native stage/layout words; only boundary input owners live here.
-    var plan: MetricProgramPlan
-    var inputs: List[PythonObject]
-    var ops: MetricPlanOpcodes
-
-    def __init__(out self, context: PythonObject) raises:
-        self.plan = MetricProgramPlan()
-        self.inputs = List[PythonObject]()
-        self.ops = MetricPlanOpcodes(context["family_metrics_ops"])
-
-    def alloc(mut self, n: Int) raises -> Int:
-        return self.plan.alloc(n)
-
-    def put(mut self, array: PythonObject) raises -> Int:
-        """A float32 (or int32, stored as its bits) C-ordered array -> its offset."""
-        var off = self.plan.input(Int(py=array.size))
-        self.inputs.append(array)
-        return off
-
-    def scratch(mut self, n: Int) raises -> Int:
-        return self.plan.scratch(n)
-
-    def stage(mut self, op: String, total: Int, params: List[Int]) raises:
-        if len(params) > MC_PARAMS:
-            raise Error("x_metrics: too many stage parameters")
-        var opcode = self.ops.get(op)
-        self.plan.stage(opcode, total, params)
-
-    def want(mut self, off: Int, n: Int, count: Int = MC_NONE, mult: Int = 1) raises -> Int:
-        return self.plan.want(off, n, count, mult)
-
-
-def mc_run(prog: McProg, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
-    """`_run(prog, numeric_mode)`: the program handed to the shared runner
-    (the one call the Python `_run` made); returns the arena store."""
-    var prog_context = context["family_metrics_prog_context"]
-    return _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
-
-
-def mc_arena_base(arena: MetricArenaOwner) raises -> Int:
-    return arena.base()
-
-
-def mc_arena_int(arena: MetricArenaOwner, off: Int) raises -> Int:
-    """`prog.ints(off, 1)[0]`."""
-    var result = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0])
-    return result
-
-
-def mc_arena_float(arena: MetricArenaOwner, off: Int) raises -> Float64:
-    """`prog.floats(off, 1)[0]`: the exact image of a Float32 word."""
-    var result = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)[0])
-    return result
-
-
-def mc_arena_double(arena: MetricArenaOwner, off: Int) raises -> Float64:
-    """`prog.words(off, 2, "d")[0]`: the binary64 at arena[off], arena[off + 1], low first."""
-    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)
-    var result = bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
-    return result
-
-
-def mc_arena_i64(arena: MetricArenaOwner, off: Int) raises -> Int:
-    """`prog.words(off, 2, "q")[0]`."""
-    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off)
-    var result = Int(bitcast[DType.int64](UInt64(words[0]) | (UInt64(words[1]) << 32)))
-    return result
-
-
-def mc_arena_f64_array(arena: MetricArenaOwner, off: Int, count: Int, shape: PythonObject,
-                       context: PythonObject) raises -> PythonObject:
-    """`Array._owned(prog.words(off, 2 * count, "d"), shape, "<f8")`."""
-    var out = family_array(shape, "<f8", context)
-    if count > 0:
-        unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
-               src=FAMILY_F64P(unsafe_from_address=arena.base() + 4 * off), count=count)
-        _ = out  # keep both owners alive through the native copy above
-    return out
-
-
-def mc_arena_i64_array(arena: MetricArenaOwner, off: Int, count: Int, shape: PythonObject,
-                       context: PythonObject) raises -> PythonObject:
-    """`Array._owned(prog.words(off, 2 * count, "q"), shape, "<i8")`."""
-    var out = family_array(shape, "<i8", context)
-    if count > 0:
-        unsafe_memcpy(dest=FAMILY_I64P(unsafe_from_address=Int(py=classical_address(out))),
-               src=FAMILY_I64P(unsafe_from_address=arena.base() + 4 * off), count=count)
-        _ = out  # keep both owners alive through the native copy above
-    return out
-
-
-def mc_f64_words(values: List[Float64], context: PythonObject) raises -> PythonObject:
-    """Binary64 values as their Int32 word pairs (low first), an int32
-    Array (`array.array("d", values).tobytes()` read as "i")."""
-    var out = family_array(Python.tuple(2 * len(values)), "<i4", context)
-    var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out)))
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(len(values)):  # small-loop(values: the binary64 parameters of one stage): bounded by the call site
-        dst[i] = values[i]
-        _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-# ------------------------------------------------------------ program pieces
-
-
-def mc_group(mut prog: McProg, key: Int, n: Int, m: Int, values: Int, vstride: Int, weights: Int,
-             width: Int) raises -> Tuple[Int, Int]:
-    """`_group`: the stable counting sort and the PairSums; (OFF, OUT)."""
-    var off = prog.alloc(m + 1)
-    var order = prog.scratch(n)
-    var out = prog.alloc(m * width)
-    prog.stage("group_sort", 1, [key, n, m, off, order])
-    if m * width:
-        prog.stage("group_sum", m * width, [off, order, values, vstride, weights, out, width])
-    return (off, out)
-
-
-def mc_counts(mut prog: McProg, off: Int, m: Int) raises -> Int:
-    """`_counts`: the m group sizes (off_diff)."""
-    var out = prog.alloc(m)
-    if m:
-        prog.stage("off_diff", m, [off, m, out])
-    return out

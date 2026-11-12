@@ -52,7 +52,7 @@ from bindings.fitted_resident_door import fitted_resident_drop
 from bindings.gp_resident_boundary_unpack import gp_resident_lease
 from bindings.gp_score_labels_boundary_door import gpc_score_result
 from bindings.gp_labels_native_door import gp_decode_score_labels
-from bindings.mcls_common import mc_shape_of
+from bindings.mcls_common_unpack import mc_shape_of
 from bindings.host_inference_scalars_door import host_inference_scalar
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"

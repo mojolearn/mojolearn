@@ -8,16 +8,16 @@
 # The groups:
 #   bindings/mcls_cluster.mojo   label-pair cluster metrics, entropy, kl_divergence, silhouette,
 #                                trustworthiness, mean_squared/absolute/root_mean_squared_error, r2_score
-#   bindings/mcls_classify.mojo  accuracy_score, confusion_matrix, precision/recall/f1_score, log_loss
-#   bindings/mcls_ranking.mojo   roc_auc_score, precision_recall_curve
+#   bindings/mcls_classify_door.mojo  accuracy_score, confusion_matrix, precision/recall/f1_score, log_loss
+#   bindings/mcls_ranking_door.mojo   roc_auc_score, precision_recall_curve
 from std.python import Python, PythonObject
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.metrics_native_support_door import metric_arguments
 from providers.python.metric_binding_pyapi_pack import metric_binding_arguments
 from bindings.mcls_cluster_door import mcls_cluster_operation
-from bindings.mcls_classify import mcls_classify_operation
-from bindings.mcls_ranking import mcls_ranking_operation
+from bindings.mcls_classify_door import mcls_classify_operation
+from bindings.mcls_ranking_door import mcls_ranking_operation
 
 
 def metrics_cls_operation(model: PythonObject, operation: String, var args: PythonObject,

@@ -25,9 +25,6 @@ allow: bindings/admitted_registry.mojo  # 2026-11-12 lane resident-pin-tables (t
 allow: bindings/classical_labels.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/cluster_resident_table.mojo  # 2026-11-12 lane resident-pin-tables (to open): CresTable/CresHeld: Python pins inside typed resident eviction (design)
 allow: bindings/logistic_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/mcls_classify.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
-allow: bindings/mcls_common.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
-allow: bindings/mcls_ranking.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot
 allow: bindings/native_model_records.mojo  # 2026-11-12 lane resident-pin-tables (to open): RecordPayloads/ModelEntry: Python pins inside typed record tables (design)
 allow: bindings/nmf_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/prep_encode_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path

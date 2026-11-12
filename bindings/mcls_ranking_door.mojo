@@ -32,13 +32,15 @@ from bindings.family_common_pack import (
     family_call,
     family_array,
 )
-from bindings.mcls_common import (
-    MC_NONE, MC_INT32_MAX, McLabels, McProg, mc_b, mc_len, mc_bool, mc_eq, mc_ne, mc_in, mc_is_str,
-    mc_is_bool, mc_is_real, mc_float, mc_int, mc_sorted, mc_set, mc_nan, mc_warn, mc_undefined, mc_entry,
-    mc_shape_of, mc_rank, mc_dim, mc_labels, mc_map_order, mc_map_equal, mc_selected, mc_positive, mc_weights,
-    mc_f32_lists, mc_run, mc_arena_int, mc_arena_float, mc_arena_double, mc_arena_f64_array, mc_group,
+from bindings.mcls_common_run import MC_NONE, MC_INT32_MAX
+from bindings.mcls_common_unpack import (
+    McLabels, mc_b, mc_len, mc_bool, mc_eq, mc_ne, mc_in, mc_is_str, mc_is_bool, mc_is_real, mc_float, mc_int,
+    mc_sorted, mc_set, mc_nan, mc_warn, mc_undefined, mc_entry, mc_shape_of, mc_rank, mc_dim, mc_labels,
+    mc_map_order, mc_map_equal, mc_selected, mc_positive, mc_weights, mc_f32_lists,
 )
-from bindings.mcls_classify import mc_targets, mc_pos_label, mc_binary_sets
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.metrics_program_pack import metric_arena_array
+from bindings.mcls_classify_door import mc_targets, mc_pos_label, mc_binary_sets
 from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_copy_words
 from checks.numerics import pinned_mul_f64
@@ -114,7 +116,7 @@ def _f32_bits(x: Float64) -> Int:
     return Int(bitcast[DType.int32](Float32(x)))
 
 
-def mc_fold_stages(mut prog: McProg, s: Int, stride: Int, pos: Int, w: Int, n: Int, problems: Int,
+def mc_fold_stages(mut prog: MetricDoorProg, s: Int, stride: Int, pos: Int, w: Int, n: Int, problems: Int,
                    partial: Bool, max_fpr: Float64, out_at: Int) raises -> Int:
     """`_fold_stages(..., auc=True, max_fpr, out)`: the compacted curve
     (bin_curve) and its AUC fold (curve_fold); the fold's CF_OUT words per
@@ -147,15 +149,15 @@ def mc_fold_stages(mut prog: McProg, s: Int, stride: Int, pos: Int, w: Int, n: I
 
 def mc_fold_auc(arena: MetricArenaOwner, off: Int, partial: Bool, max_fpr: Float64, context: PythonObject) raises -> PythonObject:
     """`_FoldCurve.auc(max_fpr)` from the fold's words."""
-    var s = mc_arena_float(arena, off) + mc_arena_float(arena, off + 1)
-    var f_tot = mc_arena_float(arena, off + 2)
-    var t_tot = mc_arena_float(arena, off + 3)
-    var k = mc_arena_int(arena, off + 4)
-    var a = mc_arena_float(arena, off + 5)
-    var b = mc_arena_float(arena, off + 6)
-    var u = mc_arena_float(arena, off + 7)
-    var v = mc_arena_float(arena, off + 8)
-    var c = mc_arena_int(arena, off + 9)
+    var s = arena.f32(off) + arena.f32(off + 1)
+    var f_tot = arena.f32(off + 2)
+    var t_tot = arena.f32(off + 3)
+    var k = arena.i32(off + 4)
+    var a = arena.f32(off + 5)
+    var b = arena.f32(off + 6)
+    var u = arena.f32(off + 7)
+    var v = arena.f32(off + 8)
+    var c = arena.i32(off + 9)
     if c <= 0 or not (f_tot > 0 and t_tot > 0):
         mc_undefined(_ROC_ONE_CLASS, context)
         return mc_nan()
@@ -174,7 +176,7 @@ def mc_fold_auc(arena: MetricArenaOwner, off: Int, partial: Bool, max_fpr: Float
     return PythonObject(pinned_mul_f64(0.5, 1 + (part - min_area) / (max_fpr - min_area)))
 
 
-def mc_stage_average(mut prog: McProg, sc: Int, sup: Int, m: Int, weighted: Bool) raises -> Int:
+def mc_stage_average(mut prog: MetricDoorProg, sc: Int, sup: Int, m: Int, weighted: Bool) raises -> Int:
     """`_stage_average`: rank_epi AVERAGE; the declared binary64 result."""
     var res = prog.want(prog.alloc(2), 2)
     prog.stage("rank_epi", 1, [_RANK_AVERAGE, sc, sup, m, 1 if weighted else 0, res])
@@ -202,14 +204,14 @@ def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, conte
     var partial = max_fpr is not None and mc_float(max_fpr, context) != 1
     var mf = mc_float(max_fpr, context) if partial else 0.0
     # `_fold_curves(s, flags, w, n, 1, fold="auc", max_fpr=mf)`
-    var prog = McProg(context)
+    var prog = MetricDoorProg()
     var s_off = prog.put(s)
     var pos = prog.put(flags)
     var w_off = MC_NONE
     if w is not None:
         w_off = prog.put(w)
     var out = mc_fold_stages(prog, s_off, 1, pos, w_off, n, 1, partial, mf, MC_NONE)
-    var arena = mc_run(prog, args[8], context)
+    var arena = metric_door_run(prog, args[8], context)
     _ = s^
     _ = flags^
     return mc_fold_auc(arena, out, partial, mf, context)
@@ -245,7 +247,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         # scores), and the flag is read before the AUC as before: the same
         # refusal, the same fold over the same words, the same bits.
         # `_micro_inputs` and `_curves(s.reshape((n * k,)), flags, wm, n * k, 1, fold="auc")`
-        var p2 = McProg(context)
+        var p2 = MetricDoorProg()
         var s2 = p2.put(s)
         var c2 = p2.put(codes)
         var pos2 = p2.scratch(n * k)
@@ -259,13 +261,13 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         var rows2 = p2.want(p2.alloc(1), 1)
         if n:
             p2.stage("rank_epi", n, [_RANK_ROW_SUM, s2, n, k, rows2])
-        var arena2 = mc_run(p2, args[8], context)
-        if mc_arena_int(arena2, rows2) != 0:
+        var arena2 = metric_door_run(p2, args[8], context)
+        if arena2.i32(rows2) != 0:
             raise Error(_ROWS_MSG)
         _ = codes^
         return mc_fold_auc(arena2, out2, False, 0.0, context)
     # `_fold_curves(s, _OneHot(codes, n, k, 0), w, n, k, stride=k, fold="auc", tail=tail)`
-    var prog = McProg(context)
+    var prog = MetricDoorProg()
     var s_off = prog.put(s)
     var c_off = prog.put(codes)
     var pos = prog.scratch(n * k)
@@ -282,7 +284,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var fl = MC_NONE
     var res = MC_NONE
     if not micro:
-        var got = mc_group(prog, c_off, n, k, MC_NONE, 1, w_off, 1)
+        var got = prog.group(c_off, n, k, MC_NONE, 1, w_off, 1)
         sc = prog.want(prog.alloc(2 * k), 2 * k)
         fl = prog.want(prog.alloc(k), k)
         var sup = prog.want(prog.alloc(2 * k), 2 * k)
@@ -290,18 +292,18 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
                                    1 if w is not None else 0, sup])
         if average is not None:
             res = mc_stage_average(prog, sc, sup, k, weighted_avg)
-    var arena = mc_run(prog, args[8], context)
-    if mc_arena_int(arena, rows) != 0:
+    var arena = metric_door_run(prog, args[8], context)
+    if arena.i32(rows) != 0:
         raise Error(_ROWS_MSG)
     _ = codes^
     # `_OvrTail.result`: one warning per class without both labels (an AUC
     # never takes the AP curve rule)
     for c in range(k):  # driver-loop: over the classes
-        if mc_arena_int(arena, fl + c) == 1:
+        if arena.i32(fl + c) == 1:
             mc_undefined(_ROC_ONE_CLASS, context)
     if average is None:
-        return mc_arena_f64_array(arena, sc, k, Python.tuple(k), context)
-    return PythonObject(mc_arena_double(arena, res))
+        return metric_arena_array(arena, sc, 2 * k, Python.tuple(k), "<f8", context)
+    return PythonObject(arena.f64(res))
 
 
 def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -334,7 +336,7 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
             break
         var m = min(chunk, n_pairs - g0)
         var last_only = g0 == 0 and m == n_pairs
-        var prog = McProg(context)
+        var prog = MetricDoorProg()
         var s_off = prog.put(s)
         var c_off = prog.put(codes)
         var oh = prog.scratch(n * k)
@@ -345,7 +347,7 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
             rows = prog.want(prog.alloc(1), 1)
             if n:
                 prog.stage("rank_epi", n, [_RANK_ROW_SUM, s_off, n, k, rows])
-        var got = mc_group(prog, c_off, n, k, MC_NONE, 1, MC_NONE, 1)
+        var got = prog.group(c_off, n, k, MC_NONE, 1, MC_NONE, 1)
         var off = got[0]
         _ = prog.want(off + k, 1)
         var cf = prog.scratch(2 * m * _CF_OUT)
@@ -372,24 +374,24 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         var res = MC_NONE
         if last_only:
             res = mc_stage_average(prog, ps, prev, n_pairs, weighted_avg)
-        var arena = mc_run(prog, args[8], context)
+        var arena = metric_door_run(prog, args[8], context)
         if g0 == 0:
-            if mc_arena_int(arena, rows) != 0:
+            if arena.i32(rows) != 0:
                 raise Error(_ROWS_MSG)
-            if mc_arena_int(arena, off + k) != n:
+            if arena.i32(off + k) != n:
                 raise Error("mojolearn roc_auc_score: a y_true label is not among the classes")
         for j in range(2 * m):  # driver-loop: over the pair directions of this program
-            if mc_arena_int(arena, fl + j) == 1:
+            if arena.i32(fl + j) == 1:
                 mc_undefined(_ROC_ONE_CLASS, context)
         if last_only:
             _ = codes^
-            return PythonObject(mc_arena_double(arena, res))
+            return PythonObject(arena.f64(res))
         for j in range(2 * m):  # driver-loop: over the pair words of this program
-            ps_words.append(Int32(mc_arena_int(arena, ps + j)))
-            prev_words.append(Int32(mc_arena_int(arena, prev + j)))
+            ps_words.append(Int32(arena.i32(ps + j)))
+            prev_words.append(Int32(arena.i32(prev + j)))
         g0 += m
     _ = codes^
-    var p2 = McProg(context)
+    var p2 = MetricDoorProg()
     var ps_in = family_array(Python.tuple(len(ps_words)), "<i4", context)
     var prev_in = family_array(Python.tuple(len(prev_words)), "<i4", context)
     mcls_copy_words(Int(ps_words.unsafe_ptr()), Int(py=classical_address(ps_in)), len(ps_words))
@@ -397,10 +399,10 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     mcls_copy_words(Int(prev_words.unsafe_ptr()), Int(py=classical_address(prev_in)), len(prev_words))
     _ = prev_in  # keep the Python object alive through the native call above
     var res = mc_stage_average(p2, p2.put(ps_in), p2.put(prev_in), n_pairs, weighted_avg)
-    var arena = mc_run(p2, args[8], context)
+    var arena = metric_door_run(p2, args[8], context)
     _ = ps_words^
     _ = prev_words^
-    return PythonObject(mc_arena_double(arena, res))
+    return PythonObject(arena.f64(res))
 
 
 def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -501,7 +503,7 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var w = mc_weights(args[4], n, caller, context) if args[4] is not None else PythonObject(None)
     var flags = mc_map_equal(true, pos, context)
     var drop = mc_bool(args[5])
-    var prog = McProg(context)
+    var prog = MetricDoorProg()
     var s_off = prog.put(s)
     var p_off = prog.put(flags)
     var w_off = MC_NONE
@@ -518,21 +520,21 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     for b in range(3):  # driver-loop: over the three output arrays
         _ = prog.want(out + 2 * b * (n + 1), 2 * (n + 1), head, 2)
     prog.stage("curve_out", 1, [_CO_PR, n, fps, tps, thr, cnt, 1 if drop else 0, out, head])
-    var arena = mc_run(prog, args[6], context)
+    var arena = metric_door_run(prog, args[6], context)
     _ = s^
     _ = flags^
-    var m = mc_arena_int(arena, head)
-    var status = mc_arena_int(arena, head + 1)
+    var m = arena.i32(head)
+    var status = arena.i32(head + 1)
     if status == _CO_EMPTY:
         raise Error("mojolearn metrics: an empty curve has no thresholds")
-    var t_tot = mc_arena_double(arena, head + 4)
+    var t_tot = arena.f64(head + 4)
     if t_tot == 0:
         mc_warn("No positive class found in y_true, recall is set to one for all thresholds.", mc_b().UserWarning, context)
     if status == _CO_ZERO_CLASS:
         return PythonObject(None)
-    var precision = mc_arena_f64_array(arena, out, m, Python.tuple(m), context)
-    var recall = mc_arena_f64_array(arena, out + 2 * (n + 1), m, Python.tuple(m), context)
-    var thresholds = mc_arena_f64_array(arena, out + 4 * (n + 1), m - 1, Python.tuple(m - 1), context)
+    var precision = metric_arena_array(arena, out, 2 * m, Python.tuple(m), "<f8", context)
+    var recall = metric_arena_array(arena, out + 2 * (n + 1), 2 * m, Python.tuple(m), "<f8", context)
+    var thresholds = metric_arena_array(arena, out + 4 * (n + 1), 2 * (m - 1), Python.tuple(m - 1), "<f8", context)
     return Python.tuple(precision, recall, thresholds)
 
 
