@@ -15,7 +15,8 @@ from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixe
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_entry_key, samba_primitive
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_call
+from core.mamba_state_entry_table import Mamba3StateRoute, MAMBA3_STATE_FORWARD, MAMBA3_STATE_DECODE
 from core.samba_entry_table import (
     samba_ref,
     SambaEntryKey, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST, SAMBA_PRIM_EMBEDDING_FORWARD,
@@ -28,7 +29,7 @@ from core.samba_entry_table_programs import (
     SAMBA_PROGRAM_OPEN, SAMBA_PROGRAM_STATUS, SAMBA_PROGRAM_FORWARD,
 )
 from core.samba_program_handle import SambaProgramHandle
-from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
+from bindings.neural_block_public import neural_training_entries, neural_training_selection, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
 from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings
@@ -108,14 +109,27 @@ def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObje
 
 
 def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> PythonObject:
+    var route = Mamba3StateRoute(1, 0, False)
+    return _samba_block_entries(block, context, route)
+
+
+def _samba_block_entries(block: PythonObject, context: PythonObject, mut route: Mamba3StateRoute) raises -> PythonObject:
+    # The block's binding entries and the key of the image that serves its
+    # carried-state calls (core/mamba_state_entry_table.mojo): the CPU
+    # inference class reads the neural host at (identical, cpu); a training
+    # block reads its connected training selection's (tier, vendor), the CPU
+    # training image's own slot when the vendor is the CPU.
     var bi = native_loaded_module("builtins")
     var nc = context["neural"]
     if Bool(py=py_call(bi.isinstance, block, nc["block_classes"]["cpu"]["mamba3"])):
+        route = Mamba3StateRoute(1, 0, False)
         return _model_bindings(PythonObject("cpu"), "mamba3", nc, PythonObject("identical"))["mamba3"]
-    return neural_training_entries(samba_fields(block), nc)
+    var selection = neural_training_selection(samba_fields(block), nc)
+    route = Mamba3StateRoute(selection.key.mode, selection.key.vendor, selection.key.vendor == 0)
+    return selection.entries
 
 def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, entries: PythonObject,
-                   captured_fields: PythonObject, captured_slots: PythonObject) raises -> PythonObject:
+                   captured_fields: PythonObject, captured_slots: PythonObject, route: Mamba3StateRoute) raises -> PythonObject:
     """One carried-state call: `(y, h_last, k_last, v_last, theta_last)`. The
     state's pieces, `buffered_tokens` and `pending` are updated; the caller
     assigns the four reports."""
@@ -160,11 +174,6 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var q = Int(py=slots["buffered_tokens"])
     var pending = 1 if Bool(py=slots["pending"]) else 0
     var updated = PythonObject(None)
-    var native = PythonObject(None)
-    if not on_session:
-        var admitted = py_get(fields, "_native_mamba_state")
-        if neural_descriptor_matches(admitted, canonical):
-            native = admitted
     if on_session:
         var owned_native = py_get(fields, "_native_mamba_block_provider_cache")
         if neural_descriptor_matches(owned_native, canonical):
@@ -174,29 +183,26 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
             updated = py_call(_native_function(entries, "mamba3_state_owned"), fields["_prefill_session"], py_ints(addresses),
                               Python.list(b, 1 if step else l, d, q, pending, owned, 1 if step else 0))
         _ = output  # keep the Python object alive through the native call above
-    elif native is not None:
-        var ints: List[Int] = [b, d, q, pending] if step else [b, l, d, q, pending]
-        updated = PythonObject(neural_descriptor_execute(native, 5 if step else 4, addresses, ints, []))
-        _ = output
-    # OPEN (lane samba-sessions-native, 2026-11-12): the two calls below and
-    # `mamba3_state_owned` above still reach the block's binding module by
-    # attribute. The image that serves MAMBA_STATE_ABI_NAME ops 4/5 for this
-    # block is: `_mojolearn_mamba` for a GPU block (CAUSAL_TABLE_MAMBA at
-    # (tier, gpu vendor), mamba/causal_entry_device.mojo);
-    # `_mojolearn_neural_host` for the CPU inference model's block
-    # (CAUSAL_TABLE_MAMBA at (tier, cpu), core/causal_entry_neural_host.mojo);
-    # `_mojolearn_mamba_host` for a CPU-build training block, which publishes
-    # its state entry (NATIVE_MAMBA_HOST_STATE_API) in NO table yet and cannot
-    # take the (tier, cpu) CAUSAL_TABLE_MAMBA slot neural_host holds. The
-    # conversion needs that publication under its own slot and the block's
-    # (route, tier, vendor) key passed in by both callers (this file and
-    # bindings/mamba_public_native.mojo).
-    elif step:
-        updated = py_call(_native_function(entries, "mamba3_decode_step"), py_ints(addresses), py_ints([b, d, q, pending]))
-        _ = output  # keep the Python object alive through the native call above
     else:
-        updated = py_call(_native_function(entries, "mamba3_forward"), py_ints(addresses), py_ints([b, l, d, q, pending]))
+        # The image that serves this block's carried state, by the block's key
+        # (core/mamba_state_entry_table.mojo; lane transformer-session-native):
+        # one table call, the GIL released around it. The former state
+        # provider capsule and the Python entries `mamba3_forward` /
+        # `mamba3_decode_step` of the block's binding module ran these ops
+        # with these words.
+        var ints: List[Int] = [b, d, q, pending] if step else [b, l, d, q, pending]
+        var entry = route.state_ref()
+        var buffered = 0
+        with GILReleased(Python()):
+            buffered = entry_ref_call(entry, MAMBA3_STATE_DECODE if step else MAMBA3_STATE_FORWARD,
+                addresses, ints, List[Float64]())
+        updated = PythonObject(buffered)
         _ = output  # keep the Python object alive through the native call above
+    # OPEN (lane transformer-session-native, 2026-11-12): `mamba3_state_owned`
+    # above (an owned snapshot read through the block's Mamba-3 prefill
+    # session, a Python-allocated owner) still reaches the binding module when
+    # the block provider differs; it moves with the Mamba-3 prefill session's
+    # conversion to a registry handle.
     _writeback(copies)
     py_setitem(slots, "buffered_tokens", updated)
     py_setitem(slots, "pending", False)
@@ -208,7 +214,9 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
     # Captured fields/slots are passed explicitly: a PythonObject(None)
     # default is evaluated at compile time and needs a live interpreter.
     var fields = samba_fields(block)
-    var result = _m3_state_call(block, x, state, step, _samba_block_entries(block, context), fields, samba_fields(state))
+    var route = Mamba3StateRoute(1, 0, False)
+    var entries = _samba_block_entries(block, context, route)
+    var result = _m3_state_call(block, x, state, step, entries, fields, samba_fields(state), route)
     var report_names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over reporting result metadata
         py_setitem(fields, report_names[i], result[i + 1])

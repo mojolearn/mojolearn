@@ -62,7 +62,7 @@ def test_mutable_state_buffers_have_retained_operation_snapshots():
     assert "return neural_array_snapshot(value, context)" in body
     assert body.index("admit_native_buffer_exporter(value)") < body.index(".memoryview, value")
     forward = NATIVE.split("def _mamba3_forward_captured(")[1].split("def mamba3_allocate(")[0]
-    assert "_m3_state_call(block, x, state, step, entries, fields, captured)" in forward
+    assert "_m3_state_call(block, x, state, step, entries, fields, captured, route)" in forward
     assert 'py_setitem(slots, "buffered_tokens", captured["buffered_tokens"])' in forward
     assert 'py_setitem(slots, "pending", captured["pending"])' in forward
 
