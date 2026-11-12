@@ -11,7 +11,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.runtime_manifold_entry import (
     runtime_manifold_c, RUNTIME_MANIFOLD_SABOTAGE,
 )
-from bindings.manifold_storage_native import ManifoldMatrix, ManifoldDevice
+from bindings.manifold_storage_native import ManifoldMatrix
 from bindings.manifold_scalar_native import ManifoldScalarSnapshot
 
 
@@ -42,7 +42,7 @@ def build__mojolearn_runtime_manifold_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_manifold_host")
         _ = module.add_type[ManifoldMatrix]("_ManifoldMatrix")
-        _ = module.add_type[ManifoldDevice]("_ManifoldDevice")
+        # TOMBSTONE: _ManifoldDevice (the Python-holding pool buffer type) deleted 2026-11-12 by lane entangled-mkit; code recoverable at e561a66d6b.
         _ = module.add_type[ManifoldScalarSnapshot]("_ManifoldScalarSnapshot")
         module.def_py_c_function(runtime_manifold_c, "manifold_native_call")
         module.def_function[runtime_manifold_host_numeric_mode_binding]("runtime_manifold_host_numeric_mode")

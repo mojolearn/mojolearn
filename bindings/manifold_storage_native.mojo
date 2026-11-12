@@ -1,122 +1,53 @@
 # SPDX-License-Identifier: Apache-2.0
-# Typed native matrix/device lifetimes. No Python _M attribute hook or _DevBuf
-# finalizer participates in a manifold operation, including temporary cleanup.
-from std.ffi import c_int
-from std.python import Python, PythonObject
-from std.python._cpython import ExternalFunction, PyObjectPtr
-from bindings.cpython_table import cpython_table
-
-# The C entries a release and the kit lists use come from the one CPython
-# table (ManifoldCalls, MojolearnManifoldCallsV1, folded into
-# bindings/cpython_table.mojo by lane ne1-e-table, 2026-11-06).
-
-
-struct ManifoldDevice(Movable, Writable):
-    var binding: PythonObject
-    var release: PythonObject
-    var identifier: PythonObject
-    var count: Int
-    # The binding's alloc / upload / download / move entries, resolved once
-    # by the kit that made this buffer (None for an entry the binding does
-    # not export): every later buffer, download and move on the same binding
-    # reuses them instead of a module-namespace scan per call
-    # (lane perf-manifold-kit).
-    var alloc: PythonObject
-    var upload: PythonObject
-    var download: PythonObject
-    var move: PythonObject
-
-    def __init__(out self, binding: PythonObject, release: PythonObject,
-                 identifier: PythonObject, count: Int, alloc: PythonObject,
-                 upload: PythonObject, download: PythonObject, move: PythonObject):
-        # Both callables were admitted from the exact module's dictionary by
-        # spectral_umap_entry. Retain the original module as well as its cell.
-        self.binding = binding
-        self.release = release
-        self.identifier = identifier
-        self.count = count
-        self.alloc = alloc
-        self.upload = upload
-        self.download = download
-        self.move = move
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("ManifoldDevice(count=", self.count, ")")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        self.write_to(writer)
-
-    def __deinit__(deinit self):
-        # Preserve an in-flight Python exception. Cleanup never calls Python's
-        # unraisable hook, a Python __del__, or mutable module attributes.
-        try:
-            ref cpy = Python().cpython()
-            var calls = cpython_table()
-            var pending = cpy.PyErr_FetchTriple()
-            var result = calls[].PyObject_CallOneArg(self.release._obj_ptr, self.identifier._obj_ptr)
-            if result:
-                cpy.Py_DecRef(result)
-            else:
-                # The previous _DevBuf finalizer silently ignored pool-release
-                # failures, including interpreter/device shutdown.
-                cpython_table()[].PyErr_Clear()
-            cpy.PyErr_Restore(pending[0], pending[1], pending[2])
-        except:
-            pass
+# The typed native owner of a fitted manifold matrix (lane entangled-mkit,
+# 2026-11-12). A fit stores each fitted matrix on the model as one
+# `_ManifoldMatrix` (registered by bindings/_mojolearn_runtime_manifold_host.mojo):
+# its host words and/or its x_decomp pool id, the image key and dispatch of
+# that id, and the side the fit left it on. It holds no Python object: a read
+# by a later transform never moves it (the typed kit, bindings/mani_kit_run.mojo,
+# reads it through an MFitted), the copy made for the other side is kept here
+# once (rows N291, N301), and its pool id goes back to the pool through the
+# image's own dispatch when the owner dies.
+#
+# TOMBSTONE: ManifoldDevice (the Python-holding pooled device buffer: binding,
+# release, identifier, alloc/upload/download/move entries) and the words-holder
+# role of ManifoldMatrix (store/device/kept_store/kept_device PythonObject
+# fields, words_new/words_count/words_address, matrix_* / device_* accessors)
+# deleted 2026-11-12 by lane entangled-mkit; code recoverable at the lane's
+# base origin/preinteg/wave9-20261112 (e561a66d6b).
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from x_decomp.descriptor_schema import XD_DEV_FREE
 
 
 struct ManifoldMatrix(Movable, Writable):
-    # A matrix: `store` is its host words holder (None while the values are
-    # only on the device) and `device` its pooled device buffer (None on the
-    # host). Views share one holder, as `_M` views shared one array.array.
-    # A words holder is a ManifoldMatrix too (the registered native type),
-    # whose `words` own `count` float32 values (one spare word keeps an empty
-    # holder's address valid, as `_M._one` did); its other fields are unused.
-    # Native words replace the array.array store (lane perf-manifold-kit): no
-    # Python allocation, len() or buffer_info() call per matrix or operation.
-    #
-    # Fitted state (rows N291, N301, lane ne3-f-kernel-table): a matrix the
-    # fit stored on the model is `frozen` when the fit returns. A read of a
-    # frozen matrix never moves it: `store` / `device` keep the side the fit
-    # left it on (so every route decision of a later transform is the one the
-    # first transform made before), and the other side's copy is kept in
-    # `kept_store` / `kept_device`, made once and reused by every later read.
-    # Neither copy is released while the model holds the matrix, so a device
-    # id a running kernel reads cannot go back to the pool under it. In-place
-    # writers refuse a frozen matrix (bindings/mani_kit.mojo mk_writable);
-    # replacing the attribute drops both copies with the old matrix.
-    var store: PythonObject
-    var device: PythonObject
     var rows: Int
     var cols: Int
+    # host words (the fit's side, or the kept copy of a device matrix)
     var words: List[Float32]
-    var count: Int
-    var frozen: Bool
-    var kept_store: PythonObject
-    var kept_device: PythonObject
+    var has_words: Bool
+    # the pool id (the fit's side, or the kept copy of a host matrix), -1 when none
+    var device: Int
+    var device_key: Int
+    var device_entry: EntryRef
+    # the side the fit left it on: every route decision of a later transform
+    # is the one the first transform made before
+    var on_device: Bool
 
-    def __init__(out self, store: PythonObject, device: PythonObject, rows: Int, cols: Int):
-        self.store = store
-        self.device = device
+    def __init__(out self, rows: Int, cols: Int):
         self.rows = rows
         self.cols = cols
         self.words = List[Float32]()
-        self.count = 0
-        self.frozen = False
-        self.kept_store = PythonObject(None)
-        self.kept_device = PythonObject(None)
+        self.has_words = False
+        self.device = -1
+        self.device_key = 0
+        self.device_entry = entry_ref_unresolved()
+        self.on_device = False
 
-    def __init__(out self, *, words_of: Int):
-        """A words holder of `words_of` zero float32 values."""
-        self.store = PythonObject(None)
-        self.device = PythonObject(None)
-        self.rows = 0
-        self.cols = 0
-        self.words = List[Float32](length=max(words_of, 1), fill=Float32(0))
-        self.count = words_of
-        self.frozen = False
-        self.kept_store = PythonObject(None)
-        self.kept_device = PythonObject(None)
+    def words_address(self) -> Int:
+        """The host words' first word, 0 when the owner has none."""
+        if not self.has_words:
+            return 0
+        return Int(self.words.unsafe_ptr())
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ManifoldMatrix(shape=(", self.rows, ", ", self.cols, "))")
@@ -124,97 +55,11 @@ struct ManifoldMatrix(Movable, Writable):
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
 
-
-def matrix_rows(value: PythonObject) raises -> Int:
-    return value.downcast_value_ptr[ManifoldMatrix]()[].rows
-
-
-def matrix_cols(value: PythonObject) raises -> Int:
-    return value.downcast_value_ptr[ManifoldMatrix]()[].cols
-
-
-def matrix_store(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldMatrix]()[].store
-
-
-def matrix_device(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldMatrix]()[].device
-
-
-def matrix_set_store(value: PythonObject, store: PythonObject) raises:
-    value.downcast_value_ptr[ManifoldMatrix]()[].store = store
-
-
-def matrix_set_device(value: PythonObject, device: PythonObject) raises:
-    if device is not None:
-        _ = device.downcast_value_ptr[ManifoldDevice]()
-    value.downcast_value_ptr[ManifoldMatrix]()[].device = device
-
-
-def matrix_frozen(value: PythonObject) raises -> Bool:
-    return value.downcast_value_ptr[ManifoldMatrix]()[].frozen
-
-
-def matrix_freeze(value: PythonObject) raises:
-    """Mark a fitted matrix read-only (see ManifoldMatrix); idempotent."""
-    value.downcast_value_ptr[ManifoldMatrix]()[].frozen = True
-
-
-def matrix_kept_store(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldMatrix]()[].kept_store
-
-
-def matrix_kept_device(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldMatrix]()[].kept_device
-
-
-def matrix_set_kept_store(value: PythonObject, store: PythonObject) raises:
-    value.downcast_value_ptr[ManifoldMatrix]()[].kept_store = store
-
-
-def matrix_set_kept_device(value: PythonObject, device: PythonObject) raises:
-    if device is not None:
-        _ = device.downcast_value_ptr[ManifoldDevice]()
-    value.downcast_value_ptr[ManifoldMatrix]()[].kept_device = device
-
-
-def device_binding(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldDevice]()[].binding
-
-
-def device_identifier(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldDevice]()[].identifier
-
-
-def device_alloc(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldDevice]()[].alloc
-
-
-def device_release(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldDevice]()[].release
-
-
-def device_upload(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldDevice]()[].upload
-
-
-def device_download(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldDevice]()[].download
-
-
-def device_move(value: PythonObject) raises -> PythonObject:
-    return value.downcast_value_ptr[ManifoldDevice]()[].move
-
-
-def words_new(count: Int) raises -> PythonObject:
-    """A words holder of `count` zero float32 values."""
-    return PythonObject(alloc=ManifoldMatrix(words_of=count))
-
-
-def words_count(holder: PythonObject) raises -> Int:
-    return holder.downcast_value_ptr[ManifoldMatrix]()[].count
-
-
-def words_address(holder: PythonObject) raises -> Int:
-    """The holder's first word (valid for an empty holder: its spare word)."""
-    return Int(holder.downcast_value_ptr[ManifoldMatrix]()[].words.unsafe_ptr())
+    def __deinit__(deinit self):
+        # The pool id goes back through its own image's dispatch. No Python
+        # call, hook or exception state is involved.
+        if self.device >= 0:
+            try:
+                _ = entry_ref_call(self.device_entry, XD_DEV_FREE, List[Int](), [self.device], List[Float64]())
+            except:
+                pass
