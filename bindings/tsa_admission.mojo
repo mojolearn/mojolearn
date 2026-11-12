@@ -17,7 +17,7 @@ from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.arena_array_metadata import arena_array_metadata
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.sequential_admission import _one_of, _ctypes_array_owner
-from bindings.admitted_input import admit_view, admitted_view_kind
+from bindings.admitted_input import admit_view, admitted_view_kind, AdmittedTypedPin
 from bindings.tensor_view import TensorView
 from core.cast_in import CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 
@@ -44,11 +44,12 @@ def tsa_scalar(value: PythonObject, context: PythonObject, integer: Bool = False
     # The one admission captures the value (bindings/admitted_input.mojo
     # admit_view, which also reads a ctypes-backed Array from its slots); its
     # one word is decoded here from the captured address.
-    var one = admit_view(value, "scalar setting", context)
-    if one.view.count() != 1:
+    var one_pin = AdmittedTypedPin()
+    var one = admit_view(value, "scalar setting", context, one_pin)
+    if one.count() != 1:
         raise Error("TypeError: TSA scalar settings require one native numeric value")
-    var result = tsa_word(one.view, "scalar setting")
-    _ = one^
+    var result = tsa_word(one, "scalar setting")
+    _ = one_pin^
     return result
 
 
@@ -190,10 +191,12 @@ def tsa_truth(value: PythonObject, context: PythonObject) raises -> Bool:
     if cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset or cls is b.str or cls is b.bytes or cls is b.bytearray:
         return len(value) != 0
     if cls is context["array_class"]:
-        var snapshot = admit_view(value, "flag", context)
-        if len(snapshot.view.shape) == 0:
+        var snapshot_pin = AdmittedTypedPin()
+        var snapshot = admit_view(value, "flag", context, snapshot_pin)
+        _ = snapshot_pin^  # metadata only: no word of the buffer is read
+        if len(snapshot.shape) == 0:
             raise Error("TypeError: len() of unsized object")
-        return snapshot.view.shape[0] != 0
+        return snapshot.shape[0] != 0
     if cls is py_get(context, "ndarray") and _primitive_dtype(value, context):
         var count = Int(py=value.size)
         if count == 0:
@@ -212,8 +215,10 @@ def tsa_component_index(value: PythonObject, context: PythonObject) raises -> Py
     if py_type(value) is b.bool or _one_of(py_type(value), context["integer_types"]):
         return py_call(b.int, value)
     if py_type(value) is py_get(context, "ndarray"):
-        var snapshot = admit_view(value, "component index", context)
-        if len(snapshot.view.shape) == 0 and admitted_view_kind(snapshot.view, "component index")[0] != CAST_KIND_FLOAT:
+        var snapshot_pin = AdmittedTypedPin()
+        var snapshot = admit_view(value, "component index", context, snapshot_pin)
+        _ = snapshot_pin^  # metadata only: no word of the buffer is read
+        if len(snapshot.shape) == 0 and admitted_view_kind(snapshot, "component index")[0] != CAST_KIND_FLOAT:
             return py_call(b.int, tsa_scalar(value, context))
     raise Error("TypeError: Holt-Winters component indices require native integers")
 

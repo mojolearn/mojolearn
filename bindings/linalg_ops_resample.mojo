@@ -30,7 +30,8 @@ from bindings.family_common import (
     FAMILY_F64P, FAMILY_I32P, family_call, family_repr, family_type_name, family_isinstance, family_is_str,
 )
 from bindings.linalg_ops_buffers import lin_truth
-from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
+from bindings.admitted_input import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
+from bindings.tensor_view import TensorView
 
 
 
@@ -116,21 +117,22 @@ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
     var value = source
     if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
         value = classical_view(value, context, name)
-    var admitted = AdmittedTyped(value, context)
-    var rank = len(admitted.view.shape)
+    var admitted_pin = AdmittedTypedPin()
+    var admitted = admitted_typed_once(value, context, admitted_pin)
+    var rank = len(admitted.shape)
     # p3-cnn-sequence-tsa: the shape text is built only on a refusal
-    if (ndim >= 0 and rank != ndim) or admitted.view.count() == 0:
+    if (ndim >= 0 and rank != ndim) or admitted.count() == 0:
         _rs_refuse_shape(admitted, rank, ndim, name)
-    return admitted_typed_c(admitted^, typestr, name, context)
+    return admitted_typed_c(admitted, admitted_pin^, typestr, name, context)
 
 
-def _rs_refuse_shape(admitted: AdmittedTyped, rank: Int, ndim: Int, name: String) raises:
-    var shape = family_repr(admitted_shape_tuple(admitted.view.shape))
+def _rs_refuse_shape(admitted: TensorView, rank: Int, ndim: Int, name: String) raises:
+    var shape = family_repr(admitted_shape_tuple(admitted.shape))
     if ndim >= 0 and rank != ndim:
         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(rank) + "-D shape " + shape)
-    if admitted.view.count() == 0:
+    if admitted.count() == 0:
         var what = String("sample(s)")
-        if rank == 2 and admitted.view.shape[0] != 0:
+        if rank == 2 and admitted.shape[0] != 0:
             what = "feature(s)"
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
                     + " (shape=" + shape + ") while a minimum of 1 is required.")
@@ -381,8 +383,8 @@ def _rs_corner(values: PythonObject, name: String, where: String, context: Pytho
     var b = native_loaded_module("builtins")
     var items = Python.list()
     if classical_is_array(values, context):
-        var admitted = AdmittedTyped(values, context)
-        ref view = admitted.view
+        var admitted = AdmittedTypedPin()
+        var view = admitted_typed_once(values, context, admitted)
         if len(view.shape) != 1:
             raise Error("TypeError: mojolearn " + where + ": " + name + " must be a one-dimensional native sequence")
         # Reuse metric label boxing semantics, but read every Array slot once
