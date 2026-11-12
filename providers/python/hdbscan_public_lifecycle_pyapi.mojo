@@ -33,6 +33,7 @@ from providers.python.estimator_binding_pyapi import estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 from bindings.py_optional import py_present
+from providers.python.hdbscan_public_lifecycle_run import _query_slot
 
 
 def _schema(context: PythonObject) raises -> PythonObject:
@@ -68,10 +69,6 @@ def _initialize(model: PythonObject, args: PythonObject, context: PythonObject) 
 # the public admission passed for this key, and per query method the views of
 # the fitted storage its kernel reads with their validated counts.
 comptime _ADMIT_SLOT = "cluster_hdbscan_admitted_v1"
-
-
-def _query_slot(method: String) -> String:
-    return "cluster_hdbscan_" + method + "_v2"
 
 
 def _scalars() raises -> PythonObject:
