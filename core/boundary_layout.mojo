@@ -225,6 +225,17 @@ def element_offset(flat: Int, layout: BufferLayout) -> Int:
 
 
 @always_inline
+def element_address(flat: Int, layout: BufferLayout, contiguous: Bool) -> Int:
+    """The address of the `flat`-th element in C order: `flat * itemsize`
+    past the base for a C-contiguous layout (no div or mod), the strided
+    `element_offset` walk only when the strides demand it. `contiguous` is
+    `layout_is_c_contiguous(layout)`, read once per conversion."""
+    if contiguous:
+        return layout.address + flat * layout.itemsize
+    return layout.address + element_offset(flat, layout)
+
+
+@always_inline
 def _load_f64(address: Int, kind: Int, itemsize: Int) -> Float64:
     if kind == BOUNDARY_KIND_FLOAT:
         if itemsize == 4:
@@ -288,7 +299,8 @@ def gather_f32(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     _check_width(kind, layout.itemsize)
     if layout.count == 0:
         return
-    if kind == BOUNDARY_KIND_FLOAT and layout.itemsize == 4 and layout_is_c_contiguous(layout):
+    var contiguous = layout_is_c_contiguous(layout)
+    if kind == BOUNDARY_KIND_FLOAT and layout.itemsize == 4 and contiguous:
         unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst_address),
             src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=layout.address), count=layout.nbytes)
         return
@@ -296,11 +308,11 @@ def gather_f32(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     var lp = UnsafePointer(to=layout)
     var itemsize = layout.itemsize
     var count = layout.count
-    def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address}:
+    def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address, imm contiguous}:
         var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_address)
         var stop = min(count, (unit + 1) * BOUNDARY_COPY_CHUNK)
         for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one conversion chunk (native, no Python)
-            var at = lp[].address + element_offset(flat, lp[])
+            var at = element_address(flat, lp[], contiguous)
             if kind == BOUNDARY_KIND_FLOAT and itemsize == 4:
                 dst[flat] = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=at)[0]
             else:
@@ -314,7 +326,8 @@ def gather_f64(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     _check_width(kind, layout.itemsize)
     if layout.count == 0:
         return
-    if kind == BOUNDARY_KIND_FLOAT and layout.itemsize == 8 and layout_is_c_contiguous(layout):
+    var contiguous = layout_is_c_contiguous(layout)
+    if kind == BOUNDARY_KIND_FLOAT and layout.itemsize == 8 and contiguous:
         unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst_address),
             src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=layout.address), count=layout.nbytes)
         return
@@ -322,11 +335,11 @@ def gather_f64(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     var lp = UnsafePointer(to=layout)
     var itemsize = layout.itemsize
     var count = layout.count
-    def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address}:
+    def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address, imm contiguous}:
         var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=dst_address)
         var stop = min(count, (unit + 1) * BOUNDARY_COPY_CHUNK)
         for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one conversion chunk (native, no Python)
-            dst[flat] = _load_f64(lp[].address + element_offset(flat, lp[]), kind, itemsize)
+            dst[flat] = _load_f64(element_address(flat, lp[], contiguous), kind, itemsize)
     host_parallelize(task, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
 
@@ -339,7 +352,8 @@ def gather_i64(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     _check_width(kind, layout.itemsize)
     if layout.count == 0:
         return
-    if kind == BOUNDARY_KIND_INT and layout.itemsize == 8 and layout_is_c_contiguous(layout):
+    var contiguous = layout_is_c_contiguous(layout)
+    if kind == BOUNDARY_KIND_INT and layout.itemsize == 8 and contiguous:
         unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst_address),
             src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=layout.address), count=layout.nbytes)
         return
@@ -347,11 +361,11 @@ def gather_i64(layout: BufferLayout, kind: Int, dst_address: Int) raises:
     var lp = UnsafePointer(to=layout)
     var itemsize = layout.itemsize
     var count = layout.count
-    def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address}:
+    def task(unit: Int) {imm lp, imm kind, imm itemsize, imm count, imm dst_address, imm contiguous}:
         var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst_address)
         var stop = min(count, (unit + 1) * BOUNDARY_COPY_CHUNK)
         for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one conversion chunk (native, no Python)
-            dst[flat] = _load_i64(lp[].address + element_offset(flat, lp[]), kind, itemsize)
+            dst[flat] = _load_i64(element_address(flat, lp[], contiguous), kind, itemsize)
     host_parallelize(task, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
 
@@ -415,11 +429,12 @@ def text_rows_into(layout: BufferLayout, kind: Int, mut points: List[UInt32], mu
     var units = (n + BOUNDARY_COPY_CHUNK - 1) // BOUNDARY_COPY_CHUNK
     var lp = UnsafePointer(to=layout)
     var lengths_address = Int(lengths.unsafe_ptr())
-    def measure(unit: Int) {imm lp, imm kind, imm width, imm n, imm lengths_address}:
+    var contiguous = layout_is_c_contiguous(layout)
+    def measure(unit: Int) {imm lp, imm kind, imm width, imm n, imm lengths_address, imm contiguous}:
         var lens = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=lengths_address)
         var stop = min(n, (unit + 1) * BOUNDARY_COPY_CHUNK)
         for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one text chunk (native, no Python)
-            lens[flat] = _text_length(lp[].address + element_offset(flat, lp[]), kind, width)
+            lens[flat] = _text_length(element_address(flat, lp[], contiguous), kind, width)
     host_parallelize(measure, units)
     var total = 0
     for i in range(n):  # driver-loop: prefix sum of the element lengths (native, no Python)
@@ -428,13 +443,14 @@ def text_rows_into(layout: BufferLayout, kind: Int, mut points: List[UInt32], mu
     points = List[UInt32](length=total, fill=0)
     var points_address = Int(points.unsafe_ptr())
     var starts_address = Int(starts.unsafe_ptr())
-    def fill_points(unit: Int) {imm lp, imm kind, imm n, imm lengths_address, imm starts_address, imm points_address}:
+    def fill_points(unit: Int) {imm lp, imm kind, imm n, imm lengths_address, imm starts_address, imm points_address,
+                                imm contiguous}:
         var lens = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=lengths_address)
         var firsts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=starts_address)
         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=points_address)
         var stop = min(n, (unit + 1) * BOUNDARY_COPY_CHUNK)
         for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one text chunk (native, no Python)
-            var at = lp[].address + element_offset(flat, lp[])
+            var at = element_address(flat, lp[], contiguous)
             var first = firsts[flat]
             if kind == BOUNDARY_KIND_UCS4:
                 var wide = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)
