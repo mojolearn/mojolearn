@@ -613,6 +613,36 @@ def causal_model_publish(mut mods: NativeModules, model: PythonObject) raises:
 comptime _CAUSAL_LAYER_SLOT = "causal_layer_buffers_v1"
 
 
+def _causal_prepared_views(mut mods: NativeModules, record: PythonObject, buffers: PythonObject,
+                           fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The views an earlier call prepared for this state when its stamp and
+    every buffer identity still match, else None. A single Array class/slot
+    stamp covers every buffer in this state. Check original identities before
+    taking views, so replacement triggers a fresh combined stamp rather than
+    nine repeated class-namespace scans."""
+    if record is None or len(record) != 2:
+        return PythonObject(None)
+    var matched = False
+    try:
+        matched = record[1].downcast_value_ptr[NativeIdentityKey]()[].arrays_match(mods, context)
+    except:
+        matched = False
+    if not matched:
+        return PythonObject(None)
+    var prepared = record[0]
+    if prepared is None:
+        return prepared
+    for i in range(len(buffers)):  # driver-loop: over current state buffer identities
+        var value = py_get(fields, buffers[i])
+        var hit = py_get(prepared, buffers[i])
+        if value is not None and py_type(value) is context["array_class"]:
+            if hit is None or hit[0] is not value:
+                return PythonObject(None)
+        elif hit is not None:
+            return PythonObject(None)
+    return prepared
+
+
 def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: PythonObject, context: PythonObject) raises -> PythonObject:
     var names = CAUSAL_FIELD_NAMES.get_or_create_ptr()
     if names[].layer_scalars is None:
@@ -650,27 +680,11 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
     # storage); a new or replaced buffer, or a foreign exporter, is captured
     # as before.
     var record = prepared_get(mods, _CAUSAL_LAYER_SLOT, state)
-    var prepared = PythonObject(None)
-    if record is not None and len(record) == 2:
-        try:
-            if record[1].downcast_value_ptr[NativeIdentityKey]()[].arrays_match(mods, context):
-                prepared = record[0]
-        except:
-            prepared = PythonObject(None)
-    # A single Array class/slot stamp covers every buffer in this state.
-    # Check original identities before taking views, so replacement triggers
-    # a fresh combined stamp rather than nine repeated class-namespace scans.
-    if prepared is not None:
-        for i in range(len(buffers)):  # driver-loop: over current state buffer identities
-            var value = py_get(fields, buffers[i])
-            var hit = py_get(prepared, buffers[i])
-            if value is not None and py_type(value) is context["array_class"]:
-                if hit is None or hit[0] is not value:
-                    prepared = PythonObject(None)
-                    break
-            elif hit is not None:
-                prepared = PythonObject(None)
-                break
+    # The prepared views are decided in `_causal_prepared_views`, which
+    # returns from inside its try and its loop: no PythonObject is reassigned
+    # in a loop or a try here (modular/modular#7546 family;
+    # runtime-fix-save-forest sweep). Same reads, same order.
+    var prepared = _causal_prepared_views(mods, record, buffers, fields, context)
     # The stamp is built only when the prepared views missed (a hit needs no
     # new identity key).
     var stamp = Optional[NativeIdentityKey](None)

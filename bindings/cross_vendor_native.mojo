@@ -961,12 +961,13 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
     py_setitem(hello, "chained", owner.chained)
     var deadline = transport_clock() + Float64(py=owner.connect_timeout)
     var socket = PythonObject(None)
-    var response = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var response = Optional[PythonObject](PythonObject(None))
     while True:  # driver-loop: over initial tunnel handshakes within the retry deadline
         socket = cross_vendor_worker_connect(owner)
         try:
             transport_send(socket, hello, PythonObject(None))
-            response = transport_receive(socket, n * 4)
+            response = Optional[PythonObject](transport_receive(socket, n * 4))
             break
         except error:
             transport_close(socket)
@@ -976,8 +977,9 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                 raise error
             transport_sleep(5.0)
     var committed = 0
-    var held = bi.list()
-    var total = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var held = Optional[PythonObject](bi.list())
+    var total = Optional[PythonObject](PythonObject(None))
     var on_device = False
     var first = True
     var chained = Bool(py=owner.chained)
@@ -987,9 +989,9 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
             if first:
                 first = False
             else:
-                response = transport_receive(socket, n * 4)
-            var head = response[0]
-            var payload = response[1]
+                response = Optional[PythonObject](transport_receive(socket, n * 4))
+            var head = response.value()[0]
+            var payload = response.value()[1]
             var command = String(py_get(head, "cmd"))
             if command == "step":
                 step_started = transport_clock()
@@ -1009,8 +1011,8 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                     for k in range(len(owner.shards)):  # driver-loop: over this worker's immutable logical shards
                         var batch = _cross_vendor_batch(owner, step, owner.shards[k])
                         _ = py_call(losses.append, _cross_vendor_trainer(tr, "shard_gradient_fold", _cross_vendor_one(batch)))
-                    held = bi.list()
-                    total = PythonObject(None)
+                    held = Optional[PythonObject](bi.list())
+                    total = Optional[PythonObject](PythonObject(None))
                     on_device = True
                 else:
                     for k in range(len(owner.shards)):  # driver-loop: over this worker's immutable logical shards
@@ -1028,8 +1030,8 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                 py_setitem(reply, "losses", losses)
                 if chained:
                     if not on_device:
-                        held = parts
-                        total = PythonObject(None)
+                        held = Optional[PythonObject](parts)
+                        total = Optional[PythonObject](PythonObject(None))
                     transport_send(socket, reply, PythonObject(None))
                 else:
                     # One join of the shards' byte views is the payload copy.
@@ -1038,36 +1040,36 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                         _ = py_call(wire.append, cross_vendor_bytes(parts[k]))
                     transport_send(socket, reply, py_call(bi.bytes().join, wire))
             elif command == "fold":
-                if not chained or (len(held) == 0 and not on_device):
+                if not chained or (len(held.value()) == 0 and not on_device):
                     raise Error("CrossVendorMismatch: worker was asked to fold with nothing held")
                 if on_device:
-                    total = _cross_vendor_trainer(tr, "fold_export", _cross_vendor_one(PythonObject(None)))
+                    total = Optional[PythonObject](_cross_vendor_trainer(tr, "fold_export", _cross_vendor_one(PythonObject(None))))
                 elif Bool(py=_cross_vendor_trainer(tr, "has_device_fold", empty_args)):
                     _ = _cross_vendor_trainer(tr, "fold_reset", _cross_vendor_one(payload if len(payload) != 0 else PythonObject(None)))
-                    for k in range(len(held)):  # driver-loop: over held logical gradients continuing the prefix
-                        _ = _cross_vendor_trainer(tr, "fold_add", _cross_vendor_one(held[k]))
-                    total = _cross_vendor_trainer(tr, "fold_export", _cross_vendor_one(PythonObject(None)))
+                    for k in range(len(held.value())):  # driver-loop: over held logical gradients continuing the prefix
+                        _ = _cross_vendor_trainer(tr, "fold_add", _cross_vendor_one(held.value()[k]))
+                    total = Optional[PythonObject](_cross_vendor_trainer(tr, "fold_export", _cross_vendor_one(PythonObject(None))))
                 else:
-                    total = cross_vendor_fold(held, payload if len(payload) != 0 else PythonObject(None))
-                held = bi.list()
+                    total = Optional[PythonObject](cross_vendor_fold(held.value(), payload if len(payload) != 0 else PythonObject(None)))
+                held = Optional[PythonObject](bi.list())
                 on_device = False
                 var reply = bi.dict()
                 py_setitem(reply, "step", head["step"])
-                transport_send(socket, reply, total)
+                transport_send(socket, reply, total.value())
             elif command == "apply":
                 if len(payload) != 0:
-                    total = payload
-                if total is None or len(total) != n * 4:
+                    total = Optional[PythonObject](payload)
+                if total.value() is None or len(total.value()) != n * 4:
                     raise Error("CrossVendorMismatch: summed gradient has the wrong size")
                 var expected_hash = py_get(head, "total_sha256")
-                if expected_hash is not None and not Bool(py=cross_vendor_hexdigest(total) == expected_hash):
+                if expected_hash is not None and not Bool(py=cross_vendor_hexdigest(total.value()) == expected_hash):
                     raise Error("CrossVendorMismatch: total hash differs from the coordinator")
                 # pass 3 (N111): the received float32 bytes go to the trainer
                 # as is; it reads them in place (no array('f') copy here, no
                 # host copy or host scan in the binding).
-                _ = _cross_vendor_trainer(tr, "apply_gradient", _cross_vendor_one(total))
-                var applied = total
-                total = PythonObject(None)
+                _ = _cross_vendor_trainer(tr, "apply_gradient", _cross_vendor_one(total.value()))
+                var applied = total.value()
+                total = Optional[PythonObject](PythonObject(None))
                 committed += 1
                 var done = _cross_vendor_trainer(tr, "step", empty_args)
                 # pass 3 (N110): the witness export is written into the same

@@ -1111,16 +1111,19 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var finished = False
         while i < nb:  # driver-loop: over runs of consecutive layers on one device
             var items = Python.list()
-            var device = PythonObject(None)
+            # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+            var run_device = Optional[PythonObject]()
             var j = i
             while j < nb:  # driver-loop: over the layers of this device run
                 var item = _parallel_layer_item(mods, blocks[j], layers[j], args[4])
                 var layer_device = model_fields["layer_devices"][item[0]]
-                if j > i and Bool(py=layer_device != device):
+                if j > i and Bool(py=layer_device != run_device.value()):
                     break
-                device = layer_device
+                run_device = layer_device
                 _ = py_call(items.append, item)
                 j += 1
+            # The run holds at least layer i (i < nb), so the device is set.
+            var device = run_device.value()
             var first_ids = PythonObject(None)
             if not embedded:
                 if Bool(py=device == embed_device):

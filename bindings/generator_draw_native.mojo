@@ -29,14 +29,15 @@ def _generator_shape(shape: PythonObject, context: PythonObject) raises -> Pytho
             pass
     var source = Python.tuple(scalar) if scalar is not None else py_call(bi.tuple, shape)
     var dims = bi.list()
-    var count = PythonObject(1)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var count = Optional[PythonObject](PythonObject(1))
     for i in range(len(source)):  # driver-loop: over caller shape metadata
         var d = py_call(bi.int, source[i])
         if Bool(py=d < 1):
             raise Error("Generator: shape must be positive")
         _ = py_call(dims.append, d)
-        count = count * d
-    return Python.tuple(py_call(bi.tuple, dims), count)
+        count = Optional[PythonObject](count.value() * d)
+    return Python.tuple(py_call(bi.tuple, dims), count.value())
 
 
 struct GeneratorDrawBoundary(Defaultable, Movable):

@@ -1549,15 +1549,18 @@ def forest_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
     # A random-splitter tree answers through its inner forest: followed in a
     # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
     # the compile hang was elsewhere); same model reached, same calls on it.
-    var target = model
-    var fields = py_fields(target)
-    var kind = forest_kind(target, context)
-    var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
-    while inner is not None:  # driver-loop: over a tree's inner-forest chain
-        target = inner
-        fields = py_fields(target)
-        kind = forest_kind(target, context)
-        inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](model)
+    var walked_fields = Optional[PythonObject](py_fields(model))
+    var kind = forest_kind(model, context)
+    var inner = Optional[PythonObject](_inner(walked_fields.value()) if kind.startswith("dt_") else PythonObject(None))
+    while inner.value() is not None:  # driver-loop: over a tree's inner-forest chain
+        walked = Optional[PythonObject](inner.value())
+        walked_fields = Optional[PythonObject](py_fields(walked.value()))
+        kind = forest_kind(walked.value(), context)
+        inner = Optional[PythonObject](_inner(walked_fields.value()) if kind.startswith("dt_") else PythonObject(None))
+    var target = walked.value()
+    var fields = walked_fields.value()
     var staged = _predict_input(target, fields, kind, args[0], context)
     return _proba_staged(target, fields, kind, staged, context)
 
@@ -1569,15 +1572,18 @@ def forest_predict(model: PythonObject, args: PythonObject, context: PythonObjec
     # A random-splitter tree answers through its inner forest: followed in a
     # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
     # the compile hang was elsewhere); same model reached, same calls on it.
-    var target = model
-    var fields = py_fields(target)
-    var kind = forest_kind(target, context)
-    var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
-    while inner is not None:  # driver-loop: over a tree's inner-forest chain
-        target = inner
-        fields = py_fields(target)
-        kind = forest_kind(target, context)
-        inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](model)
+    var walked_fields = Optional[PythonObject](py_fields(model))
+    var kind = forest_kind(model, context)
+    var inner = Optional[PythonObject](_inner(walked_fields.value()) if kind.startswith("dt_") else PythonObject(None))
+    while inner.value() is not None:  # driver-loop: over a tree's inner-forest chain
+        walked = Optional[PythonObject](inner.value())
+        walked_fields = Optional[PythonObject](py_fields(walked.value()))
+        kind = forest_kind(walked.value(), context)
+        inner = Optional[PythonObject](_inner(walked_fields.value()) if kind.startswith("dt_") else PythonObject(None))
+    var target = walked.value()
+    var fields = walked_fields.value()
     var staged = _predict_input(target, fields, kind, args[0], context)
     return _predict_staged(target, fields, kind, staged, context)
 
@@ -1590,15 +1596,18 @@ def forest_predict_codes(model: PythonObject, args: PythonObject, context: Pytho
     # A random-splitter tree answers through its inner forest: followed in a
     # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
     # the compile hang was elsewhere); same model reached, same calls on it.
-    var target = model
-    var fields = py_fields(target)
-    var kind = forest_kind(target, context)
-    var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
-    while inner is not None:  # driver-loop: over a tree's inner-forest chain
-        target = inner
-        fields = py_fields(target)
-        kind = forest_kind(target, context)
-        inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](model)
+    var walked_fields = Optional[PythonObject](py_fields(model))
+    var kind = forest_kind(model, context)
+    var inner = Optional[PythonObject](_inner(walked_fields.value()) if kind.startswith("dt_") else PythonObject(None))
+    while inner.value() is not None:  # driver-loop: over a tree's inner-forest chain
+        walked = Optional[PythonObject](inner.value())
+        walked_fields = Optional[PythonObject](py_fields(walked.value()))
+        kind = forest_kind(walked.value(), context)
+        inner = Optional[PythonObject](_inner(walked_fields.value()) if kind.startswith("dt_") else PythonObject(None))
+    var target = walked.value()
+    var fields = walked_fields.value()
     if not _classifier(kind):
         raise Error("TypeError: forest class codes require a classifier")
     var staged = _predict_input(target, fields, kind, args[0], context)

@@ -1130,7 +1130,8 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
         if rank == 0:
             raise Error("TypeError: iteration over a 0-d Array")
         width = py_slice_from(packed.shape, 1)
-        values = py_call(packed._mv.tolist)
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var grouped = Optional[PythonObject](py_call(packed._mv.tolist))
         for k in range(rank - 1):  # driver-loop: native rank metadata groups flat values into rows
             var axis = rank - 1 - k
             var step = Int(py=packed.shape[axis])
@@ -1139,9 +1140,10 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
                 count *= Int(py=packed.shape[a])
             var groups = Python.list()
             for r in range(count):  # driver-loop: native list slices preserve the Array.tolist nesting
-                var part = py_slice(values, r * step, (r + 1) * step)
+                var part = py_slice(grouped.value(), r * step, (r + 1) * step)
                 _ = py_call(groups.append, part)
-            values = groups
+            grouped = Optional[PythonObject](groups)
+        values = grouped.value()
         _ = packed  # retain the native buffer while reading its scalar values
     elif kind is py_get(context, "ndarray"):
         # Exact ndarray.tolist is its C extension implementation. Admit

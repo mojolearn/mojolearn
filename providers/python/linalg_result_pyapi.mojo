@@ -31,17 +31,20 @@ def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObje
             var recorded = py_get(schemas, ancestry[row])
             if recorded is not None:
                 return recorded
-    var schema = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found = Optional[PythonObject]()
     var start = -1
     for i in range(len(ancestry)):  # driver-loop: over result class ancestry to find the connected tuple owner
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: linalg result ancestry cannot invoke metaclass hooks")
-        if schema is None:
-            schema = py_get(schemas, ancestry[i])
-            if schema is not None:
+        if not found:
+            var candidate = py_get(schemas, ancestry[i])
+            if candidate is not None:
+                found = candidate
                 start = i
-    if schema is None:
+    if not found:
         raise Error("TypeError: linalg results require QRResult or SVDResult")
+    var schema = found.value()
     if len(ancestry) - start != len(schema[0]):
         raise Error("TypeError: linalg result ancestry changed after connection")
     for i in range(len(schema[0])):  # driver-loop: over the connected result owner ancestry

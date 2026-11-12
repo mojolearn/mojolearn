@@ -119,10 +119,12 @@ def metric_flatten_admitted(value: PythonObject, context: PythonObject) raises -
         classical_admit_value(item, context)
     if py_type(item) is not list_type and py_type(item) is not tuple_type:
         return Python.list(item)
-    var items = py_call(list_type, item)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var level = Optional[PythonObject](py_call(list_type, item))
     var list_word = Int(list_type._obj_ptr)
     var tuple_word = Int(tuple_type._obj_ptr)
     for _ in range(64):  # driver-loop: preserve the existing homogeneous-level flattening rule
+        var items = level.value()
         if len(items) == 0:
             break
         # p3-labels-metrics: item classes read by pointer from the list's C
@@ -141,5 +143,5 @@ def metric_flatten_admitted(value: PythonObject, context: PythonObject) raises -
         var flattened = Python.list()
         for index in range(len(items)):  # driver-loop: flatten one admitted container level, one extend per row
             py_call(flattened.extend, items[index])
-        items = flattened
-    return items
+        level = Optional[PythonObject](flattened)
+    return level.value()

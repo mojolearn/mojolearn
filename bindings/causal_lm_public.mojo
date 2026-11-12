@@ -2578,8 +2578,9 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         var tokens = List[Int32](capacity=b * capacity)
         var wrote = 0
         var snapshot: Optional[GenerationOperationSnapshot] = None
-        var token_a = PythonObject(None)
-        var token_b = PythonObject(None)
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var token_a = Optional[PythonObject]()
+        var token_b = Optional[PythonObject]()
         # Only this host-selection fallback needs scratch. Retain it across
         # tokens of this read; the sampler overwrites all used words and greedy
         # never sizes it. Resident/native routes have already returned above.
@@ -2609,13 +2610,13 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                 # the stream's last committed current token. Prompt stays owned
                 # separately, and public checkpoint/output paths copy the bytes.
                 if wrote % 2 == 0:
-                    if token_a is None:
-                        token_a = generation_array([b, 1], "i")
-                    next = token_a
+                    if not token_a:
+                        token_a = Optional[PythonObject](generation_array([b, 1], "i"))
+                    next = token_a.value()
                 else:
-                    if token_b is None:
-                        token_b = generation_array([b, 1], "i")
-                    next = token_b
+                    if not token_b:
+                        token_b = Optional[PythonObject](generation_array([b, 1], "i"))
+                    next = token_b.value()
             else:
                 next = generation_array([b, 1], "i")
             var dst = i32_ptr(Int(py=next._addr))

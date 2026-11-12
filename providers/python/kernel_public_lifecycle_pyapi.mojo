@@ -150,10 +150,16 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
     var modules = NativeModules()
     var plan = _plan(modules, model, attributes)
     var ancestry = _type_mro(py_type(model))
-    var parameters = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_parameters = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: passive subclasses inherit the connected schema
-        if parameters is None:
-            parameters = py_get(context["family_km_public_parameters"], ancestry[i])
+        if not found_parameters:
+            var candidate = py_get(context["family_km_public_parameters"], ancestry[i])
+            if candidate is not None:
+                found_parameters = candidate
+    var parameters = PythonObject(None)
+    if found_parameters:
+        parameters = found_parameters.value()
     if parameters is None:
         raise Error("TypeError: kernel execution requires a connected estimator class")
     var learned = Python.tuple("n_features_in_", "n_targets_", "_kernel_params", "_params", "_squeeze",

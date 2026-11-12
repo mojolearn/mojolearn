@@ -173,8 +173,9 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     # The model's mode is read once per call, at the first binding item
     # (lane ne2-b-members, N068: the fields and mode were read again for
     # every binding item of the recipe). Same refusals in the same order.
-    var mode = PythonObject(None)
-    var have_mode = False
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    # The mode's presence is the read-once flag.
+    var read_mode = Optional[PythonObject]()
     for k in range(len(recipe)):  # driver-loop: fixed native ABI arguments
         var item = recipe[k]
         var kind = String(item[0])
@@ -184,14 +185,15 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
         elif kind == "keyword":
             value = py_get(keywords, item[1], item[2]) if keywords is not None else item[2]
         elif kind == "binding":
-            if not have_mode:
+            if not read_mode:
                 var fields = py_call(plan["fields_get"], model, py_type(model))
-                mode = py_get(fields, "numeric_mode")
-                if mode is None:
-                    mode = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
-                if py_type(mode) is not b.str:
+                var stored = py_get(fields, "numeric_mode")
+                if stored is None:
+                    stored = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
+                if py_type(stored) is not b.str:
                     raise Error("TypeError: native estimator numeric_mode must be an exact string or None")
-                have_mode = True
+                read_mode = stored
+            var mode = read_mode.value()
             var modes = context["family_msel_bindings"][item[1]]
             value = py_get(modes, mode)
             if value is None:

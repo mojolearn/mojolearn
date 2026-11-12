@@ -119,14 +119,16 @@ def _resolved_path(text: PythonObject, depth: Int = 0) raises -> PythonObject:
     if not Bool(py=py_call(source.startswith, "/")):
         source = py_call(f["getcwd"]) + PythonObject("/") + source
     var parts = py_call(source.split, "/")
-    var current = PythonObject("/")
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](PythonObject("/"))
     for i in range(len(parts)):  # driver-loop: resolve admitted filesystem components and native symlinks
         var part = parts[i]
         if len(part) == 0 or part == PythonObject("."):
             continue
+        var current = walked.value()
         if part == PythonObject(".."):
             var parent = py_call(current.rsplit, "/", 1)[0]
-            current = parent if len(parent) else PythonObject("/")
+            walked = Optional[PythonObject](parent if len(parent) else PythonObject("/"))
             continue
         var next = py_call(current.rstrip, "/") + PythonObject("/") + part
         var link = False
@@ -138,10 +140,10 @@ def _resolved_path(text: PythonObject, depth: Int = 0) raises -> PythonObject:
             var target = py_call(f["readlink"], next)
             if not Bool(py=py_call(target.startswith, "/")):
                 target = current + PythonObject("/") + target
-            current = _resolved_path(target, depth + 1)
+            walked = Optional[PythonObject](_resolved_path(target, depth + 1))
         else:
-            current = next
-    return current
+            walked = Optional[PythonObject](next)
+    return walked.value()
 
 
 def corpus_path(value: PythonObject, expand: Bool = False, resolve: Bool = False) raises -> PythonObject:

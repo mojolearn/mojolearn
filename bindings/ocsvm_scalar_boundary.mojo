@@ -72,19 +72,24 @@ def _oc_ndarray(context: PythonObject) raises -> PythonObject:
 
 
 def oc_scalar_admit[Numeric: Bool = False](value: PythonObject, context: PythonObject) raises:
-    var current = value
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](value)
     var visited = List[Int]()
     var b = native_loaded_module("builtins")
-    var ndarray = PythonObject(None)
+    var connected = Optional[PythonObject]()
     while True:  # boundary-only traversal of a scalar object-array owner chain
+        var current = walked.value()
         var cls = py_type(current)
         if (cls is b.float or cls is b.int or cls is b.bool or cls is b.str or cls is b.bytes
             or cls is b.bytearray or cls is b.complex or cls is py_type(PythonObject(None))):
             return
-        if ndarray is None:
-            ndarray = _oc_ndarray(context)
-        if ndarray is None:
+        if not connected:
+            var found = _oc_ndarray(context)
+            if found is not None:
+                connected = found
+        if not connected:
             raise Error("TypeError: OneClassSVM parameters require native scalar values without Python hooks")
+        var ndarray = connected.value()
         var constructor = native_numpy_dtype(context)
         var plan = OC_SCALAR_TYPES.get_or_create_ptr()
         plan[].connect(constructor)
@@ -118,7 +123,7 @@ def oc_scalar_admit[Numeric: Bool = False](value: PythonObject, context: PythonO
         visited.append(address)
         # ndarray is exact; item() is its native C storage accessor. It
         # returns the sole pinned object without invoking that object's hooks.
-        current = py_call(current.item)
+        walked = Optional[PythonObject](py_call(current.item))
 
 
 def oc_name(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
@@ -137,11 +142,13 @@ def oc_precomputed(value: PythonObject, context: PythonObject) raises -> Bool:
     if py_type(current) is b.str:
         return String(current) == "precomputed"
     var ndarray = _oc_ndarray(context)
-    while ndarray is not None and py_type(current) is ndarray:
-        if Int(py=current.ndim) != 0:
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](current)
+    while ndarray is not None and py_type(walked.value()) is ndarray:
+        if Int(py=walked.value().ndim) != 0:
             return False
-        current = py_call(current.item)
-    return decomp_equal_admitted(current, PythonObject("precomputed"))
+        walked = Optional[PythonObject](py_call(walked.value().item))
+    return decomp_equal_admitted(walked.value(), PythonObject("precomputed"))
 
 
 def oc_kernel_admit(value: PythonObject, context: PythonObject) raises -> Bool:

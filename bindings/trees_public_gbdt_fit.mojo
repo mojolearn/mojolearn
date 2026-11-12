@@ -513,7 +513,9 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
         return coded
     var sizes = List[Int]()
     var seen = py_call(b.set)
-    var last = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    # Both are set at row 0 before any later row reads them.
+    var last = Optional[PythonObject]()
     # Keyed once per run, as 0.8.55's `itertools.groupby` keyed it (lane
     # perf2-trees, 2026-11-06): an id that is the previous id's object, or an
     # exact int/str/bytes equal to a previous id of the same exact type, has
@@ -521,7 +523,7 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     # these exact types) and was already admitted, so it extends the run
     # without the per-row isinstance checks, formatting and encoding. Any
     # other id is keyed and checked as before; same runs, same refusals.
-    var last_value = PythonObject(None)
+    var last_value = Optional[PythonObject]()
     var int_t = b.int
     var str_t = b.str
     var bytes_t = b.bytes
@@ -532,17 +534,18 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     for i in range(n_rows):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
         var value = ids[i]
         if i > 0:
-            var same = value is last_value
+            var previous = last_value.value()
+            var same = value is previous
             if not same:
                 var t = py_type(value)
-                same = (t is py_type(last_value) and (t is int_t or t is str_t or t is bytes_t)
-                        and Bool(py=value == last_value))
+                same = (t is py_type(previous) and (t is int_t or t is str_t or t is bytes_t)
+                        and Bool(py=value == previous))
             if same:
                 sizes[len(sizes) - 1] += 1
                 continue
         var key = _group_key(value, i, context)
         last_value = value
-        if i > 0 and Bool(py=key == last):
+        if i > 0 and Bool(py=key == last.value()):
             sizes[len(sizes) - 1] += 1
             continue
         if py_contains(seen, key):
@@ -1395,14 +1398,18 @@ def _gbdt_base_args(model: PythonObject, overrides: PythonObject, context: Pytho
     var b = _b()
     var classes = context["trees_classes"]
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    var defaults = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: over the model's class ancestry, to its connected GBDT base
-        if defaults is None:
+        if not found:
             var kind = py_get(classes, ancestry[i])
             if kind is not None and String(kind) == "gbdt":
-                defaults = context["trees_defaults"][ancestry[i]]
-    if defaults is None:
+                var candidate = context["trees_defaults"][ancestry[i]]
+                if candidate is not None:
+                    found = candidate
+    if not found:
         raise Error("TypeError: native GBDT constructors require the connected GradientBoosting base")
+    var defaults = found.value()
     var names = _tables(context)["init_names"]
     var args = Python.list()
     for i in range(len(names)):  # driver-loop: over the constructor parameter names

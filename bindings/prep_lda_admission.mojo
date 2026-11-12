@@ -139,6 +139,14 @@ def prep_plain_classes(value: PythonObject, context: PythonObject) raises -> Pyt
     return py_call(py_attr(py_type(Python.list()), "copy"), value)
 
 
+def _lda_plain_attempt(value: PythonObject, context: PythonObject) raises -> Optional[PythonObject]:
+    """`prep_plain_classes(value)`, or absent when the class check refuses."""
+    try:
+        return Optional[PythonObject](prep_plain_classes(value, context))
+    except:
+        return Optional[PythonObject]()
+
+
 def lda_native_fields_plain(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
     """(fields, plain classes_ or None): `lda_native_fields` plus the plain
     `classes_` list it admitted, so the caller does not copy it again.
@@ -177,7 +185,9 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
         _ = py_call(key.append, names[i])
         prepared_key_add(mods, key, value)
     var fitted = context["lda_fitted_fields"]
-    var plain = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    # The try lives in `_lda_plain_attempt`, which returns from inside it.
+    var found_plain = Optional[PythonObject]()
     for i in range(len(fitted)):  # driver-loop: consumed fitted state identities
         if full:
             break
@@ -185,26 +195,30 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
             var value = fields[fitted[i]]
             _ = py_call(key.append, fitted[i])
             if String(fitted[i]) == "classes_":
-                try:
-                    plain = prep_plain_classes(value, context)
-                except:
+                var attempt = _lda_plain_attempt(value, context)
+                if not attempt:
                     # Refused by the class check: the full path raises it at
                     # its original position, after the parameters.
                     full = True
                 if full:
                     break
+                found_plain = attempt
+                var plain_now = attempt.value()
                 _ = py_call(key.append, value)
-                if plain is not value:
-                    for k in range(len(plain)):  # driver-loop: class labels of the fitted classes_ (identity key)
-                        _ = py_call(key.append, plain[k])
+                if plain_now is not value:
+                    for k in range(len(plain_now)):  # driver-loop: class labels of the fitted classes_ (identity key)
+                        _ = py_call(key.append, plain_now[k])
                 else:
                     prepared_key_add(mods, key, value)
             else:
                 prepared_key_add(mods, key, value)
     var held = PythonObject(None) if full else prepared_get(mods, _LDA_FIELDS_SLOT, model)
     if held is not None and prepared_key_same(held, key):
-        _lda_stamp(model, fields, names, fitted, plain, configure)
-        return Python.tuple(fields, plain)
+        var plain_hit = PythonObject(None)
+        if found_plain:
+            plain_hit = found_plain.value()
+        _lda_stamp(model, fields, names, fitted, plain_hit, configure)
+        return Python.tuple(fields, plain_hit)
     for i in range(len(names)):  # driver-loop: fixed constructor configuration, before comparisons or conversion
         if not py_contains(fields, names[i]):
             raise Error("AttributeError: LDA constructor parameter is missing: " + String(names[i]))
@@ -212,11 +226,14 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
     for i in range(len(fitted)):  # driver-loop: consumed fitted state cannot introduce attribute or scalar hooks
         if py_contains(fields, fitted[i]):
             if String(fitted[i]) == "classes_":
-                if plain is None:
-                    plain = prep_plain_classes(fields[fitted[i]], context)
-                classical_admit_value(plain, context)
+                if not found_plain or found_plain.value() is None:
+                    found_plain = prep_plain_classes(fields[fitted[i]], context)
+                classical_admit_value(found_plain.value(), context)
             else:
                 classical_admit_value(fields[fitted[i]], context)
+    var plain = PythonObject(None)
+    if found_plain:
+        plain = found_plain.value()
     if not full:
         prepared_put(mods, _LDA_FIELDS_SLOT, model, key)
         _lda_stamp(model, fields, names, fitted, plain, configure)

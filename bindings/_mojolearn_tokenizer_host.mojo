@@ -976,7 +976,8 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
         raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
     if kind != "Sequence":
         raise Error("tokenizer: pre_tokenizer type " + kind + " is not a known cut")
-    var found = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found = Optional[PythonObject]()
     var steps = py_get(pre, "pretokenizers", bi.list())
     for i in range(len(steps)):  # driver-loop: over pre_tokenizer steps: configuration structure
         var step = steps[i]
@@ -991,21 +992,21 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
             var name = py_get(patterns, pat["Regex"])
             if name is None:
                 raise Error("tokenizer: pre_tokenizer regex " + String(pat["Regex"]) + " is not one of the known patterns; refused by name")
-            if found is not None and not Bool(py=found == name):
+            if found and not Bool(py=found.value() == name):
                 raise Error("tokenizer: two Split steps with different patterns")
             found = name
         elif t == "ByteLevel":
             if Bool(py=py_get(step, "use_regex", PythonObject(False))):
-                if found is not None and String(found) != "gpt2":
+                if found and String(found.value()) != "gpt2":
                     raise Error("tokenizer: Split followed by ByteLevel use_regex true cuts twice")
                 found = PythonObject("gpt2")
         elif t == "Metaspace":
             raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
         else:
             raise Error("tokenizer: pre_tokenizer step " + t + " is not a known cut")
-    if found is None:
+    if not found:
         raise Error("tokenizer: pre_tokenizer Sequence names no cut")
-    return found
+    return found.value()
 
 
 def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: PythonObject,

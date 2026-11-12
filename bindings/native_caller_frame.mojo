@@ -29,13 +29,13 @@ def native_caller_globals(depth: Int) raises -> PythonObject:
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyEval_GetFrame")()
     if not pointer:
         return PythonObject(None)
-    var frame = PythonObject(from_borrowed=pointer)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](PythonObject(from_borrowed=pointer))
     for _ in range(max(0,depth)):  # driver-loop: requested suspended caller depth
-        pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(frame._obj_ptr)
-        _ = frame  # keep the inspected frame alive through the C accessor
+        pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(walked.value()._obj_ptr)
         if not pointer:
             if cpython_table()[].PyErr_Occurred():
                 raise cpy.unsafe_get_error()
             return PythonObject(None)
-        frame = PythonObject(from_owned=pointer)
-    return native_frame_globals(frame)
+        walked = Optional[PythonObject](PythonObject(from_owned=pointer))
+    return native_frame_globals(walked.value())

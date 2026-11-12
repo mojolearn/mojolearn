@@ -57,12 +57,14 @@ def _cache_cpu_refusal(fields: PythonObject, name: PythonObject, host: Bool,
             raise Error("TypeError: native CPU binding refusal requires a stored host module name")
     var values = Python.tuple(module_name,name,reason,basename)
     var parts = context["cache_cpu_error_templates"][0 if host else 1]
-    var text = PythonObject("")
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var joined = Optional[PythonObject](PythonObject(""))
     for i in range(len(parts)):  # driver-loop: native concatenation of import-tokenized literals and exact native Unicode values
         var part = parts[i]
         if py_type(part) is not b["str"]:
             part = values[Int(py=part)]
-        text = py_call(context["cache_str_add"],text,part)
+        joined = Optional[PythonObject](py_call(context["cache_str_add"],joined.value(),part))
+    var text = joined.value()
     var category = context["cache_no_cpu_entry"] if host else context["cache_import_error"]
     if host:
         var mapping = _mapping(category,context)

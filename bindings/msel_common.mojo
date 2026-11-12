@@ -744,16 +744,17 @@ def msel_select_folds_plan(fold_store: PythonObject, fold_counts: PythonObject, 
     var rp = msel_p64(trains)
     var out = Python.list()
     # An empty side shares one private scratch allocation, as in the loop.
-    var scratch = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var scratch = Optional[PythonObject]()
     var scratch_address = 0
     for fold in range(k):  # driver-loop: over folds (output allocation only; the selection is one call)
         var size = Int(counts[fold])
         var test = msel_new(size, "<i8", context)
         var train = msel_new(n - size, "<i8", context)
         if size == 0 or n - size == 0:
-            if scratch is None:
+            if not scratch:
                 scratch = msel_new(n, "<i8", context)
-                scratch_address = msel_addr(scratch)
+                scratch_address = msel_addr(scratch.value())
         tp.unsafe_store(fold, Int64(msel_addr(test) if size else scratch_address))
         rp.unsafe_store(fold, Int64(msel_addr(train) if n - size else scratch_address))
         _ = py_call(out.append, Python.tuple(train, test))

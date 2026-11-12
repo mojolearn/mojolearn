@@ -401,15 +401,16 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
         # as the budget holds (the same words as the per-chunk solve).
         var ey = admitted_vector(n * m * k, "<f8", context)
         var e0 = trees_address(ey)
-        var syn = admitted_vector(R * m * nb * d, "<f4", context)
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var syn = Optional[PythonObject](admitted_vector(R * m * nb * d, "<f4", context))
         var r0 = 0
         while r0 < n:  # driver-loop: one binding call per row chunk
             var rows = min(R, n - r0)
             if rows < R:
-                syn = admitted_vector(rows * m * nb * d, "<f4", context)
+                syn = Optional[PythonObject](admitted_vector(rows * m * nb * d, "<f4", context))
             _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
-                      PythonObject(trees_address(syn)), _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
-            var out = _model_rows(s, syn, rows * m * nb, context)
+                      PythonObject(trees_address(syn.value())), _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
+            var out = _model_rows(s, syn.value(), rows * m * nb, context)
             _ = _call(s.table, "x_trees_kshap_means", Python.list(PythonObject(trees_address(out)),
                       PythonObject(e0 + 8 * r0 * m * k), _ints(rows, nb, m, k, link_word)))
             _ = out
@@ -439,7 +440,8 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
             _ = _call(s.table, "x_trees_agn_model_release", Python.list())
     else:
         var reuse = (bits & _AGN_IDN_SYN_POOL) != 0   # one synthetic buffer for every chunk
-        var syn = PythonObject(None)
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var syn = Optional[PythonObject]()
         try:
             var r0 = 0
             while r0 < n:  # driver-loop: one binding call per row chunk
@@ -447,16 +449,16 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
                 var y_addr = 0
                 var out = PythonObject(None)
                 if m > 0:
-                    if not reuse or syn is None or Int(py=syn.size) != rows * m * nb * d:
-                        syn = PythonObject(None)
-                        syn = admitted_vector(rows * m * nb * d, "<f4", context)
+                    if not reuse or not syn or Int(py=syn.value().size) != rows * m * nb * d:
+                        syn = Optional[PythonObject]()
+                        syn = Optional[PythonObject](admitted_vector(rows * m * nb * d, "<f4", context))
                     _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
-                              PythonObject(trees_address(syn)),
+                              PythonObject(trees_address(syn.value())),
                               _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
-                    out = _model_rows(s, syn, rows * m * nb, context)
+                    out = _model_rows(s, syn.value(), rows * m * nb, context)
                     y_addr = trees_address(out)
                     if not reuse:
-                        syn = PythonObject(None)
+                        syn = Optional[PythonObject]()
                 _ = _call(s.table, "x_trees_kshap_solve", Python.list(PythonObject(y_addr), PythonObject(f0 + 4 * r0 * k),
                           PythonObject(nl), taddr, PythonObject(p0 + 8 * r0 * d * k),
                           _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits, k, link_word)))
@@ -624,19 +626,20 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
         _ = tot
         _ = x
         return _shape(phi, n, d, k, context)
-    var syn = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var syn = Optional[PythonObject]()
     try:
         var r0 = 0
         while r0 < n:  # driver-loop: one model call per row chunk
             var rows = min(R, n - r0)
-            if not reuse or syn is None or Int(py=syn.size) != rows * mm * nb * d:
-                syn = PythonObject(None)
-                syn = admitted_vector(rows * mm * nb * d, "<f4", context)
+            if not reuse or not syn or Int(py=syn.value().size) != rows * mm * nb * d:
+                syn = Optional[PythonObject]()
+                syn = Optional[PythonObject](admitted_vector(rows * mm * nb * d, "<f4", context))
             _ = _call(s.table, "x_trees_pshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
-                      PythonObject(trees_address(syn)), _ints(rows, nb, d, npm, r0, s.seed)))
-            var out = _model_rows(s, syn, rows * mm * nb, context)
+                      PythonObject(trees_address(syn.value())), _ints(rows, nb, d, npm, r0, s.seed)))
+            var out = _model_rows(s, syn.value(), rows * mm * nb, context)
             if not reuse:
-                syn = PythonObject(None)
+                syn = Optional[PythonObject]()
             _ = _call(s.table, "x_trees_pshap_values", Python.list(PythonObject(trees_address(out)),
                       PythonObject(p0 + 8 * r0 * d * k), _ints(rows, nb, d, npm, r0, s.seed, k)))
             _ = out

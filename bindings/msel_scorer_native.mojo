@@ -387,15 +387,17 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
         methods = Python.tuple(methods)
     elif py_type(methods) is not b.tuple:
         raise Error("TypeError: native scorer response_method requires a string or tuple of strings")
-    var method = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_method = Optional[PythonObject]()
     for k in range(len(methods)):  # driver-loop: fixed response preference order
         if py_type(methods[k]) is not b.str:
             raise Error("TypeError: native scorer response method names must be exact strings")
         if py_contains(model["methods"], methods[k]):
-            method = methods[k]
+            found_method = methods[k]
             break
-    if method is None:
+    if not found_method:
         raise Error("AttributeError: native estimator has none of the requested scorer response methods")
+    var method = found_method.value()
     if memo is not None:
         if py_type(memo) is not b.dict:
             raise Error("TypeError: native scorer prediction cache must be an exact dict")

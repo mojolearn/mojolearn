@@ -251,8 +251,9 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
     var m = min(n, max(2 * nc + 1, 20))
     var j = 0
     var stop = False
-    var th = PythonObject(None)
-    var yv = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var th = Optional[PythonObject]()
+    var yv = Optional[PythonObject]()
     var top = List[Int]()
     while True:  # driver-loop: over Lanczos basis growth rounds (at most log2(_LANCZOS_MAX_M / 20) + 1)
         if j < m and not stop:
@@ -296,15 +297,15 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
         # algorithm on every column. T's words are the float32 alphas and
         # betas either way (mk_of rounded the float64 copies back to them).
         if resident:
-            th = k.dout(1, j)
-            yv = k.dout(j, j)
+            th = Optional[PythonObject](k.dout(1, j))
+            yv = Optional[PythonObject](k.dout(j, j))
             _ = family_call(k.fn("x_decomp_dev_eigh_tridiag"), device_identifier(matrix_device(abd)),
-                            device_identifier(matrix_device(th)), device_identifier(matrix_device(yv)),
+                            device_identifier(matrix_device(th.value())), device_identifier(matrix_device(yv.value())),
                             mk_ints([j, cap]))
         else:
-            th = mk_zeros(1, j, ctx)
-            yv = mk_zeros(j, j, ctx)
-            _ = family_call(k.fn("x_decomp_eigh_tridiag"), mk_store_addr(ab), mk_addr(th, ctx), mk_addr(yv, ctx),
+            th = Optional[PythonObject](mk_zeros(1, j, ctx))
+            yv = Optional[PythonObject](mk_zeros(j, j, ctx))
+            _ = family_call(k.fn("x_decomp_eigh_tridiag"), mk_store_addr(ab), mk_addr(th.value(), ctx), mk_addr(yv.value(), ctx),
                             mk_ints([j, cap]))
             _ = ab  # keep the Python object alive through the native call above
         top = List[Int]()
@@ -315,17 +316,17 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
             t -= 1
         if len(top) < nc:
             return (False, PythonObject(None), PythonObject(None))
-        var big = k.word(k.reduce(mk_take_cols(th, top, ctx), SEL_MAXABS), 0)
+        var big = k.word(k.reduce(mk_take_cols(th.value(), top, ctx), SEL_MAXABS), 0)
         if big == 0.0:
             big = 1.0
-        var last = mk_take_cols(mk_rows(yv, j - 1, j, ctx), top, ctx)
+        var last = mk_take_cols(mk_rows(yv.value(), j - 1, j, ctx), top, ctx)
         var res = k.word(k.reduce(k.ew1(OP_SCALE, last, betas[j - 1]), SEL_MAXABS), 0)
         if stop or res <= _LANCZOS_TOL * big:
             break
         if m >= cap:
             return (False, PythonObject(None), PythonObject(None))
         m = min(min(n, 2 * m), _LANCZOS_MAX_M)
-    var yt = mk_take_cols(yv, top, ctx)
+    var yt = mk_take_cols(yv.value(), top, ctx)
     var qm: PythonObject
     if mk_on_dev(qd):
         qm = mk_dev_view(matrix_device(qd), j, n, ctx)
@@ -334,7 +335,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
     var v = k.mm(qm, yt, True, False)
     _ = ab^
     _ = abd^
-    return (True, mk_take_cols(th, top, ctx), v)
+    return (True, mk_take_cols(th.value(), top, ctx), v)
 
 
 def _mani_top_eig(mut k: MKit, a: PythonObject, nc: Int, topk: Bool) raises -> Tuple[PythonObject, PythonObject]:
@@ -629,13 +630,17 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
         var fused = k.iso_gather_min(d, im, sq, mk_r(q), nn)
         if not (fused is None):
             g = fused
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var running = Optional[PythonObject]()
         for a in range(nn if fused is None else 0):  # driver-loop: over neighbor ranks (n_neighbors), one gather-and-min step each (host kit)
             var rows = k.take_rows_at(d, im, mk_r(q), nn, a, 0)
             var cand = k.ew2(OP_ADD, rows, mk_take_cols(sq, mk_col_range(a, a + 1), context))
-            if g is None:
-                g = cand
+            if not running:
+                running = cand
             else:
-                g = k.ew2(OP_MIN, g, cand)
+                running = Optional[PythonObject](k.ew2(OP_MIN, running.value(), cand))
+        if running:
+            g = running.value()
     g = k.ew1(OP_SCALE, k.ew1(OP_SQ, g, 0.0), -0.5)
     var row = k.ew1(OP_SCALE, k.rowsum(g), 1.0 / Float64(n))
     var t1 = k.ew2(OP_SUB, g, family_field(fields, "_k_col"))
