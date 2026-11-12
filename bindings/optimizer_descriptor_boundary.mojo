@@ -3,7 +3,8 @@
 from std.python import PythonObject
 from core.native_descriptor_call import native_descriptor_call
 from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_pyapi import (, _neural_descriptor_function_owner
+from providers.python.neural_descriptor_pyapi import (
+    _neural_descriptor_function_owner,
     NeuralDescriptorProvider, neural_descriptor_connect_once, neural_descriptor_connect_factory_once,
 )
 from training.optimizer_native_api import (
