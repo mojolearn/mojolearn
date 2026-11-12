@@ -869,11 +869,16 @@ struct DKit(Movable):
         return out
 
     def lu_solve(mut self, lu: Int, piv: Int, b: Int) raises -> Int:
-        # `_Kit.lu_solve(lu, piv, B)` (trans 0): on a host copy of B.
+        # `_Kit.lu_solve(lu, piv, B)` (trans 0) with the kit's pivot store.
+        return self.lu_solve_addr(lu, self.iaddr(piv), b, 0)
+
+    def lu_solve_addr(mut self, lu: Int, piv_address: Int, b: Int, trans: Int) raises -> Int:
+        # `_Kit.lu_solve(lu, piv, B, trans)`: on a host copy of B; the int32
+        # pivots at `piv_address` (a kit store, or a caller Array the door
+        # keeps alive); trans 0 is lu_solve_py's default word.
         var out = self.copy_host(b)
-        var addresses: List[Int] = [self.at(lu), self.iaddr(piv), self.at(out)]
-        # lu_solve_py's trans, absent from the kit's words: 0
-        _ = self.xd(XD_LU_SOLVE, addresses, [self.matrices[lu].rows, self.matrices[b].cols, 0], List[Float64]())
+        var addresses: List[Int] = [self.at(lu), piv_address, self.at(out)]
+        _ = self.xd(XD_LU_SOLVE, addresses, [self.matrices[lu].rows, self.matrices[b].cols, trans], List[Float64]())
         self.wrote_host(out)
         return out
 
