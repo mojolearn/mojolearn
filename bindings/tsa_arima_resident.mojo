@@ -26,11 +26,6 @@ from bindings.classical_arrays import classical_address
 comptime ARIMA_RESIDENT_SLOT = "tsa_arima_resident_v1"
 
 
-def arima_resident_words(batch: Int, n_obs: Int, order: List[Int], k: Int, n_exog: Int) -> List[Int]:
-    """`arima_resident_prepare`'s eleven plan words, in its order."""
-    return [batch, n_obs, order[0], order[1], order[2], order[3], order[4], order[5], order[6], k, n_exog]
-
-
 def arima_resident_hit(record: PythonObject, fields: PythonObject, entries: PythonObject, words: List[Int]) raises -> Int:
     """The handle of this model's resident fitted state when its record was
     minted from these very `_y`, `params_` and `_exog` objects (frozen
