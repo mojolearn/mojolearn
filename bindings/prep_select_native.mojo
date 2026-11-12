@@ -25,7 +25,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_typed, classical_input
 from bindings.admitted_input import admit_x
-from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end
+from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end
 from bindings.admitted_meta_scope_unpack import admitted_hold_array_f32
 from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy

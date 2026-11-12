@@ -27,7 +27,7 @@ from bindings.py_attr import py_attr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_wrap_array, _store_code
-from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
+from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
 from bindings.trees_public_inputs import (
     TreesLabels, trees_builtins, trees_table,
     trees_reshape, trees_address, trees_itemsize,
@@ -164,7 +164,7 @@ def _f64_word(array: PythonObject, index: Int) raises -> Float64:
 def _x_array(X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`as_f32_c(X, ndim=2, name="X")` as the Array the members read. Inside
     the operation's hold scope (meta_admitted_operation) a finite matrix is
-    held once (bindings/admitted_registry.mojo `admitted_hold`): every member
+    held once (bindings/py_admitted_registry.mojo `admitted_hold`): every member
     door then reads it as admitted, with no second view, check or scan."""
     if admitted_is_held(X):
         return X

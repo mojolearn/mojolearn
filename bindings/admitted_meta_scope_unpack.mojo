@@ -32,7 +32,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.admitted_registry import (
+from bindings.py_admitted_registry import (
     admitted_hold, admitted_hold_deferred, admitted_is_held, admitted_scope_open, admitted_held_index,
     admitted_held_finite, admitted_held_snapshot, admitted_held_apply,
 )

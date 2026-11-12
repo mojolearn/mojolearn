@@ -126,7 +126,7 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     var name = classical_estimator_name(model)
     var source = args[0]
     # A matrix the running meta-estimator holds is taken as it is
-    # (bindings/admitted_registry.mojo, consulted by admit_x_unrecorded);
+    # (bindings/py_admitted_registry.mojo, consulted by admit_x_unrecorded);
     # anything else is admitted once.
     # Lane a1b (part 2): a fit defers the finite test of a borrowed X to the
     # iforest fit entry's device scan (`iforest_device_scan`; the CPU

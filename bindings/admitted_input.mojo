@@ -20,7 +20,7 @@
 #   parallel cast-and-transpose pass), `as_array` (a mojolearn Array, never
 #   an ndarray), `finite=False` (the no-check mode: NaN and infinity pass,
 #   for imputers and the NaN-accepting doors; the result's `finite` stays
-#   False; integ-w3 folds lane a1b's `allow_nonfinite` into lane a6's option). A matrix held in bindings/admitted_registry.mojo by the
+#   False; integ-w3 folds lane a1b's `allow_nonfinite` into lane a6's option). A matrix held in bindings/py_admitted_registry.mojo by the
 #   running operation is returned as it is (C order, not as_array).
 #   admit_f32(source, ndim, name, context, ...) -> AdmittedX
 #                     the array form as an AdmittedX (ndim -1: any rank up
@@ -106,7 +106,7 @@ from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.native_array_storage_door import native_scratch_bytes, native_array_zeros, native_array_from_values, native_array_from_bytes
 from bindings.py_attr import py_attr
-from bindings.admitted_registry import (
+from bindings.py_admitted_registry import (
     admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols, admitted_held_finite,
 )
 from bindings.admitted_meta_scope_unpack import admitted_held_verify
@@ -334,7 +334,7 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     # admitted and its pandas/Torch storage read there, so the admission walk
     # and the two storage tests are not repeated for the same value.
     # A matrix the running meta-estimator already admitted (held in
-    # bindings/admitted_registry.mojo) is the array its members read as it
+    # bindings/py_admitted_registry.mojo) is the array its members read as it
     # is: no view, no check, no scan, in this form too (lane a1b: the
     # array-form doors, classical_host_f32's callers among them, skipped
     # the registry and re-checked every member's X). A row held with its
@@ -680,7 +680,7 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
     float32 in `order`; no admission record."""
     if order == "C" and not as_array:
         # A matrix the running operation already admitted (a meta-estimator
-        # holds it for its members: bindings/admitted_registry.mojo) is
+        # holds it for its members: bindings/py_admitted_registry.mojo) is
         # returned as it is: no view, no check, no scan.
         # A row held with its finite test deferred (lane s2) is handed to a
         # deferring door untested (`finite` False: its kernel entry tests

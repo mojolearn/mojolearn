@@ -21,7 +21,6 @@ core/*_entry_table*.mojo
 # Python-holding construct that needs a design change. Each line is dated and names the
 # owner; the list only shrinks: the owning lane deletes the line when the file is split.
 allow: bindings/admitted_input.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/admitted_registry.mojo  # 2026-11-12 lane resident-pin-tables (to open): AdmittedRegistry: Python pins inside the typed LRU registry (design)
 allow: bindings/classical_labels.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/logistic_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/mcls_classify.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): MxProg/McProg caller-buffer owners + MetricPlanOpcodes dict snapshot

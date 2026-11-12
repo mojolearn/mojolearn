@@ -90,7 +90,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     # scikit-learn's wording and borrowed when it already is C-order float32
     # (one parallel finiteness scan, no cast), otherwise one parallel cast;
     # a matrix the running meta-estimator holds is taken as it is
-    # (bindings/admitted_registry.mojo, consulted by admit_x_unrecorded).
+    # (bindings/py_admitted_registry.mojo, consulted by admit_x_unrecorded).
     # Lane a1b (part 2): a fit defers the finite test of a borrowed X to its
     # kernel entry, which tests the words it uploads (the forest fit's
     # device scan, `forest_device_scan`; the CPU column's host scan in
