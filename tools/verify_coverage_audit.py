@@ -2390,8 +2390,6 @@ SABOTAGE_NA_BY_SRC.update({
         "metadata: returns the compile-time MOJOLEARN_FOREST_GROVES_SABOTAGE flag (no data value); read only by the loader's sabotage refusal, and the define's own arm is what flips it."),
     ('forest_host_sabotage', 'bindings/_mojolearn_forest_host.mojo'): (
         "metadata: returns the OR of the binary's three compile-time sabotage defines (no data value); read only by _backend's load-time sabotage refusal, and those defines' arms are what flip it."),
-    ('mamba3_prefill_session_info', 'bindings/_mojolearn_mamba.mojo'): (
-        "metadata: six counters (weight uploads/recopies/reuses, backward reuses/recomputes, stages_held) of the prefill session; no data value, the forward's bytes are covered by the mamba3 lane's own arms."),
     ('mamba3_session_close', 'bindings/_mojolearn_mamba.mojo'): (
         'lifecycle: closes the resident Mamba3DecodeSession (release of ctx, weights, state and stages); no data value.'),
     ('mamba3_session_create', 'bindings/_mojolearn_mamba.mojo'): (

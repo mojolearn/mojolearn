@@ -501,7 +501,7 @@ def mamba3_setstate(mut mods: NativeModules, block: PythonObject, state: PythonO
     py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
     if String(fields["_native_route"]) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
         # A native registry handle of the block's training image (the former
-        # Python entry mamba3_prefill_session_create and _prefill_binding).
+        # Python entry mamba3_prefill_session_create and its binding field).
         var route = Mamba3StateRoute(1, 0, False)
         _ = _m3_entries(mods, block, fields, context, route)
         mods.released()

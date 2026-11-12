@@ -88,7 +88,7 @@ def test_binding_exports_no_training_entry(binding):
                      "transformer_forward", "transformer_decode_step",
                      "mamba1_forward", "mamba1_decode_step",
                      "mamba2_forward", "mamba2_decode_step",
-                     "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
+                     "mamba3_forward_fresh",
                      "embedding_forward", "rms_norm_forward", "linear_forward",
                      # numeric_profile="fixed15_v1" on the CPU route (lane/lowbit-blocks)
                      "transformer_forward_int15",
