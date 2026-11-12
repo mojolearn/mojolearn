@@ -1367,8 +1367,8 @@ NEW_LANE_PURPOSE = {
                              "(`mamba3_session_open`, `mamba3_session_step`, `mamba3_session_decode`, "
                              "`mamba3_session_export_state`, `mamba3_session_load_state`)",
     "samba-decode-session": "SambaStack.decode_session: step, decode, sync_state and load_state "
-                            "(`samba_decode_open`, `samba_decode_step`, `samba_decode_tokens`, "
-                            "`samba_decode_export`, `samba_decode_load`)",
+                            "(the Samba program table's OPEN, DECODE_STEP, DECODE_TOKENS, "
+                            "DECODE_EXPORT and DECODE_LOAD, training/samba_program_entry.mojo)",
     "training-chunked-lm-head": "training.chunked_lm_head_loss with and without gradients: "
                                 "`chunked_lm_head_v2_loss`, `chunked_lm_head_v2_train`",
     "training-mlp-sessions": "training.mlp_inference_sessions: `small_mlp_program` (op SESSIONS)",
@@ -1538,11 +1538,11 @@ ANNOTATIONS = {
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
        for e in ("mamba3_session_export_state", "mamba3_session_load_state", "mamba3_session_open",
                  "mamba3_session_step")},
-    **{e: ("covered", ["samba-decode-session"],
-           _SAMBA_OWNER + ": SambaStack.decode_session -> bindings/samba_decode_native.mojo "
-           "(open, step, decode, sync_state, load_state)")
-       for e in ("samba_decode_open", "samba_decode_step", "samba_decode_tokens", "samba_decode_export",
-                 "samba_decode_load")},
+    # The samba_decode_* entries are no longer Python registrations: the
+    # program and decode session moved behind native handles in the Samba
+    # program table (training/samba_program_entry.mojo, lane
+    # samba-sessions-native, 2026-11-12); the samba-decode-session lane still
+    # covers them through SambaStack.decode_session.
     "samba_head_loss": ("covered", ["samba-untied-dropout-accum"],
                         _SAMBA_OWNER + ": samba_gradients runs the fused head (`fused`) whenever the "
                         "resident Samba step does not take the step (dropout or accumulation) and the "

@@ -29,7 +29,7 @@ def test_public_boundary_uses_native_model_and_preserves_partial_publication():
     assert 'layer.refresh_layouts.append(pin.layout.value().copy())' in source
     public=(ROOT/'bindings/samba_inference_native.mojo').read_text()
     assert 'samba_provider_forward(' not in public  # lane x6: one device path, the stack program
-    assert '_samba_program_call(model, fields, config, entries, ids, state, context)' in public
+    assert '_samba_program_call(model, fields, config, key, ids, state, context)' in public
 
 
 def test_native_backward_walk_preserves_saved_tapes_and_original_loss_routes():

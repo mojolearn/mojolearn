@@ -86,10 +86,11 @@ def test_public_forward_loss_match_primitive_recipe(monkeypatch, layers, dropout
     assert actual.tobytes() == expected.tobytes()
     assert np.float32(loss).tobytes() == np.float32(expected_loss).tobytes()
     assert model.generator.state_dict() == before_rng
-    if hasattr(bridge.CONTEXT["entries"], "samba_program_open"):
-        # A device build runs the stack program, opened once per shape.
-        program = model._samba_program
-        assert program is not None
+    program = getattr(model, "_samba_program", None)
+    if program is not None:
+        # A device build runs the stack program, opened once per shape and
+        # kept as its native handle owner (no Python program object).
+        assert type(program).__name__ == "_SambaProgramHandle"
         audit_native_call(model.forward, inputs).assert_native()
         assert model._samba_program is program
 
