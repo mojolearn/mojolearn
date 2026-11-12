@@ -12,9 +12,10 @@ from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
 from bindings.decomp_owner_common import (
-    decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_gemm_check, decomp_int,
-    decomp_le, decomp_min_samples, decomp_repr, decomp_seed, decomp_set_mode,
+    decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int,
+    decomp_le, decomp_repr, decomp_seed, decomp_set_mode,
 )
+from x_decomp.decomp_owner_common_run import decomp_gemm_check, decomp_min_samples
 
 
 def _whiten_code(whiten: PythonObject) raises -> Int:

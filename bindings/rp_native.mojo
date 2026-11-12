@@ -16,9 +16,10 @@ from bindings.admitted_input import admit_x
 from bindings.host_sparse_native import host_sparse_format
 from bindings.decomp_inputs import decomp_input
 from bindings.decomp_owner_common import (
-    decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_gemm_check, decomp_int,
+    decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int,
     decomp_lt, decomp_le, decomp_seed, decomp_set_mode,
 )
+from x_decomp.decomp_owner_common_run import decomp_gemm_check
 from bindings.jl_native import jl_min_dim
 from bindings.decomp_kit_native import decomp_resident_cached, decomp_resident_operand, decomp_resident_drop
 

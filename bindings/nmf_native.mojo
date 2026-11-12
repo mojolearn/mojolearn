@@ -9,7 +9,8 @@ from bindings.native_buffer_address import native_buffer_address
 from bindings.native_array_storage_admission import array_storage_address
 from bindings.admitted_input import admit_f32, AdmittedX, admitted_finite_refuse
 from bindings.decomp_inputs import decomp_admit
-from bindings.decomp_owner_common import decomp_attr, decomp_check, decomp_gemm_check, decomp_set_mode
+from bindings.decomp_owner_common import decomp_attr, decomp_check, decomp_set_mode
+from x_decomp.decomp_owner_common_run import decomp_gemm_check
 from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
 from bindings.decomp_scalar_compare import decomp_equal_admitted as _equal, decomp_name_admitted as _name
 from bindings.host_inference_scalars import host_inference_scalar

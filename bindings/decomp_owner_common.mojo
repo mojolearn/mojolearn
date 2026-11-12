@@ -85,13 +85,6 @@ def decomp_check(model: PythonObject, fields: PythonObject, attr: String) raises
         raise Error("RuntimeError: " + String(py_type(model).__name__) + " is not fitted; call fit first")
 
 
-def decomp_min_samples(n: Int, d: Int, who: String, minimum: Int = 2) raises:
-    """`_min_samples`: scikit-learn's check_array(ensure_min_samples=...) wording."""
-    if n < minimum:
-        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
-                    + ")) while a minimum of " + String(minimum) + " is required by " + who + ".")
-
-
 def decomp_seed(random_state: PythonObject) raises -> Int:
     """`_seed_of`: None is 0; a bool or a non-int refused."""
     var b = native_loaded_module("builtins")
@@ -101,9 +94,3 @@ def decomp_seed(random_state: PythonObject) raises -> Int:
         raise Error("TypeError: random_state must be None or an int (the counter-based RNG takes an integer seed)")
     # mod 2^32 with Python integer semantics: every consumer masks it so
     return Int(py=py_call(b.int.__dict__["__and__"], random_state, PythonObject(0xFFFFFFFF)))
-
-
-def decomp_gemm_check(k: Int, k2: Int) raises:
-    """`_Kit.mm`'s inner-dimension refusal."""
-    if k != k2:
-        raise Error("x_decomp: gemm inner dimensions " + String(k) + " and " + String(k2) + " differ")
