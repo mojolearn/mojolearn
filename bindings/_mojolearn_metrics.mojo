@@ -45,7 +45,11 @@ wrappers without a leg to point at.
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_base import BASE_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from metrics.mojolearn_metrics_run import (
+    _f32_ptr, _i32_ptr, _load_i32, _load_f32, _guard_spectral_outputs, _guard_embedding_output,
+    precision_recall_curve_run, confusion_matrix_run, _spectral_write_outputs, _spectral_write_embedding,
+    _spectral_state_copy, spectral_predict_run,
+)
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -80,7 +84,6 @@ from metrics.estimator import (
     regression_error_host,
     log_loss_host,
     binary_ranking_host,
-    confusion_matrix_host,
     precision_recall_fscore_host,
     rand_score_host,
     silhouette_host,
@@ -97,7 +100,6 @@ from spectral.estimator import (
     spectral_fit_predict_dense_host_keep,
     spectral_fit_predict_graph_host,
     spectral_fit_predict_graph_host_keep,
-    spectral_predict_host,
 )
 from spectral.impl.spectral_predict_common import (
     SpectralPredictionState,
@@ -110,22 +112,6 @@ from spectral.impl.spectral_predict_resident import (
     spectral_resident_prepare,
     spectral_resident_release,
 )
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
-
-
-def _load_i32(addr: Int, n: Int) raises -> List[Int32]:
-    return read_i32(addr, max(0, n))
-
-
-def _load_f32(addr: Int, n: Int) raises -> List[Float32]:
-    return read_f32(addr, max(0, n))
 
 
 def _want(name: String, params: PythonObject, k: Int) raises:
@@ -510,13 +496,7 @@ def precision_recall_curve_binding(true_addr: PythonObject, score_addr: PythonOb
     var thresholds = _f32_ptr(Int(py=threshold_addr))
     var m = 0
     with GILReleased(Python()):
-        var result = binary_ranking_host[True](y,scores,n)
-        m = result[1]
-        var curve = result[0].unsafe_ptr()
-        unsafe_memcpy(dest=precision, src=curve, count=m + 1)
-        unsafe_memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
-        unsafe_memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
-        _ = len(result[0])
+        m = precision_recall_curve_run(y, scores, n, precision, recall, thresholds)
     return PythonObject(m)
 
 
@@ -550,18 +530,8 @@ def confusion_matrix_binding(
         raise Error("confusion_matrix: null output")
     var y = _load_i32(Int(py=true_addr),n)
     var p = _load_i32(Int(py=pred_addr),n)
-    if normalization == 0:
-        var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
-        with GILReleased(Python()):
-            var values = confusion_matrix_host[DType.int64](y,p,n,k,normalization)
-            unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
-            _ = len(values)
-    else:
-        var output = _f32_ptr(address)
-        with GILReleased(Python()):
-            var values = confusion_matrix_host[DType.float32](y,p,n,k,normalization)
-            unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
-            _ = len(values)
+    with GILReleased(Python()):
+        confusion_matrix_run(y, p, n, k, normalization, address)
     return PythonObject(k*k)
 
 
@@ -703,36 +673,6 @@ def trustworthiness_binding(
 # ===========================================================================
 
 
-def _guard_spectral_outputs(
-    labels: List[Int32],
-    embedding: List[Float32],
-    n_samples: Int,
-    n_components: Int,
-) raises:
-    """The two output buffers were sized by the Python caller from
-    `n_samples` and `n_components`. Check what came back BEFORE writing a
-    single element into them.
-
-    `n_out == n_components` holds on the clustering path because cuVS's
-    clustering overload sets `drop_first = false`, so this cannot fire
-    today. It is here because the day it CAN fire -- somebody threading
-    `drop_first` through, say -- the alternative is a silent heap overrun
-    in a NumPy array, which is the worst failure this boundary can have."""
-    if len(labels) != n_samples:
-        raise Error(
-            "spectral clustering: the kernel returned " + String(len(labels))
-            + " labels for " + String(n_samples)
-            + " samples; the output buffer was sized for n_samples"
-        )
-    if len(embedding) != n_samples * n_components:
-        raise Error(
-            "spectral clustering: the kernel returned "
-            + String(len(embedding)) + " embedding floats, but the output"
-            " buffer was sized for n_samples * n_components = "
-            + String(n_samples * n_components)
-        )
-
-
 def spectral_fit_predict_dataset_binding(
     x_addr: PythonObject,
     labels_addr: PythonObject,
@@ -782,10 +722,7 @@ def spectral_fit_predict_dataset_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -839,28 +776,12 @@ def spectral_fit_predict_graph_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
 # SpectralEmbedding (lane/expose-spectral-embedding, 2026-09-20): cuML's
 # `ML::SpectralEmbedding::transform`, the dataset and the COO overloads.
-
-
-def _guard_embedding_output(
-    embedding: List[Float32], n_samples: Int, n_out: Int, n_cols: Int
-) raises:
-    """The output buffer was sized by the Python caller for `n_samples x
-    n_cols`; check what came back before writing into it."""
-    if n_out != n_cols or len(embedding) != n_samples * n_cols:
-        raise Error(
-            "spectral embedding: the kernel returned " + String(len(embedding))
-            + " floats in " + String(n_out) + " columns, but the output buffer"
-            " was sized for " + String(n_samples) + " x " + String(n_cols)
-        )
 
 
 def spectral_embedding_dataset_binding(
@@ -908,8 +829,7 @@ def spectral_embedding_dataset_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -960,8 +880,7 @@ def spectral_embedding_graph_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -985,10 +904,7 @@ def _write_spectral_state(
     var evec = _f32_ptr(Int(py=addrs[first + 1]))
     var dg = _f32_ptr(Int(py=addrs[first + 2]))
     var cent = _f32_ptr(Int(py=addrs[first + 3]))
-    unsafe_memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
-    unsafe_memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
-    unsafe_memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
-    unsafe_memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
+    _spectral_state_copy(state, ev, evec, dg, cent)
 
 
 def spectral_fit_predict_dataset_state_binding(
@@ -1029,10 +945,7 @@ def spectral_fit_predict_dataset_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -1070,10 +983,7 @@ def spectral_fit_predict_graph_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 5, n_samples, n_components, n_clusters)
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -1121,10 +1031,7 @@ def spectral_fit_predict_dense_binding(
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     if keep:
         _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -1164,8 +1071,7 @@ def spectral_embedding_dense_binding(
     if n_out < 0:
         return PythonObject(n_out)
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -1206,16 +1112,10 @@ def spectral_predict_binding(
     var olp = _i32_ptr(Int(py=addrs[6]))
     var oep = _f32_ptr(Int(py=addrs[7]))
     with GILReleased(Python()):
-        var out = spectral_predict_host(
+        spectral_predict_run(
             input, train_x, n_train, n_queries, n_features, k, n_clusters,
-            n_neighbors, affinity, state,
+            n_neighbors, affinity, state, olp, oep,
         )
-        if len(out.labels) != n_queries or len(out.embedding) != n_queries * k:
-            raise Error("spectral_predict: the kernel returned the wrong number of outputs")
-        unsafe_memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
-        unsafe_memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
-        _ = len(out.labels)
-        _ = len(out.embedding)
     return PythonObject(0)
 
 
