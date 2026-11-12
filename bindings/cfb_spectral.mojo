@@ -65,10 +65,8 @@ from providers.python.spectral_lifecycle_pyapi import spectral_admit, spectral_i
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 from bindings.py_optional import py_present
+from spectral.cfb_spectral_run import _sc_check_shape, _sc_refusal, _se_check_shape
 
-comptime _DENSE_EMPTY = -1
-comptime _DENSE_NONFINITE = -2
-comptime _DENSE_NEGATIVE = -3
 
 
 def _builtins() raises -> PythonObject:
@@ -525,41 +523,6 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises -> Spectral
         SpectralFitOptions(clusters, components, inits, neighbors, t, seed, predicting),
         String(py=affinity), spectral_assignment_method(String(py=assign_labels)),
         Float64(py=g) if rbf else 0.0)
-
-
-def _sc_check_shape(clusters: Int, n: Int, k: Int) raises:
-    if clusters > n:
-        raise Error("mojolearn SpectralClustering: n_clusters=" + String(clusters) + " "
-                    + "exceeds n_samples=" + String(n))
-    if k >= n:
-        raise Error("mojolearn SpectralClustering: n_components=" + String(k) + " must be "
-                    + "below n_samples=" + String(n) + "; the Lanczos requires "
-                    + "1 <= n_components < n_samples and n_samples - n_components "
-                    + "> 0 (cuVS's own RAFT_EXPECTS)")
-
-
-def _sc_refusal(n_out: Int, who: String) raises:
-    """The dense entries' refusal codes, in the COO route's wording."""
-    if n_out == _DENSE_EMPTY:
-        raise Error("mojolearn " + who + ": the precomputed affinity "
-                    + "matrix has no nonzero entries")
-    if n_out == _DENSE_NONFINITE:
-        if who == "SpectralClustering":
-            raise Error("mojolearn SpectralClustering: the precomputed affinity "
-                        + "matrix has a non-finite entry (the implemented path refuses "
-                        + "it by name, because sqrt of a non-finite degree is a "
-                        + "NaN and no NaN may reach a recorded value)")
-        raise Error("mojolearn SpectralEmbedding: the precomputed affinity "
-                    + "matrix has a non-finite entry")
-    if n_out == _DENSE_NEGATIVE:
-        if who == "SpectralClustering":
-            raise Error("mojolearn SpectralClustering: the precomputed affinity "
-                        + "matrix has a negative entry (refused by name: sqrt of a "
-                        + "negative degree is a NaN in cuVS too)")
-        raise Error("mojolearn SpectralEmbedding: the precomputed affinity "
-                    + "matrix has a negative entry (refused by name: sqrt of a "
-                    + "negative degree is a NaN)")
-
 
 def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject, context: PythonObject) raises:
     """SpectralClustering fit over admitted source and retained provider pins."""
@@ -1090,14 +1053,6 @@ def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacia
         py_setitem(fields, "embedding_", embedding)
 
     return embedding
-
-
-def _se_check_shape(components: Int, n: Int, n_lanczos: Int) raises:
-    if n_lanczos >= n:
-        raise Error("mojolearn SpectralEmbedding: n_components=" + String(components) + " "
-                    + "needs " + String(n_lanczos) + " eigenpairs, which must be below "
-                    + "n_samples=" + String(n))
-
 
 def _spectral_embedding(args: PythonObject, routes: SpectralRoutePins, context: PythonObject) raises -> PythonObject:
     """Unpack the public spectral_embedding arguments; retain route pins separately."""

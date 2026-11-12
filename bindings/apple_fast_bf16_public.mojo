@@ -36,6 +36,7 @@ from gemm.checks.gemm_lowbit import bf16_narrow, bf16_widen
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceContext
 from core.shared_slot import SharedSlot
+from gemm.apple_fast_bf16_public_run import _require_candidate
 
 
 struct _Boundary(Defaultable, Movable):
@@ -64,12 +65,6 @@ def initialize_fast_bf16_boundary() raises:
 
 def fast_bf16_available_binding() raises -> PythonObject:
     return PythonObject(AFN_GEMM_BF16_MMA)
-
-
-def _require_candidate() raises:
-    comptime if not AFN_GEMM_BF16_MMA:
-        raise Error("Apple fast BF16 requires a fast Apple GPU binding with MOJOLEARN_AFN_GEMM_BF16_MMA enabled (default 1; explicit 0 disables it); no identical fallback is used")
-
 
 def _shape_size(shape: PythonObject) raises -> Int:
     var total = 1

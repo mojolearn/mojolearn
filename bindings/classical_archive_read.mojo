@@ -15,6 +15,7 @@ from bindings.classical_archive_linear import archive_class_names_unpack, archiv
 from core.native_archive_linear import native_archive_string, native_linear_archive_plan
 from core.native_archive_read import native_archive_read_status
 from core.native_archive_repr import NativeArchiveReprNode, archive_repr_format
+from bindings.classical_archive_read_run import _archive_missing
 
 
 def _archive_builtin_repr(value: PythonObject) raises -> String:
@@ -330,11 +331,6 @@ def _archive_dtype_name(value: PythonObject, context: PythonObject) raises -> St
             return "|S"
         return "list"
     return _archive_class_name_unpack(py_type(value))
-
-
-def _archive_missing(name: String) -> String:
-    return "mojolearn: model file is missing field '" + name + "'"
-
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
     # The refusals keep `_serialize.exact`'s wording: a cast could change

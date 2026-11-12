@@ -18,6 +18,7 @@ from core.classical_pandas_impl import _pd_double
 from core.scaler_fit_impl import scaler_cast
 from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, host_sparse_coo, host_sparse_dia, host_sparse_uint64_bound
 from bindings.cpython_table import cpython_table
+from bindings.host_sparse_native_run import _address_in
 
 
 def host_sparse_format(value: PythonObject) raises -> String:
@@ -335,14 +336,6 @@ def _type_addresses(types: PythonObject) raises -> List[Int]:
     for k in range(len(types)):  # driver-loop: over connected native ABI type identities, once per conversion
         out.append(Int(types[k]._obj_ptr))
     return out^
-
-
-def _address_in(address: Int, members: List[Int]) -> Bool:
-    for i in range(len(members)):  # driver-loop: over the few connected type identities
-        if members[i] == address:
-            return True
-    return False
-
 
 def _sparse_scalar_word_k(value: PythonObject, kind: Int, width: Int, mut kinds: _SparseKinds) raises -> UInt64:
     # Same admission, words and conversions as `_sparse_scalar_word`, with
