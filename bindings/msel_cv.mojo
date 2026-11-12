@@ -26,9 +26,10 @@ from bindings.msel_helpers_released import (
     msel_store_free_bytes,
 )
 from bindings.native_unit_threads import (
-    native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores, NativeUnitFailure,
-    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave, native_unit_device_workers,
+    native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, NativeUnitFailure,
+    native_unit_gate_enter, native_unit_device_workers,
 )
+from bindings.native_unit_os_threads_run import native_unit_cores, native_unit_gate, native_unit_gate_leave
 from core.host_parallel import host_fp_env, host_fp_env_set
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
