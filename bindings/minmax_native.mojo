@@ -25,6 +25,7 @@ from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _
 from core.scaler_fit_impl import scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices
 from bindings.minmax_metadata import _flag, minmax_range_pair
 from bindings.minmax_archive_native import minmax_archive_load, minmax_archive_save
+from bindings.py_optional import py_or_none, py_present
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 
@@ -454,9 +455,10 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             context = host
         classical_connect_numpy(context)
         classical_check_layout(model,context)
-        var result = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var result = Optional[PythonObject]()
         if operation == "init":
-            result = minmax_initialize(model,args)
+            result = py_present(minmax_initialize(model,args))
         elif operation == "get_params":
             var fields = _fields(model)
             result = Python.dict(feature_range=fields["feature_range"],copy=fields["copy"],clip=fields["clip"],numeric_mode=fields["numeric_mode"])
@@ -474,33 +476,33 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 var values = Python.tuple(py_get(options,"feature_range",fields["feature_range"]),py_get(options,"copy",fields["copy"]),py_get(options,"clip",fields["clip"]),py_get(options,"numeric_mode",fields["numeric_mode"]))
                 _ = py_call(fields.clear)
                 _ = minmax_initialize(model,values)
-            result = model
+            result = py_present(model)
         elif operation == "is_fitted":
             result = PythonObject(_fitted(_fields(model)))
         elif operation == "fit":
-            result = minmax_fit(model,args[0],context)
+            result = py_present(minmax_fit(model,args[0],context))
         elif operation == "partial_fit":
-            result = minmax_partial_fit(model,args[0],context)
+            result = py_present(minmax_partial_fit(model,args[0],context))
         elif operation == "fit_transform":
             if len(args[2]):
                 raise Error("TypeError: MinMaxScaler.fit got an unexpected keyword argument")
             var input_cache = Python.list()
             var configuration = _configuration(_fields(model),context)
-            result = minmax_fit_transform(model,args[0],context,input_cache,configuration)
-            if result is None:
+            result = py_present(minmax_fit_transform(model,args[0],context,input_cache,configuration))
+            if not result:
                 _ = minmax_fit(model,args[0],context,input_cache,configuration)
-                result = minmax_transform(model,args[0],False,context,input_cache,configuration)
-            result = _public_result(result,context,input_cache)
+                result = py_present(minmax_transform(model,args[0],False,context,input_cache,configuration))
+            result = py_present(_public_result(py_or_none(result),context,input_cache))
         elif operation == "transform":
             var input_cache = Python.list()
-            result = _public_result(minmax_transform(model,args[0],Bool(py=args[1]),context,input_cache),context,input_cache)
+            result = py_present(_public_result(minmax_transform(model,args[0],Bool(py=args[1]),context,input_cache),context,input_cache))
         elif operation == "save":
-            result = minmax_archive_save(model,args[0],context)
+            result = py_present(minmax_archive_save(model,args[0],context))
         elif operation == "load":
-            result = minmax_archive_load(model,args[0],context)
+            result = py_present(minmax_archive_load(model,args[0],context))
         else:
             raise Error("unknown native MinMaxScaler operation")
-        return result.steal_data()
+        return py_or_none(result).steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error^)
