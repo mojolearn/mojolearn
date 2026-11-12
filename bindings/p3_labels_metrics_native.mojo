@@ -30,6 +30,10 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
 from bindings.py_balanced import py_call, py_setitem
+from core.p3_labels_metrics_run import (
+    P3TextCodes, P3Utf8, P3TextSet, _p3_probe, p3_text_codes_from_utf8, p3_class_index,
+    P3_TEXT_OK as _RUN_P3_TEXT_OK, P3_TEXT_NOT_STR as _RUN_P3_TEXT_NOT_STR, P3_TEXT_FALLBACK as _RUN_P3_TEXT_FALLBACK,
+)
 
 # Py_TPFLAGS_UNICODE_SUBCLASS
 comptime P3_UNICODE_FLAG = 1 << 28
@@ -119,54 +123,11 @@ def p3_interleave_columns(columns: PythonObject, n: Int) raises -> PythonObject:
 
 # ------------------------------------------------------------ str labels
 
-comptime P3_TEXT_OK = 1
-comptime P3_TEXT_NOT_STR = 0
-comptime P3_TEXT_FALLBACK = -1
-
-
-struct P3TextCodes(Movable):
-    """`status` P3_TEXT_*; on P3_TEXT_OK `first[c]` is the row of the first
-    label of class c (classes in Python's str order) and `codes[i]` the
-    dense class of row i."""
-    var status: Int
-    var first: List[Int]
-    var codes: List[Int32]
-
-    def __init__(out self, status: Int):
-        self.status = status
-        self.first = List[Int]()
-        self.codes = List[Int32]()
-
-
-struct P3Utf8(Movable):
-    """The UTF-8 bytes (address, length) of n str labels, read in place."""
-    var addr: List[Int]
-    var size: List[Int]
-
-    def __init__(out self, n: Int):
-        self.addr = List[Int](capacity=n)
-        self.size = List[Int](capacity=n)
-
-
-def _p3_bytes_cmp(a: Int, la: Int, b: Int, lb: Int) -> Int:
-    var pa = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=a)
-    var pb = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=b)
-    for k in range(min(la, lb)):  # driver-loop: over one label's bytes
-        var x = pa[k]
-        var y = pb[k]
-        if x != y:
-            return -1 if x < y else 1
-    if la == lb:
-        return 0
-    return -1 if la < lb else 1
-
-
-def _p3_hash(a: Int, la: Int) -> UInt64:
-    var p = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=a)
-    var h = UInt64(14695981039346656037)
-    for k in range(la):  # driver-loop: over one label's bytes
-        h = (h ^ UInt64(p[k])) * UInt64(1099511628211)
-    return h
+# The status words live with the typed passes (core/p3_labels_metrics_run.mojo);
+# the label doors keep importing them from here.
+comptime P3_TEXT_OK = _RUN_P3_TEXT_OK
+comptime P3_TEXT_NOT_STR = _RUN_P3_TEXT_NOT_STR
+comptime P3_TEXT_FALLBACK = _RUN_P3_TEXT_FALLBACK
 
 
 def p3_utf8_read(labels: PythonObject, n: Int, mut text: P3Utf8, any_str: Bool) raises -> Int:
@@ -210,90 +171,6 @@ def _p3_utf8_read_source[native: Bool](labels: PythonObject, pins: List[PythonOb
     return P3_TEXT_OK
 
 
-struct P3TextSet(Movable):
-    """Distinct labels by hash: `rows[d]` the first row of distinct label d,
-    `slots` the open-addressing table of distinct ids (-1 empty)."""
-    var rows: List[Int]
-    var hashes: List[UInt64]
-    var slots: List[Int]
-    var mask: Int
-
-    def __init__(out self, n: Int):
-        var capacity = 16
-        while capacity < 2 * n:  # driver-loop: power-of-two table size (log2 n steps)
-            capacity *= 2
-        self.rows = List[Int]()
-        self.hashes = List[UInt64]()
-        self.slots = List[Int](length=capacity, fill=-1)
-        self.mask = capacity - 1
-
-    def find_or_add(mut self, text: P3Utf8, row: Int, add: Bool) -> Int:
-        """The distinct id of `text[row]`; a new id when unseen and `add`,
-        else -1."""
-        var a = text.addr[row]
-        var la = text.size[row]
-        var h = _p3_hash(a, la)
-        var slot = Int(h & UInt64(self.mask))
-        for _ in range(len(self.slots)):  # driver-loop: open-addressing probe (expected O(1); bounded by the table size)
-            var d = self.slots[slot]
-            if d < 0:
-                if not add:
-                    return -1
-                d = len(self.rows)
-                self.rows.append(row)
-                self.hashes.append(h)
-                self.slots[slot] = d
-                return d
-            if self.hashes[d] == h:
-                var r = self.rows[d]
-                if _p3_bytes_cmp(text.addr[r], text.size[r], a, la) == 0:
-                    return d
-            slot = (slot + 1) & self.mask
-        return -1  # unreachable: the table is at most half full
-
-
-def p3_sort_distinct(text: P3Utf8, rows: List[Int]) -> List[Int]:
-    """The distinct ids 0..k-1 sorted by their bytes (bottom-up merge sort;
-    the ids are distinct, so order ties cannot occur)."""
-    var k = len(rows)
-    var order = List[Int](capacity=k)
-    for d in range(k):  # driver-loop: over the k distinct labels
-        order.append(d)
-    var buffer = List[Int](length=k, fill=0)
-    var width = 1
-    while width < k:  # driver-loop: over merge widths
-        var lo = 0
-        while lo < k:  # driver-loop: over merged runs
-            var mid = min(lo + width, k)
-            var hi = min(lo + 2 * width, k)
-            var i = lo
-            var j = mid
-            var o = lo
-            while i < mid and j < hi:  # driver-loop: over one merge
-                var ri = rows[order[i]]
-                var rj = rows[order[j]]
-                if _p3_bytes_cmp(text.addr[rj], text.size[rj], text.addr[ri], text.size[ri]) < 0:
-                    buffer[o] = order[j]
-                    j += 1
-                else:
-                    buffer[o] = order[i]
-                    i += 1
-                o += 1
-            while i < mid:  # driver-loop: over one merge's tail
-                buffer[o] = order[i]
-                i += 1
-                o += 1
-            while j < hi:  # driver-loop: over one merge's tail
-                buffer[o] = order[j]
-                j += 1
-                o += 1
-            lo = hi
-        for s in range(k):  # driver-loop: over the k distinct labels
-            order[s] = buffer[s]
-        width *= 2
-    return order^
-
-
 def p3_text_codes(labels: PythonObject, any_str: Bool = True) raises -> P3TextCodes:
     var pins = List[PythonObject]()
     return _p3_text_codes_source[False](labels, pins, any_str)
@@ -314,21 +191,7 @@ def _p3_text_codes_source[native: Bool](labels: PythonObject, pins: List[PythonO
     var status = _p3_utf8_read_source[native](labels, pins, n, text, any_str)
     if status != P3_TEXT_OK:
         return P3TextCodes(status)
-    var seen = P3TextSet(n)
-    var ids = List[Int32](capacity=n)
-    for i in range(n):  # driver-loop: one hash probe per label, native
-        ids.append(Int32(seen.find_or_add(text, i, True)))
-    var order = p3_sort_distinct(text, seen.rows)
-    var k = len(order)
-    var rank = List[Int32](length=k, fill=0)
-    var out = P3TextCodes(P3_TEXT_OK)
-    out.first = List[Int](capacity=k)
-    for c in range(k):  # driver-loop: over the k sorted classes
-        rank[order[c]] = Int32(c)
-        out.first.append(seen.rows[order[c]])
-    out.codes = List[Int32](capacity=n)
-    for i in range(n):  # driver-loop: native code write per label
-        out.codes.append(rank[Int(ids[i])])
+    var out = p3_text_codes_from_utf8(text, n)
     _ = pins
     _ = labels  # the list owns the str bytes read above
     return out^
@@ -374,12 +237,7 @@ def p3_text_lookup(classes: PythonObject, values: PythonObject, address: Int, as
         return -1
     var seen = P3TextSet(k)
     var answer = List[Int]()
-    for c in range(k):  # driver-loop: over the k classes
-        var d = seen.find_or_add(ctext, c, True)
-        if d == len(answer):
-            answer.append(c)
-        else:
-            answer[d] = c  # a duplicated class keeps its last index
+    p3_class_index(ctext, k, seen, answer)
     var t = cpython_table()
     ref cpy = Python().cpython()
     var str_word = Int(native_loaded_module("builtins").str._obj_ptr)
@@ -420,24 +278,6 @@ def p3_text_lookup(classes: PythonObject, values: PythonObject, address: Int, as
     _ = classes
     _ = values
     return count
-
-
-def _p3_probe(seen: P3TextSet, ctext: P3Utf8, one: P3Utf8) -> Int:
-    """The distinct class id of the single label in `one`, or -1."""
-    var a = one.addr[0]
-    var la = one.size[0]
-    var h = _p3_hash(a, la)
-    var slot = Int(h & UInt64(seen.mask))
-    for _ in range(len(seen.slots)):  # driver-loop: open-addressing probe (expected O(1); bounded by the table size)
-        var d = seen.slots[slot]
-        if d < 0:
-            return -1
-        if seen.hashes[d] == h:
-            var r = seen.rows[d]
-            if _p3_bytes_cmp(ctext.addr[r], ctext.size[r], a, la) == 0:
-                return d
-        slot = (slot + 1) & seen.mask
-    return -1
 
 
 # ------------------------------------------------------------ dict codes
