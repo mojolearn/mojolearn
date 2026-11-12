@@ -1352,8 +1352,9 @@ def embedding_neural_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf
         if op < 0 or op >= NEURAL_EMB_OPERATIONS:
             raise Error("embedding entry: unknown operation")
         var spans = neural_entry_spans(aa, na, pp, np, ff, nf, result, 0)
-        var a = spans[0].copy()
-        var p = spans[1].copy()
+        # perf-audit-3 (pattern 3): the two spans are read in place (no copy per call).
+        ref a = spans[0]
+        ref p = spans[1]
         var value = 0
         if op == EMB_OP_FORWARD:
             value = embedding_forward_words(a, p)
