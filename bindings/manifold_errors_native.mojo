@@ -7,23 +7,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error, stash_python_error
-
-
-def _refinement(text: String, kind: Int, rows: Int, cols: Int, fitting: Bool,
-                 name: String) -> Optional[String]:
-    for marker in ["device_context", "CUDA", "HIP", "hipError", "Metal", "MTL"]:  # small-loop(device fault markers: existing public diagnostic exclusions)
-        if marker in text:
-            return Optional[String]()
-    if kind == 0:
-        for marker in ["NaN", "Infinit", "infinit", "nonfinite", "non-finite", "not finite", "requires finite", "must be finite"]:  # small-loop(nonfinite markers: existing public diagnostic spellings)
-            if marker in text:
-                var what = String("Input") if fitting else String("Input X")
-                return Optional(what + " contains NaN or infinity (" + name + ": " + text + ")")
-    if fitting and rows == 1 and kind <= 2:
-        return Optional(name + " cannot be fit on n_samples=1: " + text)
-    if fitting and cols == 1 and kind == 1:
-        return Optional(name + " cannot be fit on n_features=1: " + text)
-    return Optional[String]()
+from bindings.manifold_errors_run import _refinement
 
 
 def _with_cause(message: String, original: PythonObject) raises -> Error:
