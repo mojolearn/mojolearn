@@ -18,6 +18,7 @@ from core.logistic_native_api import (
     QnNativeDriver, QnFoldDriver, QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION,
 )
 from core.admitted_refusals import admitted_finite_refuse, door_rows_refuse
+from std.memory import unsafe_memcpy
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -109,8 +110,10 @@ def qn_door_fit_publish(r: QnFitRequest, n_iter: Int, coef: Int, iterations: Int
     and read the intercept, objective and return code."""
     var source = _F32P(unsafe_from_address=r.coefficients)
     var dest = _F32P(unsafe_from_address=coef)
-    for j in range(r.features):  # driver-loop: over the fitted coefficients (model structure)
-        dest[j] = source[j]
+    # One byte copy of the `features` coefficient words (a loop over the
+    # features is data-sized, not model structure).
+    if r.features > 0:
+        unsafe_memcpy(dest=dest, src=source, count=r.features)
     _I64P(unsafe_from_address=iterations)[0] = Int64(n_iter)
     var info = _F32P(unsafe_from_address=r.info)
     var intercept = Float64(source[r.features]) if r.intercept else 0.0
