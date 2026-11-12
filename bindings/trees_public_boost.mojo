@@ -25,7 +25,6 @@
 # round never reads (the round's own `x_trees_dart_open` holds X and tests
 # it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
-from std.math import ceil
 from std.sys.compile import is_defined
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
@@ -44,10 +43,12 @@ from bindings.trees_public_inputs import (
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
+from bindings.admitted_input_run import AdmittedXView
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_forest_run import ForestFit, trees_check_features
 from xtrees.trees_boost_run import (
+    _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
     boost_count_fraction_ok, boost_count_check, boost_weight_flags_check, boost_dart_cap_check,
 )
@@ -152,11 +153,6 @@ def _seed(random_state: PythonObject, context: PythonObject) raises -> Int:
         raise Error("random_state must be None or a nonnegative int (a RandomState object is refused:"
                     + " draws come from the lane's own counter RNG, xtrees/ops.mojo)")
     return Int(py=_int(random_state))
-
-
-def _sub_seed(seed: Int, k: Int) -> Int:
-    """`_trees_sub_seed`: the k-th member's random_state."""
-    return (seed * 1000003 + 7919 * (k + 1)) % 2147483647
 
 
 def _P(v: Int) raises -> PythonObject:
@@ -575,7 +571,7 @@ struct Session(Copyable, Movable):
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
 
 
-def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, choice: String,
+def _member_session(member: PythonObject, x: AdmittedXView, row_major: Bool, choice: String,
                     context: PythonObject) raises -> Session:
     """`_trees_member_session`: the data session for the member fits of one
     ensemble on the forest binding a clone of `member` resolves (handle 0:
@@ -880,7 +876,7 @@ def _all_columns(cols: PythonObject, d: Int) raises -> Bool:
     return True
 
 
-def _sub_x(xt: PythonObject, x: AdmittedX, xa: PythonObject, cols: PythonObject, rows_all: PythonObject,
+def _sub_x(xt: PythonObject, x: AdmittedXView, xa: PythonObject, cols: PythonObject, rows_all: PythonObject,
            context: PythonObject) raises -> PythonObject:
     """`_BaggingBase._sub_X`."""
     if _all_columns(cols, x.cols):
@@ -902,7 +898,7 @@ def _bagging_member_scores(xt: PythonObject, member: PythonObject, xs: PythonObj
     return out
 
 
-def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: AdmittedX, k: Int, classifier: Bool,
+def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: AdmittedXView, k: Int, classifier: Bool,
                          context: PythonObject) raises -> PythonObject:
     """`_BaggingBase._oob_outputs`: each member's output on its out-of-bag
     rows, added in member order; (sums, counts)."""
@@ -958,7 +954,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
             var glue = _xr(xt)
             var x = _x_f32(X, context)
             var n = x.rows
-            var pair = _bagging_oob_outputs(xt, fields, x, k, True, context)
+            var pair = _bagging_oob_outputs(xt, fields, x.view(), k, True, context)
             var acc = pair[0]
             _ = xt_normalize_rows(glue, trees_address(acc), n, k)
             _ = acc  # keep the Python object alive through the native call above
@@ -979,7 +975,8 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         var glue = _xr(xt)
         var x = _x_f32(X, context)
         var n = x.rows
-        var pair = _bagging_oob_outputs(xt, fields, x, 1, False, context)
+        var pair = _bagging_oob_outputs(xt, fields, x.view(), 1, False, context)
+        _ = x  # owner pin: the view above reads its words
         var pred = admitted_vector(n, "<f8", context)
         var words = admitted_vector(4, "<f8", context)
         var flags = admitted_vector(4, "<i4", context)
@@ -1027,7 +1024,7 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
-            var xs = _sub_x(xt, x, xa, features[i], rows_all, context)
+            var xs = _sub_x(xt, x.view(), xa, features[i], rows_all, context)
             _acc_cols(xt, acc, _member_proba(members[i], xs, context), _sub_cols(members[i], context), n, k, context)
     finally:
         trees_unstage(staged)
@@ -1071,7 +1068,7 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
-            _acc(xt, acc, _member_predict(members[i], _sub_x(xt, x, xa, features[i], rows_all, context), context), n, context)
+            _acc(xt, acc, _member_predict(members[i], _sub_x(xt, x.view(), xa, features[i], rows_all, context), context), n, context)
     finally:
         trees_unstage(staged)
     _scale(xt, acc, Float64(len(members)))
@@ -1132,7 +1129,7 @@ def _w32(xt: PythonObject, w: PythonObject, n: Int, context: PythonObject) raise
     return out
 
 
-def _colmajor(xt: PythonObject, x: AdmittedX, context: PythonObject) raises -> AdmittedX:
+def _colmajor(xt: PythonObject, x: AdmittedXView, context: PythonObject) raises -> AdmittedX:
     """`_trees_colmajor` of a C-order float32 X: the lane's transpose."""
     var out = admitted_array(Python.tuple(x.rows, x.cols), "<f4", context, "F")
     var glue = _xr(xt)
@@ -1255,12 +1252,12 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         var encoded: Optional[TreesLabels] = None
         var session = Session(PythonObject(None), 0)
         if dt_best:
-            var cm = _colmajor(xt, x, context)
+            var cm = _colmajor(xt, x.view(), context)
             if trees_env("MOJOLEARN_ADABOOST_REENCODE", "") != "1":
                 encoded = trees_encode_labels(codes, context)
             # the session open tests the column-major words it uploads
             # (lane a8c: the host scan of cm before it is deleted)
-            session = _member_session(base, cm, False, _ada_session_choice(fields, xt, context), context)
+            session = _member_session(base, cm.view(), False, _ada_session_choice(fields, xt, context), context)
             _ = cm  # keep the Python object alive through the native calls above
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
@@ -1367,7 +1364,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                                                                   or Bool(py=crit == PythonObject("mse"))):
             var native = trees_table(context, _member_mode(base, context), "_mojolearn_rf")
             if trees_entry(native, "rf_regressor_fit_session_rows_export") is not None:
-                session = _member_session(base, x, True, _ada_session_choice(fields, xt, context), context)
+                session = _member_session(base, x.view(), True, _ada_session_choice(fields, xt, context), context)
     var loss = Int(py=context["trees_ada_losses"][fields["loss"]])
     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
     var y_array = _as_array(y32, Python.tuple(n), context)
@@ -1596,15 +1593,6 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
 
 
 
-def _dart_thr(v: Float64) -> Int:
-    """`_DARTBase._dart_thr`: skip_drop for the binding's 53-bit draw."""
-    if not v > 0.0:
-        return 0
-    if v >= 1.0:
-        return 1 << 53
-    return Int(ceil(v * 9007199254740992.0))
-
-
 def _dart_bag(fields: PythonObject, xt: PythonObject, n: Int, it: Int, mut cache_start: Int, mut cache: PythonObject,
               context: PythonObject) raises -> PythonObject:
     """`_DARTBase._bag`: the bagged rows of round `it` (None: every row)."""
@@ -1690,7 +1678,7 @@ def _dart_member_fit(tree: PythonObject, tf: PythonObject, mode: String, handle:
     return tree
 
 
-def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: AdmittedX, K: Int, kind: Int,
+def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32: AdmittedXView, K: Int, kind: Int,
                 context: PythonObject) raises -> PythonObject:
     """`_DARTBase._boost` and its device round (`_boost_loop_device`)."""
     var b = trees_builtins()
@@ -1890,7 +1878,10 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     if not classifier:
         var y32 = admit_f32(args[1], 1, "y", context, finite=False)
         _y_rows_check(y32.rows, x.rows)
-        return _dart_boost(model, fields, x, y32, 1, 0, context)
+        var fitted = _dart_boost(model, fields, x.view(), y32.view(), 1, 0, context)
+        _ = x  # owner pins: the views above read their words
+        _ = y32
+        return fitted
     var labels = trees_encode_labels(args[1], context)
     py_setitem(fields, "classes_", labels.classes)
     var K = len(labels.classes)
@@ -1904,8 +1895,9 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     _ = codes  # keep the Python object alive through the native call above
     var kind = 1 if K == 2 else 2
     py_setitem(fields, "_KIND", _P(kind))
-    var _keep_ret_codes = _dart_boost(model, fields, x, y32, 1 if K == 2 else K, kind, context)
+    var _keep_ret_codes = _dart_boost(model, fields, x.view(), y32.view(), 1 if K == 2 else K, kind, context)
     _ = codes  # keep the Python object alive through the native call above
+    _ = x  # owner pin: the view above reads its words
     return _keep_ret_codes^
 
 
@@ -2228,7 +2220,7 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     py_setitem(fields, "n_features_in_", _P(d))
 
 
-def _rte_transform(fields: PythonObject, x: AdmittedX, context: PythonObject) raises -> PythonObject:
+def _rte_transform(fields: PythonObject, x: AdmittedXView, context: PythonObject) raises -> PythonObject:
     """`RandomTreesEmbedding.transform` (`apply`, then the one-hot)."""
     if not py_contains(fields, "forest_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
@@ -2277,7 +2269,10 @@ def rte_transform(model: PythonObject, args: PythonObject, context: PythonObject
     var fields = py_fields(model)
     if not py_contains(fields, "forest_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    return _rte_transform(fields, _x_f32(args[0], context), context)
+    var x = _x_f32(args[0], context)
+    var out = _rte_transform(fields, x.view(), context)
+    _ = x  # owner pin: the view above reads its words
+    return out
 
 
 def rte_fit_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -2286,7 +2281,9 @@ def rte_fit_transform(model: PythonObject, args: PythonObject, context: PythonOb
     _rte_validate(fields, context)
     var x = _x_f32(args[0], context)
     _rte_fit(model, fields, x, context)
-    return _rte_transform(fields, x, context)
+    var out = _rte_transform(fields, x.view(), context)
+    _ = x  # owner pin: the view above reads its words
+    return out
 
 
 # --------------------------------------------------------------- dispatch

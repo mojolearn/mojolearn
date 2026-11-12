@@ -9,6 +9,7 @@ Lane doorsplit-trees (2026-11-11): moved from the door. Each function is a
 per-call scalar decision; there is no independent work to split across
 cores.
 """
+from std.math import ceil
 from xtrees.trees_forest_run import trees_refuse
 
 comptime BOOST_DART_VALUES_CAP = 1 << 26
@@ -73,3 +74,17 @@ def boost_dart_cap_check(n_iters: Int, classes: Int, node_cap: Int) raises:
     if not (1 <= node_cap and node_cap <= 65535 and n_iters * classes * node_cap <= BOOST_DART_VALUES_CAP):
         raise Error("NotImplementedError: mojolearn DART: n_estimators * classes * (2 * num_leaves - 1) must be at most "
                     + String(BOOST_DART_VALUES_CAP) + " and num_leaves at most 32768 (the round's leaf-value store); refused by name")
+
+
+def _sub_seed(seed: Int, k: Int) -> Int:
+    """`_trees_sub_seed`: the k-th member's random_state."""
+    return (seed * 1000003 + 7919 * (k + 1)) % 2147483647
+
+
+def _dart_thr(v: Float64) -> Int:
+    """`_DARTBase._dart_thr`: skip_drop for the binding's 53-bit draw."""
+    if not v > 0.0:
+        return 0
+    if v >= 1.0:
+        return 1 << 53
+    return Int(ceil(v * 9007199254740992.0))
