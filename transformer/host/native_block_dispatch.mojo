@@ -5,8 +5,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
-from transformer.transformer_host_binding_impl import _run_forward, _backward_run, HostTransformerSession
+from transformer.transformer_host_binding_impl import _run_forward, _backward_run
 from core.shared_slot import SharedSlot
+from core.neural_entry_table import NEURAL_BLOCK_OPERATIONS
 
 
 def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -15,14 +16,9 @@ def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: Lis
     # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
     # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
     # (the session-ticket ops 36..40 and the invalidate-tape op 12.)
-    if op == 13:
-        if len(p) != 1 or p[0] == 0 or len(a) != 0:
-            raise Error("transformer session: invalid administration descriptor")
-        var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=p[0])
-        if owner[].busy:
-            raise Error("transformer session: session is busy or closed")
-        owner[].closed = True
-        return 0
+    # Lane transformer-session-native (2026-11-12): the session-close op 13 and
+    # HostTransformerSession are deleted; a CPU block never opens a session
+    # (op 13 refuses below as an unavailable operation).
     if op == 33:
         if (len(a) != 13 and len(a) != 13 + BLOCK_OPTION_ADDRS) or (len(p) != 10 and len(p) != 10 + BLOCK_OPTION_PARAMS):
             raise Error("transformer_forward: invalid descriptor arity")
@@ -67,7 +63,7 @@ def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: Lis
 def transformer_host_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                           result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 36 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
+        if op < 0 or op >= NEURAL_BLOCK_OPERATIONS or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
             raise Error("transformer host provider: invalid descriptor span or operation")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)

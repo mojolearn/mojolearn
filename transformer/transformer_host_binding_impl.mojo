@@ -192,22 +192,8 @@ def _run_forward(
     return out.cached_tokens
 
 
-struct HostTransformerSession(Movable, Writable):
-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
-    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
-    # (the session's `tape` / `generation` and `invalidate_tape`.)
-    var busy: Bool
-    var closed: Bool
-
-    def __init__(out self):
-        self.busy = False
-        self.closed = False
-
-    def write_to(self,mut writer: Some[Writer]):
-        writer.write("HostTransformerSession")
-
-    def write_repr_to(self,mut writer: Some[Writer]):
-        writer.write("HostTransformerSession")
+# Lane transformer-session-native (2026-11-12): HostTransformerSession (busy and
+# closed flags of a session no CPU route opened) is deleted with its entries.
 
 
 def _backward_run(
