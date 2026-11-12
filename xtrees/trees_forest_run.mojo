@@ -13,7 +13,9 @@ work to split across cores.
 """
 from std.os import getenv
 from core.entry_table import EntryRef
-from core.forest_calls import ForestExport
+from core.forest_calls import ForestExport, xf_fit
+from core.forest_fit_request import ForestFitArgs
+from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 from ensemble.rf_notices import (
     RF_NOTICE_ALL, RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL,
 )
@@ -68,6 +70,27 @@ struct ForestHandle(Movable):
         self.kept = kept
         self.key = key.copy()
         self.release_op = release_op
+
+
+def forest_fit_core(key: EntryRef, classifier: Bool, row_major: Bool, args: ForestFitArgs,
+                    device_scan: Bool) raises -> Int:
+    """THE forest fit (lane forest-typed-fit, 2026-11-12): one typed request
+    (`ForestFitArgs`: X and y addresses, the params views, the row weights,
+    the tree-ID start and the auxiliary outputs) launched in the image `key`
+    names (XF_FIT). Returns the export handle the caller's PACK copies and
+    releases. The public forest door (bindings/trees_public_forest.mojo
+    `_launch`) and the tree-range shard worker (`forest_shard_fit`, called
+    by bindings/parallel_shard_native.mojo) both call this; neither builds a
+    model object for it. An image that scans X on the device reports a
+    non-finite cell inside its own error text; it is raised as the one
+    refusal the doors match on. One synchronous launch per call: the
+    parallelism is inside the image's fit."""
+    try:
+        return xf_fit(key, classifier, row_major, args)
+    except error:
+        if device_scan and RF_NONFINITE_REFUSAL in String(error):
+            raise Error(RF_NONFINITE_REFUSAL)
+        raise error^
 
 
 def forest_export_selection() raises -> String:
