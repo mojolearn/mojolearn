@@ -35,6 +35,7 @@ from bindings.native_loaded_module import shared_dict_watcher, shared_dict_epoch
 from bindings.cpython_table import cpython_table
 from bindings.native_model_records import records_live, records_open, records_slot_array_arena
 from core.shared_slot import SharedSlot
+from bindings.p3_array_arena_records_run import P3NumpyClasses, P3DictRecords
 
 
 # Admission kinds: one per distinct check, so one class can carry several.
@@ -96,19 +97,6 @@ def p3_layout_admit(kind: Int, cls: PythonObject, extra: PythonObject) raises:
     slot[].words.append(kind)
     slot[].words.append(len(slot[].extras) - 1)
     slot[].words.append(epoch)
-
-
-struct P3NumpyClasses(Defaultable, Movable):
-    var factory: Int
-    # Exact NumPy real scalar types an object-dtype element may have.
-    var scalars: List[Int]
-    # dtype classes `_prepare` accepts before any dtype access.
-    var dtypes: List[Int]
-
-    def __init__(out self):
-        self.factory = 0
-        self.scalars = List[Int]()
-        self.dtypes = List[Int]()
 
 
 comptime P3_NUMPY_CLASSES = SharedSlot[P3NumpyClasses, "MojolearnP3ArrayArenaNumpyClassesV2"]
@@ -182,13 +170,6 @@ comptime P3_DICT_STR_INT = 4            # numpy sctypeDict: str or int keys
 comptime P3_DICT_CACHE_KEYS = 5         # DeviceCache entries: arena_cache_stats._admit_entry_keys
 comptime P3_DICT_ARRAY_STORAGE = 6      # complete native Array member descriptor inventory
 comptime P3_DICT_NATIVE_STRING_KEYS = 7 # exact dictionary with only exact native string keys
-
-
-struct P3DictRecords(Defaultable, Movable):
-    var epochs: Dict[Int, Int]
-
-    def __init__(out self):
-        self.epochs = Dict[Int, Int]()
 
 
 comptime P3_DICT_RECORDS = SharedSlot[P3DictRecords, "MojolearnP3ArrayArenaDictsV2"]
