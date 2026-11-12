@@ -16,7 +16,7 @@ from the module table.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from x_metrics.epilogue import portable_log_c
+from arima.tsa_arima_run import _penalties
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
@@ -209,19 +209,6 @@ def _order(fields: PythonObject, context: PythonObject) raises -> List[Int]:
     return [Int(py=o[0]), Int(py=o[1]), Int(py=o[2]), Int(py=so[0]), Int(py=so[1]), Int(py=so[2]), Int(py=so[3])]
 
 
-def _penalties(order: List[Int], big_n: Int, n_obs: Int, context: PythonObject) raises -> Tuple[Float64, Float64]:
-    """`_ic_penalties`: 2N, and log(T) N with the pinned log (T = n_obs after
-    differencing)."""
-    var t = n_obs - (order[1] + order[6] * order[4])
-    var n_par = Float64(big_n)
-    var log_t = Float64(0.0)
-    if t > 0:
-        # the pinned log: portable_log_c is packaging/portable_math.c `mojolearn_log`
-        # operation for operation (what `_portable_math.log` returns)
-        log_t = portable_log_c(Float64(t))
-    return (2.0 * n_par, log_t * n_par)
-
-
 def _copy_block(source: PythonObject, offset: Int, count: Int, code: String, typestr: String, width: Int,
                 shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """A copy of `count` items (of `width` bytes) of `source` from item
@@ -266,7 +253,7 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var stats = tsa_array("f", "<f4", Python.tuple(2 * batch), 2 * batch, 4, context)
     var flags = tsa_array("i", "<i4", Python.tuple(2 * batch), 2 * batch, 4, context)
     var ics = tsa_array("d", "<f8", Python.tuple(2 * batch), 2 * batch, 8, context)
-    var pens = _penalties(order, big_n, n_obs, context)
+    var pens = _penalties(order, big_n, n_obs)
     var entries = _arima_entries(model, fields, context)
     var plan = Python.list(batch, n_obs, order[0], order[1], order[2], order[3], order[4], order[5], order[6], k,
                            n_exog, context["arima_methods"][method], maxiter,
@@ -315,7 +302,7 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
     var ics = ics_in
     if ics is None:
         ics = tsa_array("d", "<f8", Python.tuple(2 * batch), 2 * batch, 8, context)
-        var pens = _penalties(_order(fields, context), big_n, n_obs, context)
+        var pens = _penalties(_order(fields, context), big_n, n_obs)
         var entries = _arima_entries(model, fields, context)
         var written = Int(py=py_call_typed(_entry(entries, "arima_ic_from_loglike"), classical_address(stats),
                                            classical_address(ics), Python.list(batch, pens[0], pens[1])))
