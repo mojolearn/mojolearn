@@ -40,7 +40,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from forest_inference_binding import (
+from forest_inference_binding_door import (
     forest_prepare_gpu_binding, forest_release_gpu_binding,
     forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
