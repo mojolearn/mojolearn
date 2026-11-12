@@ -89,15 +89,6 @@ def svc_truthy(value: PythonObject) raises -> Bool:
     return Bool(py=family_call(svc_builtins().bool, value))
 
 
-def svc_round_f32(value: Float64) -> Float64:
-    """`linear_model._round_f32`: one round-to-nearest-even to binary32."""
-    return Float64(Float32(value))
-
-
-def svc_isfinite(value: Float64) -> Bool:
-    return value == value and value - value == 0.0
-
-
 def svc_base(name: String, context: PythonObject) raises -> PythonObject:
     """The base binding's host helper `name` (`_buffer._native(name)`)."""
     return family_call(context["family_svc_native"], PythonObject(name))

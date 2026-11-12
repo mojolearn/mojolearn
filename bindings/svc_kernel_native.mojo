@@ -56,11 +56,12 @@ from core.scale_gamma_exact import scale_gamma_from_limbs
 from core.svr_native_api import SvrFitPlan, SvrFitRequest, SvrQueryRequest
 from bindings.svr_native_boundary import svr_connection, svr_run_fit, svr_run_query, SvrResidentPin, svr_resident_pin
 from bindings.svc_common import (
-    svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
-    svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32,
-    svc_read_i32, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_decode, svc_threshold_codes,
-    svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
+    svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_base, svc_mode,
+    svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32, svc_read_i32, svc_shape_of,
+    svc_labels_1d, svc_sorted_classes, svc_decode, svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
+    svc_accuracy_codes,
 )
+from bindings.svc_common_run import svc_isfinite, svc_round_f32
 
 # `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo), `_svm_impl._EPI_*` and `_GLUE_*`.
 comptime _EPI_OVO = 0
