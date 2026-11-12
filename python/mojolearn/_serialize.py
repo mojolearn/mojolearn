@@ -235,25 +235,31 @@ def decode_npy(data):
     bytes (`'|S'`) from complete npy bytes."""
     descr, fortran, shape, offset = _parse_header(data)
     itemsize = _itemsize_of(descr)
-    # The element count of the member shape, from the native shape check
-    # (an empty Array of that shape; lane pyout-runtime-boundary).
-    n = Array(shape, "<u1").size
     # Keep the ZIP member's payload borrowed until `frombytes` makes the one
     # owned Array copy.  Slicing `bytes` here used to allocate and copy the
     # complete tensor once, only for `array.array.frombytes` to copy it again.
     # A memoryview slice carries the same exact byte range without that
     # transient model-sized allocation.
+    if descr in _TYPESTR_OF:
+        # The payload of an npy member is everything after its header; the
+        # native `frombytes` checks the shape and refuses a payload that does
+        # not fill it exactly. PERF FIX (perf-audit-2-a, 2026-11-11): the
+        # element count used to come from `Array(shape, "<u1").size`, which
+        # allocated and zero-filled a member-sized store per tensor on every
+        # model load only to read its size.
+        a = _buffer.frombytes(memoryview(data)[offset:], _TYPESTR_OF[descr], shape)
+        if fortran and a.ndim > 1:
+            a = Array._view_of(a, shape, "F")
+        return a
+    # The element count of a text member's shape, from the native shape
+    # check (an empty Array of that shape; string metadata only, tiny).
+    n = Array(shape, "<u1").size
     raw = memoryview(data)[offset:offset + n * itemsize]
     if len(raw) != n * itemsize:
         raise ValueError(
             f"mojolearn: npy member holds {len(raw)} data bytes, shape "
             f"{shape} of {descr!r} needs {n * itemsize}"
         )
-    if descr in _TYPESTR_OF:
-        a = _buffer.frombytes(raw, _TYPESTR_OF[descr], shape)
-        if fortran and a.ndim > 1:
-            a = Array._view_of(a, shape, "F")
-        return a
     # Text decoding below needs byte slices (`memoryview` has no `decode` or
     # `rstrip`). String metadata is tiny; numeric model tensors took the
     # borrowed, single-copy return above.
