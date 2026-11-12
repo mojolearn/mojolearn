@@ -138,8 +138,8 @@ def connect(context, package):
         if type(plan['context']) is dict:
             plan['context'].update(door)
     context.update(family_msel_estimators=registry,
-                   family_msel_pending_estimators=tuple(value for value in vars(package).values()  # glue: distinguish known migration debt from external callbacks
-                                                        if type(value) is type and value not in registry),
+                   family_msel_pending_estimators=tuple(value for value in _public_classes(package, loaded)  # glue: distinguish known migration debt from external callbacks
+                                                        if value not in registry),
                    family_msel_backend_fields=vars(_backend))
 
     selection = loaded('model_selection')
@@ -153,3 +153,20 @@ def connect(context, package):
 
     from ._native_parallel_cv import connect as connect_parallel
     connect_parallel(context, package)
+
+
+def _public_classes(package, loaded):
+    # glue: the package's public classes whose family is loaded, read from
+    # the package namespace or the defining module (never imports a family;
+    # lane lazy-family-import binds a public name on its first touch)
+    fields = vars(package)
+    lazy = fields.get('_LAZY_NAMES', {})
+    found = [value for value in fields.values() if type(value) is type]
+    for name, where in lazy.items():  # glue: fixed public name table
+        if name in fields or where is None:
+            continue
+        module = loaded(where.lstrip('.'))
+        value = vars(module).get(name) if module is not None else None
+        if type(value) is type:
+            found.append(value)
+    return tuple(dict.fromkeys(found))
