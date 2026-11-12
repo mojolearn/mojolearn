@@ -351,3 +351,15 @@ def wire_receive(socket: PythonObject) raises -> WireMessage:
         raise Error("parallel wire: tensors without a record")
     _ = socket
     return WireMessage(frame.kind, frame.sequence, frame.request.copy(), value)
+
+
+def wire_append(value: PythonObject, mut outgoing: WireOutgoing) raises:
+    """UNPACK of one value appended under a node the caller already wrote
+    (a reply record built field by field, without a Python container)."""
+    var budget = WIRE_MAX_NODES
+    _wire_unpack(value, outgoing, 1, budget)
+
+
+def wire_key(mut outgoing: WireOutgoing, key: String):
+    """A text mapping key under a WIRE_MAP node the caller wrote."""
+    outgoing.record.text(key)
