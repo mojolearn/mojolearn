@@ -46,26 +46,32 @@ def causal_program_operation[name: StaticString](op: Int, a: List[Int], words: L
     for i in range(len(f)):  # driver-loop: over descriptor floats (argument unpacking, no data)
         fi.append(Float32(f[i]))
     var reuse = False
+    var handle = held
+    var ret = List[Int]()
     if held != 0:
+        # One lease of the held program serves both the match and, when it
+        # matches, the read (no second registry acquire per read).
         var prior = PROGRAMS.acquire(causal_session_handle_of(held))
         reuse = causal_program_matches(prior[], a, p, fi)
+        if reuse:
+            ret = causal_program_read(prior[], a, p, fi)
         _ = prior
-    var handle = held
-    if not reuse:
-        handle = causal_session_handle_word(PROGRAMS.insert(causal_program_open(a, p, fi)))
-    var ret = List[Int]()
-    try:
-        var lease = PROGRAMS.acquire(causal_session_handle_of(handle))
-        ret = causal_program_read(lease[], a, p, fi)
-        _ = lease
+    if reuse:
         if len(ret) + 1 > capacity:
             raise Error("causal lm program: result exceeds the output span")
-    except problem:
-        if not reuse:
+    else:
+        handle = causal_session_handle_word(PROGRAMS.insert(causal_program_open(a, p, fi)))
+        try:
+            var lease = PROGRAMS.acquire(causal_session_handle_of(handle))
+            ret = causal_program_read(lease[], a, p, fi)
+            _ = lease
+            if len(ret) + 1 > capacity:
+                raise Error("causal lm program: result exceeds the output span")
+        except problem:
             # A program opened for this read dies with it, as the former
             # Python owner did when the caller discarded it.
             PROGRAMS.release(causal_session_handle_of(handle))
-        raise problem
+            raise problem
     var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=output)
     dst[0] = len(ret)
     for i in range(len(ret)):  # driver-loop: over result words (no data)
