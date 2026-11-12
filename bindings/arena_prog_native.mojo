@@ -16,7 +16,6 @@
 from bindings.native_array_storage import native_array_zeros
 from std.memory import unsafe_memcpy
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.metrics_plan_admission import MetricArenaOwner
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
@@ -35,7 +34,10 @@ from bindings.x_prep_native_owner import xprep_drop_resident
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.cpython_table import cpython_table
 from bindings.p3_array_arena_records import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
-from bindings.arena_prog_run import _switch, _add_input, _merge_pairs, _pad
+from bindings.arena_prog_run import _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricProgramInput, metrics_plan_execute
+from std.python._cpython import GILReleased
+from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime INT32_MAX = 2147483647
@@ -214,20 +216,13 @@ def _prep_scratch(value: PythonObject, sbase: Int, obase: Int, context: PythonOb
 
 def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # The stage records come from the program's `_stages` list of lists.
-    return _prep_run_impl(prog, mode, context, List[Int32](), False)
+    # TOMBSTONE: `prep_run_words` and the native-stage-word arm of this runner (the classifier owner's
+    # path) deleted 2026-11-12 by lane entangled-programs: the classifier program runs typed
+    # (bindings/prep_classify_prog_run.mojo `cls_prog_execute`); code recoverable at e561a66d6b.
+    return _prep_run_impl(prog, mode, context)
 
 
-def prep_run_words(prog: PythonObject, mode: PythonObject, context: PythonObject,
-                   words: List[Int32]) raises -> PythonObject:
-    """The same runner for a native owner whose stage records are already
-    native words (16 per stage, scratch words already placed): the owner no
-    longer builds a Python list of 16 ints per stage for this runner to
-    type-check and convert word by word (perf3-prep-shared)."""
-    return _prep_run_impl(prog, mode, context, words, True)
-
-
-def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject,
-                   native_words: List[Int32], has_native: Bool) raises -> PythonObject:
+def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # Classifier owners call this runner directly, bypassing arena_prog_c.
     # Connect already-loaded native NumPy metadata in this runner's own
     # context before a DeviceRows snapshot admits an ndarray-owned view.
@@ -329,20 +324,14 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
             if not is_inout:
                 _ = py_call(in_spans.append, Python.tuple(off, off + size))
         py_setitem(fields, "_in_spans", in_spans)
-        if has_native:
-            if len(native_words) % STAGE_WORDS != 0:
+        var stage_list = fields["_stages"]
+        nst = len(stage_list)
+        for i in range(nst):  # driver-loop: over the program's stage records
+            var stage = stage_list[i]
+            if len(stage) != STAGE_WORDS:
                 raise Error("ValueError: x_prep: a stage record must hold 16 words")
-            nst = len(native_words) // STAGE_WORDS
-            stages = native_words.copy()
-        else:
-            var stage_list = fields["_stages"]
-            nst = len(stage_list)
-            for i in range(nst):  # driver-loop: over the program's stage records
-                var stage = stage_list[i]
-                if len(stage) != STAGE_WORDS:
-                    raise Error("ValueError: x_prep: a stage record must hold 16 words")
-                for j in range(STAGE_WORDS):  # driver-loop: over one stage record's fixed words
-                    stages.append(Int32(_prep_scratch(stage[j], sbase, obase, context)))
+            for j in range(STAGE_WORDS):  # driver-loop: over one stage record's fixed words
+                stages.append(Int32(_prep_scratch(stage[j], sbase, obase, context)))
         if nst == 0:
             stages.append(0)
         var pa = Int(stages.unsafe_ptr())
@@ -433,204 +422,64 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
 # ---------------------------------------------------------------- x_metrics
 
 
-def _metrics_download(fields: PythonObject, size: Int, context: PythonObject, mut known: Bool) raises -> List[Int32]:
-    # `_Prog._download`: the [lo, hi, count, mult] ranges the device brings
-    # back; the declared outputs (uncounted ones merged), else the arena
-    # less the inputs and scratch. `known` False: the whole arena.
-    var outs = fields["_outs"]
-    var result = List[Int32]()
-    known = True
-    if outs is not None:
-        var plain = List[Int]()
-        for i in range(len(outs)):  # driver-loop: over the program's declared output ranges
-            if _int(outs[i][2], context) < 0:
-                plain.append(_int(outs[i][0], context))
-                plain.append(_int(outs[i][1], context))
-        # Merged with `lo <= last hi`, as _download does (adjacent ranges join).
-        result = _merge_pairs(plain^)
-        for i in range(len(outs)):  # driver-loop: the counted output ranges, in declaration order
-            if _int(outs[i][2], context) >= 0:
-                for j in range(4):  # driver-loop: one range descriptor's four words
-                    result.append(Int32(_int(outs[i][j], context)))
-        return result^
-    var skip = fields["_skip"]
-    if len(skip) == 0:
-        known = False
-        return result^
-    var pairs = List[Int]()
-    for i in range(len(skip)):  # driver-loop: over the program's input and scratch ranges
-        pairs.append(_int(skip[i][0], context))
-        pairs.append(_int(skip[i][1], context))
-    var n = len(pairs) // 2
-    for i in range(1, n):  # driver-loop: insertion sort of the input and scratch ranges
-        var lo = pairs[2 * i]
-        var hi = pairs[2 * i + 1]
-        var j = i - 1
-        while j >= 0 and (pairs[2 * j] > lo or (pairs[2 * j] == lo and pairs[2 * j + 1] > hi)):  # driver-loop: insertion shift over range pairs
-            pairs[2 * j + 2] = pairs[2 * j]
-            pairs[2 * j + 3] = pairs[2 * j + 1]
-            j -= 1
-        pairs[2 * j + 2] = lo
-        pairs[2 * j + 3] = hi
-    var at = 0
-    for i in range(n):  # driver-loop: complement of the input and scratch ranges
-        if pairs[2 * i] > at:
-            result.append(Int32(at))
-            result.append(Int32(pairs[2 * i]))
-            result.append(-1)
-            result.append(1)
-        at = max(at, pairs[2 * i + 1])
-    if at < size:
-        result.append(Int32(at))
-        result.append(Int32(size))
-        result.append(-1)
-        result.append(1)
-    return result^
-
-
-def _metrics_run(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Preserve the public Prog API and its identity-return contract. Native
-    # metric owners supply their already-built field dictionary directly.
-    _ = _metrics_run_fields(py_fields(prog), mode, context)
-    return prog
-
-
-def _metrics_run_fields(fields: PythonObject, mode: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
-    # Metric programs are native structural data, not Python class instances.
-    # Admit dictionary/key storage before any layout read can perform lookup.
-    # p3-array-arena: one native dictionary walk (no key list, no throwaway
-    # dict/list/str objects to read three builtin types).
-    var str_type = context["prog_types"]["str"]
-    if py_type(fields) is not py_type(Python.dict()):
-        raise Error("TypeError: native metric program fields require an exact dictionary")
-    if not native_namespace_string_keys(fields._obj_ptr, str_type):
-        raise Error("TypeError: native metric program fields require exact string keys")
-    classical_connect_numpy(context)
-    var entries = _family_entries(mode, "x_metrics", context)
-    var size = _int(fields["size"], context)
-    var arena = _store(size, "f", False, context)
-    var base = Int(py=arena[1])
-    var stage_list = fields["_stages"]
-    var nst = len(stage_list)
-    var stages = List[Int32]()
-    for i in range(nst):  # driver-loop: over the program's stage records
-        var stage = stage_list[i]
-        if len(stage) != STAGE_WORDS:
-            raise Error("ValueError: x_metrics: a stage record must hold 16 words")
-        for j in range(STAGE_WORDS):  # driver-loop: over one stage record's fixed words
-            stages.append(Int32(_int(stage[j], context)))
-    if nst == 0:
-        stages.append(0)
-    var known = True
-    var merged = _metrics_download(fields, size, context, known)
-    return _metrics_execute[False](fields, List[PythonObject](), List[Int](), stages,
-                                   nst, size, arena, base, entries, known, merged, context)
+# TOMBSTONE: `_metrics_run`, `_metrics_run_fields`, `_metrics_download` and `_metrics_execute` (the Python-record
+# metric runner and the Python `x_metrics_run*` entry calls; no caller since the "x_metrics_run" door arm was
+# deleted by lane pyout-metrics-cnn) deleted 2026-11-12 by lane entangled-programs; the native plan run is the
+# typed `metrics_plan_execute` (bindings/arena_prog_run.mojo); code recoverable at e561a66d6b.
 
 
 def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
                       context: PythonObject) raises -> MetricArenaOwner:
-    # Private native builders supply words directly. The separately callable
-    # public _Prog path above retains its dictionary/record admission and order.
+    """UNPACK + RUN of a native metric plan (lane entangled-programs,
+    2026-11-12). UNPACK: the selected mode's x_metrics image, its program
+    dispatch (connected once per factory), the route words and each input's
+    address (a DeviceRows input materialized on the host: x_metrics connects
+    no row gather or resident store). RUN: `metrics_plan_execute`, typed, the
+    GIL released, every input owner held across it. The arena is native."""
     classical_connect_numpy(context)
     var entries = _family_entries(mode, "x_metrics", context)
-    var arena = _store(plan.size, "f", False, context)
-    var base = Int(py=arena[1])
-    var known = True
-    var merged = plan.download(known)
-    var completed = _metrics_execute[True](PythonObject(None), inputs, plan.input_offsets, plan.stages,
-                                  len(plan.stages) // STAGE_WORDS, plan.size, arena, base,
-                                  entries, known, merged, context)
-    return MetricArenaOwner(completed, base)
-
-
-def _metrics_execute[native_plan: Bool](
-    fields: PythonObject, native_inputs: List[PythonObject], native_offsets: List[Int],
-    stages: List[Int32], nst: Int, size: Int, arena: PythonObject, base: Int,
-    entries: PythonObject, known: Bool, merged: List[Int32], context: PythonObject,
-) raises -> PythonObject:
+    var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
+        String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
     var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
-    var inputs = PythonObject(None)
-    comptime if not native_plan:
-        inputs = fields["_inputs"]
-    var input_count = len(native_inputs) if native_plan else len(inputs)
-    var ins = List[Int32]()
-    var owned = List[Int](capacity=2 * input_count)
-    # Resident scope and cache state admitted once per run (as in _prep_run).
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    # The scope's presence is the read-once flag (its value may itself be None).
-    var scope = Optional[PythonObject]()
-    var cache_state = Optional[PythonObject]()
+    var output_ranges = py_get(entries, "x_metrics_run_out") is not None
+    if len(inputs) != plan.buffer_inputs():
+        raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
+    var held = List[PythonObject](capacity=len(inputs))
+    var records = List[MetricProgramInput](capacity=len(plan.input_offsets))
+    var scope_checked = False
+    var next_buffer = 0
+    for k in range(len(plan.input_offsets)):  # driver-loop: over the program's input records
+        if plan.input_consts[k] >= 0:
+            # a program-owned constant (native words, no Python owner)
+            records.append(MetricProgramInput(plan.input_offsets[k], plan.const_address(k),
+                                              len(plan.consts[plan.input_consts[k]])))
+            continue
+        var value = inputs[next_buffer]
+        next_buffer += 1
+        var size_k = Int(py=value.size)
+        if size_k == 0:
+            continue
+        if _is_rows(value, context):
+            value = _values(value, context, True)
+        if ranges and not scope_checked:
+            # The thread's resident scope keeps its admission checks; an
+            # x_metrics image has no resident store, so no scope applies.
+            scope_checked = True
+            if _resident_scope(entries, context, "x_metrics") is not None:
+                raise Error("RuntimeError: arena family x_metrics has no resident store")
+        records.append(MetricProgramInput(plan.input_offsets[k], Int(py=classical_address(value)), size_k))
+        held.append(value)
+    var arena = MetricArenaOwner(0)
     try:
-        for k in range(input_count):  # driver-loop: over the program's input buffers
-            var off = 0
-            var value = PythonObject(None)
-            comptime if native_plan:
-                off = native_offsets[k]
-                value = native_inputs[k]
-            else:
-                var record = inputs[k]
-                off = _int(record[0], context)
-                value = record[1]
-            var size_k = Int(py=value.size)
-            if size_k == 0:
-                continue
-            var src = -1
-            if _is_rows(value, context):
-                # device-rows input (lane cpu4-misc): gathered on the device
-                # out of the base put once into this binding's store
-                if ranges and _can_gather(entries, "x_metrics"):
-                    src = _rows_gather(value, entries, "x_metrics", owned, context)
-                if src < 0:
-                    value = _values(value, context, True)
-            if src < 0 and ranges:
-                # resident (lane py-shared): the device copies it from the
-                # store; the host arena's words stay zero and are never read
-                if not scope:
-                    scope = _resident_scope(entries, context, "x_metrics")
-                if scope.value() is not None and size_k >= Int(py=scope.value()[0]):
-                    if not cache_state:
-                        var cache = _resident_cache(entries, scope.value()[1], context, "x_metrics")
-                        cache_state = _cache_state(cache, entries, context, "x_metrics")
-                    src = _cached_slot_in(cache_state.value(), value, entries, "x_metrics")
-            if src < 0:
-                unsafe_memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
-                       src=F32P(unsafe_from_address=Int(py=classical_address(value))), count=size_k)
-            _add_input(ins, off, off + size_k, src)
-        var pa = Int(stages.unsafe_ptr())
-        if ranges:
-            # the shared ranges runner (core/arena_io.mojo): only the inputs
-            # go up, only the outputs come back
-            var outs = merged.copy() if known else [Int32(0), Int32(size), Int32(-1), Int32(1)]
-            var n_in = len(ins) // 3
-            var n_out = len(outs) // 4
-            var ia = _pad(ins.copy(), [Int32(0), Int32(0), Int32(-1)])
-            var oa = _pad(outs^, [Int32(0), Int32(0), Int32(-1), Int32(1)])
-            _ = _entry_call(entries["x_metrics_run_ranges"], Python.tuple(
-                base, pa, Python.tuple(size, nst, n_in, n_out), Int(ia.unsafe_ptr()), Int(oa.unsafe_ptr())))
-            _ = ia^
-            _ = oa^
-        elif known and py_get(entries, "x_metrics_run_out") is not None:
-            var n_out = len(merged) // 4
-            var oa = _pad(merged.copy(), [Int32(0), Int32(0), Int32(-1), Int32(1)])
-            _ = _entry_call(entries["x_metrics_run_out"], Python.tuple(
-                base, size, pa, nst, Int(oa.unsafe_ptr()), n_out))
-            _ = oa^
-        else:
-            _ = _entry_call(entries["x_metrics_run"], Python.tuple(base, size, pa, nst))
-    except error:
-        var cleanup = _release(owned, entries, "x_metrics")
-        if cleanup.byte_length() > 0:
-            _drop_pending(error)
-            raise Error("RuntimeError: x_metrics operation failed: " + String(error) + "; cleanup also failed: " + cleanup)
-        raise error
-    var cleanup = _release(owned, entries, "x_metrics")
-    if cleanup.byte_length() > 0:
-        raise Error("RuntimeError: x_metrics slot cleanup failed: " + cleanup)
-    comptime if not native_plan:
-        py_setitem(fields, "arena", arena[0])
-    _ = stages  # The packed native record owner survives the synchronous run.
-    return arena[0]
+        with GILReleased(Python()):
+            arena = metrics_plan_execute(entry, plan, records, ranges, output_ranges)
+    finally:
+        _ = held^
+        _ = records^
+        _ = provider
+        _ = entries
+    return arena^
 
 
 # ---------------------------------------------------------------- the door

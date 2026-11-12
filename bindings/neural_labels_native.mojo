@@ -22,7 +22,8 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_LABELS
 from core.cast_in import cast_in_kind
-from bindings.admitted_input import AdmittedTyped, admit_view, admitted_view_kind
+from bindings.admitted_input import AdmittedTypedPin, admit_view, admitted_view_kind
+from bindings.tensor_view import TensorView
 from bindings.tensor_view import base_format
 
 
@@ -41,10 +42,9 @@ def _item(layout: BorrowedBufferLayout, i: Int) -> Int:
 # the one admission, bindings/admitted_input.mojo admit_view) deleted 2026-11-09 by lane/m1-followups-misc; code
 # recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/NEURAL_LABELS_OWN_ADMISSION.patch
-def _numeric(var captured: AdmittedTyped, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _numeric(v: TensorView, var captured: AdmittedTypedPin, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """The sorted distinct classes and the int32 codes of a numeric label
     vector the one admission captured (any numeric dtype, its own strides)."""
-    ref v = captured.view
     var rank = len(v.shape)
     if rank > 2 or (rank == 2 and v.shape[1] != 1):
         raise Error("ValueError: y must be a label vector")
@@ -152,16 +152,16 @@ def neural_encode_labels(source: PythonObject, entries: PythonObject, context: P
     # native buffer exporter, or a list / frame it materializes); text and
     # object labels are decoded below. No foreign protocol is admitted.
     var numeric = False
-    var captured = Optional[AdmittedTyped]()
+    var captured = AdmittedTypedPin()
+    var view = TensorView()
     try:
-        var c = admit_view(source, "y", context)
-        _ = admitted_view_kind(c.view, "y")  # raises for a text or object buffer
+        view = admit_view(source, "y", context, captured)
+        _ = admitted_view_kind(view, "y")  # raises for a text or object buffer
         numeric = True
-        captured = c^
     except:
-        pass
-    if numeric and captured:
-        return _numeric(captured.take(), entries, context)
+        captured = AdmittedTypedPin()  # release a partial capture now, as before
+    if numeric:
+        return _numeric(view, captured^, entries, context)
     var labels = _flat(source, context)
     var count = len(labels)
     if count == 0:
@@ -177,7 +177,9 @@ def neural_encode_labels(source: PythonObject, entries: PythonObject, context: P
         all_text = all_text and (flags & UInt64(1 << 28)) != 0
         all_bytes = all_bytes and (flags & UInt64(1 << 27)) != 0
     if not all_text and not all_bytes:
-        return _numeric(admit_view(labels, "y", context), entries, context)
+        var labels_pin = AdmittedTypedPin()
+        var labels_view = admit_view(labels, "y", context, labels_pin)
+        return _numeric(labels_view, labels_pin^, entries, context)
     # Text labels are read as they are; only bytes need the Latin-1 key.
     var normalized = labels if all_text else Python.list()
     for i in range(0 if all_text else count):  # driver-loop: lossless native bytes-to-codepoint key normalization

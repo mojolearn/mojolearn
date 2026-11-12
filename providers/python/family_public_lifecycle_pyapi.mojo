@@ -15,6 +15,7 @@ from bindings.admitted_finite_wording import admitted_finite_wording
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta, admit_family_owned
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, admitted_input_shape, ADMITTED_ITEM_F32, ADMITTED_SPARSE_OTHER, ADMITTED_GRAPH_TUPLE
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -124,14 +125,15 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
     elif not (spec.graph and py_type(source) is b.tuple):
         # The finiteness test rides in the admission (the cast's own verdict,
         # or one parallel scan of a borrowed X): no second pass over X.
-        var snapshot = admit_family_meta(source, 2, "X", context, True, finite=spec.scan,
+        var pin = ArrayPin()
+        var snapshot = admit_family_meta(source, 2, "X", context, pin, True, finite=spec.scan,
                                          refusal=admitted_finite_wording(name, "X"),
                                          defer_finite=spec.defer)
         rows = snapshot.shape[0]
         columns = snapshot.shape[1]
         # The snapshot's buffer and owner, recorded before any refusal below
         # so an owner never re-admits the X this door admitted.
-        _ = admitted.add_input(admitted_input_dense(x_index, source, snapshot.keep, Int(snapshot.source.addr),
+        _ = admitted.add_input(admitted_input_dense(x_index, source, pin.keep, Int(snapshot.source.addr),
                                                     rows, columns, ADMITTED_ITEM_F32, snapshot.readonly))
         if rows == 0:
             raise Error("Found array with 0 sample(s) (shape=(0, " + String(columns) + ")) while a minimum of 1 is required by " + name + ".")
@@ -143,7 +145,7 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
             # handed over without a per-call copy; a fit retains X and keeps
             # the owned copy.
             var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
-            py_setitem(values, PythonObject(x_index), snapshot.keep if borrow else admit_family_owned(snapshot, context))
+            py_setitem(values, PythonObject(x_index), pin.keep if borrow else admit_family_owned(snapshot, pin, context))
     if not fitting and Int(py=depth) == 0 and columns >= 0 and not spec.graph and not _precomputed(fields, b):
         var width = py_get(fields, "n_features_in_")
         if py_type(width) is b.int:

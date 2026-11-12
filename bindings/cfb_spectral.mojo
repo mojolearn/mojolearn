@@ -17,6 +17,7 @@ from bindings.spectral_native_boundary import (
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding
 from bindings.admitted_family import admit_family, admit_family_f64, admit_family_input
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.admitted_input import admit_typed
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
 from bindings.classical_arrays import classical_address
@@ -226,8 +227,9 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
                     + "got shape " + family_repr(shape))
     # The metadata step of the one admission path (rank and emptiness
     # refusals), then the float64 widen of the same view (family_view deleted).
-    var snapshot = admit_family_input(dense_source, 2, "X", context)
-    var dense = admit_family_f64(snapshot.keep, "X", context)
+    var pin = ArrayPin()
+    _ = admit_family_input(dense_source, 2, "X", context, pin)
+    var dense = admit_family_f64(pin.keep, "X", context)
     var n = _int(shape[0])
     var size = Int(py=dense.size)
     var nnz = 0

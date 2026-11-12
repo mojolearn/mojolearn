@@ -11,7 +11,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_typed
 from bindings.tsa_arima_native import arima_fit, _adopt, _no_exog
 from bindings.tsa_hw_native import tsa_array
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 
 
 
@@ -64,7 +64,8 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
         raise Error("TypeError: AutoARIMA model groups require matching native index lists")
     if reuse is not None and (py_type(reuse) is not py_type(Python.list()) or len(reuse) != len(models)):
         raise Error("TypeError: AutoARIMA reuse metadata requires a matching native list")
-    var endog = _packed(fields["_endog"], "endog", context)
+    var endog_pin = ArrayPin()
+    var endog = _packed(fields["_endog"], "endog", context, endog_pin)
     if len(endog.shape) != 2:
         raise Error("ValueError: AutoARIMA endog must be a matrix")
     var rows = endog.shape[0]
@@ -88,7 +89,8 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
         for k in range(4):  # small-loop(selected seasonal order words)
             _ = py_call(seasonal_words.append, _integer(seasonal[k], context))
         var m = _new_arima(ordinary, seasonal_words, _integer(spec[2], context), maxiter, context)
-        var ids = _packed(ids_all[i], "group indices", context, True)
+        var ids_pin = ArrayPin()
+        var ids = _packed(ids_all[i], "group indices", context, ids_pin, True)
         if len(ids.shape) != 1:
             raise Error("ValueError: AutoARIMA group indices must be a vector")
         var y = classical_typed(Python.tuple(ids.count, width), "<f4", context)
@@ -102,11 +104,13 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
             _ = arima_fit(m, Python.tuple(y, PythonObject(None)), context)
         _ = py_call(fitted.append, m)
         _ = ids
+        _ = ids_pin^
         _ = y
     var updates = Python.dict()
     py_setitem(updates, "_fitted", fitted)
     autoarima_commit(fields, updates, context)
     _ = endog
+    _ = endog_pin^  # the door's pin held endog through every gather
     return model
 
 
@@ -119,6 +123,11 @@ struct _SearchBlock(Movable):
     var f: ArrayMetadata
     var flags: ArrayMetadata
     var ll: ArrayMetadata
+    # The door-side pins of the three typed views; the block holds them as
+    # long as it is cached.
+    var f_pin: ArrayPin
+    var flags_pin: ArrayPin
+    var ll_pin: ArrayPin
     var offsets: List[Int]
     var rows: Int
 
@@ -128,9 +137,12 @@ struct _SearchBlock(Movable):
             raise Error("TypeError: AutoARIMA search fit block requires a native tuple")
         # Admission precedes all shape/index reads in the adoption owner. The
         # original arrays remain pinned by the block throughout the adoption.
-        var f = _packed(block[0], "search float block", context)
-        var flags = _buffer(block[1], "search flags", context)
-        var ll = _packed(block[4], "search likelihoods", context)
+        var f_pin = ArrayPin()
+        var flags_pin = ArrayPin()
+        var ll_pin = ArrayPin()
+        var f = _packed(block[0], "search float block", context, f_pin)
+        var flags = _buffer(block[1], "search flags", context, flags_pin)
+        var ll = _packed(block[4], "search likelihoods", context, ll_pin)
         if not flags.c_order or flags.source.itemsize != 4 or flags.source.kind != 1:
             raise Error("TypeError: AutoARIMA search flags require contiguous int32 storage")
         var listed = block[2]
@@ -144,6 +156,9 @@ struct _SearchBlock(Movable):
         self.f = f^
         self.flags = flags^
         self.ll = ll^
+        self.f_pin = f_pin^
+        self.flags_pin = flags_pin^
+        self.ll_pin = ll_pin^
         self.offsets = offsets^
         self.rows = rows
 
@@ -171,7 +186,8 @@ def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut 
             raise Error("ValueError: AutoARIMA search block offset is out of range")
     if sb.offsets[trial] + rows * (3 * complexity + 1) > f.count:
         raise Error("ValueError: AutoARIMA selected search block is incomplete")
-    var local = _packed(saved[2], "search local indices", context, True)
+    var local_pin = ArrayPin()
+    var local = _packed(saved[2], "search local indices", context, local_pin, True)
     if len(local.shape) != 1 or local.count != count:
         raise Error("ValueError: AutoARIMA search reuse local indices disagree")
     # Capture each caller-owned source once, then gather using only these
@@ -200,4 +216,5 @@ def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut 
     _adopt(model, _fields(model, context["arima_class"]), y, False, 2, count, n_obs, _no_exog(context), 0,
            complexity, params, x, x0, stats, result_flags, PythonObject(None), context)
     _ = local
+    _ = local_pin^
     _ = block

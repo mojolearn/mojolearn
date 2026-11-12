@@ -26,6 +26,7 @@ independent numerical work to split.
 from core.entry_table import EntryRef, entry_table_publish, entry_table_resolve
 from core.native_descriptor_abi import NativeDescriptorCall, MAMBA_STATE_ABI_NAME
 from core.causal_lm_entry_table import CausalEntryKey, causal_ref, CAUSAL_TABLE_MAMBA, CAUSAL_MAMBA_OPERATIONS
+from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_MAMBA_TRAIN
 
 comptime MAMBA3_STATE_FORWARD = 4
 """a: the Mamba-3 carried-state buffers; words [B, L, d, buffered, pending] -> buffered tokens."""
@@ -72,3 +73,17 @@ struct Mamba3StateRoute(Copyable, Movable):
         if self.vendor == 0 and self.training_host:
             return mamba_host_state_ref(self.mode)
         return causal_ref[CAUSAL_TABLE_MAMBA](CausalEntryKey(self.mode, self.vendor))
+
+    def has_sessions(self) -> Bool:
+        """Whether the block's image keeps Mamba-3 prefill sessions: a
+        training block (GPU or CPU build). The CPU inference model's block
+        (`_mojolearn_neural_host`) has none."""
+        return self.vendor != 0 or self.training_host
+
+    def session_ref(self) raises -> EntryRef:
+        """The Mamba entry of the training image that holds the block's
+        prefill session (core/mamba3_prefill_session.mojo; lane
+        mamba3-prefill-handle): NEURAL_TABLE_MAMBA_TRAIN at the block's key."""
+        if not self.has_sessions():
+            raise Error("RuntimeError: Mamba3 prefill sessions require a training binding")
+        return neural_ref[NEURAL_TABLE_MAMBA_TRAIN](NeuralEntryKey(self.mode, self.vendor))

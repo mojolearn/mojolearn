@@ -16,7 +16,7 @@ from bindings.native_resident_capsule import resident_capsule
 from bindings.native_model_records import records_open, model_generation
 from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
 from std.memory import unsafe_memcpy
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays import classical_typed, classical_address, classical_kind
 from bindings.admitted_input import admit_x
@@ -523,21 +523,21 @@ def decomp_door_input(mut door: DecompDoor, mut kit: DKit, source: PythonObject,
     return decomp_door_borrow(door, kit, array, Int(py=array.shape[0]), Int(py=array.shape[1]))
 
 
-def decomp_door_snapshot(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, rows: Int,
+def decomp_door_snapshot(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int,
                          cols: Int) raises -> Int:
-    """UNPACK `input_snapshot`: the provider's admitted address, its storage
-    owners kept by the door."""
-    door.keep(snapshot.owner)
-    door.keep(snapshot.keep)
+    """UNPACK `input_snapshot`: the provider's admitted address (the typed
+    view), the pin's storage owners kept by the door for the call."""
+    door.keep(pin.owner)
+    door.keep(pin.keep)
     return kit.borrow(snapshot.source.addr, rows, cols)
 
 
-def decomp_door_tested(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, rows: Int, cols: Int,
-                       est: String) raises -> Int:
+def decomp_door_tested(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int,
+                       cols: Int, est: String) raises -> Int:
     """UNPACK `input_tested`: `decomp_door_snapshot` of an X admitted with
     `defer_finite`, tested on its upload (the GIL released, as before)."""
-    door.keep(snapshot.owner)
-    door.keep(snapshot.keep)
+    door.keep(pin.owner)
+    door.keep(pin.keep)
     var index = -1
     var py = Python()
     with GILReleased(py):

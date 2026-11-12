@@ -61,7 +61,7 @@ def fixture():
 def test_committed_schemas_are_exactly_the_source_derivation():
     events = ast.literal_eval(literal('_EVENTS'))
     assert events == {name: row['events'] for name, row in SCHEMAS.items()}
-    listed = [ast.unparse(node).rpartition('.')[2] for node in literal('_CLASSES').elts]
+    listed = list(ast.literal_eval(literal('_CLASS_SOURCES')))
     assert sorted(listed) == sorted(SCHEMAS) and len(listed) == 50
     # Only LabelEncoder (object's own constructor) stays outside.
     assert REFUSED == {'LabelEncoder': 'no source constructor'}
@@ -134,7 +134,7 @@ def test_constructor_wrapper_is_one_call_and_wired_before_snapshots():
     factory = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_initializer')
     wrapper = factory.body[0]
     assert len(wrapper.body) == 1 and ast.unparse(wrapper.body[0]) == 'return _ENTRY(self, args, kwargs, _CONTEXT, owner)'
-    text = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    text = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
     ordered = ['_install_declared_constructors()', '_connect_mode_metadata_classes(', '_connect_public_attributes(',
                '_connect_declared_params(', '_connect_declared_constructors(']
     positions = [text.index(call) for call in ordered]

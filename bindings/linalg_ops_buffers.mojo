@@ -3,7 +3,7 @@
 # `bool(value)` and `dtype_name`'s refusal name. The admission itself (the
 # metadata capture, the zero-copy borrow, the parallel conversion by
 # Array.astype's rules, the zero-filled Arrays and the shape tuples) is the one
-# multi-dtype admission path, bindings/admitted_input.mojo (`AdmittedTyped`,
+# multi-dtype admission path, bindings/admitted_input.mojo (`admitted_typed_once`,
 # `admitted_typed_c`, `admit_typed`, `admitted_typed_output`, `admitted_zeros`,
 # `AdmittedBuf`).
 from std.python import PythonObject

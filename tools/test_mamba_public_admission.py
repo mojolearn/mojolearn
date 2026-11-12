@@ -75,7 +75,7 @@ def test_session_reports_are_retained_before_returning_output():
 
 
 def test_native_cpu_route_does_not_consult_instance_class_protocol():
-    body = NATIVE.split("def _m3_entries(")[1].split("def _m3_canonical(")[0]
+    body = NATIVE.split("def _m3_entries(")[1].split("def _m3_allocate(")[0]
     assert "PyType_IsSubtype" in body
     assert "py_call(bi.isinstance" not in body
 
@@ -87,25 +87,21 @@ def test_session_release_survives_rejected_state_dictionary():
     assert body.index("h[].plan.weights.clear()") > body.rindex("finally:")
 
 
-def test_saved_binding_lookup_uses_connected_identity_without_attribute_hooks():
-    body = NATIVE.split('def _mamba_saved_entries(')[1].split('def _mamba_saved_entry(')[0]
-    assert 'PyObject_GenericGetDict' in body
-    assert 'if binding is py_get(fields, "canonical"):' in body
-    assert 'getattr' not in body and 'hasattr' not in body
+def test_owned_operations_reach_the_session_handle_without_binding_lookup():
+    # Lane mamba3-prefill-handle (2026-11-12): the owned operations call the
+    # block's session handle owner; the saved-binding resolution is gone.
+    assert 'def _mamba_saved_entries(' not in NATIVE and 'def _m3_canonical(' not in NATIVE
     for operation, following in (("release_owned", "session_info"), ("session_info", "export_owned"),
                                  ("export_owned", "getstate")):
         body = NATIVE.split(f'def mamba3_{operation}(')[1].split(f'def mamba3_{following}(')[0]
-        assert '_mamba_saved_entries(mods, binding, context)' in body
-        assert '_native_function(binding,' not in body and '_native_function(mods, binding,' not in body
+        assert 'mamba3_prefill_session_' in body
+        assert '_native_function(' not in body
 
 
 def test_native_entry_selection_refuses_hooks_before_lookup():
     assert 'Python.import_module(' not in NATIVE
     assert '.hasattr' not in NATIVE
-    canonical = NATIVE.split('def _m3_canonical(')[1].split('def _mamba_saved_entries(')[0]
-    assert canonical.index('_native_entry_fields(mods, entries)') < canonical.index('fields["canonical"]')
-    assert 'entries.canonical' not in canonical
-    for name in ('mamba3_forward_fresh', 'mamba3_owned_weights_enabled', 'mamba1_profile'):
+    for name in ('mamba3_forward_fresh', 'mamba1_profile'):
         assert f'_native_has_entry(' in NATIVE and f'"{name}")' in NATIVE
     assert '_native_has_entry(mods, binding, kind_name + "_session_create")' in NATIVE
     assert '_native_has_entry(mods, binding, kind_name + "_decode_step")' in NATIVE

@@ -48,7 +48,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_isinstance, family_call, family_array, family_field,
@@ -406,11 +406,12 @@ def knn_release(model: PythonObject) raises:
 # scikit-learn does).
 
 
-def knn_admit_x(source: PythonObject, model: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+def knn_admit_x(source: PythonObject, model: PythonObject, context: PythonObject,
+                mut pin: ArrayPin) raises -> ArrayMetadata:
     """A k-NN door's X (the fit index or the queries): dense float32 C
     order, borrowed when it already is; a cast or a fold refused in
     `admitted_finite_wording`, a borrowed X left to the entry's status word."""
-    return admit_family_meta(source, 2, "X", context, True, True, False, False,
+    return admit_family_meta(source, 2, "X", context, pin, True, True, False, False,
                              admitted_finite_wording(_class_name(model), "X"), True)
 
 
@@ -656,8 +657,10 @@ def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: 
     # public operation snapshot. Keep that internal ABI while their owner
     # migrates; plain operations above consume the retained snapshot directly.
     if value == KNN_DIST_JS:
-        var snapshot = admit_family_meta(x, 2, "X", context)
+        var pin = ArrayPin()
+        var snapshot = admit_family_meta(x, 2, "X", context, pin)
         _check_metric_input(cls_name, value, snapshot)
+        _ = pin^
 
 
 # ------------------------------------------------------------------ fit
@@ -682,12 +685,13 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
     # 0.8.66 regression C3 (knn fit 8.5x on istella): 0.8.55 and
     # scikit-learn's brute NearestNeighbors keep the caller's block; the
     # zero-filled copy is gone.
-    var input = knn_admit_x(x_source, model, context)
+    var input_pin = ArrayPin()
+    var input = knn_admit_x(x_source, model, context, input_pin)
     var idx: PythonObject
     if input.f32_c() and not input.copied:
-        idx = input.keep
+        idx = input_pin.keep
     else:
-        idx = admit_family_owned(input, context)
+        idx = admit_family_owned(input, input_pin, context)
     var rbc = _eq(family_field(fields, "algorithm"), PythonObject("rbc"))
     if not knn_x_tested(input, x_source, context):
         # Lane a7b: the fit's finite test. On the GPU binding the index is
@@ -704,6 +708,7 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
     py_setitem(fields, "_index", idx)
     py_setitem(fields, "n_samples_fit_", PythonObject(input.shape[0]))
     py_setitem(fields, "n_features_in_", PythonObject(input.shape[1]))
+    _ = input_pin^  # the door's pin held X through the device upload or host scan
 
 
 def _y_shape(y: PythonObject, fields: PythonObject, context: PythonObject) raises -> List[Int]:
@@ -878,16 +883,17 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var xn = args[0]
     _nn_fit(model, args[1], context, PythonObject(None))
     var fields = py_fields(model)
-    var target = admit_family_meta(args[2], -1, "y", context)
+    var target_pin = ArrayPin()
+    var target = admit_family_meta(args[2], -1, "y", context, target_pin)
     var shape = target.shape.copy()
     knn_check_y_rank(len(shape))
     knn_check_y_rows(shape[0], Int(py=family_field(fields, "n_samples_fit_")))
-    var ya = target.keep
+    var ya = target_pin.keep
     var n = shape[0]
     var n_out = 1 if len(shape) == 1 else shape[1]
     if n_out == 1:
         # One column IS one contiguous row of the transposed layout.
-        py_setitem(fields, "_y_cols", labels_reshape(admit_family_owned(target, context), Python.tuple(1, n), context))
+        py_setitem(fields, "_y_cols", labels_reshape(admit_family_owned(target, target_pin, context), Python.tuple(1, n), context))
     else:
         # The transpose on the device (`xn_p2m_transpose`; the host binding's
         # same op on a CPU-only install).
@@ -900,13 +906,14 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         py_setitem(fields, "_y_cols", yc)
     py_setitem(fields, "outputs_2d_", PythonObject(len(shape) == 2 and shape[1] != 1))
     _ = target
+    _ = target_pin
 
 
 # ------------------------------------------------------------------ predict
 
 
 def _queries(model: PythonObject, x_source: PythonObject, mut dist: PythonObject,
-             context: PythonObject) raises -> ArrayMetadata:
+             context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     """The prediction preamble: fitted check, float32 queries, the metric
     input check (with `_dist_params`' refusals), width and k checks. `dist`
     receives the resolved `_dist_params`, read once per call."""
@@ -914,7 +921,7 @@ def _queries(model: PythonObject, x_source: PythonObject, mut dist: PythonObject
     if (py_get(fields, PythonObject("_index"), PythonObject(None)) is None
             or py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None):
         raise Error("mojolearn: call fit before predict")
-    var q = knn_admit_x(x_source, model, context)
+    var q = knn_admit_x(x_source, model, context, pin)
     dist = _dist_params(model, context)
     _check_metric_input(_class_name(model), Int(py=dist[0]), q)
     _query_checks(fields, q.shape[1])
@@ -1005,11 +1012,13 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     var fold = _knn_fold(model, binding, x_source, dist, context)
     if fold.active():
         return _classify_on(model, binding, 0, fold.rows, True, fold, want_proba, dist, context)
-    var query = _queries(model, x_source, dist, context)
+    var query_pin = ArrayPin()
+    var query = _queries(model, x_source, dist, context, query_pin)
     var result = _classify_on(model, binding, query.source.addr, query.shape[0],
                               knn_x_tested(query, x_source, context), DoorRowsStore.none(), want_proba, dist,
                               context)
-    _ = query  # retain the query's owners through execution
+    _ = query
+    _ = query_pin^  # the door's pin retains the query's owners through execution
     return result
 
 
@@ -1189,10 +1198,12 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     var fold = _knn_fold(model, binding, x_source, dist, context)
     if fold.active():
         return _reg_predict_on(model, binding, 0, fold.rows, True, fold, dist, context)
-    var query = _queries(model, x_source, dist, context)
+    var query_pin = ArrayPin()
+    var query = _queries(model, x_source, dist, context, query_pin)
     var result = _reg_predict_on(model, binding, query.source.addr, query.shape[0],
                                  knn_x_tested(query, x_source, context), DoorRowsStore.none(), dist, context)
-    _ = query  # retain the query's owners through execution
+    _ = query
+    _ = query_pin^  # the door's pin retains the query's owners through execution
     return result
 
 

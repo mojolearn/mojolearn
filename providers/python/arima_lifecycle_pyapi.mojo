@@ -8,6 +8,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _truth
 from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _integer_object, _integer, _buffer, _packed
+from providers.python.array_metadata_pyapi import ArrayPin
 from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.classical_arrays import classical_address
 from bindings.tsa_hw_native import tsa_array
@@ -36,7 +37,8 @@ def arima_order(value: PythonObject, width: Int, name: String, context: PythonOb
         if cls is b.tuple and normalized:
             return value
     else:
-        var source = _buffer(value, name, context)
+        var source_pin = ArrayPin()
+        var source = _buffer(value, name, context, source_pin)
         if len(source.shape) != 1 or source.count != width:
             raise Error("ValueError: mojolearn ARIMA: " + name + " must have " + String(width) + " entries")
         var code = String("?") if source.source.kind == CAST_KIND_BOOL else String("q") if source.source.kind == CAST_KIND_SIGNED else String("Q") if source.source.kind == CAST_KIND_UNSIGNED else String("e") if source.source.itemsize == 2 else String("f") if source.source.itemsize == 4 else String("d")
@@ -50,6 +52,7 @@ def arima_order(value: PythonObject, width: Int, name: String, context: PythonOb
                 raise Error("ValueError: mojolearn ARIMA: " + name + " entries must be non-negative integers")
             _ = py_call(values.append, py_call(b.int, decoded.integer_text(), 2))
         _ = source
+        _ = source_pin^  # the door's pin held the order words through the decode
     return py_call(b.tuple, values)
 
 
@@ -148,7 +151,8 @@ def arima_parameter(model: PythonObject, args: PythonObject, context: PythonObje
         flatten = True
     else:
         raise Error("AttributeError: unknown ARIMA parameter " + name)
-    var source = _packed(fields["params_"], "params", context)
+    var source_pin = ArrayPin()
+    var source = _packed(fields["params_"], "params", context, source_pin)
     if len(source.shape) != 2:
         raise Error("ValueError: ARIMA params must be a fitted parameter matrix")
     var rows = source.shape[0]
@@ -175,6 +179,7 @@ def arima_parameter(model: PythonObject, args: PythonObject, context: PythonObje
         # ~/mojolearn-evidence/arima-cpu-repair-20261029/.
         _ = dims
     _ = source
+    _ = source_pin^
     return result
 
 

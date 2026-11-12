@@ -11,6 +11,7 @@ from bindings.pca_descriptor_boundary import pca_mode, pca_fold_connection, pca_
 from core.pca_native_api import PCAQueryRequest, PCAFoldStore
 from providers.python.pca_model_pyapi import pca_query_admitted
 from providers.python.pca_input_pyapi import pca_state_snapshot
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.decomp_inputs import decomp_admit
 
 
@@ -53,8 +54,10 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     # so a value written in place into components_ or mean_ after an earlier
     # whitened transform is still refused. No Python walk is involved.
     var scan = whiten
-    var components = pca_state_snapshot(fields, "components_", [count, features], context, scan)
-    var mean = pca_state_snapshot(fields, "mean_", [features], context, scan)
+    var components_pin = ArrayPin()
+    var mean_pin = ArrayPin()
+    var components = pca_state_snapshot(fields, "components_", [count, features], context, components_pin, scan)
+    var mean = pca_state_snapshot(fields, "mean_", [features], context, mean_pin, scan)
     # NumPy's native ndarray constructor owns this fresh bytearray-backed
     # C-order float32 output. No later Python wrapper converts its result.
     var output = sequential_array(Python.tuple(rows, features if inverse else count), context["float32"], context)
@@ -68,8 +71,10 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
         pca_whiten_capability(connection)
         if fit_rows < 2:
             raise Error("PCA whitening requires fit rows >=2")
-        var singular = pca_state_snapshot(fields, "singular_values_", [count], context, scan, scan)
-        var variance = pca_state_snapshot(fields, "explained_variance_", [count], context, scan, scan)
+        var singular_pin = ArrayPin()
+        var variance_pin = ArrayPin()
+        var singular = pca_state_snapshot(fields, "singular_values_", [count], context, singular_pin, scan, scan)
+        var variance = pca_state_snapshot(fields, "explained_variance_", [count], context, variance_pin, scan, scan)
         # The fit row count governs whitening; the current input's row count
         # only governs output shape. All owners and addresses are now frozen.
         request.singular = singular.source.addr
@@ -80,6 +85,8 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
             raise failure^
         _ = singular^
         _ = variance^
+        _ = singular_pin^
+        _ = variance_pin^
     elif inverse:
         _ = pca_run_query(connection, request)
     elif x.store.active():
@@ -92,4 +99,6 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     _ = x^
     _ = components^
     _ = mean^
+    _ = components_pin^  # the door's pins hold the fitted state through every RUN read
+    _ = mean_pin^
     return output

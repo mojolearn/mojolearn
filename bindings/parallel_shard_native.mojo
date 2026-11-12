@@ -32,6 +32,7 @@ from core.native_label_codes import NativeLabelCodes
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.admitted_family import admit_family, admit_family_meta, admit_family_input, admit_family_cast
+from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
@@ -153,14 +154,15 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     var rps = args[3]
     if py_type(rps) is not b.int or Int(py=rps) < 1:
         raise Error("ValueError: rows_per_shard must be a positive int")
-    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
-    var x = x_meta.keep
+    var x_pin = ArrayPin()
+    var x_meta = admit_family_meta(args[1], 2, "X", context, x_pin, True)
+    var x = x_pin.keep
     var d = Int(py=x.shape[1])
     if d != Int(py=fields["n_features_in_"]):
         raise Error("ValueError: X has " + String(d) + " features, the fit had " + String(Int(py=fields["n_features_in_"])))
     var rows = Int(py=x.shape[0])
     if rows == 0:
-        return _rbf_transform(estimator, Python.tuple(args[4], x), context, x_meta)
+        return _rbf_transform(estimator, Python.tuple(args[4], x), context, x_meta, x_pin)
     var n_devices = shard_devices(args[2])
     var ranges = shard_ranges(rows, rps, "rows_per_shard", "")
     var state = shard_state(fields, b.frozenset(Python.list("_resident_holder")), context)
@@ -205,7 +207,8 @@ def _scaler_input(source: PythonObject, context: PythonObject) raises -> PythonO
     # the borrow or the cast of the same capture (family_view and the second
     # admission of `source` deleted). A rank above 2 is now refused by the
     # metadata step ("must be at most 2-D") before the dtype test.
-    var snapshot = admit_family_input(source, -1, "input", context)
+    var pin = ArrayPin()
+    var snapshot = admit_family_input(source, -1, "input", context, pin)
     var b = shard_b()
     var listed = py_type(source) is b.list or py_type(source) is b.tuple
     if not listed and snapshot.dtype_name != "<f4":
@@ -214,8 +217,8 @@ def _scaler_input(source: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("ValueError: Scaler requires a nonempty two-dimensional input")
     if snapshot.shape[0] * snapshot.shape[1] > 2147483647:
         raise Error("ValueError: Scaler exceeds the native Int32 indexing bound")
-    admit_family_cast(snapshot, "input", context)
-    return snapshot.keep
+    admit_family_cast(snapshot, pin, "input", context)
+    return pin.keep
 
 
 def _columns(data: PythonObject, lo: Int, hi: Int, context: PythonObject) raises -> PythonObject:
@@ -1413,8 +1416,12 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var args = shard_resolve_stored(request[2])
     if operation == "rbf_rows":
         var model = shard_model(_t("rbf_class"), state)
-        var rows_meta = admit_family_meta(args[0], 2, "X", context, True)
-        return _rbf_transform(model, Python.tuple(_worker_binding("_mojolearn_kernel_methods"), rows_meta.keep), context, rows_meta)
+        var rows_pin = ArrayPin()
+        var rows_meta = admit_family_meta(args[0], 2, "X", context, rows_pin, True)
+        var rows_out = _rbf_transform(model, Python.tuple(_worker_binding("_mojolearn_kernel_methods"), rows_pin.keep),
+                                      context, rows_meta, rows_pin)
+        _ = rows_pin^
+        return rows_out
     if operation == "scaler_fit" or operation == "scaler_transform":
         return _scaler_worker(operation, state, args, context)
     # The GPC sites call the GP table entry (core/gp_entry_table.mojo) of the

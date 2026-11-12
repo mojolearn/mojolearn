@@ -18,7 +18,7 @@ from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _
 from bindings.family_common import FAMILY_F32P, family_array, family_repr
 from bindings.classical_arrays import classical_address
 from bindings.parallel_public_result import parallel_public_result
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from core.cast_in import cast_in_kind
 from core.admitted_input import admitted_cast_f32
 
@@ -75,7 +75,7 @@ def _complex_dtype(code: Int) -> Bool:
     return code == 14 or code == 15 or code == 16
 
 
-def _cast(var snapshot: ArrayMetadata, name: String, context: PythonObject) raises -> ArrayMetadata:
+def _cast(var snapshot: ArrayMetadata, mut pin: ArrayPin, name: String, context: PythonObject) raises -> ArrayMetadata:
     # Unsupported metadata is descriptive only. This guard dominates every
     # CastIn-based conversion and replace_f32 call. The ignored-target byte
     # scan below separately admits its supported dtype/width and arbitrary rank.
@@ -88,12 +88,13 @@ def _cast(var snapshot: ArrayMetadata, name: String, context: PythonObject) rais
         _ = cast_in_kind(snapshot.dtype_number, snapshot.source.itemsize, name)
         raise Error(name + " metadata requires an admitted scalar/vector/matrix")
     if not snapshot.f32_c():
-        var output = family_array(snapshot.python_shape(), "<f4", context)
+        var output = family_array(array_python_shape(snapshot), "<f4", context)
         var address = Int(py=classical_address(output))
         var src = snapshot.source
         _ = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
                          FAMILY_F32P(unsafe_from_address=address))
-        snapshot.replace_f32(output, address)
+        snapshot.replace_f32(address)
+        pin.keep = output
     return snapshot^
 
 
@@ -149,7 +150,7 @@ def _target_finite(snapshot: ArrayMetadata) raises -> Bool:
 
 
 def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
-                   context: PythonObject) raises -> ArrayMetadata:
+                   context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     var prepared = source
     var sparse = host_sparse_format(source)
     if sparse_allowed:
@@ -171,12 +172,12 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + name + " takes dense X only.)")
     var view = classical_view(prepared, context, "X")
     var shape = array_shape_once(view, context)
-    var snapshot = array_metadata_once(view, shape^, "X", context,
+    var snapshot = array_metadata_once(view, shape^, "X", context, pin,
                                       allow_non_native=True, allow_unsupported=True)
     # A converted view may own only new bytes. Keep the caller's original
     # exporter and sparse/pandas/Torch preparation alive through execution as
     # well as the provider's immediate storage owner, including after casts.
-    snapshot.owner = Python.tuple(source, prepared, snapshot.owner)
+    pin.owner = Python.tuple(source, prepared, pin.owner)
     var nd = len(snapshot.shape)
     if _complex_dtype(snapshot.dtype_number):
         raise Error("Complex data not supported: " + name + " got a complex X.")
@@ -185,17 +186,17 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
     if _numeric_dtype(snapshot.dtype_number):
         if nd < 2:
             raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape="
-                        + family_repr(snapshot.python_shape()) + "). " + RESHAPE_HINT)
+                        + family_repr(array_python_shape(snapshot)) + "). " + RESHAPE_HINT)
         if nd == 2 and snapshot.shape[0] == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + family_repr(snapshot.python_shape())
+            raise Error("Found array with 0 sample(s) (shape=" + family_repr(array_python_shape(snapshot))
                         + ") while a minimum of 1 is required by " + name + ".")
         if nd == 2 and snapshot.shape[1] == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + family_repr(snapshot.python_shape())
+            raise Error("Found array with 0 feature(s) (shape=" + family_repr(array_python_shape(snapshot))
                         + ") while a minimum of 1 is required by " + name + ".")
     if nd != 2:
         var hint = String(". ") + RESHAPE_HINT if nd < 2 else String("")
-        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + family_repr(snapshot.python_shape()) + hint)
-    var result = _cast(snapshot^, "X", context)
+        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + family_repr(array_python_shape(snapshot)) + hint)
+    var result = _cast(snapshot^, pin, "X", context)
     _ = view
     _ = prepared
     _ = source
@@ -272,10 +273,12 @@ def manifold_ignored_target(y: PythonObject, rows: Int, name: String, context: P
         if kind == 2:
             var view = classical_view(y, context, "y")
             var shape = array_shape_once(view, context)
-            var captured = array_metadata_once(view, shape^, "y", context,
+            var captured_pin = ArrayPin()
+            var captured = array_metadata_once(view, shape^, "y", context, captured_pin,
                                                 allow_non_native=True, allow_unsupported=True)
             if not _target_finite(captured):
                 raise Error("Input y contains NaN or infinity (" + name + ").")
+            _ = captured_pin^  # the door's pin held y through the scan
         if len(y) != rows:
             raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(len(y)) + "]")
         return
@@ -290,7 +293,8 @@ def manifold_ignored_target(y: PythonObject, rows: Int, name: String, context: P
         return
     var view = classical_view(y, context, "y")
     var shape = array_shape_once(view, context)
-    var snapshot = array_metadata_once(view, shape^, "y", context,
+    var pin = ArrayPin()
+    var snapshot = array_metadata_once(view, shape^, "y", context, pin,
                                       allow_non_native=True, allow_unsupported=True)
     if _complex_dtype(snapshot.dtype_number):
         raise Error("Complex data not supported: " + name + " got a complex y.")
@@ -302,6 +306,7 @@ def manifold_ignored_target(y: PythonObject, rows: Int, name: String, context: P
     if len(snapshot.shape) > 0 and snapshot.shape[0] != rows:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(snapshot.shape[0]) + "]")
     _ = view
+    _ = pin^  # the door's pin held y through the scan
     _ = y
 
 

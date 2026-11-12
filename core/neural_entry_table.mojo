@@ -85,7 +85,10 @@ comptime NEURAL_TABLE_LAST = 5
 # transformer-session-native, 2026-11-12); the capsule admissions still name 36
 # operations and never call it.
 comptime NEURAL_BLOCK_OPERATIONS = 37
-comptime NEURAL_MAMBA_OPERATIONS = 44
+# The Mamba table gained ops 44..46 (create, info, capabilities of the Mamba-3
+# prefill session registry; lane mamba3-prefill-handle, 2026-11-12); the
+# capsule admissions still name 44 operations and never call them.
+comptime NEURAL_MAMBA_OPERATIONS = 47
 # The small MLP program: open, step, download, apply, close, sessions.
 comptime NEURAL_MLP_PROGRAM_ABI = "mojolearn.neural.small_mlp_program.v1"
 comptime NEURAL_MLP_PROGRAM_OPERATIONS = 6
@@ -138,9 +141,40 @@ comptime NEURAL_MAMBA_RELEASE = 1
 comptime NEURAL_MAMBA1_BACKWARD = 2
 comptime NEURAL_MAMBA2_BACKWARD = 3
 comptime NEURAL_MAMBA3_BACKWARD = 4
+comptime NEURAL_MAMBA3_FRESH_FORWARD = 5
+# The Mamba-3 prefill session is a native registry handle of its training
+# image (lane mamba3-prefill-handle, 2026-11-12; core/mamba3_prefill_session.mojo):
+# every session operation's first word is the handle word, never an address.
+comptime NEURAL_MAMBA3_SESSION_FORWARD = 6
+"""a: 15 [x, nine weights, y, four reports]; words [h, B, L, d] (GPU image only)."""
 comptime NEURAL_MAMBA3_SESSION_BACKWARD = 7
+comptime NEURAL_MAMBA3_OWNED_FORWARD = 8
+"""a: 6 [x, y, four reports]; words [h, B, L, d, generation]."""
 comptime NEURAL_MAMBA3_OWNED_BACKWARD = 9
 comptime NEURAL_MAMBA3_OWNED_INSTALL = 15
+comptime NEURAL_MAMBA3_OWNED_STATE = 16
+"""a: 25 (the carried-state buffers; weight slots unread); words [h, B, L, d,
+buffered, pending, generation, step] -> buffered tokens (the former Python
+entry `mamba3_state_owned`)."""
+comptime NEURAL_MAMBA3_OWNED_EXPORT = 17
+"""a: nine writable buffers; words [h, generation] -> generation."""
+comptime NEURAL_MAMBA3_SESSION_CLOSE = 18
+"""words [h]: close the session and release its handle (a busy session
+refuses and keeps the handle). No reserve."""
+comptime NEURAL_MAMBA3_SESSION_CREATE = 44
+"""No arguments -> a new session's handle word (no device work)."""
+comptime NEURAL_MAMBA3_SESSION_INFO = 45
+"""a: [address of six Int words]; words [h]: weight_uploads, weight_recopies,
+weight_reuses, backward_reuses, backward_recomputes, stages_held. No reserve
+(a busy host session refuses, as its former Python entry did)."""
+comptime NEURAL_MAMBA3_SESSION_CAPS = 46
+"""No arguments -> capability bits of the image (fixed per build):"""
+comptime MAMBA3_CAP_SESSION_PREFILL = 1
+"""the non-owned session forward/backward (ops 6/7; the GPU image)."""
+comptime MAMBA3_CAP_REPORTS_OPTIONAL = 2
+"""op 6 admits a null report address (IDN_MAMBA3_REPORTS_ON_REQUEST)."""
+comptime MAMBA3_CAP_OWNED_WEIGHTS = 4
+"""the owned weight snapshot (NN40_OWNED_WEIGHTS)."""
 
 
 @fieldwise_init

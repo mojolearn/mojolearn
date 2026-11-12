@@ -14,7 +14,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.sequential_inputs import _promote
 from bindings.x_prep_native_inputs import _rows_fields
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.prep_transform_pyapi import _array_snapshot, _pandas_empty_shape
 from providers.python.prep_category_pyapi import prep_ndarray_backed, prep_category_target
 from providers.python.prep_arrow_target_pyapi import prep_arrow_target
@@ -88,14 +88,17 @@ def _pandas_target(source: PythonObject, rows: Int, multi: Bool, name: String,
         var number = -1
         var width = 0
         var data: ArrayMetadata
+        # The door's pin of `data`; its owners go into `owners` below, which
+        # the returned tuple holds.
+        var data_pin = ArrayPin()
         if is_category:
-            var captured = prep_category_target(raw, context)
+            var captured = prep_category_target(raw, context, data_pin)
             data = captured[0].copy()
             number = captured[1]
             width = captured[2]
             finite = captured[3]
         elif is_arrow:
-            var captured = prep_arrow_target(raw, series, context)
+            var captured = prep_arrow_target(raw, series, context, data_pin)
             data = captured[0].copy()
             number = captured[1]
             width = captured[2]
@@ -112,15 +115,16 @@ def _pandas_target(source: PythonObject, rows: Int, multi: Bool, name: String,
                 raw = py_get(fields, "_data")
                 if py_type(raw) is not context["ndarray"] or py_type(mask_value) is not context["ndarray"]:
                     raise Error("TypeError: pandas nullable target requires native arrays")
-                var mask = _array_snapshot(mask_value, context)
+                var mask_pin = ArrayPin()
+                var mask = _array_snapshot(mask_value, context, mask_pin)
                 if len(mask.shape) != 1 or mask.dtype_number != 0 or mask.source.itemsize != 1 or not mask.castable:
                     raise Error("TypeError: pandas nullable target mask metadata differs")
                 mask_rows = mask.count
                 # Nullable DataFrame export is object dtype. A nullable Series
                 # with a missing value also exports passive object labels.
                 objects = objects or not series or prep_mask_any(mask.source, mask.count)
-                _ = py_call(owners.append, Python.tuple(mask.keep, mask.owner))
-            data = _array_snapshot(raw, context)
+                _ = py_call(owners.append, Python.tuple(mask_pin.keep, mask_pin.owner))
+            data = _array_snapshot(raw, context, data_pin)
             number = 17 if period else data.dtype_number
             width = data.source.itemsize
         var rank = len(data.shape)
@@ -143,7 +147,7 @@ def _pandas_target(source: PythonObject, rows: Int, multi: Bool, name: String,
         elif numeric:
             var kind = String("b") if number == 0 else (String("f") if number >= 11 else (String("i") if number % 2 == 1 else String("u")))
             _promote(common_kind, common_size, kind, width)
-        _ = py_call(owners.append, Python.tuple(data.keep, data.owner))
+        _ = py_call(owners.append, Python.tuple(data_pin.keep, data_pin.owner))
         snapshots.append(data^)
         categorical.append(is_category or is_arrow)
         category_finite.append(finite)
@@ -224,7 +228,8 @@ def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
     classical_admit_value(y, context)
     var prepared = native_torch_numpy(y) if _ordinary_torch(cls, context) else y
     var view = prepared if classical_is_array(prepared, context) else classical_input(prepared, context, "y")
-    var snapshot = _array_snapshot(view, context)
+    var pin = ArrayPin()
+    var snapshot = _array_snapshot(view, context, pin)
     if _complex(snapshot.dtype_number):
         raise Error("Complex data not supported: " + name + " got a complex y.")
     var reshape = cls is py_get(context, "ndarray") or cls is context["array_class"] or _ordinary_torch(cls, context)
@@ -234,4 +239,4 @@ def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
         _finite(snapshot, name)
     if len(snapshot.shape) > 0:
         _length(rows, snapshot.shape[0])
-    return Python.tuple(y, prepared, snapshot.keep, snapshot.owner)
+    return Python.tuple(y, prepared, pin.keep, pin.owner)
