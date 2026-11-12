@@ -385,7 +385,7 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
 def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
                       var program: List[Int32], records: List[XprepInput], owners: List[PythonObject],
                       entries: PythonObject, context: PythonObject,
-                      logical_output: Int = 0, inout_ranges: List[Int] = List[Int]()) raises:
+                      logical_output: Int, inout_ranges: List[Int]) raises:
     """One x_prep program run (lane encprog-typed, 2026-11-12: UNPACK, typed
     RUN, then cleanup). UNPACK resolves each input once: its buffer address,
     its resident cache slot, its DeviceRows fields, and the selected image's

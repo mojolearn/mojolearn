@@ -302,17 +302,17 @@ def _neighbours(xf: PythonObject, n: Int, dk: Int, mode: PythonObject, js: List[
     var cnt = p.alloc(1)
     var g = p.alloc(dk * dk)
     var flag = p.alloc(1)
-    _stage(p.program, OP_II_MEAN, dk, fo, n, dk, mz, 0, means, cnt, flag)
-    _stage(p.program, OP_II_GRAM, dk * dk, fo, n, dk, mz, 0, means, g, flag)
+    _stage(p.prog.program, OP_II_MEAN, dk, fo, n, dk, mz, 0, means, cnt, flag)
+    _stage(p.prog.program, OP_II_GRAM, dk * dk, fo, n, dk, mz, 0, means, g, flag)
     var m = p.alloc(dk * dk)
-    _stage(p.program, OP_ABSCORR_CELL, dk * dk, g, dk, m)
-    _stage(p.program, OP_ABSCORR_NORM, dk, m, dk)
+    _stage(p.prog.program, OP_ABSCORR_CELL, dk * dk, g, dk, m)
+    _stage(p.prog.program, OP_ABSCORR_NORM, dk, m, dk)
     var calls = len(js)
     var fl = p.work(calls * dk)
     var out = p.alloc(calls * (k + 1))
     var jo = p.put_ints(js, context)
     var so = _seed_put(p, rng, context)
-    _stage(p.program, OP_F2_WPICK, calls, m, dk, jo, k, so, fl, out)
+    _stage(p.prog.program, OP_F2_WPICK, calls, m, dk, jo, k, so, fl, out)
     var ran = p.run(entries, context)
     var lists = List[List[Int]]()
     for c in range(calls):  # driver-loop: one feature list per step
@@ -338,7 +338,7 @@ def _prepare(mut p: EncProg, values: PythonObject, xf: PythonObject, keep: List[
     var fo = p.put_inout(xf, n * dk)
     var ko = p.put_floats(_floats_of(keep), context)
     var mo = p.alloc(n * dk)
-    _stage(p.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
+    _stage(p.prog.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
     var bo = p.put_floats(bounds, context)
     return (fo, mo, bo)
 
@@ -358,10 +358,10 @@ def _with_indicator(model: PythonObject, values: PythonObject, xt: PythonObject,
     var xo = _mark_missing(p, p.put_x(values), n * d, fields["missing_values"], context)
     var mo = p.alloc(n * m)
     var io = p.put_floats(_floats_of(indicator), context)
-    _stage(p.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
+    _stage(p.prog.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
     var to = p.put(xt, n * dk)
     var hc = p.output(n * (dk + m), entries)
-    _stage(p.program, OP_HCAT, n * (dk + m), to, dk, mo, m, hc)
+    _stage(p.prog.program, OP_HCAT, n * (dk + m), to, dk, mo, m, hc)
     var ran = p.run(entries, context)
     return _take2(ran, hc, n, dk + m, context)
 
@@ -377,7 +377,7 @@ def _mask_arr(values: PythonObject, keep: List[Int], missing: PythonObject, cont
     var xo = _mark_missing(p, p.put_x(values), n * d, missing, context)
     var mo = p.alloc(n * dk)
     var ko = p.put_floats(_floats_of(keep), context)
-    _stage(p.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
+    _stage(p.prog.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
     var ran = p.run(_entries(mode, context), context)
     return _take2(ran, mo, n, dk, context)
 
@@ -393,9 +393,9 @@ def _ii_rows(mut p: EncProg, mo: Int, n: Int, dk: Int, j: Int, missing: Bool) ->
     var tot = p.alloc(1)
     var rows = p.alloc(n)
     var flag = 1 if missing else 0
-    _stage(p.program, OP_II_RCOUNT, nch, mo, n, dk, j, flag, ch, cnt)
-    _stage(p.program, OP_UNIQ_SCAN, 1, cnt, nch, off, tot)
-    _stage(p.program, OP_II_RWRITE, nch, mo, n, dk, j, flag, ch, off, rows)
+    _stage(p.prog.program, OP_II_RCOUNT, nch, mo, n, dk, j, flag, ch, cnt)
+    _stage(p.prog.program, OP_UNIQ_SCAN, 1, cnt, nch, off, tot)
+    _stage(p.prog.program, OP_II_RWRITE, nch, mo, n, dk, j, flag, ch, off, rows)
     return (rows, tot)
 
 
@@ -441,7 +441,7 @@ def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl:
     var mis = _ii_rows(p, mo, n, dk, j, True)
     var gm = p.alloc(n * nc)
     if nc > 0:
-        _stage(p.program, OP_II_GATHER, n * nc, xo, dk, mis[0], mis[1], co, nc, gm)
+        _stage(p.prog.program, OP_II_GATHER, n * nc, xo, dk, mis[0], mis[1], co, nc, gm)
     var obs = (0, 0)
     var go = 0
     var gy = 0
@@ -450,8 +450,8 @@ def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl:
         go = p.alloc(n * nc)
         gy = p.alloc(n)
         if nc > 0:
-            _stage(p.program, OP_II_GATHER, n * nc, xo, dk, obs[0], obs[1], co, nc, go)
-        _stage(p.program, OP_II_GATHER, n, xo, dk, obs[0], obs[1], jo, 1, gy)
+            _stage(p.prog.program, OP_II_GATHER, n * nc, xo, dk, obs[0], obs[1], co, nc, go)
+        _stage(p.prog.program, OP_II_GATHER, n, xo, dk, obs[0], obs[1], jo, 1, gy)
     var ran = p.run(_entries(mode, context), context)
     var m = Int(_word(ran, mis[1]))
     var x_fit = PythonObject(None)
@@ -530,7 +530,7 @@ def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: I
     lohi.append(lo)
     lohi.append(hi)
     var bo = p.put_floats(lohi, context)
-    _stage(p.program, OP_II_SCATTER, k, xo, dk, ro, j, vo, bo, clip)
+    _stage(p.prog.program, OP_II_SCATTER, k, xo, dk, ro, j, vo, bo, clip)
     var ran = p.run(entries, context)
     return _take2(ran, xo, n, dk, context)
 
@@ -545,8 +545,8 @@ def _ii_stop(xt: PythonObject, prev: PythonObject, n: Int, dk: Int, tol: Float64
     var flag = p.alloc(1)
     var niter = p.alloc(1)
     var rowabs = p.alloc(n)
-    _stage(p.program, OP_II_ROWABS, n, xo, po, dk, rowabs, flag)
-    _stage(p.program, OP_II_CONV, 1, xo, po, n * dk, to, flag, niter, dk, rowabs + 1)
+    _stage(p.prog.program, OP_II_ROWABS, n, xo, po, dk, rowabs, flag)
+    _stage(p.prog.program, OP_II_CONV, 1, xo, po, n * dk, to, flag, niter, dk, rowabs + 1)
     var ran = p.run(_entries(mode, context), context)
     return _word(ran, flag) != 0
 
@@ -619,14 +619,14 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     var ordw = p.alloc(max(R * dk, 1))
     var lens = p.alloc(R)
     var sc = p.alloc(1)
-    _stage(p.program, OP_C2_COLMAX, 1, st + 5 * d, d, sc)
+    _stage(p.prog.program, OP_C2_COLMAX, 1, st + 5 * d, d, sc)
     if dk > 0:
         var missd = p.work(dk)
         var ko = p.put_ints(keep, context)
-        _stage(p.program, OP_C2_II_MISS, dk, st, ko, n, missd)
+        _stage(p.prog.program, OP_C2_II_MISS, dk, st, ko, n, missd)
         if order_name == "random":
             var so = _seed_put(p, rng, context)
-            _stage(p.program, OP_C2_II_RAND, R, missd, dk, 1 if skip else 0, so, ordw, lens)
+            _stage(p.prog.program, OP_C2_II_RAND, R, missd, dk, 1 if skip else 0, so, ordw, lens)
         else:
             var pos = p.work(dk)
             var mcode = 0
@@ -636,8 +636,8 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
                 mcode = 2
             elif order_name == "arabic":
                 mcode = 3
-            _stage(p.program, OP_C2_II_POS, dk, missd, dk, mcode, pos)
-            _stage(p.program, OP_C2_II_ORD, dk, missd, dk, pos, R, ordw, lens)
+            _stage(p.prog.program, OP_C2_II_POS, dk, missd, dk, mcode, pos)
+            _stage(p.prog.program, OP_C2_II_ORD, dk, missd, dk, pos, R, ordw, lens)
     var ran = p.run(entries, context)
     var scale = Float64(_word(ran, sc))
     if not isfinite(scale) and scale == scale and scale > 0.0:
@@ -738,7 +738,7 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     var rowabs = -1
     for r in range(rounds):  # driver-loop: drives the device imputation rounds (imputation rounds)
         if len(orders[r]) > 0 and conv:
-            _stage(q.program, OP_II_SNAPSHOT, n * dk, fo, prev, flag)
+            _stage(q.prog.program, OP_II_SNAPSHOT, n * dk, fo, prev, flag)
         for i in range(len(orders[r])):  # driver-loop: drives one device regression per feature (per-round feature order)
             var j = orders[r][i]
             var coef = q.alloc(dk)
@@ -756,33 +756,33 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
             seq_j.append(j)
             seq_coef.append(coef)
             seq_inter.append(inter)
-            _stage(q.program, OP_II_MEAN, dk, fo, n, dk, mo, j, means, cnt, flag)
-            _stage(q.program, OP_II_GRAM, dk * dk, fo, n, dk, mo, j, means, g, flag)
+            _stage(q.prog.program, OP_II_MEAN, dk, fo, n, dk, mo, j, means, cnt, flag)
+            _stage(q.prog.program, OP_II_GRAM, dk * dk, fo, n, dk, mo, j, means, g, flag)
             if pp > 0:
-                _stage(q.program, OP_II_SUB, 1, g, dk, j, gs, flag, nb1)
-                _stage(q.program, OP_EIGH, 1, gs, pp, 0, eig, vec, 1)  # q[5]=1: cyclic eigh_unit, not round-robin
-            _stage(q.program, OP_II_BR, 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
+                _stage(q.prog.program, OP_II_SUB, 1, g, dk, j, gs, flag, nb1)
+                _stage(q.prog.program, OP_EIGH, 1, gs, pp, 0, eig, vec, 1)  # q[5]=1: cyclic eigh_unit, not round-robin
+            _stage(q.prog.program, OP_II_BR, 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
             if posterior:
                 var sig = q.alloc(max(pp, 1) * max(pp, 1))
-                _stage(q.program, OP_II_SIGMA, pp * pp, eig, vec, pp, al, sig, flag)
+                _stage(q.prog.program, OP_II_SIGMA, pp * pp, eig, vec, pp, al, sig, flag)
                 var key_words = List[Int]()
                 key_words.append(seed)
                 key_words.append(post_step)
                 var key = q.put_ints(key_words, context)
                 post_step += 1
-                _stage(q.program, OP_II_POST, n, fo, n, dk, mo, j, coef, inter, bo, flag, means, sig, al, nb1, key)
+                _stage(q.prog.program, OP_II_POST, n, fo, n, dk, mo, j, coef, inter, bo, flag, means, sig, al, nb1, key)
                 _ = py_call(post_nbl.append, nbl_obj)
                 post_sig.append(sig)
                 post_al.append(al)
                 post_means.append(means)
                 post_pp.append(pp)
             else:
-                _stage(q.program, OP_II_PREDICT, n, fo, n, dk, mo, j, coef, inter, bo, flag)
+                _stage(q.prog.program, OP_II_PREDICT, n, fo, n, dk, mo, j, coef, inter, bo, flag)
         if len(orders[r]) > 0 and conv:
             if rowabs < 0:
                 rowabs = q.alloc(n)
-            _stage(q.program, OP_II_ROWABS, n, fo, prev, dk, rowabs, flag)
-            _stage(q.program, OP_II_CONV, 1, fo, prev, n * dk, to, flag, niter, dk, rowabs + 1)
+            _stage(q.prog.program, OP_II_ROWABS, n, fo, prev, dk, rowabs, flag)
+            _stage(q.prog.program, OP_II_CONV, 1, fo, prev, n * dk, to, flag, niter, dk, rowabs + 1)
     var got = q.run(entries, context)
     var done = 0
     if any_order:
@@ -871,9 +871,9 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
             var mo2 = p.put(means, Int(py=means.size))
             var so2 = p.put(sig, Int(py=sig.size))
             var ao2 = p.put(al, Int(py=al.size))
-            _stage(p.program, OP_II_POST, n, fo, n, dk, mo, j, co, io, bo, NONE, mo2, so2, ao2, nb1, key)
+            _stage(p.prog.program, OP_II_POST, n, fo, n, dk, mo, j, co, io, bo, NONE, mo2, so2, ao2, nb1, key)
         else:
-            _stage(p.program, OP_II_PREDICT, n, fo, n, dk, mo, j, co, io, bo, NONE)
+            _stage(p.prog.program, OP_II_PREDICT, n, fo, n, dk, mo, j, co, io, bo, NONE)
     var ran = p.run(entries, context)
     py_setitem(fields, "_post_step", PythonObject(post_step))
     var xt = _take2(ran, fo, n, dk, context)
