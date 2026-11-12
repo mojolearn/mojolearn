@@ -112,6 +112,8 @@ from bindings.forest_host_groves_binding import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
     forest_release_host_binding,
+)
+from core.forest_host_groves_run import (
     forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
 )
 from bindings.forest_fit_boundary import forest_fit_args_py, forest_params_py
