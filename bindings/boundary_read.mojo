@@ -463,19 +463,21 @@ def read_str_points(obj: PythonObject) raises -> List[UInt32]:
     PyUnicode_ReadChar reads them): CPython calls PyUnicode_GetLength +
     PyUnicode_AsUCS4Copy + PyMem_Free, whatever the length; the copy into
     the returned list is native."""
-    ref cpy = Python().cpython()
-    var count = cpy.lib.get_function[Int]("PyUnicode_GetLength")(obj._obj_ptr)
+    # The three C-API functions come from the process table (resolved once),
+    # not `get_function` (one dlsym each per str; perf audit 2-b).
+    var t = cpython_table()
+    var count = t[].PyUnicode_GetLength(obj._obj_ptr)
     if count < 0:
         raise _pending_error()
     var result = List[UInt32](length=count, fill=0)
     if count == 0:
         return result^
-    var address = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")(obj._obj_ptr)
+    var address = t[].PyUnicode_AsUCS4Copy(obj._obj_ptr)
     if address == 0:
         raise _pending_error()
     unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(result.unsafe_ptr())),
         src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=count * 4)
-    cpy.lib.get_function[NoneType]("PyMem_Free")(address)
+    t[].PyMem_Free(address)
     _ = obj
     return result^
 
