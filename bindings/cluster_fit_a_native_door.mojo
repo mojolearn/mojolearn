@@ -43,7 +43,7 @@ from bindings.family_common_pack import (
 )
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from bindings.cluster_native_door import cluster_operation, _xc_array
-from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_forget
+from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import (
     MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest, VariantsResultSlot, VariantsSpan, VARIANTS_CAP_DEVSCAN,
 )
@@ -111,7 +111,7 @@ def _one_of(value: PythonObject, a: String, b: String) raises -> Bool:
 def _set(model: PythonObject, var name: String, value: PythonObject) raises:
     """`setattr(model, name, value)`. A fit storing new `cluster_centers_`
     releases the model's resident device copy of the old ones at once
-    (bindings/cluster_resident_table.mojo, N024); the next query uploads
+    (bindings/cluster_resident_table_run.mojo, N024); the next query uploads
     the new object once."""
     if name == "cluster_centers_":
         cres_forget(model, CRES_X_CLUSTER)

@@ -54,7 +54,7 @@ def test_x_cluster_centers_resident(x_cluster, make):
     x = _blobs()
     q = np.ascontiguousarray(x[::7] + np.float32(0.1))
     # A model's copy is released lazily: its key goes on the dead-key ring
-    # and the next lookup or store drains it (bindings/cluster_resident_table.mojo).
+    # and the next lookup or store drains it (bindings/cluster_resident_table_run.mojo).
     # So drain the previous case's copy first: a throwaway query (drain, then
     # mint) and a refit (which releases its own copy at once).
     w = make().fit(x)

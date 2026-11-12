@@ -83,7 +83,7 @@
       "anchor": "bindings/cluster_native.mojo:162",
       "role": "resident query tuple/objects tuple and compiled Python dispatch",
       "status": "migrated",
-      "after": "bindings/cluster_resident_table.mojo:cres_variant_lookup/store; core/kmeans_variants_resident_state.mojo:VariantsResidentState"
+      "after": "bindings/cluster_resident_table_run.mojo:cres_variant_lookup/store; core/kmeans_variants_resident_state.mojo:VariantsResidentState"
     },
     {
       "family": "shared centers",

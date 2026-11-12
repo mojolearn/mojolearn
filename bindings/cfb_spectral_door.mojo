@@ -50,7 +50,7 @@ from core.spectral_preparation_api import (
 from bindings.spectral_preparation_boundary_unpack import (
     SpectralPreparationConnection, spectral_coo_count_run, spectral_coo_fill_run, spectral_knn_run,
 )
-from bindings.cluster_resident_table import CRES_SPECTRAL, cres_spectral_lookup, cres_spectral_store, cres_forget
+from bindings.py_cluster_resident import CRES_SPECTRAL, cres_spectral_lookup, cres_spectral_store, cres_forget
 from bindings.spectral_resident_boundary_unpack import (
     SpectralResidentLease, spectral_resident_prepare, spectral_resident_query, spectral_resident_retire,
 )
