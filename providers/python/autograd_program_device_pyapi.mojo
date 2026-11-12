@@ -34,7 +34,8 @@ from bindings.py_balanced import py_call
 from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
 from autograd.rankn import ShapeN
 from autograd.program_device_execution import program_device_execute
-from providers.python.autograd_program_pyapi import _imported_repr, _imported_tuple, _imported_session_dims
+from providers.python.autograd_program_pyapi import _imported_repr, _imported_tuple
+from autograd.autograd_program_run import _imported_session_dims
 
 
 def _device_kind(dtype: String, what: String) raises -> Tuple[Int, Int]:

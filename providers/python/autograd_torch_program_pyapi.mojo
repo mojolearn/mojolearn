@@ -24,7 +24,7 @@ from autograd.program import PROGRAM_IN_IDS, same_shape
 from autograd.program_io import ProgramInput
 from autograd.program_host_request import NativeProgramHostRun
 from providers.python.autograd_host_provider_pyapi import imported_host_provider_request
-from providers.python.autograd_program_pyapi import _imported_session_dims
+from autograd.autograd_program_run import _imported_session_dims
 from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
 from bindings.cpython_table import cpython_table
