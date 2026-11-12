@@ -15,7 +15,9 @@ from bindings.admitted_input import AdmittedX, admit_f32
 from bindings.decomp_inputs import decomp_admit
 from bindings.decomp_scalar_admission import decomp_scalar_admit
 from bindings.decomp_truth_boundary import decomp_truth as _truth
-from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
+from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish
+from x_decomp.decomp_public_lifecycle_run import decomp_public_method
+from x_decomp.ipca_run import _state_name
 from bindings.public_lifecycle_owner import lifecycle_end, lifecycle_admit_fields
 from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPrevious, IPCAQueryRequest, IPCAFitResult, IPCAStateIds
 from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
@@ -98,18 +100,6 @@ def _publish(fields: PythonObject, room: IPCAOutputRoom, count: Int, features: I
     py_setitem(fields, "explained_variance_ratio_", ratio)
     py_setitem(fields, "noise_variance_", PythonObject(noise))
     _ = room
-
-
-def _state_name(index: Int) -> String:
-    if index == 0:
-        return "components_"
-    if index == 1:
-        return "singular_values_"
-    if index == 2:
-        return "mean_"
-    if index == 3:
-        return "var_"
-    return "explained_variance_"
 
 
 def _state_field(fields: PythonObject, index: Int) raises -> PythonObject:

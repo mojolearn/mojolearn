@@ -16,6 +16,7 @@ from bindings.training_scalar_native import training_scalar_warning
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, stash_python_error, _restore_python_error
 from bindings.manifold_temporal_native import temporal_object_kind
 from core.native_scalar_decode import NativeRealBits
+from x_decomp.pca_fit_scalar_run import PCAFitScalarArray
 
 
 def _pca_scalar_bytes(value: PythonObject) raises -> PythonObject:
@@ -148,19 +149,6 @@ def pca_fit_scalar_admit(value: PythonObject, context: PythonObject) raises:
         if cls is sequence_dtype_create(PythonObject(code), scalar).type:
             return
     sequential_admit_value(value, context)
-
-
-struct PCAFitScalarArray(Copyable, Movable):
-    var ndim: Int
-    var count: Int
-    var kind: String
-    var char: String
-
-    def __init__(out self, ndim: Int, count: Int, kind: String, char: String):
-        self.ndim = ndim
-        self.count = count
-        self.kind = kind
-        self.char = char
 
 
 struct PCAFitScalar(Copyable, Movable):

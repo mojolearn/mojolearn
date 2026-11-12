@@ -16,7 +16,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
-from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
+from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish
+from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,

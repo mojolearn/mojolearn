@@ -17,7 +17,7 @@ from core.parallel_entry_table import (
     parallel_table_publish,
 )
 from core.shared_slot import SharedSlot
-from bindings.ivf_index_arrays import ivf_merge_shards_host_run, ivf_shard_plan_host_run
+from ivf.ivf_index_arrays_run import ivf_merge_shards_host_run, ivf_shard_plan_host_run
 from ivf.index_arrays_impl import ivf_finalize_distances_host
 
 

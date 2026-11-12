@@ -11,6 +11,7 @@ from bindings.decomp_owner_common import F32P, decomp_attr
 from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
 from bindings.decomp_scalar_compare import decomp_name_admitted
 from bindings.decomp_truth_boundary import decomp_truth
+from x_decomp.kpca_run import _f32_scalar
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from core.kpca_native_api import KPCAEigenRequest
 from core.kpca_native_plan import (
@@ -46,10 +47,6 @@ def _float(value: PythonObject, context: PythonObject) raises -> Float64:
 def _name(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
     decomp_scalar_admit(value, context)
     return decomp_name_admitted(value, name)
-
-
-def _f32_scalar(value: Float64) -> Float64:
-    return Float64(Float32(value))
 
 
 def _f32(rows: Int, cols: Int, context: PythonObject, vector: Bool = False) raises -> PythonObject:

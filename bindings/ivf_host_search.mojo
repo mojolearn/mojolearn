@@ -21,26 +21,28 @@ its workers, so with them the driver's Python partition, its local-id maps
 and its global merge run on a CPU-only install exactly as they run on a
 GPU, and the `par-ivf` lane of tools/identity_break.py has a CPU route.
 """
-from std.atomic import Atomic, Ordering
-from std.memory import ArcPointer
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from core.hostptr import f32_ptr, read_f32
+from core.hostptr import read_f32
 from bindings.ivf_index_arrays import (
     ivf_read_resident_filter,
     ivf_write_resident_result,
     ivf_extend_count,
     ivf_read_index_arrays,
-    ivf_write_extended_arrays,
     ivf_read_search_filter,
     ivf_search_extents,
     ivf_write_search_result,
 )
-from ivf.host.ivf_host import IvfHostIndex, host_ivf_extend, host_ivf_search
 from ivf.index_arrays_impl import ivf_finalize_distances_host
-from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.shared_slot import SharedSlot
+from ivf.ivf_host_search_run import (
+    ivf_host_extend_run,
+    ivf_host_index_of,
+    ivf_host_register,
+    ivf_host_release,
+    ivf_host_search_run,
+    _host_ivf_view,
+)
 
 
 def _ivf_host_search_arrays(
@@ -61,38 +63,12 @@ def _ivf_host_search_arrays(
     var k = ext[1]
     var n_probes = ext[2]
     var queries = read_f32(Int(py=addrs[5]), m * arrays.dim)
-    # compile-fix-1: each list moves out and its field is refilled empty, so
-    # `arrays` stays whole and is destroyed as one value (moving fields out of
-    # the middle of it does not compile); still no copy of the index arrays.
-    var taken_centers = arrays.centers^
-    arrays.centers = List[Float32]()
-    var taken_center_norms = arrays.center_norms^
-    arrays.center_norms = List[Float32]()
-    var taken_offsets = arrays.offsets^
-    arrays.offsets = List[Int32]()
-    var taken_list_indices = arrays.list_indices^
-    arrays.list_indices = List[UInt32]()
-    var taken_list_data = arrays.list_data^
-    arrays.list_data = List[Float32]()
-    var index = IvfHostIndex(
-        arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        taken_centers^, taken_center_norms^, taken_offsets^,
-        taken_list_indices^, taken_list_data^,
-    )
+    var index = ivf_host_index_of(arrays^)
     var dist = List[Float32]()
     var idx = List[UInt32]()
     var cand = List[Int32]()
     with GILReleased(Python()):
-        var r = host_ivf_search(index, queries, m, k, n_probes, partial_storage, keep)
-        # compile-fix-2: each result list moves out and its field is refilled
-        # empty, so `r` stays whole and is destroyed as one value (moving
-        # fields out of the middle of it does not compile); still no copy.
-        dist = r.distances^
-        r.distances = List[Float32]()
-        idx = r.indices^
-        r.indices = List[UInt32]()
-        cand = r.n_candidates^
-        r.n_candidates = List[Int32]()
+        ivf_host_search_run(index, queries, m, k, n_probes, partial_storage, keep, dist, idx, cand)
     ivf_write_search_result(addrs, dist, idx, cand, m, k)
     return PythonObject(0)
 
@@ -134,30 +110,8 @@ def ivf_flat_extend_binding(
     0. See `bindings/ivf_index_arrays.mojo` for the lists."""
     var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_extend"), 10, 5)
     var n_new = ivf_extend_count(params, arrays.n_rows, arrays.dim)
-    var new_x = read_f32(Int(py=addrs[5]), n_new * arrays.dim)
-    # compile-fix-1: each list moves out and its field is refilled empty, so
-    # `arrays` stays whole and is destroyed as one value (moving fields out of
-    # the middle of it does not compile); still no copy of the index arrays.
-    var taken_centers = arrays.centers^
-    arrays.centers = List[Float32]()
-    var taken_center_norms = arrays.center_norms^
-    arrays.center_norms = List[Float32]()
-    var taken_offsets = arrays.offsets^
-    arrays.offsets = List[Int32]()
-    var taken_list_indices = arrays.list_indices^
-    arrays.list_indices = List[UInt32]()
-    var taken_list_data = arrays.list_data^
-    arrays.list_data = List[Float32]()
-    var index = IvfHostIndex(
-        arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        taken_centers^, taken_center_norms^, taken_offsets^,
-        taken_list_indices^, taken_list_data^,
-    )
-    var labels = List[UInt32]()
-    var out = host_ivf_extend(index, new_x, n_new, labels)
-    ivf_write_extended_arrays(
-        addrs, out.n_rows, out.dim, out.n_lists, out.offsets, out.list_indices,
-        out.list_data, labels, n_new,
+    ivf_host_extend_run(
+        arrays^, Int(py=addrs[5]), n_new, Int(py=addrs[6]), Int(py=addrs[7]), Int(py=addrs[8]), Int(py=addrs[9])
     )
     return PythonObject(0)
 
@@ -172,114 +126,12 @@ def ivf_flat_extend_binding(
 # ===========================================================================
 
 
-struct HostIvfResident(Movable):
-    var index: IvfHostIndex
-    var partial_storage: Bool
-
-    def __init__(out self, var index: IvfHostIndex, partial_storage: Bool):
-        self.index = index^
-        self.partial_storage = partial_storage
-
-
-struct HostIvfRegistry(Defaultable, Movable):
-    # p3-neighbors-cluster: each entry sits behind a reference-counted
-    # pointer. A search copies the pointer under the registry's lock word and
-    # reads the index with the GIL released; a concurrent prepare (which may
-    # grow the dictionary) or release then drops only the registry's
-    # reference, never the memory a running search reads.
-    var entries: Dict[Int, ArcPointer[HostIvfResident]]
-    var next_id: Int
-    # One lock word (the neighbors/resident_index.mojo pattern): searches run
-    # with the GIL released.
-    var lock: List[Int64]
-
-    def __init__(out self):
-        self.entries = Dict[Int, ArcPointer[HostIvfResident]]()
-        self.next_id = 1
-        self.lock = List[Int64](length=1, fill=Int64(0))
-
-
-# V2 -> V3: the entry layout changed (p3-neighbors-cluster); a process-wide
-# slot name is shared by every extension that registers it.
-comptime HOST_IVF_REGISTRY = SharedSlot[HostIvfRegistry, (
-    "MojolearnIvfFlatHostResidentIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojolearnIvfFlatHostResidentFastV3"
-)]
-
-
-def _host_ivf_registry() raises -> UnsafePointer[HostIvfRegistry, MutAnyOrigin]:
-    return HOST_IVF_REGISTRY.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-
-
-def _host_ivf_lock(state: UnsafePointer[HostIvfRegistry, MutAnyOrigin]) raises:
-    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].lock.unsafe_ptr())
-    while True:  # driver-loop: spin on the registry's lock word (held for one dictionary step only)
-        var expected = Int64(0)
-        if Atomic.compare_exchange[
-            success_ordering=Ordering.SEQUENTIAL,
-            failure_ordering=Ordering.RELAXED,
-        ](word, expected, Int64(1)):
-            return
-
-
-def _host_ivf_unlock(state: UnsafePointer[HostIvfRegistry, MutAnyOrigin]):
-    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].lock.unsafe_ptr())
-    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
-
-
 def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     var partial = Int(py=params[4]) != 0
     var arrays = ivf_read_index_arrays(
         addrs, params, String("ivf_flat_search"), 5, 5, partial_storage=partial
     )
-    # compile-fix-1: each list moves out and its field is refilled empty, so
-    # `arrays` stays whole and is destroyed as one value (moving fields out of
-    # the middle of it does not compile); still no copy of the index arrays.
-    var taken_centers = arrays.centers^
-    arrays.centers = List[Float32]()
-    var taken_center_norms = arrays.center_norms^
-    arrays.center_norms = List[Float32]()
-    var taken_offsets = arrays.offsets^
-    arrays.offsets = List[Int32]()
-    var taken_list_indices = arrays.list_indices^
-    arrays.list_indices = List[UInt32]()
-    var taken_list_data = arrays.list_data^
-    arrays.list_data = List[Float32]()
-    var index = IvfHostIndex(
-        arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        taken_centers^, taken_center_norms^, taken_offsets^,
-        taken_list_indices^, taken_list_data^,
-    )
-    var entry = ArcPointer[HostIvfResident](HostIvfResident(index^, partial))
-    var state = _host_ivf_registry()
-    _host_ivf_lock(state)
-    try:
-        if state[].next_id == 9223372036854775807:
-            raise Error("resident IVF-Flat index handle space exhausted")
-        var handle = state[].next_id
-        state[].next_id += 1
-        state[].entries[handle] = entry^
-        _host_ivf_unlock(state)
-        return PythonObject(handle)
-    except error:
-        _host_ivf_unlock(state)
-        raise error^
-
-
-def _host_ivf_view(h: Int) raises -> ArcPointer[HostIvfResident]:
-    """The entry's pointer (a reference-counted copy), read under the lock
-    word."""
-    var state = _host_ivf_registry()
-    _host_ivf_lock(state)
-    try:
-        if h not in state[].entries:
-            raise Error("unknown or released resident IVF-Flat index handle")
-        var view = state[].entries[h].copy()
-        _host_ivf_unlock(state)
-        return view^
-    except error:
-        _host_ivf_unlock(state)
-        raise error^
+    return PythonObject(ivf_host_register(arrays^, partial))
 
 
 def ivf_flat_index_search_binding(
@@ -306,35 +158,12 @@ def ivf_flat_index_search_binding(
     var idx = List[UInt32]()
     var cand = List[Int32]()
     with GILReleased(Python()):
-        var r = host_ivf_search(e[].index, queries, m, k, n_probes, partial, keep)
-        # compile-fix-2: each result list moves out and its field is refilled
-        # empty, so `r` stays whole and is destroyed as one value (moving
-        # fields out of the middle of it does not compile); still no copy.
-        dist = r.distances^
-        r.distances = List[Float32]()
-        idx = r.indices^
-        r.indices = List[UInt32]()
-        cand = r.n_candidates^
-        r.n_candidates = List[Int32]()
+        ivf_host_search_run(e[].index, queries, m, k, n_probes, partial, keep, dist, idx, cand)
     ivf_write_resident_result(addrs, dist, idx, cand, m, k)
     _ = e^
     return PythonObject(0)
 
 
 def ivf_flat_index_release_binding(handle: PythonObject) raises -> PythonObject:
-    var state = _host_ivf_registry()
-    var h = Int(py=handle)
-    _host_ivf_lock(state)
-    if h not in state[].entries:
-        _host_ivf_unlock(state)
-        raise Error("unknown or released resident IVF-Flat index handle")
-    try:
-        var released = state[].entries.pop(h)
-        _host_ivf_unlock(state)
-        # The registry's reference is dropped outside the lock; a running
-        # search keeps its own copy until it returns.
-        _ = released^
-    except error:
-        _host_ivf_unlock(state)
-        raise error^
+    ivf_host_release(Int(py=handle))
     return PythonObject(0)

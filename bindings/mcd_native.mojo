@@ -26,7 +26,8 @@ from bindings.classical_labels import classical_accuracy, labels_shape_of
 from bindings.admitted_input import classical_view
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.admitted_input import admit_x
-from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
+from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish
+from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
