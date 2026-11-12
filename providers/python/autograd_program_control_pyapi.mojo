@@ -7,6 +7,7 @@ from sequence.exec_trait import Exec
 from providers.python.autograd_program_pyapi import program_inputs, program_input, _dict, _result, _integer
 from providers.python.autograd_program_arrays_pyapi import host_arrays_py, host_array_py
 from autograd.program_control import control_prepare, control_run
+from autograd.autograd_program_control_run import control_state_view
 from autograd.program_io import ProgramInput
 from autograd.ops_api import ops_session
 from bindings.py_balanced import py_call
@@ -30,10 +31,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
     if plan.is_loop and plan.iteration_input:
         # The caller passes the carried state only; the iteration register
         # (the body's last input) lives on the device.
-        var state_view = plan.body.copy()
-        state_view.n_in -= 1
-        _ = state_view.in_kinds.pop()
-        _ = state_view.in_shapes.pop()
+        var state_view = control_state_view(plan.body)
         inputs = program_inputs(state_view, arrays, True)
     else:
         inputs = program_inputs(plan.body, arrays, True)
@@ -76,10 +74,7 @@ def ops_program_decode_py[E: Exec & Movable & Deinitable, KIND: Int](
     )
     var inputs: List[ProgramInput]
     if plan.iteration_input:
-        var state_view = plan.body.copy()
-        state_view.n_in -= 1
-        _ = state_view.in_kinds.pop()
-        _ = state_view.in_shapes.pop()
+        var state_view = control_state_view(plan.body)
         inputs = program_inputs(state_view, arrays, True)
     else:
         inputs = program_inputs(plan.body, arrays, True)
