@@ -15,7 +15,7 @@ from bindings.sequential_admission import sequential_admit_value, SequentialValu
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array
 from bindings.xseq_native_common import xseq_neural_provider
-from bindings.str_labels_native import StrTable, _read, _sorted
+from bindings.str_labels_native import StrTable, _read, str_unique_into
 from bindings.native_buffer_address import native_buffer_address
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
@@ -192,22 +192,22 @@ def neural_encode_labels(source: PythonObject, entries: PythonObject, context: P
     var table = StrTable()
     if not _read(normalized, table):
         raise Error("TypeError: labels require native text")
-    var order = _sorted(table, count)
     var codes = sequential_array(Python.tuple(count), context["int32"], context)
-    var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(codes))
-    var unique = List[Int]()
+    # perf-audit-3: the distinct classes (each its FIRST label, in code-point
+    # order) and every label's int32 code from the parallel hash unique
+    # (`str_unique_into`), which sorts only the k distinct classes. The former
+    # stable merge sort of all `count` labels ran on one thread; the classes,
+    # their order and the codes are the same.
+    var unique = str_unique_into(table, count, native_buffer_address(codes))
     var width = 1
     var needs_objects = False
-    for i in range(count):  # driver-loop: distinct text-label metadata and inverse codes
-        var index = order[i]
-        if i == 0 or table.compare(order[i - 1], index) != 0:
-            unique.append(index)
-            width = max(width, table.lengths[index])
-            # Fixed-width U/S rows discard trailing NULs on scalar publication.
-            # Preserve those distinct admitted labels in owned object slots.
-            if table.lengths[index] > 0 and table.points[table.starts[index] + table.lengths[index] - 1] == 0:
-                needs_objects = True
-        cp[index] = Int32(len(unique) - 1)
+    for c in range(len(unique)):  # driver-loop: over the distinct classes (native metadata)
+        var index = unique[c]
+        width = max(width, table.lengths[index])
+        # Fixed-width U/S rows discard trailing NULs on scalar publication.
+        # Preserve those distinct admitted labels in owned object slots.
+        if table.lengths[index] > 0 and table.points[table.starts[index] + table.lengths[index] - 1] == 0:
+            needs_objects = True
     if needs_objects:
         var classes = _object_array(len(unique), context)
         var base = native_buffer_address(classes)
