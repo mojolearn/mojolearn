@@ -20,29 +20,19 @@
 # and gives the GIL back with `native_unit_gil_leave`. The floating-point
 # environment of the caller is installed on every worker (core/host_parallel
 # DEVIATION 5900), so a unit computes the same bits on any thread.
-from std.atomic import Atomic, Ordering
-from std.ffi import c_int, c_size_t, external_call
+from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
-from std.sys.info import num_physical_cores
 
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_get, py_type
 from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
-
-#: The thread entry: `void *(*)(void *)` with the argument and result as
-#: address words (same register class under the C ABI on every target).
-comptime NativeUnitEntry = def(Int) thin abi("C") -> Int
-
-#: Words reserved for a `pthread_attr_t` (56 bytes on glibc x86_64/aarch64,
-#: 64 bytes on macOS): 128 bytes.
-comptime _ATTR_WORDS = 16
-#: Stack of every unit thread: owners recurse over model structure (nested
-#: estimators, tree builders); a macOS secondary thread gets 512 KiB by
-#: default, the main thread 8 MiB. Reserved address space, not resident.
-comptime _UNIT_THREAD_STACK_BYTES = 64 << 20
+from bindings.native_unit_os_threads_run import (
+    NativeUnitEntry, native_unit_cores, native_unit_gate_try, native_unit_yield,
+    native_unit_threads_start, native_unit_threads_join,
+)
 
 
 #: Units whose member fits run on a GPU run ONE AT A TIME (orchestrator
@@ -77,11 +67,6 @@ def native_unit_device_workers(workers: Int, context: PythonObject) -> Int:
     return min(workers, 1)
 
 
-def native_unit_cores() -> Int:
-    """Physical cores of this host (at least 1)."""
-    return max(num_physical_cores(), 1)
-
-
 def native_unit_jobs(n_jobs: PythonObject, caller: String) raises -> Int:
     """The thread bound of a unit run from an estimator's `n_jobs`
     (joblib's meaning): an int k > 0 is the bound, -1 all cores, -k all
@@ -100,12 +85,6 @@ def native_unit_jobs(n_jobs: PythonObject, caller: String) raises -> Int:
     return k
 
 
-def native_unit_gate() -> List[Int64]:
-    """A gate one unit holds at a time (a unit's gathers or scores that share
-    an owner's program state): one zeroed word on the heap."""
-    return List[Int64](length=1, fill=0)
-
-
 def native_unit_gate_enter(mut gate: List[Int64]):
     """Take the gate, yielding with the GIL released while another unit
     holds it. The word is read and written atomically: a plain Bool field of
@@ -113,22 +92,11 @@ def native_unit_gate_enter(mut gate: List[Int64]):
     (the compiler may assume no other thread writes it), so a waiter spun
     forever on a gate its holder had already opened (cross_val_score on 2+
     threads, 2026-11-09)."""
-    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](gate.unsafe_ptr())
     while True:  # driver-loop: wait for another unit's gated section (GIL released while waiting)
-        var expected = Int64(0)
-        if Atomic.compare_exchange[
-            success_ordering=Ordering.SEQUENTIAL,
-            failure_ordering=Ordering.RELAXED,
-        ](word, expected, Int64(1)):
+        if native_unit_gate_try(gate):
             return
         with GILReleased(Python()):
-            _ = external_call["sched_yield", c_int]()
-
-
-def native_unit_gate_leave(mut gate: List[Int64]):
-    """Open the gate `native_unit_gate_enter` took."""
-    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](gate.unsafe_ptr())
-    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
+            native_unit_yield()
 
 
 def native_unit_gil_enter() raises -> c_int:
@@ -153,24 +121,13 @@ def native_unit_threads_run(entry: NativeUnitEntry, arg: Int, workers: Int) rais
     _ = cpython_table()
     var extra = workers - 1
     var handles = List[Int](length=max(extra, 0), fill=0)
-    var attr = List[Int64](length=_ATTR_WORDS, fill=Int64(0))
-    var started = 0
-    if extra > 0 and external_call["pthread_attr_init", c_int](Int(attr.unsafe_ptr())) == 0:
-        _ = external_call["pthread_attr_setstacksize", c_int](Int(attr.unsafe_ptr()), c_size_t(_UNIT_THREAD_STACK_BYTES))
-        for i in range(extra):  # driver-loop: over unit threads (at most one per core)
-            var slot = Int(handles.unsafe_ptr()) + i * 8
-            if external_call["pthread_create", c_int](slot, Int(attr.unsafe_ptr()), entry, arg) != 0:
-                break
-            started += 1
-        _ = external_call["pthread_attr_destroy", c_int](Int(attr.unsafe_ptr()))
+    var started = native_unit_threads_start(entry, arg, extra, handles)
     _ = entry(arg)
     if started > 0:
         # Workers still running need the GIL to finish their units.
         with GILReleased(Python()):
-            for i in range(started):  # driver-loop: over started unit threads
-                _ = external_call["pthread_join", c_int](handles[i], Int(0))
+            native_unit_threads_join(handles, started)
     _ = handles^
-    _ = attr^
 
 
 struct NativeUnitFailure(Movable):
