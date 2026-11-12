@@ -679,7 +679,7 @@ def bpe_decode_batch_binding(
     var joined = List[UInt8]()
     var lens = List[Int](capacity=n)
     for s in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-        bpe_decode_batch_append(owner[], _ids_from_seq(batch[s]), nv, joined, lens)
+        bpe_decode_batch_append(owner[], _ids(batch[s]), nv, joined, lens)
     bpe_decode_batch_fit(joined, cap)
     if n > 0:
         tokenizer_store_i64(_i64_ptr(_index(lengths_addr)), lens)
