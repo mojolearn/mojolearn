@@ -40,7 +40,7 @@ Publication and lookup are small metadata operations with no independent
 numerical work to split.
 """
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
-from core.neural_entry_table import NeuralEntryKey, neural_table_entry, NEURAL_TABLE_BLOCK_FORWARD
+from core.neural_entry_table import NeuralEntryKey, neural_table_entry, NEURAL_TABLE_BLOCK_FORWARD, NEURAL_BLOCK_OPERATIONS
 from core.native_descriptor_abi import (
     NativeDescriptorCall, PRIMITIVE_ABI_NAME, TRANSFORMER_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME,
 )
@@ -58,7 +58,9 @@ comptime CAUSAL_TABLE_MAMBA = 3
 comptime CAUSAL_LINALG_SCHEMA = "mojolearn.linalg.v1"
 comptime CAUSAL_LINALG_OPERATIONS = 15
 comptime CAUSAL_PRIMITIVE_OPERATIONS = 29
-comptime CAUSAL_BLOCK_OPERATIONS = 36
+# The block family reads the neural table's block-forward slot: the same count
+# (37 since lane transformer-session-native added session create, op 36).
+comptime CAUSAL_BLOCK_OPERATIONS = NEURAL_BLOCK_OPERATIONS
 comptime CAUSAL_MAMBA_OPERATIONS = 6
 
 # Linalg operation codes (gemm/linalg_dispatch.mojo linalg_native_operation).

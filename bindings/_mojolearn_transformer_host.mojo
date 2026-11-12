@@ -97,7 +97,6 @@ from transformer.transformer_host_binding_impl import (
     _host_weights_from,
     _run_forward,
     _run_decode_steps,
-    HostTransformerSession,
 )
 
 
@@ -358,16 +357,12 @@ def transformer_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(transformer_arithmetic_profile())
 
 
-def transformer_session_create_binding() raises -> PythonObject:
-    return PythonObject(alloc=HostTransformerSession())
-
-
-def transformer_session_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[HostTransformerSession]()
-    if owner[].busy:
-        raise Error("transformer session: session is busy")
-    owner[].closed = True
-    return PythonObject(0)
+# Lane transformer-session-native (2026-11-12): `transformer_session_create`,
+# `transformer_session_close`, `transformer_native_session_handle_v1`, the
+# `_TransformerSession` type (HostTransformerSession) and the block entry's
+# session-close op 13 are deleted. A CPU block never opens a session: this
+# image serves only the ephemeral ops 4, 5 and 33, and the block session is a
+# registry handle of the GPU image (core/transformer_block_session.mojo).
 
 
 # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
@@ -385,11 +380,6 @@ def transformer_block_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
-def transformer_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[HostTransformerSession]()
-    return PythonObject(Int(owner))
-
-
 def build__mojolearn_transformer_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
@@ -398,12 +388,8 @@ def build__mojolearn_transformer_host() -> PythonObject:
         # entries remain for their other callers and the boundary tests.
         publish_neural_transformer_host()
         module.def_function[transformer_block_api_binding]("transformer_block_api_v1")
-        module.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
-        _ = module.add_type[HostTransformerSession]("_TransformerSession")
         module.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
         module.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
-        module.def_function[transformer_session_create_binding]("transformer_session_create")
-        module.def_function[transformer_session_close_binding]("transformer_session_close")
         module.def_function[transformer_host_numeric_mode_binding]("transformer_host_numeric_mode")
         module.def_function[transformer_host_vendor_binding]("transformer_host_vendor")
         module.def_function[transformer_host_column_binding]("transformer_host_column")

@@ -3442,10 +3442,9 @@ FAMILIES = (
             "transformer_forward", "transformer_forward_fresh",
             "transformer_decode_step", "transformer_decode_steps", "transformer_backward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
-            "transformer_session_close",
+            "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
-            "transformer_block_api_v1", "transformer_native_session_handle_v1",
+            "transformer_block_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise

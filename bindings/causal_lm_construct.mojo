@@ -29,6 +29,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 from std.python._cpython import GILReleased
+from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
+from providers.python.transformer_block_session_pyapi import transformer_block_session_open
 from core.causal_lm_entry_table import (
     CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_ref, causal_table_entry, CAUSAL_TABLE_LINALG,
     CAUSAL_LIN_TO_BF16, CAUSAL_LIN_QUANTIZE_INT8, CAUSAL_LIN_FROM_BF16, CAUSAL_LIN_DEQUANTIZE_INT8,
@@ -610,14 +612,16 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             py_setitem(fields, "_runtime_lock", context["rlock"]())
             mods.released()
         var session = PythonObject(None)
-        var session_binding = PythonObject(None)
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") == "1":
-            if _native_has_entry(mods, bindings[kind], "transformer_session_create"):
-                session = _native_function(mods, bindings[kind], "transformer_session_create")()
-                mods.released()
-                session_binding = bindings[kind]
+            # The block's session: a native registry handle of its GPU
+            # Transformer image, created through the block entry of the neural
+            # table (core/transformer_block_session.mojo; lane
+            # transformer-session-native). Replaces the former Python entry
+            # `transformer_session_create` and the `_session_binding` module
+            # identity the owner's resolved entry now carries.
+            session = transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
+                NeuralEntryKey(Int(py=bindings["entry_mode"]), Int(py=bindings["entry_vendor"]))))
         py_setitem(fields, "_native_session", session)
-        py_setitem(fields, "_session_binding", session_binding)
         py_setitem(fields, "_arithmetic_profile", PythonObject(None))
         if _native_has_entry(mods, bindings[kind], "transformer_arithmetic_profile"):
             py_setitem(fields, "_arithmetic_profile", _native_function(mods, bindings[kind], "transformer_arithmetic_profile")())

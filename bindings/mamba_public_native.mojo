@@ -30,7 +30,7 @@ from bindings.generation_buffers import (
 )
 from bindings.causal_lm_public import _native_function, _native_entry_fields, _native_has_entry, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block
-from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
+from bindings.neural_block_public import neural_training_entries, neural_training_selection, _neural_input, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
 from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -43,6 +43,7 @@ from providers.python.neural_descriptor_pyapi import (
 from bindings.samba_inference_native import _m3_shapes, _m3_names, _m3_state_call
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
+from core.mamba_state_entry_table import Mamba3StateRoute
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
 from mamba.impl.mamba_decode_plan import MambaDecodePlan
 from core.hostptr import f32_ptr
@@ -174,8 +175,16 @@ def _mamba_session_fields(mut mods: NativeModules, session: PythonObject, contex
 
 
 def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var route = Mamba3StateRoute(1, 0, False)
+    return _m3_entries(mods, block, fields, context, route)
+
+
+def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObject, context: PythonObject,
+    mut route: Mamba3StateRoute) raises -> PythonObject:
     # The binding the retired `Mamba3Block._extension()` returned: the shipped
     # host binding for the CPU inference class, the block's tier otherwise.
+    # `route` receives the key of the image that serves the block's carried
+    # state (core/mamba_state_entry_table.mojo; lane transformer-session-native).
     var bi = mods.module("builtins")
     # isinstance may consult a replaced block.__class__ descriptor even when
     # field storage was admitted. Test the actual native type ancestry.
@@ -196,8 +205,11 @@ def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObje
             mods.released()
         py_setitem(fields, "_native_mamba_block_provider_cache", block_provider)
         py_setitem(fields, "_native_mamba_state", state_provider)
+        route = Mamba3StateRoute(1, 0, False)
         return entries
-    return neural_training_entries(mods, fields, context)
+    var selection = neural_training_selection(mods, fields, context)
+    route = Mamba3StateRoute(selection.key.mode, selection.key.vendor, selection.key.vendor == 0)
+    return selection.entries
 
 
 def _m3_canonical(mut mods: NativeModules, entries: PythonObject) raises -> PythonObject:
@@ -278,7 +290,8 @@ def _m3_allocate(mut mods: NativeModules, block: PythonObject, fields: PythonObj
     return state
 
 
-def _m3_fresh(mut mods: NativeModules, block: PythonObject, fields: PythonObject, x: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _m3_fresh(mut mods: NativeModules, block: PythonObject, fields: PythonObject, x: PythonObject, entries: PythonObject, context: PythonObject,
+    route: Mamba3StateRoute) raises -> PythonObject:
     # The retired `_call`: the discard-only prefill where the binding has it,
     # else the carried-state entry from a fresh zero state.
     if _native_has_entry(mods, entries, "mamba3_forward_fresh"):
@@ -286,7 +299,7 @@ def _m3_fresh(mut mods: NativeModules, block: PythonObject, fields: PythonObject
         mods.released()
         return windowed_result8^
     var state = _m3_allocate(mods, block, fields, x.shape[0], context)
-    var windowed_result7 = _m3_state_call(block, x, state, False, entries, fields, _fields(state))
+    var windowed_result7 = _m3_state_call(block, x, state, False, entries, fields, _fields(state), route)
     mods.released()
     return windowed_result7^
 
@@ -300,7 +313,8 @@ def _mamba3_forward_captured(mut mods: NativeModules,
     if step and state is None:
         raise Error("Mamba3Block.step: state is required (a decode step continues a sequence; allocate_state(B) makes the fresh one)")
     var x = _neural_input(mods, input, d, step, context)
-    var entries = _m3_entries(mods, block, fields, context)
+    var route = Mamba3StateRoute(1, 0, False)
+    var entries = _m3_entries(mods, block, fields, context, route)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     if lengths is not None:
@@ -310,14 +324,14 @@ def _mamba3_forward_captured(mut mods: NativeModules,
         var padded = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=padded._addr), Int(py=x._addr), sizes, b, l, d)
         _ = x^  # the copy above read `x` by address
-        var ran = _m3_fresh(mods, block, fields, padded, entries, context)
+        var ran = _m3_fresh(mods, block, fields, padded, entries, context, route)
         var result = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=result._addr), Int(py=ran[0]._addr), sizes, b, l, d)
         return Python.tuple(result, ran[1], ran[2], ran[3], ran[4])
     if state is None:
-        return _m3_fresh(mods, block, fields, x, entries, context)
+        return _m3_fresh(mods, block, fields, x, entries, context, route)
     var captured = _mamba_state_fields(mods, state, "mamba3", context)
-    var result = _m3_state_call(block, x, state, step, entries, fields, captured)
+    var result = _m3_state_call(block, x, state, step, entries, fields, captured, route)
     mods.released()
     var slots = _fields(state)
     py_setitem(slots, "buffered_tokens", captured["buffered_tokens"])
@@ -543,8 +557,7 @@ def mamba3_getstate(mut mods: NativeModules, block: PythonObject, context: Pytho
     # cache keyed the state provider on (neural_descriptor_cached): a module
     # is not picklable, and setstate reconnects the provider anyway.
     var transient_names = [String("_owned_native_provider"), String("_native_mamba_block_provider_cache"),
-                           String("_native_mamba_state"), String("_native_mamba_state_binding"),
-                           String("_native_forward_owner")]
+                           String("_native_mamba_state"), String("_native_mamba_state_binding")]
     for name in transient_names:  # driver-loop: over ephemeral native owners excluded from serialized model state
         _ = py_call(result.pop, name, PythonObject(None))
     return result

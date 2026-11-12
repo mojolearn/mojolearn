@@ -60,5 +60,5 @@ def test_transformer_serialization_restores_a_fresh_native_owner():
     assert 'operation_lock_create()' in restore
     assert 'py_type(state) is not bi.dict' in restore
     save = source.split('def neural_block_getstate_binding')[1].split('def neural_block_setstate_binding')[0]
-    assert 'String("_native_forward_owner")' in save
+    assert 'String("_native_session")' in save
     assert 'elif saved is not None:' in save

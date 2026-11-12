@@ -221,7 +221,6 @@ from std.math import isfinite
 from transformer.impl.llama.afn_apple_fast import afn_flash_call_count
 
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
-from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transformer_session_forward_native
 
 from transformer.lean_stages import transformer_lean_stages, _lean_for
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
@@ -398,8 +397,12 @@ def transformer_session_forward_fresh_binding(
     `cached_tokens = 0`. The cache is the session's retained buffers,
     zero-filled on the device; nothing of it crosses the host boundary. This
     is `transformer_forward_fresh` on a session: the block's attention step
-    op arm retained across calls under the budget."""
-    var owner = session.downcast_value_ptr[TransformerSession]()
+    op arm retained across calls under the budget. `session` is the block's
+    native session owner (core/transformer_block_session.mojo); the registry
+    lease keeps the session alive through the call."""
+    var lease = BLOCK_SESSIONS.acquire(transformer_block_session_of(
+        session.downcast_value_ptr[TransformerBlockSession]()[].word()))
+    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=lease[])))
     if owner[].busy or owner[].closed:
         raise Error("transformer: session is busy or closed")
     var a = _read_addrs_tail(addrs, 13, String("transformer_session_forward_fresh"))
@@ -419,8 +422,10 @@ def transformer_session_forward_fresh_binding(
                 raise error
     except error:
         owner[].busy = False
+        _ = lease
         raise error
     owner[].busy = False
+    _ = lease  # the registry lease outlives every use of the owner pointer
     return PythonObject(result)
 
 
@@ -429,8 +434,12 @@ def transformer_session_backward_binding(
 ) raises -> PythonObject:
     """`transformer_backward` on a session (lane/neural-net-experiment):
     the same twenty-one addresses and eight scalars, word for word, the
-    weights, workspace and backward stages retained across calls."""
-    var owner = session.downcast_value_ptr[TransformerSession]()
+    weights, workspace and backward stages retained across calls. `session`
+    is the block's native session owner; the registry lease keeps the session
+    alive through the call."""
+    var lease = BLOCK_SESSIONS.acquire(transformer_block_session_of(
+        session.downcast_value_ptr[TransformerBlockSession]()[].word()))
+    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=lease[])))
     if owner[].busy or owner[].closed:
         raise Error("transformer: session is busy or closed")
     if len(addrs) != 21 or len(params) != 8:
@@ -466,51 +475,28 @@ def transformer_session_backward_binding(
                 raise error
     except error:
         owner[].busy = False
+        _ = lease
         raise error
     owner[].busy = False
+    _ = lease  # the registry lease outlives every use of the owner pointer
     return PythonObject(0)
 
 
-def transformer_session_create_binding() raises -> PythonObject:
-    return PythonObject(alloc=TransformerSession())
+# Lane transformer-session-native (2026-11-12): the block session is a native
+# registry handle (core/transformer_block_session.mojo, BLOCK_SESSIONS in
+# transformer/native_block_dispatch.mojo). The Python entries
+# `transformer_session_create`, `transformer_session_close`,
+# `transformer_session_forward`, `transformer_session_forward_int15`,
+# `transformer_native_session_handle_v1`, `transformer_native_api_v1` and the
+# `_TransformerSession` type are deleted: callers create, run and close the
+# session through the block entry of core/neural_entry_table.mojo (ops 36, 11,
+# 35, 13). The two session entries above remain only for the
+# MOJOLEARN_NEURAL_TABLE_ROUTE_OFF B arm (bindings/neural_block_public.mojo) and
+# take the session's native owner.
 
 
-def transformer_session_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy:
-        raise Error("transformer: session is busy")
-    owner[].closed = True
-    owner[].clear()
-    owner[].ctx = None
-    return PythonObject(0)
-
-
-def transformer_session_forward_binding(
-    session: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer: session is busy or closed")
-    # `transformer_forward`'s lists, with or without the two option tails
-    # (the header of this section); the same contract word for word.
-    var a = _read_addrs_tail(addrs, 13, String("transformer_forward"))
-    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_forward"))
-    _ = a  # keep the Python object alive through the native call above
-    var p = _read_params(params, 10, String("transformer_forward"))
-    var opts = BlockOptions.from_params(p, 10)
-    owner[].busy = True
-    var result = 0
-    try:
-        with GILReleased(Python()):
-            result = transformer_session_forward_native(owner[], a, p, opts)
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(result)
-
-
-from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
+from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API, BLOCK_SESSIONS
+from core.transformer_block_session import TransformerBlockSession, transformer_block_session_of
 from transformer.neural_entry_device import publish_neural_transformer_device
 from providers.python.causal_session_handles_pyapi import causal_session_handles_type
 
@@ -529,64 +515,6 @@ def transformer_block_api_binding() raises -> PythonObject:
     if not capsule:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=capsule)
-
-
-def transformer_native_api_binding() raises -> PythonObject:
-    # Setup-time ABI transport only. The table and name live for the owning
-    # image's lifetime; consumers retain this module and capsule while using
-    # any copied native function pointer. No extension-layout assumptions.
-    ref cpy = Python().cpython()
-    var api = TRANSFORMER_NATIVE_API.get_or_create_ptr()
-    var capsule = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
-        api[].entries.unsafe_ptr(), api[].name.as_c_string_slice().unsafe_ptr(), PyObjectPtr())
-    if not capsule:
-        raise cpy.unsafe_get_error()
-    return PythonObject(from_owned=capsule)
-
-
-def transformer_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
-    # The ONLY conversion from a public session owner to this image's opaque
-    # handle. A caller must retain session; native consumers never inspect its
-    # Python extension layout or reconstruct TransformerSession themselves.
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer: session is busy or closed")
-    return PythonObject(Int(owner))
-
-
-def transformer_session_forward_int15_binding(
-    session: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer: session is busy or closed")
-    var what = String("transformer_session_forward_int15")
-    if len(addrs) != INT15_ENTRY_ADDRS:
-        raise Error(what + ": addrs must contain " + String(INT15_ENTRY_ADDRS) + " addresses, got " + String(len(addrs)))
-    if len(params) != INT15_ENTRY_PARAMS:
-        raise Error(what + ": params must contain " + String(INT15_ENTRY_PARAMS) + " values, got " + String(len(params)))
-    var a = List[Int]()
-    for i in range(len(addrs)):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: INT15_ENTRY_ADDRS validated tensor addresses): reads pointer list, not data
-        a.append(Int(py=addrs[i]))
-    _check_base_addrs(a, [0, 1, 2, 10, 11, 12], what)
-    _ = a  # keep the Python object alive through the native call above
-    var p = _read_params(params, 10, what)
-    var opts = BlockOptions.from_params(p, 10)
-    owner[].busy = True
-    var result = 0
-    try:
-        with GILReleased(Python()):
-            try:
-                result = _transformer_run_session_int15(owner[], a,
-                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
-            except error:
-                owner[].clear()
-                raise error
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(result)
 
 
 def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
@@ -1287,20 +1215,15 @@ def build__mojolearn_transformer() -> PythonObject:
         # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_forward_binding]("transformer_forward")
-        _ = m.add_type[TransformerSession]("_TransformerSession")
-        m.def_function[transformer_session_create_binding]("transformer_session_create")
-        m.def_function[transformer_session_close_binding]("transformer_session_close")
         # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
-        m.def_function[transformer_session_forward_binding]("transformer_session_forward")
-        m.def_function[transformer_native_api_binding]("transformer_native_api_v1")
         m.def_function[transformer_block_api_binding]("transformer_block_api_v1")
-        m.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
-        # lane/neural-net-experiment: the stateless prefill on a session.
+        # The MOJOLEARN_NEURAL_TABLE_ROUTE_OFF B arm only: the stateless prefill
+        # and the backward on a block session (its native owner). The session
+        # create/close/forward/int15/handle/native-api entries are deleted
+        # (lane transformer-session-native, 2026-11-12).
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
         m.def_function[transformer_session_backward_binding]("transformer_session_backward")
-        # lane/lowbit-blocks: numeric_profile="fixed15_v1".
-        m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
         # NVIDIA's full public A/B gate admits discarded-cache prefill.
         # Apple retains its prior default until separately priced; the explicit
         # force flag remains available for its completed arithmetic gate.

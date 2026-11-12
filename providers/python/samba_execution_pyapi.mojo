@@ -8,7 +8,11 @@ from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_type
 from bindings.generation_buffers import generation_address, generation_array
 from bindings.causal_lm_public import _native_function, _mutable
-from bindings.neural_block_public import neural_training_entries
+from bindings.neural_block_public import neural_training_selection
+from providers.python.transformer_block_session_pyapi import (
+    transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
+)
+from core.neural_entry_table import neural_ref, NEURAL_TABLE_BLOCK_TRAIN
 from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct, neural_descriptor_execute
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.native_execution_pyapi import AdmittedNativeExecution
@@ -116,7 +120,8 @@ struct AdmittedSambaExecution(Movable):
             var publication = SambaLayerPublication(layer_fields, layer_state, transformer)
             var layer = NativeSambaLayer(self.owners[0].endpoint(), 0, [], [], [], 0, 0, -1, [])
             try:
-                var entries = neural_training_entries(layer_fields, context)
+                var selection = neural_training_selection(layer_fields, context)
+                var entries = selection.entries
                 publication.entries = entries
                 var source_weights = layer_fields["_w"]
                 for j in range(len(source_weights)):  # driver-loop: retain immutable weight owners at admission
@@ -140,15 +145,18 @@ struct AdmittedSambaExecution(Movable):
                     var use_session = not cpu and (packed or layer_state is not None or Bool(py=py_call(bi.hasattr, entries, "transformer_session_forward_fresh")))
                     var session = PythonObject(None)
                     if use_session:
+                        # The block's session: a native registry handle of the
+                        # training image (core/transformer_block_session.mojo,
+                        # lane transformer-session-native). Creation performs no
+                        # numerical work; the handle word is one native read
+                        # (the former Python entries transformer_session_create
+                        # and transformer_native_session_handle_v1).
+                        var train = neural_ref[NEURAL_TABLE_BLOCK_TRAIN](selection.key)
                         session = layer_fields["_native_session"]
-                        if session is None or layer_fields["_session_binding"] is not canonical:
-                            # Empty owner admission performs no numerical work. New
-                            # candidate blocks already have this shared typed owner.
-                            session = _native_function(entries, "transformer_session_create")()
+                        if not transformer_block_session_serves(session, train):
+                            session = transformer_block_session_open(train)
                         publication.session = session
-                        publication.binding = canonical
-                        var handle = neural_descriptor_handle(provider,
-                            _native_function(entries, "transformer_native_session_handle_v1"), session)
+                        var handle = transformer_block_session_handle(session)
                         self.owners.append(AdmittedNativeExecution(provider, session, handle, 0, 1, lock.owner, lock.handle))
                     else:
                         self.owners.append(AdmittedNativeExecution(provider, PythonObject(None), 0, -1, -1, lock.owner, lock.handle))
@@ -439,7 +447,8 @@ struct AdmittedSambaExecution(Movable):
                 continue
             if publication.session is not None:
                 py_setitem(publication.fields, "_native_session" if publication.transformer else "_prefill_session", publication.session)
-                py_setitem(publication.fields, "_session_binding" if publication.transformer else "_prefill_binding", publication.binding)
+                if not publication.transformer:
+                    py_setitem(publication.fields, "_prefill_binding", publication.binding)
             if layer.prepared:
                 py_setitem(publication.fields, "_owned_generation", PythonObject(layer.prepared_result))
                 py_setitem(publication.fields, "_owned_restore_pending", False)

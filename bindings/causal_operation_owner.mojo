@@ -159,15 +159,18 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
         if Bool(original) and (not py_contains(original.value(), names[i]) or item is not original.value()[names[i]]):
             raise Error("TypeError: CausalLM native execution entry changed after admission")
         if (name == "native_primitives" or name == "native_block_operations" or name == "native_mamba"
-                or name == "block_binding" or name == "native_session_provider"):
+                or name == "block_binding"):
             # Typed provider/lifetime admission occurs at its native boundary;
             # these values are retained, never called or traversed as Python.
             py_setitem(result, names[i], item)
         elif (name == "cpu" or name == "weight_names" or name == "resident_vendor"
                 or name == "mamba1_profile" or name == "native_enabled"
-                or name == "entry_mode" or name == "entry_vendor"):
+                or name == "entry_mode" or name == "entry_vendor"
+                or name == "block_session" or name == "forward15"):
             # entry_mode/entry_vendor: the CausalLM entry table key words
             # (core/causal_lm_entry_table.mojo), plain admitted integers.
+            # block_session/forward15: the GPU Transformer session route flags
+            # (lane transformer-session-native; they were Python entries).
             neural_plain_value(mods, item, 0, context)
             py_setitem(result, names[i], neural_metadata_snapshot(mods, item))
         else:
@@ -277,9 +280,9 @@ def _causal_block_runtime_names() -> List[String]:
     # Block fields an operation writes back (sessions, provider caches,
     # arithmetic profile words, reports): taken live on every call.
     return [String("_arithmetic_profile"), String("_arithmetic_profile_mode"), String("_arithmetic_profile_changed"),
-            String("_native_session"), String("_session_binding"), String("_native_forward_owner"), String("h_last_"),
+            String("_native_session"), String("h_last_"),
             String("_native_block_provider_cache"), String("_native_mamba_block_provider_cache"), String("_native_mamba_state"),
-            String("_native_session_provider_cache"), String("_native_primitives_provider_cache"),
+            String("_native_primitives_provider_cache"),
             String("_native_mamba_provider_cache")]
 
 

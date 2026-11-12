@@ -18,8 +18,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-ROOTS = ("transformer.session_abi", "transformer.native_session_call",
-         "transformer.session_native_dispatch", "core.native_descriptor_abi",
+ROOTS = ("transformer.session_native_dispatch", "core.transformer_block_session", "core.native_descriptor_abi",
          "core.native_descriptor_call", "training.native_primitive_dispatch",
          "mamba.native_state_dispatch", "transformer.native_lm_resident_dispatch",
          "transformer.causal_lm_program")
