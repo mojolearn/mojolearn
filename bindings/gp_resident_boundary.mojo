@@ -12,7 +12,8 @@ from core.gp_native_state import GPLeaseState
 
 struct GPPreparedLease(Movable, Writable):
     # This owner is only in the weak-keyed prepared registry, never a model
-    # field. The provider and mirrored buffers survive native lease cleanup.
+    # field. The image pin (`provider`: the connected GP module) and mirrored
+    # buffers survive native lease cleanup.
     var state: GPLeaseState
     var driver: GPDriver
     var provider: PythonObject
@@ -51,7 +52,7 @@ def gp_resident_lease(model: PythonObject, slot: String, connection: GPConnectio
     if record is not None:
         try:
             var held = record.downcast_value_ptr[GPPreparedLease]()
-            var same = held[].state.matches_header(Int(connection.provider._obj_ptr), generation, len(mirrors))
+            var same = held[].state.matches_header(Int(connection.image._obj_ptr), generation, len(mirrors))
             if same:
                 for i in range(len(mirrors)):  # driver-loop: fitted buffer identities in the original slot order
                     if not held[].state.matches_owner(i, Int(mirrors[i]._obj_ptr)):
@@ -79,8 +80,8 @@ def gp_resident_lease(model: PythonObject, slot: String, connection: GPConnectio
     # Lease creation only mutates native registry metadata; keep the GIL as
     # the previous opener did, with no extra release/reacquire boundary.
     var handle = connection.driver.lease_open()
-    var state = GPLeaseState(handle, Int(connection.provider._obj_ptr), generation, identities^)
-    var owner = GPPreparedLease(state^, connection.driver, connection.provider, retained^)
+    var state = GPLeaseState(handle, Int(connection.image._obj_ptr), generation, identities^)
+    var owner = GPPreparedLease(state^, connection.driver, connection.image, retained^)
     var packed: PythonObject
     try:
         packed = PythonObject(alloc=owner^)
