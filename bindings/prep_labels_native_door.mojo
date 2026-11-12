@@ -27,7 +27,7 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.x_prep_native_owner_door import xprep_values
-from bindings.prep_encode_native import (
+from bindings.prep_encode_native_door import (
     EncProg, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
 from bindings.prep_encode_prog_run import OUT_MARK
 from bindings.str_labels_native_door import str_lookup, _read, str_unique_into, str_codes_into

@@ -2,7 +2,7 @@
 # The native owner of IterativeImputer (dispatched by bindings/prep_owner_native.mojo).
 # fit, fit_transform and transform are each one call here. The owner checks the
 # parameters, fits the initial SimpleImputer through the encode owner's native
-# SimpleImputer (bindings/prep_encode_native.mojo), and builds the x_prep programs
+# SimpleImputer (bindings/prep_encode_native_door.mojo), and builds the x_prep programs
 # the Python `_Prog` built (the same stages, operands and arena order, so the same
 # bits): the statistics and imputation-order program, the n_nearest_features draw
 # program, the one program of rounds for the built-in Bayesian ridge, and
@@ -29,7 +29,7 @@ from bindings.native_array_storage_door import native_array_zeros
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.prep_stateless_native_door import _int_like, _repr, _name
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has
-from bindings.prep_encode_native import (
+from bindings.prep_encode_native_door import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
 

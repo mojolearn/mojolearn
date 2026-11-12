@@ -15,7 +15,7 @@
 # `ClsProg`, the classifier owner's context `select_context`) because the
 # support mask and the ranking are in-out inputs, as `_Prog.put(inout=True)`
 # made them. The mutual-information programs and the selector transform run
-# on the encode owner's transport (bindings/prep_encode_native.mojo `EncProg`).
+# on the encode owner's transport (bindings/prep_encode_native_door.mojo `EncProg`).
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -36,7 +36,7 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.x_prep_native_owner_door import xprep_values
 from bindings.prep_stateless_native_door import _select_transform, _select_gather, _support_columns, _words
-from bindings.prep_encode_native import (
+from bindings.prep_encode_native_door import (
     EncProg, _cs, _codes, _fit_categories, _take1, _take2, _word, _iword, _put_codes, _default_mode,
     _seed64, _score_words)
 from bindings.prep_classify_prog_door import ClsProg, f32_array

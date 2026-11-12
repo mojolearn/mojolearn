@@ -101,7 +101,7 @@ def str_unique_into(table: StrTable, n: Int, codes_address: Int) raises -> List[
 def str_codes_into(rows: StrTable, known: StrTable, classes: StrClasses, address: Int,
                    as_float: Bool) raises -> StrUnseen:
     """THE str-label lookup (every caller: `str_lookup`'s code-point path and
-    bindings/prep_labels_native.mojo `_text_codes`): each label of `rows`
+    bindings/prep_labels_native_door.mojo `_text_codes`): each label of `rows`
     looked up among `classes` of `known`, its index (-1 unseen) written as
     int32 (float32 with `as_float`) at `address`, across the host pool with
     the GIL released (only native tables and the caller's words are read or

@@ -35,10 +35,6 @@ allow: bindings/metrics_exp_rank.mojo  # 2026-11-12 lane metric-programs-2 (to o
 allow: bindings/metrics_reg_native.mojo  # 2026-11-12 lane metric-programs-2 (to open; entangled-programs left it): _Reg y/p/w refs + _Prog owners + MetricPlanOpcodes snapshot
 allow: bindings/native_model_records.mojo  # 2026-11-12 lane resident-pin-tables (to open): RecordPayloads/ModelEntry: Python pins inside typed record tables (design)
 allow: bindings/nmf_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/prep_encode_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
-allow: bindings/prep_iterimp_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
-allow: bindings/prep_labels_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
-allow: bindings/prep_select_native.mojo  # 2026-11-12 lane encprog-typed (to open; entangled-programs left it): EncProg: Python input records on the xprep RUN path
 allow: bindings/spectral_affinity_boundary.mojo  # 2026-11-12 lane entangled-mkit follow-up (to open): SpectralAffinityRoom public_array pin (entangled-mkit follow-up)
 allow: bindings/trees_public_boost.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/trees_public_forest.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
