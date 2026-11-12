@@ -66,7 +66,7 @@ from training.neural_session_mlp import nn_mlp_sessions_device
 
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from core.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr as _f32_ptr, i32_ptr as _i32_ptr
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from bindings.sha256_door import sha256_hexdigest
@@ -147,14 +147,6 @@ from core.philox_neural import neural_rng_host
 # (training/samba_program_entry.mojo, published by
 # publish_samba_training_primitives); no Python entry here.
 from training.causal_entry_device import publish_causal_training_device
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
 
 
 def training_numeric_mode_binding() raises -> PythonObject:
