@@ -798,15 +798,6 @@ def rf_classifier_fit_binding[EXPORT: Bool = False](
     return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, EXPORT)
 
 
-def rf_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_classifier_fit` with `x` ROW-major (C-order) float32, borrowed
-    through the call (DEVIATION 2637). Same params, same forest bits."""
-    return _rf_fit_py[True, True](x_addr, y_addr, params, criterion, EXPORT)
-
-
 def rf_classifier_fit_weighted_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
@@ -1739,15 +1730,6 @@ def rf_regressor_fit_ada_round_binding(
     return _retain_rf_export(export_trees^, forest.notices)
 
 
-def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_regressor_fit` with `x` ROW-major (C-order) float32, borrowed
-    through the call (DEVIATION 2637). Same params, same forest bits."""
-    return _rf_fit_py[False, True](x_addr, y_addr, params, criterion, EXPORT)
-
-
 def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
@@ -2124,23 +2106,6 @@ def rf_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, False, tree_start=Int(py=tree_start))
 
 
-# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
-# fit, returned as the export descriptor the door copies into its five Arrays
-# through `forest_export`, instead of `_forest_out_trees`' one Python object
-# per node. The bytes are the same (MOJOLEARN_FOREST_EXPORT=verify compares
-# them with `forest_export_legacy`).
-def rf_classifier_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
-    weights_addr: PythonObject) raises -> PythonObject:
-    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, True, weights=Int(py=weights_addr),
-                                   tree_start=Int(py=tree_start))
-
-
-def rf_regressor_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, True, tree_start=Int(py=tree_start))
-
-
 struct RfGpuForest(ForestImage):
     """This image's forest entry operations (core/forest_entry.mojo; lane
     calltable-forest): the bodies the Python entries above unpack into."""
@@ -2251,7 +2216,8 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[rf_classifier_fit_rowmajor_binding[True]]("rf_classifier_fit_rowmajor_export")
+        # TOMBSTONE: TREES_LEGACY_PYTHON_ENTRIES (DELETED: no caller; the door fits through the forest entry table) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+        # Restore: git apply experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch
         m.def_function[rf_classifier_fit_weighted_binding[False]]("rf_classifier_fit_weighted")
         m.def_function[rf_classifier_fit_weighted_binding[True]]("rf_classifier_fit_weighted_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -2262,7 +2228,6 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_regressor_fit_weighted_binding[True]]("rf_regressor_fit_weighted_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[rf_regressor_fit_rowmajor_binding[True]]("rf_regressor_fit_rowmajor_export")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -2300,8 +2265,6 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_regressor_fit_ada_round_binding]("rf_regressor_fit_ada_round_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
-        m.def_function[rf_classifier_fit_shard_export_binding]("rf_classifier_fit_shard_export")
-        m.def_function[rf_regressor_fit_shard_export_binding]("rf_regressor_fit_shard_export")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))

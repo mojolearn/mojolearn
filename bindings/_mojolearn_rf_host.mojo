@@ -595,13 +595,6 @@ def rf_classifier_fit_export_binding(
     return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, True)
 
 
-def rf_classifier_fit_rowmajor_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit_py[True, True](x_addr, y_addr, params, criterion, True)
-
-
 def _rf_classifier_fit_weighted(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject, export: Bool,
@@ -650,13 +643,6 @@ def rf_regressor_fit_weighted_export_binding(
                                     weight_max=Float64(py=weight_max))
 
 
-def rf_regressor_fit_rowmajor_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit_py[False, True](x_addr, y_addr, params, criterion, True)
-
-
 def rf_classifier_fit_shard_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
@@ -677,27 +663,6 @@ def rf_regressor_fit_shard_binding(
 ) raises -> PythonObject:
     """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_shard_binding`."""
     return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, False, tree_start=_index(tree_start))
-
-
-# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
-# fit returned as the export descriptor the door copies through
-# `forest_export`, not one Python object per node. Same bytes.
-def rf_classifier_fit_shard_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn_rf.mojo::rf_classifier_fit_shard_export_binding`."""
-    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, True, weights=_index(weights_addr),
-                                   tree_start=_index(tree_start))
-
-
-def rf_regressor_fit_shard_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_shard_export_binding`."""
-    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, True, tree_start=_index(tree_start))
 
 
 # ---------------------------------------------------------------------------
@@ -1236,17 +1201,15 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_classifier_fit_export_binding]("rf_classifier_fit_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[rf_classifier_fit_rowmajor_export_binding]("rf_classifier_fit_rowmajor_export")
+        # TOMBSTONE: TREES_LEGACY_PYTHON_ENTRIES (DELETED: no caller; the door fits through the forest entry table) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+        # Restore: git apply experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_regressor_fit_export_binding]("rf_regressor_fit_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[rf_regressor_fit_rowmajor_export_binding]("rf_regressor_fit_rowmajor_export")
         module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
-        module.def_function[rf_classifier_fit_shard_export_binding]("rf_classifier_fit_shard_export")
-        module.def_function[rf_regressor_fit_shard_export_binding]("rf_regressor_fit_shard_export")
         module.def_function[rf_forest_export_binding]("forest_export")
         module.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[rf_forest_export_release_binding]("forest_export_release")

@@ -406,98 +406,16 @@ def _et_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
     return _et_handle_py(_et_fit_native[CLASSIFIER, ROWMAJOR](args), export)
 
 
-def _et_weights(weights_addr: PythonObject, entry: String) raises -> Int:
-    var address = _index(weights_addr)
-    if address == 0:
-        raise Error(entry + " requires a nonzero float32 weight pointer")
-    return address
-
-
 def et_classifier_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     return _et_fit_py[True, False](x_addr, y_addr, params, EXPORT)
 
 
-def et_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`et_classifier_fit` with `x` ROW-major (C-order) float32 (DEVIATION
-    2637), transposed on the host. Same params, same forest bits."""
-    return _et_fit_py[True, True](x_addr, y_addr, params, EXPORT)
-
-
-def et_classifier_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    """`et_classifier_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
-    (lane sk-kernels): `weights` is n_rows float32, scikit-learn's
-    sample_weight times its class_weight row, borrowed through the call."""
-    return _et_fit_py[True, ROWMAJOR](x_addr, y_addr, params, EXPORT,
-                                      weights=_et_weights(weights_addr, "et_classifier_fit_weighted"))
-
-
 def et_regressor_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     return _et_fit_py[False, False](x_addr, y_addr, params, EXPORT)
-
-
-def et_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`et_regressor_fit` with `x` ROW-major (C-order) float32 (DEVIATION
-    2637), as `et_classifier_fit_rowmajor`."""
-    return _et_fit_py[False, True](x_addr, y_addr, params, EXPORT)
-
-
-def et_regressor_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    """`et_regressor_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
-    (lane sk-final): `weights` is n_rows float32, scikit-learn's
-    sample_weight, borrowed through the call."""
-    return _et_fit_py[False, ROWMAJOR](x_addr, y_addr, params, EXPORT,
-                                       weights=_et_weights(weights_addr, "et_regressor_fit_weighted"))
-
-
-def et_classifier_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_fit_py[True, False](x_addr, y_addr, params, False, tree_start=_index(tree_start))
-
-
-def et_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_fit_py[False, False](x_addr, y_addr, params, False, tree_start=_index(tree_start))
-
-
-# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
-# fit returned as the export descriptor the door copies through
-# `forest_export`, not one Python object per node. Same bytes.
-def et_classifier_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_fit_py[True, False](x_addr, y_addr, params, True, tree_start=_index(tree_start))
-
-
-def et_regressor_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_fit_py[False, False](x_addr, y_addr, params, True, tree_start=_index(tree_start))
-
-
-def et_classifier_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, weights_addr: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    """lane sk-final: `et_classifier_fit_shard` with per-row weights."""
-    var address = _et_weights(weights_addr, "et_classifier_fit_weighted_shard")
-    return _et_fit_py[True, False](x_addr, y_addr, params, False, weights=address, tree_start=_index(tree_start))
-
-
-def et_regressor_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, weights_addr: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    """lane sk-final: `et_regressor_fit_shard` with per-row weights."""
-    var address = _et_weights(weights_addr, "et_regressor_fit_weighted_shard")
-    return _et_fit_py[False, False](x_addr, y_addr, params, False, weights=address, tree_start=_index(tree_start))
 
 
 def _et_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
@@ -746,31 +664,19 @@ def build__mojolearn_trees_host() -> PythonObject:
         module.def_function[et_classifier_fit_binding[True]]("et_classifier_fit_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[et_classifier_fit_rowmajor_binding[True]]("et_classifier_fit_rowmajor_export")
-        module.def_function[et_classifier_fit_weighted_binding[False]]("et_classifier_fit_weighted")
-        module.def_function[et_classifier_fit_weighted_binding[True]]("et_classifier_fit_weighted_export")
+        # TOMBSTONE: TREES_LEGACY_PYTHON_ENTRIES (DELETED: no caller; the door fits through the forest entry table) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+        # Restore: git apply experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[et_classifier_fit_weighted_binding[True, True]]("et_classifier_fit_weighted_rowmajor_export")
         module.def_function[et_regressor_fit_binding[False]]("et_regressor_fit")
         module.def_function[et_regressor_fit_binding[True]]("et_regressor_fit_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[et_regressor_fit_rowmajor_binding[True]]("et_regressor_fit_rowmajor_export")
         module.def_function[et_forest_export_binding]("forest_export")
         module.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[et_forest_export_release_binding]("forest_export_release")
-        module.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
-        module.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
-        module.def_function[et_classifier_fit_shard_export_binding]("et_classifier_fit_shard_export")
-        module.def_function[et_regressor_fit_shard_export_binding]("et_regressor_fit_shard_export")
-        module.def_function[et_classifier_fit_weighted_shard_binding]("et_classifier_fit_weighted_shard")
-        module.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
-        module.def_function[et_regressor_fit_weighted_binding[False]]("et_regressor_fit_weighted")
-        module.def_function[et_regressor_fit_weighted_binding[True]]("et_regressor_fit_weighted_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[et_regressor_fit_weighted_binding[True, True]]("et_regressor_fit_weighted_rowmajor_export")
         module.def_function[et_predict_binding]("et_predict")
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")

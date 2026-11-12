@@ -1064,7 +1064,8 @@ TRAINING_LANE_NAMES = {
     # knn_classify_neighbors and knn_regress_neighbors.
     # Wave 2, the forest driver: fit_forest cuts 16 trees into four global
     # tree ID ranges in Python; each range is the rf or trees host
-    # binding's shard fit (rf_classifier_fit_shard, et_regressor_fit_shard),
+    # binding's shard fit (rf_classifier_fit_shard; the et shard fits were
+    # deleted 2026-11-12, no caller),
     # the GPU bindings' tree_start offset restated on the host, and the
     # trees concatenate in ID order.
     # Wave 2, par-mlp: ParallelNeuralTrainer sends one mlp_gradient request
@@ -2460,18 +2461,9 @@ FAMILIES = (
             "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
             "trees_host_sabotage", "trees_vendor", "trees_numeric_mode",
             "et_classifier_fit", "et_classifier_fit_export",
-            "et_classifier_fit_rowmajor_export",
             "et_regressor_fit", "et_regressor_fit_export",
-            "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
-            "et_classifier_fit_shard", "et_regressor_fit_shard",
-            "et_classifier_fit_shard_export", "et_regressor_fit_shard_export",
             # the weighted fits (sample_weight; lanes sk-kernels / sk-final)
-            "et_classifier_fit_weighted", "et_classifier_fit_weighted_export",
-            "et_classifier_fit_weighted_rowmajor_export",
-            "et_regressor_fit_weighted", "et_regressor_fit_weighted_export",
-            "et_regressor_fit_weighted_rowmajor_export",
-            "et_classifier_fit_weighted_shard", "et_regressor_fit_weighted_shard",
             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
             "forest_release_gpu",
             "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
@@ -2512,15 +2504,12 @@ FAMILIES = (
             "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
             "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
             "rf_classifier_fit_export",
-            "rf_classifier_fit_rowmajor_export",
             "rf_regressor_fit_export",
-            "rf_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
             "rf_regressor_fit_weighted_export",
             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
-            "rf_classifier_fit_shard_export", "rf_regressor_fit_shard_export",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
             "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
             "rf_data_session_open", "rf_data_session_close",
