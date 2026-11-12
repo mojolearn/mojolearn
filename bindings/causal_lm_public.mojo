@@ -2344,7 +2344,15 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
         var read_words: List[Int] = [held, Int(reply.unsafe_ptr()), reply_words]
         for i in range(len(p)):  # driver-loop: over descriptor words (argument packing)
             read_words.append(p[i])
-        var served = _session_call(entries, family, CAUSAL_SESSION_PROGRAM_READ, a, read_words, f)
+        # A held program's owner already carries its resolved session entry
+        # (resolved once at its construction); only the first read of a model,
+        # with no owner yet, resolves it by the admitted key.
+        var served: Int
+        if owner is not None and owner.downcast_value_ptr[CausalSessionHandles]()[].family == family:
+            served = _session_call_ref(owner.downcast_value_ptr[CausalSessionHandles]()[].entry,
+                CAUSAL_SESSION_PROGRAM_READ, a, read_words, f)
+        else:
+            served = _session_call(entries, family, CAUSAL_SESSION_PROGRAM_READ, a, read_words, f)
         mods.released()
         if served != held:
             # A new program serves these weights: its owner replaces the held
