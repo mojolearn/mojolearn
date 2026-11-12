@@ -8,9 +8,8 @@ from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_type
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.optimizer_public_words import stash_python_error
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
-from core.sequence_array_cast import SEQ_CAST_OVERFLOW, SEQ_CAST_INVALID
-from core.native_scalar_decode import NativeRealBits
-from core.native_depth_state import NativeDepthFormat, native_depth_float_cast, native_depth_add_one
+from core.sequence_array_cast import SEQ_CAST_INVALID
+from core.host_iforest_depth_run import host_iforest_depth_step_run
 
 
 def _depth_dtype(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -189,45 +188,15 @@ def host_iforest_depth_step(value: PythonObject, subtract: Bool, context: Python
     var target = py_call(native_numpy_dtype(context),PythonObject(code))
     var bytes = List[UInt8](length=32,fill=UInt8(0))
     var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var status = 0
-    if kind == "i" or kind == "u":
-        var bits = UInt64(0)-source.real.low if source.real.negative else source.real.low
-        var mask = ~UInt64(0) if width == 8 else (UInt64(1) << UInt64(width*8))-1
-        bits &= mask
-        var signed = kind == "i"
-        var overflow = bits == ((mask >> 1)+1 if signed else UInt64(0)) if subtract else bits == (mask >> 1 if signed else mask)
-        bits = (bits-UInt64(1) if subtract else bits+UInt64(1)) & mask
-        for i in range(width):  # driver-loop: integer ufunc arithmetic wraps within the promoted primitive width
-            data[i] = UInt8((bits >> UInt64(i*8)) & 255)
-        if overflow and not ndarray:
-            status = SEQ_CAST_OVERFLOW
-    else:
-        var complex = kind == "c"
-        var real_code = String("f") if code == "F" else String("d") if code == "D" else String("g") if code == "G" else code
-        var format = NativeDepthFormat(real_code,width//2 if complex else width)
-        var cast_invalid = source.real.precision != format.precision and source.real.special == 2 and source.real.bit(source.real.precision-2) == 0
-        if complex:
-            cast_invalid = cast_invalid or (source.imag.precision != format.precision and source.imag.special == 2 and source.imag.bit(source.imag.precision-2) == 0)
-        if cast_invalid:
-            # NumPy1 promotes small scalar/0-D floats before +1. A signaling
-            # NaN fails or warns during that conversion, with "cast" text,
-            # then becomes quiet for the following arithmetic operation.
-            _depth_report(SEQ_CAST_INVALID,String("subtract") if subtract else String("add"),False,context,"cast")
-        var real = native_depth_float_cast(source.real,format.precision,format.minimum_power)
-        if real.special == 2 and real.bit(format.precision-2) == 0:
-            status = SEQ_CAST_INVALID
-        real = native_depth_add_one(real,subtract,format.precision,format.minimum_power)
-        format.write(data,0,real)
-        if complex:
-            var imag = native_depth_float_cast(source.imag,format.precision,format.minimum_power)
-            if imag.special == 2:
-                if imag.bit(format.precision-2) == 0:
-                    status = SEQ_CAST_INVALID
-                # Complex imaginary +/-0 quiets a NaN like the real part.
-                imag = native_depth_add_one(imag,subtract,format.precision,format.minimum_power)
-            elif not imag.truth() and not subtract:
-                imag.negative = False
-            format.write(data,format.width,imag)
+    var cast_invalid = False
+    var status = host_iforest_depth_step_run(
+        source.real, source.imag, code, kind, width, subtract, ndarray, data, cast_invalid,
+    )
+    if cast_invalid:
+        # NumPy1 promotes small scalar/0-D floats before +1. A signaling
+        # NaN fails or warns during that conversion, with "cast" text,
+        # then becomes quiet for the following arithmetic operation.
+        _depth_report(SEQ_CAST_INVALID,String("subtract") if subtract else String("add"),False,context,"cast")
     # Warning-as-error occurs before the completed operation is published.
     # A 0-D first operation is a ufunc, whose result becomes a scalar for
     # the second operation; this distinction controls integer overflow.
