@@ -72,6 +72,11 @@ from core.hostptr import f32_ptr, read_f32, read_i32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hostptr import i32_ptr
+from metrics.mojolearn_metrics_host_run import (
+    _check_range, _guard_spectral_outputs, _guard_embedding_output,
+    homogeneity_completeness_v_measure_run, silhouette_run, precision_recall_curve_run, confusion_matrix_run,
+    _spectral_write_outputs, _spectral_write_embedding, _spectral_state_copy, spectral_predict_run,
+)
 from metrics.host.r2_entry_host import _check_float_pair, _r2_value, _r2_weighted_value, publish_metrics_r2_host
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
@@ -85,7 +90,6 @@ from spectral.host.spectral_oracle import (
 from spectral.host.spectral_predict_host import (
     SPECTRAL_PREDICT_HOST_SABOTAGE,
     SpectralPredictionState,
-    host_spectral_predict,
     spectral_predict_check_state,
 )
 from umap.host.umap_oracle import UMAP_ORACLE_HOST_SABOTAGE
@@ -93,9 +97,7 @@ from core.neighbors_entry_table import NeighborsEntryKey
 from core.neighbors_entry_table_umap import UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, umap_ops_publish
 from umap.ops_entry_host import UMAP_OPS_HOST_API, umap_ops_host_v1, umap_ops_host_words
 from bindings.py_balanced import py_setattr
-from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from metrics.host.metrics_oracle import (
-    DISTANCE_L2_SQRT_UNEXPANDED,
     METRICS_ORACLE_HOST_SABOTAGE,
     host_accuracy_score,
     host_accuracy_score_ptr,
@@ -110,13 +112,11 @@ from metrics.host.metrics_oracle import (
     host_mutual_info,
     host_mutual_info_ptr,
     host_r2_score,
-    host_silhouette,
     host_v_measure,
 )
 from metrics.host.metrics_host_entries_impl import (
     binary_ranking_checked,
     check_classification,
-    check_classification_ptr,
     log_loss_inputs_check,
     metrics_check_pair as _check_pair,
     regression_inputs_finite,
@@ -127,7 +127,6 @@ from metrics.host.classification_oracle import (
     host_binary_ranking,
     host_confusion_matrix_f32,
     host_confusion_matrix_i64,
-    host_confusion_matrix_ptr,
     host_kl_divergence,
     host_log_loss,
     host_precision_recall_fscore,
@@ -162,14 +161,6 @@ def _want(name: String, params: PythonObject, k: Int) raises:
         raise Error(
             name + ": params must contain " + String(k) + " values, got "
             + String(len(params))
-        )
-
-
-def _check_range(lower: Int32, upper: Int32) raises:
-    if upper < lower:
-        raise Error(
-            "metrics: upper_class_range (" + String(upper)
-            + ") is below lower_class_range (" + String(lower) + ")"
         )
 
 
@@ -457,11 +448,10 @@ def homogeneity_completeness_v_measure_binding(
     var c = Float64(0.0)
     var v = Float64(0.0)
     with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        _check_range(lower, upper)
-        h = host_homogeneity_score(yt, yp, n, lower, upper)
-        c = host_homogeneity_score(yp, yt, n, lower, upper)
-        v = v_measure_from(h, c, beta)
+        var hcv = homogeneity_completeness_v_measure_run(yt, yp, n, lower, upper, beta)
+        h = hcv[0]
+        c = hcv[1]
+        v = hcv[2]
     return Python.tuple(PythonObject(h), PythonObject(c), PythonObject(v))
 
 
@@ -511,60 +501,15 @@ def silhouette_binding(
     var x = read_f32(_index(x_addr), n_rows * n_cols)
     var lab = read_i32(_index(labels_addr), n_rows)
     var sp = f32_ptr(_index(scores_addr))
-    var scores = List[Float32]()
     var mean = Float32(0.0)
     with GILReleased(Python()):
-        if n_rows <= 0:
-            raise Error("silhouette: n_rows must be positive, got " + String(n_rows))
-        if n_cols <= 0:
-            raise Error("silhouette: n_cols must be positive, got " + String(n_cols))
-        if len(x) < n_rows * n_cols:
-            raise Error(
-                "silhouette: X holds " + String(len(x)) + " floats, needs "
-                + String(n_rows * n_cols)
-            )
-        if len(lab) < n_rows:
-            raise Error(
-                "silhouette: labels holds " + String(len(lab))
-                + " entries, needs n_rows = " + String(n_rows)
-            )
-        mean = host_silhouette(
-            x, lab, n_rows, n_cols, n_labels, chunk,
-            DISTANCE_L2_SQRT_UNEXPANDED, scores,
-        )
-        if n_rows > 0:
-            unsafe_memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
-        _ = len(scores)
+        mean = silhouette_run(x, lab, n_rows, n_cols, n_labels, chunk, sp)
     return PythonObject(Float64(mean))
 
 
 # ===========================================================================
 # Group E: spectral clustering on a dataset and on a precomputed graph.
 # ===========================================================================
-
-
-def _guard_spectral_outputs(
-    labels: List[Int32],
-    embedding: List[Float32],
-    n_samples: Int,
-    n_components: Int,
-) raises:
-    """`_guard_spectral_outputs`, `bindings/_mojolearn_metrics.mojo`: the
-    two output buffers were sized by the Python caller; check what came
-    back BEFORE writing a single element into them."""
-    if len(labels) != n_samples:
-        raise Error(
-            "spectral clustering: the kernel returned " + String(len(labels))
-            + " labels for " + String(n_samples)
-            + " samples; the output buffer was sized for n_samples"
-        )
-    if len(embedding) != n_samples * n_components:
-        raise Error(
-            "spectral clustering: the kernel returned "
-            + String(len(embedding)) + " embedding floats, but the output"
-            " buffer was sized for n_samples * n_components = "
-            + String(n_samples * n_components)
-        )
 
 
 def spectral_fit_predict_dataset_binding(
@@ -600,10 +545,7 @@ def spectral_fit_predict_dataset_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
         _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-        unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-        unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-        _ = len(labels)
-        _ = len(embedding)
+        _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -646,28 +588,12 @@ def spectral_fit_predict_graph_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
         _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-        unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-        unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-        _ = len(labels)
-        _ = len(embedding)
+        _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
 # SpectralEmbedding (lane/expose-spectral-embedding, 2026-09-20): cuML's
 # `ML::SpectralEmbedding::transform`, the dataset and the COO overloads.
-
-
-def _guard_embedding_output(
-    embedding: List[Float32], n_samples: Int, n_out: Int, n_cols: Int
-) raises:
-    """The output buffer was sized by the Python caller for `n_samples x
-    n_cols`; check what came back before writing into it."""
-    if n_out != n_cols or len(embedding) != n_samples * n_cols:
-        raise Error(
-            "spectral embedding: the kernel returned " + String(len(embedding))
-            + " floats in " + String(n_out) + " columns, but the output buffer"
-            " was sized for " + String(n_samples) + " x " + String(n_cols)
-        )
 
 
 def spectral_embedding_dataset_binding(
@@ -715,8 +641,7 @@ def spectral_embedding_dataset_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -767,8 +692,7 @@ def spectral_embedding_graph_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -790,10 +714,7 @@ def _write_spectral_state(
     var evec = f32_ptr(_index(addrs[first + 1]))
     var dg = f32_ptr(_index(addrs[first + 2]))
     var cent = f32_ptr(_index(addrs[first + 3]))
-    unsafe_memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
-    unsafe_memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
-    unsafe_memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
-    unsafe_memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
+    _spectral_state_copy(state, ev, evec, dg, cent)
 
 
 def spectral_fit_predict_dataset_state_binding(
@@ -827,10 +748,7 @@ def spectral_fit_predict_dataset_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -867,10 +785,7 @@ def spectral_fit_predict_graph_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 5, n_samples, n_components, n_clusters)
-    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -905,14 +820,10 @@ def spectral_predict_binding(
     var olp = i32_ptr(_index(addrs[6]))
     var oep = f32_ptr(_index(addrs[7]))
     with GILReleased(Python()):
-        var out = host_spectral_predict(
+        spectral_predict_run(
             input, train_x, n_train, n_queries, n_features, k, n_clusters,
-            n_neighbors, affinity, state,
+            n_neighbors, affinity, state, olp, oep,
         )
-        unsafe_memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
-        unsafe_memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
-        _ = len(out.labels)
-        _ = len(out.embedding)
     return PythonObject(0)
 
 
@@ -1014,13 +925,7 @@ def precision_recall_curve_binding(
     var thresholds = f32_ptr(_index(threshold_addr))
     var m = 0
     with GILReleased(Python()):
-        var result = binary_ranking_checked(y, scores, n, True)
-        m = result[1]
-        var curve = result[0].unsafe_ptr()
-        unsafe_memcpy(dest=precision, src=curve, count=m + 1)
-        unsafe_memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
-        unsafe_memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
-        _ = len(result[0])
+        m = precision_recall_curve_run(y, scores, n, precision, recall, thresholds)
     return PythonObject(m)
 
 
@@ -1061,20 +966,8 @@ def confusion_matrix_binding(
         raise Error("confusion_matrix: null output")
     var y = i32_ptr(_index(true_addr))
     var p = i32_ptr(_index(pred_addr))
-    if normalization == 0:
-        var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
-        with GILReleased(Python()):
-            check_classification_ptr(y, p, n, k, True)
-            var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
-            unsafe_memcpy(dest=output, src=values[0].unsafe_ptr(), count=len(values[0]))
-            _ = len(values[0])
-    else:
-        var output = f32_ptr(address)
-        with GILReleased(Python()):
-            check_classification_ptr(y, p, n, k, True)
-            var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
-            unsafe_memcpy(dest=output, src=values[1].unsafe_ptr(), count=len(values[1]))
-            _ = len(values[1])
+    with GILReleased(Python()):
+        confusion_matrix_run(y, p, n, k, normalization, address)
     return PythonObject(k * k)
 
 
