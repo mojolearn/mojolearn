@@ -605,8 +605,15 @@ def gbdt_fit_native(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitOutco
         )
         ctx.synchronize()
 
-    return GbdtFitOutcome(result.text.copy(), result.best_iteration, result.stopped_early, result.learn_losses.copy(),
-                          result.test_losses.copy())
+    # perf-audit-3: the model text and the two curves are moved out of the
+    # finished result (swapped with empty values), not copied.
+    var text = String()
+    var learn = List[Float64]()
+    var test = List[Float64]()
+    swap(text, result.text)
+    swap(learn, result.learn_losses)
+    swap(test, result.test_losses)
+    return GbdtFitOutcome(text^, result.best_iteration, result.stopped_early, learn^, test^)
 
 
 def gbdt_fit_binding(
