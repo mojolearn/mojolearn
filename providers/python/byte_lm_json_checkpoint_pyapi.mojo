@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_json_door import native_json_parse_unique
-from bindings.native_transport import _transport_json
+from bindings.native_transport_door import _transport_json
 from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
 from bindings.byte_checkpoint_native_door import BYTE_CHECKPOINT_BOUNDARY, byte_checkpoint_raw
 from bindings.cross_vendor_admission import cv_path

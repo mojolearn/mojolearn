@@ -10,7 +10,7 @@ from std.ffi import c_int
 from std.memory import unsafe_memcpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_json_door import native_json_read, native_json_parse, native_path, native_path_exists

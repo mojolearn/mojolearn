@@ -8,7 +8,7 @@ from bindings.classical_attributes import classical_check_layout, classical_conn
 from bindings.classical_pandas import _pd_type_fields
 from bindings.host_logistic_native_door import _logistic_label_kind
 from bindings.native_owner_lifetime import native_release_admit
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def _density_option(value: PythonObject, context: PythonObject, depth: Int = 0) raises:

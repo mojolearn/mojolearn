@@ -37,7 +37,7 @@ from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_mat
 from bindings.mode_metadata_native import _fields
 from bindings.p3nc_fitted_freeze import fitted_freeze
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
-from providers.python.neighbors_public_lifecycle_pyapi import (
+from providers.python.neighbors_public_lifecycle_pyapi_door import (
     NeighborPublicCall, _target, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal,
 )
 

@@ -43,7 +43,7 @@ from core.boundary_layout import gather_i64, gather_f64
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
 from bindings.user_objects_native_run import _refusal, _index_at, _float_is_integer
 

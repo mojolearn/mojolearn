@@ -10,7 +10,7 @@ from bindings.native_owner_registry import borrowed_native_owner
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys, shared_dict_watch, shared_dict_epoch
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_watch_ready
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call_spans, native_descriptor_leased_call

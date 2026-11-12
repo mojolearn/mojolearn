@@ -24,7 +24,7 @@ from providers.python.array_layout_boundary import native_shape_pack
 from bindings.optimizer_device_native_door import shape_count, device_entries, device_shape, device_allocate
 from bindings.optimizer_admission import opt_value
 from bindings.training_embedding_native_door import embedding_indices
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 #: A/B arm (default off): `mlp_inference_sessions` runs the sessions packed as
 #: ONE forward of the small-MLP program (lane m2-neural-leftovers) instead of

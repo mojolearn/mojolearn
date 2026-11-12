@@ -9,7 +9,7 @@ from core.logistic_config import (
     logistic_penalty, logistic_positive, logistic_ratio_valid, logistic_strength_plan,
     logistic_scalar_operation, LogisticArithmetic,
 )
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_type, py_setitem
 from bindings.native_scalar_decode import native_scalar_buffer_dtype
 from bindings.native_scalar_promotion import native_scalar_weak_promotion

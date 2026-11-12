@@ -38,7 +38,7 @@ from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.xseq_glue_host import publish_x_sequence_host
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from providers.python.autograd_program_control_pyapi import ops_program_control_py
-from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
+from providers.python.autograd_torch_program_pyapi_door import ops_torch_program_run_py
 from providers.python.autograd_distributed_pyapi import (
     distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,

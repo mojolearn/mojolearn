@@ -3,7 +3,7 @@
 # only retained native slots publish the completed object, without callbacks.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_buffer_owner import native_storage_allocate

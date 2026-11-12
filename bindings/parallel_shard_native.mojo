@@ -11,7 +11,7 @@ The forest workers receive typed request words and arrays and call the one
 forest fit core (lane forest-typed-fit); they build no estimator.
 
 Each driver's partition, request order, driver negative control and merge
-are its old Python driver's (bindings/parallel_shard_common.mojo for the
+are its old Python driver's (bindings/parallel_shard_common_door.mojo for the
 shared parts): the shards run their plain native owners in worker processes
 on the native local process pool, one per device, and every shard's block is
 placed at its own offset in shard order. The same compiled entries on the
@@ -47,11 +47,11 @@ from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scal
 from bindings.parallel_public_result import parallel_public_result
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common import family_call
-from bindings.native_process_pool import (
+from bindings.native_process_pool_door import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
     process_pool_close,
 )
-from bindings.native_transport import transport_close
+from bindings.native_transport_door import transport_close
 from core.entry_table import EntryRef
 from core.parallel_entry_table import (
     ParallelEntryKey, parallel_ref, PARALLEL_TABLE_BASE, PARALLEL_TABLE_IVF, parallel_ivf_finalize, parallel_ivf_merge_shards, parallel_ivf_shard_plan,
@@ -61,7 +61,7 @@ from std.python._cpython import GILReleased
 from bindings.native_codec import codec_initialize
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_key_fields, prepared_key_same, prepared_get, prepared_put, prepared_drop
-from bindings.parallel_shard_common import (
+from bindings.parallel_shard_common_door import (
     shard_b,
     shard_ranges,
     shard_devices,

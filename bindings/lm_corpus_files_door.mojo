@@ -12,7 +12,7 @@ from std.os import getenv
 from std.math import isfinite
 from core.sha256 import Sha256, sha256_hex_addr
 from core.sha256_file import sha256_file
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json_door import native_path, native_json_parse
 from bindings.mode_metadata_native import _class_fields

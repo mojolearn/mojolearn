@@ -24,7 +24,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.family_common import (
@@ -36,7 +36,7 @@ from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present
 from core.kmeans_native_api import (
     KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest,

@@ -14,7 +14,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_iforest_scalar_repr import host_iforest_scalar_repr
 from bindings.host_kernel_inference_native import _kernel_entry
 from bindings.host_array_native import host_archive_typed
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native_door import host_sparse_format
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_scalar_decode import native_scalar_buffer

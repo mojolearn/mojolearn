@@ -39,7 +39,7 @@ from bindings.sequential_admission import _one_of
 from bindings.classifier_public_lifecycle import _feature_names
 from bindings.admitted_input import admit_x_unrecorded, classical_view
 from bindings.classical_arrays import classical_kind
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.decomp_kit_native import (

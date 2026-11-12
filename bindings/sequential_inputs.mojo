@@ -11,7 +11,7 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.cpython_borrowed import borrowed_item as p3_item, borrowed_type_word as p3_type_word
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.sequential_input_plan import sequence_promote as _promote, SequenceInputPlan, sequence_write, SequenceBufferFormat, sequence_buffer_shape
 from bindings.sequential_admission import _one_of
 from std.python._cpython import GILReleased, PyObjectPtr

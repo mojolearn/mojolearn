@@ -37,11 +37,11 @@ from core.gp_native_fit_summary import GPCFitSummary
 from bindings.gp_common_native import gp_extension, gp_caps, gp_kernel_arrays, gp_f32, gp_fit_owned
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
-from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_scan
+from bindings.gp_query_x_door import GpQuery, gp_query, gp_query_address, gp_query_scan
 from gaussian_process.gp_query_x_run import gp_query_refuse
 from bindings.fitted_resident_door import fitted_resident_drop
 from bindings.gp_resident_boundary import gp_resident_lease
-from bindings.gp_score_labels_boundary import gpc_score_result
+from bindings.gp_score_labels_boundary_door import gpc_score_result
 from bindings.gp_labels_native import gp_decode_score_labels
 from bindings.mcls_common import mc_shape_of
 from bindings.host_inference_scalars import host_inference_scalar
@@ -402,7 +402,7 @@ def _gpc_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
 
 def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject,
                entry_tests: Bool = False) raises -> GpQuery:
-    """`_query(X)` as a GpQuery (bindings/gp_query_x.mojo; lane a7a):
+    """`_query(X)` as a GpQuery (bindings/gp_query_x_door.mojo; lane a7a):
     `entry_tests` (the gpc_predict_all entries, which return the query's
     status words) keeps a cross-validation fold on the device; any other
     route tests the query first (gp_query_scan)."""

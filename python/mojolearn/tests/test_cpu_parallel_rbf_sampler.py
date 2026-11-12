@@ -57,7 +57,7 @@ def test_cpu_rbf_reordered_worker_rows_are_detectable(monkeypatch):
     with reference_training():
         model = RBFSampler(n_components=13, random_state=11).fit(X)
     expected = np.asarray(model.transform(X))
-    # the transport negative control (bindings/parallel_shard_common.mojo
+    # the transport negative control (bindings/parallel_shard_common_door.mojo
     # `shard_map`): the first numerical batch comes back reversed, once
     monkeypatch.setenv("MOJOLEARN_PAR_TRANSPORT_FAULT", "reverse_results")
     monkeypatch.setenv("MOJOLEARN_HOST_ALLOW_SABOTAGE", "1")

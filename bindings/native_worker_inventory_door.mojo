@@ -8,7 +8,7 @@ from core.native_string import unsafe_string_from_utf8_cstr
 from std.ffi import OwnedDLHandle, c_int, c_uint, external_call
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
-from bindings.native_transport import TRANSPORT_BOUNDARY
+from bindings.native_transport_door import TRANSPORT_BOUNDARY
 from bindings.native_worker_inventory_run import _inventory_status, _inventory_hex
 
 def _inventory_dict(value: PythonObject) raises:

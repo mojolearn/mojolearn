@@ -8,7 +8,7 @@
                          `embedding_forward` (or `embedding_forward_dev` for
                          device=True) call, the result in the ids' shape
     load                 the saved table read natively (the NPZ reader of
-                         bindings/classical_archive_read.mojo), the checks of
+                         bindings/classical_archive_read_door.mojo), the checks of
                          the constructor, the layer built without running
                          Python
 and its lifetime (`embedding_layer_lifetime_c`, installed at import as the
@@ -51,7 +51,7 @@ from core.admitted_input_nd import admitted_cast_nd_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
-from bindings.classical_archive_read import classical_archive_read, _archive_string, _archive_exact
+from bindings.classical_archive_read_door import classical_archive_read, _archive_string, _archive_exact
 from bindings.optimizer_public_words import optimizer_python_error
 from core.shared_slot import SharedSlot
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Typed kernels behind the user-object reader (bindings/user_objects_native.mojo).
+"""Typed kernels behind the user-object reader (bindings/user_objects_native_door.mojo).
 
 The shell reads a user's Python objects once into typed values (here: one
 byte key per row); these functions do the work on them. Host Mojo, no Python.

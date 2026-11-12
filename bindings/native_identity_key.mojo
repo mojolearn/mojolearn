@@ -11,7 +11,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_type, py_call
 from bindings.native_array_snapshot import native_array_slots
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 struct NativeIdentityKey(Movable, Writable):

@@ -18,7 +18,7 @@ from core.causal_session_handles import CausalSessionHandles
 from core.entry_table import EntryRef
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules

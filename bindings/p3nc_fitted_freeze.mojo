@@ -21,7 +21,7 @@ from bindings.native_loaded_module import native_loaded_module, native_namespace
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.native_array_storage_admission import array_storage_admit, array_storage_context
 from bindings.native_owner_lifetime import native_release_admit
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def _fitted_class(context: PythonObject) raises -> PythonObject:

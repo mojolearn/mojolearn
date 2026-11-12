@@ -18,7 +18,7 @@ from bindings.kpca_native import kpca_fit, kpca_fit_transform, kpca_transform
 from bindings.classical_error_boundary import classical_python_error
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import kpca_lifecycle_spec
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.rp_native import rp_components, rp_fit, rp_getstate, rp_project, rp_query, rp_set_components
 from bindings.lda_native import lda_fit, lda_partial_fit, lda_project, lda_query
 from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish

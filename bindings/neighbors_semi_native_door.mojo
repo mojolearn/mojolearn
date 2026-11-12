@@ -36,7 +36,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from core.shared_slot import SharedSlot
 from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word, xn_rows_match_check
 from bindings.py_optional import py_present

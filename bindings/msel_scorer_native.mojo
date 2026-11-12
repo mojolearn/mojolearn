@@ -4,7 +4,7 @@
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit
 from bindings.native_model_records import RECORDS_PREPARED, ContentRecord, records_stamped_get, records_stamped_put
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains

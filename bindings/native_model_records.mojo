@@ -96,7 +96,7 @@ Nothing here computes on data or changes an arithmetic or fold order.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, shared_dict_watch, shared_dict_epoch
 from bindings.py_balanced import py_call, py_type, py_fields, _is_exact_dict
 # The dead-key ring lives in a Python-free core module so kernels can poll it;

@@ -15,14 +15,14 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_codec import codec_initialize
-from bindings.native_process_pool import (
+from bindings.native_process_pool_door import (
     process_initialize, process_pool_create, process_pool_start, process_pool_map, process_pool_close,
     process_worker_connect, process_worker_next, process_send,
 )
-from bindings.native_transport import transport_close
-from bindings.native_worker_inventory import native_worker_inventory, native_require_worker_inventory
+from bindings.native_transport_door import transport_close
+from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.msel_cv import msel_prepare_folds, MselFoldRows, msel_fit
+from bindings.msel_cv_door import msel_prepare_folds, MselFoldRows, msel_fit
 from bindings.msel_common import msel_score, msel_f64_list
 from bindings.msel_parallel_wire import (
     msel_parallel_model_pack, msel_parallel_model_unpack, msel_parallel_scorer_pack,

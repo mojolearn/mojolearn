@@ -4,7 +4,7 @@
 from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call, _archive_class_name_unpack
 from bindings.optimizer_public_words import stash_python_error

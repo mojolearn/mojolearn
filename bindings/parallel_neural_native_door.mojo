@@ -7,21 +7,21 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy
 from bindings.parallel_byte_native import _parallel_int, _parallel_view
-from bindings.parallel_mlp_native import (
+from bindings.parallel_mlp_native_door import (
     mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state, mlp_validate_state,
     mlp_gradients_open, mlp_gradients_close, mlp_gradients_on,
     mlp_apply_from_state, mlp_batch, mlp_targets, neural_ordered_sum,
     neural_cooperative_admit,
 )
-from bindings.native_process_pool import (
+from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map, process_pool_close,
     process_worker_connect, process_worker_next, process_send,
 )
-from bindings.native_transport import transport_close
+from bindings.native_transport_door import transport_close
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.parallel_neural_admission import neural_admit
 from core.sha256 import Sha256
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text
 from core.shared_slot import SharedSlot
 

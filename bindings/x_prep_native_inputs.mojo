@@ -15,7 +15,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.scaler_native_door import _input
 from core.array_helpers_impl import strided_copy_bytes
 from bindings.py_optional import py_present
-from bindings.cpython_table import cpython_table  # buffer calls without a dlsym per call (perf2-prep)
+from bindings.py_cpython_table import cpython_table  # buffer calls without a dlsym per call (perf2-prep)
 
 
 def _target_finite(view: PythonObject, context: PythonObject) raises:

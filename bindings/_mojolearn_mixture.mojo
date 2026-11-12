@@ -126,7 +126,7 @@ def gmm_sample_binding(
 
 def mixture_native_api_v1_binding() raises -> PythonObject:
     """The typed GaussianMixture transport (core/mixture_native_api.mojo)
-    the mixture door (bindings/mixture_native.mojo) calls for fit,
+    the mixture door (bindings/mixture_native_door.mojo) calls for fit,
     fit_predict and every score. `gmm_sample` stays a Python entry: the
     sample door (bindings/svm_mixture_native_door.mojo `_gmm_sample`) calls it
     and the typed transport has no sample operation."""

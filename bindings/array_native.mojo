@@ -25,7 +25,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.py_typed_call import py_call_typed
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_optional import py_present
 from bindings.array_native_run import _rebuild, _prod, _c_strides, _f_strides, _both_orders, _is_int, _is_float, _address_in
 

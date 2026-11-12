@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.memory import bitcast
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_contains
@@ -272,7 +272,7 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
     var acquired = False
     ref cpy = Python().cpython()
     # N393 (lane ne3-g-svc-gp-neighbors): the buffer protocol through the one
-    # CPython table (bindings/cpython_table.mojo), not a dlsym per input.
+    # CPython table (bindings/py_cpython_table.mojo), not a dlsym per input.
     var cpt = cpython_table()
     if classical_is_array(value, context):
         shape = array_slot_once(value, "shape", context)

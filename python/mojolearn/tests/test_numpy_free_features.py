@@ -97,7 +97,7 @@ def test_parallel_rbf_copy_order_and_cleanup(monkeypatch, shard_rows, fault):
     # transform_rbf_sampler is one native call (bindings/parallel_shard_native.mojo);
     # it needs no NumPy, joins row blocks in input order, and its checks or
     # the bytes catch a dropped or reordered block (the transport negative
-    # control, bindings/parallel_shard_common.mojo `shard_map`).
+    # control, bindings/parallel_shard_common_door.mojo `shard_map`).
     from mojolearn._native_parallel_shard import _native_parallel_shard
     rows = np.arange(35, dtype='<f4').reshape(7, 5)[::-1]
     x = Array.from_list(rows.tolist(), '<f4')

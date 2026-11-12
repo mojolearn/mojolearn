@@ -4,7 +4,7 @@
 `forecast_arima`, `predict_exponential_smoothing` and
 `forecast_exponential_smoothing` as one call each into
 `parallel_forecast_call`, on the native local process pool
-(bindings/native_process_pool.mojo).
+(bindings/native_process_pool_door.mojo).
 
 The partition is the Python driver's: whole series in `series_per_shard`
 ranges; each shard's series-major state (ARIMA's `_y` and `params_` rows,
@@ -23,15 +23,15 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
-from bindings.native_process_pool import (
+from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map, process_pool_close,
     process_worker_connect, process_worker_next, process_send,
 )
-from bindings.native_transport import transport_close
+from bindings.native_transport_door import transport_close
 from bindings.tsa_hw_native import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
 from bindings.tsa_admission import tsa_hw_fields
 from bindings.tsa_arima_native import arima_predict, arima_fit, _series_major
-from bindings.parallel_shard_common import (
+from bindings.parallel_shard_common_door import (
     shard_ranges,
     shard_devices,
     shard_run,
@@ -102,7 +102,7 @@ def _devices(devices: PythonObject) raises:
 
 def _run(requests: PythonObject, devices: PythonObject) raises -> PythonObject:
     """`_run`: the pool's results in request order (an admitted, traced pool,
-    bindings/parallel_shard_common.mojo `shard_run`); the pool always closes."""
+    bindings/parallel_shard_common_door.mojo `shard_run`); the pool always closes."""
     return shard_run(requests, devices, _CHILD)
 
 

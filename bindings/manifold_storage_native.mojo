@@ -4,11 +4,11 @@
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import ExternalFunction, PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 # The C entries a release and the kit lists use come from the one CPython
 # table (ManifoldCalls, MojolearnManifoldCallsV1, folded into
-# bindings/cpython_table.mojo by lane ne1-e-table, 2026-11-06).
+# bindings/py_cpython_table.mojo by lane ne1-e-table, 2026-11-06).
 
 
 struct ManifoldDevice(Movable, Writable):

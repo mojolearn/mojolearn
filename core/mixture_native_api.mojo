@@ -3,7 +3,7 @@
 `gmm_fit_predict`, `gmm_score_samples`, `gmm_predict_proba`, `gmm_predict`,
 `gmm_score_bic_aic`) of `_mojolearn_mixture` and `_mojolearn_mixture_host`.
 
-The mixture door (bindings/mixture_native.mojo) used to build two Python
+The mixture door (bindings/mixture_native_door.mojo) used to build two Python
 lists per call (addresses, params), call the binding's Python entry and let
 it unpack every word with `Int(py=)` / `Float64(py=)`. This descriptor
 carries the same words as plain integers and floats; the two names

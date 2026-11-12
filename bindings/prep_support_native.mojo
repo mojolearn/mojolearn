@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.mode_metadata_native import _fields, _truth
 from bindings.params_metadata_native import _resolved, _value
 from bindings.sequential_admission import _one_of
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def _support_truth(value: PythonObject, context: PythonObject) raises -> Bool:

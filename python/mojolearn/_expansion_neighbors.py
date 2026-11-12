@@ -847,7 +847,7 @@ class OneClassSVM(_XNeighbors):
 
 
 # OneClassSVM's public methods are one call into the compiled SVM family
-# owner (bindings/svc_ocsvm_native.mojo); it reads this module's x_neighbors
+# owner (bindings/svc_ocsvm_native_door.mojo); it reads this module's x_neighbors
 # kernel codes and the MOJOLEARN_XN_OLD_ITEMS arm.
 _native_family_bridge.tables(family_svc_xn_kernels=dict(_KERNELS), family_svc_xn_old_items=_OLD_ITEMS)
 

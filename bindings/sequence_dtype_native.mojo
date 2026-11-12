@@ -5,7 +5,7 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.sequence_string_storage import sequence_string_class, sequence_string_admit
+from bindings.sequence_string_storage_door import sequence_string_class, sequence_string_admit
 from bindings.sequence_array_warnings import sequence_array_warn, sequence_array_category
 from bindings.optimizer_public_words import stash_python_error
 from bindings.py_optional import py_or_none, py_present

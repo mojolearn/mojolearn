@@ -23,7 +23,7 @@ from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_warnings import classical_warning
 from bindings.native_caller_frame import native_frame_globals
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.prep_native_estimator import prep_native_split, prep_entry_call
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order

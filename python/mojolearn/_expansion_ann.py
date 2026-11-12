@@ -108,7 +108,7 @@ class _AnnSaved:
         """
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
-    # One native call (bindings/host_archive_native.mojo `host_archive_ann`,
+    # One native call (bindings/host_archive_native_door.mojo `host_archive_ann`,
     # from the layout connected at the end of this module).
     @classmethod
     def load(cls, path):

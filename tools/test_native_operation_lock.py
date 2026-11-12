@@ -4,7 +4,7 @@ from pathlib import Path
 from check_generation_native_boundary import audit
 ROOT = Path(__file__).resolve().parents[1]
 CORE = (ROOT/'core/operation_lock.mojo').read_text()
-BOUNDARY = (ROOT/'providers/python/operation_lock_pyapi.mojo').read_text()
+BOUNDARY = (ROOT/'providers/python/operation_lock_pyapi_door.mojo').read_text()
 
 
 def test_native_lock_dependencies_resolve_and_avoids_object_layout_cast():

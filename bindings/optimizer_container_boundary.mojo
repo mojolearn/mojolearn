@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Optimizer container UNPACK/PACK; native vectors pin admitted Python owners."""
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table, _PyBuffer_Release
+from bindings.py_cpython_table import cpython_table, _PyBuffer_Release
 from bindings.optimizer_admission import opt_value
 from bindings.py_balanced import py_type
 

@@ -26,7 +26,7 @@ Rules (shared by every site that uses it):
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_PREPARED

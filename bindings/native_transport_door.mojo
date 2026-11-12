@@ -13,7 +13,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from bindings.native_json_door import native_json_parse
-from bindings.native_idna import idna_initialize, idna_encode
+from bindings.native_idna_door import idna_initialize, idna_encode
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
 from bindings.native_posix_transport import (
@@ -22,7 +22,7 @@ from bindings.native_posix_transport import (
 from bindings.native_posix_transport_run import (
     PosixBytes, PosixWords, posix_close, posix_errno, posix_failure,
 )
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.shared_slot import SharedSlot
 from bindings.native_transport_run import (
     transport_clock,

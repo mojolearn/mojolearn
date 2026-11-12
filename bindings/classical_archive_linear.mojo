@@ -7,7 +7,7 @@ publishes the writable coefficient owner plus its native state pin.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_archive_output import archive_numeric_pack

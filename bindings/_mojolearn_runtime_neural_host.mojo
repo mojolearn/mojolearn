@@ -13,7 +13,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from bindings.native_transport import transport_initialize
+from bindings.native_transport_door import transport_initialize
 from bindings.transformer_public_native import transformer_public_c
 from providers.python.transformer_decode_pyapi import transformer_decode_native_c
 from bindings.mamba_public_native import mamba_native_c

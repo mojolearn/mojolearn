@@ -12,13 +12,13 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from bindings.native_transport import transport_initialize
+from bindings.native_transport_door import transport_initialize
 from bindings.parallel_shard_native import parallel_shard_c
 from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
 from bindings.parallel_forecast_native_door import parallel_forecast_c
 from bindings.tsa_public_native import tsa_c
 from bindings.parallel_neural_native_door import parallel_neural_c
-from bindings.parallel_mlp_native import parallel_mlp_c
+from bindings.parallel_mlp_native_door import parallel_mlp_c
 from bindings.small_mlp_native import small_mlp_c, small_mlp_finalize_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
 from std.python.bindings import lookup_py_type_object

@@ -13,7 +13,7 @@
 # fit_transform projects the X the fit converted (tsvd_transform), with no
 # second conversion and no Python between the two.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from std.python._cpython import PyObjectPtr

@@ -3,7 +3,7 @@
 # scalar implementation, while warning/error timing stays at the consumer.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
 from bindings.native_scalar_decode import native_scalar_buffer

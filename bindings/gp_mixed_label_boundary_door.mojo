@@ -7,7 +7,7 @@ NumPy promotion and arbitrary-size integers cannot be replaced by Float64 keys.
 Only the private dictionary/index containers become typed Mojo storage.
 """
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_item
 from bindings.decomp_scalar_compare import decomp_equal_admitted
 from gaussian_process.gp_mixed_label_boundary_run import GPScalarBucket

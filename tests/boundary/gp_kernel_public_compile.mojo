@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.gp_kernel_public_native import gp_kernel_operation, gp_admit_kernel, gp_kernel_nodes
+from bindings.gp_kernel_public_native_door import gp_kernel_operation, gp_admit_kernel, gp_kernel_nodes
 
 def kernel_operation(kernel: PythonObject, operation: PythonObject, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:

@@ -51,7 +51,7 @@ from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.py_typed_call import py_call_typed
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.prep_support_native import prep_support
 from bindings.prep_normalizer_lifecycle import normalizer_transform
 from bindings.prep_normalizer_fit import normalizer_fit

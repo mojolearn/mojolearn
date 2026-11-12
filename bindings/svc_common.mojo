@@ -21,7 +21,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_pandas import _pd_class
 from bindings.classical_labels import _pandas_values, labels_type_name

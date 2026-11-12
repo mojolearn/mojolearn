@@ -20,7 +20,7 @@
 # a value runs before the full admission has accepted it.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.prep_native_estimator import prep_estimator_call, prep_estimator_plan

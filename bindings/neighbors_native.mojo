@@ -14,7 +14,7 @@ from core.pcs_native_api import PCSFitPlan, pcs_options, pcs_feature_width
 from bindings.pcs_native_boundary import pcs_binding, PCSConnection, pcs_array, pcs_seed_unpack, pcs_run_draw, pcs_run_query
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from providers.python.pcs_public_lifecycle_pyapi import pcs_public_begin, pcs_feature_names
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from bindings.family_common import family_field
 from providers.python.radius_public_lifecycle_pyapi import radius_fit, radius_refusals
 from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release

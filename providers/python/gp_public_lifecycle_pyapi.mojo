@@ -6,7 +6,7 @@ from bindings.admitted_finite_wording import admitted_finite_wording
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.admitted_family import admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall
@@ -30,8 +30,8 @@ from bindings.host_inference_scalars import host_inference_scalar, host_inferenc
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.gp_kernel_public_native import gp_admit_kernel
-from bindings.gp_regressor_native import gp_regressor_operation
+from bindings.gp_kernel_public_native_door import gp_admit_kernel
+from bindings.gp_regressor_native_door import gp_regressor_operation
 from bindings.gp_classifier_native_door import gp_classifier_operation
 from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
 from bindings.gp_svm_records import gpsvm_no_fit_callbacks
@@ -303,7 +303,7 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
         # Lane a7a: a predict / score defers the finite test of a borrowed
         # X to its kernel entry (defer_finite: the entry tests the words it
         # uploads and returns the status word; an owner whose route returns
-        # none tests it itself, bindings/gp_query_x.mojo), and a
+        # none tests it itself, bindings/gp_query_x_door.mojo), and a
         # cross-validation fold stays on the device (device_x: the owner
         # hands its store ids to the entry, which gathers the rows). A fit
         # keeps the scan here: it keeps X as X_train_.

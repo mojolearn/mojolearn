@@ -5,7 +5,7 @@ from bindings.arena_buffer_copy import buffer_copy_to_array
 from std.python import Python, PythonObject
 from bindings.arena_materialize_run import _itemsize, _cast_code, _cast_failure, _widen_elements, _canonical_half_nans
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.arena_array_metadata import arena_array_metadata

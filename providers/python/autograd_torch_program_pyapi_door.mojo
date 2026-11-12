@@ -27,7 +27,7 @@ from providers.python.autograd_host_provider_pyapi import imported_host_provider
 from autograd.autograd_program_run import _imported_session_dims
 from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
 from autograd.autograd_torch_program_run import _torch_kind

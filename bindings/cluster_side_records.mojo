@@ -29,7 +29,7 @@
 # succeeded, and never holds its own model.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.mode_metadata_native import _class_fields

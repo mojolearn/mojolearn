@@ -2,7 +2,7 @@
 """Optimizer copy/pickle UNPACK/PACK; process-local handles never serialize."""
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_fields, py_get, py_setitem, py_type
 from bindings.optimizer_admission import opt_owner, opt_value
 from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_new, optimizer_owner_retained, optimizer_owner_close, optimizer_owner_admit_replacement

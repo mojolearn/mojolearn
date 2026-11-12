@@ -30,7 +30,7 @@ from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_label_lists import p3nc_float_list_verdict
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_array
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from providers.python.estimator_lifecycle_pyapi import (

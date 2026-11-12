@@ -28,7 +28,7 @@
 # the import-connected provider after entry: `_mojolearn` for prediction and
 # x_neighbors for fit. Explicit bindings remain supported for native drivers.
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from core.hotpath_impl import HpStat
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
@@ -37,7 +37,7 @@ from core.neighbors_entry_table import (
     nb_fold_ready_call, nb_classify_call, nb_regress_call, nb_classify_resident_call, nb_regress_resident_call,
 )
 from bindings.admitted_family import admit_family, admit_family_meta, admit_family_owned
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -46,7 +46,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_pandas import classical_admit_value
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native_door import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute
@@ -64,7 +64,7 @@ from bindings.device_rows_door import door_is_device_rows, door_rows_store, door
 from bindings.device_rows_door_run import DoorRowsStore
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster import mcls_cluster_operation
-from bindings.host_archive_native import host_archive_rbc_metric_object
+from bindings.host_archive_native_door import host_archive_rbc_metric_object
 from core.shared_slot import SharedSlot
 # RUN (typed, no Python): the checks, refusal wording, host scans and copies.
 from neighbors.neighbors_knn_run import (

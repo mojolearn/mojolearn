@@ -37,7 +37,7 @@ total can be read off its UNPACK and PACK.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word
 from bindings.native_instance_item import native_instance_item
 from bindings.optimizer_public_words import stash_python_error

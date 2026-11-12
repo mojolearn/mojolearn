@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.cross_vendor_admission import cv_types_initialize, cv_buffer, cv_path, cv_int, cv_json, cv_state, CROSS_VENDOR_TYPES
 from bindings.native_json_door import native_json_parse
-from bindings.native_transport import _transport_json, transport_initialize
+from bindings.native_transport_door import _transport_json, transport_initialize
 from bindings.parallel_byte_native import PARALLEL_BYTE_BOUNDARY, _parallel_shape
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array
 from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io

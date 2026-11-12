@@ -14,7 +14,7 @@
 # (lists, tuples, float, complex, object, str, datetime, pandas, torch, sparse,
 # subclasses) keeps its caller's existing element-by-element path.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_type, py_get
 from core.label_storage_impl import label_float_target_refusal
 

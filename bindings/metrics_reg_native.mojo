@@ -28,7 +28,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run_plan
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.metrics_plan_admission import MetricPlanOpcodes
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.family_common import (

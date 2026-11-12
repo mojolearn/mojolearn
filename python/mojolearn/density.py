@@ -564,7 +564,7 @@ class KernelDensity(NumericModeMixin):
 
 
 # `save` and `load` are one native call each: the schema below, and
-# bindings/host_archive_native.mojo `host_archive_density` with the load's
+# bindings/host_archive_native_door.mojo `host_archive_density` with the load's
 # refusals. The resident device fit is released by the native finalizer.
 _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     _native_archive_bridge.fitted("_x"),

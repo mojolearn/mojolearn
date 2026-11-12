@@ -5,7 +5,7 @@ from bindings.native_buffer_address import native_buffer_address
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
 

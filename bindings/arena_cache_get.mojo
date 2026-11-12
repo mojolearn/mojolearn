@@ -5,7 +5,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.arena_cache_stats import _attribute, _mapping, _string_keys, _admit_entry_keys
 from bindings.optimizer_public_words import stash_python_error
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.p3_array_arena_records import P3_CACHE_KEY_LAYOUT, p3_layout_admitted, p3_layout_admit
 from bindings.training_scalar_native import training_scalar_warning, training_void_bytes
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields

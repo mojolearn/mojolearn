@@ -1298,7 +1298,7 @@ class RadiusNeighbors(NumericModeMixin):
         against a host brute force per row with no tolerance.
         `_resolve_rbc_metric` holds the table and every refusal message.
         """
-        # Native (bindings/host_archive_native.mojo
+        # Native (bindings/host_archive_native_door.mojo
         # `host_archive_radius_refusals`), the check `fit` and `load` run.
         _NATIVE(self, "family_xn_radius_refusals", (), _NATIVE_CONTEXT)
 

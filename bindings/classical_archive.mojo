@@ -11,7 +11,7 @@ from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.archive_unicode_native import _archive_unicode_failure
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.boundary_read import read_str_points
 from core.sha256 import sha256_hex, sha256_hex_addr
 from core.native_archive_span import ArchiveSpan

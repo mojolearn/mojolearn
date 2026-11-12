@@ -3,7 +3,7 @@
 entries of the cluster lane (`x_cluster/entries.mojo::bgmm_entry`,
 `bgmm_score_entry`).
 
-The mixture door (bindings/mixture_native.mojo) used to pack the option
+The mixture door (bindings/mixture_native_door.mojo) used to pack the option
 words into Python lists, call `x_cluster_call` through CPython and read the
 result back as a Python list of `array.array`s. This descriptor carries the
 same words as plain integers and floats and returns the entry's own

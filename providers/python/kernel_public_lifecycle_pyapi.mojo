@@ -23,7 +23,7 @@ from bindings.label_input_sources import labels_storage_source, labels_list_inte
 from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.family_common import family_array
 from core.admitted_input import admitted_cast_f64

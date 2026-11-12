@@ -23,7 +23,7 @@
 # Python `DevicePool` (python/mojolearn/_parallel_pool.py), whose workers run
 # Python handlers.
 from providers.python.estimator_binding_pyapi import estimator_arguments
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.python import PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
 from providers.python.array_metadata_pyapi import ArrayPin
@@ -50,7 +50,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import (
     family_repr, family_str, family_call, family_field, family_is_str,
 )
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense, _sparse_fields
 # TOMBSTONE: _any_contiguous_address use (the labels admission copy's buffer address read) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.admitted_input import admitted_finite_refuse

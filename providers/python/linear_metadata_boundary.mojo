@@ -7,7 +7,7 @@ decisions; this boundary only admits and transfers those external owners.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_model_records import bump_model_generation
 from bindings.native_owner_lifetime import native_release_admit

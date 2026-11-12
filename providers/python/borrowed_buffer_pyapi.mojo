@@ -6,7 +6,7 @@
 # words on supported 64-bit little-endian targets (same as optimizer tensor_view).
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.borrowed_buffer import BorrowedBufferLayout
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get, py_fields, py_call, py_contains

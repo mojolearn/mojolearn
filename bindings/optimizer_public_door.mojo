@@ -30,7 +30,7 @@ from std.memory import unsafe_memcpy
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python._cpython import ExternalFunction, GILReleased, PyObjectPtr
 from bindings.admitted_input import admitted_storage_native
 from training.optimizer_config import optimizer_keyword_refusal
@@ -209,7 +209,7 @@ def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
 def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
     """`PyObject_GetBuffer(obj, view, PyBUF_FULL_RO)`; False (indicator
     cleared) when `obj` does not export a buffer."""
-    # Symbols from the process-wide table (bindings/cpython_table.mojo),
+    # Symbols from the process-wide table (bindings/py_cpython_table.mojo),
     # resolved once, not a dlsym per tensor; the clear runs only on refusal.
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var rc = cpython_table()[].PyObject_GetBuffer(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))

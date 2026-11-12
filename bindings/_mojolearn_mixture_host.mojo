@@ -74,7 +74,7 @@ def mixture_numeric_mode_binding() raises -> PythonObject:
 
 def mixture_native_api_v1_binding() raises -> PythonObject:
     """The typed GaussianMixture transport (core/mixture_native_api.mojo)
-    the mixture door (bindings/mixture_native.mojo) calls for the fit and
+    the mixture door (bindings/mixture_native_door.mojo) calls for the fit and
     every score. `gmm_sample` stays a Python entry: the sample door
     (bindings/svm_mixture_native_door.mojo `_gmm_sample`) calls it and the typed
     transport has no sample operation."""

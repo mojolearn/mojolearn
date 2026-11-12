@@ -15,7 +15,7 @@
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
 from std.ffi import external_call, c_size_t
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
@@ -41,7 +41,7 @@ from x_decomp.descriptor_schema import (
     XD_DEV_SELECT_SMALLEST,
 )
 from bindings.classical_validate import classical_view
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
 
 comptime DecompF32 = MutPointer[Float32, MutUntrackedOrigin]

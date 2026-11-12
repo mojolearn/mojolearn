@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.family_common import family_type_name
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.optimizer_public_words import stash_python_error

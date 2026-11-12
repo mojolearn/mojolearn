@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.classical_error_boundary import classical_python_error
 from bindings.classical_caller import classical_caller_outside
-from bindings.host_archive_native import host_archive_build
+from bindings.host_archive_native_door import host_archive_build
 from bindings.host_archive_predict_native import host_archive_predict
 from bindings.host_knn_predict_native import host_knn_predict
 from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE

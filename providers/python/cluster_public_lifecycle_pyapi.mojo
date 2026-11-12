@@ -3,7 +3,7 @@
 # Validation, fitted tracking, feature metadata and final output wrapping stay
 # inside this one native operation. The existing algorithm owners are retained;
 # their legacy extension dispatch remains separately tracked migration debt.
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
@@ -25,7 +25,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.cluster_fit_a_native import cluster_fit_a_operation, _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from bindings.cluster_native import cluster_operation
-from bindings.mixture_native import mixture_operation
+from bindings.mixture_native_door import mixture_operation
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_constructor_pyapi import cluster_initialize_py

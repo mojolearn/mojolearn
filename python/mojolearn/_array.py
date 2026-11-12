@@ -453,7 +453,7 @@ def _flatten(nested):
     if fast is not None:
         return fast
     # the general walk (a ragged or mixed nested list, Arrays inside it) reads
-    # the user's list once natively (bindings/user_objects_native.mojo nested)
+    # the user's list once natively (bindings/user_objects_native_door.mojo nested)
     from . import _user_objects
     shape, flat = _user_objects.call("nested", nested, Array)
     return tuple(shape), flat

@@ -19,7 +19,7 @@ from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, p
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
 from bindings.native_json_door import native_json_parse
 from bindings.native_buffer_address import native_buffer_address
-from bindings.native_transport import _transport_json, transport_initialize
+from bindings.native_transport_door import _transport_json, transport_initialize
 from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_execute
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from training.parallel_byte_impl import (

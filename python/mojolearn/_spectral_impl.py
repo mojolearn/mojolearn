@@ -63,7 +63,7 @@ DEFAULT_EIGEN_TOL = 1e-5
 #: `raft::random::RngState rng_state{0}`).
 DEFAULT_SEED = 0
 
-# The compiled family owner (bindings/cfb_spectral.mojo): every public method
+# The compiled family owner (bindings/cfb_spectral_door.mojo): every public method
 # is one native call; its owner selects among these import-time connections.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_cfb_sc_affinities=_CLUSTER_AFFINITIES,
@@ -82,7 +82,7 @@ def _coo_triples(A, who="SpectralClustering"):
     dense input; converting a dense matrix through COO drops exact zeros. A
     sparse input is an exact SciPy container, read natively from its stored
     buffers; no method of the input (`tocoo()`) is called and nothing is
-    imported to ask. The scan is native (bindings/cfb_spectral.mojo, the
+    imported to ask. The scan is native (bindings/cfb_spectral_door.mojo, the
     base binding's `nonzero_f64_count` / `nonzero_f64_fill`).
     """
     return _NATIVE(None, "family_cfb_coo_triples", (A, who),
@@ -629,7 +629,7 @@ class SpectralEmbedding(ParamsMixin):
     def _validate_params(self):
         """The constructor checks, run first in `fit`; the converted values
         go to private attributes, which the fit reads
-        (bindings/cfb_spectral.mojo)."""
+        (bindings/cfb_spectral_door.mojo)."""
         return _NATIVE(self, "family_cfb_se_validate", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
@@ -661,7 +661,7 @@ class SpectralEmbedding(ParamsMixin):
         """scikit-learn's affinity='precomputed_nearest_neighbors' of a
         precomputed distance matrix, symmetrized 0.5 * (C + C^T), as an
         n x n float32 Array (and `affinity_matrix_`): the base binding's
-        `knn_affinity_f32` (bindings/cfb_spectral.mojo)."""
+        `knn_affinity_f32` (bindings/cfb_spectral_door.mojo)."""
         return _NATIVE(self, "family_cfb_se_knn_affinity", (X,),
                        _NATIVE_CONTEXT)
 

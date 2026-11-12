@@ -46,7 +46,7 @@ struct FamilyLifecycle(Copyable, Movable):
 def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     """The lifecycle of a connected public operation. The positions are the
     owner argument tuple's: 0 the resolved binding, 1 X, then the rest."""
-    # OneClassSVM (bindings/svc_ocsvm_native.mojo). sample_weight is not a target.
+    # OneClassSVM (bindings/svc_ocsvm_native_door.mojo). sample_weight is not a target.
     if operation == "family_svc_ocsvm_fit":
         return FamilyLifecycle("fit", scan=True)
     if operation == "family_svc_ocsvm_fit_predict":

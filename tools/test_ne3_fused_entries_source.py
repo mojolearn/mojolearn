@@ -51,7 +51,7 @@ def test_exports_registered_on_both_bindings_and_listed():
 
 
 def test_fused_doors_keep_the_op_chain_fallback():
-    ocsvm = _read('bindings/svc_ocsvm_native.mojo')
+    ocsvm = _read('bindings/svc_ocsvm_native_door.mojo')
     assert '_ocsvm_labels_available(binding)' in ocsvm and '"p2m_sign_label"' in ocsvm
     local = _read('bindings/neighbors_local_native.mojo')
     assert '_nc_fused_available(binding)' in local and '"row_argmax"' in local and '"knn_select"' in local

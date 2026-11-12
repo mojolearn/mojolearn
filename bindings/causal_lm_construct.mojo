@@ -14,7 +14,7 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
 from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
-from providers.python.operation_lock_pyapi import operation_lock_create
+from providers.python.operation_lock_pyapi_door import operation_lock_create
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_array_snapshot, generation_address, py_ints
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard, causal_entry_key
 from bindings.causal_operation_owner import _causal_namespace, causal_snapshot_fields

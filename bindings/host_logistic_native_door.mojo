@@ -12,7 +12,7 @@ from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.sequential_admission import _one_of, _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.host_archive_native import host_archive_typed, host_archive_class_values
+from bindings.host_archive_native_door import host_archive_typed, host_archive_class_values
 from bindings.host_tree_native import host_tree_input
 from bindings.host_kernel_inference_native import _kernel_buffer
 from bindings.host_inference_features import host_inference_feature_names

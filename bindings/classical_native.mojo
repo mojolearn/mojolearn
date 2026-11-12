@@ -13,7 +13,7 @@ from providers.python.linear_score_boundary import classical_linear_score
 from providers.python.linear_metadata_boundary import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
 from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
 from bindings.classical_archive import classical_archive_save, classical_archive_hash as classical_host_hash
-from bindings.classical_archive_read import classical_archive_load, classical_host_model
+from bindings.classical_archive_read_door import classical_archive_load, classical_host_model
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
 from bindings.native_operation_codes import operation_table

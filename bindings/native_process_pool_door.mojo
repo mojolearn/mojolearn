@@ -10,7 +10,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.native_transport import (
+from bindings.native_transport_door import (
     transport_initialize,
     transport_listen,
     transport_accept,

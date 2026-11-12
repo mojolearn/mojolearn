@@ -25,7 +25,7 @@ from bindings.cluster_fit_a_native import cluster_fit_a_operation
 from providers.python.hdbscan_public_lifecycle_pyapi import hdbscan_public_operation
 from providers.python.density_public_lifecycle_pyapi import density_public_operation
 from bindings.cluster_fit_b_native import cluster_fit_b_operation
-from bindings.mixture_native import mixture_operation
+from bindings.mixture_native_door import mixture_operation
 from bindings.linalg_ops_native import linalg_ops_operation
 from providers.python.lowbit_weight_pyapi import lowbit_weight_operation
 from bindings.parallel_public_native import parallel_public_operation

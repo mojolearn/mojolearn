@@ -2,7 +2,7 @@
 """Optimizer lifetime boundary: a typed control record and its extension pin."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_admission import opt_value, opt_schedule
 from bindings.py_balanced import py_fields, py_get, py_type
 from training.optimizer_owner_control import OptimizerOwnerControl

@@ -5,7 +5,7 @@
 # by owned CPython references. The caller supplies the shared classical context.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.memory import bitcast, unsafe_memcpy
 from std.sys import size_of
 from std.sys.info import CompilationTarget

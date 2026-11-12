@@ -10,7 +10,7 @@ No input Python protocols or numerical algorithm execute here.
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def _py_result_list(count: Int) raises -> PythonObject:

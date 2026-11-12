@@ -21,8 +21,8 @@ from providers.python.mamba3_prefill_session_pyapi import (
 )
 from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct, neural_descriptor_execute
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.native_execution_pyapi import AdmittedNativeExecution
-from providers.python.operation_lock_pyapi import OperationLockLease
+from providers.python.native_execution_pyapi_door import AdmittedNativeExecution
+from providers.python.operation_lock_pyapi_door import OperationLockLease
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from providers.python.generation_metadata_pyapi import GenerationLayerSnapshot
 from bindings.native_buffer_address import native_buffer_address

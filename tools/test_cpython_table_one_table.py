@@ -1,4 +1,4 @@
-"""Source controls for the one CPython function table (bindings/cpython_table.mojo).
+"""Source controls for the one CPython function table (bindings/py_cpython_table.mojo).
 
 Compilation and runtime checks are separate; these read the source only.
 """
@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TABLE = ROOT / "bindings" / "cpython_table.mojo"
 # Version-dependent symbols resolved by existence check, never on a hot path.
 EXTERNAL_ALLOWED = {
-    "bindings/cpython_table.mojo",
+    "bindings/py_cpython_table.mojo",
     "bindings/native_loaded_module.mojo",  # Py_IsFinalizing / _Py_IsFinalizing
 }
 

@@ -109,7 +109,7 @@
    "037d2dbea17df481ca1ed76ed79f6b1ee340087439629cfda9702a504491051e"
   ],
   [
-   "bindings/classical_archive_read.mojo",
+   "bindings/classical_archive_read_door.mojo",
    "bec2b085e644da69f7275368e9a03be487030bc39f48cf941c4c8d8060460712"
   ],
   [
@@ -205,7 +205,7 @@
    "66273eacde2a51892e6e5d0d572781dcb651f4bbc5df813ac01f8ec6c9d1c997"
   ],
   [
-   "bindings/host_archive_native.mojo",
+   "bindings/host_archive_native_door.mojo",
    "f8957bbbaa7167e24e08f847d78e03b8435a03ff683f5d2d63b498ab3c1237a6"
   ],
   [
@@ -217,7 +217,7 @@
    "324ce82639985eb20fce824a2eff54a1b4c6c9b5bc83d0fb6c098fcb9ae11605"
   ],
   [
-   "bindings/host_sparse_native.mojo",
+   "bindings/host_sparse_native_door.mojo",
    "973469efa66ffb4dc9c9c9babc2e37e87ae5fcb016dbf6989cc79789b39015ac"
   ],
   [
@@ -293,7 +293,7 @@
    "b031089f524cb58d5eeae575721c1a5aa475d9996e24648c7c8c9cb760258794"
   ],
   [
-   "bindings/native_idna.mojo",
+   "bindings/native_idna_door.mojo",
    "06577b25fdad42bb13ee53e230972a5ebff39a1767c66d6310232e576f306443"
   ],
   [
@@ -325,7 +325,7 @@
    "005e93066074acd4d0af05fe980c23ac2574141ebe73720bf193263bf1fa16e6"
   ],
   [
-   "bindings/native_process_pool.mojo",
+   "bindings/native_process_pool_door.mojo",
    "e4741e6a46c8b0c8caa3e628588acba5afe9a1c2c67fec99c1cb3981a0fda88c"
   ],
   [
@@ -337,11 +337,11 @@
    "03de954c312670b734faa8b6e4a7feec1ae80147afb58674815e1fee5cbe8cd8"
   ],
   [
-   "bindings/native_transport.mojo",
+   "bindings/native_transport_door.mojo",
    "9f673109f2c71a4f0b655a768448cb08e4bfafc2e23687ba892e8211c2e430ad"
   ],
   [
-   "bindings/native_worker_inventory.mojo",
+   "bindings/native_worker_inventory_door.mojo",
    "0d40a8b51d2357a9f1c511b439f0fc15b465f7da202116492aed65752dfdc9eb"
   ],
   [
@@ -413,7 +413,7 @@
    "ef84cc3305bd7137b4286a8897793ce1d6a8a1a25b76a4468235b27094cd01d1"
   ],
   [
-   "bindings/parallel_mlp_native.mojo",
+   "bindings/parallel_mlp_native_door.mojo",
    "4028292639fee41939a8911a34d56c5eeed8c3712c414bde732fac5d472762f4"
   ],
   [
@@ -437,7 +437,7 @@
    "29324004c919c00bbbd0b52540979b736dd3fa9c6680c2a03082a3944b436b93"
   ],
   [
-   "bindings/parallel_shard_common.mojo",
+   "bindings/parallel_shard_common_door.mojo",
    "75687b7245cb3fb861267caab2373618acbff3f957f6ae26896f33aa78e78a61"
   ],
   [
@@ -561,7 +561,7 @@
    "b76ac2b083b09c671ed035533fef5623f48afa2e9268186aada5ddbd7d271c16"
   ],
   [
-   "bindings/sequence_string_storage.mojo",
+   "bindings/sequence_string_storage_door.mojo",
    "94a76c35d519d52fc2505409f7a012b9ba25ea599594fc99d36f1ab4f1eff889"
   ],
   [
@@ -649,7 +649,7 @@
    "3c1026f14396df06000e32160dbd79f96bf8ba5bee5789527f4f103086da5d5e"
   ],
   [
-   "bindings/user_objects_native.mojo",
+   "bindings/user_objects_native_door.mojo",
    "6ec3ef05717b304f195ffde61062063ef17c814030706fc45f4be74ecde94ab0"
   ],
   [

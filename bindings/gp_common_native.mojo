@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# The shared pieces of the Gaussian process owners (bindings/gp_regressor_native.mojo,
+# The shared pieces of the Gaussian process owners (bindings/gp_regressor_native_door.mojo,
 # bindings/gp_classifier_native_door.mojo): the binding's compile-time mode cross-check
 # (`_extension`), its typed descriptor capability word, `numeric_mode_used`, and the
 # kernel objects read natively from their instance fields: the postfix spec
@@ -18,7 +18,7 @@ from std.memory import unsafe_memcpy
 from bindings.family_common import family_repr, family_is_str, family_call, family_array, FAMILY_F32P
 from bindings.classical_arrays import classical_address
 from bindings.archive_schema_native import _schema_kernel_layouts
-from bindings.gp_kernel_public_native import gp_kernel_native_nodes
+from bindings.gp_kernel_public_native_door import gp_kernel_native_nodes
 
 
 

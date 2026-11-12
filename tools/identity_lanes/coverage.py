@@ -1414,7 +1414,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("neural-trainer-unfused")
 def _(ml, X, yc, yr, Xh=None):
     """ParallelNeuralTrainer over the mlp lane's trainer: the shard
-    gradients (bindings/parallel_mlp_native.mojo mlp_gradients_on: the
+    gradients (bindings/parallel_mlp_native_door.mojo mlp_gradients_on: the
     SmallMLPTrainer program's loss-and-gradients run,
     autograd/small_mlp_program.mojo mode 1; lane m2-neural-leftovers,
     2026-11-09) and the ordered update. Parts: the weights after three

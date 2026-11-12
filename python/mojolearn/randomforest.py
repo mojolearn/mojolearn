@@ -80,7 +80,7 @@ _MODEL_FORMAT = "mojolearn-randomforest-1"
 # The compiled saved-model owner, connected once at import: `save` and
 # `load` are one native call each (bindings/archive_schema_native.mojo
 # writes the schema registered after `_RandomForestBase`;
-# bindings/host_archive_native.mojo `host_archive_public_forest` builds the
+# bindings/host_archive_native_door.mojo `host_archive_public_forest` builds the
 # loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 

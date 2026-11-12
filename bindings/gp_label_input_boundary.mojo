@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_item, p3_type_word
 from bindings.label_input_sources import LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
 from core.gp_native_label_input import GPLabelInput

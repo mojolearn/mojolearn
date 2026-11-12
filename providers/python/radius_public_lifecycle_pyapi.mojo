@@ -13,15 +13,15 @@ from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_arrays import classical_address
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
-from bindings.host_archive_native import host_archive_radius_refusals
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
+from bindings.host_archive_native_door import host_archive_radius_refusals
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch
 from providers.python.array_metadata_pyapi import ArrayPin, array_slot_once, array_owner_once
-from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import NeighborPublicCall, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
 from core.native_scalar_decode import native_scalar_real
 from bindings.py_optional import py_or_none, py_present

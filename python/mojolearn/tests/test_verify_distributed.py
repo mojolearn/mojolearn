@@ -68,7 +68,7 @@ def test_incomplete_or_false_pass_evidence_rejected(fault):
 
 @pytest.mark.parametrize('fault', ['drop_result', 'reverse_results'])
 def test_transport_controls_set_and_restore_the_native_switch(fault, monkeypatch):
-    # the native pools read the switch (bindings/parallel_shard_common.mojo
+    # the native pools read the switch (bindings/parallel_shard_common_door.mojo
     # `shard_map`); the control sets it for its block and restores it
     import os
     calls = []

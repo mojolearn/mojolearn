@@ -17,7 +17,7 @@ from bindings.base_helpers_released import base_check_indices_i64
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.ffi import c_int, external_call
 from std.sys.compile import is_defined
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
 from bindings.msel_helpers_key import msel_helpers_key
 from bindings.msel_helpers_released import (

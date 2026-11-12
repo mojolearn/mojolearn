@@ -29,8 +29,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import family_call, family_isinstance, family_str, family_array
-from bindings.cfb_spectral import _as_i32
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields, host_sparse_dense
+from bindings.cfb_spectral_door import _as_i32
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields, host_sparse_dense
 from bindings.cfb_sparse_read import cfb_sparse_triples
 from bindings.neighbors_ann_native import ann_keep_array
 from bindings.mcls_cluster import mcls_cluster_operation
@@ -50,7 +50,7 @@ from neighbors.neighbors_graph_run import (
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present
 
 # The typed checks, the operation requests (their word order and float32
@@ -299,7 +299,7 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
     var vals = Optional[PythonObject]()
     var n = 0
     # An exact SciPy CSR container is read from its own stored buffers
-    # (the instance dictionary, bindings/host_sparse_native.mojo
+    # (the instance dictionary, bindings/host_sparse_native_door.mojo
     # _sparse_fields): its `tocsr()` returns itself and `shape` is the
     # stored `_shape`, so the same arrays reach the kernels without running
     # SciPy's Python methods inside the native call. A CSC or COO container

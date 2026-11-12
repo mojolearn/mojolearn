@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The native PCA owner: every public PCA operation is one call into pca_c.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr

@@ -23,7 +23,7 @@ from bindings.native_array_snapshot import native_array_snapshot, native_array_s
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_instance_item import native_instance_item
-from bindings.native_transport import _transport_state
+from bindings.native_transport_door import _transport_state
 from bindings.native_posix_transport import posix_transfer
 from bindings.native_posix_transport_run import PosixBytes
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer

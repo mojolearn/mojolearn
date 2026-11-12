@@ -14,7 +14,7 @@
 # (`cpy.lib`), so no global symbol linkage is assumed.
 #
 # THE ONE FORM (every caller, every lane):
-#   from bindings.cpython_table import cpython_table
+#   from bindings.py_cpython_table import cpython_table
 #   var table = cpython_table()            # once per function, outside loops
 #   var fields = table[].PyModule_GetDict(module._obj_ptr)
 # - A C-API function the tree needs that is not here is ADDED here (field,

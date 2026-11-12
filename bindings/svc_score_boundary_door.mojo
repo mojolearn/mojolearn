@@ -11,7 +11,7 @@ are distinct from the GP scorer's existing host-only label path.
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_item
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_arrays import classical_address

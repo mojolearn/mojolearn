@@ -51,7 +51,7 @@ from bindings.spectral_umap_routes import (
 )
 from bindings.cfb_dbscan import cfb_borrow_copy
 from bindings.cfb_sparse_read import cfb_sparse_triples
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from bindings.classical_attributes import classical_connect_numpy

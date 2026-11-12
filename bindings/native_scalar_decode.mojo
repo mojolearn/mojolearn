@@ -2,7 +2,7 @@
 # Shared numeric buffer decoding. Callers admit exact primitive scalar/array
 # owners first. This is not a general Python buffer/protocol admission helper.
 from std.memory import bitcast
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from core.native_scalar_decode import NativeRealBits, native_scalar_real

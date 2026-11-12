@@ -85,7 +85,7 @@
 set -u
 
 DEFAULT_SUSPECTS="bindings/admitted_call.mojo
-bindings/classical_archive_read.mojo
+bindings/classical_archive_read_door.mojo
 bindings/classical_native.mojo
 bindings/classical_pandas.mojo
 bindings/family_native.mojo

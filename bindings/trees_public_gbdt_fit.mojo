@@ -26,7 +26,7 @@ from bindings.trees_public_state import _release_tree_values
 from bindings.py_typed_call import py_call_typed
 from bindings.boundary_read import read_int, read_float, exact_ndarray_view, view_kind_fits_i64, view_kind_real
 from bindings.cpython_borrowed import borrowed_type_word
-from bindings.host_archive_native import host_archive_gbdt_state
+from bindings.host_archive_native_door import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.trees_public_inputs import (

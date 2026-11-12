@@ -8,7 +8,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_address import native_buffer_address
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def _storage_metadata() raises -> PythonObject:

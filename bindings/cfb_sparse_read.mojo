@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# The spectral owner's sparse COO reader (bindings/cfb_spectral.mojo): the
+# The spectral owner's sparse COO reader (bindings/cfb_spectral_door.mojo): the
 # (row, col, data, shape) a SciPy matrix's `tocoo()` returns, read from the
 # matrix's own stored buffers instead of calling into SciPy. An exact COO
 # container hands back its stored coordinates (its `tocoo()` returns itself);
@@ -11,7 +11,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type, py_contains
 from bindings.native_loaded_module import native_loaded_module
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields, _sparse_indices
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields, _sparse_indices
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_array
 from core.cfb_sparse_read_impl import cfb_sparse_expand

@@ -6,7 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item

@@ -60,7 +60,7 @@ def test_named_listen_connect_and_numeric_endpoint_paths_are_native(native):
     client = accepted = None
     try:
         # Native transport sockets are owned native capsules, not Python
-        # socket objects (bindings/native_transport.mojo _transport_own), so
+        # socket objects (bindings/native_transport_door.mojo _transport_own), so
         # the endpoint and the bytes are read through the native entries.
         address = audit_native_call(native, 'address', (listener, False)).assert_native()
         port = audit_native_call(native, 'port', (listener,)).assert_native()

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed Punycode encoding moved from bindings/native_idna.mojo."""
+"""Typed Punycode encoding moved from bindings/native_idna_door.mojo."""
 
 
 def _idna_adapt(delta_in: Int, points: Int, first: Bool) -> Int:

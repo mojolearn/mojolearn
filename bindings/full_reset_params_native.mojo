@@ -4,7 +4,7 @@
 # calling Python constructors. Every old owner that will actually be dropped is
 # admitted before clearing the existing dictionary, whose identity is preserved.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module

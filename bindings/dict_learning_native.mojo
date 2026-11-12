@@ -13,7 +13,7 @@
 # uploaded once, and the dictionary, mean and components are not downloaded
 # and re-uploaded between the two.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception

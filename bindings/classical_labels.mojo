@@ -55,7 +55,7 @@ from bindings.label_input_sources import (
 from bindings.str_labels_native import _read_source, str_unique_into
 from bindings.str_labels_native_run import StrTable
 from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.class_weight_boundary import class_weight_admit_dictionary
 from bindings.class_weight_rows_boundary import class_weight_rows_admitted
 from bindings.labels_descriptor_boundary_door import (

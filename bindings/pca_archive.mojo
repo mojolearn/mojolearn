@@ -7,7 +7,7 @@ from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_description import sequential_fields
 from bindings.classical_arrays import classical_array, classical_word
 from bindings.classical_archive import classical_archive_write
-from bindings.classical_archive_read import classical_archive_read, _archive_exact, _archive_string
+from bindings.classical_archive_read_door import classical_archive_read, _archive_exact, _archive_string
 from bindings.pca_metadata import pca_mode, pca_initialize
 from bindings.py_balanced import py_call, py_contains, py_setitem
 

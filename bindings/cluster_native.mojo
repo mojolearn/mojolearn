@@ -63,7 +63,7 @@ def _xc_fitted(mut mods: NativeModules, model: PythonObject, attr: String) raise
 def _xc_f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
     """`source` is an exact Array or ndarray, 2-D, non-empty, float32 in C
     order: `as_f32_c(source, ndim=2)` would admit it and return its own
-    storage (the test of bindings/mixture_native.mojo `_f32_ready`)."""
+    storage (the test of bindings/mixture_native_door.mojo `_f32_ready`)."""
     var cls = py_type(source)
     if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
         return False

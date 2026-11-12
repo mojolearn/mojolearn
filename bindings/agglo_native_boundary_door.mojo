@@ -7,7 +7,7 @@ from bindings.py_balanced import py_get, py_setitem, py_type
 from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.native_owner_lifetime import native_release_admit
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
 from core.shared_slot import SharedSlot
 from bindings.classical_arrays import classical_address, classical_wrap_layout

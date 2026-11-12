@@ -314,7 +314,7 @@ def connect(context, register, registry):
 
 def _connect_device_rows(registry):
     # glue: import-time ABI flag. Model selection hands these classes a
-    # fold's X as `_arena_io.DeviceRows` (bindings/msel_cv.mojo
+    # fold's X as `_arena_io.DeviceRows` (bindings/msel_cv_door.mojo
     # msel_device_rows_ok): every CV method of each reads X through a door
     # that resolves it with the rows gathered on the device out of model
     # selection's resident base. LinearRegression / Ridge: fit, predict and

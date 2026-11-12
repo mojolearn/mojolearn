@@ -13,7 +13,7 @@ predict uploads only the query:
     slot 0  X_train_, alpha_      every predict
     slot 1  L_                    the first `return_std=True` predict
 
-The store's key is a lease the public door (bindings/gp_regressor_native.mojo
+The store's key is a lease the public door (bindings/gp_regressor_native_door.mojo
 through bindings/fitted_resident_door.mojo) takes once per fitted state and
 keeps in the model's prepared-owner record; `GpResidentLease` is the native
 object that holds it, and its destruction (a refit, a replaced fitted array,

@@ -1937,12 +1937,12 @@ ANNOTATIONS_BY_SRC.update({
     ("native_process_call", _TOK): (
         "covered", ["par-mlp", "par-samba", "par-samba-clip"],
         "mojolearn._parallel_neural imports _native_process, whose import-time `initialize` call sets the "
-        "interpreter and environment the native process pool (bindings/native_process_pool.mojo) spawns "
+        "interpreter and environment the native process pool (bindings/native_process_pool_door.mojo) spawns "
         "the parallel trainers' workers with; par-* lanes run on two-device boxes"),
     ("parallel_mlp_call", _TOK): (
         "covered", ["par-mlp"],
         "mojolearn._parallel_neural imports _parallel_mlp, whose import-time `initialize` call hands the "
-        "parallel MLP owner (bindings/parallel_mlp_native.mojo) SmallMLPTrainer, AdamW and the training "
+        "parallel MLP owner (bindings/parallel_mlp_native_door.mojo) SmallMLPTrainer, AdamW and the training "
         "binding it builds its replicas from; par-* lanes run on two-device boxes"),
     ("pca_native_call", _TOK): (
         "covered", ["pca", "pca-whiten", "pca-inverse", "pca-whiten-inverse", "pca-full-whiten",

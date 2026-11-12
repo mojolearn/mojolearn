@@ -158,7 +158,7 @@ def inventory(argv):
         if "PREPARED AND NOT EXPOSED" in doc.split("\n", 1)[0] and f"`{stem}.py`" in init_text:
             queue.append(stem)
     # A module the native local process pool launches as `python -m
-    # <pkg>.<module>` (bindings/native_process_pool.mojo; the child module
+    # <pkg>.<module>` (bindings/native_process_pool_door.mojo; the child module
     # names are string literals in the binding sources, e.g.
     # "mojolearn._native_parallel_shard_worker") is reached by the binding,
     # though no Python import statement names it.

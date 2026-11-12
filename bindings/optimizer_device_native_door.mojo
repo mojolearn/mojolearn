@@ -2,7 +2,7 @@
 """Training device UNPACK/PACK; handles and transfer requests stay native."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_admission import opt_value, opt_scalar

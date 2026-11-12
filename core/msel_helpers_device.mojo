@@ -249,7 +249,7 @@ def msel_store_free_device_run(id: Int) raises -> Int:
 
 def msel_store_free_bytes_device_run() raises -> Int:
     """Free bytes of the device the fold store lives on: the measured bound
-    of how many cross-validation units run at once (bindings/msel_cv.mojo
+    of how many cross-validation units run at once (bindings/msel_cv_door.mojo
     msel_cv_units, lane p3-msel-parallel-and-process-pool)."""
     var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
     var mem = ctx.get_memory_info()

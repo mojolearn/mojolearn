@@ -179,8 +179,9 @@ def test_each_door_dispatches_its_operation():
 
 
 def test_sharded_drivers_keep_the_partition_and_the_negative_control():
-    common = _read("bindings/parallel_shard_common.mojo")
-    shift = common[common.index("def shard_read_shift("):common.index("def shard_run(")]
+    common = _read("bindings/parallel_shard_common_door.mojo")
+    run = _read("bindings/parallel_shard_common_run.mojo")
+    shift = run[run.index("def shard_read_shift("):run.index("def shard_faults_take(")]
     # `_parallel_pool.driver_read_shift`, word for word
     assert "if first < 1 or n_devices < 2 or index % n_devices == 0:" in shift
     assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE"' in shift and '"MOJOLEARN_HOST_ALLOW_SABOTAGE"' in shift

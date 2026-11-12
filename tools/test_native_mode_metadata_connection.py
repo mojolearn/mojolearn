@@ -42,7 +42,7 @@ class ModeMetadataConnection(unittest.TestCase):
         # CPython calls go through the process-wide typed pointer table, never a
         # per-call by-name symbol lookup.
         self.assertIn('cpython_table()[].PyObject_GenericGetDict(model._obj_ptr, PyObjectPtr())', native)
-        self.assertIn('from bindings.cpython_table import cpython_table', native)
+        self.assertIn('from bindings.py_cpython_table import cpython_table', native)
         self.assertNotIn('get_function', native)
         self.assertNotIn('Python.import_module', native)
         self.assertNotIn('family_raw_get', native)

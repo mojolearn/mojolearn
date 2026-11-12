@@ -28,7 +28,7 @@ from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allo
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.operation_lock_pyapi import OperationLockLease, operation_lock_create
+from providers.python.operation_lock_pyapi_door import OperationLockLease, operation_lock_create
 from bindings.native_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse,

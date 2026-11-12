@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared native Array storage admission for construction and address reads."""
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields

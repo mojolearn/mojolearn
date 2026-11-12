@@ -19,7 +19,7 @@ from bindings.admitted_input import admit_ids
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_typed
 from bindings.admitted_input import admit_x
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native_door import host_sparse_format
 from bindings.classical_validate import classical_view
 from core.decomp_native_impl import decomp_piv_valid
 from bindings.decomp_kit_native import (

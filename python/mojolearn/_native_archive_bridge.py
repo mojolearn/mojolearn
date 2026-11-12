@@ -6,7 +6,7 @@ estimator classes.
 classical owner (`bindings/classical_native.mojo`): `save` runs the class's
 fixed save schema or native family (`bindings/archive_schema_native.mojo`) and writes the
 deterministic NPZ the Python writer wrote; `load` reads the file and builds
-the model natively (`bindings/host_archive_native.mojo`). Python here only
+the model natively (`bindings/host_archive_native_door.mojo`). Python here only
 connects fixed metadata once, at import: the shared context, each class's
 format and save schema, and the lookup tables its builder reads.
 """

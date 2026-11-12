@@ -35,8 +35,8 @@ from bindings.boundary_read import text_buffer_view, read_text_rows_into, pack_u
 from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT, gather_i64
 from bindings.classical_pandas import classical_admit_value
 from bindings.label_admission_native import LabelTypeKinds
-from bindings.user_objects_native import _Env, _f32_exact, _indicator, _new_list, _list_put
-from bindings.cpython_table import cpython_table
+from bindings.user_objects_native_door import _Env, _f32_exact, _indicator, _new_list, _list_put
+from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
 from core.label_words_impl import label_codes_i32_to_f64
 

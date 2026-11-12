@@ -16,7 +16,7 @@ from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.manifold_storage_native import (
     ManifoldMatrix, ManifoldDevice, matrix_rows, matrix_cols, matrix_store, matrix_device,
     matrix_set_store, matrix_set_device, device_binding, device_identifier,

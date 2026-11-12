@@ -9,7 +9,7 @@ columns, series, trees or classes), run each shard's plain native owner in a
 worker process per device and place every shard's block at its own offset.
 The old Python driver (`_parallel_pool.DevicePool` plus pickle) did the same
 in Python; here the partition, the request records, the native local
-process pool (bindings/native_process_pool.mojo: one process per device, the
+process pool (bindings/native_process_pool_door.mojo: one process per device, the
 visibility mask narrowed to it, every device count 1) and the join are
 native. The wave order is the old pool's: `process_pool_map` sends waves of
 `len(devices)` requests and hands wave position j to worker j, so shard i
@@ -31,8 +31,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_process_pool import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
-from bindings.native_worker_inventory import native_worker_inventory, native_require_worker_inventory
+from bindings.native_process_pool_door import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
+from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native import tsa_array
 from core.shared_slot import SharedSlot
 from bindings.parallel_shard_common_run import (
@@ -185,7 +185,7 @@ comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV2", 2]
 
 def shard_identity() raises -> PythonObject:
     """A worker's answer to an identity request: its own process and the
-    devices its visibility mask leaves it (bindings/native_worker_inventory.mojo)."""
+    devices its visibility mask leaves it (bindings/native_worker_inventory_door.mojo)."""
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     return native_worker_inventory(p[].vendor, p[].environ)
 

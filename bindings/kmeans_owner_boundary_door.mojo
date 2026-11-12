@@ -7,7 +7,7 @@ from core.shared_slot import SharedSlot
 from core.kmeans_owner_state import KMeansResidentState
 from bindings.kmeans_descriptor_boundary_door import kmeans_provider
 from x_cluster.kmeans_descriptor_boundary_run import kmeans_driver
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_fields, py_contains, py_setitem, py_type
 from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import stash_python_error

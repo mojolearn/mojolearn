@@ -44,7 +44,7 @@ from bindings.msel_helpers_released import msel_gather_i64
 # linked into this door instead of called through CPython.
 from core.array_helpers_impl import row_means_f64, row_stds_f64
 from bindings.family_common import FAMILY_I32P
-from bindings.msel_cv import (
+from bindings.msel_cv_door import (
     msel_clone,
     msel_cv_folds,
     msel_cv_splitter,

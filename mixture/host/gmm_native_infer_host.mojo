@@ -3,7 +3,7 @@
 (`mixture_native_api_v1` of `_mojolearn_mixture_infer_host`): the host
 scoring body (mixture/host/gmm_native_host_score.mojo) reached with typed
 words, and no fit (this binding compiles none). The mixture door
-(bindings/mixture_native.mojo) scores a saved model (`mojolearn.host_model`)
+(bindings/mixture_native_door.mojo) scores a saved model (`mojolearn.host_model`)
 through it; before it existed the door found no typed transport on this
 binding and every host-model GaussianMixture score refused."""
 from core.shared_slot import SharedSlot

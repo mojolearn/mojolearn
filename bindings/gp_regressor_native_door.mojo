@@ -25,7 +25,7 @@ from bindings.classical_arrays import classical_address
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
-from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_scan
+from bindings.gp_query_x_door import GpQuery, gp_query, gp_query_address, gp_query_scan
 from gaussian_process.gp_query_x_run import gp_query_refuse
 # thin-unpack-kit (2026-11-11): one C-API read per scalar parameter in place
 # of a call of the builtin bool/int/float (same semantics and exceptions).
@@ -359,7 +359,7 @@ def _gpr_fitted(fields: PythonObject, message: String) raises:
 def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject,
                entry_tests: Bool = False) raises -> GpQuery:
     """`as_f32_c(X, ndim=2, name="X")` with the fitted feature count, as a
-    GpQuery (bindings/gp_query_x.mojo; lane a7a): `entry_tests` (the
+    GpQuery (bindings/gp_query_x_door.mojo; lane a7a): `entry_tests` (the
     resident predict, which returns the query's status words) keeps a
     cross-validation fold on the device. A caller whose entry returns no
     status word calls gp_query_scan."""

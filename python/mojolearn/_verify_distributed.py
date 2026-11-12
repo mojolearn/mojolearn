@@ -62,7 +62,7 @@ def _require_used_groups(receipt, group_ids, case):
 @contextmanager
 def transport_fault(fault, control):
     """Perturb one actual numerical result batch of the native shard pools
-    (bindings/parallel_shard_common.mojo `shard_map`): its last result is
+    (bindings/parallel_shard_common_door.mojo `shard_map`): its last result is
     dropped or the batch is reversed, once. Never a native arithmetic fault."""
     from ._native_parallel_shard import _native_parallel_shard
     if fault not in ('drop_result', 'reverse_results'):

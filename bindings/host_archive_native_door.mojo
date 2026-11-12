@@ -3,7 +3,7 @@
 # metadata, never Python loaders, constructors, or callbacks. The public
 # router is switched only after every existing format has a native builder.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.gp_native_api import GPKernelView
 from core.gp_native_archive import GPArchiveKernelPlan
 from bindings.native_loaded_module import native_loaded_module
@@ -12,7 +12,7 @@ from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
 from bindings.trees_public_iforest import iforest_validate
 from bindings.sequential_description import sequential_fields
-from bindings.classical_archive_read import _archive_read_input, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
+from bindings.classical_archive_read_door import _archive_read_input, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
 from bindings.classical_archive import _archive_class_name_unpack
 from bindings.classical_archive_output import archive_events_pack, archive_members_pack
 from bindings.classical_archive_linear import archive_print_mode_unpack, archive_class_names_unpack, archive_linear_pack
