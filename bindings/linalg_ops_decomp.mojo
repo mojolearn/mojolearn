@@ -23,8 +23,7 @@ from bindings.admitted_input import AdmittedBuf, admitted_zeros
 from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints, lin_connected_binding
 from providers.python.linalg_result_pyapi import linalg_result_new
 from bindings.linalg_ops_kit import LinKit, KIT_F32P, OP_MUL, OP_DIV, OP_ABS, OP_SCALE, OP_ADDS, OP_LE
-
-comptime TS_MAX_N = 512
+from bindings.linalg_ops_decomp_run import _lin_tsqr_on
 
 
 def _lin_door(context: PythonObject) raises -> PythonObject:
@@ -45,11 +44,6 @@ def _lin_eq(a: PythonObject, b: String) raises -> Bool:
 def _lin_named(cls: String, items: PythonObject, context: PythonObject) raises -> PythonObject:
     """`QRResult(...)` / `SVDResult(...)`: the tuple subclass over `items`."""
     return linalg_result_new(lin_state(context)[cls], items, context)
-
-
-def _lin_tsqr_on(rows: Int, cols: Int) -> Bool:
-    """`_tsqr_on(rows, cols)`: tall and at most TS_MAX_N wide."""
-    return cols >= 1 and cols <= TS_MAX_N and rows >= cols
 
 
 def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> PythonObject:
