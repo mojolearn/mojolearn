@@ -31,6 +31,7 @@ from providers.python.estimator_lifecycle_pyapi import estimator_outside, estima
 from providers.python.cluster_constructor_pyapi import cluster_initialize_py
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 from bindings.py_optional import py_present
+from cluster.cluster_public_lifecycle_run import _method
 
 
 def _scalar_state(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -190,24 +191,6 @@ def _admit_replaced_state(model: PythonObject, fields: PythonObject, context: Py
     for name in ["_mojolearn_fitted", "_mojolearn_fitting", "feature_names_in_"]:  # driver-loop: shared lifecycle writes/removals
         if py_contains(fields, name):
             native_release_admit(fields[name], context)
-
-
-def _method(operation: String) -> String:
-    if operation.endswith("partial_fit"):
-        return String("partial_fit")
-    if operation.endswith("fit_predict"):
-        return String("fit_predict")
-    if operation.endswith("fit_transform"):
-        return String("fit_transform")
-    if operation.endswith("predict_proba"):
-        return String("predict_proba")
-    if operation.endswith("score_samples"):
-        return String("score_samples")
-    if operation.endswith("transform"):
-        return String("transform")
-    if operation.endswith("predict"):
-        return String("predict")
-    return String("fit") if operation.endswith("fit") else String("score")
 
 
 def cluster_public_operation(model: PythonObject, operation: String, args: PythonObject,
