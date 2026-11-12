@@ -146,7 +146,8 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
         if reduction == 0:
             row_loss = new_array([rows], "<f4")
             row_address = row_loss._addr
-        var gradient = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var gradient = Optional[PythonObject]()
         if device:
             if want_grad:
                 gradient = device_allocate(native, shape, context)
@@ -162,13 +163,13 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
         py_call(params.append, smoothing)
         var keep = List[List[Float32]]()
         if device:
-            var output_handle = fields["h"] if gradient is None else py_fields(gradient)["h"]
+            var output_handle = fields["h"] if not gradient else py_fields(gradient.value())["h"]
             _ = py_call(entry, loss._addr, row_address, targets[1], Python.list(output_handle, fields["h"]), params)
         else:
             var address = 0
             with GILReleased(Python()):
                 address = optimizer_contiguous_address(view, keep)
-            _ = py_call(entry, loss._addr, row_address, gradient._addr, address, targets[1], params)
+            _ = py_call(entry, loss._addr, row_address, gradient.value()._addr, address, targets[1], params)
         var result = PythonObject(None)
         if reduction == 0:
             result = row_loss
@@ -176,7 +177,7 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
             var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))
             result = PythonObject(Float64(pointer[0]))
         if want_grad:
-            result = Python.tuple(result, gradient)
+            result = Python.tuple(result, gradient.value())
         _ = keep^
         _ = targets^
         _ = logits^

@@ -552,14 +552,16 @@ def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonO
         var idx = xcnn_host_i32(shape, context)
         var dev = d["_dev"]
         var entries = context["xcnn_bindings"]
-        var owner = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var connected = Optional[PythonObject]()
         var keys = Python.tuple("identical", "fast")
         for i in range(2):  # driver-loop: over the two numeric modes
             var e = py_get(entries, keys[i])
             if e is not None and not Bool(py=py_call(b.isinstance, e, b.str)) and e["module"] is _fields(dev)["b"]:
-                owner = e
-        if owner is None:
+                connected = e
+        if not connected:
             raise Error("RuntimeError: a resident array of a binding this process did not connect")
+        var owner = connected.value()
         var handle = _pool_int(d["_idx_dev"], context)
         var key = xcnn_ref(owner)
         var dst = xcnn_ptr(idx)

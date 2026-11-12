@@ -49,6 +49,7 @@ from bindings.native_array_storage import native_array_zeros
 from bindings.p3_labels_metrics_native import (
     p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK)
 from bindings.cpython_table import cpython_table
+from bindings.py_optional import py_present
 
 comptime MC_NONE = -1
 comptime MC_PARAMS = 14
@@ -487,14 +488,15 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject, admitte
         # nested inputs flattened above): within int64 they take the native
         # encoder as one int64 store; an int outside int64 keeps the Python
         # label step below.
-        var store = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var store = Optional[PythonObject]()
         try:
-            store = py_call(native_loaded_module("array").array, PythonObject("q"), labels)
+            store = py_present(py_call(native_loaded_module("array").array, PythonObject("q"), labels))
         except:
-            store = PythonObject(None)
-        if store is not None:
-            var count = mc_len(store)
-            var encoded = mc_encode_store(store, count, context)
+            store = Optional[PythonObject]()
+        if Bool(store):
+            var count = mc_len(store.value())
+            var encoded = mc_encode_store(store.value(), count, context)
             return McLabels("integer", count, encoded[0], encoded[1])
     if String(listed[1]) == "string":
         # p3-labels-metrics: exact str labels hashed to their k distinct

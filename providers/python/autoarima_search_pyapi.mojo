@@ -14,6 +14,7 @@ from bindings.tsa_arima_native import arima_fit, _arima_entries
 from providers.python.autoarima_lifecycle_pyapi import _fields, _integer, _integer_object, _number, _packed, _buffer
 from x_metrics.epilogue import portable_log_c
 from providers.python.autoarima_owner_pyapi import autoarima_commit
+from bindings.py_optional import py_present
 
 
 struct _Candidate(Copyable, Movable):
@@ -267,8 +268,10 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
         var best = _array(count, 3, context)
         var best_ic = _array(count, ic_code, context)
         var ic_k = _array(count, ic_code, context)
-        var grouped_ll = PythonObject(None)
-        var search_fit = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var grouped_ll = Optional[PythonObject]()
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var search_fit = Optional[PythonObject]()
         var chosen = False
         if n_obs > 2 and _optional(entries, "arima_order_batch_enabled"):
             if caps & 1 and (plain or caps & 2):
@@ -289,7 +292,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                         best = _cast(best32, 2, 3, count, context)
                         best_ic = out
                     else:
-                        grouped_ll = out
+                        grouped_ll = py_present(out)
             elif plain:
                 var compact = Python.list()
                 var offsets = Python.list()
@@ -305,15 +308,15 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                     var fitf = _array(off, 0, context)
                     var fiti = _array(2 * count * trials, 2, context)
                     written = Int(py=py_call_typed(entries["arima_order_search_fit"], classical_address(sub),
-                                  classical_address(grouped_ll), classical_address(fitf), classical_address(fiti), compact,
+                                  classical_address(grouped_ll.value()), classical_address(fitf), classical_address(fiti), compact,
                                   Python.list(count, n_obs, d, maxiter)))
-                    search_fit = Python.tuple(fitf, fiti, offsets, count, grouped_ll)
+                    search_fit = Python.tuple(fitf, fiti, offsets, count, grouped_ll.value())
                 else:
                     written = Int(py=py_call_typed(entries["arima_order_search"], classical_address(sub),
-                                  classical_address(grouped_ll), compact, Python.list(count, n_obs, d, maxiter)))
+                                  classical_address(grouped_ll.value()), compact, Python.list(count, n_obs, d, maxiter)))
                 if written == 0:
-                    grouped_ll = PythonObject(None)
-                    search_fit = PythonObject(None)
+                    grouped_ll = Optional[PythonObject]()
+                    search_fit = Optional[PythonObject]()
                 elif written != trials * count:
                     raise Error("RuntimeError: AutoARIMA: incomplete grouped likelihood output")
         if not chosen:
@@ -324,13 +327,13 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             var ic_k_address = classical_address(ic_k)
             var best_ic_address = classical_address(best_ic)
             var best_address = classical_address(best)
-            var grouped_address = 0 if grouped_ll is None else Int(py=classical_address(grouped_ll))
+            var grouped_address = 0 if not grouped_ll else Int(py=classical_address(grouped_ll.value()))
             var arima_class = context["arima_class"]
             for trial in range(trials):  # driver-loop: over candidate order fits and compiled IC folds
                 ref order = grid[trial]
                 var llf = PythonObject(None)
                 var address = 0
-                if grouped_ll is None:
+                if not grouped_ll:
                     var m = _new_arima(Python.tuple(order.p, d, order.q),
                         Python.tuple(order.seasonal_p, seasonal_d, order.seasonal_q, order.period), order.intercept, maxiter, context)
                     _ = arima_fit(m, Python.tuple(sub, PythonObject(None)), context)
@@ -365,7 +368,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             _ = py_call(models.append, Python.tuple(Python.tuple(order.p, d, order.q),
                          Python.tuple(order.seasonal_p, seasonal_d, order.seasonal_q, order.period), order.intercept))
             _ = py_call(ids_all.append, selected)
-            _ = py_call(reuse_all.append, PythonObject(None) if search_fit is None else Python.tuple(search_fit, trial, local))
+            _ = py_call(reuse_all.append, PythonObject(None) if not search_fit else Python.tuple(search_fit.value(), trial, local))
             _ = py_call(fitted.append, PythonObject(None))
         _ = bcounts
     _ = dcounts

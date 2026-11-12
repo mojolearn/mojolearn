@@ -488,7 +488,8 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
             transport_send(peers[i]["sock"], apply, bi.bytes() if chained and i == count - 1 else total)
         py_setitem(timing, "apply_sent", _cross_vendor_elapsed(started))
         var hashes = bi.dict()
-        var agreed = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var agreed = Optional[PythonObject]()
         var vendors = bi.dict()
         for i in range(count):  # driver-loop: over committed worker state witnesses
             var peer = peers[i]
@@ -498,16 +499,19 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
                 cross_vendor_refuse(owner, String(peer["name"]) + " did not commit step " + String(step + 1))
             py_setitem(hashes, peer["name"], head["state"])
             py_setitem(vendors, peer["name"], py_get(peer, "vendor"))
-            if i == 0:
+            if not agreed:
                 agreed = head["state"]
-            elif not Bool(py=head["state"] == agreed):
+            elif not Bool(py=head["state"] == agreed.value()):
                 cross_vendor_refuse(owner, "replicas disagree after step " + String(step + 1))
             py_setitem(timing, "applied_" + String(peer["name"]), _cross_vendor_elapsed(started))
         py_setitem(timing, "step_seconds", _cross_vendor_elapsed(started))
         var row = bi.dict()
         py_setitem(row, "step", PythonObject(step + 1))
         py_setitem(row, "losses", all_losses)
-        py_setitem(row, "state", agreed)
+        var agreed_state = PythonObject(None)
+        if agreed:
+            agreed_state = agreed.value()
+        py_setitem(row, "state", agreed_state)
         py_setitem(row, "workers", hashes)
         py_setitem(row, "vendors", vendors)
         py_setitem(row, "total_sha256", total_hash)
@@ -960,22 +964,25 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
     py_setitem(hello, "n_total", PythonObject(n))
     py_setitem(hello, "chained", owner.chained)
     var deadline = transport_clock() + Float64(py=owner.connect_timeout)
-    var socket = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546): the loop leaves only through a connected attempt.
+    var opened = Optional[PythonObject]()
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var response = Optional[PythonObject](PythonObject(None))
     while True:  # driver-loop: over initial tunnel handshakes within the retry deadline
-        socket = cross_vendor_worker_connect(owner)
+        var attempt = cross_vendor_worker_connect(owner)
         try:
-            transport_send(socket, hello, PythonObject(None))
-            response = Optional[PythonObject](transport_receive(socket, n * 4))
+            transport_send(attempt, hello, PythonObject(None))
+            response = Optional[PythonObject](transport_receive(attempt, n * 4))
+            opened = attempt
             break
         except error:
-            transport_close(socket)
+            transport_close(attempt)
             if String(error).startswith("InterruptedError:"):
                 raise error
             if transport_clock() > deadline:
                 raise error
             transport_sleep(5.0)
+    var socket = opened.value()
     var committed = 0
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var held = Optional[PythonObject](bi.list())
@@ -1124,10 +1131,11 @@ def cross_vendor_main(argv: PythonObject) raises -> PythonObject:
         raise Error(usage)
     var host = PythonObject("0.0.0.0")
     var port = PythonObject(7777)
-    var workers = PythonObject(None)
-    var shards = PythonObject(None)
-    var steps = PythonObject(None)
-    var path = PythonObject(None)
+    # Optional, not PythonObject(None) sentinels: an option not given is absent (modular/modular#7546).
+    var workers = Optional[PythonObject]()
+    var shards = Optional[PythonObject]()
+    var steps = Optional[PythonObject]()
+    var path = Optional[PythonObject]()
     var chained = PythonObject(False)
     var at = 1
     while at < len(values):  # driver-loop: over native command-line options
@@ -1158,15 +1166,15 @@ def cross_vendor_main(argv: PythonObject) raises -> PythonObject:
             steps = py_call(c[].bi.int, value)
         else:
             raise Error("unknown coordinator option " + option)
-    if workers is None or shards is None or steps is None:
+    if not workers or not shards or not steps:
         raise Error("coordinator requires --workers, --shards and --steps")
     var owner = py_call(c[].bi.object.__new__, c[].coordinator_cls)
     var args = c[].bi.list()
     _ = py_call(args.append, owner)
     _ = py_call(args.append, port)
-    _ = py_call(args.append, workers)
-    _ = py_call(args.append, shards)
-    _ = py_call(args.append, steps)
+    _ = py_call(args.append, workers.value())
+    _ = py_call(args.append, shards.value())
+    _ = py_call(args.append, steps.value())
     _ = py_call(args.append, host)
     _ = py_call(args.append, PythonObject(None))
     _ = py_call(args.append, 3600.0)
@@ -1174,8 +1182,11 @@ def cross_vendor_main(argv: PythonObject) raises -> PythonObject:
     _ = py_call(args.append, 2147483648)
     _ = py_call(args.append, chained)
     _ = py_call(args.append, c[].ready_cls)
-    _ = py_call(args.append, path)
+    if path:
+        _ = py_call(args.append, path.value())
+    else:
+        _ = py_call(args.append, PythonObject(None))
     _ = cross_vendor_coordinator_init(args)
     var rows = cross_vendor_coordinator_run(owner)
-    cross_vendor_console("AGREED on " + String(len(rows)) + " steps across " + String(workers) + " workers")
+    cross_vendor_console("AGREED on " + String(len(rows)) + " steps across " + String(workers.value()) + " workers")
     return PythonObject(0)

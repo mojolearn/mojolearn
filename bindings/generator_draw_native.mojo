@@ -11,23 +11,25 @@ from bindings.causal_checkpoint import checkpoint_array
 from bindings.causal_lm_construct import _model_f32
 from bindings.generation_buffers import generation_initialize_binding, generation_array, GENERATION_BOUNDARY
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_present
 
 
 def _generator_shape(shape: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = _builtins()
-    var scalar = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var scalar = Optional[PythonObject]()
     # Row N202: exact types are decided without the index probe and its
     # swallowed exception: an exact tuple or list never has __index__, and an
     # exact int is its own index. Every other object keeps the probe.
     var kind = py_type(shape)
     if kind is bi.int:
-        scalar = shape
+        scalar = py_present(shape)
     elif kind is not bi.tuple and kind is not bi.list:
         try:
-            scalar = py_call(context["generator_index"], shape)
+            scalar = py_present(py_call(context["generator_index"], shape))
         except:
             pass
-    var source = Python.tuple(scalar) if scalar is not None else py_call(bi.tuple, shape)
+    var source = Python.tuple(scalar.value()) if Bool(scalar) else py_call(bi.tuple, shape)
     var dims = bi.list()
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var count = Optional[PythonObject](PythonObject(1))

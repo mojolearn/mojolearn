@@ -17,15 +17,14 @@ def _cache_entry_name(prefix: PythonObject, suffix: String,
         raise Error("TypeError: DeviceCache prefix cannot invoke a custom metaclass")
     var ancestry = py_call(context["cache_type_mro"],cls)
     var unicode = False
-    var selected = PythonObject(None)
-    var found = False
+    # Optional, not a PythonObject(None) sentinel: its presence is the old `found` flag (modular/modular#7546).
+    var selected = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: admit inherited native Unicode concatenation, including NumPy str_
         unicode = unicode or ancestry[i] is b["str"]
         var mapping = _mapping(ancestry[i],context)
-        if not found and py_contains(mapping,"__add__"):
+        if not selected and py_contains(mapping,"__add__"):
             selected = mapping["__add__"]
-            found = True
-    var admitted = unicode and selected is context["cache_str_add"]
+    var admitted = unicode and Bool(selected) and selected.value() is context["cache_str_add"]
     var types = context["cache_prefix_error_types"]
     for i in range(len(types)):  # driver-loop: exact native error-producing prefix forms cannot dispatch user arithmetic
         admitted = admitted or cls is types[i]

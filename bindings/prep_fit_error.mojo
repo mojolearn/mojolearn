@@ -8,6 +8,7 @@ from bindings.py_balanced import py_call, py_type
 from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR, stash_python_error
 from bindings.prep_normalizer_lifecycle import _repr_admit
+from bindings.py_optional import py_present
 
 
 def _reference(address: Int) raises -> PythonObject:
@@ -22,7 +23,8 @@ def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
     var text = String(error)
     var pending_error = text == PYTHON_ERROR_PENDING
     var category = b.ValueError
-    var cause = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var cause = Optional[PythonObject]()
     if pending_error:
         var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
         category = _reference(pending[].words[0])
@@ -33,7 +35,7 @@ def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
         # entry may already have created an exact builtin exception instance.
         if py_type(value) is b.str:
             text = String(value)
-            cause = py_call(category, value)
+            cause = py_present(py_call(category, value))
         elif py_type(value) is category:
             var args = py_call(b.BaseException.__dict__["args"].__get__, value, category)
             try:
@@ -43,7 +45,7 @@ def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
                 # repr hooks just to add small-fit context.
                 raise error^
             text = String(py_call(b.BaseException.__dict__["__str__"], value))
-            cause = value
+            cause = py_present(value)
         else:
             raise error^
     else:
@@ -68,15 +70,15 @@ def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
             replacement = name + " cannot be fit on n_features=1: " + text
     if replacement.byte_length() == 0:
         raise error^
-    if cause is None:
-        cause = py_call(category, text)
+    if not cause:
+        cause = py_present(py_call(category, text))
     var result = py_call(b.ValueError, replacement)
     ref cpy = Python().cpython()
     if pending_error:
         var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
         if pending[].words[2] != 0:
             var trace = _reference(pending[].words[2])
-            _ = cpy.lib.get_function[Int32]("PyException_SetTraceback")(cause._obj_ptr, trace._obj_ptr)
+            _ = cpy.lib.get_function[Int32]("PyException_SetTraceback")(cause.value()._obj_ptr, trace._obj_ptr)
         # The old pending triple owns these references. Drop them only after
         # cause/result have independently retained the original exception.
         var words = pending[].words.copy()
@@ -86,7 +88,7 @@ def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
                 cpy.lib.get_function[NoneType]("Py_DecRef")(words[i])
     # SetCause steals the new reference. SetObject borrows result, then the
     # existing ABI pending-error facility owns the completed exception.
-    cpy.lib.get_function[NoneType]("PyException_SetCause")(result._obj_ptr, cpy.Py_NewRef(cause._obj_ptr))
+    cpy.lib.get_function[NoneType]("PyException_SetCause")(result._obj_ptr, cpy.Py_NewRef(cause.value()._obj_ptr))
     cpy.lib.get_function[NoneType]("PyErr_SetObject")(b.ValueError._obj_ptr, result._obj_ptr)
     var failure = stash_python_error()
     raise failure^

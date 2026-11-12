@@ -12,6 +12,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_ty
 from bindings.py_typed_call import py_call_typed
 from core.sha256 import Sha256
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_present
 
 
 struct ByteCheckpointBoundary(Defaultable, Movable):
@@ -139,11 +140,12 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
     var flags = Int(py=c[].os.O_WRONLY) | Int(py=c[].os.O_CREAT) | Int(py=c[].os.O_EXCL)
     var fd = byte_checkpoint_io(failure, c[].os.open, [temporary, PythonObject(flags), PythonObject(384)])
     var descriptor_open = True
-    var stream = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var stream = Optional[PythonObject]()
     var whole = Sha256()
     try:
-        stream = byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")])
-        if Int(py=byte_checkpoint_io(failure, stream.write, [prefix])) != len(prefix):
+        stream = py_present(byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")]))
+        if Int(py=byte_checkpoint_io(failure, stream.value().write, [prefix])) != len(prefix):
             raise Error("Byte-LM checkpoint short header write")
         sha256_update(whole, prefix)
         for i in range(4):  # driver-loop: over the four checkpoint arrays
@@ -152,22 +154,22 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
             for start in range(0, len(raw), BYTE_CHECKPOINT_CHUNK):  # driver-loop: over bounded checkpoint I/O chunks, preserving raw bytes
                 var end = min(start + BYTE_CHECKPOINT_CHUNK, len(raw))
                 var chunk = raw[py_call(c[].bi.slice, start, end)]
-                if Int(py=byte_checkpoint_io(failure, stream.write, [chunk])) != len(chunk):
+                if Int(py=byte_checkpoint_io(failure, stream.value().write, [chunk])) != len(chunk):
                     raise Error("Byte-LM checkpoint short write")
                 sha256_update(written, chunk)
                 sha256_update(whole, chunk)
             if not Bool(py=PythonObject(written.hexdigest()) == entries[i]["sha256"]):
                 raise Error("Byte-LM checkpoint state changed during save")
-        _ = byte_checkpoint_io(failure, stream.flush, List[PythonObject]())
+        _ = byte_checkpoint_io(failure, stream.value().flush, List[PythonObject]())
         _ = byte_checkpoint_io(failure, c[].os.fsync, [fd])
-        _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
+        _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
         descriptor_open = False
-        stream = PythonObject(None)
+        stream = Optional[PythonObject]()
         _ = byte_checkpoint_io(failure, c[].os.replace, [temporary, normalized])
     except error:
         try:
-            if stream is not None:
-                _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
+            if Bool(stream):
+                _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
             elif descriptor_open:
                 _ = byte_checkpoint_io(failure, c[].os.close, [fd])
         except:

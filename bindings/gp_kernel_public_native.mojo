@@ -498,11 +498,15 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: GPArgumentP
 
 def _kernel_name(kernel: PythonObject, context: PythonObject, snapshot: GPKernelSnapshot) raises -> String:
     var cls = _kernel_class(kernel, context)
-    var fields = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var captured = Optional[PythonObject]()
     for i in range(len(snapshot.owners)):  # driver-loop: reuse state captured by admission
         if kernel is snapshot.owners[i]:
-            fields = snapshot.states[i]
+            captured = snapshot.states[i]
             break
+    if not captured:
+        raise Error("TypeError: native GP kernel state was not captured by admission")
+    var fields = captured.value()
     var layout = context["family_gp_kernel_nodes"][cls]
     var how = String(layout[0])
     var b = native_loaded_module("builtins")

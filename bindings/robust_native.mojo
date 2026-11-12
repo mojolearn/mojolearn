@@ -24,6 +24,7 @@ from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
 from gemm.f16_widen import f16_bits_to_f32
+from bindings.py_optional import py_or_none, py_present
 
 def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
     var b = native_loaded_module("builtins")
@@ -306,14 +307,15 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         classical_check_layout(model,context)
         var fields = py_fields(model)
         var names = Python.tuple("with_centering","with_scaling","quantile_range","copy","unit_variance")
-        var result = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var result = Optional[PythonObject]()
         if operation == "init":
             for k in range(5):  # small-loop(params: the five stored constructor parameters)
                 py_setitem(fields,names[k],args[k])
         elif operation == "get_params":
             result = Python.dict()
             for k in range(5):  # small-loop(params: the five constructor parameters)
-                py_setitem(result,names[k],fields[names[k]])
+                py_setitem(result.value(),names[k],fields[names[k]])
         elif operation == "set_params":
             var options = args[0]
             var builtins = native_loaded_module("builtins")
@@ -323,9 +325,9 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 if py_type(keys[k]) is not string_type or not py_contains(names,keys[k]):
                     raise Error("mojolearn: invalid parameter for RobustScaler")
                 py_setitem(fields,keys[k],options[keys[k]])
-            result = model
+            result = py_present(model)
         elif operation == "is_fitted":
-            result = classical_is_fitted(model)
+            result = py_present(classical_is_fitted(model))
         elif operation == "fit" or operation == "fit_transform":
             if operation == "fit_transform" and len(args[2]) != 0:
                 raise Error("TypeError: RobustScaler.fit got an unexpected keyword argument")
@@ -338,16 +340,16 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                     raise Error("TypeError: native fit_transform requires native fit and transform; call application operations explicitly")
                 if fit.__func__ is not context["robust_fit_method"] or transform.__func__ is not context["robust_transform_method"]:
                     raise Error("TypeError: native fit_transform cannot invoke Python estimator overrides; call application operations explicitly")
-            result = robust_fit(model,args[0],args[1],context,operation == "fit_transform")
+            result = py_present(robust_fit(model,args[0],args[1],context,operation == "fit_transform"))
             if operation == "fit_transform":
-                if result is None:
-                    result = robust_transform(model,args[0],context)
-                result = _public_result(result,context)
+                if not result:
+                    result = py_present(robust_transform(model,args[0],context))
+                result = py_present(_public_result(py_or_none(result),context))
         elif operation == "transform":
-            result = _public_result(robust_transform(model,args[0],context),context)
+            result = py_present(_public_result(robust_transform(model,args[0],context),context))
         else:
             raise Error("unknown native RobustScaler operation")
-        return result.steal_data()
+        return py_or_none(result).steal_data()
     except error:
         # Input/target admission is the same native preparation shared with
         # MaxAbsScaler. Keep this estimator's public diagnostic identity.

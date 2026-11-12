@@ -48,7 +48,8 @@ def _archive_prediction_record(model: PythonObject, method: Int, context: Python
             var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
             if ancestry is not record[1]:
                 raise Error("TypeError: saved host prediction class ancestry changed")
-            var descriptor = PythonObject(None)
+            # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+            var descriptor = Optional[PythonObject]()
             for k in range(len(ancestry)):  # driver-loop: over the class's method resolution order, without descriptors
                 var fields = py_call(b.type.__dict__["__dict__"].__get__, ancestry[k])
                 var keys = py_call(b.list, fields)
@@ -58,7 +59,9 @@ def _archive_prediction_record(model: PythonObject, method: Int, context: Python
                 if py_contains(fields, key):
                     descriptor = fields[key]
                     break
-            if descriptor is not record[3][method]:
+            var expected = record[3][method]
+            var replaced = (descriptor.value() is not expected) if descriptor else (expected is not None)
+            if replaced:
                 raise Error("TypeError: saved host prediction cannot invoke a replaced public method or descriptor")
             class_admit(mods, slot, cls, PythonObject(True))
         if record[4][method] is None:

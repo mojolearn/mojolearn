@@ -63,6 +63,7 @@ from bindings.kmeans_variants_boundary import variants_span
 from bindings.boundary_read import read_int_like, read_float_like, read_bool, pack_room
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
+from bindings.py_optional import py_or_none
 
 comptime _GMM = "mojolearn GaussianMixture: "
 # The by-name refusals of the options `GmmParams` does not carry
@@ -500,7 +501,8 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     var scalars = List[Float64](length=3, fill=0.0)
     _check_mode(binding, model, context)
     var connection = _gmm_connection(binding)
-    var labels = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var labels = Optional[PythonObject]()
     if fit_predict and (connection.driver.metadata(MIXTURE_NATIVE_CAPABILITIES) & MIXTURE_CAP_FIT_PREDICT) != 0:
         labels = family_array(Python.tuple(n), "<i4", context)
     # The two names cross as NUL-terminated UTF-8 (one str read each; both
@@ -514,7 +516,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
         Int(py=classical_address(x)), Int(py=classical_address(weights)), Int(py=classical_address(means)),
         Int(py=classical_address(covariances)), Int(py=classical_address(precisions)),
         Int(py=classical_address(log_det)), Int(scalars.unsafe_ptr()),
-        Int(py=classical_address(labels)) if labels is not None else 0,
+        Int(py=classical_address(labels.value())) if Bool(labels) else 0,
         Int(covariance_name.as_c_string_slice().unsafe_ptr()), Int(init_name.as_c_string_slice().unsafe_ptr()),
         n, d, k, max_iter, random_state, tol, reg_covar)
     var n_iter = 0
@@ -544,7 +546,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     py_setattr(model, "converged_", PythonObject(Int(scalars[1]) != 0))
     py_setattr(model, "lower_bound_", PythonObject(scalars[2]))
     _ = scalars^
-    return Python.tuple(x, labels)
+    return Python.tuple(x, py_or_none(labels))
 
 
 def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject, name: String, what: String,

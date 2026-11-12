@@ -24,13 +24,16 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
     if py_type(cls) is not b.type:
         return
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var plan = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var layout = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: connected host cleanup ownership
-        plan = py_get(context["host_archive_lifetime_layouts"], mro[i])
-        if plan is not None:
+        var got = py_get(context["host_archive_lifetime_layouts"], mro[i])
+        if got is not None:
+            layout = got
             break
-    if plan is None:
+    if not layout:
         return
+    var plan = layout.value()
     # A device class connected by `_native_archive_bridge.lifetime`:
     # (None, dictionary descriptor, "entry", holder key or None, release
     # entry name). Its resident tuple carries the binding that minted the

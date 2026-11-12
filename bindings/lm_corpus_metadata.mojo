@@ -184,17 +184,20 @@ def corpus_mmap_hooks(cls: PythonObject) raises -> PythonObject:
     var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
     var hooks = Python.dict()
     for name in ["__new__", "__init__", "__del__", "__buffer__", "__release_buffer__"]:  # small-loop(mmap allocation and lifetime slots)
-        var member = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546); PACK stores None for an absent slot.
+        var member = Optional[PythonObject]()
         for i in range(len(ancestry)):  # small-loop(native extension ancestry)
             var namespace = _class_fields(ancestry[i])
             if py_contains(namespace, name):
                 member = namespace[name]
                 break
-        if member is not None:
-            var kind = py_type(member)
+        if member:
+            var kind = py_type(member.value())
             if kind is not py_type(bi.object.__repr__) and kind is not py_type(bi.bytes.decode) and kind is not py_type(bi.object.__new__):
                 raise Error("TypeError: mmap allocation and lifetime slots require native descriptors")
-        py_setitem(hooks, name, member)
+            py_setitem(hooks, name, member.value())
+        else:
+            py_setitem(hooks, name, PythonObject(None))
     return hooks
 
 

@@ -18,14 +18,14 @@ def _scalar(value: PythonObject, context: PythonObject) raises:
 def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var records = context["xseq_" + kind + "_classes"]
     var cls = py_type(model)
-    var found = False
-    var fixed_model = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: its presence is the old `found` flag (modular/modular#7546).
+    var connected = Optional[PythonObject]()
     for i in range(len(records)):  # driver-loop: over connected forecast class choices
         if cls is records[i][0]:
-            found = True
-            fixed_model = records[i][1]
-    if not found:
+            connected = records[i]
+    if not connected:
         raise Error("TypeError: forecast constructor requires an exact connected model class")
+    var fixed_model = connected.value()[1]
     var fields = _fields(model, cls)
     var updates = Python.dict()
     var lifecycle = context["xseq_lifecycle_context"]

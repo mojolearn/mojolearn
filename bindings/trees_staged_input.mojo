@@ -19,6 +19,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.native_loaded_module import native_loaded_module
 from bindings.trees_public_inputs import trees_table, trees_entry
 from bindings.trees_public_forest import forest_effective_mode, forest_kind, _engine, _ordered_export
+from bindings.py_optional import py_present
 from bindings.native_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_TREES,
 )
@@ -114,21 +115,22 @@ def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int
     var tables = Python.list()
     var counts = List[Int]()
     for i in range(len(members)):  # driver-loop: over the member estimators
-        var native = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var native = Optional[PythonObject]()
         try:
-            native = _member_table(members[i], cols, context)
+            native = py_present(_member_table(members[i], cols, context))
         except:
             # The member's own call reports whatever this read refused.
             pass
-        if native is None:
+        if not native:
             continue
         var seen = -1
         for j in range(len(tables)):  # small-loop(tables): at most the two forest binaries per mode
-            if tables[j] is native:
+            if tables[j] is native.value():
                 seen = j
                 break
         if seen < 0:
-            _ = py_call(tables.append, native)
+            _ = py_call(tables.append, native.value())
             counts.append(1)
         else:
             counts[seen] += 1
@@ -165,15 +167,16 @@ def trees_stage_rounds(member: PythonObject, x_addr: Int, rows: Int, cols: Int,
     var staged = Python.list()
     if rows < 1 or cols < 1:
         return staged
-    var native = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var native = Optional[PythonObject]()
     try:
-        native = _member_table(member, cols, context)
+        native = py_present(_member_table(member, cols, context))
     except:
         pass
-    if native is None:
+    if not native:
         return staged
-    var stage = trees_entry(native, "forest_stage_input_gpu")
-    var unstage = trees_entry(native, "forest_unstage_input_gpu")
+    var stage = trees_entry(native.value(), "forest_stage_input_gpu")
+    var unstage = trees_entry(native.value(), "forest_unstage_input_gpu")
     if stage is None or unstage is None:
         return staged
     _ = py_call(staged.append, unstage)

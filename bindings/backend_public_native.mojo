@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error
 from bindings.cpython_table import cpython_table
+from bindings.py_optional import py_or_none, py_present
 
 
 def _text(value: PythonObject, name: String, optional: Bool = False) raises -> PythonObject:
@@ -93,21 +94,22 @@ def backend_public_operation(operation: String, args: PythonObject, context: Pyt
             if read is not None:
                 found_said = _text(read, "compiled vendor")
                 break
-        var said = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var said = Optional[PythonObject]()
         if found_said:
-            said = found_said.value()
+            said = py_present(found_said.value())
         var expected = _text(fields["_VENDOR_SELECTED"], "selected vendor", True)
         var layout = fields["_LAYOUT"]
         if py_type(layout) is not py_type(Python.tuple()) or len(layout) != 2:
             raise Error("TypeError: backend layout requires native import-connected metadata")
         var kind = _text(layout[0], "layout kind")
         if String(kind) == "vendor":
-            if said is not None and said != expected:
-                raise Error("RuntimeError: mojolearn: the loaded " + String(mode) + " binaries were compiled for " + String(said) + " but the selector opened the " + String(expected) + " set -- a binary is in the wrong vendor directory; rebuild both sets")
+            if Bool(said) and said.value() != expected:
+                raise Error("RuntimeError: mojolearn: the loaded " + String(mode) + " binaries were compiled for " + String(said.value()) + " but the selector opened the " + String(expected) + " set -- a binary is in the wrong vendor directory; rebuild both sets")
             return expected
-        if said is not None:
-            py_setitem(fields, "_VENDOR_SELECTED", said)
-            return said
+        if Bool(said):
+            py_setitem(fields, "_VENDOR_SELECTED", said.value())
+            return py_or_none(said)
         return expected
     raise Error("ValueError: unknown backend metadata operation")
 

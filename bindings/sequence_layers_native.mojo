@@ -19,6 +19,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from providers.python.sequence_layer_buffer_pyapi import SequenceFloatBuffer, SequenceResidentSnapshot, _array
 from bindings.sequence_moe_native import sequence_moe_operation
 from core.scaler_fit_impl import scaler_fill
+from bindings.py_optional import py_present
 
 
 def _b() raises -> PythonObject:
@@ -224,10 +225,11 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
         # `layer_norm_dev_alloc` crossing instead of one `seq_tensor_alloc`
         # crossing per tensor. The same handles, the same launches: no bit
         # moves. The result then carries the kept stats as a fifth item.
-        var fused = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var fused = Optional[PythonObject]()
         if not backward:
-            fused = py_get(input.entries, "layer_norm_dev_alloc")
-        if fused is not None:
+            fused = py_present(py_get(input.entries, "layer_norm_dev_alloc"))
+        if Bool(fused):
             var out_count = max(1, shape_count(input.shape))
             var fused_hs = Python.list(input.handle, PythonObject(0), PythonObject(0), PythonObject(0))
             var sizes = Python.list(0, out_count, 0, 0)
@@ -240,7 +242,7 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
                 _ = py_call(sizes.extend, Python.list(m, m))
                 _ = py_call(flags.append, PythonObject(1))
             var fused_addrs = Python.list(w.address, b.address, PythonObject(0), PythonObject(0))
-            var made = py_call_typed(fused, fused_hs, fused_addrs, flags, fp, sizes)
+            var made = py_call_typed(fused.value(), fused_hs, fused_addrs, flags, fp, sizes)
             var module = input.entries["module"]
             var fused_output = seq_device_make(module, input.shape, made[1], PythonObject(None), context)
             var kept = PythonObject(None)

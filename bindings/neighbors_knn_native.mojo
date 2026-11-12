@@ -1043,9 +1043,9 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     # it, every later call classifies against the device copy; a binding
     # without that entry takes the per-call path.
     var ops = knn_ops_key(binding)
-    var handle = PythonObject(None)
+    var handle = Optional[PythonObject]()  # Optional, not a PythonObject(None) sentinel (modular/modular#7546)
     if ops.vendor != 0:
-        handle = _resident_handle(model, binding, idx)
+        handle = Optional[PythonObject](_resident_handle(model, binding, idx))
     # UNPACK: the plain words of the neighbors operations table's classify
     # request (core/neighbors_entry_table.mojo NB_OP_CLASSIFY[_RESIDENT]).
     var call = KnnCallWords(model, idx, nq, dist)
@@ -1058,10 +1058,10 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     var used_word = 0
     # Two words: the finite word, and for a fold the index-range word.
     var status = List[Int32](length=2, fill=Int32(0))
-    if handle is not None:
+    if handle:
         # Lane a7b: the queries are tested behind the entry's upload; lane
         # a8b-device-x-neighbors-rest: a fold is gathered and tested there.
-        var handle_word = Int(py=handle)
+        var handle_word = Int(py=handle.value())
         var status_address = Int(status.unsafe_ptr()) if (fold.active() or not tested) else 0
         var fold_words = NbFold(1, fold.base_id, fold.base_rows, fold.index_id) if fold.active() else NbFold.none()
         with GILReleased(Python()):
@@ -1206,9 +1206,9 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     var idx = family_field(fields, "_index")
     # DEVIATION 3002: the regressor's resident door; see the classifier.
     var ops = knn_ops_key(binding)
-    var handle = PythonObject(None)
+    var handle = Optional[PythonObject]()  # Optional, not a PythonObject(None) sentinel (modular/modular#7546)
     if ops.vendor != 0:
-        handle = _resident_handle(model, binding, idx)
+        handle = Optional[PythonObject](_resident_handle(model, binding, idx))
     # UNPACK: the plain words of the neighbors operations table's regress
     # request (core/neighbors_entry_table.mojo NB_OP_REGRESS[_RESIDENT]).
     var call = KnnCallWords(model, idx, nq, dist)
@@ -1219,10 +1219,10 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     var used_word = 0
     # Two words: the finite word, and for a fold the index-range word.
     var status = List[Int32](length=2, fill=Int32(0))
-    if handle is not None:
+    if handle:
         # Lane a7b: the queries are tested behind the entry's upload; lane
         # a8b-device-x-neighbors-rest: a fold is gathered and tested there.
-        var handle_word = Int(py=handle)
+        var handle_word = Int(py=handle.value())
         var status_address = Int(status.unsafe_ptr()) if (fold.active() or not tested) else 0
         var fold_words = NbFold(1, fold.base_id, fold.base_rows, fold.index_id) if fold.active() else NbFold.none()
         with GILReleased(Python()):

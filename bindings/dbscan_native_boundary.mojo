@@ -17,6 +17,7 @@ from core.dbscan_native_api import (
     DBSCANFitRequest, DBSCANCoreRequest, DBSCANGatherRequest, DBSCANReferenceRequest, DBSCANQueryRequest, DBSCANResidentQuery,
 )
 from core.dbscan_native_state import DBSCANReferenceKey, DBSCANReferenceState
+from bindings.py_optional import py_present
 
 
 struct DBSCANConnection(Movable):
@@ -260,15 +261,16 @@ def dbscan_reference_labels(model: PythonObject, binding: PythonObject, refs: Py
     # Capture admitted query dimensions before a resident prepare/release
     # allows another Python thread to alter caller-visible metadata.
     var queries = Int(py=query.shape[0])
-    var owner = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var owner = Optional[PythonObject]()
     if resident:
-        owner = dbscan_reference_owner(model, connection, refs, keys, labels, rows, features, metric, context)
+        owner = py_present(dbscan_reference_owner(model, connection, refs, keys, labels, rows, features, metric, context))
     var dst = dbscan_array(List[Int](length=1, fill=queries), "<i4", context)
     try:
-        if owner is not None:
-            var driver = owner.downcast_value_ptr[DBSCANReferenceOwner]()[].state.driver.copy()
+        if Bool(owner):
+            var driver = owner.value().downcast_value_ptr[DBSCANReferenceOwner]()[].state.driver.copy()
             var request = DBSCANResidentQuery(Int(py=classical_address(query)), Int(py=classical_address(dst)),
-                owner.downcast_value_ptr[DBSCANReferenceOwner]()[].state.handle, queries, features, metric, True, eps)
+                owner.value().downcast_value_ptr[DBSCANReferenceOwner]()[].state.handle, queries, features, metric, True, eps)
             with GILReleased(Python()):
                 _ = driver.resident(request)
         else:

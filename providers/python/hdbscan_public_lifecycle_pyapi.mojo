@@ -32,6 +32,7 @@ from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_binding_pyapi import estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
+from bindings.py_optional import py_present
 
 
 def _schema(context: PythonObject) raises -> PythonObject:
@@ -178,7 +179,8 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     var columns = 0
     var rows = 0
     var neighbors = 0
-    var pd = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var pd = Optional[PythonObject]()
     if held is not None:
         var cached = held.downcast_value_ptr[HdbscanQueryRecord]()
         connection = Optional(HdbscanQueryConnection(cached[].provider, cached[].driver.copy(), cached[].host))
@@ -203,19 +205,19 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     else:
         if not py_contains(fields, "labels_"):
             raise Error("mojolearn " + method + ": this HDBSCAN instance is not fitted yet; call fit first")
-        pd = py_get(fields, "_prediction_data")
-        if pd is None:
+        pd = py_present(py_get(fields, "_prediction_data"))
+        if not pd:
             raise Error("mojolearn " + method + ": Prediction data not yet generated. Fit with HDBSCAN(prediction_data=True); cuML refuses the same call the same way (hdbscan.pyx:1104-1108)")
-        if py_type(pd) is not b.dict:
+        if py_type(pd.value()) is not b.dict:
             raise Error("TypeError: HDBSCAN prediction metadata requires an exact dictionary")
-        if not native_namespace_string_keys(pd._obj_ptr, b.str):
+        if not native_namespace_string_keys(pd.value()._obj_ptr, b.str):
             raise Error("TypeError: HDBSCAN prediction metadata requires exact string keys")
         for name in ["n_edges", "n_condensed", "n_exemplars"]:  # driver-loop: fixed tree counts
-            if py_type(pd[name]) is not b.int or Int(py=pd[name]) < 0:
+            if py_type(pd.value()[name]) is not b.int or Int(py=pd.value()[name]) < 0:
                 raise Error("TypeError: HDBSCAN tree counts require non-negative native integers")
-        edges = Int(py=pd["n_edges"])
-        condensed = Int(py=pd["n_condensed"])
-        exemplars = Int(py=pd["n_exemplars"])
+        edges = Int(py=pd.value()["n_edges"])
+        condensed = Int(py=pd.value()["n_condensed"])
+        exemplars = Int(py=pd.value()["n_exemplars"])
         selected = Int(py=fields["n_clusters_"])
         columns = Int(py=fields["n_features_in_"])
         if selected < 0 or columns < 1:
@@ -254,11 +256,11 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
             raise Error("ValueError: HDBSCAN min_samples must fit its training row count")
         core = _buffer(fields["core_distances_"], "core_distances_", "<f4", rows, context)
         labels = _buffer(fields["labels_"], "labels_", "<i4", rows, context)
-        parents = _buffer(pd["parents"], "tree parents", "<i4", edges, context)
-        lambdas = _buffer(pd["lambdas"], "tree lambdas", "<f4", edges, context)
-        deaths = _buffer(pd["deaths"], "deaths", "<f4", condensed, context)
-        clusters = _buffer(pd["selected_clusters"], "selected_clusters", "<i4", selected, context)
-        children = _buffer(pd["index_into_children"], "index_into_children", "<i4", edges + 1, context)
+        parents = _buffer(pd.value()["parents"], "tree parents", "<i4", edges, context)
+        lambdas = _buffer(pd.value()["lambdas"], "tree lambdas", "<f4", edges, context)
+        deaths = _buffer(pd.value()["deaths"], "deaths", "<f4", condensed, context)
+        clusters = _buffer(pd.value()["selected_clusters"], "selected_clusters", "<i4", selected, context)
+        children = _buffer(pd.value()["index_into_children"], "index_into_children", "<i4", edges + 1, context)
         _hdbscan_mode(model, binding, context)
     if approximate:
         if held is None:
@@ -295,8 +297,8 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
         _ = children^
         return Python.tuple(output, probabilities)
     if held is None:
-        indices = _buffer(pd["exemplar_idx"], "exemplar_idx", "<i4", exemplars, context)
-        offsets = _buffer(pd["exemplar_label_offsets"], "exemplar_label_offsets", "<i4", selected + 1, context)
+        indices = _buffer(pd.value()["exemplar_idx"], "exemplar_idx", "<i4", exemplars, context)
+        offsets = _buffer(pd.value()["exemplar_label_offsets"], "exemplar_label_offsets", "<i4", selected + 1, context)
         connection = Optional(hdbscan_query_connection(binding))
     # Keep the old tree-first and query/output-before-training address reads.
     # These are boundary storage admissions, not numerical work.

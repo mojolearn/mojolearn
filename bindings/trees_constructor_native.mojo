@@ -54,13 +54,16 @@ def tree_constructor_values(model: PythonObject, args: PythonObject, constructor
     var actual_plan = py_get(constructors, cls)
     var hooks = plan[2] if actual_plan is None else actual_plan[2]
     for i in range(len(hooks)):  # driver-loop: fixed storage hook identities before native dictionary access
-        var actual = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var actual = Optional[PythonObject]()
         for j in range(len(mro)):  # driver-loop: inherited native storage metadata
             var namespace = py_call(b.type.__dict__["__dict__"].__get__, mro[j])
             if py_contains(namespace, hooks[i][0]):
                 actual = namespace[hooks[i][0]]
                 break
-        if actual is not hooks[i][1]:
+        var expected = hooks[i][1]
+        var modified = (actual.value() is not expected) if actual else (expected is not None)
+        if modified:
             raise Error("TypeError: native forest constructors cannot invoke modified Python storage hooks")
     var positional = args[1]
     var keywords = args[2]

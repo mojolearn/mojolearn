@@ -193,15 +193,17 @@ def _expected_entries(pins: PythonObject, mode: PythonObject, b: PythonObject) r
         return g[].expected
     if py_type(pins) is not b.tuple:
         raise Error("TypeError: native Normalizer requires its immutable import-time entry identities")
-    var selected = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var connected = Optional[PythonObject]()
     for i in range(len(pins)):  # small-loop(ABI: connected numeric modes)
         var record = pins[i]
         if py_type(record) is not b.tuple or len(record) != 2 or py_type(record[0]) is not b.str:
             raise Error("TypeError: native Normalizer binding identity metadata is invalid")
         if String(record[0]) == text:
-            selected = record[1]
-    if py_type(selected) is not b.tuple:
+            connected = record[1]
+    if not connected or py_type(connected.value()) is not b.tuple:
         raise Error("TypeError: native Normalizer requires the originally connected compiled entries")
+    var selected = connected.value()
     var expected_entries = Python.dict()
     for i in range(len(selected)):  # driver-loop: immutable imported entry references, never name/module inference
         var pair = selected[i]

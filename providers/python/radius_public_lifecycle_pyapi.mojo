@@ -24,6 +24,7 @@ from providers.python.array_metadata_pyapi import array_slot_once, array_owner_o
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
 from core.native_scalar_decode import native_scalar_real
+from bindings.py_optional import py_or_none, py_present
 
 
 def radius_settings(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -177,7 +178,8 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
         storage = native_torch_numpy(source)
         reshape = True
     var owner = array_owner_once(source, context) if array else storage
-    var view = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var view = Optional[PythonObject]()
     var shape = PythonObject(None)
     var strides = PythonObject(None)
     var code = String()
@@ -199,11 +201,11 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
         if code == "e" or code == "f" or code == "d" or code == "g":
             address = Int(py=classical_address(storage))
     else:
-        view = native_buffer_view(array_slot_once(source, "_mv", context) if array else storage)
-        shape = array_slot_once(source, "shape", context) if array else view.shape
-        strides = array_slot_once(source, "strides", context) if array else view.strides
-        code = String(view.format)
-        width = Int(py=view.itemsize)
+        view = py_present(native_buffer_view(array_slot_once(source, "_mv", context) if array else storage))
+        shape = array_slot_once(source, "shape", context) if array else view.value().shape
+        strides = array_slot_once(source, "strides", context) if array else view.value().strides
+        code = String(view.value().format)
+        width = Int(py=view.value().itemsize)
         if array:
             var dtype = String(array_slot_once(source, "dtype", context))
             width = Int(py=array_slot_once(source, "itemsize", context))
@@ -227,7 +229,7 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
     if columns is None and reshape and len(shape) == 2 and Int(py=shape[1]) == 1:
         classical_warn_column(context)
     if code != "e" and code != "f" and code != "d" and code != "g":
-        return Python.tuple(source, storage, owner, view)  # integer/string/object/record targets had no finite scan
+        return Python.tuple(source, storage, owner, py_or_none(view))  # integer/string/object/record targets had no finite scan
     var dimensions = List[Int]()
     var steps = List[Int]()
     var count = 1
@@ -244,9 +246,9 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
     var buffer = List[Int](length=10, fill=0)
     var pointer = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()
-    var exported = view is not None
+    var exported = Bool(view)
     if exported:
-        if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(view._obj_ptr, pointer, Int32(0x118)) != 0:
+        if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(view.value()._obj_ptr, pointer, Int32(0x118)) != 0:
             raise cpy.unsafe_get_error()
         if not array:
             address = buffer[0]
@@ -267,7 +269,7 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
             # Keep the Py_buffer storage alive past the release on every path
             # (ASAP destruction could free it before PyBuffer_Release reads it).
             _ = len(buffer)
-    return Python.tuple(source, storage, owner, view)
+    return Python.tuple(source, storage, owner, py_or_none(view))
 
 
 def radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

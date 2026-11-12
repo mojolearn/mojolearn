@@ -21,6 +21,7 @@ from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
 from core.scaler_fit_impl import scaler_refuse_infinite
+from bindings.py_optional import py_or_none, py_present
 
 
 def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject,
@@ -49,7 +50,8 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var maximum = PythonObject(None)
     var scale = PythonObject(None)
     var fused = False
-    var scaled = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var scaled = Optional[PythonObject]()
     if direct is not None:
         var output = classical_typed(Python.tuple(2*d),"<f4",context["output_context"])
         _ = py_call(direct,classical_address(values[1]),classical_address(output),Python.list(n,d))
@@ -96,7 +98,7 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         maximum = xprep_take(arena[0],ma,d,0,context["output_context"])
         scale = xprep_take(arena[0],sc,d,0,context["output_context"])
         if fused:
-            scaled = xprep_take(arena[0],dest,n,d,context["output_context"])
+            scaled = py_present(xprep_take(arena[0],dest,n,d,context["output_context"]))
         _ = arena^
     # scikit-learn refuses an infinite input (NaN alone is allowed); the
     # native column maxima of |X| are infinite exactly for those columns.
@@ -110,12 +112,14 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     py_setitem(fields,"_mojolearn_fitted",True)
     if py_contains(fields,"feature_names_in_"):
         _ = py_call(fields.pop,"feature_names_in_")
-    if project and scaled is None:
+    if project and not scaled:
         # fit_transform without the fused projection (the direct entry, or
         # n*d >= 2^27): the transform runs on the values prepared above.
         return _maxabs_apply(fields,values^,entries,context)
     _ = values^
-    return scaled if project else model
+    if project:
+        return scaled.value()
+    return model
 
 
 def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -173,7 +177,8 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         var fields = py_fields(model)
-        var result = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var result = Optional[PythonObject]()
         if operation == "init":
             py_setitem(fields,"copy",args[0])
         elif operation == "get_params":
@@ -187,22 +192,22 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 if py_type(names[k]) is not string_type or String(names[k]) != "copy":
                     raise Error("mojolearn: invalid parameter for MaxAbsScaler")
                 py_setitem(fields,names[k],options[names[k]])
-            result = model
+            result = py_present(model)
         elif operation == "is_fitted":
-            result = classical_is_fitted(model)
+            result = py_present(classical_is_fitted(model))
         elif operation == "fit" or operation == "fit_transform":
             if operation == "fit_transform" and len(args[2]) != 0:
                 raise Error("TypeError: MaxAbsScaler.fit got an unexpected keyword argument")
-            result = maxabs_fit(model,args[0],args[1],context,operation == "fit_transform")
+            result = py_present(maxabs_fit(model,args[0],args[1],context,operation == "fit_transform"))
             if operation == "fit_transform":
-                if result is None:
-                    result = maxabs_transform(model,args[0],context)
-                result = _public_result(result,context)
+                if not result:
+                    result = py_present(maxabs_transform(model,args[0],context))
+                result = py_present(_public_result(py_or_none(result),context))
         elif operation == "transform":
-            result = _public_result(maxabs_transform(model,args[0],context),context)
+            result = py_present(_public_result(maxabs_transform(model,args[0],context),context))
         else:
             raise Error("unknown native MaxAbsScaler operation")
-        return result.steal_data()
+        return py_or_none(result).steal_data()
     except error:
         if String(error).startswith("NotFittedError:") or String(error).startswith("DataConversionWarning:"):
             try:

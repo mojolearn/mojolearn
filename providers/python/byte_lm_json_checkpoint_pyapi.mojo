@@ -12,6 +12,7 @@ from bindings.byte_checkpoint_native import BYTE_CHECKPOINT_BOUNDARY, byte_check
 from bindings.cross_vendor_admission import cv_path
 from bindings.generation_buffers import generation_array
 from bindings.sha256_door import sha256_hexdigest
+from bindings.py_optional import py_present
 
 comptime BYTE_JSON_LIMIT = 2097152
 comptime BYTE_JSON_SCHEMA = "mojolearn.small-byte-lm-json-checkpoint.v1"
@@ -114,21 +115,22 @@ def byte_json_write(path: PythonObject, encoded: PythonObject, mut failure: Byte
     var flags = Int(py=c[].os.O_WRONLY) | Int(py=c[].os.O_CREAT) | Int(py=c[].os.O_EXCL)
     var fd = byte_checkpoint_io(failure, c[].os.open, [temporary, PythonObject(flags), PythonObject(384)])
     var descriptor_open = True
-    var stream = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var stream = Optional[PythonObject]()
     try:
-        stream = byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")])
-        if Int(py=byte_checkpoint_io(failure, stream.write, [encoded])) != len(encoded):
+        stream = py_present(byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")]))
+        if Int(py=byte_checkpoint_io(failure, stream.value().write, [encoded])) != len(encoded):
             raise Error("Byte-LM checkpoint short write")
-        _ = byte_checkpoint_io(failure, stream.flush, List[PythonObject]())
+        _ = byte_checkpoint_io(failure, stream.value().flush, List[PythonObject]())
         _ = byte_checkpoint_io(failure, c[].os.fsync, [fd])
-        _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
+        _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
         descriptor_open = False
-        stream = PythonObject(None)
+        stream = Optional[PythonObject]()
         _ = byte_checkpoint_io(failure, c[].os.replace, [temporary, normalized])
     except error:
         try:
-            if stream is not None:
-                _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
+            if Bool(stream):
+                _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
             elif descriptor_open:
                 _ = byte_checkpoint_io(failure, c[].os.close, [fd])
         except:

@@ -69,6 +69,7 @@ from bindings.admitted_input import (
     classical_view, admit_ids, admitted_finite_entry_refuse,
 )
 from bindings.classical_arrays import classical_dtype_str, classical_c_order, classical_is_f32
+from bindings.py_optional import py_or_none, py_present
 from bindings.classical_labels import (
     ClassicalLabels, labels_full_f32, labels_address, labels_cast, labels_reshape,
     labels_shape_of, labels_env, classical_encode_labels, classical_decode_labels, classical_accuracy, labels_r2,
@@ -2095,7 +2096,8 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
     var y = _xl_vector(args[1], n, context)
     var cv = fields["cv"]
     var ids = PythonObject(None)
-    var roles = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var roles = Optional[PythonObject]()
     var folds = 0
     if cv is None or _xl_is_int_cv(cv, context):
         var k = PythonObject(5) if cv is None else py_call(b.int, cv)
@@ -2106,7 +2108,7 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
         folds = len(splits)
         var got = _xl_cv_fold_ids_f32(splits, n, name, context)
         ids = got[0]
-        roles = got[1]
+        roles = py_present(got[1])
     var alphas = fields["alphas"]
     var n_alphas = _attr(model, "n_alphas", PythonObject(None))
     var explicit = False
@@ -2137,7 +2139,7 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
     counts.append(n)
     var weighted = 0
     var w_keep = PythonObject(None)
-    if roles is not None:
+    if Bool(roles):
         # per-split roles ride the weighted arm, after the weights
         if sample_weight is None:
             w_keep = labels_full_f32(n, 1.0, context)
@@ -2146,9 +2148,9 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
         addrs.append(labels_address(w_keep))
         _ = w_keep  # keep the Python object alive through the native call above
         counts.append(n)
-        addrs.append(labels_address(roles))
+        addrs.append(labels_address(roles.value()))
         _ = roles  # keep the Python object alive through the native call above
-        counts.append(Int(py=roles.size))
+        counts.append(Int(py=roles.value().size))
         weighted = 1
     elif sample_weight is not None:
         w_keep = _xl_owned(admit_weight_words(sample_weight, n, context), context)
@@ -2289,7 +2291,8 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
     var Cs = _xl_cs_grid(fields["Cs"], context)
     var cv = fields["cv"]
     var explicit = not (cv is None or _xl_is_int_cv(cv, context))
-    var roles = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var roles = Optional[PythonObject]()
     var fold_ids = PythonObject(None)
     var folds = 0
     if explicit:
@@ -2297,17 +2300,18 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
         folds = len(splits)
         var got = _xl_cv_fold_ids_f32(splits, n, "LogisticRegressionCV", context)
         fold_ids = got[0]
-        roles = got[1]
+        roles = py_present(got[1])
     else:
         folds = 5 if cv is None else _int(cv)
     var sample_weight = args[2]
-    var raw = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var raw = Optional[PythonObject]()
     if sample_weight is not None:
         raw = _xl_owned(admit_weight_words(sample_weight, n, context), context)
     var class_weight = fields["class_weight"]
-    var weigh = sample_weight is not None or class_weight is not None or roles is not None
+    var weigh = sample_weight is not None or class_weight is not None or Bool(roles)
     var prep = _xl_class_prep(model, entries, class_weight, labels.classes, labels.codes,
-                              0 if raw is None else labels_address(raw), True, class_weight is not None, context)
+                              0 if not raw else labels_address(raw.value()), True, class_weight is not None, context)
     _ = raw  # keep the Python object alive through the native call above
     var fitw = prep[1]
     _ = raw  # keep the Python object alive through the native call above
@@ -2332,20 +2336,20 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
     counts.append(n)
     var has_sw = 0
     if weigh:
-        if raw is None:
+        if not raw:
             raw = labels_full_f32(n, 1.0, context)
-        addrs.append(labels_address(raw) if fitw is None else labels_address(fitw))
+        addrs.append(labels_address(raw.value()) if fitw is None else labels_address(fitw))
         _ = fitw  # keep the Python object alive through the native call above
         _ = raw  # keep the Python object alive through the native call above
         counts.append(n)
-        addrs.append(labels_address(raw))
+        addrs.append(labels_address(py_or_none(raw)))
         _ = raw  # keep the Python object alive through the native call above
         counts.append(n)
         has_sw = 1
-    if roles is not None:
-        addrs.append(labels_address(roles))
+    if Bool(roles):
+        addrs.append(labels_address(roles.value()))
         _ = roles  # keep the Python object alive through the native call above
-        counts.append(Int(py=roles.size))
+        counts.append(Int(py=roles.value().size))
     var yy = _xl_parts(addrs, counts, context)
     var p = kp * (d + 1)
     var nc = len(Cs)

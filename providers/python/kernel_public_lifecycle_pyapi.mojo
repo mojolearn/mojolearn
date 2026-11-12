@@ -39,6 +39,7 @@ from bindings.native_model_records import (
     ContentRecord, content_value, RECORDS_GP_SVM,
 )
 from bindings.gp_svm_records import gpsvm_key_value
+from bindings.py_optional import py_present
 
 
 comptime _KM_ADMIT_SLOT = "kernel_public_admitted_v1"
@@ -157,10 +158,11 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
             var candidate = py_get(context["family_km_public_parameters"], ancestry[i])
             if candidate is not None:
                 found_parameters = candidate
-    var parameters = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var parameters = Optional[PythonObject]()
     if found_parameters:
-        parameters = found_parameters.value()
-    if parameters is None:
+        parameters = py_present(found_parameters.value())
+    if not parameters:
         raise Error("TypeError: kernel execution requires a connected estimator class")
     var learned = Python.tuple("n_features_in_", "n_targets_", "_kernel_params", "_params", "_squeeze",
                                "X_fit_", "dual_coef_", "info_", "components_", "component_indices_",
@@ -173,12 +175,12 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
         # A refit replaces the learned fields: release the record now.
         gpsvm_side_drop(_KM_ADMIT_SLOT, model)
         records_drop(RECORDS_GP_SVM, model, _KM_STAMP)
-    if fitting or not _km_admitted(modules, model, fields, parameters, learned, plan.plan, attributes, context):
+    if fitting or not _km_admitted(modules, model, fields, parameters.value(), learned, plan.plan, attributes, context):
         var direct = not fitting
-        for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names
-            var value = _lookup(model, parameters[i], fields, plan, attributes)
+        for i in range(len(parameters.value())):  # driver-loop: fixed constructor parameter names
+            var value = _lookup(model, parameters.value()[i], fields, plan, attributes)
             classical_admit_value(value, context)
-            direct = direct and py_contains(fields, parameters[i]) and value is fields[parameters[i]]
+            direct = direct and py_contains(fields, parameters.value()[i]) and value is fields[parameters.value()[i]]
         for i in range(len(learned)):  # driver-loop: only fitted storage consumed by kernel owners
             if py_contains(fields, learned[i]):
                 var value = _lookup(model, learned[i], fields, plan, attributes)
@@ -186,7 +188,7 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
                 direct = direct and value is fields[learned[i]]
         if direct:
             # Every value came from plain instance storage: record it.
-            _km_remember(modules, model, fields, parameters, learned, plan.plan, attributes, context)
+            _km_remember(modules, model, fields, parameters.value(), learned, plan.plan, attributes, context)
     var flag = py_get(fields, "_mojolearn_fitted", PythonObject(False))
     if py_type(flag) is not py_type(PythonObject(True)) and py_type(flag) is not py_type(PythonObject(0)):
         raise Error("TypeError: kernel fitted flags must be native booleans or integers")

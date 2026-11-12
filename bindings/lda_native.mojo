@@ -59,13 +59,15 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
     var n = Int(py=x.shape[0])
     var v = Int(py=x.shape[1])
     var nc = decomp_int(fields["n_components"])
-    var state_c = PythonObject(None)
-    var state_e = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var state_c = Optional[PythonObject]()
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var state_e = Optional[PythonObject]()
     if not (op == _FIT or (op == _PARTIAL and fresh)):
         state_c = admit_x(decomp_attr(model, fields, "components_"), 2, "components_", context)
         state_e = admit_x(decomp_attr(model, fields, "exp_dirichlet_component_"), 2,
                                      "exp_dirichlet_component_", context)
-        nc = Int(py=state_c.shape[0])
+        nc = Int(py=state_c.value().shape[0])
     var comps = decomp_f32(Python.tuple(nc, v), context)
     var exp_dir = decomp_f32(Python.tuple(nc, v), context)
     var out = decomp_f32(Python.tuple(n, nc), context) if op == _TRANSFORM else PythonObject(None)
@@ -77,8 +79,8 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
         bs = _batch_size(fields)
     var params = Python.list(
         op, classical_address(x), n, v, nc, 1 if fresh else 0, 1 if flag else 0,
-        classical_address(state_c) if state_c is not None else spare,
-        classical_address(state_e) if state_e is not None else spare, classical_address(comps),
+        classical_address(state_c.value()) if Bool(state_c) else spare,
+        classical_address(state_e.value()) if Bool(state_e) else spare, classical_address(comps),
         classical_address(exp_dir), classical_address(out) if out is not None else spare,
         decomp_int(fields["max_iter"]), 1 if (op == _FIT and online) else 0, bs,
         decomp_int(fields["max_doc_update_iter"]),

@@ -145,11 +145,12 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     py_setitem(options, "huber_delta", fp[8])
     py_setitem(fields, "_options", options)
     var params = sequential_array(mods, Python.tuple(ip[16]), context["float32"], context)
-    var classes = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var classes = Optional[PythonObject]()
     if Int(py=ip[13]) > 0:
         classes = sequential_array(mods, Python.tuple(ip[13]), context["class_dtypes"][Python.tuple(ip[14], ip[15])], context)
     var addresses = Python.list(sequential_address(params), 0, 0, 0, 0,
-        PythonObject(0) if classes is None else sequential_address(classes))
+        PythonObject(0) if not classes else sequential_address(classes.value()))
     var m = PythonObject(None)
     var v = PythonObject(None)
     var state = PythonObject(None)
@@ -174,8 +175,8 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     py_setitem(fields, "_fit_shuffle", py_call(b.bool, ip[8]))
     py_setitem(fields, "_y_1d", py_call(b.bool, ip[11]))
     py_setitem(fields, "_sample_shape", PythonObject(None))
-    if classes is not None:
-        py_setitem(fields, "classes_", classes)
+    if Bool(classes):
+        py_setitem(fields, "classes_", classes.value())
     py_setitem(fields, "n_iter_", PythonObject(0) if export else ip[12])
     py_setitem(fields, "loss_curve_", Python.list() if export else sequential_curve(curve, Int(py=ip[12])))
     py_setitem(fields, "_fit_state", state)

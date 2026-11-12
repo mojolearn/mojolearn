@@ -300,17 +300,19 @@ def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: P
     var b = mods.module("builtins")
     var cls = py_type(model)
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var inherited = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var inherited = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: over class ancestry for plain metadata defaults
         var namespace = _class_fields(mods, ancestry[i])
         if py_contains(namespace, PythonObject(name)):
-            inherited = namespace[name]
-            var kind = py_type(inherited)
+            var member = namespace[name]
+            inherited = member
+            var kind = py_type(member)
             if kind is mods.module("types").MemberDescriptorType:
-                if inherited.__objclass__ is not ancestry[i] or String(inherited.__name__) != name:
+                if member.__objclass__ is not ancestry[i] or String(member.__name__) != name:
                     raise Error("TypeError: native mode metadata refuses a foreign slot descriptor")
                 ref cpy = Python().cpython()
-                var getter = inherited.__get__
+                var getter = member.__get__
                 var args = Python.tuple(model, cls)
                 var value = cpy.PyObject_Call(getter._obj_ptr, args._obj_ptr, PyObjectPtr())
                 if not value:
@@ -327,7 +329,9 @@ def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: P
             break
     if py_contains(fields, PythonObject(name)):
         return fields[name]
-    return inherited
+    if inherited:
+        return inherited.value()
+    return PythonObject(None)
 
 
 def _readback(model: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:

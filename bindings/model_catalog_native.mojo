@@ -19,6 +19,7 @@ from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter,
 from providers.python.autograd_import_frontend_pyapi import _import
 from providers.python.autograd_program_pyapi import ops_imported_run_py
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_or_none
 
 
 struct CatalogConnection(Defaultable, Movable):
@@ -294,12 +295,13 @@ def _catalog_verify(args: PythonObject, context: PythonObject) raises -> PythonO
     if digests is None:
         digests = Python.dict()
     model_dict(digests)
-    var expected = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var expected = Optional[PythonObject]()
     if len(digests):
         expected = PythonObject(model_string(py_call(bi.list, digests.values())[0]))
-    var matched = PythonObject(None) if expected is None else PythonObject(Bool(py=digest == expected))
+    var matched = PythonObject(None) if not expected else PythonObject(Bool(py=digest == expected.value()))
     var report = Python.dict(name=name, version=version, numeric_mode=mode, vendor=context["vendor"],
-        digest=digest, expected=expected, input_digest=input_digest, run_ms=PythonObject(elapsed),
+        digest=digest, expected=py_or_none(expected), input_digest=input_digest, run_ms=PythonObject(elapsed),
         source=Python.dict(artifact=artifact, sha256=artifact_hash, catalog=py_get(entry, "source")))
     py_setitem(report, "match", matched)
     _ = source

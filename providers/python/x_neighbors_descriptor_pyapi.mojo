@@ -13,6 +13,7 @@ from providers.python.estimator_binding_pyapi import estimator_binding
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from providers.python.x_neighbors_admission_pyapi import xn_is_module, xn_module, xn_capabilities, xn_admit_checked
 from x_neighbors.descriptor_schema import xn_operation_id
+from bindings.py_optional import py_or_none, py_present
 
 
 def xn_admit(binding: PythonObject) raises -> PythonObject:
@@ -28,17 +29,18 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
 def xn_pcs_draw_entry(binding: PythonObject) raises -> PythonObject:
     # Capture the legacy entry only on that existing route; the native route
     # reads its operation-local capability snapshot and never resolves it.
-    var legacy = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var legacy = Optional[PythonObject]()
     var available = False
     if xn_is_module(binding):
-        legacy = neural_descriptor_entry(binding, "x_neighbors_kfeat_pcs_draw_idn", False)
-        available = legacy is not None
+        legacy = py_present(neural_descriptor_entry(binding, "x_neighbors_kfeat_pcs_draw_idn", False))
+        available = Bool(legacy)
     else:
         available = (xn_capabilities(binding) & 8) != 0
     if not available:
         raise Error("NotImplementedError: mojolearn PolynomialCountSketch: this binary lacks "
                     + "x_neighbors_kfeat_pcs_draw_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
-    return legacy
+    return py_or_none(legacy)
 
 
 def xn_pcs_draw(binding: PythonObject, legacy: PythonObject, seed: Int,

@@ -14,6 +14,7 @@ from bindings.sequential_admission import _one_of, _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.scaler_native import _input
 from core.array_helpers_impl import strided_copy_bytes
+from bindings.py_optional import py_present
 from bindings.cpython_table import cpython_table  # buffer calls without a dlsym per call (perf2-prep)
 
 
@@ -119,7 +120,8 @@ def _target(value: PythonObject, rows: Int, context: PythonObject) raises:
         raise Error("Complex data not supported: MaxAbsScaler got a complex y.")
     var sequence = cls is b.list or cls is b.tuple
     var length = -1
-    var view = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var view = Optional[PythonObject]()
     var examine = True
     if native_pandas_exact(value):
         length = _target_pandas(value,context)
@@ -142,15 +144,15 @@ def _target(value: PythonObject, rows: Int, context: PythonObject) raises:
         classical_admit_value(value,context)
         var pair = _target_view(value,context)
         length = Int(py=pair[0])
-        view = pair[1]
-    if view is not None:
-        var kind = classical_kind(view,context)
+        view = py_present(pair[1])
+    if Bool(view):
+        var kind = classical_kind(view.value(),context)
         if kind == "c":
             raise Error("Complex data not supported: MaxAbsScaler got a complex y.")
-        if not sequence and Int(py=view.ndim) == 2 and Int(py=view.shape[1]) == 1 and cls is not b.memoryview:
+        if not sequence and Int(py=view.value().ndim) == 2 and Int(py=view.value().shape[1]) == 1 and cls is not b.memoryview:
             classical_warn_column(context)
         if kind == "f":
-            _target_finite(view,context)
+            _target_finite(view.value(),context)
     if length >= 0 and length != rows:
         raise Error("Found input variables with inconsistent numbers of samples: ["+String(rows)+", "+String(length)+"]")
 

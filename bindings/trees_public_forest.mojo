@@ -857,25 +857,27 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
     if _truthy(cfg["oob_score"]) or importances:
         if tree_start is not None:
             raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
-        var oob = PythonObject(None)
-        var score = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var oob = Optional[PythonObject]()
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var score = Optional[PythonObject]()
         if _truthy(cfg["oob_score"]):
             oob = admitted_array(Python.tuple(labels.n, k), "<f8", context)
             score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
         var importance = admitted_vector(x.cols, "<f4", context) if importances else PythonObject(None)
         var fit = ForestFit(True, weights=0 if not weights else weights.value().address,
-                            oob=0 if oob is None else trees_address(oob),
-                            score=0 if score is None else trees_address(score),
+                            oob=0 if not oob else trees_address(oob.value()),
+                            score=0 if not score else trees_address(score.value()),
                             importance=0 if importance is None else trees_address(importance))
         _ = _rf_fit_arrays(fields, kind, x, y_addr, labels.n, k, fit, rf, context)
         _ = labels  # y_addr borrows the encoded codes, not the stored classes_
         _ = importance  # keep the Python object alive through the native call above
         _ = score  # keep the Python object alive through the native call above
         _ = oob  # keep the Python object alive through the native call above
-        if oob is not None:
-            py_setitem(fields, "oob_decision_function_", oob)
-            py_setitem(fields, "oob_score_", PythonObject(_F64(score, 0)))
+        if Bool(oob):
+            py_setitem(fields, "oob_decision_function_", oob.value())
+            py_setitem(fields, "oob_score_", PythonObject(_F64(score.value(), 0)))
         if importance is not None:
             py_setitem(fields, "feature_importances_", importance)
         _ = weights^
@@ -965,23 +967,25 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
     if _truthy(cfg["oob_score"]) or importances:
         if tree_start is not None:
             raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
-        var oob = PythonObject(None)
-        var score = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var oob = Optional[PythonObject]()
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var score = Optional[PythonObject]()
         if _truthy(cfg["oob_score"]):
             oob = admitted_vector(y32.rows, "<f8", context)
             score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
         var importance = admitted_vector(x.cols, "<f4", context) if importances else PythonObject(None)
-        var fit = ForestFit(False, oob=0 if oob is None else trees_address(oob),
-                            score=0 if score is None else trees_address(score),
+        var fit = ForestFit(False, oob=0 if not oob else trees_address(oob.value()),
+                            score=0 if not score else trees_address(score.value()),
                             importance=0 if importance is None else trees_address(importance))
         _ = _rf_fit_arrays(fields, kind, x, y32.address, y32.rows, 0, fit, rf, context)
         _ = importance  # keep the Python object alive through the native call above
         _ = score  # keep the Python object alive through the native call above
         _ = oob  # keep the Python object alive through the native call above
-        if oob is not None:
-            py_setitem(fields, "oob_prediction_", oob)
-            py_setitem(fields, "oob_score_", PythonObject(_F64(score, 0)))
+        if Bool(oob):
+            py_setitem(fields, "oob_prediction_", oob.value())
+            py_setitem(fields, "oob_score_", PythonObject(_F64(score.value(), 0)))
         if importance is not None:
             py_setitem(fields, "feature_importances_", importance)
         _ = y32^

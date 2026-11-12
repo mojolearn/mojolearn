@@ -51,6 +51,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.mode_metadata_native import _fields
 from bindings.public_attributes_native import _string_keys
+from bindings.py_optional import py_or_none, py_present
 from bindings.family_common import (
     family_repr, family_call, family_entry, family_array, family_snapshot_min, family_field,
 )
@@ -203,11 +204,12 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
             and ((native is None and checked[1] is None) or (native is not None and checked[1] is native))):
         var flags_hit = kernel_method_metadata(native, 14) if native is not None else 0
         return (binding, native, flags_hit)
-    var getter = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var getter = Optional[PythonObject]()
     if native is None:
-        getter = neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False)
-    if native is not None or getter is not None:
-        var got = kernel_method_metadata(native, 13) if native is not None else _km_int(family_call(getter), "numeric mode")
+        getter = py_present(neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False))
+    if native is not None or Bool(getter):
+        var got = kernel_method_metadata(native, 13) if native is not None else _km_int(family_call(getter.value()), "numeric mode")
         var codes = context["family_km_mode_codes"]
         var wanted = py_get(codes, want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
@@ -304,12 +306,13 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var scalars = family_array(Python.tuple(1), "<f8", context)
     # A fold's X_fit_ is the entry's device copy of the gathered rows.
     var fold_fit = family_array(Python.tuple(n, d), "<f4", context) if fold.active() else PythonObject(None)
-    var weights = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var weights = Optional[PythonObject]()
     var weights_owner = PythonObject(None)
     var weights_address = 0
     if args[3] is not None:
         var snapshot = admit_family_weights(args[3], n, False, context, wide=True)
-        weights = snapshot.keep
+        weights = py_present(snapshot.keep)
         weights_owner = snapshot.owner
         weights_address = snapshot.source.addr
     var fit = ptr_entry
@@ -327,7 +330,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
         _ = py_call(addresses.append, PythonObject(fold.base_id))
         _ = py_call(addresses.append, PythonObject(fold.base_rows))
         _ = py_call(addresses.append, PythonObject(fold.index_id))
-    elif weights is not None:
+    elif Bool(weights):
         _ = py_call(addresses.append, PythonObject(weights_address))
     _ = weights  # keep the Python object alive through the native call below
     _ = fold_fit  # keep the Python object alive through the native call below
@@ -456,17 +459,18 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
                              info, PythonObject(q))
-    var handle = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var handle = Optional[PythonObject]()
     if resident:
-        handle = _km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit_meta, dual_meta, n, d, t, context, native, flags)
-    if handle is not None:
+        handle = py_present(_km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit_meta, dual_meta, n, d, t, context, native, flags))
+    if Bool(handle):
         # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_resident_binding:
         # handle; x_new, out; the predict's ten params.
         var output_addresses = Python.list(PythonObject(xq_meta.source.addr), classical_address(out))
         if native is not None:
-            _ = kernel_method_execute(native, "kernel_ridge_predict_resident", output_addresses, params, Int(py=handle))
+            _ = kernel_method_execute(native, "kernel_ridge_predict_resident", output_addresses, params, Int(py=handle.value()))
         else:
-            var words = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle, output_addresses, params)
+            var words = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle.value(), output_addresses, params)
             admitted_finite_refuse(Int(py=words[0]), where)
         _ = out  # keep the Python object alive through the native call above
         _ = xq  # keep the Python object alive through the native call above
@@ -584,17 +588,23 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var binding = admission[0]
     var native = admission[1]
     var flags = admission[2]
-    var joint = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var joint = Optional[PythonObject]()
     if transform:
         if native is not None:
             if (flags & 6) == 6:
                 joint = PythonObject(True)
         else:
-            joint = _km_door(binding, "nystroem_fit_transform_ptr", context)
-    var out = PythonObject(None)
-    var fit = joint
-    if joint is None and native is None:
+            joint = py_present(_km_door(binding, "nystroem_fit_transform_ptr", context))
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var out = Optional[PythonObject]()
+    var fit: PythonObject
+    if joint:
+        fit = joint.value()
+    elif native is None:
         fit = _km_pointer_entry(binding, "nystroem_fit_ptr", "nystroem_fit", context)
+    else:
+        fit = PythonObject(None)  # unread: the native entry runs the fit
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_fit_binding:
     # x, components_out, indices_out, normalization_out, eigenvalues_out,
     # eigenvectors_out, scalars_out; n, d, kernel, degree, gamma, coef0, q, seed.
@@ -610,11 +620,11 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = eigenvectors  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(kernel), PythonObject(degree),
                              gamma, coef0, PythonObject(q), seed)
-    if joint is not None:
+    if Bool(joint):
         # ORDER MATCHES nystroem_fit_transform_ptr_binding: the seven fit
         # addresses, then the n x q transform.
         out = family_array(Python.tuple(n, q), "<f4", context)
-        _ = py_call(addresses.append, classical_address(out))
+        _ = py_call(addresses.append, classical_address(out.value()))
         _ = out  # keep the Python object alive through the native call above
         _ = scalars  # keep the Python object alive through the native call above
         _ = eigenvectors  # keep the Python object alive through the native call above
@@ -623,7 +633,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = indices  # keep the Python object alive through the native call above
         _ = components  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
-    var fit_name = "nystroem_fit_transform_ptr" if joint is not None else ("nystroem_fit_ptr" if (flags & 2) != 0 else "nystroem_fit")
+    var fit_name = "nystroem_fit_transform_ptr" if Bool(joint) else ("nystroem_fit_ptr" if (flags & 2) != 0 else "nystroem_fit")
     var sweeps = kernel_method_execute(native, fit_name, addresses, params) if native is not None else family_call(fit, addresses, params)
     _ = out  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
@@ -641,11 +651,11 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     py_setitem(fields, "eigenvectors_", eigenvectors)
     py_setitem(fields, "sweeps_", PythonObject(_km_int(sweeps, "sweeps_")))
     py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, seed))
-    if transform and out is None:
+    if transform and not out:
         out = family_array(Python.tuple(n, q), "<f4", context)
         var transform_addresses = Python.list(classical_address(components), classical_address(indices),
             classical_address(normalization), classical_address(eigenvalues), classical_address(eigenvectors),
-            PythonObject(x_meta.source.addr), classical_address(out))
+            PythonObject(x_meta.source.addr), classical_address(out.value()))
         var transform_parameters = Python.list(q, d, kernel, degree, gamma, coef0, seed, sweeps, n)
         if native is not None:
             _ = kernel_method_execute(native, "nystroem_transform", transform_addresses, transform_parameters)
@@ -659,7 +669,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = out
     _ = x^
     _ = x_meta
-    return out
+    return py_or_none(out)
 
 
 def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata) raises -> PythonObject:
@@ -895,10 +905,11 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     `dual_coef_` are the same objects (the held key keeps references to
     them) and the binding is the minting one; None where the binding has no
     resident door. Only the holder dictionary changes."""
-    var prepare = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var prepare = Optional[PythonObject]()
     if native is None:
-        prepare = _km_door(binding, "kernel_ridge_resident_prepare", context)
-        if prepare is None:
+        prepare = py_present(_km_door(binding, "kernel_ridge_resident_prepare", context))
+        if not prepare:
             return PythonObject(None)
     elif (flags & 1) == 0:
         return PythonObject(None)
@@ -930,7 +941,7 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     var addresses = Python.list(PythonObject(x_fit.source.addr), PythonObject(dual.source.addr))
     var parameters = Python.list(PythonObject(n), PythonObject(d), PythonObject(t))
     var key = Python.tuple(x_fit_obj, dual_obj, PythonObject(n), PythonObject(d), PythonObject(t))
-    var handle = kernel_method_execute(native, "kernel_ridge_resident_prepare", addresses, parameters) if native is not None else family_call(prepare, addresses, parameters)
+    var handle = kernel_method_execute(native, "kernel_ridge_resident_prepare", addresses, parameters) if native is not None else family_call(prepare.value(), addresses, parameters)
     if native is not None:
         var owner = neural_descriptor_adopt(native, Int(py=handle), 5, [])
         py_setitem(holder, "index", Python.tuple(key, handle, binding, owner, native))
@@ -943,14 +954,15 @@ def _km_scale_gamma(binding: PythonObject, x: ArrayMetadata, d: Int, context: Py
     """`_scale_gamma.scale_gamma_x`: the binding's exact limbs of the float32
     cells, the one rounding in exact integer math."""
     var b = native_loaded_module("builtins")
-    var flags_entry = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var flags_entry = Optional[PythonObject]()
     var flags = 0
     if native is not None:
         flags = kernel_method_metadata(native, 15)
     else:
-        flags_entry = neural_descriptor_entry(binding, "py2mojo_linear_flags", False)
-        if flags_entry is not None:
-            flags = _km_int(family_call(flags_entry), "linear flags")
+        flags_entry = py_present(neural_descriptor_entry(binding, "py2mojo_linear_flags", False))
+        if Bool(flags_entry):
+            flags = _km_int(family_call(flags_entry.value()), "linear flags")
     if (flags & _PY2MOJO_SCALE_GAMMA) == 0:
         raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
                     + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
@@ -1010,18 +1022,20 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         var admission = _km_extension(fields, binding, where, context)
         extension = admission[0]
         native = admission[1]
-    var out = PythonObject(None)
-    var joint = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var out = Optional[PythonObject]()
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var joint = Optional[PythonObject]()
     if transform and native is None:
-        joint = neural_descriptor_entry(extension, "rbf_sampler_fit_transform_resident", False)
-    if joint is not None:
+        joint = py_present(neural_descriptor_entry(extension, "rbf_sampler_fit_transform_resident", False))
+    if Bool(joint):
         # lane apple-fast-w2-kfeat MOJOLEARN_KM_FAST_RBF_RESIDENT
         # (kernel_methods/rbf_resident.mojo): the draws, the upload, the
         # projection and every download in one binding call and one wait.
         out = family_array(Python.tuple(m, q), "<f4", context)
         # ORDER MATCHES kernel_methods/rbf_resident.mojo::rbf_sampler_fit_transform_binding.
-        _ = family_call(joint, Python.list(classical_address(weights), classical_address(offset),
-                                           classical_address(scalars), PythonObject(x_meta.source.addr), classical_address(out)),
+        _ = family_call(joint.value(), Python.list(classical_address(weights), classical_address(offset),
+                                           classical_address(scalars), PythonObject(x_meta.source.addr), classical_address(out.value())),
                         Python.list(PythonObject(d), PythonObject(q), gamma, seed, PythonObject(m)))
         _ = offset  # keep the Python object alive through the native call above
         _ = weights  # keep the Python object alive through the native call above
@@ -1057,9 +1071,9 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = x^
         _ = x_meta
         return model
-    if out is None:
+    if not out:
         out = family_array(Python.tuple(m, q), "<f4", context)
-        var addresses = Python.list(classical_address(weights), classical_address(offset), PythonObject(x_meta.source.addr), classical_address(out))
+        var addresses = Python.list(classical_address(weights), classical_address(offset), PythonObject(x_meta.source.addr), classical_address(out.value()))
         var parameters = Python.list(d, q, gamma, seed, sigma, scale, m)
         if native is not None:
             _ = kernel_method_execute(native, "rbf_sampler_transform", addresses, parameters)
@@ -1070,7 +1084,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = out
     _ = x^
     _ = x_meta
-    return out
+    return py_or_none(out)
 
 
 # ---------------------------------------------------------------------------

@@ -118,7 +118,8 @@ def sequence_array_warn(message: String, context: PythonObject, kind: String = "
     var lineno = Int(py=context["warning_lineno"])
     var module = context["warning_module"]
     var filters = py_get(fields, "filters")
-    var log = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: a context's `log` of None is absent (modular/modular#7546).
+    var log = Optional[PythonObject]()
     if Bool(py=context["warning_context_enabled"]):
         var active = py_get(context["warning_context_var"], context["warning_global_context"])
         if active is not context["warning_global_context"]:
@@ -126,8 +127,10 @@ def sequence_array_warn(message: String, context: PythonObject, kind: String = "
                 raise Error("TypeError: custom warning contexts are not native")
             var stored = _warning_fields(py_call(context["warning_context_fields"].__get__, active))
             filters = py_get(stored, "_filters")
-            log = py_get(stored, "log")
-    if py_type(filters) is not b.list or (log is not None and py_type(log) is not b.list):
+            var recorded = py_get(stored, "log")
+            if recorded is not None:
+                log = recorded
+    if py_type(filters) is not b.list or (Bool(log) and py_type(log.value()) is not b.list):
         raise Error("TypeError: warning filters and recording require native lists")
     var old = context["warning_filter_rows"]
     var changed = filters is not context["warning_filter_owner"] or len(old) != len(filters)
@@ -180,7 +183,7 @@ def sequence_array_warn(message: String, context: PythonObject, kind: String = "
         pass
     else:
         raise Error("TypeError: custom warning recording callbacks are not native")
-    if log is not None:
+    if log:
         var record_class = context["warning_record"]
         var ancestry = py_call(b.type.__dict__["__mro__"].__get__, record_class)
         if len(ancestry) != 2 or ancestry[1] is not b.object or py_get(_warning_class_fields(record_class), "__del__") is not None:
@@ -195,7 +198,7 @@ def sequence_array_warn(message: String, context: PythonObject, kind: String = "
         py_setitem(stored, "line", PythonObject(None))
         py_setitem(stored, "source", PythonObject(None))
         py_setitem(stored, "_category_name", PythonObject(kind))
-        py_call(log.append, record)
+        py_call(log.value().append, record)
         if mode != "always" and mode != "all":
             py_setitem(context["warning_seen"], key, True)
         return

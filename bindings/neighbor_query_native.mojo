@@ -30,6 +30,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.parallel_public_result import parallel_public_result
 from bindings.scaler_lifecycle_native import _outside
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
+from bindings.py_optional import py_present
 
 
 def _query_kind(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -129,21 +130,22 @@ def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject)
     var names = Python.tuple("_index", "centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
     var scalars = Python.tuple("n_samples_fit_", "n_features_in_", "n_rows_", "n_lists_", "metric_code_", "metric", "p", "algorithm", "query_tile", "_metric_value", "_metric_arg")
     var text = String(kind[0])
-    var holder = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var holder = Optional[PythonObject]()
     if text == "knn":
-        holder = py_get(fields, "_resident_holder")
-        if holder is not None:
-            if py_type(holder) is not b.dict:
+        holder = py_present(py_get(fields, "_resident_holder"))
+        if Bool(holder):
+            if py_type(holder.value()) is not b.dict:
                 raise Error("TypeError: neighbor resident holder requires a native dictionary")
-            var keys = py_call(b.tuple, holder.keys())
+            var keys = py_call(b.tuple, holder.value().keys())
             for i in range(len(keys)):  # driver-loop: resident metadata keys, before dictionary comparisons
                 if py_type(keys[i]) is not b.str:
                     raise Error("TypeError: resident metadata requires exact string keys")
     var mods = NativeModules()
-    if text == "ivf" or holder is not None:
-        var resident = py_get(holder, "index") if holder is not None else py_get(fields, "_resident")
+    if text == "ivf" or Bool(holder):
+        var resident = py_get(holder.value(), "index") if Bool(holder) else py_get(fields, "_resident")
         var stamp = knn_state_values(fields, names + scalars) + Python.tuple(resident)
-        var stored = py_get(holder, "admitted_query") if holder is not None else prepared_get(mods, IVF_QUERY_STATE_SLOT, model)
+        var stored = py_get(holder.value(), "admitted_query") if Bool(holder) else prepared_get(mods, IVF_QUERY_STATE_SLOT, model)
         if knn_state_unchanged(stored, stamp):
             return True
     # Radius models have no resident holder: their stamp (every slot object
@@ -187,9 +189,9 @@ def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject)
                 break
         if not ivf_self_reference:
             prepared_put(mods, IVF_QUERY_STATE_SLOT, model, ivf_stamp)
-    elif text == "knn" and holder is not None:
-        py_setitem(holder, "index", _resident_owner(py_get(holder, "index"), context))
-        py_setitem(holder, "admitted_query", knn_state_values(fields, names + scalars) + Python.tuple(py_get(holder, "index")))
+    elif text == "knn" and Bool(holder):
+        py_setitem(holder.value(), "index", _resident_owner(py_get(holder.value(), "index"), context))
+        py_setitem(holder.value(), "admitted_query", knn_state_values(fields, names + scalars) + Python.tuple(py_get(holder.value(), "index")))
     elif text == "radius":
         var self_reference = False
         for i in range(len(radius_stamp)):  # driver-loop: over the stamp objects, refusing a self-reference

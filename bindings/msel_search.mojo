@@ -53,6 +53,7 @@ from bindings.msel_estimator_native import msel_native_clone_planned
 
 from bindings.msel_estimator_native import msel_native_set_params, msel_estimator_plan
 from bindings.msel_search_state import msel_search_fields, msel_parameter_values, msel_search_update
+from bindings.py_optional import py_present
 
 
 # Scalar options and native numeric container leaves are admitted before
@@ -763,26 +764,27 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     var jobs = msel_unit_jobs(args[6], PythonObject(_nan()), "permutation_test_score", context)
     var n_permutations = msel_int(_search_scalar(args[5], "n_permutations", context))
     var random_state = _search_seed(args[7], context)
-    var base = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var base = Optional[PythonObject]()
     if not msel_sabotage():
         # admission of the helper table the permutation gathers use
         _ = msel_helpers_key(context)
-        base = _perm_base(y, context)
-        if base is not None and Int(py=base.size) < 2:
-            base = PythonObject(None)
-    if base is None:
+        base = py_present(_perm_base(y, context))
+        if Bool(base) and Int(py=base.value().size) < 2:
+            base = Optional[PythonObject]()
+    if not base:
         return _permutation_definition(args, n_permutations, random_state, jobs, context)
     var x = msel_materialize(args[1], "X", context)
     var sc = msel_get_scorer(args[9], context)
-    var n = Int(py=base.size)
+    var n = Int(py=base.value().size)
     var reuse = not (cv is None or msel_is_integral(cv, context)) and _y_free(cv, context)
-    var folds0 = msel_cv_folds(estimator, x, base, cv, groups, False, context)[2]
+    var folds0 = msel_cv_folds(estimator, x, base.value(), cv, groups, False, context)[2]
     var device = msel_device_rows_ok(estimator, sc, context)
     var rows0 = MselFoldRows(x, PythonObject(None), folds0, device, context)
     var score: Float64 = 0.0
     var perm_scores = List[Float64]()
     try:
-        score = _mean_test(estimator, x, base, folds0, sc, rows0, jobs, context)
+        score = _mean_test(estimator, x, base.value(), folds0, sc, rows0, jobs, context)
         var rng = MselRng(random_state, context)
         var order = PythonObject(None) if groups is None else _group_order(groups, n, context)
         var group_sizes = List[Int]() if groups is None else _group_sizes(order)
@@ -796,7 +798,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
         var group_values = PythonObject(None)
         if not reuse:
             group_values = PythonObject(None) if groups is None else msel_materialize_y(groups, context)
-            splitter = msel_cv_splitter(estimator, base, cv, False, context)
+            splitter = msel_cv_splitter(estimator, base.value(), cv, False, context)
         for _ in range(n_permutations):  # driver-loop: over permutations
             var idx = PythonObject(None)
             if order is None:
@@ -804,7 +806,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
             else:
                 idx = _group_index(rng, order, group_sizes, n, context)
             # the permuted y: one device gather out of the resident base y
-            var yp = rows0.resident_take(base, idx, context)
+            var yp = rows0.resident_take(base.value(), idx, context)
             rows0.resident_release(idx, context)
             if reuse:
                 perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, jobs, context))

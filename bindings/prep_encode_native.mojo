@@ -40,6 +40,7 @@ from bindings.classical_labels import ClassicalLabels, labels_address, labels_ca
 from bindings.admitted_input import admit_c_view, admitted_dtype, admit_f32, admit_ids, admitted_vector
 from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f64
+from bindings.py_optional import py_present
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -772,16 +773,17 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     _kbins_finite(values)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var w = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var w = Optional[PythonObject]()
     var wl = 0
     if weight_source is not None:
         var checked = _check_weights(weight_source, n, "KBinsDiscretizer", context)
-        w = checked[0]
+        w = py_present(checked[0])
         wl = checked[1]
     var subsample = fields["subsample"]
     var resample = subsample is not None and Bool(py=py_call(operator.gt, PythonObject(n), subsample))
-    var weighted_draw = resample and w is not None
-    var plain_draw = resample and w is None
+    var weighted_draw = resample and Bool(w)
+    var plain_draw = resample and not w
     var draws = 0
     var seed_lo = 0
     var seed_hi = 0
@@ -793,8 +795,8 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         draws = Int(py=py_call_typed(b.int, subsample))
     if weighted_draw:
         # the weighted resample with replacement is drawn in the fit's program
-        wsub = w
-        w = PythonObject(None)
+        wsub = w.value()
+        w = Optional[PythonObject]()
     var nb = List[Int]()
     var n_bins = fields["n_bins"]
     if _int_like(n_bins, context):
@@ -812,7 +814,7 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         nbmax = max(nbmax, nb[i])
     if len(nb) != d or smallest < 2:
         raise Error("mojolearn: n_bins must be >= 2 per feature")
-    var weighted = w is not None
+    var weighted = Bool(w)
     if weighted and strat != 0 and strat != 1 and strat != 3 and strat != 4:
         raise Error("mojolearn: When fitting with strategy='quantile' and sample weights, quantile_method "
                     + "should either be set to 'averaged_inverted_cdf' or 'inverted_cdf', got "
@@ -870,7 +872,7 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
             stw = p.alloc(6 * d)
             var m = wl
             if m < n:
-                wo = p.put(w, n)
+                wo = p.put(w.value(), n)
                 var ro = p.alloc(n)
                 _ = _sel(p, wo, n, 1, 1, ro)
                 var xz = p.alloc(m * d)
@@ -890,7 +892,7 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
             _stage(p.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
             _stage(p.program, OP_LOOKUP, n * d, x_orig, n, d, ug, n, ucnt, codes)
             if wo < 0:
-                wo = p.put(w, n)
+                wo = p.put(w.value(), n)
             _stage(p.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
             if strat == 3:
                 _stage(p.program, OP_KBINS_WKM, d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
@@ -2636,13 +2638,14 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
     var mode = _default_mode(context)
     var entries = _entries(mode, context)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
-    var inverse = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var inverse = Optional[PythonObject]()
     var cats = PythonObject(None)
     if _c08_route(mode, entries, 1) and auto:
         # C08 reuses only unsupervised category IDs
         var got = _fit_categories_with_codes(values, entries, context)
         cats = got[0]
-        inverse = got[1]
+        inverse = py_present(got[1])
     elif auto:
         cats = _fit_categories(values, mode, entries, context)
     else:
@@ -2655,10 +2658,10 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
     var p = EncProg()
     var scratch = _target_scratch(mode, entries)
     var codes = 0
-    if inverse is None:
+    if not inverse:
         codes = _codes(p, values, cats, context, scratch, PythonObject(None))[0]
     else:
-        codes = p.put_array2(inverse)
+        codes = p.put_array2(inverse.value())
     var yo = 0
     var co = 0
     if info.kind == "continuous":
@@ -3212,7 +3215,8 @@ def _fit_weights(model: PythonObject, args: PythonObject, operation: String) rai
     if py_type(params) is not b.dict:
         raise Error("TypeError: native fit keywords require an exact dictionary")
     var string_type = b.str
-    var weights = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var weights = Optional[PythonObject]()
     ref cpy = Python().cpython()
     var position = 0
     var raw_key = PyObjectPtr()
@@ -3232,7 +3236,7 @@ def _fit_weights(model: PythonObject, args: PythonObject, operation: String) rai
         else:
             raise Error("TypeError: " + _name(model) + ".fit() got an unexpected keyword argument " + _repr(key))
     _ = params  # owns borrowed values through their final NewRef
-    return weights
+    return py_or_none(weights)
 
 
 def _no_fit_params(model: PythonObject, args: PythonObject) raises:

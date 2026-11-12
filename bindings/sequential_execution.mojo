@@ -12,6 +12,7 @@ from providers.python.autograd_pyapi import _ints, model_float64_words, model_ad
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
 from bindings.sequential_description import sequential_fields, sequential_sample_shape, sequential_native_description, SequentialDescription, _integer
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x_snapshot, sequential_curve
+from bindings.py_optional import py_present
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -145,14 +146,15 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var moment = PythonObject(None)
     var variance = PythonObject(None)
     var state = PythonObject(None)
-    var previous = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var previous = Optional[PythonObject]()
     var curve = PythonObject(None)
     if resume:
         params = fields["params_"]
         moment = fields["_opt_m"]
         variance = fields["_opt_v"]
         state = fields["_fit_state"]
-        previous = fields["_curve"]
+        previous = py_present(fields["_curve"])
         curve = sequential_array(mods, Python.tuple(Int(py=fields["n_iter_"]) + epochs), context["float32"], context)
     else:
         params = fields["params_"] if warm else sequential_array(mods, Python.tuple(n_params), context["float32"], context)
@@ -169,7 +171,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         options["weight_decay"], 0.0, options["tol"], options["gamma"], options["huber_delta"])
     var addresses = Python.list(xd, yd, sequential_address(params), sequential_address(curve),
         sequential_address(moment), sequential_address(variance), sequential_address(state),
-        PythonObject(0) if previous is None else sequential_address(previous))
+        PythonObject(0) if not previous else sequential_address(previous.value()))
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     _ = state  # keep the Python object alive through the native call above

@@ -29,6 +29,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_constructor_pyapi import cluster_initialize_py
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
+from bindings.py_optional import py_present
 
 
 def _scalar_state(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -102,10 +103,11 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
             var candidate = py_get(context["cluster_public_parameters"], ancestry[i])
             if candidate is not None:
                 found_parameters = candidate
-    var parameters = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var parameters = Optional[PythonObject]()
     if found_parameters:
-        parameters = found_parameters.value()
-    if parameters is None:
+        parameters = py_present(found_parameters.value())
+    if not parameters:
         raise Error("TypeError: cluster execution requires a connected native estimator class")
     var setter_seen = False
     for i in range(len(ancestry)):  # driver-loop: admit native field writes before entering algorithm owners
@@ -118,8 +120,8 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
             raise Error("TypeError: native cluster execution cannot invoke Python fit callbacks")
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native cluster execution cannot invoke Python fit callbacks")
-    for i in range(len(parameters)):  # driver-loop: fixed model parameter metadata, never a Python property
-        var name = parameters[i]
+    for i in range(len(parameters.value())):  # driver-loop: fixed model parameter metadata, never a Python property
+        var name = parameters.value()[i]
         var value = _lookup(model, name, fields, plan, attributes)
         direct = direct and py_contains(fields, name) and value is fields[name]
         if String(name) == "init":
@@ -160,7 +162,7 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
                 _scalar_state(value[0], context)
     # The class-level checks above passed for this class state: keep its
     # parameter schema so a later query can build its identity key.
-    class_admit(modules, _XC_CLASS_SLOT, py_type(model), parameters)
+    class_admit(modules, _XC_CLASS_SLOT, py_type(model), parameters.value())
     return fields
 
 

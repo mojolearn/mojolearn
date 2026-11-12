@@ -26,6 +26,7 @@ from core.cast_in import cast_in_kind, cast_w64_bits, _top_bit
 from core.sequence_array_cast import sequence_store_word
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from bindings.py_optional import py_present
 
 
 comptime _RPScalarBox = def(MutPointer[UInt8, MutUntrackedOrigin], PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr
@@ -659,7 +660,8 @@ def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, conte
             raise Error("ValueError: pandas Arrow chunk offsets exceed output bounds")
         if addresses[0] != 0 and (offset + length + 7) // 8 > sizes[0]:
             raise Error("ValueError: pandas Arrow validity buffer is too small")
-        var numeric = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var numeric = Optional[PythonObject]()
         var numeric_sources = List[_RPArray]()
         if not text and not binary and type_id != 0 and type_id != 1:
             var item = Int(py=py_call(context["resample_pandas_dtype_factory"], dtype).itemsize)
@@ -667,9 +669,9 @@ def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, conte
                 raise Error("ValueError: pandas Arrow numeric data buffer is too small")
             # A native ndarray view supplies admitted scalar metadata; data
             # never passes through Arrow/NumPy conversion or compute methods.
-            numeric = py_call(context["ndarray"], Python.tuple(length), dtype=PythonObject(dtype), buffer=buffers[1], offset=offset * Int(py=py_call(context["resample_pandas_dtype_factory"], dtype).itemsize))
-        if numeric is not None:
-            numeric_sources.append(_RPArray(numeric, context))
+            numeric = py_present(py_call(context["ndarray"], Python.tuple(length), dtype=PythonObject(dtype), buffer=buffers[1], offset=offset * Int(py=py_call(context["resample_pandas_dtype_factory"], dtype).itemsize)))
+        if Bool(numeric):
+            numeric_sources.append(_RPArray(numeric.value(), context))
         for row in range(length):  # driver-loop: unpack Arrow validity and copy/box one stored cell
             var index = offset + row
             var valid = type_id != 0

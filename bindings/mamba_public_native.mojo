@@ -155,11 +155,14 @@ def _mamba_session_fields(mut mods: NativeModules, session: PythonObject, contex
                           initialized: Bool = True) raises -> PythonObject:
     var classes = context["mamba_session_classes"]
     var cls = py_type(session)
-    var expected = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var connected = Optional[PythonObject]()
     for name in [String("mamba1"), String("mamba2"), String("mamba3")]:  # small-loop(three connected Mamba session classes)
         if cls is classes[name]:
-            expected = classes[name]
-    var fields = _mamba_record_fields(mods, session, expected, [String("_handle"), String("_block"), String("_state")])
+            connected = classes[name]
+    if not connected:
+        raise Error("TypeError: Mamba state/session requires its exact connected native class")
+    var fields = _mamba_record_fields(mods, session, connected.value(), [String("_handle"), String("_block"), String("_state")])
     if initialized:
         var hobj = fields["_handle"]
         var handle = hobj.downcast_value_ptr[MambaDecodeHandle]()

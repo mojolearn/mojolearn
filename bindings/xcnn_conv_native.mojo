@@ -33,6 +33,7 @@ from x_cnn.conv_run import (
     conv_run_relu_forward, conv_run_relu_backward, conv_run_add,
 )
 from bindings.sequential_inputs import sequential_input
+from bindings.py_optional import py_present
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -832,11 +833,12 @@ def xcnn_conv_forward(layer: PythonObject, fields: PythonObject, x: PythonObject
 def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_ReLU.forward(x)`."""
     var fields = _fields(layer)
-    var entries = PythonObject(None)   # resolved once per call (N136)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var entries = Optional[PythonObject]()   # resolved once per call (N136)
     var py = Python()
     if xcnn_is_t(x, context):
         var b = xcnn_entries(fields, context)
-        entries = b
+        entries = py_present(b)
         var xs = xcnn_shape(x)
         if xcnn_on_dev(b, x, context) and xcnn_idn(b, XCNN_F_LAYER_IO) and xcnn_size(xs) > 0:
             var out = xcnn_new(b, xs, False, context)
@@ -850,10 +852,10 @@ def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObjec
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
     var out = xcnn_host_f32(xs, context)
-    if entries is None:
-        entries = xcnn_entries(fields, context)
+    if not entries:
+        entries = py_present(xcnn_entries(fields, context))
     var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out)]
-    var key = xcnn_ref(entries)
+    var key = xcnn_ref(entries.value())
     with GILReleased(py):
         conv_run_relu_forward(key, addrs[0], addrs[1], xcnn_size(xs))
     _ = out  # keep the Python object alive through the native call above

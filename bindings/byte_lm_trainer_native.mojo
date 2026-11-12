@@ -1229,14 +1229,19 @@ def _run_steps(mut mods: NativeModules, fields: PythonObject, stack: PythonObjec
         return _run_resident(mods, fields, stack, shape, binding, context, True, n_steps, True)
     var losses = _f32(n_steps, context)
     var loss_out = _F32P(unsafe_from_address=Int(py=classical_address(losses)))
-    var last = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var last = Optional[PythonObject]()
     for k in range(n_steps):  # driver-loop: over the stateless route's steps (each one whole-state native call)
         var batch = _ids_batch(stack, k, shape, context)
-        last = _run_stateless(mods, fields, batch, shape, binding, context, True)
-        loss_out[k] = Float32(Float64(py=last["loss"]))
-    py_setitem(last, "losses", losses)
+        var step = _run_stateless(mods, fields, batch, shape, binding, context, True)
+        loss_out[k] = Float32(Float64(py=step["loss"]))
+        last = step
+    if not last:
+        raise Error("TypeError: 'NoneType' object does not support item assignment")
+    var result = last.value()
+    py_setitem(result, "losses", losses)
     _ = losses  # keep the Python object alive through the native writes above
-    return last
+    return result
 
 
 def byte_lm_train_steps(mut mods: NativeModules, trainer: PythonObject, args: PythonObject,
@@ -1360,14 +1365,18 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
     if py_type(free) is not _b(mods).list:
         raise Error("TypeError: Byte-LM logits pool requires a native list")
     var count = batch * length * vocab
-    var store = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var pooled = Optional[PythonObject]()
     for i in range(len(free)):  # driver-loop: over the bounded reusable host-buffer pool
         if py_type(free[i]) is not context["array_type"]:
             raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
         if len(free[i]) == count:
-            store = py_call(free.pop, i)
+            pooled = py_call(free.pop, i)
             break
-    if store is None:
+    var store: PythonObject
+    if pooled:
+        store = pooled.value()
+    else:
         store = py_call(context["array_type"], "f", py_call(context["native_bytes_type"], count * 4))
     var out = classical_wrap_array(store, Python.tuple(batch, length, vocab), "<f4", "C", context["byte_lm_pooled_context"])
     py_setitem(py_fields(out), "_pool", pool)
@@ -1430,10 +1439,12 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
         # The greedy pick runs on the device for a ragged batch too (plan row
         # N091): operation 6 takes the row lengths as a seventh descriptor.
         var direct_next = next_bytes and resident
-        var row_lengths = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var row_lengths = Optional[PythonObject]()
         if direct_next and args[1] is not None:
-            row_lengths = _i32(batch, context)
-            var lengths_out = _I32P(unsafe_from_address=Int(py=classical_address(row_lengths)))
+            var lengths = _i32(batch, context)
+            row_lengths = lengths
+            var lengths_out = _I32P(unsafe_from_address=Int(py=classical_address(lengths)))
             for row in range(batch):  # small-loop(batch: one admitted length per row)
                 lengths_out[row] = Int32(admitted[3][row])
         var expected = batch if direct_next else batch * length * shape.vocab()
@@ -1451,8 +1462,8 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
             var is_open = Bool(py=fields["_session_open"])
             for key in [String("parameters"), String("m"), String("v")]:  # driver-loop: over the three session admission buffers
                 addresses.append(0 if is_open else Int(py=classical_address(state[key])))
-            if row_lengths is not None:
-                addresses.append(Int(py=classical_address(row_lengths)))
+            if row_lengths:
+                addresses.append(Int(py=classical_address(row_lengths.value())))
             try:
                 written = _native_execute(fields, 6 if direct_next else 2, addresses, shape, state, False, batch, length)
                 mods.released()
