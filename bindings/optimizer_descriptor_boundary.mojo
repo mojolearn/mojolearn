@@ -1,35 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 """Optimizer descriptor UNPACK: exact factories and lifetime pins stay here."""
 from std.python import PythonObject
-from core.native_descriptor_call import native_descriptor_call
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import (
     _neural_descriptor_function_owner,
     NeuralDescriptorProvider, neural_descriptor_connect_once, neural_descriptor_connect_factory_once,
 )
-from training.optimizer_native_api import (
-    OPTIMIZER_NATIVE_ABI, OPT_NATIVE_COUNT, OPT_NATIVE_HOST, OPT_NATIVE_MODE, OPT_NATIVE_DEVICE_AVAILABLE, OptimizerNativeDriver,
+from training.optimizer_native_api import OPTIMIZER_NATIVE_ABI, OPT_NATIVE_COUNT, OptimizerNativeDriver
+from training.optimizer_descriptor_boundary_run import (
+    optimizer_connection_index, optimizer_connection_add, optimizer_record_driver, optimizer_record_mode,
+    optimizer_record_device,
 )
+from bindings.py_provider_pins import ProviderPins, provider_word
 
 
-@fieldwise_init
-struct OptimizerConnection(Movable):
-    var owner: PythonObject
-    var driver: OptimizerNativeDriver
-    var mode: Int
-    var device: Bool
-
-
-struct OptimizerConnections(Defaultable, Movable):
-    # GIL-owned boundary cache. Providers pin extension images, capsule tables
-    # and factories; algorithm calls receive only the typed driver copy.
-    var records: List[OptimizerConnection]
-
-    def __init__(out self):
-        self.records = List[OptimizerConnection]()
-
-
-comptime OPTIMIZER_CONNECTIONS = SharedSlot[OptimizerConnections, "MojolearnOptimizerBoundaryConnectionsV2"]
+# GIL-owned boundary pins: providers pin extension images, capsule tables and
+# factories; algorithm calls receive only the typed driver copy from the RUN
+# record at the same index (training/optimizer_descriptor_boundary_run.mojo).
+comptime OPTIMIZER_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnOptimizerProviderPinsV1"]
 
 
 def optimizer_provider(module: PythonObject) raises -> PythonObject:
@@ -54,31 +42,25 @@ def optimizer_provider_entries(entries: PythonObject) raises -> PythonObject:
 
 
 def _optimizer_connection(provider: PythonObject) raises -> Int:
-    var cache = OPTIMIZER_CONNECTIONS.get_or_create_ptr()
-    for i in range(len(cache[].records)):  # driver-loop: over connected native extension images
-        if cache[].records[i].owner is provider:
-            return i
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
-    var host = native_descriptor_call(entry, OPT_NATIVE_HOST, [], [], []) != 0
-    var mode = native_descriptor_call(entry, OPT_NATIVE_MODE, [], [], [])
-    var device = native_descriptor_call(entry, OPT_NATIVE_DEVICE_AVAILABLE, [], [], []) != 0
-    var index = len(cache[].records)
-    # Publish one complete native record. Parallel owner/metadata vectors
-    # could otherwise have different lengths after an allocation failure.
-    cache[].records.append(OptimizerConnection(provider, OptimizerNativeDriver(entry, host), mode, device))
+    var index = optimizer_connection_index(provider_word(provider))
+    if index >= 0:
+        return index
+    # One complete typed record is published by RUN (its metadata reads may
+    # raise before anything is appended); the pin append that follows cannot
+    # raise, so the record and pin lists keep the same length.
+    index = optimizer_connection_add(provider_word(provider),
+        provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    OPTIMIZER_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
     return index
 
 
 def optimizer_driver(provider: PythonObject) raises -> OptimizerNativeDriver:
-    var index = _optimizer_connection(provider)
-    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].records[index].driver.copy()
+    return optimizer_record_driver(_optimizer_connection(provider))
 
 
 def optimizer_native_mode(provider: PythonObject) raises -> Int:
-    var index = _optimizer_connection(provider)
-    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].records[index].mode
+    return optimizer_record_mode(_optimizer_connection(provider))
 
 
 def optimizer_device_available(provider: PythonObject) raises -> Bool:
-    var index = _optimizer_connection(provider)
-    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].records[index].device
+    return optimizer_record_device(_optimizer_connection(provider))
