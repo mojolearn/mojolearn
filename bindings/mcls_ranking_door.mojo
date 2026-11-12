@@ -40,22 +40,15 @@ from bindings.mcls_common_unpack import (
 )
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.metrics_program_pack import metric_arena_array
+from bindings.mcls_ranking_run import (
+    _CF_OUT, _CF_CHUNK, _OVO_WORDS, _RANK_ROW_SUM, _RANK_CURVE_SCORE, _RANK_AVERAGE, _RANK_OVO_MASK, _RANK_OVO_PAIR,
+    _CO_PR, _CO_EMPTY, _CO_ZERO_CLASS, mc_fold_stages, mc_stage_average,
+)
 from bindings.mcls_classify_door import mc_targets, mc_pos_label, mc_binary_sets
 from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_copy_words
 from checks.numerics import pinned_mul_f64
 
-comptime _CF_OUT = 10
-comptime _CF_CHUNK = 1024
-comptime _OVO_WORDS = 1 << 26
-comptime _RANK_ROW_SUM = 5
-comptime _RANK_CURVE_SCORE = 6
-comptime _RANK_AVERAGE = 7
-comptime _RANK_OVO_MASK = 8
-comptime _RANK_OVO_PAIR = 9
-comptime _CO_PR = 1
-comptime _CO_EMPTY = 1
-comptime _CO_ZERO_CLASS = 2
 comptime _ROC_ONE_CLASS = "Only one class is present in y_true. ROC AUC score is not defined in that case."
 comptime _ROWS_MSG = "Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes"
 
@@ -110,41 +103,7 @@ def _binary_labels(y_true: PythonObject, context: PythonObject) raises -> McLabe
 
 
 # -------------------------------------------------------- the curve fold
-
-
-def _f32_bits(x: Float64) -> Int:
-    return Int(bitcast[DType.int32](Float32(x)))
-
-
-def mc_fold_stages(mut prog: MetricDoorProg, s: Int, stride: Int, pos: Int, w: Int, n: Int, problems: Int,
-                   partial: Bool, max_fpr: Float64, out_at: Int) raises -> Int:
-    """`_fold_stages(..., auc=True, max_fpr, out)`: the compacted curve
-    (bin_curve) and its AUC fold (curve_fold); the fold's CF_OUT words per
-    problem, at `out_at` (allocated and declared when MC_NONE)."""
-    var total = n * problems
-    var order = prog.scratch(total)
-    var cnt = prog.scratch(problems)
-    var fps = prog.scratch(total)
-    var tps = prog.scratch(total)
-    var thr = prog.scratch(total)
-    var keep = prog.scratch(total)
-    var cf = prog.scratch(3 * total)
-    var cm = prog.scratch(problems)
-    prog.stage("bin_curve", problems, [s, stride, pos, w, n, order, fps, tps, thr, cnt, keep, 1, cf, cm])
-    var out = out_at
-    if out == MC_NONE:
-        out = prog.want(prog.alloc(_CF_OUT * problems), _CF_OUT * problems)
-    var mode = 0
-    var mh = 0
-    var ml = 0
-    if partial:
-        # `_f32_split(max_fpr)`: the float-float hi + lo as Int32 bit words
-        var hi = Float32(max_fpr)
-        mode = 2
-        mh = Int(bitcast[DType.int32](hi))
-        ml = _f32_bits(max_fpr - Float64(hi))
-    prog.stage("curve_fold", problems, [n, cf, cf + total, cm, out, mode, mh, ml, _CF_CHUNK])
-    return out
+# (the typed stages: bindings/mcls_ranking_run.mojo)
 
 
 def mc_fold_auc(arena: MetricArenaOwner, off: Int, partial: Bool, max_fpr: Float64, context: PythonObject) raises -> PythonObject:
@@ -176,13 +135,6 @@ def mc_fold_auc(arena: MetricArenaOwner, off: Int, partial: Bool, max_fpr: Float
     return PythonObject(pinned_mul_f64(0.5, 1 + (part - min_area) / (max_fpr - min_area)))
 
 
-def mc_stage_average(mut prog: MetricDoorProg, sc: Int, sup: Int, m: Int, weighted: Bool) raises -> Int:
-    """`_stage_average`: rank_epi AVERAGE; the declared binary64 result."""
-    var res = prog.want(prog.alloc(2), 2)
-    prog.stage("rank_epi", 1, [_RANK_AVERAGE, sc, sup, m, 1 if weighted else 0, res])
-    return res
-
-
 # ------------------------------------------------------------ roc_auc_score
 
 
@@ -210,7 +162,7 @@ def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, conte
     var w_off = MC_NONE
     if w is not None:
         w_off = prog.put(w)
-    var out = mc_fold_stages(prog, s_off, 1, pos, w_off, n, 1, partial, mf, MC_NONE)
+    var out = mc_fold_stages(prog.plan, s_off, 1, pos, w_off, n, 1, partial, mf, MC_NONE)
     var arena = metric_door_run(prog, args[8], context)
     _ = s^
     _ = flags^
@@ -257,7 +209,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
             var w_in = p2.put(w)
             w2 = p2.scratch(n * k)
             p2.stage("rep_rows", n * k, [w_in, w2, k])
-        var out2 = mc_fold_stages(p2, s2, 1, pos2, w2, n * k, 1, False, 0.0, MC_NONE)
+        var out2 = mc_fold_stages(p2.plan, s2, 1, pos2, w2, n * k, 1, False, 0.0, MC_NONE)
         var rows2 = p2.want(p2.alloc(1), 1)
         if n:
             p2.stage("rank_epi", n, [_RANK_ROW_SUM, s2, n, k, rows2])
@@ -275,7 +227,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var w_off = MC_NONE
     if w is not None:
         w_off = prog.put(w)
-    var out = mc_fold_stages(prog, s_off, k, pos, w_off, n, k, False, 0.0, MC_NONE)
+    var out = mc_fold_stages(prog.plan, s_off, k, pos, w_off, n, k, False, 0.0, MC_NONE)
     # the tail: ROW_SUM, then the supports, scores and average
     var rows = prog.want(prog.alloc(1), 1)
     if n:
@@ -291,7 +243,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         prog.stage("rank_epi", k, [_RANK_CURVE_SCORE, out, k, 0, sc, fl, got[1] if w is not None else got[0],
                                    1 if w is not None else 0, sup])
         if average is not None:
-            res = mc_stage_average(prog, sc, sup, k, weighted_avg)
+            res = mc_stage_average(prog.plan, sc, sup, k, weighted_avg)
     var arena = metric_door_run(prog, args[8], context)
     if arena.i32(rows) != 0:
         raise Error(_ROWS_MSG)
@@ -357,8 +309,8 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
             var w = prog.scratch(n)
             if n:
                 prog.stage("rank_epi", n, [_RANK_OVO_MASK, c_off, n, a, b, w])
-            _ = mc_fold_stages(prog, s_off + a, k, oh + a * n, w, n, 1, False, 0.0, cf + 2 * t * _CF_OUT)
-            _ = mc_fold_stages(prog, s_off + b, k, oh + b * n, w, n, 1, False, 0.0, cf + (2 * t + 1) * _CF_OUT)
+            _ = mc_fold_stages(prog.plan, s_off + a, k, oh + a * n, w, n, 1, False, 0.0, cf + 2 * t * _CF_OUT)
+            _ = mc_fold_stages(prog.plan, s_off + b, k, oh + b * n, w, n, 1, False, 0.0, cf + (2 * t + 1) * _CF_OUT)
         var sc = prog.scratch(4 * m)
         var fl = prog.want(prog.alloc(2 * m), 2 * m)
         prog.stage("rank_epi", 2 * m, [_RANK_CURVE_SCORE, cf, 2 * m, 0, sc, fl, MC_NONE, 0, 0])
@@ -373,7 +325,7 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         prog.stage("rank_epi", m, [_RANK_OVO_PAIR, sc, off, k, n, g0, m, ps, prev])
         var res = MC_NONE
         if last_only:
-            res = mc_stage_average(prog, ps, prev, n_pairs, weighted_avg)
+            res = mc_stage_average(prog.plan, ps, prev, n_pairs, weighted_avg)
         var arena = metric_door_run(prog, args[8], context)
         if g0 == 0:
             if arena.i32(rows) != 0:
@@ -391,17 +343,13 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
             prev_words.append(Int32(arena.i32(prev + j)))
         g0 += m
     _ = codes^
+    # the pair words are the AVERAGE program's own words (were two Arrays
+    # copied from them and pinned as caller buffers)
     var p2 = MetricDoorProg()
-    var ps_in = family_array(Python.tuple(len(ps_words)), "<i4", context)
-    var prev_in = family_array(Python.tuple(len(prev_words)), "<i4", context)
-    mcls_copy_words(Int(ps_words.unsafe_ptr()), Int(py=classical_address(ps_in)), len(ps_words))
-    _ = ps_in  # keep the Python object alive through the native call above
-    mcls_copy_words(Int(prev_words.unsafe_ptr()), Int(py=classical_address(prev_in)), len(prev_words))
-    _ = prev_in  # keep the Python object alive through the native call above
-    var res = mc_stage_average(p2, p2.put(ps_in), p2.put(prev_in), n_pairs, weighted_avg)
+    var ps_off = p2.put_words(ps_words^)
+    var prev_off = p2.put_words(prev_words^)
+    var res = mc_stage_average(p2.plan, ps_off, prev_off, n_pairs, weighted_avg)
     var arena = metric_door_run(p2, args[8], context)
-    _ = ps_words^
-    _ = prev_words^
     return PythonObject(arena.f64(res))
 
 

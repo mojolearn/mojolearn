@@ -38,17 +38,10 @@ from bindings.mcls_common_unpack import (
 )
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.metrics_program_pack import metric_arena_array
-
-# cm_epi kinds (x_metrics/cm_epi.mojo, op 59) and the NORM modes.
-comptime _CM_COUNT = 2
-comptime _CM_NORM = 3
-comptime _CM_WSUM_LEAF = 7
-comptime _CM_WSUM_FOLD = 8
-comptime _WSUM_BLOCK = 256
-# row_metric kinds (x_metrics ranking.mojo) and rank_epi MEAN.
-comptime _ROW_LOGLOSS = 2
-comptime _RANK_MEAN = 0
-
+from bindings.mcls_classify_run import (
+    _CM_COUNT, _CM_NORM, _CM_WSUM_LEAF, _CM_WSUM_FOLD, _WSUM_BLOCK, _ROW_LOGLOSS, _RANK_MEAN,
+    McEpi, McSums, mc_wsum_sf64, mc_count_tail, mc_row_mean, mc_proba_stages, mc_proba_code,
+)
 
 # ------------------------------------------------------------------ targets
 
@@ -119,41 +112,6 @@ def mc_classification_pair(y_true: PythonObject, y_pred: PythonObject, context: 
 # ---------------------------------------------------------- the sums program
 
 
-@fieldwise_init
-struct McEpi(Copyable, Movable):
-    """One `cls_epi` request of `_Sums(epi=...)`: (kind, k, AVG, ZD, FMODE, beta^2)."""
-    var kind: Int
-    var k: Int
-    var avg: Int
-    var zd: Int
-    var fmode: Int
-    var b2: Float64
-
-
-struct McSums(Movable):
-    """The offsets `_Sums` keeps: the groupings' (OFF, OUT) pairs (match,
-    true, pred, then the weight total's), the count slots (unweighted) and
-    the epilogue slots; the match key and the weights for a COUNT tail."""
-    var groups: List[Int]
-    var cnt: List[Int]
-    var eos: List[Int]
-    var match_off: Int
-    var w_off: Int
-    var n: Int
-    var labels: Int
-    var weighted: Bool
-
-    def __init__(out self):
-        self.groups = List[Int]()
-        self.cnt = List[Int]()
-        self.eos = List[Int]()
-        self.match_off = MC_NONE
-        self.w_off = MC_NONE
-        self.n = 0
-        self.labels = 0
-        self.weighted = False
-
-
 def mc_sums(mut prog: MetricDoorProg, pair: McPair, order: PythonObject, epis: List[McEpi],
             context: PythonObject) raises -> McSums:
     """`_Sums(true, pred, w, order, numeric_mode, epi=...)` up to its tail:
@@ -205,34 +163,6 @@ def mc_sums(mut prog: MetricDoorProg, pair: McPair, order: PythonObject, epis: L
     return s^
 
 
-def mc_wsum_sf64(mut prog: MetricDoorProg, s: McSums, k: Int) raises -> Int:
-    """`_wsum_sf64`: the weighted COUNT's hit and weight total as soft
-    binary64 sums (one leaf unit per WSUM_BLOCK rows, then one fold stage
-    per tree level)."""
-    var nb = max(1, (s.n + _WSUM_BLOCK - 1) // _WSUM_BLOCK)
-    var out = prog.scratch(4 * nb)
-    prog.stage("cm_epi", nb, [_CM_WSUM_LEAF, s.match_off, s.w_off, s.n, out, k])
-    var stride = 1
-    for _ in range(64):  # driver-loop: over the fold tree levels (log2 of the block count)
-        if stride >= nb:
-            break
-        prog.stage("cm_epi", (nb - stride + 2 * stride - 1) // (2 * stride), [_CM_WSUM_FOLD, out, stride, nb])
-        stride *= 2
-    return out
-
-
-def mc_count_tail(mut prog: MetricDoorProg, s: McSums, k: Int) raises -> Int:
-    """`_cm_stage(..., _CM_COUNT, 11)`: the COUNT tail's 11-word slot."""
-    var col = 1 if s.weighted else 0
-    var out = prog.alloc(11)
-    var tp = s.groups[col]
-    var tot = s.n
-    if s.weighted:
-        tot = mc_wsum_sf64(prog, s, k)
-    prog.stage("cm_epi", 1, [_CM_COUNT, tp, k, col, tot, out])
-    return out
-
-
 # --------------------------------------------------------------- accuracy
 
 
@@ -246,7 +176,7 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var pair = mc_pair(args[1], args[2], args[4], "accuracy_score", context, True, True)
         var prog = MetricDoorProg()
         var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
-        var out = mc_count_tail(prog, s, mc_len(pair.present))
+        var out = mc_count_tail(prog.plan, s, mc_len(pair.present))
         var arena = metric_door_run(prog, args[5], context)
         if not s.weighted:
             return PythonObject(arena.i32(out + 1))
@@ -536,45 +466,18 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def mc_put_proba(mut prog: MetricDoorProg, a: PythonObject, n: Int, k: Int, binary: Bool) raises -> Tuple[Int, Int]:
-    """`_put_proba`: (S, FLAGS); the probabilities' check and layout."""
+    """`_put_proba`: (S, FLAGS); the probabilities pinned, the stages typed."""
     var a_off = prog.put(a)
-    var flags = prog.alloc(3)
-    var s = a_off
-    if binary:
-        s = prog.scratch(2 * n)
-    if n:
-        prog.stage("proba_rows", n, [a_off, n, 1 if binary else k, 1 if binary else 0, s, flags])
-    return (s, flags)
+    return mc_proba_stages(prog.plan, a_off, n, k, binary)
 
 
-def mc_proba_code(arena: MetricArenaOwner, flags: Int) raises -> Int:
-    """`_proba_code`: 0, or the first failed check."""
-    if arena.i32(flags) != 0:
-        return 1
-    if arena.i32(flags + 1) != 0:
-        return 2
-    if arena.i32(flags + 2) != 0:
-        return 3
-    return 0
-
-
-def mc_row_mean(mut prog: MetricDoorProg, s: Int, cols: Int, y: Int, n: Int, kind: Int, w: PythonObject,
-                normalize: Bool, half: Bool) raises -> Int:
-    """`_row_mean`'s stages (`_row_fold`, then rank_epi MEAN) before the
-    run: the binary64 result's offset."""
-    var out = prog.scratch(n)
-    prog.stage("row_metric", n, [s, cols, y, out, kind, 0, MC_NONE])
-    var zero = prog.scratch(n)
-    prog.stage("pair_key", n, [0, 0, zero, 1, 2])
-    var w_off = MC_NONE
+def mc_row_mean_door(mut prog: MetricDoorProg, s: Int, cols: Int, y: Int, n: Int, kind: Int, w: PythonObject,
+                     normalize: Bool, half: Bool) raises -> Int:
+    """`_row_mean` before the run: the typed stages, the weights pinned as
+    the input the stages declared."""
+    var res = mc_row_mean(prog.plan, s, cols, y, n, kind, w is not None, normalize, half)
     if w is not None:
-        w_off = prog.put(w)
-    var tot = prog.group(zero, n, 1, out, 1, w_off, 1)[1]
-    var sw = MC_NONE
-    if w is not None:
-        sw = prog.group(zero, n, 1, MC_NONE, 1, w_off, 1)[1]
-    var res = prog.alloc(2)
-    prog.stage("rank_epi", 1, [_RANK_MEAN, tot, n, sw, 1 if normalize else 0, 1 if half else 0, res])
+        prog.pins.append(w)
     return res
 
 
@@ -653,7 +556,7 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
     var prog = MetricDoorProg()
     var put = mc_put_proba(prog, proba, n, k, binary)
     var y = prog.put(codes)
-    var res = mc_row_mean(prog, put[0], k, y, n, _ROW_LOGLOSS, w, mc_bool(args[2]), False)
+    var res = mc_row_mean_door(prog, put[0], k, y, n, _ROW_LOGLOSS, w, mc_bool(args[2]), False)
     var arena = metric_door_run(prog, args[5], context)
     var code = mc_proba_code(arena, put[1])
     if code == 1:
@@ -703,7 +606,7 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var prog = MetricDoorProg()
     var put = mc_put_proba(prog, proba, n, k, binary)
     var y = prog.put(encoded)
-    var res = mc_row_mean(prog, put[0], k, y, n, _ROW_LOGLOSS, PythonObject(None), mc_bool(normalize), False)
+    var res = mc_row_mean_door(prog, put[0], k, y, n, _ROW_LOGLOSS, PythonObject(None), mc_bool(normalize), False)
     var arena = metric_door_run(prog, args[5], context)
     var code = mc_proba_code(arena, put[1])
     if code == 1:
@@ -727,7 +630,7 @@ def mcls_accuracy_fraction(y_true: PythonObject, y_pred: PythonObject, sample_we
     var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context, true_admitted, pred_admitted)
     var prog = MetricDoorProg()
     var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
-    var out = mc_count_tail(prog, s, mc_len(pair.present))
+    var out = mc_count_tail(prog.plan, s, mc_len(pair.present))
     var arena = metric_door_run(prog, numeric_mode, context)
     if s.weighted and arena.i32(out) != 0:
         raise Error("ZeroDivisionError: float division by zero")
