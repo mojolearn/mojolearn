@@ -560,7 +560,7 @@ def _class_list(classes: PythonObject, codes: List[Int], context: PythonObject) 
     var is_tuple = py_type(classes) is b.tuple
     var slots = List[Int64](length=n, fill=0)
     var used = List[Bool](length=k, fill=False)
-    for t in range(n):  # driver-loop: native range check of the code words (no CPython call)
+    for t in range(n):  # native data loop (not a driver loop): native range check of the code words (no CPython call)
         var i = codes[t]
         var j = i + k if i < 0 else i
         if j < 0 or j >= k:
@@ -583,7 +583,7 @@ def _class_list(classes: PythonObject, codes: List[Int], context: PythonObject) 
                 words[j] = Int64(Int(py=py_call(b.int, classes[j])))
         var out = admitted_vector(n, "<i8", _out(context))
         var dest = I64P(unsafe_from_address=labels_address(out))
-        for t in range(n):  # driver-loop: native gather of the class words (no CPython call)
+        for t in range(n):  # native data loop (not a driver loop): native gather of the class words (no CPython call)
             dest[t] = words[Int(slots[t])]
         _ = out  # keep the Python object alive through the native writes above
         return out
@@ -594,7 +594,7 @@ def _class_list(classes: PythonObject, codes: List[Int], context: PythonObject) 
                 reals[j] = Float64(py=py_call(b.float, classes[j]))
         var out = admitted_vector(n, "<f8", _out(context))
         var dest = F64P(unsafe_from_address=labels_address(out))
-        for t in range(n):  # driver-loop: native gather of the class words (no CPython call)
+        for t in range(n):  # native data loop (not a driver loop): native gather of the class words (no CPython call)
             dest[t] = reals[Int(slots[t])]
         _ = out  # keep the Python object alive through the native writes above
         return out
@@ -689,7 +689,7 @@ def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context:
     var units = (n + _TEXT_LOOKUP_CHUNK - 1) // _TEXT_LOOKUP_CHUNK
     def lookup(unit: Int) {imm tp, imm kp, imm cp, imm n, imm address, imm as_float}:
         var stop = min(n, (unit + 1) * _TEXT_LOOKUP_CHUNK)
-        for i in range(unit * _TEXT_LOOKUP_CHUNK, stop):  # driver-loop: labels of one lookup chunk (native, no Python)
+        for i in range(unit * _TEXT_LOOKUP_CHUNK, stop):  # native data loop (not a driver loop): labels of one lookup chunk (native, no Python)
             var found = str_find(tp[], i, kp[], cp[])
             if as_float:
                 F32P(unsafe_from_address=address)[i] = Float32(found)
@@ -701,7 +701,7 @@ def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context:
     _ = lookup_classes
     var unseen = List[Int](length=5, fill=0)
     var count = 0
-    for i in range(n):  # driver-loop: native scan for unseen labels (no CPython call)
+    for i in range(n):  # native data loop (not a driver loop): native scan for unseen labels (no CPython call)
         var missing = F32P(unsafe_from_address=address)[i] < 0 if as_float else I32P(unsafe_from_address=address)[i] < 0
         if missing:
             if count < 5:
@@ -938,7 +938,7 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
         var dest = I32P(unsafe_from_address=address)
         var unseen = List[Int](length=5, fill=0)
         var count = 0
-        for i in range(n):  # driver-loop: native scan for unseen labels (no CPython call)
+        for i in range(n):  # native data loop (not a driver loop): native scan for unseen labels (no CPython call)
             if dest[i] < 0:
                 if count < 5:
                     unseen[count] = i
@@ -993,7 +993,7 @@ def _le_inverse(model: PythonObject, y: PythonObject, context: PythonObject) rai
     if not _code_buffer(y, context, codes):
         codes = _int64_codes(_flatten_labels(y, context))
     var k = len(classes)
-    for i in range(len(codes)):  # driver-loop: native range check of the code words (no CPython call)
+    for i in range(len(codes)):  # native data loop (not a driver loop): native range check of the code words (no CPython call)
         if codes[i] < 0 or codes[i] >= k:
             raise Error(UNSEEN)
     return _class_list(classes, codes, context)
@@ -1195,7 +1195,7 @@ def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, c
         var idx = List[Int](length=n, fill=0)
         if K != 1:
             var words = F32P(unsafe_from_address=Int(py=ran_obj[0][1]))
-            for i in range(n):  # driver-loop: native read of one code per row (no CPython call)
+            for i in range(n):  # native data loop (not a driver loop): native read of one code per row (no CPython call)
                 idx[i] = Int(words[codes + i])
             _ = ran_obj  # keep the result alive through the native reads above
         return _class_list(classes, idx, context)
