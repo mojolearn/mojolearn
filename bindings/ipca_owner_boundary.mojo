@@ -9,18 +9,7 @@ from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_
 from bindings.native_model_records import model_generation, records_open
 from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
 from bindings.ipca_descriptor_boundary import ipca_provider, ipca_driver, ipca_run_free
-
-
-def _slot(index: Int) -> String:
-    if index == 0:
-        return "ipca_components_native_v1"
-    if index == 1:
-        return "ipca_singular_native_v1"
-    if index == 2:
-        return "ipca_mean_native_v1"
-    if index == 3:
-        return "ipca_variance_native_v1"
-    return "ipca_explained_native_v1"
+from x_decomp.ipca_owner_boundary_run import _slot
 
 
 @fieldwise_init
