@@ -370,7 +370,9 @@ struct BufferView(Movable):
         owned by this view."""
         if self.matches("<f4"):
             return self.layout.address
-        self.converted = List[UInt8](length=self.layout.count * 4 if self.layout.count > 0 else 4, fill=0)
+        # PERF FIX (perf-audit-3, 2026-11-11): the conversion buffer is not
+        # zero-filled first; gather_f32/f64/i64 write every element.
+        self.converted = List[UInt8](unsafe_uninit_length=self.layout.count * 4 if self.layout.count > 0 else 4)
         var dst = Int(self.converted.unsafe_ptr())
         gather_f32(self.layout, self.kind, dst)
         return dst
@@ -379,7 +381,7 @@ struct BufferView(Movable):
         """`as_f32_c` for float64."""
         if self.matches("<f8"):
             return self.layout.address
-        self.converted = List[UInt8](length=self.layout.count * 8 if self.layout.count > 0 else 8, fill=0)
+        self.converted = List[UInt8](unsafe_uninit_length=self.layout.count * 8 if self.layout.count > 0 else 8)
         var dst = Int(self.converted.unsafe_ptr())
         gather_f64(self.layout, self.kind, dst)
         return dst
@@ -388,7 +390,7 @@ struct BufferView(Movable):
         """`as_f32_c` for int64 (integer or bool storage only)."""
         if self.matches("<i8"):
             return self.layout.address
-        self.converted = List[UInt8](length=self.layout.count * 8 if self.layout.count > 0 else 8, fill=0)
+        self.converted = List[UInt8](unsafe_uninit_length=self.layout.count * 8 if self.layout.count > 0 else 8)
         var dst = Int(self.converted.unsafe_ptr())
         gather_i64(self.layout, self.kind, dst)
         return dst
