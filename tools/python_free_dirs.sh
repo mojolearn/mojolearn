@@ -6,7 +6,14 @@
 #     tests/ imports Python, or
 #   - a file listed in tools/python_free_doors.txt (paths or globs; RUN modules
 #     and entry tables, wherever they live, bindings/ included), or any file
-#     matching `*_run.mojo`, imports Python.
+#     matching `*_run.mojo`, imports Python, or
+#   - a Mojo file under bindings/ or providers/python/ imports Python and is
+#     not a boundary file: `bindings/_mojolearn*.mojo` and `bindings/entry/*.mojo`
+#     (PUBLISH), `bindings/py_*.mojo` (shared CPython primitives), `*_unpack.mojo`
+#     (UNPACK), `*_pack.mojo` (PACK), `*_door.mojo` (one public operation's
+#     unpack, typed RUN call and pack), or an `allow:` line of
+#     tools/python_free_doors.txt (dated, owner named; it only shrinks).
+#     Everything else there is checked like a kernel directory.
 # "Imports Python" is `from python ...`, `from std.python ...`, `import
 # python`, a `providers.python` module, or naming the `PythonObject` type.
 # A kernel directory whose files import no Python cannot run Python. This is an
@@ -49,15 +56,23 @@ else
     doors_text=$(cat "$doors_file")
 fi
 doors=('*_run.mojo')
+# The boundary files that may import Python inside bindings/ and providers/python/.
+boundary_allow=('bindings/_mojolearn*.mojo' 'bindings/entry/*.mojo' 'bindings/py_*.mojo'
+                '*_unpack.mojo' '*_pack.mojo' '*_door.mojo')
+allowed=()
 while IFS= read -r line; do
     line=${line%%#*}
     line=$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-    [ -n "$line" ] && doors+=("$line")
+    case "$line" in
+        allow:*) line=${line#allow:}; line=${line#"${line%%[![:space:]]*}"}
+                 [ -n "$line" ] && allowed+=("$line") ;;
+        *) [ -n "$line" ] && doors+=("$line") ;;
+    esac
 done <<< "$doors_text"
 
-# A literal door (no glob) that does not exist is a stale list entry.
+# A literal door or allow entry (no glob) that does not exist is a stale list entry.
 missing=()
-for door in "${doors[@]}"; do
+for door in "${doors[@]}" ${allowed[@]+"${allowed[@]}"}; do
     case "$door" in *[*?[]*) continue ;; esac
     if [ -n "$rev" ]; then
         git cat-file -e "$rev:$door" 2>/dev/null || missing+=("$door")
@@ -117,8 +132,30 @@ else
     for door in "${doors[@]}"; do door_spec+=(":(glob)$door"); done
 fi
 
+# boundary_hits: the Python-importing Mojo files under bindings/ and
+# providers/python/ that match no boundary pattern and no allow: line.
+boundary_hits() {
+    local f a ok
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        ok=0
+        for a in "${boundary_allow[@]}" ${allowed[@]+"${allowed[@]}"}; do
+            case "$a" in
+                */*) case "$f" in $a) ok=1; break ;; esac ;;
+                *) case "${f##*/}" in $a) ok=1; break ;; esac ;;
+            esac
+        done
+        [ $ok = 1 ] || printf '%s\n' "$f"
+    done < <(if [ $in_git = 1 ]; then
+                 grep_paths ':(glob)bindings/**/*.mojo' ':(glob)providers/python/**/*.mojo'
+             else
+                 grep_paths ':(glob)bindings/*.mojo' ':(glob)providers/python/*.mojo'
+             fi)
+}
+
 kernel_hits=$(grep_paths "${kernel_spec[@]}")
 door_hits=$(grep_paths "${door_spec[@]}")
+bnd_hits=$(boundary_hits)
 if [ $grep_status -ne 0 ]; then
     echo "python_free_dirs: git grep failed (status $grep_status)" >&2
     exit 2
@@ -136,10 +173,17 @@ if [ -n "$door_hits" ]; then
     printf '  %s\n' $door_hits >&2
     bad=1
 fi
+if [ -n "$bnd_hits" ]; then
+    echo "python_free_dirs: these Mojo files under bindings/ or providers/python/ import Python but are not" >&2
+    echo "boundary files (_mojolearn*, entry/*, py_*, *_unpack, *_pack, *_door, or an allow: line in $doors_file);" >&2
+    echo "move their RUN work to a Python-free module and rename the rest:" >&2
+    printf '  %s\n' $bnd_hits >&2
+    bad=1
+fi
 if [ ${#missing[@]} -gt 0 ]; then
     echo "python_free_dirs: $doors_file lists files that do not exist (renamed or removed? update the list):" >&2
     printf '  %s\n' "${missing[@]}" >&2
     bad=1
 fi
 [ $bad = 0 ] || exit 1
-echo "python_free_dirs: no kernel-directory Mojo file, listed door or *_run.mojo imports Python"
+echo "python_free_dirs: no kernel-directory Mojo file, listed door, *_run.mojo or non-boundary binding imports Python"
