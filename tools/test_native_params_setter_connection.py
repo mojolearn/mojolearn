@@ -152,7 +152,7 @@ def test_setter_preserves_references_and_never_invokes_python_estimator_protocol
 
 
 def test_native_slots_setter_and_getter_connection_order_preserves_snapshots():
-    source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    source = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
     calls = ('_connect_public_attributes(', '_connect_native_cv(',
              '_connect_params_setter(', '_connect_params_metadata_classes(')
     positions = [source.index(call) for call in calls]

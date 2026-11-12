@@ -82,7 +82,7 @@ def test_additional_constructor_work_requires_explicit_new_schema():
 
 
 def test_installer_precedes_all_layout_snapshots():
-    text=(ROOT/'python/mojolearn/__init__.py').read_text()
+    text=(ROOT/'python/mojolearn/_families.py').read_text()  # the package's class connections
     calls=['_install_linear_constructors(', '_connect_mode_metadata_classes(', '_connect_public_attributes(',
            '_connect_native_cv(', '_connect_params_setter(', '_connect_params_metadata_classes(', '_connect_linear_constructors(']
     positions=[text.index(call) for call in calls];assert positions==sorted(positions)

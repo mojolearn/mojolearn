@@ -224,32 +224,38 @@ def _connect_pass(package):
         trees_bridge.connect_cpu_prediction()
 
     # Field-only constructors must precede every method/storage identity snapshot.
-    from . import _native_linear_constructors as linear_constructors
-    linear_constructors.collect()
-    linear_constructors.install()
+    from ._native_linear_constructors import (collect as _collect_linear_constructors,
+                                              install as _install_linear_constructors,
+                                              connect as _connect_linear_constructors)
+    _collect_linear_constructors()
+    _install_linear_constructors()
     # Full-reset setters precede every class-layout snapshot; the linear subset keeps its separate contract.
-    from . import _native_full_reset_params as full_reset
-    full_reset.collect()
-    full_reset.install()
+    from ._native_full_reset_params import (collect as _collect_full_reset_params,
+                                            install as _install_full_reset_params,
+                                            connect as _connect_full_reset_params)
+    _collect_full_reset_params()
+    _install_full_reset_params()
     # Field-only declared prep/decomp constructors precede every class-layout snapshot too.
-    from . import _native_declared_constructors as declared_constructors
-    declared_constructors.collect()
-    declared_constructors.install()
+    from ._native_declared_constructors import (collect as _collect_declared_constructors,
+                                                install as _install_declared_constructors,
+                                                connect as _connect_declared_constructors)
+    _collect_declared_constructors()
+    _install_declared_constructors()
     # Layouts connected at module import (neighbor queries, host inference, ...)
     # predate the installers above: rebind their replaced __init__/set_params.
-    from ._native_classical_bridge import refresh_installed_members
-    refresh_installed_members()
+    from ._native_classical_bridge import refresh_installed_members as _refresh_installed_members
+    _refresh_installed_members()
 
     # CV's fixed native estimator ABIs after every public class exists.
-    from ._native_mode_metadata import connect_classes as connect_mode_metadata
-    connect_mode_metadata(_mode._MODE_METADATA_CONTEXT, package)
+    from ._native_mode_metadata import connect_classes as _connect_mode_metadata_classes
+    _connect_mode_metadata_classes(_mode._MODE_METADATA_CONTEXT, package)
     # Native attribute slots precede the estimator and parameter layout snapshots.
-    from ._native_public_attributes import connect_classes as connect_attributes
-    connect_attributes(package)
+    from ._native_public_attributes import connect_classes as _connect_public_attributes
+    _connect_public_attributes(package)
 
     if selection is not None:
-        from ._native_msel_dispatch import connect as connect_cv
-        connect_cv(selection._NATIVE_CONTEXT, package)
+        from ._native_msel_dispatch import connect as _connect_native_cv
+        _connect_native_cv(selection._NATIVE_CONTEXT, package)
         # The prep owners (RFE, IterativeImputer, TargetEncoder's cv splitter)
         # reach a wrapped estimator or splitter through the same compiled
         # model-selection entry and plan table (bindings/prep_native_estimator.mojo).
@@ -267,31 +273,32 @@ def _connect_pass(package):
             trees._TREES_CONTEXT["trees_linear_predict"] = linear._LinearRegressorMixin.__dict__["predict"]
         # Parameter-read schemas capture the final built-in installers' method
         # and descriptor identities; the connection changes only this private plan table.
-        from ._native_params_setter import connect as connect_params_setter
-        connect_params_setter(selection._NATIVE_CONTEXT, _mode._PARAMS_METADATA_CONTEXT)
+        from ._native_params_setter import connect as _connect_params_setter
+        _connect_params_setter(selection._NATIVE_CONTEXT, _mode._PARAMS_METADATA_CONTEXT)
 
-    from ._native_params_metadata import connect_classes as connect_params_metadata
-    connect_params_metadata(_mode._PARAMS_METADATA_CONTEXT, package)
+    from ._native_params_metadata import connect_classes as _connect_params_metadata_classes
+    _connect_params_metadata_classes(_mode._PARAMS_METADATA_CONTEXT, package)
 
     if selection is not None:
-        from ._native_declared_params import connect as connect_declared_params, CONTEXT as declared
-        connect_declared_params(package, selection._NATIVE_CONTEXT, _mode._PARAMS_METADATA_CONTEXT)
+        from ._native_declared_params import connect as _connect_declared_params, CONTEXT as _declared
+        _connect_declared_params(package, selection._NATIVE_CONTEXT, _mode._PARAMS_METADATA_CONTEXT)
         # Complete constructor ownership only after the native setter layouts exist.
-        from ._native_params_setter import _CONTEXT as setters
-        linear_constructors.connect(setters)
+        from ._native_params_setter import _CONTEXT as _setters
+        _connect_linear_constructors(_setters)
         # Connect full-reset ownership and nested routes after all getter/setter plans.
-        full_reset.connect(_mode._PARAMS_METADATA_CONTEXT, setters, declared, selection._NATIVE_CONTEXT)
+        _connect_full_reset_params(_mode._PARAMS_METADATA_CONTEXT, _setters, _declared, selection._NATIVE_CONTEXT)
         # Declared-family constructors release overwritten values under the declared setter's admission.
-        declared_constructors.connect(declared)
+        _declared_constructor_setters = _declared
+        _connect_declared_constructors(_declared_constructor_setters)
 
     # Snapshot family storage after every native constructor/attribute installer.
-    from ._native_family_layouts import connect as connect_family_layouts
-    connect_family_layouts(package)
+    from ._native_family_layouts import connect as _connect_family_layouts
+    _connect_family_layouts(package)
 
     if selection is not None:
         # Default member estimators are constructed only after every constructor above is connected.
-        from ._native_msel_prep import connect_estimator_defaults
-        connect_estimator_defaults()
+        from ._native_msel_prep import connect_estimator_defaults as _connect_estimator_defaults
+        _connect_estimator_defaults()
 
     # The public parallel drivers' class/storage snapshots are taken last:
     # every class connection above precedes them, so a correct call is not
