@@ -12,6 +12,7 @@ coefficient lookup stays in UNPACK). Each function is a scalar decision on
 one fit's options; there is no independent work to split across cores.
 """
 from std.math import isfinite, floor, copysign
+from std.os import getenv
 from std.memory import bitcast
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
 
@@ -207,3 +208,13 @@ def gbdt_bias_of(text: String) raises -> Float64:
             raise Error("invalid literal for int() with base 16: '" + hex + "'")
         bits = (bits << 4) | UInt64(d)
     return bitcast[DType.float64](bits)
+
+
+def _sabotaged() -> Bool:
+    return getenv("MOJOLEARN_CATBOOST_DEFAULTS_SABOTAGE") == "1" and getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1"
+
+
+def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
+    if not (0 <= v and v < n_rows):
+        raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
+                    + String(n_rows) + " rows")

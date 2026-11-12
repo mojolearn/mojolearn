@@ -17,7 +17,6 @@
 # dimension is read from the fitted text in the same call.
 from std.math import isfinite
 from std.memory import bitcast
-from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native_door import _read, _resolved
@@ -54,6 +53,7 @@ from bindings.label_list_words_unpack import label_store_address
 from bindings.label_list_words_pack import label_list_store
 from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
 from gbdt.trees_gbdt_fit_run import (
+    _sabotaged, _pair_end_range,
     GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,
     gbdt_validate_search_options, gbdt_id_code, gbdt_id_typestr_supported, gbdt_check_group_rows, gbdt_bias_of,
 )
@@ -124,10 +124,6 @@ def catboost_auto_learning_rate_op(args: PythonObject, context: PythonObject) ra
     iterations, use_best_model, boost_from_average, table=None)`."""
     return gbdt_auto_learning_rate(args[0], _float(args[1]), _float(args[2]), _truthy(args[3]),
                                    _truthy(args[4]), args[5] if _truthy(args[5]) else PythonObject(None), context)
-
-
-def _sabotaged() -> Bool:
-    return getenv("MOJOLEARN_CATBOOST_DEFAULTS_SABOTAGE") == "1" and getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1"
 
 
 def _resolved_learning_rate(fields: PythonObject, model: PythonObject, n_rows: Int, n_eval_rows: Int,
@@ -603,12 +599,6 @@ def _pair_end_checked(index: PythonObject, i: Int, j: Int, n_rows: Int, int_word
         v = Int(py=py_call_typed(admit.int_t, index))
     _pair_end_range(v, i, j, n_rows)
     return v
-
-
-def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
-    if not (0 <= v and v < n_rows):
-        raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
-                    + String(n_rows) + " rows")
 
 
 def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, admit: _PairAdmit) raises -> Float32:
