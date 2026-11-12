@@ -121,7 +121,6 @@ from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
 from core.admitted_rows_plan import admitted_rows_base, admitted_rows_indices, admitted_rows_shape, admitted_rows_store, admitted_rows_run
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from std.python._cpython import PyObjectPtr, GILReleased
-from std.reflection import reflect
 from std.sys.compile import is_defined
 from bindings.py_balanced import py_setattr, py_get, py_setitem
 from bindings.py_attr import py_attr
@@ -1170,7 +1169,7 @@ def register_admitted_buffer_pin(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[AdmittedBufferPin[]]()
     except error:
-        if not py_type_absent(error, String(reflect[AdmittedBufferPin[]].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[AdmittedBufferPin[]]("_AdmittedBufferPin")
         return

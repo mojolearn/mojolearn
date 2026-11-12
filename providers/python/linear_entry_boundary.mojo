@@ -2,7 +2,6 @@
 """Canonical import-time connections, with Python image pins only at UNPACK."""
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_owner_registry import borrowed_native_owner, register_native_owner_type
 from bindings.py_balanced import py_type, py_call
@@ -54,7 +53,7 @@ def register_linear_entry_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[LinearEntryOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[LinearEntryOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[LinearEntryOwner]("_LinearEntryOwner")
         return

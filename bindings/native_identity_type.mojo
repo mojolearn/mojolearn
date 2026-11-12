@@ -7,7 +7,7 @@ class. Module setup runs with the GIL; this never runs in an execution loop.
 """
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent
 from bindings.native_identity_key import NativeIdentityKey
 from bindings.py_balanced import py_setattr
 
@@ -19,9 +19,7 @@ def native_identity_type(mut module: PythonModuleBuilder) raises:
     except error:
         # Only the documented absent-registration case authorizes creation.
         # Keep every other lookup error and all creation/attachment errors.
-        # stdlib1.0 source: std/python/bindings.mojo, lookup_py_type_object.
-        var absent = String("No Python type object registered for Mojo type with name: ") + String(reflect[NativeIdentityKey].name())
-        if String(error) != absent:
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[NativeIdentityKey]("_NativeIdentityKey")
         return

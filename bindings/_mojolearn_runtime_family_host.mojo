@@ -10,7 +10,6 @@ from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.hdbscan_query_boundary import HdbscanQueryRecord
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
@@ -64,7 +63,7 @@ def register_hdbscan_query_record(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[HdbscanQueryRecord]()
     except error:
-        if not py_type_absent(error, String(reflect[HdbscanQueryRecord].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[HdbscanQueryRecord]("_HdbscanQueryRecord")
         return
@@ -76,7 +75,7 @@ def register_kmeans_resident_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[KMeansResidentOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[KMeansResidentOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[KMeansResidentOwner]("_KMeansResidentOwner")
         return
@@ -91,7 +90,7 @@ def register_KDEResidentOwner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[KDEResidentOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[KDEResidentOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[KDEResidentOwner]("_KDEResidentOwner")
         return
@@ -103,7 +102,7 @@ def register_KDEAdmissionOwner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[KDEAdmissionOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[KDEAdmissionOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[KDEAdmissionOwner]("_KDEAdmissionOwner")
         return
@@ -115,7 +114,7 @@ def register_DBSCANReferenceOwner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[DBSCANReferenceOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[DBSCANReferenceOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[DBSCANReferenceOwner]("_DBSCANReferenceOwner")
         return
@@ -127,7 +126,7 @@ def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[DBSCANHolder]()
     except error:
-        if not py_type_absent(error, String(reflect[DBSCANHolder].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[DBSCANHolder]("_DBSCANHolder")
         return
@@ -138,7 +137,7 @@ def register_AggloReferenceOwner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[AggloReferenceOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[AggloReferenceOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[AggloReferenceOwner]("_AggloReferenceOwner")
         return
@@ -150,7 +149,7 @@ def register_AggloHolder(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[AggloHolder]()
     except error:
-        if not py_type_absent(error, String(reflect[AggloHolder].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[AggloHolder]("_AggloHolder")
         return
@@ -162,7 +161,7 @@ def register_SvrPreparedLease(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[SvrPreparedLease]()
     except error:
-        if not py_type_absent(error, String(reflect[SvrPreparedLease].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[SvrPreparedLease]("_SvrPreparedLease")
         return
@@ -174,7 +173,7 @@ def register_GPPreparedLease(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[GPPreparedLease]()
     except error:
-        if not py_type_absent(error, String(reflect[GPPreparedLease].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[GPPreparedLease]("_GPPreparedLease")
         return
@@ -186,7 +185,7 @@ def register_GPPackedKernel(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[GPPackedKernel]()
     except error:
-        if not py_type_absent(error, String(reflect[GPPackedKernel].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[GPPackedKernel]("_GPPackedKernel")
         return
@@ -198,7 +197,7 @@ def register_GPPreparedKernel(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[GPPreparedKernel]()
     except error:
-        if not py_type_absent(error, String(reflect[GPPreparedKernel].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[GPPreparedKernel]("_GPPreparedKernel")
         return
@@ -210,7 +209,7 @@ def register_GPPreparedState(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[GPPreparedState]()
     except error:
-        if not py_type_absent(error, String(reflect[GPPreparedState].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[GPPreparedState]("_GPPreparedState")
         return
@@ -222,7 +221,7 @@ def register_GPPreparedClassTable(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[GPPreparedClassTable]()
     except error:
-        if not py_type_absent(error, String(reflect[GPPreparedClassTable].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[GPPreparedClassTable]("_GPPreparedClassTable")
         return

@@ -14,7 +14,6 @@ Registered once, by `_mojolearn_runtime_byte_trainer_host`.
 """
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from core.state_registry import StateHandle
 from core.byte_lm_entry_table import ByteLmEntryKey
@@ -76,7 +75,7 @@ def register_bytelmsessionowner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[ByteLmSessionOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[ByteLmSessionOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[ByteLmSessionOwner]("_ByteLmSessionOwner")
         return

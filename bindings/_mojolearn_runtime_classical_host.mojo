@@ -20,7 +20,6 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.python.bindings import lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.trees_lifetime import TreesResident, trees_resident_pins
 from bindings.trees_resident_table import TreesResidentDeath
@@ -67,7 +66,7 @@ def register_trees_resident(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[TreesResident]()
     except error:
-        if not py_type_absent(error, String(reflect[TreesResident].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[TreesResident]("_TreesResident")
         return
@@ -79,7 +78,7 @@ def register_trees_resident_death(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[TreesResidentDeath]()
     except error:
-        if not py_type_absent(error, String(reflect[TreesResidentDeath].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[TreesResidentDeath]("_TreesResidentDeath")
         return
@@ -91,7 +90,7 @@ def register_tree_shap_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[TreeShapOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[TreeShapOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[TreeShapOwner]("_TreeShapOwner")
         return
@@ -103,7 +102,7 @@ def register_compiled_binding_snapshot(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[CompiledBindingSnapshot]()
     except error:
-        if not py_type_absent(error, String(reflect[CompiledBindingSnapshot].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[CompiledBindingSnapshot]("_CompiledBindingSnapshot")
         return

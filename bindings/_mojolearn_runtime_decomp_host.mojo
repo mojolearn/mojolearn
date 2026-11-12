@@ -10,7 +10,6 @@ from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from providers.python.pca_query_cache_pyapi import PCAQueryCache
 from bindings.tsvd_owner_boundary import TSVDResidentOwner
@@ -59,7 +58,7 @@ def register_pca_query_cache(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[PCAQueryCache]()
     except error:
-        if not py_type_absent(error, String(reflect[PCAQueryCache].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[PCAQueryCache]("_PCAQueryCache")
         return
@@ -71,7 +70,7 @@ def register_tsvd_resident_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[TSVDResidentOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[TSVDResidentOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[TSVDResidentOwner]("_TSVDResidentOwner")
         return
@@ -83,7 +82,7 @@ def register_ipca_resident_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[IPCAResidentOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[IPCAResidentOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[IPCAResidentOwner]("_IPCAResidentOwner")
         return

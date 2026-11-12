@@ -102,7 +102,6 @@ from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.optimizer_owner_boundary import OptimizerOwner
 from std.python.bindings import lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
@@ -1189,7 +1188,7 @@ def register_optimizer_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[OptimizerOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[OptimizerOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[OptimizerOwner]("_OptimizerOwner")
         return

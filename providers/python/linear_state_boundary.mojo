@@ -9,7 +9,6 @@ admitted descriptors before taking its immutable native snapshot.
 from std.python import PythonObject
 from std.memory import ArcPointer
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry import borrowed_native_owner, register_native_owner_type
 from bindings.classical_arrays import classical_address
@@ -124,7 +123,7 @@ def register_linear_state_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[LinearStateOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[LinearStateOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[LinearStateOwner]("_LinearStateOwner")
         return
