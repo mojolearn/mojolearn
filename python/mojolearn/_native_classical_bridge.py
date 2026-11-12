@@ -318,6 +318,15 @@ def _layout(cls, attribute_descriptor):
 _IMPORT_LAYOUTS = []
 
 
+def arm_import_layouts():
+    """Collect the layouts taken while a family imports (lane
+    lazy-family-import): `_families` arms this when the outermost package
+    import begins; `refresh_installed_members` rebinds and disarms it."""
+    global _IMPORT_LAYOUTS
+    if _IMPORT_LAYOUTS is None:
+        _IMPORT_LAYOUTS = []
+
+
 def refresh_installed_members(names=("__init__", "set_params")):
     # glue: called once by the package after every constructor/setter installer
     # and before any later snapshot; a stale binding would refuse the native

@@ -3,6 +3,11 @@
 import os
 import sys
 
+# Lazy family import (lane lazy-family-import): a worker runs on the loaded
+# set the package had before it, every family and unit, as its parent may hand
+# it any of them.
+from . import _families as _worker_families
+_worker_families.load_all()
 from .parallel_forecasting import _native_parallel_forecast
 
 _native_parallel_forecast('worker', sys.argv)

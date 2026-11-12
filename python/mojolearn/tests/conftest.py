@@ -24,6 +24,15 @@ import os
 import pytest
 
 from mojolearn.tests._suite_env import ENVIRONMENT
+from mojolearn import _families
+
+# The suite was written against the package that imported every family at
+# `import mojolearn`, and its tests read the connection tables of every
+# family. Since lane lazy-family-import (2026-11-12) a family loads on first
+# touch, so the suite loads the pre-lane set once here (`load_all`, what
+# `python -m mojolearn` and the workers do). The lazy path itself is checked in
+# fresh interpreters by tests/test_lazy_family_import.py.
+_families.load_all()
 
 
 def pytest_collection_modifyitems(config, items):
