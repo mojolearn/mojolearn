@@ -3215,7 +3215,8 @@ def _fit_weights(model: PythonObject, args: PythonObject, operation: String) rai
     if py_type(params) is not b.dict:
         raise Error("TypeError: native fit keywords require an exact dictionary")
     var string_type = b.str
-    var weights = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var weights = Optional[PythonObject]()
     ref cpy = Python().cpython()
     var position = 0
     var raw_key = PyObjectPtr()
@@ -3235,7 +3236,7 @@ def _fit_weights(model: PythonObject, args: PythonObject, operation: String) rai
         else:
             raise Error("TypeError: " + _name(model) + ".fit() got an unexpected keyword argument " + _repr(key))
     _ = params  # owns borrowed values through their final NewRef
-    return weights
+    return py_or_none(weights)
 
 
 def _no_fit_params(model: PythonObject, args: PythonObject) raises:
