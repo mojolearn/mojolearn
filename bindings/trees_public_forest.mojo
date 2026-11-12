@@ -22,7 +22,7 @@
 # vote) without returning to Python between the vote and the decode.
 from std.math import sqrt
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesLabels, trees_builtins, trees_table,
@@ -241,9 +241,9 @@ def _criterion_code(criterion: PythonObject, table: PythonObject, unsupported: P
     """`randomforest._criterion_code`."""
     var b = trees_builtins()
     if py_contains(table, criterion):
-        return py_get(table, criterion)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
+        return py_item(table, criterion)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
     if py_contains(unsupported, criterion):
-        _refuse("criterion=" + _repr(criterion), String(py_get(unsupported, criterion)))
+        _refuse("criterion=" + _repr(criterion), String(py_item(unsupported, criterion)))
     raise Error("criterion=" + _repr(criterion) + " is not a " + who + " criterion here; accepted are "
                 + _repr(py_call(b.sorted, table)))
 

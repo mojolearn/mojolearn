@@ -164,7 +164,7 @@ from bindings.gp_label_snapshot_native import gp_label_list as _label_list
 from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
 from bindings.mode_metadata_native import _fields
 from providers.python.classical_family_admission_pyapi import classical_family_admit
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields, py_item
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array, classical_input, classical_dtype_str, classical_c_bytes, _store_code
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_connect_numpy
@@ -217,7 +217,7 @@ def _schema_index(value: PythonObject, index: PythonObject) raises -> PythonObje
             raise Error("TypeError: saved sequence indices require exact integers")
     else:
         raise Error("TypeError: saved field paths require exact native containers")
-    return py_get(value, index)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
+    return py_item(value, index)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
 
 
 def _schema_float(value: PythonObject, context: PythonObject) raises -> Float64:
@@ -283,7 +283,7 @@ def _schema_field(fields: PythonObject, key: PythonObject, name: String) raises 
         raise Error("TypeError: saved field names require exact strings")
     if not py_contains(fields, key):
         raise Error("AttributeError: '" + name + "' object has no attribute '" + String(key) + "'")
-    return py_get(fields, key)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
+    return py_item(fields, key)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
 
 
 def _schema_has(fields: PythonObject, path: PythonObject) raises -> Bool:

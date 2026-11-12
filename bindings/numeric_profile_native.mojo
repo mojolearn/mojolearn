@@ -7,7 +7,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 from core.shared_slot import SharedSlot
@@ -235,7 +235,7 @@ def _default(use: PythonObject, fields: PythonObject, context: PythonObject) rai
                 var what = String(fields["ENV"])
                 value = _available(_canonical(env, what, fields), what, PythonObject("inference"), fields)
         py_setitem(defaults, use, value)
-    return py_get(defaults, use)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
+    return py_item(defaults, use)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
 
 
 def _profiles(fields: PythonObject) raises -> PythonObject:

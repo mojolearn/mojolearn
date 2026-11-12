@@ -2,7 +2,7 @@
 # Read-only cache operations. No upload, release or hidden-owner traversal.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_item
 from bindings.optimizer_public_words import stash_python_error
 from bindings.sequence_dtype_native import sequence_dtype_create
 from bindings.cpython_table import cpython_table
@@ -111,7 +111,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
             raise Error("TypeError: cache metadata requires an ordinary instance dictionary")
         _string_keys(fields,context)
         if py_contains(fields,name):
-            return py_get(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
+            return py_item(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
     elif cpython_table()[].PyErr_ExceptionMatches(context["cache_attribute_error"]._obj_ptr) != 0:
         cpython_table()[].PyErr_Clear()
     else:

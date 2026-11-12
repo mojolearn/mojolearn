@@ -88,6 +88,17 @@ def py_setattr(owner: PythonObject, var name: String, value: PythonObject) raise
         raise cpy.unsafe_get_error()
 
 
+def py_item(container: PythonObject, key: PythonObject) raises -> PythonObject:
+    """`container[key]` through `PyObject_GetItem`: exact subscript semantics
+    (a missing key raises the container's own KeyError or IndexError). Use
+    this instead of the std subscript when the result is returned directly
+    and the key is a borrowed argument (AGENTS.md, tail-call fix 2026-11-12)."""
+    var got = cpython_table()[].PyObject_GetItem(container._obj_ptr, key._obj_ptr)
+    if not got:
+        raise Python().cpython().unsafe_get_error()
+    return PythonObject(from_owned=got)
+
+
 def py_get(mapping: PythonObject, key: PythonObject) raises -> PythonObject:
     """`mapping.get(key)`."""
     return py_get(mapping, key, PythonObject(None))

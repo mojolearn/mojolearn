@@ -13,7 +13,7 @@ from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
 from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
 from bindings.native_array_view import native_array_ndarray_view as _array_view
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_find_admitted
 from bindings.native_mode_recipe import mode_recipe_call
@@ -241,7 +241,7 @@ def _availability_member(mut mods: NativeModules, cls: PythonObject, name: Pytho
     for i in range(len(ancestry)):  # driver-loop: raw descriptor protocol metadata only
         var fields = _class_fields(mods, ancestry[i])
         if py_contains(fields, name):
-            return py_get(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
+            return py_item(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
     return missing
 
 

@@ -9,7 +9,7 @@ from bindings.native_class_admission import class_record, class_admit, class_wat
 from bindings.cpython_table import cpython_table
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
@@ -27,7 +27,7 @@ def _resolved(mut mods: NativeModules, cls: PythonObject, name: PythonObject, mi
     for i in range(len(ancestry)):  # driver-loop: raw class namespaces, without descriptor calls
         var fields = _class_fields(mods, ancestry[i])
         if py_contains(fields, name):
-            return py_get(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
+            return py_item(fields, name)  # tail-call fix (2026-11-12): a std subscript returned directly is emitted as an LLVM tail call; LLVM may drop the borrowed key's stack store (Mojo 1.2.0). Read through the C API.
     return missing
 
 
