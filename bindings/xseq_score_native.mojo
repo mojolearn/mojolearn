@@ -38,10 +38,23 @@ def _shape_words(value: PythonObject) raises -> List[Int]:
     return words^
 
 
+def _lead_words(value: PythonObject, rank: Int, keep: Int) raises -> List[Int]:
+    """UNPACK: the shape words a check reads. Of a rank-`keep` (or lower)
+    array, its words; of any other rank, every word (a refusal's text).
+    The old helpers read ndim and the leading extent, not the whole shape
+    tuple (round2-fixes, perf audit 2 A pattern 9)."""
+    if rank > keep:
+        return _shape_words(value)
+    var words = List[Int]()
+    for i in range(rank):  # driver-loop: over at most `keep` shape words
+        words.append(Int(py=value.shape[i]))
+    return words^
+
+
 def _vector(value: PythonObject, name: String) raises -> PythonObject:
     """`_as_f32_1d` of an already float32 array: `_vector_shape`'s refusals,
     the column flattened, then the finiteness refusal."""
-    var shape = _shape_words(value)
+    var shape = _lead_words(value, Int(py=value.ndim), 2)
     var n = xseq_run_vector_rows(shape, name)
     var out = xseq_reshape(value, Python.tuple(n)) if len(shape) == 2 else value
     xseq_run_vector_finite(Int(py=xseq_addr(out)), n, name)
@@ -87,7 +100,7 @@ def _r2_native(key: MetricsEntryKey, operation: Int, var addresses: List[Int], n
 def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_sample_weight_f32(sample_weight, n, "r2_score")`."""
     var w = xseq_as_f32_c(source, 0, "sample_weight", context)
-    xseq_run_weights_check(_shape_words(w), n, Int(py=xseq_addr(w)))
+    xseq_run_weights_check(_lead_words(w, Int(py=w.ndim), 1), n, Int(py=xseq_addr(w)))
     _ = w  # keep the Python object alive through the native scans above
     return w
 

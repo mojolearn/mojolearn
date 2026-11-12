@@ -96,7 +96,11 @@ def xseq_as_f32_c(source: PythonObject, ndim: Int, name: String, context: Python
     float32 array (float64 narrowed round-to-nearest-even, integers through
     float64 as `Array.astype` does). `ndim` 0 accepts any rank."""
     var a = xseq_input(source, context)
-    xseq_run_as_f32_check(_shape_words(a), ndim, name)
+    # The rank and the size decide; the shape words are read only for a
+    # refusal's text (round2-fixes: the door split read every shape word on
+    # every call, perf audit 2 A pattern 9; the old helper read ndim and size).
+    if (ndim != 0 and Int(py=a.ndim) != ndim) or Int(py=a.size) == 0:
+        xseq_run_as_f32_check(_shape_words(a), ndim, name)
     return admit_nd_f32(a, name, False, context)
 
 
