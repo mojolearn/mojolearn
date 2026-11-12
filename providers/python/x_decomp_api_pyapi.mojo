@@ -13,11 +13,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.api import (
     eigh_run, ew_run, gemm_run, lle_apply_run, lle_local_run, lu_solve_run, rand_run,
     sqdist_run, svd_run, trisolve_run,
-    absmax_sign_run, lars_rows_run, lasso_rows_run, lu_aux_run, omp_rows_run, r_signs_run,
-    rank_above_run, tsqr_r_run,
+    absmax_sign_run, lars_rows_run, lasso_rows_run, lu_aux_run, omp_rows_run,
+    rank_above_run,
     argmin_all_run, dsum_sq_run, geqrf_run, idn_flags_run,
     move_run, ols_tsqr_r_run, order_f_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
-    tsqr_q_run,
 )
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
@@ -362,32 +361,6 @@ def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject)
     return PythonObject(r)
 
 
-def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
-    """r (n x n, n = d + nrhs) = R of the blocked TSQR of [a | b] (a m x d,
-    b m x nrhs, row major; b is read only when nrhs > 0). p = [m, d, nrhs,
-    keep]: keep != 0 holds the factorization for `tsqr_q_py`."""
-    var m = _n(p, 0)
-    var d = _n(p, 1)
-    var nrhs = _n(p, 2)
-    var keep = Int(py=p[3]) != 0
-    var pa = _f(a)
-    var pb = _f(b)
-    var pr = _f(r)
-    var n = 0
-    with GILReleased(Python()):
-        n = tsqr_r_run[E](pa, pb, pr, m, d, nrhs, keep)
-    return PythonObject(n)
-
-
-def r_signs_py(r: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
-    """R's diagonal made non-negative for `linalg.qr` (`r_signs_run`). p = [n]."""
-    var n = _n(p, 0)
-    var pr = _f(r)
-    var pc = _f(c)
-    r_signs_run(pr, pc, n)
-    return PythonObject(0)
-
-
 def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises -> PythonObject:
     """How many singular values at sv are > 0 and > s[0] * rtol
     (`rank_above_run`). p = [n]."""
@@ -422,19 +395,6 @@ def ols_tsqr_r_py[E: Exec](
     return PythonObject(n)
 
 
-
-
-def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
-    """q (m x k) = Q c (c n x k) for the factorization `tsqr_r_py` kept,
-    which is then released; p = [m, n, k], k == 0 releases it only."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
-    var k = _n(p, 2)
-    var pc = _f(c)
-    var pq = _f(q)
-    with GILReleased(Python()):
-        tsqr_q_run[E](pc, pq, m, n, k)
-    return PythonObject(k)
 
 
 def geqrf_py[E: Exec](a: PythonObject, tau: PythonObject, p: PythonObject) raises -> PythonObject:

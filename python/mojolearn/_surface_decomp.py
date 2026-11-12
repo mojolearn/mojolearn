@@ -37,7 +37,7 @@ FAMILIES = (
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_barycenter_rows", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q",
+            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_barycenter_rows", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr",
             # lane apple-fast-py2mojo-decomp (2026-10-03): the rest of the module's data path
             "x_decomp_move", "x_decomp_dsum_sq", "x_decomp_order_f", "x_decomp_select_smallest", "x_decomp_argmin_all", "x_decomp_pca_mle_rank",
             # lane hr2-graph-embed (2026-10-02): the Isomap / LLE graph builds as cells
@@ -49,7 +49,7 @@ FAMILIES = (
             "x_decomp_mds_fit", "x_decomp_lle_iterate",
             "x_decomp_numeric_mode", "x_decomp_vendor",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "x_decomp_trisolve", "x_decomp_r_signs",
+            "x_decomp_trisolve",
             "x_decomp_rank_above", "x_decomp_graph_radius_geo",
             # lane mca2-decomp-a (2026-10-22): TruncatedSVD(algorithm='randomized').fit, one driver
             "x_decomp_tsvd_randomized", "x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project",

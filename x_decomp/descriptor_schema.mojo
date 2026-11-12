@@ -122,7 +122,12 @@ comptime XD_RANDOMIZED_SVD = 69   # a: [x, u, s, vt] i: [rows, cols, nc, oversam
 # (`x_decomp_order_small`, `x_decomp_dev_order_small`), appended.
 comptime XD_ORDER_SMALL = 70      # a: [x, dst] i: [n]
 comptime XD_DEV_ORDER_SMALL = 71  # i: [x, dst, n]
-comptime XD_OPERATION_COUNT = 72
+# lane entangled-decompkit (2026-11-12): the TSQR doors linalg.qr / svd
+# (bindings/linalg_ops_decomp.mojo) still called as Python entries
+# (`x_decomp_tsqr_q`, `x_decomp_r_signs`), appended.
+comptime XD_TSQR_Q = 72           # a: [c, q] i: [m, n, k]   (k == 0 releases the kept factorization only)
+comptime XD_R_SIGNS = 73          # a: [r, c] i: [n]
+comptime XD_OPERATION_COUNT = 74
 
 comptime XD_CAP_HOST = 1       # the host-address operations
 comptime XD_CAP_RESIDENT = 2   # the device-resident operations
@@ -262,6 +267,10 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (2, 1, 0)
     if op == XD_DEV_ORDER_SMALL:
         return (0, 3, 0)
+    if op == XD_TSQR_Q:
+        return (2, 3, 0)
+    if op == XD_R_SIGNS:
+        return (2, 1, 0)
     raise Error("x_decomp native ABI: unknown operation " + String(op))
 
 

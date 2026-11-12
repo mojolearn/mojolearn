@@ -12,7 +12,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from providers.python.x_decomp_api_pyapi import (
-    colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
+    colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, rank_above_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
@@ -186,8 +186,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[geqrf_py[DevExec]]("x_decomp_geqrf")
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
-        m.def_function[tsqr_r_py[DevExec]]("x_decomp_tsqr_r")
-        m.def_function[tsqr_q_py[DevExec]]("x_decomp_tsqr_q")
         # TruncatedSVD.fit's randomized and TSVD_QFIX routes, one driver each
         # (x_decomp/tsvd_owner.mojo; bindings/tsvd_native.mojo calls them)
         m.def_function[tsvd_randomized_py[DevExec, DevRDev, True]]("x_decomp_tsvd_randomized")
@@ -213,10 +211,11 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[lda_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_lda_owner")
         m.def_function[rp_fit_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_rp_fit")
         m.def_function[rp_project_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_rp_project")
-        m.def_function[r_signs_py]("x_decomp_r_signs")
         m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes
         m.def_function[idn_flags_py]("x_decomp_idn_flags")
+        # x_decomp_tsqr_r, x_decomp_tsqr_q and x_decomp_r_signs removed (lane entangled-decompkit,
+        # 2026-11-12): their callers use the table ops XD_TSQR_R, XD_TSQR_Q and XD_R_SIGNS.
         m.def_function[ols_tsqr_r_py[DevExec]]("x_decomp_ols_tsqr_r")
         # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
