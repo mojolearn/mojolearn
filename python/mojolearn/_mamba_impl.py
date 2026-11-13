@@ -1291,4 +1291,6 @@ class Mamba3DecodeSession:
 
 
 from . import _native_neural_bridge
-from .models import causal_lm as _causal_native_connection
+# The causal native connection that sets _native_neural_bridge.RUNTIME/CONTEXT runs at the
+# first read of either slot (_native_neural_bridge.__getattr__), not by importing models here:
+# that import closed a cycle when neural_inference imported first (lane lazy-import-fix).

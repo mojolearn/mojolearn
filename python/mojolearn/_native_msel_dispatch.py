@@ -100,7 +100,10 @@ def connect(context, package):
     forests = tuple(getattr(module, name) for module, names in (  # glue: exact native forest schemas of loaded families
         (loaded('randomforest'), ('RandomForestClassifier', 'RandomForestRegressor')),
         (loaded('extratrees'), ('ExtraTreesClassifier', 'ExtraTreesRegressor')),
-        (loaded('tree'), ('DecisionTreeClassifier', 'DecisionTreeRegressor')))
+        # The trees' defining module, not the `tree` re-export: `mojolearn.DecisionTree*` routes to
+        # `_expansion_trees` (_LAZY_NAMES), so gating on `tree` left them unregistered and an
+        # ensemble member was refused by Sequential admission (lane lazy-import-fix).
+        (loaded('_expansion_trees'), ('DecisionTreeClassifier', 'DecisionTreeRegressor')))
         if module is not None for name in names)
     if any(cls not in registry for cls in forests):
         from . import _native_trees_bridge
