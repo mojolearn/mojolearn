@@ -1610,6 +1610,7 @@ FAMILIES = (
         display="the byte LM forward pass and one training step",
         host_modules=(
             "training/byte_lm_host.mojo",
+            "training/byte_lm_host_backward.mojo",
             "training/byte_lm_host_program.mojo",
             "training/byte_lm_program.mojo",
             "autograd/block_step_host.mojo",

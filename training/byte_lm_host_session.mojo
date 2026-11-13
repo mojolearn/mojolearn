@@ -6,12 +6,22 @@
 # training/byte_lm_program.mojo), the GPU trainer's algorithm and its call
 # shape: `train_steps` is ONE Program.fit and a refused call commits none of
 # its steps; logits and next bytes keep byte_lm_host_execution's forward.
+# Lane restore-byte-lm-host-step (2026-11-13): that program is the B arm
+# -D MOJOLEARN_BYTE_LM_PROGRAM_STEP, as on the GPU columns. By default a call
+# of k steps runs k composed host steps (byte_host_train_native, the words of
+# the GPU columns' restored hand step) on the call's own lists and commits
+# them together, so the call rules stay the GPU trainer's: k steps in one
+# native call, step i the bits of the i-th of k single steps, a refused call
+# commits none of its steps.
 from std.math import isfinite
 from std.memory import unsafe_memcpy, unsafe_memcmp, bitcast
 from core.hostptr import read_f32, read_i32, f32_ptr, i32_ptr
-from training.byte_lm_config import ByteConfig
+from training.byte_lm_config import ByteConfig, BYTE_LM_PROGRAM_STEP
 from training.byte_lm_host_io import all_finite_f32_scan
-from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_optimizer
+from training.byte_lm_host_execution import (
+    byte_host_logits_native, byte_host_next_native, byte_host_optimizer, byte_host_train_native,
+    byte_host_loss_native,
+)
 from training.byte_lm_program import byte_program_fit, byte_program_eval
 from training.byte_lm_host_program import (
     ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_store,
@@ -243,17 +253,21 @@ struct ByteHostSession(Movable, Writable):
             self.synced = True
 
     def _fit(mut self, ids: Int, n_steps: Int, losses: Int, completed: Int) raises -> Int:
-        """`n_steps` training steps as ONE Program.fit (the GPU trainer's
-        `byte_steps_device`): `ids` the n_steps batches of batch * (length +
-        1) int32 ids in order, `losses` n_steps float32 step losses. A
-        non-finite loss or a state that fails the after-scans refuses the
-        whole call: nothing of it is committed. Returns completed + n_steps."""
+        """`n_steps` training steps in one call: `ids` the n_steps batches of
+        batch * (length + 1) int32 ids in order, `losses` n_steps float32
+        step losses. Default: n_steps composed host steps, step k reading
+        step k - 1's outputs, on the call's own lists. Under
+        MOJOLEARN_BYTE_LM_PROGRAM_STEP: ONE Program.fit (the GPU trainer's
+        `byte_steps_device`). A non-finite loss or a state that fails the
+        after-scans refuses the whole call: nothing of it is committed.
+        Returns completed + n_steps."""
         var cfg = self._cfg()
         var n = cfg.n_total()
         self.clear_shadow()
         self.grad_step = -1
-        self._ready()
-        self.synced = False
+        comptime if BYTE_LM_PROGRAM_STEP:
+            self._ready()
+            self.synced = False
         self.busy = True
         var p = List[Float32](length=n, fill=0)
         var m = List[Float32](length=n, fill=0)
@@ -262,11 +276,29 @@ struct ByteHostSession(Movable, Writable):
         # AdamW writes every tensor's moments: every momentum flag is set
         var flags = List[Int32](length=len(self.flags), fill=Int32(1))
         try:
-            var mean = byte_program_fit(self.program.value(), ids, n_steps, losses)
-            if not isfinite(mean):
-                raise Error("byte LM: nonfinite loss")
-            byte_host_program_store(self.program.value(), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()),
-                                    Int(v.unsafe_ptr()), Int(grad.unsafe_ptr()))
+            comptime if BYTE_LM_PROGRAM_STEP:
+                var mean = byte_program_fit(self.program.value(), ids, n_steps, losses)
+                if not isfinite(mean):
+                    raise Error("byte LM: nonfinite loss")
+                byte_host_program_store(self.program.value(), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()),
+                                        Int(v.unsafe_ptr()), Int(grad.unsafe_ptr()))
+            else:
+                var n_ids = cfg.batch * (cfg.length + 1)
+                var loss_out = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=losses)
+                # Step 0 reads the committed lists; step k > 0 reads step k - 1's
+                # outputs in p, m, v (the step reads all of its inputs before it
+                # writes an output). The committed lists are never written.
+                var src_p = Int(self.p.unsafe_ptr())
+                var src_m = Int(self.m.unsafe_ptr())
+                var src_v = Int(self.v.unsafe_ptr())
+                for k in range(n_steps):  # driver-loop: over the call's training steps (one composed host step each)
+                    var bits = host_loss_bits(byte_host_train_native([src_p, src_m, src_v, ids + k * n_ids * 4,
+                        Int(grad.unsafe_ptr()), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()), Int(v.unsafe_ptr())],
+                        cfg, self.optimizer, completed + k))
+                    loss_out[k] = UInt32(bits)
+                    src_p = Int(p.unsafe_ptr())
+                    src_m = Int(m.unsafe_ptr())
+                    src_v = Int(v.unsafe_ptr())
             host_state_validate(p, m, v, flags, completed + n_steps)
         except error:
             self.busy = False
@@ -331,8 +363,13 @@ struct ByteHostSession(Movable, Writable):
         host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
         self.admit(cfg, opt, completed, a[1])
         self.clear_shadow()
-        self._ready()
-        var loss = host_loss_bits(Int(bitcast[DType.uint32](byte_program_eval(self.program.value(), a[0]))))
+        var loss: Int
+        comptime if BYTE_LM_PROGRAM_STEP:
+            self._ready()
+            loss = host_loss_bits(Int(bitcast[DType.uint32](byte_program_eval(self.program.value(), a[0]))))
+        else:
+            # the composed host loss on every core (the oracle's bits)
+            loss = host_loss_bits(byte_host_loss_native([Int(self.p.unsafe_ptr()), a[0]], cfg, 1, 0))
         MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=a[2])[0] = UInt32(loss)
         return self.completed
 

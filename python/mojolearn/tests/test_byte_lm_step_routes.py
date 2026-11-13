@@ -13,6 +13,13 @@ one route, so the comparison crosses two runs of this file:
 Without the reference the cross-route test skips; the within-build checks
 (evaluate before a step equals that step's loss; train_steps equals the same
 train_step calls word for word) run on either build.
+
+Within one build every column runs the same route (the switch lives in
+training/byte_lm_config.mojo): the CPU column's composed host step by default,
+its host program under the define. `test_host_and_device_give_the_same_words`
+trains the same tiny model on the GPU trainer and on the CPU column's
+`LanguageModelHostTrainer` in one process and requires the same loss, gradient,
+parameter and moment words.
 """
 import json
 import os
@@ -21,6 +28,7 @@ import numpy as np
 import pytest
 
 from mojolearn import SmallByteLanguageModelTrainer as Trainer
+from mojolearn import ByteLanguageModelConfig as Shape
 
 N_STEPS = 3
 
@@ -98,3 +106,37 @@ def test_both_routes_give_the_same_loss_words():
     with open(reference) as f:
         want = json.load(f)
     assert got == want
+
+
+def _host_trainer():
+    """The CPU column's trainer at the same initialization and optimizer, or
+    a skip naming why the host binding is not loadable in this install."""
+    try:
+        from mojolearn import LanguageModelHostTrainer
+        return LanguageModelHostTrainer(initial(), shape=Shape(), lr=1e-3, betas=(.9, .999), eps=1e-8,
+                                        weight_decay=.01)
+    except (ImportError, OSError) as error:
+        pytest.skip(f'the CPU byte LM binding is not loadable here: {error}')
+
+
+def _bytes(values):
+    return np.ascontiguousarray(np.asarray(values, dtype=np.float32)).tobytes()
+
+
+def test_host_and_device_give_the_same_words():
+    data = batches()
+    host = _host_trainer()
+    device = Trainer(initial(), data_schedule={'dataset': 'route-test'}, lr=1e-3, betas=(.9, .999), eps=1e-8,
+                     weight_decay=.01, resident=True)
+    try:
+        assert words([host.loss(data[0])]) == words([device.evaluate(data[0])])
+        host_losses = [int(host.train_step(data[k])) for k in range(N_STEPS)]
+        device_losses = words([device.train_step(data[k])['loss'] for k in range(N_STEPS)])
+        assert host_losses == device_losses
+        state = device.state_dict()
+        assert _bytes(host.parameters_) == _bytes(state['parameters'])
+        assert _bytes(host.m_) == _bytes(state['m'])
+        assert _bytes(host.v_) == _bytes(state['v'])
+        assert words([host.loss(data[0])]) == words([device.evaluate(data[0])])
+    finally:
+        device.close()

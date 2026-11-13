@@ -105,3 +105,35 @@ def test_pool_and_offload_exports_write_into_the_caller():
     assert run.count('.export_into([0, 1, 2],') == 4
     for name in ('training/byte_lm_model_pool.mojo', 'training/byte_lm_offload.mojo'):
         assert 'def export_into(' in _read(name)
+
+
+def test_cpu_column_follows_the_gpu_columns_step_switch():
+    # lane restore-byte-lm-host-step (2026-11-13): one switch for every
+    # column, defined once in the host-safe config module.
+    config = _read('training/byte_lm_config.mojo')
+    assert 'comptime BYTE_LM_PROGRAM_STEP = is_defined["MOJOLEARN_BYTE_LM_PROGRAM_STEP"]()' in config
+    lm = _read('training/byte_lm.mojo')
+    assert 'comptime BYTE_LM_PROGRAM_STEP =' not in lm
+    assert 'from training.byte_lm_config import ByteConfig, BYTE_LM_PROGRAM_STEP' in lm
+    # the stateless step and loss: composed by default, the host program as the B arm
+    execution = _read('training/byte_lm_host_execution.mojo')
+    train = execution.split('def byte_host_train_native(')[1].split('def byte_host_loss_native(')[0]
+    assert train.index('comptime if not BYTE_LM_PROGRAM_STEP:') < train.index('byte_host_train_step(')
+    assert train.index('byte_host_train_step(') < train.index('byte_program_fit(')
+    loss = execution.split('def byte_host_loss_native(')[1]
+    assert loss.index('comptime if not BYTE_LM_PROGRAM_STEP:') < loss.index('byte_host_loss(')
+    assert loss.index('byte_host_loss(') < loss.index('byte_program_eval(')
+    # the session: k composed steps on the call's own lists, committed together
+    session = _read('training/byte_lm_host_session.mojo')
+    fit = session.split('def _fit(')[1].split('def step(')[0]
+    assert 'comptime if BYTE_LM_PROGRAM_STEP:' in fit and 'byte_program_fit(' in fit
+    assert 'byte_host_train_native(' in fit
+    assert "# driver-loop: over the call's training steps (one composed host step each)" in fit
+    assert fit.index('host_state_validate(') < fit.index('self.p = p^')
+    evaluate = session.split('def evaluate(')[1].split('def rollback(')[0]
+    assert 'byte_host_loss_native(' in evaluate and 'byte_program_eval(' in evaluate
+    steps = session.split('def steps(')[1].split('def evaluate(')[0]
+    assert 'self._fit(a[0], n_steps, a[1], completed)' in steps
+    # the composed step itself is back (training/byte_lm_host_backward.mojo)
+    backward = _read('training/byte_lm_host_backward.mojo')
+    assert 'def byte_host_train_step(' in backward and 'def byte_host_adamw(' not in backward
