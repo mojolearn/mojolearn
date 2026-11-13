@@ -132,6 +132,10 @@
   "ols-predict-tiled": {
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
    "status": "define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits"
+  },
+  "mamba3-forward-zero-fill": {
+   "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
+   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
   }
  },
  "rows": [
@@ -922,6 +926,18 @@
     "ols-predict-tiled"
    ],
    "decides": "ols infer (predict) taxi and istella on NVIDIA and AMD: the tiled gemv (B) returns as predict's default only if at least as fast as the plain kernel (A) on the vendor average (on record: ols taxi infer 0.8.25 NV 2.68 / AMD 1.51 ms vs candidate 5.52 / 3.02); same bits"
+  },
+  {
+   "id": "restore-mamba3-forward-unfilled",
+   "source": "fix-mamba3-unfilled-arrays (2026-11-13; restore-neural-call-paths doubt: Mamba-3 forward still zero-fills 5 arrays per call in _prefill_mamba3_reports)",
+   "kind": "ab",
+   "lane": "mamba3-forward",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mamba3-forward-zero-fill"
+   ],
+   "decides": "keep the unfilled outputs (A) unless the zero-filled arrays (B) are at least as fast on the NVIDIA and AMD average; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba3-forward 3.95 -> 6.75 ms; same kernels, digests must not move in either arm"
   }
  ]
 }
