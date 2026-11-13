@@ -727,6 +727,49 @@ there; from the SIMD width up every lane of the vendor kernel has work.
 `-D MOJOLEARN_LEGACY_NARROW_GEMV_PINNED` restores 64."""
 
 
+#: OLS predict's gemv (lane restore-classical-measured-routes, 2026-11-13).
+#: The tiled kernel became the IDENTICAL NVIDIA/AMD `gemv_n` (812de59288,
+#: 2026-10-02, NV_AMD_IDENTICAL_STEPS) for the QN objective's loads and was
+#: never measured for predict. The board on record, same clock span (upload
+#: + validation + call): ols taxi infer 0.8.25 (plain `pinned_gemv_n_kernel`)
+#: NVIDIA 2.68 ms / AMD 1.51 ms vs 0.8.55 5.45 / 3.54 and candidate
+#: 4c2340386abc 5.52 / 3.02 (2x); istella infer did not regress. One cell
+#: each, with other 0.8.25 -> 0.8.37 harness/Python changes in between. So
+#: OLS predict (`gemv_n_ols_predict`) launches the measured plain kernel by
+#: default; `-D MOJOLEARN_IDN_OLS_PREDICT_TILED` is the B arm (today's tiled
+#: kernel), owed A/B row ols-predict-tiled (ols infer taxi + istella, NV +
+#: AMD) in bench/results/paper_compare/owed-pre0867.json. Fit and every other
+#: `gemv_n` caller keep NV_AMD_IDENTICAL_STEPS. Both kernels run the same
+#: chain per row: no bit moves.
+comptime IDN_OLS_PREDICT_TILED = is_defined["MOJOLEARN_IDN_OLS_PREDICT_TILED"]()
+
+
+def gemv_n_ols_predict(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`z[m] = x[m x k] . y[k]` for OLS predict: IDENTICAL launches the
+    plain one-thread-per-row `pinned_gemv_n_kernel` (the measured 0.8.25
+    route) unless `-D MOJOLEARN_IDN_OLS_PREDICT_TILED`; every other case is
+    `gemv_n`."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not IDN_OLS_PREDICT_TILED:
+        ctx.enqueue_function[pinned_gemv_n_kernel](
+            z.unsafe_ptr(),
+            x.unsafe_ptr(),
+            y.unsafe_ptr(),
+            Int32(m),
+            Int32(k),
+            grid_dim=((m + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
+            block_dim=(PINNED_GEMM_TPB, 1, 1),
+        )
+        return
+    gemv_n(ctx, z, x, y, m, k)
+
+
 def gemv_n(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],

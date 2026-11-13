@@ -54,11 +54,27 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # absolute cut that removes small-scale features of a badly scaled
 # covariance); the Cholesky keeps them, as scikit-learn's float64 pinvh does.
 # Bits change (all columns: this host twin runs chol_oracle's spelling of the
-# same profile). No size rule. `-D MOJOLEARN_IDN_MCD_CHOL_OFF` restores the
-# LU + eigh C-step. A/B owed (NV + AMD, MinCovDet/EllipticEnvelope taxi and
-# istella, plus one non-board shape).
-comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_MCD_CHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# same profile). No size rule.
+#
+# DEFAULT OFF since lane restore-classical-measured-routes (2026-11-13): this
+# switch went in (2cb89eb1b9) as the IDENTICAL default with its NV + AMD A/B
+# owed and never run. The board on record: min-cov-det taxi fit AMD 2116 ms
+# (0.8.25, LU + Jacobi pinvh C-step) -> 9852 ms (0.8.42 a6b5f76cb, after
+# this switch), NVIDIA 2871 -> 3420 ms; elliptic-envelope taxi AMD 2141 ->
+# 9760 ms; istella went the other way (AMD 268.9 s @1658ba796 -> 243.4 s
+# @a6b5f76cb, NVIDIA 186.2 s @12412eca4 -> 168.8 s @4c75b4144). One cell
+# each, other changes in between (history-audit hist-classical rank 2). The
+# measured LU + round-robin Jacobi pinvh C-step (0.8.25 .. 0.8.41) is the
+# default again; `-D MOJOLEARN_IDN_MCD_CHOL` is the Cholesky C-step, the B
+# arm of the owed A/B (NV + AMD, min-cov-det and elliptic-envelope taxi AND
+# istella, plus one non-board shape; owed row mcd-chol in
+# bench/results/paper_compare/owed-pre0867.json). Flipping the default
+# changes MinCovDet / EllipticEnvelope IDENTICAL bits on every column
+# together (host, Apple, NVIDIA, AMD). The `_OFF` define is gone (it would
+# select the default). A size rule only if each arm wins on a range of
+# shapes (no dimension targeting).
+comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MCD_CHOL"]() and not (
+    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes

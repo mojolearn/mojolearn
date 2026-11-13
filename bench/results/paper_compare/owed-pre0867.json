@@ -67,7 +67,7 @@
   },
   "chol-ops-fit": {
    "define": "MOJOLEARN_IDN_CHOL_OPS_FIT",
-   "status": "define in code (cholesky/chol_ops.mojo:79): B = the N7/N8 Cholesky ops route for KernelRidge and GPR fits; A = potrf_lower + cho_solve (the 0.8.66 route, restored 2026-11-13 after AMD 1.14-1.25x)"
+   "status": "define in code (cholesky/chol_ops.mojo CHOL_OPS_FIT): B = the N7/N8 Cholesky ops route for the KernelRidge and GPR resident fits, the GPC Laplace Newton loop (bounded device loop, gaussian_process/gpc_newton.mojo), and the GP estimator's fit / lml+gradient / sample_y and hyperparameter optimizer (device run sequencer); A = potrf_lower + cho_solve (the 0.8.66 routes, restored 2026-11-13 after AMD 1.14-1.25x: KRR/GPR by fable-perf-classical-0855, GPC and the GP estimator/optimizer by restore-classical-measured-routes)"
   },
   "program-run-entry": {
    "define": "MOJOLEARN_PROGRAM_RUN_ENTRY",
@@ -112,6 +112,26 @@
   "cnn-predict-program-copy": {
    "define": "MOJOLEARN_CNN_PREDICT_PROGRAM_COPY",
    "status": "define in code (sequence/cnn_classifier_program.mojo CNN_PREDICT_PROGRAM_COPY): B = lane x8b's resident predict per call (zero-filled X and (n, k) buffers, a new prepared replay, per-chunk OP_COPY); A = unfilled device buffers, the session's cached replay, one-chunk output read in place"
+  },
+  "mcd-chol": {
+   "define": "MOJOLEARN_IDN_MCD_CHOL",
+   "status": "define in code (x_decomp/mcd.mojo IDN_MCD_CHOL): B = the blocked Cholesky C-step (2cb89eb1b9, the default 0.8.42 .. 2026-11-13, never A/B'd); A = the LU + round-robin Jacobi pinvh C-step (0.8.25 .. 0.8.41, restored 2026-11-13). Bits differ between the arms (every column together)"
+  },
+  "tsqr-wy-pair-off": {
+   "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
+   "status": "define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)"
+  },
+  "tsqr-tree-par-off": {
+   "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
+   "status": "define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)"
+  },
+  "tsqr-wy-pair-tree-par-off": {
+   "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
+   "status": "both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)"
+  },
+  "ols-predict-tiled": {
+   "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
+   "status": "define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits"
   }
  },
  "rows": [
@@ -840,6 +860,68 @@
     "cnn-predict-program-copy"
    ],
    "decides": "keep the trimmed resident predict (A) unless B is at least as fast on NVIDIA and AMD (infer); no 0.8.55 cell (AMD MI325X 9.21 ms at 0.8.62); softmax/argmax stay the generic ops in both arms (x_cnn_res_argmax deleted at 7c9d9d5575); digests must not move"
+  },
+  {
+   "id": "chol-ops-fit",
+   "source": "restore-classical-measured-routes (2026-11-13; history-audit hist-classical rows 1-5): GPC 24c4eed3a5 + e28e5af236, GP estimator 7ec10acd29, GP optimizer 4da49ab7a0; KRR/GPR afbb2b2769",
+   "kind": "ab",
+   "lane": [
+    "kernel-ridge",
+    "gpr",
+    "gpc"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "chol-ops-fit"
+   ],
+   "decides": "the Cholesky ops (B) become the default only if at least as fast as potrf_lower + cho_solve (A) on the NVIDIA + AMD average with the same words; on record (candidate on the ops vs 0.8.66, MI325X): kernel-ridge 1.21-1.25x, gpr 1.14-1.18x, gpc taxi 959 -> 1160 ms, istella 1442 -> 1728 ms. The GP optimizer, lml+gradient and sample_y follow the same define and are off the board (board GPR uses optimizer=None): a driver timing of gpr with optimizer is owed if B wins"
+  },
+  {
+   "id": "mcd-chol",
+   "source": "restore-classical-measured-routes (2026-11-13; history-audit hist-classical rows 1-5): 2cb89eb1b9 (Cholesky C-step made the IDENTICAL default with its A/B owed)",
+   "kind": "ab",
+   "lane": [
+    "min-cov-det",
+    "elliptic-envelope"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mcd-chol"
+   ],
+   "decides": "taxi AND istella on NVIDIA and AMD (both datasets required: taxi lost after the switch, AMD 2116 -> 9852 ms, NV 2871 -> 3420; istella gained, AMD 268.9 -> 243.4 s, NV 186.2 -> 168.8 s), plus one non-board shape; the Cholesky C-step (B) is promoted only on the vendor average with support Jaccard vs scikit-learn not lower; a size rule only if each arm wins over a range of shapes (no dimension targeting). Bits change between arms on every column"
+  },
+  {
+   "id": "tsqr-wy-pair-tree-par",
+   "source": "restore-classical-measured-routes (2026-11-13; history-audit hist-classical rows 1-5): 3c5c5592a0 (TS_WY_PAIR / TS_TREE_PAR IDENTICAL defaults, no recorded A/B)",
+   "kind": "ab",
+   "lane": [
+    "ols",
+    "qr",
+    "svd",
+    "lstsq"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "tsqr-wy-pair-off",
+    "tsqr-tree-par-off",
+    "tsqr-wy-pair-tree-par-off"
+   ],
+   "decides": "keep the defaults (A) unless an _OFF arm wins on the NVIDIA + AMD average (one cell each on record: ols taxi fit AMD 7.9 -> 12.2 ms after the switch, NV 17.5 -> 14.3 ms, ols istella NV 1029 -> 653, qr istella NV 1177 -> 850); bits change between arms on every column"
+  },
+  {
+   "id": "ols-predict-tiled",
+   "source": "restore-classical-measured-routes (2026-11-13; history-audit hist-classical rows 1-5): 812de59288 (tiled gemv default for every IDENTICAL NV/AMD gemv_n, never measured for predict)",
+   "kind": "ab",
+   "lane": "ols",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ols-predict-tiled"
+   ],
+   "decides": "ols infer (predict) taxi and istella on NVIDIA and AMD: the tiled gemv (B) returns as predict's default only if at least as fast as the plain kernel (A) on the vendor average (on record: ols taxi infer 0.8.25 NV 2.68 / AMD 1.51 ms vs candidate 5.52 / 3.02); same bits"
   }
  ]
 }

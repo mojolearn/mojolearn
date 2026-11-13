@@ -93,6 +93,17 @@ comptime TS_MAX_N = 512
 # tree apply tiles C's columns over threadgroups (TS_TPB a tile) with the
 # reflector staged the same way. Bits change in the tree's norms only; the
 # column updates keep their chains.
+#
+# MEASUREMENT OWED (lane restore-classical-measured-routes, 2026-11-13): both
+# switches went in as IDENTICAL defaults (3c5c5592a0, 2026-10-08) with no
+# recorded A/B. Board cells on record, one each: ols taxi fit AMD 7.915 ms
+# (de2b2b739, before) -> 12.18 (0a7b206f1, after) -> 14.19 (candidate
+# 4c2340386abc); NVIDIA went the other way (17.51 -> 14.33 ms), ols istella
+# NV 1029 -> 653 ms, qr istella NV 1177 -> 850 ms. Not flipped (NVIDIA
+# gained); the vendor-average A/B decides: owed row tsqr-wy-pair-tree-par in
+# bench/results/paper_compare/owed-pre0867.json (arms: default,
+# -D MOJOLEARN_IDN_TSQR_WY_PAIR_OFF, -D MOJOLEARN_IDN_TSQR_TREE_PAR_OFF, both;
+# ols / qr / svd / lstsq taxi + istella, NV + AMD).
 comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )

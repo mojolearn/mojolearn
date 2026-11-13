@@ -77,8 +77,9 @@ from core.step_gate import StepI32, step_fail_joins_loop
 comptime CHOL_OP_GATED = Int32(-1)
 
 #: The one-factor fits' route (lane fable-perf-classical-0855, 2026-11-13).
-#: `-D MOJOLEARN_IDN_CHOL_OPS_FIT` runs KernelRidge's and
-#: GaussianProcessRegressor's factor + solve on these ops (lane n8-gp-krr-smo,
+#: `-D MOJOLEARN_IDN_CHOL_OPS_FIT` runs KernelRidge's,
+#: GaussianProcessRegressor's and GaussianProcessClassifier's factor + solve
+#: on these ops (lane n8-gp-krr-smo,
 #: 2026-11-09: read-free, one drain per fit); absent, the fits keep the
 #: measured 0.8.66 route (`potrf_lower` with its one info read, then
 #: `cho_solve`), the same kernels in the same order plus that one drain.
@@ -92,9 +93,15 @@ comptime CHOL_OP_GATED = Int32(-1)
 #: same between the two routes except the solves' guarded twins
 #: (trsm_*_guarded_kernel) and the toolchain (Mojo 1.0 -> 1.2.0), so the
 #: A/B of this define on AMD is what settles it (AGENTS.md "A measured
-#: winner is never deleted on reasoning"). The GPC Newton loop runs only on
-#: the ops (gaussian_process/gpc_newton.mojo); its old host loop is
-#: recoverable at 24c4eed3a5^ should the A/B blame the ops.
+#: winner is never deleted on reasoning"). Lane
+#: restore-classical-measured-routes (2026-11-13) put every other caller of
+#: these ops on the same switch: the GPC Laplace Newton loop
+#: (gaussian_process/gpc_newton.mojo: by default 0.8.66's host loop,
+#: `gpc_newton_host_loop`), and the GP estimator's fit, lml+gradient and
+#: sample_y (gaussian_process/estimator.mojo) and hyperparameter optimizer
+#: (gaussian_process/gp_optim.mojo: by default 0.8.66's per-evaluation
+#: loop, `_gpr_optimize_host_runs`). The owed A/B is row chol-ops-fit in
+#: bench/results/paper_compare/owed-pre0867.json.
 comptime CHOL_OPS_FIT = is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"]()
 
 comptime _F32 = MutPointer[Float32, MutAnyOrigin]
