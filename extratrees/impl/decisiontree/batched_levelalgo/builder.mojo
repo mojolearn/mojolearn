@@ -7017,9 +7017,9 @@ def _et_run_depthwise_host[
             clock.tick(ctx, PHASE_HOST_QUEUE)
             break
         if sabotage == FOREST_SAB_SCALAR_TREE:
-            item_trees = List[Int32](
-                length=len(item_trees), fill=item_trees[0]
-            )
+            var scalar_tree = item_trees[0]
+            var scalar_len = len(item_trees)
+            item_trees = List[Int32](length=scalar_len, fill=scalar_tree)
         var n_nodes = len(work_items)
         clock.tick(ctx, PHASE_HOST_QUEUE)
 
