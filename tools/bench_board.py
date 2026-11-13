@@ -2945,7 +2945,8 @@ def ensure_neural_fixtures(ctx, races):
     # every algos mirror present beside them (the board's c1 cache holds the smoke's rows and the full rows): one
     # manifest covers both, so the timed board does not regenerate what its smoke shard made
     base = os.path.dirname(dirs[0])
-    mirrors = sorted({os.path.join(base, d) for d in os.listdir(base)
+    present = os.listdir(base) if os.path.isdir(base) else []
+    mirrors = sorted({os.path.join(base, d) for d in present
                       if d.startswith("rows-") and os.path.isdir(os.path.join(base, d))} | set(dirs))
     lanes = sorted({r["lane"] for r in layer} | _fixture_lanes(fixdir))
     tmp = fixdir + ".new"
