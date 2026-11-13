@@ -317,11 +317,11 @@ def _d2d(
 
 def _pair_add_device(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
     mut src: DeviceBuffer[DType.float32],
     n: Int,
 ) raises:
-    """`out[n] = ftz(ftz(src[0:n]) + ftz(src[n:2n]))`: the clause 9.2 tree of
+    """`dst[n] = ftz(ftz(src[0:n]) + ftz(src[n:2n]))`: the clause 9.2 tree of
     TWO pieces, which is what `SambaStack.loss_and_grads` asks of
     `accumulate_grads([d_emb, dw_head], tokens=None)` for the tied embedding
     gradient. Launch for launch `training/samba_ops.mojo::samba_accumulate_buffer`
@@ -335,9 +335,9 @@ def _pair_add_device(
         )
         var first = ctx.enqueue_create_buffer[DType.float32](2 * n)
         var second = ctx.enqueue_create_buffer[DType.float32](n)
-        nn_shard_merge_into(ctx, out, src, ids, first, second, 2, n)
+        nn_shard_merge_into(ctx, dst, src, ids, first, second, 2, n)
         comptime if NN58_ACCUMULATE_STATUS:
-            var hit = device_first_nonfinite(ctx, out, n)
+            var hit = device_first_nonfinite(ctx, dst, n)
             if hit >= 0:
                 raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(hit))
         _ = ids^
@@ -348,7 +348,7 @@ def _pair_add_device(
         var status = ctx.enqueue_create_buffer[DType.int32](1)
         status.enqueue_fill(Int32(n))
         ctx.enqueue_function[samba_tree_status_kernel](
-            out.unsafe_ptr(), src.unsafe_ptr(), status.unsafe_ptr(), Int32(n), Int32(1),
+            dst.unsafe_ptr(), src.unsafe_ptr(), status.unsafe_ptr(), Int32(n), Int32(1),
             grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
         )
         var host_status = ctx.enqueue_create_host_buffer[DType.int32](1)
@@ -360,7 +360,7 @@ def _pair_add_device(
         _ = host_status^
     else:
         ctx.enqueue_function[samba_tree_level_kernel](
-            out.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
+            dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
             grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
         )
 
