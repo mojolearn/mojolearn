@@ -219,6 +219,13 @@ def _record(source, compiler):
                 'Missing original successful host compiler/cache witness')
         if cache.get('outcome') == 'hot-hit':
             validate_shard_origin(source.get('host_shard_origins', {}).get(f), f, cache, one)
+        elif cache.get('outcome') == 'hit':
+            # A bincache hit of an unchanged source closure compiled from an earlier commit (the reuse the
+            # bincache exists for, AGENTS.md "Compiles"): the key equality above already proves the same
+            # closure, compiler, flags, target features and index; the bytes are the earlier commit's
+            # uploaded build. Found 2026-11-13: _mojolearn_native_series_host.so hit 416cc0f7a3's bytes on
+            # every leg of ba08dac006 and the composition refused it as a missing witness.
+            pass
         else:
             require(cache.get('outcome') == 'miss+built-uploaded' and cache['compiled_from_commit'] == commit,
                     'Missing original successful host compiler/cache witness')

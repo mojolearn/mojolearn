@@ -517,3 +517,23 @@ def test_absent_format_does_not_relax_other_host_flags(tmp_path):
               for i, (v, a) in enumerate(LEGS)]
     with pytest.raises(ValueError, match='flags differ'):
         hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+
+
+def test_a_bincache_hit_from_an_earlier_commit_is_a_witnessed_host(tmp_path):
+    """A 'hit' (the bincache reusing an unchanged closure compiled from an earlier commit) composes: the key
+    equality proves the closure; the bytes are that commit's upload (2026-11-13, series_host on ba08dac006)."""
+    source_dir=tmp_path/'source'; source_dir.mkdir(); (source_dir/'sample.mojo').write_text('source\n')
+    for rel in hc.HOST_FORMAT_SOURCES:
+        path=source_dir/rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('source\n')
+    directory=build(tmp_path/'build', 'hip','gfx942',b'host',source_dir)
+    source,_=hc.inspect_build(directory)
+    proof=hc.decoded(source['proof']); keys=hc.decoded(source['host_cache_key'])
+    filename=next(iter(keys))
+    cache=proof['bincache']['mojolearn/hip/gfx942/host/'+filename]
+    cache['outcome']='hit'; cache['compiled_from_commit']='f'*40
+    source['proof']=_text_witness(json.dumps(proof))
+    hc._record(source,COMPILER)
+    bad=copy.deepcopy(source); p2=hc.decoded(bad['proof']); p2['bincache']['mojolearn/hip/gfx942/host/'+filename]['outcome']='miss+built-not-uploaded:no-slot'
+    bad['proof']=_text_witness(json.dumps(p2))
+    with pytest.raises(ValueError, match='Missing original successful host compiler/cache witness'):
+        hc._record(bad,COMPILER)
