@@ -33,10 +33,9 @@ def tree_export_state(model: PythonObject, operation: String) raises -> PythonOb
     if operation == "trees_forest_getstate":
         _ = py_call(state.pop, "_resident_holder", PythonObject(None))
         _ = py_call(state.pop, "_resident_forest", PythonObject(None))
-    elif operation == "trees_iforest_getstate":
-        _ = py_call(state.pop, "_if_token", PythonObject(None))
-        _ = py_call(state.pop, "_if_lifetime", PythonObject(None))
     else:
+        # IsolationForest's state is `trees_public_iforest_door.iforest_getstate`
+        # (lane fix-iforest-save-device-forest: it carries the fitted forest).
         _ = py_call(state.pop, "_resident", PythonObject(None))
     _ = fields
     return state
