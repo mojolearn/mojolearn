@@ -11,6 +11,7 @@ from bindings.py_cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
+from std.sys import is_defined
 from sequence.exec_trait import Exec
 from providers.python.autograd_execution_profile_pyapi_pack import execution_profile_object
 from sequence.ops import FP
@@ -21,7 +22,7 @@ from providers.python.autograd_program_arrays_pyapi_door import output_array, ou
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
-from providers.python.autograd_program_arrays_pyapi_door import host_arrays_py
+from providers.python.autograd_program_arrays_pyapi_door import host_arrays_py, output_array_unfilled
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
@@ -313,12 +314,66 @@ def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
     return out
 
 
+# Lane restore-executor-fast-run (2026-11-13): the fixed-shape Program.run
+# (and Session.run) route is again the 0.8.55 one, `OpsSession.run_program`
+# (autograd/ops_api.mojo): inputs uploaded into the session's retained
+# scratch tape (capacity kept per program and shape, no zero fill, no
+# alloc/free per run), the PreparedInferenceReplay cached on the program's
+# slot, no OpsProgram copy, and each output downloaded straight into the
+# caller's array. fb75472a87 (2026-10-20) had folded this run onto
+# `program_execute_run` (autograd/program_entries.mojo: zero-filled input
+# alloc + free per run, two OpsProgram copies, a fresh PreparedProgramReplay
+# and a host staging copy per output) with no A/B. Board cell program-run NV
+# 1.04 ms (0.8.55) -> 1.19 (0.8.66) -> 1.70 (candidate 4c2340386abc, 1.63x;
+# Program.run itself 0.761 ms on the L40S, nv-profile-program2.log); AMD
+# MI300X 1.25 (0.8.55), MI325X 0.60 (candidate). Same `_program_op` replay
+# and kernels on both routes: no bit change. A/B owed (owed row
+# restore-executor-program-run, b arm program-run-entry):
+# -D MOJOLEARN_PROGRAM_RUN_ENTRY runs every Program.run on program_execute_run
+# as before (B). dynamic_shapes, optimize and profile keep program_execute_run.
+comptime PROGRAM_RUN_ENTRY = is_defined["MOJOLEARN_PROGRAM_RUN_ENTRY"]()
+
+
+def _program_run_fixed[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, pid: Int, owner_sid: Int, arrays: PythonObject,
+) raises -> PythonObject:
+    # The same admission, in the same order, as program_execute_prepare.
+    if owner_sid != sid:
+        raise Error("program must be a Program of this session")
+    var s = ops_session[E, KIND](sid)
+    var pi = s[]._program_index(pid)
+    if s[].tape.is_recording():
+        raise Error("program execution requires an inference session")
+    # Exact captured shapes (program_inputs, as the entry route), read from
+    # the session's program in place: no OpsProgram copy.
+    var inputs = program_inputs(s[].programs[pi], arrays, False)
+    var srcs = List[CastIn]()
+    for k in range(len(inputs)):  # driver-loop: over program input descriptors
+        srcs.append(inputs[k].src)
+    var outs = Python.list()
+    var dsts = List[FP]()
+    var n_out = len(s[].programs[pi].out_shapes)
+    for k in range(n_out):  # driver-loop: over program outputs, one result array each
+        var made = output_array_unfilled(s[].programs[pi].out_shapes[k])
+        var array = made[0]
+        dsts.append(FP(unsafe_from_address=made[1]))
+        _ = py_call(outs.append, array)
+    s[].run_program(pid, srcs, dsts)
+    _ = inputs^  # scalar-sequence owners stay alive through the upload
+    _ = arrays  # retain original external buffer owners until native replay returns
+    _ = outs  # destinations stay pinned until every download completed
+    return _result(outs)
+
+
 def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, pid: PythonObject, owner_sid: PythonObject, arrays: PythonObject,
     dynamic_shapes: PythonObject, optimize: PythonObject, profile: PythonObject,
 ) raises -> PythonObject:
     var sid_i = Int(py=sid)
     var profiled = Bool(py=profile)
+    comptime if not PROGRAM_RUN_ENTRY:
+        if not profiled and not Bool(py=optimize) and not Bool(py=dynamic_shapes):
+            return _program_run_fixed[E, KIND](sid_i, Int(py=pid), Int(py=owner_sid), arrays)
     var plan = program_execute_prepare[E, KIND](sid_i, Int(py=pid), Int(py=owner_sid), Bool(py=optimize), profiled)
     # Native ABI shape policy: bool preserves the existing fixed-rank
     # dynamic contract; integer 2 selects compatibility checked at each node.
