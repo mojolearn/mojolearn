@@ -360,6 +360,11 @@ def coop_kernel[OP: Int](
 #: moves. MOJOLEARN_SEQ_POOL=0 restores the per-call allocations;
 #: SEQ_POOL_BYTES bounds what is kept (the oldest free entries go first).
 comptime SEQ_POOL_BYTES = 3 << 30
+#: The bound of one owned executor's kept storage (DeviceExec.idle_*,
+#: fable-perf-neural-0855): device memory, not a model or board dimension.
+#: A byte LM train step at the board's control shape keeps about 300 MB of
+#: per-step buffers and stages; a Mamba block program about 20 MB.
+comptime SEQ_EXEC_IDLE_BYTES = 1 << 30
 
 
 struct _SeqPool(Defaultable, Movable):
@@ -522,6 +527,30 @@ struct DeviceExec(Exec, Movable):
     #: the next sync or the end of this Exec drains the queue.
     var retired: List[DeviceBuffer[DType.float32]]
     var retired_pdev: List[Int]
+    #: lane fable-perf-neural-0855 (2026-11-13): an OWNED executor (the
+    #: `__init__(ctx)` form: the Mamba block programs, the byte LM and Samba
+    #: training programs, the CausalLM program, the transformer step arms)
+    #: keeps the device buffers it freed and the pinned stages its syncs
+    #: drained, and serves the next `_alloc` of the same count and the next
+    #: upload/download of a fitting size from them. Before this every such
+    #: call created a pinned HostBuffer (`enqueue_create_host_buffer`) and
+    #: dropped it at the sync: a Mamba-1 per-call forward paid 6 pinned
+    #: allocations and frees (x, two state pieces in, y, two pieces out), a
+    #: Mamba-2 forward 10, a byte LM train step 5 plus 13 device buffers.
+    #: cudaHostAlloc/cudaFreeHost are slow calls on NVIDIA (the 0.8.55
+    #: bodies allocated once per session and copied from pageable pointers):
+    #: candidate 4c2340386abc vs 0.8.55 on the L40S read mamba2-forward 5.57
+    #: -> 7.58 ms, mamba1-forward 3.43 -> 4.08, lm-train-step 35.5 -> 48.9,
+    #: with AMD unchanged on the Mamba rows. The pooled executor already
+    #: reuses through X_SEQUENCE_POOL; this is the same rule per owned
+    #: executor (exact count for device buffers, smallest fit for stages),
+    #: bounded by SEQ_EXEC_IDLE_BYTES, oldest dropped first. Copies only: no
+    #: bit moves on any vendor.
+    var idle_dev: List[DeviceBuffer[DType.float32]]
+    var idle_dev_n: List[Int]
+    var idle_host: List[HostBuffer[DType.float32]]
+    var idle_host_n: List[Int]
+    var idle_bytes: Int
     #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
     #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
     var profile: Int
@@ -548,6 +577,11 @@ struct DeviceExec(Exec, Movable):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.idle_dev = List[DeviceBuffer[DType.float32]]()
+        self.idle_dev_n = List[Int]()
+        self.idle_host = List[HostBuffer[DType.float32]]()
+        self.idle_host_n = List[Int]()
+        self.idle_bytes = 0
         self.profile = launch_profile_level()
         self.execution_profile = ExecutionProfile(True)
 
@@ -575,6 +609,11 @@ struct DeviceExec(Exec, Movable):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.idle_dev = List[DeviceBuffer[DType.float32]]()
+        self.idle_dev_n = List[Int]()
+        self.idle_host = List[HostBuffer[DType.float32]]()
+        self.idle_host_n = List[Int]()
+        self.idle_bytes = 0
         self.profile = launch_profile_level()
         self.execution_profile = ExecutionProfile(True)
 
@@ -617,7 +656,7 @@ struct DeviceExec(Exec, Movable):
             if zero:
                 self.execution_profile.fill(count * 4)
             return pp
-        var buf = self.ctx.enqueue_create_buffer[DType.float32](count)
+        var buf = self._idle_dev_take(count)
         if zero:
             buf.enqueue_fill(Float32(0.0))
         var p = FP(unsafe_from_address=Int(buf.unsafe_ptr()))
@@ -628,6 +667,68 @@ struct DeviceExec(Exec, Movable):
         if zero:
             self.execution_profile.fill(count * 4)
         return p
+
+    # ------------------------------------------------------------ owned reuse
+    def _idle_dev_take(mut self, count: Int) raises -> DeviceBuffer[DType.float32]:
+        """A kept device buffer of exactly `count` floats (the queue that
+        last used it has drained: it entered the list at a sync), else a
+        new one."""
+        for i in range(len(self.idle_dev_n)):  # small-loop(idle_dev: kept device buffers): exact-count search, no data
+            if self.idle_dev_n[i] == count:
+                self.idle_bytes -= count * 4
+                _ = self.idle_dev_n.pop(i)
+                return self.idle_dev.pop(i)
+        return self.ctx.enqueue_create_buffer[DType.float32](count)
+
+    def _idle_host_take(mut self, n: Int) raises -> HostBuffer[DType.float32]:
+        """A kept pinned stage of at least `n` floats (the smallest that
+        fits; its last copy drained at the sync that kept it), else a new
+        one of `n` floats."""
+        var best = -1
+        for i in range(len(self.idle_host_n)):  # small-loop(idle_host: kept pinned stages): smallest-fit search, no data
+            if self.idle_host_n[i] >= n and (best < 0 or self.idle_host_n[i] < self.idle_host_n[best]):
+                best = i
+        if best >= 0:
+            self.idle_bytes -= self.idle_host_n[best] * 4
+            _ = self.idle_host_n.pop(best)
+            return self.idle_host.pop(best)
+        return self.ctx.enqueue_create_host_buffer[DType.float32](n)
+
+    def _idle_trim(mut self, need: Int) raises:
+        """Drop kept storage, oldest first, until `need` more bytes fit
+        under SEQ_EXEC_IDLE_BYTES (a buffer larger than the bound alone is
+        not kept)."""
+        while self.idle_bytes + need > SEQ_EXEC_IDLE_BYTES and (len(self.idle_dev) > 0 or len(self.idle_host) > 0):
+            if len(self.idle_host) > 0:
+                self.idle_bytes -= self.idle_host_n[0] * 4
+                _ = self.idle_host_n.pop(0)
+                _ = self.idle_host.pop(0)
+            else:
+                self.idle_bytes -= self.idle_dev_n[0] * 4
+                _ = self.idle_dev_n.pop(0)
+                _ = self.idle_dev.pop(0)
+
+    def _idle_dev_keep(mut self, var buf: DeviceBuffer[DType.float32]) raises:
+        """Keep a drained device buffer for `_idle_dev_take`."""
+        var count = len(buf)
+        self._idle_trim(count * 4)
+        if self.idle_bytes + count * 4 > SEQ_EXEC_IDLE_BYTES:
+            _ = buf^
+            return
+        self.idle_bytes += count * 4
+        self.idle_dev_n.append(count)
+        self.idle_dev.append(buf^)
+
+    def _idle_host_keep(mut self, var host: HostBuffer[DType.float32]) raises:
+        """Keep a drained pinned stage for `_idle_host_take`."""
+        var n = len(host)
+        self._idle_trim(n * 4)
+        if self.idle_bytes + n * 4 > SEQ_EXEC_IDLE_BYTES:
+            _ = host^
+            return
+        self.idle_bytes += n * 4
+        self.idle_host_n.append(n)
+        self.idle_host.append(host^)
 
     def _sub(self, slot: Int, off: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
         """The view [off, off + n) of this executor's slot (pooled or owned)."""
@@ -719,7 +820,7 @@ struct DeviceExec(Exec, Movable):
             self.pstaged.append(hi)
             _ = view^
             return
-        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var host = self._idle_host_take(n)
         self.execution_profile.staging(n * 4)
         _pcopy(host.unsafe_ptr(), src, n)
         self.execution_profile.copied(3, n * 4)
@@ -763,7 +864,7 @@ struct DeviceExec(Exec, Movable):
             _pool_release_host(hi)
             _ = view^
             return
-        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var host = self._idle_host_take(n)
         self.execution_profile.staging(n * 4)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
         self.execution_profile.copied(1, n * 4)
@@ -772,7 +873,7 @@ struct DeviceExec(Exec, Movable):
         self.execution_profile.copied(3, n * 4)
         _ = view^
         self.execution_profile.staging(-n * 4)
-        _ = host^
+        self._idle_host_keep(host^)
 
     def download_async(mut self, dst: FP, src: FP, n: Int) raises:
         var started = self.execution_profile.clock()
@@ -805,7 +906,7 @@ struct DeviceExec(Exec, Movable):
             self.pend_dst.append(Int(dst))
             self.pend_n.append(n)
             return
-        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var host = self._idle_host_take(n)
         self.execution_profile.staging(n * 4)
         var view = self._sub(found[0], found[1], n)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
@@ -1459,9 +1560,13 @@ struct DeviceExec(Exec, Movable):
         var staged_bytes = self._profile_staged_bytes()
         self._synchronize()
         self.execution_profile.drained()
-        self.staged.clear()
+        # the queue is drained: the upload stages and the freed buffers of an
+        # owned executor are kept for its next calls (fable-perf-neural-0855)
+        while len(self.staged) > 0:
+            self._idle_host_keep(self.staged.pop())
         # lane ag-fusion: the queue is drained, so freed buffers can go
-        self.retired.clear()
+        while len(self.retired) > 0:
+            self._idle_dev_keep(self.retired.pop())
         for i in range(len(self.retired_pdev)):
             _pool_release_dev(self.retired_pdev[i])
         self.retired_pdev.clear()
@@ -1479,6 +1584,8 @@ struct DeviceExec(Exec, Movable):
             for i in range(len(self.pend_dst)):
                 _pcopy(FP(unsafe_from_address=self.pend_dst[i]), self.pend_host[i].unsafe_ptr(), self.pend_n[i])
                 self.execution_profile.copied(3, self.pend_n[i] * 4)
+            while len(self.pend_host) > 0:
+                self._idle_host_keep(self.pend_host.pop())
         self.pend_host.clear()
         self.pend_dst.clear()
         self.pend_n.clear()
