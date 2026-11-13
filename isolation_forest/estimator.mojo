@@ -58,6 +58,8 @@ from isolation_forest.impl.isolation_forest import (
     predict_into as if_predict_into,
     score_samples as if_score_samples,
     score_samples_into as if_score_samples_into,
+    score_samples_into_f64 as if_score_samples_into_f64,
+    IDN_IF_SCORES_F64,
     contamination_offset as if_contamination_offset,
 )
 from core.shared_slot import SharedSlot
@@ -691,6 +693,7 @@ def iforest_run_resident(
     want: Int,
     out_f32_addr: Int,
     out_i32_addr: Int,
+    wide_scores: Bool,
 ) raises -> IFRunOutputs:
     """`iforest_run_host` with the forest resident. `held` is what
     `if_resident_take` returned: one entry scores without fitting; empty
@@ -701,7 +704,9 @@ def iforest_run_resident(
     The result is written at `out_f32_addr` (`want` 0 and 1, `n_query`
     float32) or `out_i32_addr` (`want` 2, `n_query` int32); the returned
     lists are empty. `query_addr` nonzero lends the ROW-major query block
-    (`IDN_IF_QUERY_DEVICE`), else `query` holds it."""
+    (`IDN_IF_QUERY_DEVICE`), else `query` holds it. `wide_scores`
+    (IDN_IF_SCORES_F64, want 0 and 1 only) writes `n_query` float64 at
+    `out_f32_addr` instead: the same float32 values widened on the device."""
     if key.n_train <= 0:
         raise Error("iforest_run_host: n_rows must be at least one")
     if key.n_features <= 0:
@@ -762,6 +767,15 @@ def iforest_run_resident(
             ctx, held[0].est.model, query, n_query, n_features,
             Float32(-held[0].est.offset_), held[0].est.knobs, query_addr, out_i32_addr,
         )
+    elif wide_scores:
+        comptime if IDN_IF_SCORES_F64:
+            if_score_samples_into_f64(
+                ctx, held[0].est.model, query, n_query, n_features, held[0].est.knobs,
+                query_addr, out_f32_addr, want == IF_WANT_DECISION_FUNCTION,
+                Float32(held[0].est.offset_),
+            )
+        else:
+            raise Error("iforest_run_resident: this binary writes float32 scores only")
     else:
         if_score_samples_into(
             ctx, held[0].est.model, query, n_query, n_features, held[0].est.knobs,

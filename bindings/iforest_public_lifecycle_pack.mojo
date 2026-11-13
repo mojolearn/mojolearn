@@ -158,7 +158,12 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     if fitting and admitted.finite:
         trees_finite_mark(x)
     try:
-        result = iforest_operation_with_source(model, "trees_iforest_" + method, Python.tuple(x), context, source)
+        # A public caller's scores are float64: a binary that writes them
+        # directly (iforest_scores_f64) is asked to, and the widening below
+        # returns them as they are (restore-iforest-kde, audit row 4).
+        var wide = outside and (method == "score_samples" or method == "decision_function")
+        result = iforest_operation_with_source(model, "trees_iforest_" + method, Python.tuple(x), context, source,
+                                               wide)
     except error:
         if not admitted.finite:
             # The entry's own refusal of a deferred non-finite X (the
@@ -178,6 +183,9 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     if py_type(result) is context["array_class"]:
         # Preserve internal Float32 arrays; public outlier scores widen
         # even when the optional NumPy output view is unavailable.
+        # The float32 scores of a binary without iforest_scores_f64 (the CPU
+        # column, Apple, -D MOJOLEARN_IDN_IF_SCORES_F64_OFF) are widened by one
+        # parallel cast; float64 scores are returned as they are.
         if outside and (method == "score_samples" or method == "decision_function"):
             result = admit_family_f64(result, "scores", context)
         if outside and py_get(context, "ndarray") is not None:

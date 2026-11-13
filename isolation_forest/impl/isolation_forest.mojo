@@ -857,6 +857,41 @@ def if_score_epilogue_kernel(
     scores.unsafe_store(i, v)
 
 
+# Lane restore-iforest-kde (2026-11-13, history audit row 4): the public
+# score_samples / decision_function are float64 (scikit-learn's dtype), and
+# since 115b5eb8bb (2026-10-28) the public door widened the float32 scores
+# with a second host pass (admit_family_f64) into a second allocation after
+# the download. Record measurement of candidate 4c2340386abc, taxi
+# score_samples NVIDIA L40S (ms): 0.8.44 2.70 / 4.80, 0.8.55 3.27 / 5.61,
+# candidate 5.32 / 8.63 (test / large). Here the epilogue writes the float64
+# words itself and the download lands in the caller's float64 buffer: no
+# float32 host buffer, no cast pass. BITS UNCHANGED: the value is the same
+# float32 `-paper` (minus the float32 offset) as if_score_epilogue_kernel,
+# widened exactly to float64, which is what the host cast wrote.
+# Not on Apple (Metal has no float64). `-D MOJOLEARN_IDN_IF_SCORES_F64_OFF`
+# restores the float32 download plus the door's cast (the B arm of the owed
+# A/B, bench/results/paper_compare/owed-pre0867.json).
+comptime IDN_IF_SCORES_F64 = not TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_IDN_IF_SCORES_F64_OFF"]()
+
+
+def if_score_epilogue_f64_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    wide: MutPointer[Float64, MutAnyOrigin],
+    n_in: Int32,
+    subtract: Int32,
+    offset: Float32,
+):
+    """`if_score_epilogue_kernel`'s float32 value, stored widened to
+    float64 in `wide` (the public score dtype). `scores` is not written."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var v = -scores.unsafe_load(i)
+    if subtract != 0:
+        v = v - offset
+    wide.unsafe_store(i, Float64(v))
+
+
 def if_predict_epilogue_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
     predictions: MutPointer[Int32, MutAnyOrigin],
@@ -1518,6 +1553,45 @@ def score_samples_into(
     ctx.enqueue_copy(dst_ptr=dst, src_buf=scores.create_sub_buffer[DType.float32](0, n_rows))
     ctx.synchronize()
     _ = scores^
+
+
+def score_samples_into_f64(
+    ctx: DeviceContext,
+    forest: IsolationForestModel,
+    input_rowmajor: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    knobs: IFLaunchKnobs,
+    src_addr: Int,
+    out_addr: Int,
+    subtract_offset: Bool,
+    offset: Float32,
+) raises:
+    """`score_samples_into` with the public float64 output (IDN_IF_SCORES_F64):
+    `n_rows` float64 written at the host address `out_addr`, the same
+    float32 values widened exactly on the device."""
+    if out_addr == 0:
+        raise Error("score_samples_into_f64: the output address is null")
+    var trace = IdentityTrace.disabled()
+    var scores = _score_samples_device(
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
+    )
+    var wide = ctx.enqueue_create_buffer[DType.float64](n_rows)
+    var blocks = (n_rows + knobs.path_tpb - 1) // knobs.path_tpb
+    ctx.enqueue_function[if_score_epilogue_f64_kernel](
+        scores.unsafe_ptr(),
+        wide.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(1) if subtract_offset else Int32(0),
+        offset,
+        grid_dim=(blocks, 1, 1),
+        block_dim=(knobs.path_tpb, 1, 1),
+    )
+    var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=out_addr)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=wide)
+    ctx.synchronize()
+    _ = scores^
+    _ = wide^
 
 
 # T43: exact 32-bit radix selection, two independent order statistics.

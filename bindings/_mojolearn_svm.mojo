@@ -64,6 +64,7 @@ from isolation_forest.impl.isolation_forest import (
     IF_DEVICE_TRANSPOSE,
     IDN_IF_QUERY_DEVICE,
     IDN_IF_RESIDENT,
+    IDN_IF_SCORES_F64,
 )
 
 from isolation_forest.impl.isolation_tree_builder import IF_FAST_ROWMAJOR
@@ -92,6 +93,13 @@ from std.sys import is_defined
 comptime _IF_RESIDENT_ROUTE = IDN_IF_RESIDENT or (
     GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"]()
 )
+# Lane restore-iforest-kde (IDN_IF_SCORES_F64, isolation_forest/impl/
+# isolation_forest.mojo): on the resident route `want` 3 and 4 are
+# score_samples and decision_function written as float64 at the score
+# address (the public dtype), so the door makes no cast pass. Advertised by
+# `iforest_scores_f64`; any other binary refuses them as before.
+comptime _IF_WIDE_ROUTE = _IF_RESIDENT_ROUTE and IDN_IF_SCORES_F64
+comptime _IF_WANT_WIDE_BASE = 3
 # cgfin-c-svm: the epilogues, Platt, the shuffle and the row glue run on
 # the device (the CPU binding runs svm/host/svc_proba.mojo's host twin)
 from providers.python.svm_impl_svc_epilogue_pyapi_door import (
@@ -757,6 +765,11 @@ def iforest_run_binding(
     var contamination_auto = Int(py=params[13]) != 0
     var contamination = Float64(py=params[14])
     var want = Int(py=params[15])
+    var wide_scores = False
+    comptime if _IF_WIDE_ROUTE:
+        if resident and (want == _IF_WANT_WIDE_BASE or want == _IF_WANT_WIDE_BASE + 1):
+            wide_scores = True
+            want -= _IF_WANT_WIDE_BASE
     if n_train <= 0 or n_features <= 0 or n_query <= 0:
         raise Error("iforest_run: n_train, n_features and n_query must all be positive")
     # DEVIATION 2638: the training matrix is LENT by address (the Python
@@ -801,6 +814,7 @@ def iforest_run_binding(
                 with GILReleased(Python()):
                     res = iforest_run_resident(
                         plan, held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
+                        wide_scores,
                     )
             except e:
                 # Preserve an existing caller-owned forest after a refused
@@ -858,6 +872,15 @@ def iforest_resident_binding() raises -> PythonObject:
     17-value params with a token; 0 otherwise (DEVIATION 874's refit per
     call)."""
     comptime if _IF_RESIDENT_ROUTE:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def iforest_scores_f64_binding() raises -> PythonObject:
+    """1 when this binary's resident `iforest_run` takes `want` 3 / 4
+    (score_samples / decision_function written as float64, the public
+    dtype, by the device epilogue: IDN_IF_SCORES_F64); 0 otherwise."""
+    comptime if _IF_WIDE_ROUTE:
         return PythonObject(1)
     return PythonObject(0)
 
@@ -933,6 +956,7 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")
         m.def_function[iforest_resident_binding]("iforest_resident")
+        m.def_function[iforest_scores_f64_binding]("iforest_scores_f64")
         m.def_function[iforest_resident_release_binding]("iforest_resident_release")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
