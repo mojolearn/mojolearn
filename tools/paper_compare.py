@@ -23,6 +23,9 @@ board. This tool:
         bench_board_args), written as race-ids-full.txt and race-ids-smoke.txt (the smoke's rows and shape), the
         board arguments as board-args.txt (one per line) and the races the board no longer plans as
         not-planned.json. A race the board does not plan is recorded, never a refusal of the whole run.
+  ids-all  --vendor V --planner tools/bench_board.py --out-dir DIR
+        ON THE BOX, the full-board screen: every race the board plans on V (every family and lane, identical, our
+        arms), in the same files as ids plus races.json (family/lane/dataset per race, for measure_owed data-keys).
   pass-ids --full-ids FILE --smoke-json SMOKE.json... --out FILE
         the full-size ids of the planned races whose smoke passed (smoke-failed.json beside --out lists the rest).
   compare  --recipes JSON --board BOARD.json... [--out-md MD] [--out-json JSON] [--summary TXT]
@@ -375,6 +378,50 @@ def cmd_ids(args):
         json.dump(missing, fh, indent=1, sort_keys=True)
     print("PAPER-IDS vendor=%s recipe_races=%d planned=%d not_planned=%d"
           % (doc["vendor"], len(doc["race_ids"]), len(full), len([k for k in missing if not k.endswith(" arms")])))
+    return 0
+
+
+def plan_all(planner, vendor):
+    """The full-board screen (tools/ops/paper_compare_job.sh board-all): (full ids, smoke ids, {id: why not},
+    board args, races) of EVERY race the board plans on the vendor (every family and lane, the board's datasets,
+    identical, our arms; no --gpu-opponents-only: every own configuration is screened)."""
+    modes = planner.modes_for(vendor, "identical")
+    families = tuple(planner.FAMILIES)
+
+    def plan(rows, shape):
+        return {r["id"]: r for r in planner.plan_races(vendor, modes, families, None, planner.DATASETS, rows, shape)}
+
+    full = plan(None, "full")
+    smoke_rows = int(getattr(planner, "SMOKE_ROWS", 2000))
+    smoke = plan(smoke_rows, SMOKE_SHAPE)
+    full_ids, smoke_ids, missing = [], [], {}
+    for rid in sorted(full):
+        sid = smoke_id(rid, smoke_rows)
+        if sid not in smoke:
+            missing[rid] = "the board plans no smoke race %s" % sid
+            continue
+        full_ids.append(rid)
+        smoke_ids.append(sid)
+    bargs = ["--vendor", vendor, "--families", ",".join(families), "--modes", "identical",
+             "--datasets", ",".join(planner.DATASETS)]
+    races = [{"race_id": rid, "family": full[rid].get("family"), "lane": full[rid].get("lane"),
+              "dataset": full[rid].get("dataset")} for rid in full_ids]
+    return full_ids, smoke_ids, missing, bargs, races
+
+
+def cmd_ids_all(args):
+    planner = load_planner(args.planner)
+    full, smoke, missing, bargs, races = plan_all(planner, args.vendor)
+    os.makedirs(args.out_dir, exist_ok=True)
+    for name, lines in (("race-ids-full.txt", full), ("race-ids-smoke.txt", smoke), ("board-args.txt", bargs)):
+        with open(os.path.join(args.out_dir, name), "w") as fh:
+            fh.write("".join(x + "\n" for x in lines))
+    with open(os.path.join(args.out_dir, "not-planned.json"), "w") as fh:
+        json.dump(missing, fh, indent=1, sort_keys=True)
+    # the shape tools/measure_owed.py data-keys reads as --paper-recipes (family, lane, dataset per race)
+    with open(os.path.join(args.out_dir, "races.json"), "w") as fh:
+        json.dump({"recipes": races}, fh, indent=1, sort_keys=True)
+    print("PAPER-IDS-ALL vendor=%s planned=%d no_smoke=%d" % (args.vendor, len(full), len(missing)))
     return 0
 
 
@@ -896,6 +943,10 @@ def build_parser():
     i.add_argument("--recipes", required=True)
     i.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
     i.add_argument("--out-dir", required=True)
+    a = sub.add_parser("ids-all", help="(box) every race the board plans: the full-board screen")
+    a.add_argument("--vendor", required=True, choices=VENDORS)
+    a.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
+    a.add_argument("--out-dir", required=True)
     s = sub.add_parser("pass-ids", help="(box) the planned races whose smoke passed")
     s.add_argument("--full-ids", required=True)
     s.add_argument("--smoke-json", action="append", default=[])
@@ -921,7 +972,8 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    return {"recipes": cmd_recipes, "ids": cmd_ids, "pass-ids": cmd_pass_ids, "compare": cmd_compare}[args.cmd](args)
+    return {"recipes": cmd_recipes, "ids": cmd_ids, "ids-all": cmd_ids_all, "pass-ids": cmd_pass_ids,
+            "compare": cmd_compare}[args.cmd](args)
 
 
 if __name__ == "__main__":
