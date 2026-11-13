@@ -16,7 +16,14 @@ from core.host_parallel import host_parallelize
 from isolation_forest.checks.if_oracle import OracleForest, OracleTree
 from isolation_forest.impl.isolation_forest import IF_params, compute_c_normalization
 from isolation_forest.forest_io import IFForestWords, if_forest_check
-from svm.host.svm_host_impl import IForestHostFitted
+from isolation_forest.estimator import IFResidentKey
+from svm.host.svm_host_impl import (
+    IForestHostEntry,
+    IForestHostFitted,
+    IForestHostRun,
+    _iforest_host_fit,
+    _iforest_host_query,
+)
 
 
 def if_host_forest_sizes(fitted: IForestHostFitted) -> Tuple[Int, Int]:
@@ -121,3 +128,37 @@ def if_host_forest_import(
         host_parallelize(task, n_trees)
     _ = counts^
     return IForestHostFitted(forest^, offset_, max_samples_)
+
+
+def if_host_resident_fit_if_empty(mut held: List[IForestHostEntry], key: IFResidentKey, new_token: Int) raises:
+    """The fit half of `iforest_run_host_resident` (its words): `held` empty
+    fits the host forest from `key.train_addr` and leaves it, under
+    `new_token`, in `held`; one entry is left as it is."""
+    if len(held) == 0:
+        var fitted = _iforest_host_fit(
+            key.train_addr, key.n_train, key.n_features, key.n_estimators,
+            key.max_samples_mode, key.max_samples_int, key.max_samples_frac,
+            key.max_depth, key.max_features_mode, key.max_features_int,
+            key.max_features_frac, key.bootstrap, key.random_state,
+            key.contamination_auto, key.contamination,
+        )
+        held.append(IForestHostEntry(new_token, key, fitted^))
+
+
+def if_host_imported_if_empty(
+    mut held: List[IForestHostEntry], key: IFResidentKey, new_token: Int, words: IFForestWords,
+    n_features: Int, max_samples_: Int, offset_: Float64,
+) raises:
+    """`held` empty imports the saved compact forest at `words` and leaves
+    it, under `new_token`, in `held`; one entry is left as it is."""
+    if len(held) == 0:
+        var fitted = if_host_forest_import(words, n_features, max_samples_, offset_)
+        held.append(IForestHostEntry(new_token, key, fitted^))
+
+
+def if_host_entry_query(
+    held: List[IForestHostEntry], query_address: Int, n_query: Int, n_features: Int, want: Int,
+) raises -> IForestHostRun:
+    """`_iforest_host_query` over the one entry in `held` (fitted or
+    imported: the same scorer)."""
+    return _iforest_host_query(held[0].fitted, query_address, n_query, n_features, want)
