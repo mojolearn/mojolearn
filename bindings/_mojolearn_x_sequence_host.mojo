@@ -403,7 +403,7 @@ def ops_program_public_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr)
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_program_public_call expects three arguments")
-        var result = ops_program_public_call_py(args[0], args[1], args[2])
+        var result = ops_program_public_call_py[HostExec, OPS_HOST](args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -414,7 +414,7 @@ def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_session_call expects three arguments")
-        var result = ops_session_public_call_py(args[0], args[1], args[2])
+        var result = ops_session_public_call_py[HostExec, OPS_HOST](args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)

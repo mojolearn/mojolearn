@@ -1,15 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # One native public call; route to the exact Session provider image retaining
-# the captured Program dictionary and original owner for the complete call.
+# the captured Program dictionary and original owner for the complete call
+# (a direct typed call when this image owns the registry: lane
+# restore-executor-fast-run 2026-11-13, see the Session request PACK file).
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module
+from sequence.exec_trait import Exec
 from providers.python.autograd_program_owner_pyapi_door import program_owner_fields
 from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
 
 
-def ops_program_public_call_py(owner: PythonObject, operation: PythonObject,
-                              args: PythonObject) raises -> PythonObject:
+def ops_program_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
+    owner: PythonObject, operation: PythonObject, args: PythonObject,
+) raises -> PythonObject:
     if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not py_type(Python.tuple()):
         raise Error("TypeError: Program requires an exact operation string and argument tuple")
     var fields = program_owner_fields(owner)
@@ -21,5 +25,5 @@ def ops_program_public_call_py(owner: PythonObject, operation: PythonObject,
     var snapshot = Python.dict()
     py_setitem(snapshot, "_s", fields["_s"])
     py_setitem(snapshot, "_id", pid)
-    return ops_session_public_call_py(snapshot["_s"], PythonObject("program_public"),
-                                      Python.tuple(owner, snapshot, fields, operation, args))
+    return ops_session_public_call_py[E, KIND](snapshot["_s"], PythonObject("program_public"),
+                                               Python.tuple(owner, snapshot, fields, operation, args))
