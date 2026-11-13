@@ -1277,10 +1277,16 @@ def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.f
     var status = ctx.enqueue_create_buffer[DType.int32](1)
     enqueue_fill[DType.int32](ctx, status, Int32(0))
     enqueue_finite_status(ctx, words.unsafe_ptr(), n, status.unsafe_ptr(), 0)
-    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    # perf-neighbors (2026-11-13): the one status word comes back straight
+    # into native host memory, as x_linear's `_decision_status` returns its
+    # word on every vendor, not through a pinned host buffer allocated and
+    # freed per call (a k-NN fit + predict made two of them, a radius query
+    # one). The copy completes inside the synchronize below.
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_address = Int(word.unsafe_ptr())
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=word_address), src_buf=status)
     ctx.synchronize()
-    var result = word.unsafe_ptr()[0]
+    var result = word[0]
     _ = word^
     _ = status^
     return result
