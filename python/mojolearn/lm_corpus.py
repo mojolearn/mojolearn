@@ -377,8 +377,8 @@ class _TokenBatchIterator:
 # constructor, filesystem operation, tokenizer helper or scheduling loop.
 import mmap as _corpus_mmap
 from ._array import Array as _CorpusArray
-from ._native_loaded_modules import connect_module as _corpus_connect_module
-_corpus_connect_module("mmap", _corpus_mmap, ("mmap",))
+# The "mmap" module connection is made once in _native_loaded_modules, so the
+# checkpoint reader (models.safetensors) can connect the mmap exporter too.
 _NATIVE = _tokenizer._TOKENIZER_NATIVE
 _NATIVE.lm_corpus_public_call("connect", (
     TokenizedCorpus, TokenBatches, _TokenBatchIterator, _CorpusArray, _corpus_mmap.mmap,

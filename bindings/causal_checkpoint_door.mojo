@@ -20,7 +20,7 @@ from bindings.neural_block_admission_door import neural_array_slots, neural_arra
 from bindings.mode_metadata_native_door import _class_fields
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.causal_model_config_door import model_record_fields, model_dict, model_plain, model_string, model_integer, model_sequence
-from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
+from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer, connect_native_mmap_exporter
 from bindings.linalg_ops_lowbit_door import _lin_from_f16, lin_connected_binding
 from core.shared_slot import SharedSlot
 
@@ -80,6 +80,13 @@ def checkpoint_connect(mut mods: NativeModules, context: PythonObject) raises ->
     py_setitem(entries, "mmap_class", cls)
     py_setitem(entries, "mmap_close", close)
     py_setitem(entries, "ACCESS_READ", PythonObject(model_integer(mods, mmap.ACCESS_READ)))
+    # _checkpoint_store admits memoryview(mmap)[slice] through the shared
+    # exporter admission, which accepts the mmap owner only once its exact
+    # extension type is connected. Only the lazily imported lm_corpus did
+    # that, so CausalLM.load in a process without lm_corpus was refused
+    # ("native buffers require an exact native exporter") since 6dcf21b621.
+    # Connect it here, at checkpoint import; the connection is idempotent.
+    connect_native_mmap_exporter(cls)
     _ = neural_array_slots(connected)
     var state = CHECKPOINT_CONNECTION.get_or_create_ptr()
     if state[].context is not None:
