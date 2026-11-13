@@ -386,8 +386,15 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
 - Compilation is never described as verified runtime behavior or bitwise identity. A compile pass on one target is
   not a claim that every target works. Development merges need a successful compile of the affected code and the
   source and push guards, not a verification campaign (2026-10-27).
-- Mac compiles go through the slot semaphore: `bash tools/compile_slot.sh <command>`. The slot count and the
-  laptop's one-compiler-worker rule live in that script and only there.
+- **The integration compile is the GitHub measurement build (Andrew, 2026-11-13).** An integration branch is
+  compiled once by `tools/release.py candidate` on the free GitHub runners (Linux CPU, sm_80, sm_89, gfx942: the
+  targets that are measured), which is also the measurement build of that sha. No Mac compile round per
+  integration: the laptop builds Apple identical and CPU only, builds no GPU target, and costs an hour of the
+  laptop per round. The Mac compiles once, at the release, for the Apple wheel and the Apple column of the one
+  verification. Per integration the checks are: the GitHub build, the box's start-up smoke, the measurement.
+  No identity verify before the release's one verification.
+- Mac compiles (the release's Apple build) go through the slot semaphore: `bash tools/compile_slot.sh <command>`.
+  The slot count and the laptop's one-compiler-worker rule live in that script and only there.
 - For a development repair, build the smallest affected groups (`tools/development_build.py`,
   `bindings/development_groups.json`) and reuse unchanged compiled groups whose source closure, compiler, flags,
   target and dependencies match (Andrew, 2026-10-29). Separately compiled groups are valid evidence for the paths
