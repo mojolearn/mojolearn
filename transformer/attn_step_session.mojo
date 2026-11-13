@@ -49,6 +49,7 @@ from autograd.block_step_ops import (
     attn_step_entry,
     attn_step_restart,
     attn_step_run_kept,
+    attn_step_run_kept_host,
     block_guard,
     block_offsets,
     block_state_sizes,
@@ -395,6 +396,15 @@ struct AttnStepArm(Movable):
             raise Error("transformer decode session: L must be positive")
         var n = self.b * l * self.dm
         self._io(n)
+        if l == 1:
+            # the decode step from and to the caller's arrays, no resident
+            # x/y hop and no device-to-device copies (fable-perf-neural-0855;
+            # 0.8.55's `_session_step_run`); the same op entry and stages
+            attn_step_run_kept_host(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints,
+                                    px, py, self.pre, False)
+            self.cached += 1
+            self.ex.sync()
+            return self.cached
         var ctx = self.ex.ctx.copy()
         ctx.enqueue_copy(dst_buf=self._view(self.xio, n), src_ptr=f32_ptr(px))
         self._run(l, False)
