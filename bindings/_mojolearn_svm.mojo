@@ -70,7 +70,10 @@ from isolation_forest.impl.isolation_forest import (
 from isolation_forest.impl.isolation_tree_builder import IF_FAST_ROWMAJOR
 from isolation_forest.estimator import (
     IF_WANT_PREDICT,
+    IFResidentEntry,
     IFResidentKey,
+    if_resident_fit_if_empty,
+    if_resident_score,
     IFRunOutputs,
     if_resident_new_token,
     if_resident_put,
@@ -78,6 +81,13 @@ from isolation_forest.estimator import (
     if_resident_take,
     iforest_run_host,
     iforest_run_resident,
+)
+from isolation_forest.forest_io import (
+    IFForestWords,
+    if_held_forest_export,
+    if_held_forest_sizes,
+    if_imported_if_empty,
+    if_imported_key,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys import is_defined
@@ -844,6 +854,157 @@ def iforest_run_binding(
     return PythonObject(n_query)
 
 
+def _forest_words(words: PythonObject) raises -> IFForestWords:
+    """UNPACK: the seven words of a compact forest (offsets, feature,
+    threshold, left and right addresses, trees, nodes)."""
+    if len(words) != 7:
+        raise Error("iforest forest: seven words are needed, got " + String(len(words)))
+    return IFForestWords(Int(py=words[0]), Int(py=words[1]), Int(py=words[2]), Int(py=words[3]),
+                         Int(py=words[4]), Int(py=words[5]), Int(py=words[6]))
+
+
+def iforest_forest_export_binding(
+    train_addr: PythonObject, info_addr: PythonObject, params: PythonObject, words: PythonObject,
+) raises -> PythonObject:
+    """The fitted forest as the compact host form `save()` and pickle write
+    (lane fix-iforest-save-device-forest, isolation_forest/forest_io.mojo):
+    read from the device, so a caller's in-place edit of the borrowed
+    training X after fit never reaches a saved model.
+
+    `params` is `iforest_run`'s seventeen (slot 15 unused, slot 16 the
+    token): the resident forest that token names when its key matches (the
+    forest every score of this estimator used), else a fresh fit from
+    `train_addr`, kept under a new token on a resident binary. `words`
+    empty asks for the sizes only; seven words (offsets, feature,
+    threshold, left, right addresses, trees, nodes) receive the forest.
+    `info_addr` takes FOUR float64: offset_, max_samples_, n_features_in_,
+    token. Returns `[token, trees, nodes]`."""
+    if len(params) != 17:
+        raise Error("iforest_forest_export: params must contain 17 values, got " + String(len(params)))
+    var key = IFResidentKey(
+        Int(py=train_addr), Int(py=params[0]), Int(py=params[1]), Int(py=params[3]), Int(py=params[4]),
+        Int(py=params[5]), Float64(py=params[6]), Int(py=params[7]), Int(py=params[8]),
+        Int(py=params[9]), Float64(py=params[10]), Int(py=params[11]) != 0, Int(py=params[12]),
+        Int(py=params[13]) != 0, Float64(py=params[14]),
+    )
+    if key.n_train <= 0 or key.n_features <= 0:
+        raise Error("iforest_forest_export: n_train and n_features must both be positive")
+    if key.train_addr == 0:
+        raise Error("iforest_forest_export: the training matrix address is null")
+    var write = len(words) > 0
+    var dst = IFForestWords(0, 0, 0, 0, 0, 0, 0)
+    if write:
+        dst = _forest_words(words)
+    var ip = f64_ptr(Int(py=info_addr))
+    var token = Int(py=params[16])
+    var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
+    var held = if_resident_take(token, key) if _IF_RESIDENT_ROUTE else List[IFResidentEntry]()
+    var new_token = 0
+    if len(held) == 0:
+        new_token = if_resident_new_token() if _IF_RESIDENT_ROUTE else 0
+    var n_trees = 0
+    var n_nodes = 0
+    try:
+        with GILReleased(Python()):
+            if_resident_fit_if_empty(plan, held, key, new_token)
+            var sizes = if_held_forest_sizes(held)
+            n_trees = sizes[0]
+            n_nodes = sizes[1]
+            if write:
+                if_held_forest_export(held, dst)
+    except e:
+        if new_token == 0 and _IF_RESIDENT_ROUTE:
+            if_resident_put(held)
+        raise e
+    var held_token = held[0].token
+    ip.unsafe_store(0, held[0].est.offset_)
+    ip.unsafe_store(1, Float64(held[0].est.max_samples_))
+    ip.unsafe_store(2, Float64(key.n_features))
+    ip.unsafe_store(3, Float64(held_token))
+    comptime if _IF_RESIDENT_ROUTE:
+        if_resident_put(held)
+    return Python.list(PythonObject(held_token), PythonObject(n_trees), PythonObject(n_nodes))
+
+
+def iforest_forest_run_binding(
+    words: PythonObject, query_addr: PythonObject, out_f32_addr: PythonObject, out_i32_addr: PythonObject,
+    info_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """ONE of `score_samples`, `decision_function` or `predict` over a
+    SAVED compact forest (a loaded or unpickled IsolationForest): the forest
+    is uploaded once (isolation_forest/forest_io.mojo `if_forest_import`)
+    and scored by `iforest_run`'s resident scorer, the same kernels; no
+    training matrix and no fit (lane fix-iforest-save-device-forest).
+
+    `words`: the seven forest words. `params`: n_features, n_query,
+    max_samples_, offset_ (float), want (0, 1, 2; 3 and 4 the float64
+    score_samples / decision_function where `iforest_scores_f64` is 1),
+    token (0, or the token an earlier call returned: that imported forest
+    scores with no upload). `info_addr` takes FOUR float64 (offset_,
+    max_samples_, n_features_in_, token). Returns `n_query`."""
+    if len(params) != 6:
+        raise Error("iforest_forest_run: params must contain 6 values, got " + String(len(params)))
+    var forest = _forest_words(words)
+    var n_features = Int(py=params[0])
+    var n_query = Int(py=params[1])
+    var max_samples_ = Int(py=params[2])
+    var offset_ = Float64(py=params[3])
+    var want = Int(py=params[4])
+    var token = Int(py=params[5])
+    var wide_scores = False
+    comptime if _IF_WIDE_ROUTE:
+        if want == _IF_WANT_WIDE_BASE or want == _IF_WANT_WIDE_BASE + 1:
+            wide_scores = True
+            want -= _IF_WANT_WIDE_BASE
+    if n_features <= 0 or n_query <= 0:
+        raise Error("iforest_forest_run: n_features and n_query must both be positive")
+    if want < 0 or want > IF_WANT_PREDICT:
+        raise Error("iforest_forest_run: want=" + String(want) + " is not one of 0, 1, 2")
+    var qp = f32_ptr(Int(py=query_addr))
+    var query = List[Float32]()
+    var q_addr = 0
+    comptime if IDN_IF_QUERY_DEVICE:
+        q_addr = Int(qp)
+    else:
+        query = list_f32(qp, n_query * n_features)
+    var out_f32 = 0
+    var out_i32 = 0
+    if want == IF_WANT_PREDICT:
+        out_i32 = Int(py=out_i32_addr)
+        if out_i32 == 0:
+            raise Error("iforest_forest_run: the label output address is null")
+    else:
+        out_f32 = Int(py=out_f32_addr)
+        if out_f32 == 0:
+            raise Error("iforest_forest_run: the score output address is null")
+    var ip = f64_ptr(Int(py=info_addr))
+    var key = if_imported_key(forest, n_features, max_samples_, offset_)
+    var held = if_resident_take(token, key) if _IF_RESIDENT_ROUTE else List[IFResidentEntry]()
+    var new_token = 0
+    if len(held) == 0:
+        new_token = if_resident_new_token() if _IF_RESIDENT_ROUTE else 0
+    var res = IFRunOutputs()
+    try:
+        with GILReleased(Python()):
+            if_imported_if_empty(held, key, new_token, forest, n_features, max_samples_, offset_)
+            res = if_resident_score(held, n_features, query, q_addr, n_query, want, out_f32, out_i32, wide_scores)
+    except e:
+        if new_token == 0 and _IF_RESIDENT_ROUTE:
+            if_resident_put(held)
+        raise e
+    comptime if _IF_RESIDENT_ROUTE:
+        if_resident_put(held)
+    iforest_resident_info_run(res, ip)
+    _ = query^  # keep the query copy alive past the scoring above
+    return PythonObject(n_query)
+
+
+def iforest_forest_io_binding() raises -> PythonObject:
+    """1: this binary has `iforest_forest_export` and `iforest_forest_run`
+    (a saved IsolationForest holds its forest, not its training matrix)."""
+    return PythonObject(1)
+
+
 def svm_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -958,6 +1119,9 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[iforest_resident_binding]("iforest_resident")
         m.def_function[iforest_scores_f64_binding]("iforest_scores_f64")
         m.def_function[iforest_resident_release_binding]("iforest_resident_release")
+        m.def_function[iforest_forest_export_binding]("iforest_forest_export")
+        m.def_function[iforest_forest_run_binding]("iforest_forest_run")
+        m.def_function[iforest_forest_io_binding]("iforest_forest_io")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
         m.def_function[svm_scale_gamma_limbs_binding]("scale_gamma_limbs")
