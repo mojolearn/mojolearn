@@ -1267,11 +1267,17 @@ def locked_version(name, lock=None, envs=LOCK_ENV_ORDER):
 def ours_only_requirements(pins, lock=None):
     """The third-party packages an ours-only board venv installs beside our wheels: the scikit-learn pin of
     the trees opponent set (the drivers' data helpers and metrics; it pulls numpy, scipy, joblib and
-    threadpoolctl), then OURS_ONLY_LOCKED at their pixi.lock versions. Every other third-party import of the
+    threadpoolctl), its catboost pin (the border oracle of our pre-binned arms, never raced here), then OURS_ONLY_LOCKED at their pixi.lock versions. Every other third-party import of the
     drivers is an opponent arm's (lazy, inside that arm) or a download step's (pyarrow for parquet)."""
     trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
     sk = [r for r in (trees[1] if trees else []) if r.lower().startswith("scikit-learn==")]
     out = sk or ["scikit-learn"]
+    # SMOKE-NOT-RUN FIX (2026-11-13, candidate 4c2340386abc): our own pre-binned arms (`ours-prebinned` on
+    # gbdt-depthwise, `ours-gain0` on gbdt-lossguide; tools/board_pairing.py) fit on the GreedyLogSum bin ids that
+    # CatBoost's own Pool.quantize computes (tools/speed_gbdt_arm.py prebinned_data, untimed, the border oracle).
+    # Without catboost in this venv the trees driver refused both own arms ("No module named 'catboost'"), the
+    # probe built nothing and the four rows smoked as "arm=- not run". The oracle's pin is the trees set's.
+    out += [r for r in (trees[1] if trees else []) if r.lower().startswith("catboost==")][:1] or ["catboost"]
     for name in OURS_ONLY_LOCKED:
         version = locked_version(name, lock)
         out.append("%s==%s" % (name, version) if version else name)
