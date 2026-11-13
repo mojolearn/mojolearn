@@ -28,8 +28,9 @@
 #   UPLOADED name=00.tgz seq=3 label=periodic bytes=.. sha256=..   FAILED name=.. http=..   REJECTED (403: expired
 #   or wrong key)   EXPIRED (URLs past their expiry: nothing more is sent)   READBACK-OK|READBACK-MISMATCH
 # Excluded from every tarball: venv, venv-*, .venv, .pixi, *.whl, .cache, __pycache__, .mojo_cache,
-# node_modules, *.persist.json, persist.json, plus the json's "excludes". A tarball over max_bytes is rebuilt
-# without its largest files, and PERSIST_TRUNCATED.txt in the results dir names what was left out.
+# node_modules, *.persist.json, persist.json, plus the json's "excludes". When the files' sizes (read before any tar)
+# exceed max_bytes, the one tarball leaves out the largest files, and PERSIST_TRUNCATED.txt in the results dir names
+# what was left out. A staging tarball that failed to build or upload is deleted (it filled a pod on 2026-11-13).
 #
 # Box state: <root>/active/<tag>.env (one per running job; what --flush-all walks), <root>/state/<tag>/ (upload
 # counter, entries, lock). <root> is $BOX_PERSIST_ROOT, else the parent of this script's bin/ directory, else
@@ -115,22 +116,55 @@ tar_results() {  # <out> [exclude-file]: rc 0 or 1 (GNU: files changed while rea
     [ $rc -le 1 ] && [ -s "$1" ]
 }
 
-# the tarball within max_bytes: full; else without files over max/8; else without files over 1 MiB; else the logs
-build_tarball() {  # <out>
-    local out=$1 b lim
-    tar_results "$out" || { plog "TAR-FAILED (see $ST/tar.err)"; return 1; }
-    b=$(fsize "$out"); [ "$b" -gt "$MAXB" ] || { rm -f "$RES/PERSIST_TRUNCATED.txt"; return 0; }
-    for lim in $(( MAXB / 8 )) 1048576; do
-        ( cd "$RES" && find . -type f -size +"${lim}"c ) > "$ST/big.lst" 2> /dev/null
-        {
-            echo "box_persist: the results tarball was $b bytes, over max_bytes=$MAXB; files over $lim bytes were left out:"
-            ( cd "$RES" && while IFS= read -r f; do echo "$(fsize "$f") $f"; done < "$ST/big.lst" )
-        } > "$RES/PERSIST_TRUNCATED.txt"
-        tar_results "$out" "$ST/big.lst" || return 1
-        b=$(fsize "$out"); [ "$b" -gt "$MAXB" ] || { plog "TRUNCATED limit=$lim omitted=$(grep -c . "$ST/big.lst")"; return 0; }
+# every file the tarball would hold, one "<bytes> ./<path>" line each, from ONE find pass that prunes what
+# tar_results excludes (a pattern with a slash is matched against the path, as tar does)
+size_list() {
+    local p first=1 pr=()
+    for p in $DEFAULT_EXCLUDES $EXTRA_EXCL "$(basename "$JSON")"; do
+        [ $first = 1 ] || pr+=(-o)
+        case "$p" in */*) pr+=(-path "*/$p") ;; *) pr+=(-name "$p") ;; esac
+        first=0
     done
-    echo "box_persist: even without files over 1 MiB the tarball was $b bytes; only the logs were uploaded" >> "$RES/PERSIST_TRUNCATED.txt"
-    tar -czf "$out" -C "$RES" PERSIST_TRUNCATED.txt $( cd "$RES" && ls persist.log command.log 2> /dev/null ) 2>> "$ST/tar.err"
+    if find "$RES" -maxdepth 0 -printf '' > /dev/null 2>&1; then
+        ( cd "$RES" && find . \( "${pr[@]}" \) -prune -o -type f -printf '%s %p\n' ) 2> /dev/null
+    else   # BSD find (the Mac tests): wc -c in batches; drop its "total" lines (every real path starts with ./)
+        ( cd "$RES" && find . \( "${pr[@]}" \) -prune -o -type f -exec wc -c {} + ) 2> /dev/null \
+            | awk '!(NF == 2 && $2 == "total") { sub(/^ */, ""); print }'
+    fi
+}
+
+# the tarball within max_bytes, tarred ONCE: the decision is made from the files' sizes before any tar runs (the
+# 2026-11-13 NVIDIA job tarred 27 GB in full and then again truncated, on a nearly full disk, and both failed).
+# Uncompressed sizes bound the tarball from above, so: all files if they fit; else without files over max/8; else
+# without files over 1 MiB; else the logs only. A tarball that still comes out over max_bytes (tar headers on very
+# many small files) drops to the next level. A failed staging tarball is deleted at once.
+build_tarball() {  # <out>
+    local out=$1 total kept lim b
+    rm -f "$out"
+    size_list > "$ST/sizes.lst"
+    total=$(awk '{ s += $1 } END { printf "%d", s }' "$ST/sizes.lst")
+    if [ "$total" -le "$MAXB" ]; then
+        rm -f "$RES/PERSIST_TRUNCATED.txt"
+        tar_results "$out" || { rm -f "$out"; plog "TAR-FAILED (see $ST/tar.err)"; return 1; }
+        b=$(fsize "$out"); [ "$b" -gt "$MAXB" ] || return 0
+        rm -f "$out"
+    fi
+    for lim in $(( MAXB / 8 )) 1048576; do
+        kept=$(awk -v l="$lim" '$1 <= l { s += $1 } END { printf "%d", s }' "$ST/sizes.lst")
+        [ "$kept" -le "$MAXB" ] || continue
+        awk -v l="$lim" '$1 > l { sub(/^[0-9]+ /, ""); print }' "$ST/sizes.lst" > "$ST/big.lst"
+        {
+            echo "box_persist: the results held $total bytes before compression, over max_bytes=$MAXB; files over $lim bytes were left out:"
+            awk -v l="$lim" '$1 > l' "$ST/sizes.lst"
+        } > "$RES/PERSIST_TRUNCATED.txt"
+        tar_results "$out" "$ST/big.lst" || { rm -f "$out"; plog "TAR-FAILED (see $ST/tar.err)"; return 1; }
+        b=$(fsize "$out"); [ "$b" -gt "$MAXB" ] || { plog "TRUNCATED limit=$lim omitted=$(grep -c . "$ST/big.lst")"; return 0; }
+        rm -f "$out"
+    done
+    echo "box_persist: even without files over 1 MiB the results did not fit max_bytes=$MAXB ($total bytes before compression); only the logs were uploaded" > "$RES/PERSIST_TRUNCATED.txt"
+    awk '$1 > 1048576' "$ST/sizes.lst" >> "$RES/PERSIST_TRUNCATED.txt"
+    tar -czf "$out" -C "$RES" PERSIST_TRUNCATED.txt $( cd "$RES" && ls persist.log command.log 2> /dev/null ) 2>> "$ST/tar.err" \
+        || { rm -f "$out"; plog "TAR-FAILED (see $ST/tar.err)"; return 1; }
     plog "TRUNCATED to logs only"
 }
 
@@ -170,14 +204,14 @@ snapshot() {  # <label> [exit] [why]
         name=final.tgz; pk=final.put; sk=final.sha.put; gk=final.get; maxs=$FINAL_PUT_MAX
     fi
     tgz="$ST/upload.tgz"; side="$ST/upload.sha256"; rm -f "$tgz"
-    build_tarball "$tgz" || { unlock; return 1; }
+    build_tarball "$tgz" || { rm -f "$tgz"; unlock; return 1; }
     sha=$(sum256 "$tgz"); bytes=$(fsize "$tgz")
     printf '%s  %s\n' "$sha" "$name" > "$side"
     c=$(http PUT "$(jget "$pk")" "$tgz" "$maxs")
     case "$c" in
         2*) ;;
-        403) plog "REJECTED name=$name http=403 (the URL expired or is not signed for this key)"; unlock; return 1 ;;
-        *) plog "FAILED name=$name http=$c bytes=$bytes"; unlock; return 1 ;;
+        403) plog "REJECTED name=$name http=403 (the URL expired or is not signed for this key)"; rm -f "$tgz" "$side"; unlock; return 1 ;;
+        *) plog "FAILED name=$name http=$c bytes=$bytes"; rm -f "$tgz" "$side"; unlock; return 1 ;;
     esac
     c2=$(http PUT "$(jget "$sk")" "$side" 120)
     case "$c2" in 2*) ;; *) plog "FAILED name=$name.sha256 http=$c2" ;; esac

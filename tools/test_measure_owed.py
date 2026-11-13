@@ -55,6 +55,32 @@ class Plan(unittest.TestCase):
         self.assertIn("algos", bargs[bargs.index("--families") + 1])
 
 
+class DataKeys(unittest.TestCase):
+    def test_keys_come_from_the_boards_data_needs(self):
+        # the stage step and the job read the dataset list from the board's data_needs over the paper and owed races
+        # (2026-11-12: a hand-written list left out higgs), never from a literal
+        m = fake_planner()
+        seen = []
+
+        def data_needs(races):
+            seen.extend(races)
+            return sorted({r["dataset"] for r in races} | {"higgs"}), []
+        m.data_needs = data_needs
+        m.R2_KEYS = {"taxi": "gbm-bench/taxi/taxi_speed.npz", "istella": "gbm-bench/istella/istella_speed.npz",
+                     "higgs": "gbm-bench/higgs/higgs_speed.npz"}
+        m.DATA_FILES = {"taxi": "taxi/taxi_speed.npz", "istella": "istella/istella_speed.npz",
+                        "higgs": "higgs/higgs_speed.npz"}
+        m.ALGOS = types.SimpleNamespace(r2_keys=lambda lane, ds: ["corpus/enwik8/input.txt"] if lane == "gmm" else [],
+                                        corpus_path=lambda k: "/c/" + k)
+        paper = dict(PAPER, recipes=[{"family": "classical", "lane": "kmeans", "dataset": "taxi"}])
+        keys = MO.data_keys(OWED, paper, m, "nvidia", "/d")
+        self.assertIn(("gbm-bench/higgs/higgs_speed.npz", "/d/higgs/higgs_speed.npz"), keys)
+        self.assertIn(("gbm-bench/istella/istella_speed.npz", "/d/istella/istella_speed.npz"), keys)
+        self.assertIn(("corpus/enwik8/input.txt", "/c/corpus/enwik8/input.txt"), keys)
+        self.assertIn({"family": "classical", "lane": "kmeans", "dataset": "taxi"}, seen)
+        self.assertTrue(any(r["lane"] == "gmm" for r in seen), "the owed rows' races count too")
+
+
 class Report(unittest.TestCase):
     def test_prior_ratio_and_b_flags(self):
         cell = lambda ms: {"arm": "ours", "status": "ok", "median_ms": ms}  # noqa: E731

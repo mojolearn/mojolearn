@@ -21,6 +21,20 @@ NVIDIA: `nvidia_central.sh sync <lane> <tree>` first puts the lane tree /root/mo
 worktree of the branch whose tools/ the job runs). AMD: the droplet's /root/mojolearn must already be at that
 branch's pushed head (`tools/do_amd_steward.sh update <sha>`); this tool checks it and refuses otherwise.
 Nothing here rents, releases or extends a box. It prints the submit line; the orchestrator runs it.
+
+Before any copy it also (fix lane tooling-measure-stage, 2026-11-13, after the measurement of 4c2340386abc):
+  * refuses a --b-arm NAME that is not one of the owed file's b_arms (six B sets were staged under invented names and
+    the job reported every one "not planned");
+  * checks the box's free disk on /root: at least --min-free-gb (40), or the largest results dir already under the
+    tree's box-out/ plus 20 GB, and prints what can be pruned (old results dirs, staging tarballs of
+    box_persist_run.sh, old /root/pc-in sets, smoke caches); it refuses below that unless --allow-low-disk (the
+    80 GB L40S pod filled twice);
+  * stages every dataset the job reads through `tools/dataset_store.sh stage` (the first AMD submit died in 1 s on a
+    missing taxi; half the smoke shards refused on a missing higgs). The key list is not written here: it is
+    tools/measure_owed.py data_keys over the paper recipes and the owed rows, through the board's own data_needs.
+    The pins are the candidate's full source tree's bench/results/dataset_store/manifest.tsv
+    (<work dir>/source/<commit12>/, written by tools/release.py candidate; --source-tree overrides), since the lean
+    tooling worktree has no bench/results/. A file already on the box at its pins is kept, not refetched.
 """
 import argparse
 import os
@@ -34,6 +48,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "tools" / "ops"))
 import candidate_wheel_install as C  # noqa: E402
+import measure_owed as MO  # noqa: E402
+import paper_compare as PC  # noqa: E402
 import release_gate as RG  # noqa: E402
 
 RELEASE_ROOT = Path.home() / "mojolearn-evidence" / "release"
@@ -55,6 +71,88 @@ def dir_version(wheel_dir, fallback):
         return fallback
 IN_BASE = "/root/pc-in"
 AMD_TREE = "/root/mojolearn"
+#: the job's --data-root (tools/ops/paper_compare_job.sh PC_DATA_ROOT default); dataset_store.sh stages there
+DATA_ROOT = "/root/datasets/gbm-bench"
+OWED_NAME = "owed-pre0867.json"
+#: free disk the job needs on /root at least, and on top of the largest earlier results dir (GB): the 2026-11-13
+#: NVIDIA job wrote 14 GB of board evidence and 12 GB of smoke scratch, and its persist staging held 36 GB more
+MIN_FREE_GB = 40
+HEADROOM_GB = 20
+
+
+def source_tree(wheel_dir, commit, override=None):
+    """The candidate's full source tree tools/release.py candidate checked out: <work dir>/source/<commit12>, where
+    the wheel dir is <work dir>/<commit12>/linux/final."""
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(wheel_dir).expanduser().resolve().parents[2] / "source" / commit[:12]
+
+
+def results_file(name, *roots):
+    """bench/results/<name> from the first root that has it (the job tree, else the candidate's source tree)."""
+    for r in roots:
+        f = Path(r) / "bench" / "results" / name
+        if f.is_file():
+            return f
+    raise SystemExit(f"measure-candidate: no bench/results/{name} under " + " or ".join(str(r) for r in roots))
+
+
+def check_b_arms(names, owed_file):
+    """Refuse a B set name the owed file does not list (the job would report its rows "not planned")."""
+    known = sorted((PC.load_json(owed_file).get("b_arms") or {}))
+    bad = [n for n in names if n not in known]
+    if bad:
+        raise SystemExit(f"measure-candidate: --b-arm {', '.join(bad)} not in {owed_file} b_arms; "
+                         f"the names are: {', '.join(known)}")
+    dup = sorted({n for n in names if names.count(n) > 1})
+    if dup:
+        raise SystemExit(f"measure-candidate: --b-arm {', '.join(dup)} given twice")
+
+
+def dataset_keys(vendor, owed_file, recipes_file, planner_file):
+    """The R2 keys the job's races read (tools/measure_owed.py data_keys: the board's own data_needs)."""
+    keys = MO.data_keys(PC.load_json(owed_file), PC.load_json(recipes_file), MO.load_planner(str(planner_file)),
+                        vendor, DATA_ROOT)
+    return [k for k, _ in keys]
+
+
+def disk_script(results_base):
+    """The box-side report the disk check parses: FREE_KB, then RES / STAGING / CACHE lines (<kb> <path>)."""
+    b = shlex.quote(results_base)
+    return ("df -Pk /root | awk 'NR==2 {print \"FREE_KB \" $4}'; "
+            f"for d in {b}/*/; do [ -d \"$d\" ] && du -sk \"$d\" | sed 's/^/RES /'; done; "
+            "for f in /root/box-persist/state/*/upload.tgz; do [ -f \"$f\" ] && du -sk \"$f\" | sed 's/^/STAGING /'; done; "
+            "for d in /root/pc-in/*/ /root/pc-cache/c*/; do [ -d \"$d\" ] && du -sk \"$d\" | sed 's/^/CACHE /'; done; true")
+
+
+def disk_verdict(text, tag, commit12, min_free_gb=MIN_FREE_GB, headroom_gb=HEADROOM_GB):
+    """(free GB, needed GB, [(GB, path, why)] prunable) from disk_script's output. Needed: min_free_gb, or the
+    largest results dir already on the box + headroom_gb. Prunable: every other results dir, every staging tarball,
+    other commits' /root/pc-in sets and the smoke caches c2.. (the timed boards use c1)."""
+    free_kb, prune, largest = None, [], 0
+    for line in text.splitlines():
+        f = line.split(None, 2)
+        if len(f) == 2 and f[0] == "FREE_KB" and f[1].isdigit():
+            free_kb = int(f[1])
+        elif len(f) == 3 and f[1].isdigit():
+            kind, kb, path = f[0], int(f[1]), f[2].rstrip("/")
+            gb = kb / 1048576
+            if kind == "RES":
+                largest = max(largest, gb)
+                if os.path.basename(path) != tag:
+                    prune.append((gb, path, "an earlier results dir (fetch it home first: tools/box_persist.py fetch)"))
+            elif kind == "STAGING":
+                prune.append((gb, path, "a box_persist_run.sh staging tarball (a failed or killed upload)"))
+            elif kind == "CACHE":
+                base = os.path.basename(path)
+                if path.startswith(IN_BASE + "/") and base != commit12:
+                    prune.append((gb, path, "another candidate's staged wheels"))
+                elif re.fullmatch(r"c([2-9]|[1-9][0-9]+)", base):
+                    prune.append((gb, path, "a smoke shard's cache (the timed boards use c1)"))
+    if free_kb is None:
+        raise SystemExit("measure-candidate: could not read the box's free disk (df -Pk /root)")
+    need = max(float(min_free_gb), largest + headroom_gb)
+    return free_kb / 1048576, need, sorted(prune, reverse=True)
 
 
 def pick_wheels(wheel_dir, vendor, version):
@@ -82,8 +180,22 @@ class StagePlan:
             return ["bash", self.wrapper, "sh", self.lane, command]
         return ["bash", self.wrapper, "ssh", command]
 
+    synced = False      # cmd_stage syncs first (the lane's pod is assigned at its first sync), then checks the disk
+
     def sync(self):
-        return ["bash", self.wrapper, "sync", self.lane, str(self.tree)] if self.vendor == "nvidia" else None
+        if self.synced or self.vendor != "nvidia":
+            return None
+        return ["bash", self.wrapper, "sync", self.lane, str(self.tree)]
+
+    def ssh_target(self):
+        """The wrapper's "<ssh flags> <target>" of the box, for tools/dataset_store.sh stage."""
+        if self.vendor == "nvidia":
+            return ["bash", self.wrapper, "ssh-target", self.lane]
+        return ["bash", self.wrapper, "ssh-target"]
+
+    def results_base(self):
+        """The box dir the submit line's box-out/<tag> lands in."""
+        return (f"/root/mojolearn-{self.lane}" if self.vendor == "nvidia" else AMD_TREE) + "/box-out"
 
     def prepare(self):
         return self.box_sh("set -e; mkdir -p " + " ".join(shlex.quote(d) for d in self.dirs) + "; echo READY")
@@ -125,11 +237,20 @@ def cmd_stage(a):
     manifest = C.build_manifest(version, vendor, wheels, commit)     # refuses a wheel of another freeze
     print(f"candidate {version} {commit[:12]} {vendor}: " + ", ".join(
         f"{f['file']} {f['sha256'][:16]}" for f in manifest["files"]))
+    tree = Path(a.tree).resolve() if a.tree else ROOT
+    src = source_tree(wdir, commit, a.source_tree)
+    owed_file = Path(a.owed_file).expanduser() if a.owed_file else results_file(f"paper_compare/{OWED_NAME}", tree, src)
+    specs = [parse_b_arm(spec) for spec in a.b_arm]
+    check_b_arms([n for n, _, _ in specs], owed_file)
+    recipes = results_file(f"paper_compare/recipes-{vendor}.json", tree, src)
+    planner = tree / "tools" / "bench_board.py"
+    keys = dataset_keys(vendor, owed_file, recipes, planner if planner.is_file() else ROOT / "tools" / "bench_board.py")
+    ds_manifest = results_file("dataset_store/manifest.tsv", src, tree)
+    print(f"datasets the job reads ({vendor}): {' '.join(keys)} (pins {ds_manifest})")
     indir = f"{IN_BASE}/{commit[:12]}"
     uploads = [(w, f"{indir}/{vendor}/{w.name}", False) for w in wheels]
     b_lines = []
-    for spec in a.b_arm:
-        name, bdir, bsha = parse_b_arm(spec)
+    for name, bdir, bsha in specs:
         bver = dir_version(bdir, a.b_version or version)     # a B candidate has its own local version
         bw = pick_wheels(bdir, vendor, bver)
         C.build_manifest(bver, vendor, bw, bsha)
@@ -142,14 +263,17 @@ def cmd_stage(a):
         local.write_text("".join(b_lines))
         uploads.append((local, f"{indir}/b-arms-{vendor}.txt", False))
         env["PC_B_ARMS"] = f"{indir}/b-arms-{vendor}.txt"
-    tree = Path(a.tree).resolve() if a.tree else ROOT
     plan = StagePlan(vendor, a.lane, tree, indir, uploads)
     tag = a.tag or f"pc-{commit[:12]}-{vendor}"
     line = submit_line(vendor, a.lane, tag, env)
+    stage_ds = ["sh", "tools/dataset_store.sh", "stage", "<" + " ".join(plan.ssh_target()) + ">"] + keys
     if a.dry_run:
         q = lambda argv: " ".join(shlex.quote(str(x)) for x in argv)  # noqa: E731
         if plan.sync():
             print(q(plan.sync()))
+        print(q(plan.box_sh(disk_script(plan.results_base()))) + f"  # free >= max({a.min_free_gb}, largest results + "
+              f"{HEADROOM_GB}) GB")
+        print(f"MOJOLEARN_DATASET_MANIFEST={shlex.quote(str(ds_manifest))} " + q(stage_ds))
         print(q(plan.prepare()))
         for local, remote, _ in uploads:
             print(q(plan.upload(remote)) + " < " + shlex.quote(str(local)))
@@ -163,9 +287,50 @@ def cmd_stage(a):
         if got.stdout.strip().splitlines()[-1:] != [head]:
             raise SystemExit(f"measure-candidate: the droplet's {AMD_TREE} is not at {head[:12]}; run "
                              f"`bash tools/do_amd_steward.sh update {head}` first (the branch must be pushed)")
-    RG.Runner(a).stage(plan)
+    runner = RG.Runner(a)
+    if plan.sync():
+        print("$ " + " ".join(plan.sync()), flush=True)
+        runner.must(plan.sync(), "the lane sync", timeout=3600)
+    plan.synced = True
+    check_disk(a, runner, plan, tag, commit[:12])
+    stage_datasets(a, runner, plan, keys, ds_manifest, commit[:12])
+    runner.stage(plan)
     print("SUBMIT " + line)
     return 0
+
+
+def check_disk(a, runner, plan, tag, commit12):
+    got = runner.must(plan.box_sh(disk_script(plan.results_base())), "the disk check on the box", timeout=1800)
+    free, need, prune = disk_verdict(got.stdout or "", tag, commit12, a.min_free_gb)
+    print(f"disk: {free:.1f} GB free on /root; the job needs {need:.1f} GB")
+    for gb, path, why in prune:
+        print(f"  prunable {gb:6.1f} GB  {path}  ({why})")
+    if free < need:
+        msg = (f"measure-candidate: {free:.1f} GB free on /root, under the {need:.1f} GB the job needs; prune the "
+               f"paths above (results dirs only after their bytes are home) or pass --allow-low-disk")
+        if not a.allow_low_disk:
+            raise SystemExit(msg)
+        print("WARNING " + msg, flush=True)
+
+
+def stage_datasets(a, runner, plan, keys, ds_manifest, commit12):
+    """Every dataset the job reads, through tools/dataset_store.sh stage (presigned on the Mac, verified on the box;
+    a file already at its pins is kept). Its full output goes to the state dir."""
+    got = runner.must(plan.ssh_target(), "the box's ssh target")
+    target = ([ln for ln in (got.stdout or "").splitlines() if ln.strip()] or [""])[-1].strip()
+    if not target:
+        raise SystemExit("measure-candidate: the wrapper printed no ssh target")
+    log = Path(a.state_dir).expanduser() / f"datasets-{commit12}-{plan.vendor}.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    print(f"staging {len(keys)} dataset(s) through tools/dataset_store.sh stage (log {log})", flush=True)
+    env = dict(os.environ, MOJOLEARN_DATASET_MANIFEST=str(ds_manifest))
+    with open(log, "w") as fh:
+        rc = subprocess.run(["sh", str(ROOT / "tools" / "dataset_store.sh"), "stage", target] + list(keys),
+                            cwd=str(ROOT), env=env, stdout=fh, stderr=subprocess.STDOUT, timeout=7200).returncode
+    tail = log.read_text(errors="replace").strip().splitlines()[-1:] if log.exists() else []
+    if rc != 0:
+        raise SystemExit(f"measure-candidate: dataset staging failed (rc {rc}); see {log}: {' '.join(tail)}")
+    print("  " + " ".join(tail))
 
 
 def main(argv=None):
@@ -185,6 +350,14 @@ def main(argv=None):
                    "else --version)")
     s.add_argument("--state-dir", default="~/mojolearn-evidence/measure-candidate")
     s.add_argument("--tag", default=None, help="the results tag (default pc-<commit12>-<vendor>)")
+    s.add_argument("--source-tree", default=None, help="the candidate's full source tree (default <work dir>/source/"
+                   "<commit12> beside the wheel dir): its bench/results/dataset_store/manifest.tsv pins the datasets")
+    s.add_argument("--owed-file", default=None, help="the owed file whose b_arms name the B sets (default "
+                   f"bench/results/paper_compare/{OWED_NAME} of --tree, else of the source tree)")
+    s.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB,
+                   help=f"free disk on /root the job needs at least (default {MIN_FREE_GB}; or the largest earlier "
+                   f"results dir + {HEADROOM_GB})")
+    s.add_argument("--allow-low-disk", action="store_true", help="warn instead of refusing below the free-disk need")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)

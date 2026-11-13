@@ -102,11 +102,13 @@ check "install: queue up, 2 slots, lease OK" "grep -q 'LEASE OK' $W/up1.log && g
 check "install retired the fixed runpod_guard watchdog on the pod" "docker exec $C1 bash -c '! pgrep -f \"[s]leep 7000\" > /dev/null && [ ! -e /tmp/mojolearn-lease.pid ]'"
 wp=$(cat "$W/devpods/nvc1/deadman.pid")
 check "the Mac watcher replaced the dead-man in deadman.pid" "kill -0 $wp && ps -p $wp -o command= | grep -q watch.sh && ! pgrep -f 'sleep 7100' > /dev/null"
-MOJOLEARN_NVC_TEST_BALANCE=50 $N up 1 > "$W/up2.log" 2>&1
-check "up at N is idempotent: nothing rented" "grep -q 'already up' $W/up2.log && [ \$(grep -c '^fake dev_pod up' $W/devpod_calls) = 2 ]"
+MOJOLEARN_NVC_TEST_BALANCE=50 $N up > "$W/up2.log" 2>&1
+check "up with no N brings one pod (a measurement needs one): nothing rented" "grep -q 'already up' $W/up2.log && [ \$(grep -c '^fake dev_pod up' $W/devpod_calls) = 2 ]"
 echo $C2 > "$W/next_container"
-MOJOLEARN_NVC_TEST_BALANCE=50 $N up 2 > "$W/up3.log" 2>&1
-check "up 2 adds exactly nvc2" "[ -f $W/devpods/nvc2/state.env ] && [ ! -e $W/devpods/nvc3 ]"
+check "up --pods 1 is idempotent too" "MOJOLEARN_NVC_TEST_BALANCE=50 $N up --pods 1 2>&1 | grep -q 'already up'"
+check "up refuses a stray argument" "! $N up --pods 1 extra 2>/dev/null"
+MOJOLEARN_NVC_TEST_BALANCE=50 $N up --pods 2 > "$W/up3.log" 2>&1
+check "up --pods 2 adds exactly nvc2" "[ -f $W/devpods/nvc2/state.env ] && [ ! -e $W/devpods/nvc3 ]"
 check "up refuses N over the 3-pod cap" "! $N up 4 2>/dev/null"
 
 echo "== sync, sh"

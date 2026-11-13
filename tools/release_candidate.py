@@ -57,6 +57,51 @@ CANDIDATE_ROOT = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expandus
 STEPS = ("reuse-plan", "linux-builds", "linux-wait", "linux-assemble", "linux-pack")
 VENDORS = ("nvidia", "amd")
 LABEL_RE = re.compile(r"[a-z0-9]+(\.[a-z0-9]+)*")
+#: the owed B arms of the pre-0.8.67 measurement: {arm name: {define, status}} under "b_arms"
+OWED_FILE = "bench/results/paper_compare/owed-pre0867.json"
+
+
+def owed_arms(path=OWED_FILE):
+    """{owed arm name: define} of the owed file: PATH on disk, else (a lean checkout leaves bench/results out)
+    its committed bytes at this checkout's HEAD."""
+    f = Path(path) if Path(path).is_absolute() else ROOT / path
+    try:
+        text = f.read_text() if f.is_file() else sh("git", "show", f"HEAD:{path}")
+        arms = json.loads(text).get("b_arms") or {}
+    except (OSError, ValueError, SystemExit) as exc:
+        raise SystemExit(f"candidate: cannot read the owed file {path}: {exc}")
+    return {name: (row or {}).get("define") or "" for name, row in arms.items()}
+
+
+def resolve_owed(label, owed_arm, defines, path=OWED_FILE):
+    """(label, defines, owed arm name) of a measurement build. The owed file's arm names carry hyphens, which a
+    PEP 440 local label cannot (they split wheel file names): a '-' becomes '.' (`small-mlp-generic` ->
+    `small.mlp.generic`). --owed-arm NAME, or a --label that is an owed arm's name, takes that arm's define; a
+    --defines that differs from it is refused (2026-11-13: B sets staged under other names were "not planned")."""
+    from release_github_build import normalize_defines
+    arm = owed_arm or ""
+    if arm:
+        arms = owed_arms(path)
+        if arm not in arms:
+            raise SystemExit(f"candidate: --owed-arm {arm} is not an owed arm of {path} ({', '.join(sorted(arms))})")
+    elif label:
+        try:
+            arms = owed_arms(path)
+        except SystemExit:
+            arms = {}   # a plain label needs no owed file
+        dotted = label.replace("-", ".").lower()
+        arm = next((name for name in sorted(arms) if name.replace("-", ".").lower() == dotted), "")
+    if arm:
+        want = normalize_defines(arms[arm])
+        if not want:
+            raise SystemExit(f"candidate: the owed arm {arm} names no define in {path}")
+        if defines and defines != want:
+            raise SystemExit(f"candidate: --defines {defines} is not the owed arm {arm}'s define {want}")
+        defines = want
+        if label and label != arm and label.replace("-", ".").lower() != arm.replace("-", ".").lower():
+            raise SystemExit(f"candidate: --label {label} and --owed-arm {arm} name different arms")
+        label = arm
+    return (label or "").replace("-", ".").lower(), defines, arm or None
 
 
 def sh(*args, cwd=ROOT, check=True):
@@ -134,8 +179,11 @@ def parse(argv):
     ap.add_argument("--commit", required=True, help="the exact source commit (40 hex), pushed to origin")
     ap.add_argument("--vendors", default="nvidia,amd", help="vendor wheels to validate and stage (default nvidia,amd)")
     ap.add_argument("--defines", default="", help="B set: '-D NAME=V -D NAME2' or NAME=V,NAME2 (MOJOLEARN_BUILD_DEFINES)")
-    ap.add_argument("--label", default="", help="the version's label (lower case [a-z0-9.]; default: none for an "
-                    "A set, d<8 hex of the defines> for a B set)")
+    ap.add_argument("--label", default="", help="the version's label (lower case [a-z0-9.]; a '-' becomes '.', so an "
+                    "owed arm's name is a label; default: none for an A set, d<8 hex of the defines> for a B set)")
+    ap.add_argument("--owed-arm", default="", help="an owed B arm of the owed file's b_arms (e.g. small-mlp-generic): "
+                    "its define, and its name as the label (small.mlp.generic) and as candidate.json owed_arm")
+    ap.add_argument("--owed-file", default=OWED_FILE, help="the owed file (default %(default)s)")
     ap.add_argument("--base-version", default="", help="X.Y.Z of the .dev0 version (default: the commit's "
                     "_version.py plus one patch)")
     ap.add_argument("--ref", default="", help="the pushed tooling branch the workflow runs from (default: this "
@@ -162,6 +210,7 @@ def main(argv=None, release=None):
     if not vendors or any(v not in VENDORS for v in vendors):
         raise SystemExit("candidate: --vendors is a comma list of nvidia, amd")
     defines = release_github_build.normalize_defines(a.defines)
+    label, defines, owed_arm = resolve_owed(a.label, a.owed_arm, defines, a.owed_file)
     for entry in [e for e in defines.split(",") if e]:
         name = entry.split("=", 1)[0]
         readers = sorted(release_reuse.define_readers(a.commit, [name], ROOT))
@@ -170,10 +219,10 @@ def main(argv=None, release=None):
             raise SystemExit(f"candidate: no .mojo or bindings/ file of {a.commit[:12]} names {name}; "
                              "that define changes nothing at this commit")
         print(f"measurement build: {name} is read by {', '.join(readers[:6])}" + (" ..." if len(readers) > 6 else ""))
-    label = a.label or default_label(defines)
+    label = label or default_label(defines)
     if label and not LABEL_RE.fullmatch(label):
-        raise SystemExit("candidate: --label is lower case letters and digits, dot separated (a PEP 440 local "
-                         "segment; no '-', it splits wheel file names)")
+        raise SystemExit("candidate: --label is lower case letters and digits, dot or hyphen separated (a PEP 440 "
+                         "local segment; a '-' becomes '.')")
     committed = re.search(r'^__version__ = "([^"]*)"',
                           sh("git", "show", f"{a.commit}:python/mojolearn/_version.py"), re.M)
     base = a.base_version or next_version(committed[1] if committed else None)
@@ -200,13 +249,26 @@ def main(argv=None, release=None):
         state = dict(version=version, commit=a.commit, steps={}, release_modes=["identical"],
                      candidate=dict(version=version, commit=a.commit, defines=defines, label=label,
                                     base_version=base, committed_version=committed[1] if committed else None,
-                                    made=release.now()))
-        release.write_json(state_path, state)
+                                    owed_arm=owed_arm, made=release.now()))
+    # THE TOOLING SHA, recorded at the first launch: a resume dispatches from the same pushed ref while it still
+    # holds this sha with the same route files, even after the ref moved on (release_github_build.tooling_ref;
+    # 2026-11-13: origin/main moved under the tooling checkout and every resume refused with "push it")
+    cand = state.setdefault("candidate", {})
+    if not cand.get("tooling_sha"):
+        cand["tooling_sha"] = sh("git", "rev-parse", "HEAD")
+        branch = a.ref or sh("git", "rev-parse", "--abbrev-ref", "HEAD")
+        cand["tooling_ref"] = "" if branch == "HEAD" else branch
+    if owed_arm and not cand.get("owed_arm"):
+        cand["owed_arm"] = owed_arm
+    release.write_json(state_path, state)
+    tooling_sha = cand["tooling_sha"]
     argv = [version, "--only", ",".join(STEPS), "--state-dir", str(work), "--source-checkout", str(src),
             "--build-backend", "github", "--identity-on-wheels"] + (["--dry-run"] if a.dry_run else [])
     args = release.release_parser().parse_args(argv)
     args.release_modes = release_reuse.release_modes(default=("identical",))
-    args.candidate_version, args.candidate_defines, args.candidate_ref = version, defines, a.ref
+    args.candidate_version, args.candidate_defines = version, defines
+    args.candidate_ref = a.ref or cand.get("tooling_ref") or ""
+    args.candidate_tooling_sha = tooling_sha
     r = release.Release(args)
     if r.commit != a.commit:
         raise SystemExit(f"measurement build: the Release resolved {r.commit}, not {a.commit}")
@@ -217,11 +279,14 @@ def main(argv=None, release=None):
     after = remote_refs()
     moved = [k for k in ("origin_main", "origin_tags_sha256", "local_tags_sha256") if before[k] != after[k]]
     if moved:
-        # this path has no push, tag or publish command; a change here is someone else's, and is reported
-        raise SystemExit("measurement build: CHANGED during the run: " + ", ".join(f"{k} {before[k]} -> {after[k]}" for k in moved)
-                         + " (a measurement build pushes and tags nothing; check who moved it)")
-    print(f"measurement build: origin/main {str(after['origin_main'])[:12]} and {after['origin_tags']} origin / "
-          f"{after['local_tags']} local tags unchanged")
+        # This path has no push, tag or publish command, so a change here is someone else's (2026-11-12: the
+        # orchestrator merged to main during a build and the finished build was refused, its wheels unrecorded).
+        # It is reported and recorded in candidate.json (refs_moved), never a refusal of the built wheels.
+        print("measurement build: changed by someone else during the run (this build pushes and tags nothing): "
+              + ", ".join(f"{k} {before[k]} -> {after[k]}" for k in moved))
+    else:
+        print(f"measurement build: origin/main {str(after['origin_main'])[:12]} and {after['origin_tags']} origin / "
+              f"{after['local_tags']} local tags unchanged")
     if rc or a.dry_run:
         return rc
     final = work / a.commit[:12] / "linux" / "final"
@@ -237,7 +302,8 @@ def main(argv=None, release=None):
             if payload.get("local_version") != version or (payload.get("defines") or "") != defines:
                 raise SystemExit(f"measurement build: {f['file']} does not record this build's version and defines")
     doc = dict(schema="mojolearn.release-candidate.v1", version=version, source_commit=a.commit, defines=defines,
-               label=label, wheel_dir=str(final), vendors=vendors, steps=list(STEPS),
+               label=label, owed_arm=cand.get("owed_arm"), tooling_sha=tooling_sha, refs_moved=moved,
+               wheel_dir=str(final), vendors=vendors, steps=list(STEPS),
                wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
                manifests=manifests, refs_before=before, refs_after=after, made=release.now())
     release.write_json(final / "candidate.json", doc)
@@ -245,7 +311,7 @@ def main(argv=None, release=None):
     for vendor in vendors:
         if defines:
             # a B set rides with its A set's stage line (measure_candidate reads this version from candidate.json)
-            print(f"B-ARM {vendor} --b-arm <owed arm name>={final}@{a.commit}")
+            print(f"B-ARM {vendor} --b-arm {cand.get('owed_arm') or '<owed arm name>'}={final}@{a.commit}")
         else:
             print(f"STAGE python3 tools/ops/measure_candidate.py stage {vendor} --version '{version}' "
                   f"--source-commit {a.commit} --tree <job worktree>")
