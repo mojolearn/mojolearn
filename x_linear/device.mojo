@@ -6247,16 +6247,33 @@ def decision_codes_kernel(s: FP, n: Int32, k: Int32, strict: Int32, below: Int32
 def _decision_status(ctx: DeviceContext, dx: DeviceBuffer[DType.float32], count: Int, status: Int) raises -> DeviceBuffer[DType.int32]:
     """The deferred finite test of a decision entry's X (lane
     a1b-doors-opt-in-trees-linear; core/admitted_finite_status.mojo): over
-    the words the entry just uploaded, one grid-stride kernel, the status
-    word copied back with the result (no new synchronisation). `status` is
-    the host address of one int32 word, 0 when the door tested X itself."""
+    the words the entry just uploaded, one grid-stride kernel into the
+    device word returned here. `status` is the host address of one int32
+    word, 0 when the door tested X itself; `_decision_status_home` copies
+    the word there, AFTER the entry's result copy (the status rides home
+    with the result, one drain per predict)."""
     var dstat = ctx.enqueue_create_buffer[DType.int32](1)
     if status != 0:
         dstat.enqueue_fill(Int32(0))
         if count > 0:
             enqueue_finite_status(ctx, dx.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), count, dstat.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
-        ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=status), src_buf=dstat)
     return dstat^
+
+
+def _decision_status_home(ctx: DeviceContext, mut dstat: DeviceBuffer[DType.int32], status: Int) raises:
+    """Copy the finite status word to the door's host word, enqueued last.
+    Lane fable-perf-classical-0855 (2026-11-13): this copy was enqueued
+    BEFORE the decision kernel. `status` is a pageable host word (the
+    door's int32 array), and a device-to-host copy into pageable memory
+    returns only once it has completed (CUDA's cuMemcpyDtoHAsync rule), so
+    every predict drained the stream twice: once here, once for the
+    result. The owed measurement of candidate 4c2340386abc on an L40S
+    (~/mojolearn-evidence/measure-candidate/nv-results-4c2340386abc,
+    OWED-SUMMARY-nvidia.txt) had algos/ard/taxi infer Xq 1.20 -> 1.43 ms
+    against 0.8.66, which tested nothing; 0.8.66 is the only prior for the
+    row. Same words: the word is read after the entry's synchronisation."""
+    if status != 0:
+        ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=status), src_buf=dstat)
 
 
 def decision_codes_device(
@@ -6284,6 +6301,7 @@ def decision_codes_device(
             grid_dim=(n + 127) // 128, block_dim=128,
         )
         ctx.enqueue_copy(dst_ptr=codes, src_buf=dc.create_sub_buffer[DType.int32](0, n))
+    _decision_status_home(ctx, dstat, status)
     ctx.synchronize()
     _ = dstat^
     _ = dx^
@@ -6330,6 +6348,7 @@ def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_
             grid_dim=blocks, block_dim=ROWS_TPB,
         )
         ctx.enqueue_copy(dst_ptr=res, src_buf=dres.create_sub_buffer[DType.float32](0, n_res))
+    _decision_status_home(ctx, dstat, status)
     ctx.synchronize()
     _ = dstat^
     _ = dx^
@@ -6405,6 +6424,7 @@ def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP, s
             grid_dim=(total + 127) // 128, block_dim=128,
         )
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+    _decision_status_home(ctx, dstat, status)
     ctx.synchronize()
     _ = dstat^
     _ = dx^

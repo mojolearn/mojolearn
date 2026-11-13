@@ -161,7 +161,7 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
-from cholesky.chol_ops import chol_op_cho_solve, chol_op_factor
+from cholesky.chol_ops import CHOL_OPS_FIT, chol_op_cho_solve, chol_op_factor
 from cholesky.multi_gpu import chol_device_count
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
@@ -364,8 +364,13 @@ def kernel_ridge_solve(
 
 def kernel_ridge_ops_route(trace: IdentityTrace) raises -> Bool:
     """True when the factor and the solve run as the executor's Cholesky ops
-    (one device, no identity trace); False on the trace route and under a
-    multi-GPU Cholesky plan, which keep `potrf_lower` / `cho_solve`."""
+    (`-D MOJOLEARN_IDN_CHOL_OPS_FIT`, one device, no identity trace); False
+    by default, on the trace route and under a multi-GPU Cholesky plan,
+    which keep `potrf_lower` / `cho_solve` (cholesky/chol_ops.mojo
+    CHOL_OPS_FIT: the ops route measured AMD kernel-ridge 1.21-1.25x slower
+    than 0.8.66, NVIDIA the same; the define is its A/B arm)."""
+    comptime if not CHOL_OPS_FIT:
+        return False
     return not trace.enabled and chol_device_count() == 1
 
 
