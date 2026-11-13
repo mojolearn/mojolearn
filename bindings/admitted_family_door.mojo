@@ -358,6 +358,18 @@ def admit_family_owned_finite(value: ArrayMetadata, pin: ArrayPin, est: String, 
         if not host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols):
             raise Error(admitted_finite_wording(est, "X"))
         return pin.keep
+    if value.f32_c():
+        # perf-neighbors (2026-11-13): a borrowed float32 C-order X (every
+        # board fit) is tested by the shared SIMD scan across host cores and
+        # then copied by the parallel byte copy `admit_family_owned` uses:
+        # the same words, two bandwidth-bound passes instead of one scalar
+        # per-element cast with a dtype dispatch per word. Lane a8b's single
+        # cast pass made RadiusNeighbors fit on taxi 2.40 -> 4.13 ms on the
+        # AMD record run of 4c2340386abc (NVIDIA 6.18 -> 7.27 ms, both vs
+        # 0.8.66, which copied with no test). Bits unchanged.
+        if not host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols):
+            raise Error(admitted_finite_wording(est, "X"))
+        return admit_family_owned(value, pin, context)
     var result = admitted_array(array_python_shape(value), "<f4", context)
     var address = Int(py=classical_address(result))
     # parallel: the owned copy over row tasks, the finiteness verdict in the same pass
