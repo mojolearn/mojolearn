@@ -223,9 +223,15 @@ def test_from_state_carries_the_moments_and_the_step_count():
 
 
 def test_loss_returns_the_float_of_the_bits():
+    """`loss` is the step's loss at the current parameters and moves nothing
+    (lane byte-lm-host-step-words, 2026-11-13: it used to be a step)."""
     bits = trainer().train_step(ids())
     model = trainer()
+    before = np.asarray(model.parameters_).tobytes()
     assert model.loss(ids()) == struct.unpack('<f', struct.pack('<I', bits))[0]
+    assert model.completed_steps == 0
+    assert np.asarray(model.parameters_).tobytes() == before
+    assert model.train_step(ids()) == bits
     assert model.completed_steps == 1
 
 

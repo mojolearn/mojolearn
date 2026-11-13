@@ -352,8 +352,10 @@ class LanguageModelHostTrainer:
         return _HOST_TRAIN(self, "train_step", (ids,), _HOST_TRAIN_CONTEXT)
 
     def loss(self, ids):
-        """`train_step`'s loss as a float. The bits are the comparable value;
-        this is for reading."""
+        """The mean next-byte loss of one batch at the current parameters,
+        as a float: what `train_step` on the same ids would report, without
+        the update. The parameters, the moments and the step count do not
+        move."""
         return _HOST_TRAIN(self, "loss", (ids,), _HOST_TRAIN_CONTEXT)
 
 
