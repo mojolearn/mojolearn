@@ -157,6 +157,30 @@ def test_stateless_forward_leaves_block_reports_untouched():
         assert vars(block).get(name) is value, name
 
 
+def test_device_stateless_forward_takes_the_resident_route():
+    # lane restore-samba-resident-forward (2026-11-13): on a device build the
+    # stateless forward runs the resident session's forward (descriptor op
+    # 16), the measured samba-forward winner; the stack program is its B arm
+    # (-D MOJOLEARN_SAMBA_PROGRAM_FORWARD) and serves a dropout stack. The
+    # door records the arm it ran; the host route (CPU builds) records none.
+    _, model = _models(["mamba3", "attention"])
+    ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
+    audit_native_call(model.forward, ids).assert_native()
+    route = vars(model).get("_samba_forward_route")
+    if route is None:
+        pytest.skip("host route: no device forward route on this build")
+    if model.numeric_mode != "identical":
+        assert route == "program"
+        return
+    assert route == "resident"
+    assert vars(model).get("_samba_program") is None
+    # The session is the one the train step uses (op 12 owner).
+    assert vars(model).get("_resident_handle") is not None
+    _, dropped = _models(["attention"], dropout=0.125)
+    audit_native_call(dropped.forward, ids).assert_native()
+    assert vars(dropped).get("_samba_forward_route") == "program"
+
+
 class _HookedInt(int):
     def __index__(self):  # pragma: no cover - must never run
         raise AssertionError("Python hook ran inside a native Samba forward")
