@@ -100,8 +100,15 @@ comptime CHOL_OP_GATED = Int32(-1)
 #: `gpc_newton_host_loop`), and the GP estimator's fit, lml+gradient and
 #: sample_y (gaussian_process/estimator.mojo) and hyperparameter optimizer
 #: (gaussian_process/gp_optim.mojo: by default 0.8.66's per-evaluation
-#: loop, `_gpr_optimize_host_runs`). The owed A/B is row chol-ops-fit in
-#: bench/results/paper_compare/owed-pre0867.json.
+#: loop, `_gpr_optimize_host_runs`). Lane fix-chol-ops-remaining-callers
+#: (2026-11-13) put the last callers on it too: the GMM precision Cholesky
+#: chain (mixture/checks/mstep.mojo `gmm_precision_cholesky`, and
+#: `gmm_precision_enqueue` wherever no one-launch factor applies:
+#: `gmm_precision_reads_host`) and x_decomp's `DevExec.chol_inv` /
+#: `DMcd.chol` (x_decomp/device.mojo, x_decomp/kit_device.mojo: MinCovDet's
+#: Cholesky C-step), by default 0.8.66's potrf_lower + chol_logdet +
+#: trsm_lower again (restored from 49e8c5b633^). The owed A/B is row
+#: chol-ops-fit in bench/results/paper_compare/owed-pre0867.json.
 comptime CHOL_OPS_FIT = is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"]()
 
 comptime _F32 = MutPointer[Float32, MutAnyOrigin]
