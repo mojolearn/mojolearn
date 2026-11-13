@@ -3676,7 +3676,7 @@ def probe_refusals(log_path, arms):
             lines = fh.read().splitlines()
     except OSError:
         return out
-    starts = [i for i, line in enumerate(lines) if line.startswith("=== ")]
+    starts = [i for i, line in enumerate(lines) if re.match(r"=== \d{4}-\d\d-\d\dT", line)]
     for line in lines[starts[-1] if starts else 0:]:     # the last probe run only (the log is appended to)
         m = _PROBE_REFUSAL.match(line)
         if not m or m.group(2) not in arms:
