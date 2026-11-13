@@ -36,7 +36,8 @@ from isolation_forest.impl.isolation_forest import (
     read_f32,
     read_i32,
 )
-from isolation_forest.estimator import IsolationForestEstimator, IFResidentKey
+from core.neural_context import process_ctx
+from isolation_forest.estimator import IsolationForestEstimator, IFResidentEntry, IFResidentKey, _DEVCTX_SLOT
 
 #: `IFResidentKey.max_samples_mode` of an imported forest: no fitted key
 #: carries it (fitted modes are 0, 1 and 2), so a token minted for an
@@ -292,3 +293,27 @@ def if_forest_import(
     est.model = model^
     est.fitted = True
     return est^
+
+
+def if_imported_if_empty(
+    mut held: List[IFResidentEntry], key: IFResidentKey, new_token: Int, words: IFForestWords,
+    n_features: Int, max_samples_: Int, offset_: Float64,
+) raises:
+    """`held` empty imports the saved compact forest at `words` onto this
+    binding's process context and leaves it, under `new_token`, in `held`;
+    one entry is left as it is."""
+    if len(held) == 0:
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var est = if_forest_import(ctx, words, n_features, max_samples_, offset_)
+        held.append(IFResidentEntry(new_token, key, ctx, est^))
+        _ = ctx^
+
+
+def if_held_forest_sizes(held: List[IFResidentEntry]) -> Tuple[Int, Int]:
+    """`if_forest_sizes` of the one entry in `held`."""
+    return if_forest_sizes(held[0].est.model)
+
+
+def if_held_forest_export(held: List[IFResidentEntry], words: IFForestWords) raises:
+    """`if_forest_export` of the one entry in `held`, on its context."""
+    if_forest_export(held[0].ctx, held[0].est.model, words)
