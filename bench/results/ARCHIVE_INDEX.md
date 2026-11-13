@@ -249,3 +249,9 @@ history at its listed sha: `git checkout <sha> -- <path>` restores it.
 | `bench/results/transformer-host-stages-20261001/` | 5a8921de38 | 2026-10-01 | 476297 |
 | `bench/results/treeshap-tasks-20261001/` | 56f42e7f91 | 2026-10-01 | 157245 |
 | `bench/results/tsqr-split-seqpool-ivf-qrtiles-20261001/` | e6e33d0e48 | 2026-10-01 | 9891 |
+
+## Trim of 2026-11-13 14:39 UTC (tree at 9eef4d95a4)
+
+| path | last commit | date | size |
+|---|---|---|---|
+| `bench/results/identity_break/2026-09-14_ivf-embedding/` | dcd940dfa7 | 2026-09-15 | 53366 |
