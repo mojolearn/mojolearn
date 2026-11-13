@@ -13,9 +13,11 @@
 # `install` and `down` refuse without MOJOLEARN_ORCHESTRATOR=1; a lane that
 # finds no pod up says so to the orchestrator and waits.
 #
-#   tools/nvidia_central.sh up [N]                     ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1). RENTS.
-#                                                      Brings the shared set to N pods (default NVC_PODS=2, at
-#                                                      most 3). Idempotent: never more than N.
+#   tools/nvidia_central.sh up [--pods N | N]          ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1). RENTS.
+#                                                      Brings the shared set to N pods (default NVC_PODS=1, at
+#                                                      most 3). Idempotent: never more than N. A measurement
+#                                                      needs one pod (2026-11-12: the old default 2 rented an
+#                                                      unused second L40S for the measurement).
 #   tools/nvidia_central.sh sync   <lane> <worktree>   patch-sync to /root/mojolearn-<lane> on the lane's pod
 #                                                      (a lane is assigned to one pod at its first sync)
 #   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] <script-on-box>
@@ -37,6 +39,8 @@
 #   tools/nvidia_central.sh run    <lane> [--gpus N] [--wait MIN] <command>
 #                                                      SHORT interactive GPU command on N free slots
 #                                                      (yields to queued jobs; exit 75 if no slot came)
+#   tools/nvidia_central.sh ssh-target <lane>          prints "<ssh flags> <target>" of the lane's pod (for
+#                                                      tools/dataset_store.sh stage)
 #   tools/nvidia_central.sh sh     <lane> <command>    NO GPU (CUDA_VISIBLE_DEVICES=-1): builds, pixi, tail, git
 #   tools/nvidia_central.sh fetch  <lane> <path> <local dir>   tar a box path back to the Mac
 #   tools/nvidia_central.sh install <pod>              ORCHESTRATOR ONLY (up does this) install/upgrade queue + lease
@@ -74,7 +78,7 @@ CONF="${MOJOLEARN_NVC_CONF:-$HOME/mojolearn-evidence/nvidia_central.env}"
 # shellcheck disable=SC1090
 [ ! -f "$CONF" ] || . "$CONF"
 NVC_MAX_PODS=3                                        # the account cap (tools/dev_pod.sh MAX_RUNPOD_PODS)
-NVC_PODS=${NVC_PODS:-2}                               # `up` with no N brings the set to this many
+NVC_PODS=${NVC_PODS:-1}                               # `up` with no N brings the set to this many
 # The ordered GPU types and counts are shared with tools/prebuild_changed.py --rent: one constant.
 # shellcheck disable=SC1091
 . "$ROOT/tools/runpod_nvidia_sm89.env"
@@ -299,8 +303,15 @@ case "$cmd" in up|install|down)
 esac
 case "$cmd" in
 up)
-    want=${1:-$NVC_PODS}
-    [[ "$want" =~ ^[1-9]$ ]] && [ "$want" -le $NVC_MAX_PODS ] || die "up [N]: N is 1..$NVC_MAX_PODS"
+    want=$NVC_PODS
+    case "${1:-}" in
+        --pods) want=${2:-}; shift 2 || true ;;
+        --pods=*) want=${1#--pods=}; shift ;;
+        '') ;;
+        *) want=$1; shift ;;
+    esac
+    [ $# -eq 0 ] || die "up [--pods N | N]: unexpected '$*'"
+    [[ "$want" =~ ^[1-9]$ ]] && [ "$want" -le $NVC_MAX_PODS ] || die "up [--pods N | N]: N is 1..$NVC_MAX_PODS"
     [ "$NO_API" = 1 ] || load_key || die "no RunPod key (~/.mojolearn_runpod_key, mode 600)"
     up_lock
     reconcile
@@ -471,6 +482,11 @@ sh)
     # every GPU hidden (an invalid index shows no device); `hold` keeps the pod's lease busy while it runs
     inner="mkdir -p /root/mojolearn-$lane; export CUDA_VISIBLE_DEVICES=-1; $BOX_PATH; cd /root/mojolearn-$lane && bash -c $(sq "$*")"
     BOX_TIMEOUT=14400 box "$NVQ hold $(sq "$inner")"
+    ;;
+ssh-target)
+    # the "<ssh flags+target>" of the lane's pod, for tools/dataset_store.sh stage (tools/ops/measure_candidate.py)
+    lane="${1:-}"; lane_ok "$lane"; need_lane_pod "$lane"
+    echo "$SSH_OPTS $SSH_TARGET"
     ;;
 fetch)
     lane="${1:-}"; lane_ok "$lane"; p="${2:?fetch <lane> <path> <local dir>}"; out="${3:?local dir}"

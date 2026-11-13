@@ -19,6 +19,10 @@ planned through the board and reported beside the paper compare (lane measure-pr
           rowmap.json           {row id: [race ids]} for the report
         A race id the paper recipes hold is not planned again for the candidate or the prior arm: the paper board
         times it for the candidate, and its 0.8.66 number is the paper compare's middle column.
+  data-keys --owed JSON --paper-recipes JSON --planner tools/bench_board.py --vendor V --data-root DIR
+        the R2 dataset keys (bench/results/dataset_store/manifest.tsv) the paper and owed races read, one
+        `<key> TAB <path>` line each, from the board's own data_needs (data_keys): what the stage step stages
+        (tools/ops/measure_candidate.py) and what the job checks after its plan.
   report --owed JSON --plan-dir DIR --results RES [--prior-compare JSON] --vendor V [--out-md --out-json --summary]
         per owed row and race cell: candidate ms, prior ms (the prior board, or the paper compare's 0.8.66 cell),
         each B arm's ms, the ratios, and the row's flags: REGRESSION / FASTER / SAME vs the prior, B-FASTER / B-SLOWER
@@ -77,18 +81,11 @@ def row_arms(row, b_present):
     return [], []
 
 
-def plan(doc, paper, planner, vendor, b_present):
-    """(units {(arm, rows): [race ids]}, smoke ids, drivers, not_planned, rowmap, board args)."""
-    if doc.get("schema") != SCHEMA:
-        raise SystemExit("measure_owed: not a %s document" % SCHEMA)
+def race_planner(planner, vendor):
+    """(lane -> family, planned(lane_list, rows, shape)): the board's races for some lanes, cached."""
     fam = family_of(planner)
     modes = planner.modes_for(vendor, "identical")
-    paper_ids = set(paper.get("race_ids") or [])
-    pb = paper.get("bench_board_args") or {}
-    families, lanes, datasets = list(pb.get("families") or []), list(pb.get("lanes") or []), list(pb.get("datasets") or [])
-    units, smoke, drivers, missing, rowmap = {}, [], [], {}, {}
     cache = {}
-    smoke_rows = int(getattr(planner, "SMOKE_ROWS", 2000))
 
     def planned(lane_list, rows, shape="full"):
         fams = tuple(sorted({fam[l] for l in lane_list}))
@@ -97,6 +94,47 @@ def plan(doc, paper, planner, vendor, b_present):
             races = planner.plan_races(vendor, modes, fams, tuple(lane_list), tuple(planner.DATASETS), rows, shape)
             cache[key] = planner.gpu_opponents_only(races, vendor)
         return cache[key]
+    return fam, planned
+
+
+def row_races(row, fam, planned):
+    """(lanes the board still has, lanes it lost, rows (None = full), the races) of one board / ab row."""
+    want_lanes = as_list(row["lane"])
+    gone = [l for l in want_lanes if l not in fam]
+    lane_list = [l for l in want_lanes if l in fam]
+    rows = None if row.get("rows") in (None, "full") else int(row["rows"])
+    ds = row.get("dataset") or "*"
+    races = [r for r in planned(lane_list, rows) if ds == "*" or r["dataset"] == ds] if lane_list else []
+    return lane_list, gone, rows, races
+
+
+def data_keys(doc, paper, planner, vendor, data_root):
+    """[(R2 key, path the board reads it from)] for every input the job's races read: the paper recipes and the owed
+    board / ab rows, through the board's own data_needs (bench_board.py) and the algos corpus keys. The stage step
+    (tools/ops/measure_candidate.py) stages these before a submit and the job checks them after its plan (2026-11-12:
+    a hand-written list left out higgs and half the smoke shards refused)."""
+    fam, planned = race_planner(planner, vendor)
+    races = [r for r in (paper.get("recipes") or []) if r.get("family") and r.get("lane") and r.get("dataset")]
+    for row in doc.get("rows") or []:
+        if row.get("kind") in ("board", "ab"):
+            races += row_races(row, fam, planned)[3]
+    needed, _ = planner.data_needs(races)
+    out = [(planner.R2_KEYS[n], os.path.join(data_root, planner.DATA_FILES[n])) for n in needed if n in planner.R2_KEYS]
+    corpus = sorted({k for r in races if r["family"] == "algos"
+                     for k in planner.ALGOS.r2_keys(r["lane"], r["dataset"]) if k.startswith("corpus/")})
+    return out + [(k, planner.ALGOS.corpus_path(k)) for k in corpus]
+
+
+def plan(doc, paper, planner, vendor, b_present):
+    """(units {(arm, rows): [race ids]}, smoke ids, drivers, not_planned, rowmap, board args)."""
+    if doc.get("schema") != SCHEMA:
+        raise SystemExit("measure_owed: not a %s document" % SCHEMA)
+    fam, planned = race_planner(planner, vendor)
+    paper_ids = set(paper.get("race_ids") or [])
+    pb = paper.get("bench_board_args") or {}
+    families, lanes, datasets = list(pb.get("families") or []), list(pb.get("lanes") or []), list(pb.get("datasets") or [])
+    units, smoke, drivers, missing, rowmap = {}, [], [], {}, {}
+    smoke_rows = int(getattr(planner, "SMOKE_ROWS", 2000))
 
     for row in doc["rows"]:
         rid = row["id"]
@@ -106,16 +144,12 @@ def plan(doc, paper, planner, vendor, b_present):
         if row["kind"] not in ("board", "ab"):
             missing[rid] = "unknown kind %r" % row["kind"]
             continue
-        want_lanes = as_list(row["lane"])
-        gone = [l for l in want_lanes if l not in fam]
+        lane_list, gone, rows, races = row_races(row, fam, planned)
         for l in gone:
             missing["%s %s" % (rid, l)] = "lane %s is no longer a board lane" % l
-        lane_list = [l for l in want_lanes if l in fam]
         if not lane_list:
             continue
-        rows = None if row.get("rows") in (None, "full") else int(row["rows"])
         ds = row.get("dataset") or "*"
-        races = [r for r in planned(lane_list, rows) if ds == "*" or r["dataset"] == ds]
         if not races:
             missing[rid] = "the board plans no race for %s on %s (dataset %s, rows %s)" % (
                 ",".join(lane_list), vendor, ds, rows_tag(rows))
@@ -190,6 +224,14 @@ def cmd_plan(a):
     print("OWED-PLAN vendor=%s rows=%d units=%d races=%d smoke=%d drivers=%d not_planned=%d b_arms=%s"
           % (a.vendor, len(doc["rows"]), len(units), sum(len(v) for v in units.values()), len(smoke),
              len(drivers), len(missing), ",".join(b_present) or "-"))
+    return 0
+
+
+def cmd_data_keys(a):
+    """One `<key> TAB <path>` line per input (tools/ops/paper_compare_job.sh checks each path after its plan)."""
+    doc = PC.load_json(a.owed) if a.owed else {"rows": []}
+    keys = data_keys(doc, PC.load_json(a.paper_recipes), load_planner(a.planner), a.vendor, a.data_root)
+    sys.stdout.write("".join("%s\t%s\n" % kp for kp in keys))
     return 0
 
 
@@ -370,6 +412,12 @@ def build_parser():
     pl.add_argument("--vendor", required=True, choices=PC.VENDORS)
     pl.add_argument("--b-arms", default="", help="comma list of the B wheel sets staged on this box")
     pl.add_argument("--out-dir", required=True)
+    d = sub.add_parser("data-keys", help="the R2 dataset keys the paper and owed races read, with their paths")
+    d.add_argument("--owed", default=None, help="the owed file (omitted: the paper races only)")
+    d.add_argument("--paper-recipes", required=True)
+    d.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
+    d.add_argument("--vendor", required=True, choices=PC.VENDORS)
+    d.add_argument("--data-root", required=True, help="the board's --data-root (e.g. /root/datasets/gbm-bench)")
     r = sub.add_parser("report", help="the owed rows' numbers from the job's boards and drivers")
     r.add_argument("--owed", required=True)
     r.add_argument("--plan-dir", required=True)
@@ -384,7 +432,7 @@ def build_parser():
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
-    return {"plan": cmd_plan, "report": cmd_report}[a.cmd](a)
+    return {"plan": cmd_plan, "data-keys": cmd_data_keys, "report": cmd_report}[a.cmd](a)
 
 
 if __name__ == "__main__":
