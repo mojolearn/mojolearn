@@ -2847,6 +2847,132 @@ def ensure_algos_prep(ctx, races):
                   % (rc, log), flush=True)
 
 
+#: The neural-layer fixtures (tools/neural_fixtures.py) are the one place torch makes the inputs and initial weights
+#: of our arm on the algos layer lanes (conv2d, gcn, graphsage, moe, ...). SMOKE-NOT-RUN FIX (2026-11-13, candidate
+#: 4c2340386abc): the ours-only measurement job staged no fixture set, so every such row's parameter probe refused
+#: ("neural fixtures missing ... no <cache>/algos-data/neural-fixtures/manifest.json"), preflight dropped the
+#: recipe, and the smoke reported "arm=- not run" on both vendors. With --fixtures-venv the board makes the set
+#: itself, untimed and before any probe: a CPU-torch venv (FIXTURES_TORCH_INDEX, torch at the board's pinned
+#: version without its device suffix, torch-geometric at the algos pin) that only runs `neural_fixtures.py
+#: generate`; our arm never imports torch, and CPU torch gives every vendor the same bytes.
+FIXTURES_TORCH_INDEX = "https://download.pytorch.org/whl/cpu"
+FIXTURES_VENV_MARKER = ".mojolearn-fixtures-venv"
+
+
+def fixtures_requirements(vendor):
+    """[numpy, torch==<board pin, no +cuda/+rocm suffix>, torch-geometric==<algos pin>]."""
+    torch = DEFAULT_TORCH_SPEC.get(vendor) or DEFAULT_TORCH_SPEC["apple"]
+    torch = torch.split()[0].split("+")[0]
+    pyg = [r for r in ALGOS.PINS_COMMON if r.lower().startswith("torch-geometric==")]
+    return ["numpy", torch] + pyg[:1]
+
+
+def layer_races(races):
+    """The algos races whose own arm reads the neural fixtures (lane kind "layer")."""
+    return [r for r in races if r["family"] == "algos"
+            and (ALGOS.LANES.get(r["lane"]) or {}).get("kind") == "layer"]
+
+
+def ensure_fixtures_venv(vdir, vendor, log):
+    """The generator interpreter at `vdir` (made once; parallel smoke shards share it under a lock), or None."""
+    import fcntl
+    reqs = fixtures_requirements(vendor)
+    py = os.path.join(vdir, "bin", "python")
+    marker = os.path.join(vdir, FIXTURES_VENV_MARKER)
+    os.makedirs(os.path.dirname(os.path.abspath(vdir)) or ".", exist_ok=True)
+    with open(os.path.abspath(vdir) + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            with open(marker) as fh:
+                if fh.read().split() == reqs and os.path.exists(py):
+                    return py
+        except OSError:
+            pass
+        if not os.path.exists(py) and run_logged([sys.executable, "-m", "venv", vdir], None, log, 1800) != 0:
+            return None
+        pip = [py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
+        if run_logged(pip + ["--index-url", FIXTURES_TORCH_INDEX, "--extra-index-url", "https://pypi.org/simple"]
+                      + reqs[:2], None, log, 3600) != 0:
+            return None
+        if len(reqs) > 2 and run_logged(pip + reqs[2:], None, log, 3600) != 0:
+            return None
+        with open(marker, "w") as fh:
+            fh.write("\n".join(reqs) + "\n")
+        return py
+
+
+def fixtures_cover(fixdir, races, data_dirs):
+    """Whether the manifest in `fixdir` was generated over every data dir and lane these races read."""
+    try:
+        with open(os.path.join(fixdir, "manifest.json")) as fh:
+            man = json.load(fh)
+    except (OSError, ValueError):
+        return False
+    have_dirs = {os.path.abspath(d) for d in man.get("data_dirs") or []}
+    have_lanes = {e.get("lane") for e in (man.get("entries") or {}).values()}
+    return (set(data_dirs) <= have_dirs) and {r["lane"] for r in races} <= have_lanes
+
+
+def ensure_neural_fixtures(ctx, races):
+    """Untimed: make the neural-layer fixture set the layer races' own arm reads, beside their algos blocks
+    (tools/neural_fixtures.default_dir), when --fixtures-venv is given and the set there does not cover them.
+    Without it (or on a failure) nothing is made and those races refuse by name in their probe, which the
+    preflight and the smoke verdict now carry ("probe refused: ... neural fixtures missing"), never "not run"."""
+    layer = layer_races(races)
+    if not layer:
+        return None
+    NF = _load_tool("neural_fixtures")
+    dirs = sorted({os.path.abspath(algos_data_dir(ctx, r["rows"], r)) for r in layer})
+    fixdir = NF.default_dir(dirs[0])
+    if fixtures_cover(fixdir, layer, dirs):
+        return fixdir
+    if not ctx.get("fixtures_venv"):
+        print("bench_board: neural fixtures missing for %d layer race(s) under %s and no --fixtures-venv; "
+              "their own arm refuses by name" % (len(layer), fixdir), flush=True)
+        return None
+    log = os.path.join(ctx["out"], "logs", "neural-fixtures.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    py = ensure_fixtures_venv(ctx["fixtures_venv"], ctx["vendor"], log)
+    if not py:
+        print("bench_board: the fixtures venv failed (see %s); the layer races refuse by name" % log, flush=True)
+        return None
+    # every algos mirror present beside them (the board's c1 cache holds the smoke's rows and the full rows): one
+    # manifest covers both, so the timed board does not regenerate what its smoke shard made
+    base = os.path.dirname(dirs[0])
+    mirrors = sorted({os.path.join(base, d) for d in os.listdir(base)
+                      if d.startswith("rows-") and os.path.isdir(os.path.join(base, d))} | set(dirs))
+    lanes = sorted({r["lane"] for r in layer} | _fixture_lanes(fixdir))
+    tmp = fixdir + ".new"
+    shutil.rmtree(tmp, ignore_errors=True)
+    cmd = [py, "-u", os.path.join(HERE, "neural_fixtures.py"), "generate", "--out", tmp, "--lanes", ",".join(lanes)]
+    for d in mirrors:
+        cmd += ["--data", d]
+    env = child_env(ctx)
+    env.pop(NF.ENV_DIR, None)
+    print("bench_board: neural fixtures: generating %s over %d mirror(s) into %s" % (",".join(lanes), len(mirrors),
+                                                                                    fixdir), flush=True)
+    rc = run_logged(cmd, env, log, 3600, nice=ctx["nice"])
+    if rc == 0:
+        rc = run_logged([sys.executable, os.path.join(HERE, "neural_fixtures.py"), "verify", "--dir", tmp],
+                        None, log, 1800)
+    if rc != 0:
+        print("bench_board: neural fixtures generate/verify rc %d (see %s); the layer races refuse by name"
+              % (rc, log), flush=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None
+    shutil.rmtree(fixdir, ignore_errors=True)
+    os.replace(tmp, fixdir)
+    return fixdir
+
+
+def _fixture_lanes(fixdir):
+    try:
+        with open(os.path.join(fixdir, "manifest.json")) as fh:
+            return {e.get("lane") for e in (json.load(fh).get("entries") or {}).values()} - {None}
+    except (OSError, ValueError):
+        return set()
+
+
 def algos_cmd(ctx, race):
     """tools/bench_board_algos.py race for one algos (lane, dataset)."""
     rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
@@ -5294,6 +5420,10 @@ def build_parser():
                    help=argparse.SUPPRESS)
     p.add_argument("--algos-data", default=None,
                    help="algos block dir (default <cache>/algos-data); prep is untimed and once")
+    p.add_argument("--fixtures-venv", default=None, metavar="DIR",
+                   help="make the neural-layer fixtures our arm reads on the algos layer lanes (untimed, before "
+                        "any probe) with a CPU-torch venv at DIR (made once, shared under a lock); without it a "
+                        "box with no fixture set refuses those races by name")
     return p
 
 
@@ -5650,7 +5780,9 @@ def main(argv=None):
            "more_driver": os.path.abspath(args.more_driver),
            "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
            "algos_driver": os.path.abspath(args.algos_driver), "arm_python": arm_python,
-           "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
+           "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data")),
+           "fixtures_venv": (os.path.abspath(os.path.expanduser(args.fixtures_venv))
+                             if getattr(args, "fixtures_venv", None) else None)}
     ctx["artifact_manifest"] = os.path.abspath(args.artifact_manifest) if args.artifact_manifest else None
     ctx["artifact_identity"] = artifact_identity
     box = box_fingerprint(ctx)
@@ -5747,6 +5879,7 @@ def main(argv=None):
         ensure_more_prep(ctx, todo)
     if any(r["family"] == "algos" for r in todo):
         ensure_algos_prep(ctx, todo)
+        ensure_neural_fixtures(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
     if _synthetic_on():
