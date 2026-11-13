@@ -675,11 +675,29 @@ def facts_for_commit(commit, cache_dir, root=ROOT):
     with tempfile.TemporaryDirectory(prefix="mojolearn-tree-") as d:
         extract_tree(commit, d, root)
         facts = tree_facts(d)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    tmp = cache.with_suffix(".tmp")
-    tmp.write_text(json.dumps(dict(schema=FACTS_SCHEMA, commit=commit, facts=facts), sort_keys=True) + "\n")
-    tmp.replace(cache)
+    atomic_write_text(cache, json.dumps(dict(schema=FACTS_SCHEMA, commit=commit, facts=facts), sort_keys=True) + "\n")
     return facts
+
+
+def atomic_write_text(path, text):
+    """Write TEXT to PATH through a temp file of this process and thread only, then one atomic rename. Ten
+    `release.py candidate` controllers of one commit all wrote `identities/<sha40>.tmp` and renamed it; the
+    losers' renames raised FileNotFoundError in reuse-plan (2026-11-12 22:50 ET, sgd1). The facts of one commit
+    are the same bytes whoever writes them, so the last rename wins harmlessly and no lock is needed."""
+    import tempfile
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".tmp-%d-" % os.getpid(), dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def darwin_toolchain():

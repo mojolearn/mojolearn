@@ -404,11 +404,8 @@ def read_json(path):
 
 
 def write_json(path, doc):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
-    tmp.replace(path)
+    # a per-process, per-thread temp name and one atomic rename (concurrent controllers; release_reuse)
+    release_reuse.atomic_write_text(path, json.dumps(doc, indent=1, sort_keys=True) + "\n")
 
 
 # ---------------------------------------------------------------- freeze helpers
@@ -1598,9 +1595,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return
         with self._lock:
             self.base.mkdir(parents=True, exist_ok=True)
-            tmp = self.state_path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.state, indent=2, sort_keys=True) + "\n")
-            tmp.replace(self.state_path)
+            release_reuse.atomic_write_text(self.state_path, json.dumps(self.state, indent=2, sort_keys=True) + "\n")
 
     def head(self):
         return git("rev-parse", "HEAD")
