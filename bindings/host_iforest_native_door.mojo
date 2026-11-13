@@ -19,7 +19,6 @@ from bindings.trees_lifetime_door import trees_resident_new
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any
 from bindings.py_optional import py_present
-from bindings.trees_public_iforest_door import iforest_forest_words
 
 comptime _HOST_TOKEN_SLOT = "trees_iforest_host_resident_v1"
 
@@ -187,6 +186,36 @@ def _host_resident_entries(entry: PythonObject, context: PythonObject) raises ->
     return Python.tuple(release)
 
 
+def _host_forest_words(forest: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK: `(words, views)` of a held saved forest: five flat native
+    arrays (offsets int32 of n_trees + 1, feature int32, threshold float32,
+    left int32, right int32, equal node counts), their addresses, the tree
+    and node counts; the views keep the buffers alive through the call. The
+    node-level checks run in the binding (`if_forest_check`)."""
+    var b = native_loaded_module("builtins")
+    if py_type(forest) is not b.tuple or len(forest) != 5:
+        raise Error("IsolationForest saved forest must be a tuple of five arrays")
+    var kinds = Python.tuple("i", "i", "f", "i", "i")
+    var words = Python.list()
+    var views = Python.list()
+    var sizes = List[Int]()
+    for i in range(5):  # driver-loop: the five fixed forest arrays
+        var view = classical_input(forest[i], context, "IsolationForest saved forest")
+        if (Int(py=view.ndim) != 1 or classical_kind(view, context) != String(kinds[i])
+                or Int(py=view.itemsize) != 4 or not classical_c_order(view, context)
+                or (not classical_is_array(view, context) and not Bool(py=view.dtype.isnative))):
+            raise Error("IsolationForest saved forest requires flat native 32-bit storage")
+        _ = py_call(words.append, classical_address(view))
+        _ = py_call(views.append, view)
+        sizes.append(Int(py=view.size))
+    var total = sizes[1]
+    if sizes[0] < 2 or sizes[2] != total or sizes[3] != total or sizes[4] != total:
+        raise Error("IsolationForest saved forest arrays do not have matching lengths")
+    _ = py_call(words.append, PythonObject(sizes[0] - 1))
+    _ = py_call(words.append, PythonObject(total))
+    return Python.tuple(words, views)
+
+
 def _host_forest_inference(model: PythonObject, fields: PythonObject, query: PythonObject, rows: Int, features: Int,
                            want: Int, name: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
     """A saved forest (`mojolearn-iforest-2`, held as `_if_forest`, no
@@ -196,7 +225,7 @@ def _host_forest_inference(model: PythonObject, fields: PythonObject, query: Pyt
     column. A resident binary keeps the imported forest under a token, the
     record anchored on the held forest tuple."""
     var forest = fields["_if_forest"]
-    var unpacked = iforest_forest_words(forest, context)
+    var unpacked = _host_forest_words(forest, context)
     var entry = _kernel_entry("iforest_forest_run", context)
     if not py_contains(fields, "max_samples_") or not py_contains(fields, "offset_"):
         raise Error("IsolationForest saved forest lacks its fitted offset_ or max_samples_")
