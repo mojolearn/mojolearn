@@ -1283,6 +1283,24 @@ def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], c
 
 def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
               y_out: FP) raises:
+    if sc.inference_only:
+        # lane restore-samba-resident-forward (2026-11-13): an inference-only
+        # session (the Samba stack program) runs its attention layers as the
+        # 0.8.55 resident forward did (training/samba_resident.mojo
+        # `_forward_blocks`): `forward_only=True` (no backward reads these
+        # stages) on L > 1 stages kept in the entry across runs (reset to the
+        # constructor's zeros by `prepare`), not a fresh `AttnPrefill` per
+        # call. The kept stages move out for the run (it borrows the scratch
+        # mutably) and back in after it, as `attn_step_train_run` does. Bits:
+        # the forward-only launch set is the resident forward's, so these
+        # layers' bytes are the 0.8.55 resident ones on every vendor.
+        var e = attn_step_entry(ex, sc, bufs, counts, ints)
+        var kept = AttnPrefill()
+        swap(kept, sc.attn[e].kept)
+        _run_attn_on(ex, sc, bufs, counts, ints, y_out, kept, True)
+        swap(kept, sc.attn[e].kept)
+        _ = kept^
+        return
     var pre = AttnPrefill()
     _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, False)
     if pre.stages:
