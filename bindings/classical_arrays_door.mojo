@@ -85,6 +85,20 @@ def classical_wrap_layout(store: PythonObject, layout: NativeArrayLayout, typest
         raise Error("RuntimeError: an array store does not match its shape")
     var cls = context["array_class"]
     _ = array_storage_admit(cls, cls, context["array_storage_slots"], "Array native output")
+    return classical_wrap_admitted_layout(cls, store, layout, typestr)
+
+
+def classical_wrap_admitted_layout(cls: PythonObject, store: PythonObject, layout: NativeArrayLayout,
+                                   typestr: String) raises -> PythonObject:
+    # The slot writes of classical_wrap_layout for a class whose storage layout
+    # the CALLER already admitted. array_storage_admit requires the slot
+    # descriptors' __objclass__ to be `cls` itself and refuses a class carrying
+    # __del__, so a connected Array subclass (the byte LM's pooled logits,
+    # admitted by its own pinned-ancestry check in byte_lm_trainer_native_door)
+    # can never pass it; that refusal ("Array native storage descriptors
+    # changed") broke lm-forward logits from 80df8451eb on.
+    if layout.count != len(store):
+        raise Error("RuntimeError: an array store does not match its shape")
     var array = native_storage_allocate(cls)
     py_setattr(array, "_store", store)
     py_setattr(array, "_base", PythonObject(None))
