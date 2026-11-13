@@ -36,6 +36,7 @@ from bindings.trees_public_inputs_door import (
     trees_builtins, trees_table, trees_entry, trees_address, trees_call,
 )
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view
+from bindings.admitted_family_door import admitted_array as family_uninit_array
 from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 # TOMBSTONE: trees_f32 / trees_all_finite / TreesMatrix / trees_vector / trees_empty uses and _copied (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -214,7 +215,15 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     `max_samples_` read back. Returns the float32 scores or int32 labels."""
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
-    var values = PythonObject(None) if want == _WANT_PREDICT else admitted_vector(n_query, "<f4", context)
+    # Lane perf-iforest (2026-11-13): the score vector is uninitialised
+    # storage (admitted_family_door.admitted_array): `iforest_run` writes all
+    # n_query words for want 0 and 1, so the zero fill (native_array_zeros)
+    # was one more pass per scoring call. Record measurement of candidate
+    # 4c2340386abc against 0.8.55, taxi score_samples (ms): NVIDIA L40S
+    # 3.27 -> 5.32 (test) and 5.61 -> 8.63 (large), AMD MI325X 2.91 -> 3.56.
+    # Bits unchanged (the kernel's words, read as before).
+    var values = PythonObject(None) if want == _WANT_PREDICT else family_uninit_array(
+        Python.tuple(n_query), "<f4", context)
     var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
     var probe = trees_entry(svm, "iforest_resident")
     var resident = probe is not None and Int(py=py_call_typed(probe)) == 1
@@ -325,14 +334,27 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     var fields = py_fields(model)
     iforest_validate(model, fields, context)
     # `input_copied_`: False when the conversion would borrow X in place (a
-    # float32 C-order 2-D input). The admission hands a mojolearn Array
-    # (as_array): a fresh copy of anything but the caller's own Array, which
-    # the fit copies below (the training matrix is the fit's own).
+    # float32 C-order 2-D input). The admission borrows a float32 C-order
+    # view, which the fit copies below, and casts anything else once into
+    # storage the fit owns (the training matrix is the fit's own).
     var view = classical_view(X, context, "X")
     var copied = not ((view is X or view is copy_source) and Int(py=view.ndim) == 2
                       and classical_is_f32(view, context) and classical_c_order(view, context))
     py_setitem(fields, "input_copied_", PythonObject(copied))
-    var x = admit_f32(view, 2, "X", context, finite=False, as_array=True, admitted=True)
+    # Lane perf-iforest (2026-11-13): as_array=False. With as_array=True an
+    # ndarray input (the board's float32 C-order X) was never borrowed: the
+    # admission allocated a ZERO-FILLED Array store (native_array_zeros, one
+    # extra serial memory pass over the destination) and then copied X into
+    # it, so the snapshot cost a zero fill plus a copy instead of the one
+    # parallel copy into uninitialised storage described below. Record
+    # measurement of candidate 4c2340386abc against 0.8.55 (ms): istella fit
+    # NVIDIA L40S 197 -> 1318, AMD MI325X 180 -> 888; taxi fit NVIDIA
+    # 149 -> 320, AMD 189 -> 267 (measure-candidate/{nv,amd}-p1-4c2340386abc).
+    # Now a float32 C-order view is borrowed and copied once (the branch
+    # below); any other input is cast once into uninitialised storage this
+    # fit owns, which is kept as it is (no second copy). The same float32
+    # bytes either way: no bit change.
+    var x = admit_f32(view, 2, "X", context, finite=False, admitted=True)
     _ = view^
     var device_scan = _device_scan(fields, context)
     # The public door's admission (admit_x) already refused NaN and
@@ -370,6 +392,13 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
             host_parallel_copy_bytes(dst, x.address, count * 4)
         _ = x  # keep the caller's buffer alive through the copy above
         x = admitted_words(native_buffer_view(owned), dst, x.rows, x.cols)
+    elif py_type(x.array) is not context["array_class"]:
+        # The cast copy admit_f32 made into uninitialised storage (an ndarray
+        # with NumPy): this fit owns it, so it is the training matrix as it
+        # is. `_as_array` wraps its one-dimensional byte view as the fitted
+        # Array (`_store` is the ndarray, which keeps the bytes alive).
+        var owned_view = py_call(native_buffer_view(x.array).cast, "B")
+        x = admitted_words(owned_view, x.address, x.rows, x.cols)
     var had = Python.dict()
     var kept = Python.tuple("_x", "n_features_in_")
     for i in range(2):  # driver-loop: over fixed call structure, small-loop(kept): the two fitted field names restored on a refusal
