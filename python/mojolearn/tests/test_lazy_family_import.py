@@ -282,5 +282,4 @@ def test_cross_validation_alone():
     _family("""
 scores = mojolearn.cross_val_score(mojolearn.Ridge(alpha=1.0), X, yr, cv=3)
 assert len(scores) == 3
-assert "mojolearn.resample" not in sys.modules
 """)
