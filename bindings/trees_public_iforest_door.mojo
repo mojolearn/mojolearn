@@ -490,6 +490,15 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     try:
         out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, False, context)
         _ = x  # keep the Python object alive through the native call above
+        # Lane fix-iforest-save-device-forest: the forest this fit built is
+        # read out now (the resident forest `_run` just kept, no second fit;
+        # a refit-per-call binary fits it once more here, never at save) and
+        # held as `_if_forest`. `save()` and pickle write it, so a caller's
+        # in-place edit of a borrowed X after fit, or a resident-store
+        # eviction, never changes a saved model. Scores are unchanged: the
+        # live estimator scores its resident forest as before.
+        py_setitem(fields, _FOREST_FIELD, iforest_export_forest(model, context))
+        _ = x  # keep the Python object alive through the native call above
     except error:
         var message = String(error)
         if device_scan and ("Input X contains" in message or "does not accept non-finite" in message):
@@ -517,7 +526,7 @@ def _score(model: PythonObject, X: PythonObject, want: Int, wide: Bool,
     return _run(model, fields, x, fields["_x"], want, False, wide, context)
 
 
-def _forest_words(forest: PythonObject, context: PythonObject) raises -> PythonObject:
+def iforest_forest_words(forest: PythonObject, context: PythonObject) raises -> PythonObject:
     """UNPACK: `(words, views)` of a saved forest tuple: the seven words
     `iforest_forest_run` takes (five addresses, trees, nodes) after the
     dtype, layout and length checks, and the views that keep the five
@@ -587,7 +596,7 @@ def _run_forest(model: PythonObject, fields: PythonObject, x: AdmittedX, want: I
     if run is None:
         raise Error("ImportError: mojolearn: the svm binding has no iforest_forest_run")
     var forest = fields[_FOREST_FIELD]
-    var unpacked = _forest_words(forest, context)
+    var unpacked = iforest_forest_words(forest, context)
     var wide_out = False
     if wide and want != _WANT_PREDICT:
         var f64_probe = trees_entry(svm, "iforest_scores_f64")
@@ -629,10 +638,12 @@ def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> 
     this estimator fits one from `_x` first and keeps it. Raises when the
     estimator holds neither."""
     var fields = py_fields(model)
+    # The forest held since fit (or since load / unpickle) is the saved one:
+    # no read from the binding, no refit from a possibly edited `_x`.
+    if py_contains(fields, _FOREST_FIELD):
+        _ = iforest_forest_words(fields[_FOREST_FIELD], context)  # refuse a malformed held forest here
+        return fields[_FOREST_FIELD]
     if not py_contains(fields, "_x"):
-        if py_contains(fields, _FOREST_FIELD):
-            _ = _forest_words(fields[_FOREST_FIELD], context)  # refuse a malformed held forest here
-            return fields[_FOREST_FIELD]
         raise Error("RuntimeError: " + _PREFIX + "this estimator is not fitted yet")
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
     var export = trees_entry(svm, "iforest_forest_export")
@@ -683,7 +694,7 @@ def iforest_getstate(model: PythonObject, context: PythonObject) raises -> Pytho
     var state = py_call(trees_builtins().dict, fields)
     _ = py_call(state.pop, "_if_token", PythonObject(None))
     _ = py_call(state.pop, "_if_lifetime", PythonObject(None))
-    if py_contains(fields, "_x"):
+    if py_contains(fields, "_x") or py_contains(fields, _FOREST_FIELD):
         py_setitem(state, _FOREST_FIELD, iforest_export_forest(model, context))
         _ = py_call(state.pop, "_x", PythonObject(None))
     _ = fields
