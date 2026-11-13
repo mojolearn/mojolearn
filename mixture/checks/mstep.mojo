@@ -107,9 +107,19 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from cholesky.checks.potrf import CHOL_ELEM_TPB, add_jitter
+from cholesky.checks.potrf import (
+    CHOL_ELEM_TPB,
+    CHOL_NB_PINNED,
+    CHOL_PANEL_TPB,
+    add_jitter,
+    chol_logdet,
+    chol_workspace_floats,
+    potrf_lower,
+)
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.device_zero import enqueue_fill
 from cholesky.chol_ops import (
+    CHOL_OPS_FIT,
     chol_op_begin,
     chol_op_factor,
     chol_op_logdet,
@@ -1798,17 +1808,28 @@ def gmm_chol_dwork_floats(d: Int) -> Int:
 def _gmm_chain_factor(
     ctx: DeviceContext,
     mut work: DeviceBuffer[DType.float32],
+    mut cws: DeviceBuffer[DType.float32],
     mut dinfo: DeviceBuffer[DType.int32],
     mut hinfo: HostBuffer[DType.int32],
+    mut quiet: IdentityTrace,
     d: Int,
+    chol_elem_tpb: Int,
 ) raises -> Int:
-    """`chol_op_factor` on the working block (info zeroed first), and its
-    LAPACK info read home: the sabotage chain decides on it."""
-    enqueue_fill(ctx, dinfo, Int32(0))
-    chol_op_factor(ctx, work, dinfo, d)
-    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-    ctx.synchronize()
-    return Int(hinfo.unsafe_ptr().unsafe_load(0))
+    """The working block's factor and its LAPACK info, home: the chain
+    decides on it. By default 0.8.66's `potrf_lower` (its info read per
+    panel, workspace `cws`); under -D MOJOLEARN_IDN_CHOL_OPS_FIT the
+    executor's `chol_op_factor` (info zeroed first, one read)."""
+    comptime if CHOL_OPS_FIT:
+        enqueue_fill(ctx, dinfo, Int32(0))
+        chol_op_factor(ctx, work, dinfo, d)
+        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+        ctx.synchronize()
+        return Int(hinfo.unsafe_ptr().unsafe_load(0))
+    else:
+        var run = potrf_lower(
+            ctx, work, cws, d, quiet, CHOL_NB_PINNED, CHOL_PANEL_TPB, chol_elem_tpb,
+        )
+        return run.info
 
 
 def gmm_precision_cholesky(
@@ -1830,10 +1851,11 @@ def gmm_precision_cholesky(
 ) raises -> GmmMStepRun:
     """`_compute_precision_cholesky` for `covariance_type="full"`
     (`_gaussian_mixture.py:353-371`), component by component in ASCENDING
-    order, with the host reading every pivot: THE SABOTAGE ARMS' CHAIN ONLY
+    order, with the host reading every pivot: the sabotage arms' chain
     (`GMM_SAB_COLLAPSE_RESET`, `GMM_SAB_LOGDET_FROM_DIAG` and every other
-    `GMM_SAB_*` fit). A fit without a sabotage arm takes
-    `gmm_precision_enqueue` (enqueue only, the pivots in device words).
+    `GMM_SAB_*` fit), and the fit's own route wherever no one-launch factor
+    applies (`gmm_precision_reads_host`). Otherwise a fit without a
+    sabotage arm takes `gmm_precision_enqueue`'s one-launch factors.
 
     For each `k`, in this order:
 
@@ -1843,11 +1865,13 @@ def gmm_precision_cholesky(
       2. `add_jitter(..., GMM_CHOL_JITTER)` -- a ridge of `+0.0`
          (DEVIATION 1737), called for its `ftz` on the diagonal rather than
          for a ridge;
-      3. `chol_op_factor` -> `L_k` (info read home), and **`info != 0` STOPS EVERYTHING**
+      3. `potrf_lower` -> `L_k`, and **`info != 0` STOPS EVERYTHING**
          (DEVIATION 1723);
-      4. `chol_op_logdet(L_k)` (read home) -> `2 sum log L_jj`, and
+      4. `chol_logdet(L_k)` -> `2 sum log L_jj`, and
          `log_det_chol[k] = -0.5 *` that (DEVIATION 1726);
-      5. `chol_op_solve_lower(L_k, I)` -> `L_k^{-1}`;
+      5. `trsm_lower(L_k, I)` -> `L_k^{-1}`;
+      (under -D MOJOLEARN_IDN_CHOL_OPS_FIT, the B arm: `chol_op_factor`,
+      `chol_op_logdet` and `chol_op_solve_lower` with the same reads home)
       6. transpose -> `P_k = (L_k^{-1})^T`, scikit-learn's `.T` at `:370`.
 
     **THE CHOLESKY LANE'S OWN CARD STAGES ARE NOT EMITTED, AND THAT IS
@@ -1890,14 +1914,25 @@ def gmm_precision_cholesky(
     var scal = dwork.create_sub_buffer[DType.float32](dd, d + 1)
     var work = dwork.create_sub_buffer[DType.float32](dd + d + 1, dd)
     var logdet_host = List[Float32]()
-    # lane m3-linalg-and-housekeeping (2026-11-09): the executor's Cholesky
-    # ops (cholesky/chol_ops.mojo), with this chain's host reads (the
-    # component's info, its log det), where `potrf_lower`'s per-panel
-    # route, `chol_logdet` and `trsm_lower` ran: their arithmetic at the
-    # pinned width (the same words); `gmm_precision_enqueue` already ran them
+    # Lane fix-chol-ops-remaining-callers (2026-11-13): by default 0.8.66's
+    # route again (restored from 49e8c5b633^): `potrf_lower` (its info read
+    # per panel, workspace at the pinned width), `chol_logdet` (one wait)
+    # and `trsm_lower`, each with a disabled trace. Lane
+    # m3-linalg-and-housekeeping (49e8c5b633, 2026-11-09) had put the
+    # executor's Cholesky ops (cholesky/chol_ops.mojo) here without an
+    # NVIDIA + AMD measurement; they are the B arm under
+    # -D MOJOLEARN_IDN_CHOL_OPS_FIT (owed row chol-ops-fit). The ops claim
+    # potrf_lower's arithmetic at the pinned width (the same words); the
+    # A/B checks it.
+    var quiet = IdentityTrace.disabled()
+    var cws = ctx.enqueue_create_buffer[DType.float32](
+        1 if CHOL_OPS_FIT else max(chol_workspace_floats(d, CHOL_NB_PINNED), 1)
+    )
     var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
     var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(d))
+    var dscr = ctx.enqueue_create_buffer[DType.float32](
+        chol_op_logdet_scratch_floats(d) if CHOL_OPS_FIT else 1
+    )
     var dld = ctx.enqueue_create_buffer[DType.float32](1)
     var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
 
@@ -1919,7 +1954,7 @@ def gmm_precision_cholesky(
         add_jitter(ctx, work, d, GMM_CHOL_JITTER, chol_elem_tpb)
 
         # (3) the factorization, and the only failure this lane has
-        var info = _gmm_chain_factor(ctx, work, dinfo, hinfo, d)
+        var info = _gmm_chain_factor(ctx, work, cws, dinfo, hinfo, quiet, d, chol_elem_tpb)
         if info != 0:
             if sabotage == GMM_SAB_COLLAPSE_RESET:
                 # ARM. See `cov_reset_identity_kernel`. The component's
@@ -1937,7 +1972,7 @@ def gmm_precision_cholesky(
                 ctx.enqueue_copy(dst_buf=work, src_buf=src2)
                 ctx.synchronize()
                 add_jitter(ctx, work, d, GMM_CHOL_JITTER, chol_elem_tpb)
-                info = _gmm_chain_factor(ctx, work, dinfo, hinfo, d)
+                info = _gmm_chain_factor(ctx, work, cws, dinfo, hinfo, quiet, d, chol_elem_tpb)
                 _ = src2^
                 if info != 0:
                     # The identity matrix failed to factor, which is
@@ -1957,10 +1992,14 @@ def gmm_precision_cholesky(
                 return GmmMStepRun(info, kc)
 
         # (4) log|Sigma_k| through the ONE pinned fold, halved and negated.
-        chol_op_logdet(ctx, work, dinfo, dscr, dld, d)
-        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
-        ctx.synchronize()
-        var ld = hld.unsafe_ptr().unsafe_load(0)
+        var ld: Float32
+        comptime if CHOL_OPS_FIT:
+            chol_op_logdet(ctx, work, dinfo, dscr, dld, d)
+            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
+            ctx.synchronize()
+            ld = hld.unsafe_ptr().unsafe_load(0)
+        else:
+            ld = chol_logdet(ctx, work, scal, d, quiet, chol_elem_tpb)
         logdet_host.append(ftz(identical_mul(Float32(-0.5), ld)))
 
         # the factor, kept for the card and for the VENDOR_MATMUL arm
@@ -1977,7 +2016,12 @@ def gmm_precision_cholesky(
             grid_dim=(grid_dd, 1, 1),
             block_dim=(elem_tpb, 1, 1),
         )
-        chol_op_solve_lower(ctx, work, identity, dinfo, d, d)
+        comptime if CHOL_OPS_FIT:
+            chol_op_solve_lower(ctx, work, identity, dinfo, d, d)
+        else:
+            trsm_lower(
+                ctx, work, identity, d, d, quiet, "gmm.precision.trsm", CHOL_SOLVE_TPB
+            )
         var linv_k = linv.create_sub_buffer[DType.float32](kc * dd, dd)
         ctx.enqueue_copy(dst_buf=linv_k, src_buf=identity)
 
@@ -2024,6 +2068,12 @@ def gmm_precision_cholesky(
     _ = identity^
     _ = scal^
     _ = work^
+    _ = cws^
+    _ = dinfo^
+    _ = hinfo^
+    _ = dscr^
+    _ = dld^
+    _ = hld^
     return GmmMStepRun(0, -1)
 
 
@@ -2094,7 +2144,9 @@ struct GmmCholScratch(Movable):
     """The precision Cholesky's device words and scratch, allocated once per
     fit: one info word per component, the status pair, and for the
     per-component chain a working d x d block, the identity it solves
-    against, the logdet fold's scratch and the raw log determinants."""
+    against, the logdet fold's scratch and the raw log determinants; and
+    when the fit's route is the host-read chain (`gmm_precision_reads_host`)
+    that chain's `dwork` (`gmm_chol_dwork_floats`), else one float."""
     var info: DeviceBuffer[DType.int32]
     var status: DeviceBuffer[DType.int32]
     var work: DeviceBuffer[DType.float32]
@@ -2102,9 +2154,13 @@ struct GmmCholScratch(Movable):
     var ld_scratch: DeviceBuffer[DType.float32]
     var ld_raw: DeviceBuffer[DType.float32]
     var host_status: HostBuffer[DType.int32]
+    var chain_dwork: DeviceBuffer[DType.float32]
 
     def __init__(out self, ctx: DeviceContext, d: Int, ncomp: Int) raises:
         var dd = d * d
+        self.chain_dwork = ctx.enqueue_create_buffer[DType.float32](
+            gmm_chol_dwork_floats(d) if gmm_precision_reads_host(d) else 1
+        )
         self.info = ctx.enqueue_create_buffer[DType.int32](max(ncomp, 1))
         self.status = ctx.enqueue_create_buffer[DType.int32](2)
         self.work = ctx.enqueue_create_buffer[DType.float32](max(dd, 1))
@@ -2142,6 +2198,28 @@ def gmm_status_put(
     scratch.host_status.unsafe_ptr().unsafe_store(1, Int32(run.failed_component))
     ctx.enqueue_copy(dst_buf=scratch.status, src_ptr=scratch.host_status.unsafe_ptr())
     ctx.synchronize()
+
+
+def gmm_precision_reads_host(d: Int) -> Bool:
+    """Whether the fit's precision Cholesky at this d is the host-read chain
+    (`gmm_precision_cholesky`, 0.8.66's per-component `potrf_lower` route):
+    no one-launch factor of `gmm_precision_enqueue` applies (the same tests
+    in the same order) and -D MOJOLEARN_IDN_CHOL_OPS_FIT is off. The EM loop
+    then reads its register block every iteration (check_every = 1), as for
+    the sabotage arms, so no iteration runs past a stop. Lane
+    fix-chol-ops-remaining-callers (2026-11-13)."""
+    comptime if CHOL_OPS_FIT:
+        return False
+    comptime if IDN_GMM_FUSED_CHOL:
+        if gmm_idn_chol_applies(d):
+            return False
+    comptime if GMM_FUSED_CHOL:
+        if d <= GMM_CHOL_MAX_D:
+            return False
+    comptime if GMM_FAST_BIG_CHOL:
+        if d > GMM_CHOL_MAX_D and d <= GMM_CHOL_TPB:
+            return False
+    return True
 
 
 def gmm_precision_enqueue(
@@ -2214,6 +2292,24 @@ def gmm_precision_enqueue(
                 grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
             )
             fused = True
+    comptime if not CHOL_OPS_FIT:
+        if not fused:
+            # Lane fix-chol-ops-remaining-callers (2026-11-13): no one-launch
+            # factor applies, so by default the fit runs 0.8.66's
+            # per-component chain (`gmm_precision_cholesky`: potrf_lower,
+            # chol_logdet, trsm_lower, the host reading each pivot) and puts
+            # its verdict in the status pair; it records its own trace
+            # stages. The loop reads every iteration on this route
+            # (`gmm_precision_reads_host`). The enqueue-only chain on the
+            # executor's Cholesky ops below is the B arm under
+            # -D MOJOLEARN_IDN_CHOL_OPS_FIT (owed row chol-ops-fit).
+            var run = gmm_precision_cholesky(
+                ctx, cov, chol_l, linv, prec, log_det_chol, scratch.chain_dwork,
+                d, ncomp, trace, tag, elem_tpb, chol_elem_tpb, GMM_SAB_NONE,
+                cov_lo_addr,
+            )
+            gmm_status_put(ctx, scratch, run)
+            return
     if not fused:
         var grid_dd = (dd + elem_tpb - 1) // elem_tpb
         for kc in range(ncomp):  # driver-loop: over mixture components (model structure), enqueue only
