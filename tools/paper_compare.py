@@ -103,6 +103,7 @@ SMOKE_SHAPE = "small"
 # ---------------------------------------------------------------------------------------------------------------
 
 def load_json(path):
+    path = str(path)  # callers pass str or Path (measure_candidate stage crashed on a PosixPath, 2026-11-13)
     opener = gzip.open if path.endswith(".gz") else open
     with opener(path, "rt") as fh:
         return json.load(fh)
