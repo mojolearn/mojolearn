@@ -143,3 +143,31 @@ def test_public_inference_refusals_are_native(operation, args):
     report = result.report()
     for name in ("python_frames", "wrapper_work", "forbidden_native_calls", "unobserved_existing_threads"):
         assert not report[name], report
+
+
+def test_stateless_forward_leaves_block_reports_untouched():
+    # lane perf-neural-sessions (2026-11-13): a stack's Mamba-3 blocks discard
+    # their reports, so the stateless forward requests none (as the 0.8.55
+    # resident forward did): no report arrays are allocated or published.
+    _, model = _models(["mamba3", "attention"])
+    block = model._blocks[0]
+    before = {name: vars(block).get(name) for name in ("h_last_", "k_last_", "v_last_", "theta_last_")}
+    audit_native_call(model.forward, np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")).assert_native()
+    for name, value in before.items():
+        assert vars(block).get(name) is value, name
+
+
+class _HookedInt(int):
+    def __index__(self):  # pragma: no cover - must never run
+        raise AssertionError("Python hook ran inside a native Samba forward")
+
+
+def test_read_only_forward_still_refuses_hooks_in_fields_it_reads():
+    # The read-only admission walks only the fields forward reads; each of them
+    # keeps the full walk's refusal.
+    _, model = _models(["attention"])
+    ids = np.array([[1, 2, 3]], dtype="i4")
+    audit_native_call(model.forward, ids).assert_native()
+    vars(model)["n_total"] = _HookedInt(model.n_total)
+    with pytest.raises(TypeError):
+        model.forward(ids)
