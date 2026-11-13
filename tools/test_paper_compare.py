@@ -342,5 +342,157 @@ class JobScript(unittest.TestCase):
         self.assertIn("prune_persist_staging", text)
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# --best-ever (tools/board_best_ever.py files) and the full-board screen (ids-all, board-all)
+# ---------------------------------------------------------------------------------------------------------------
+
+PCA = "classical/pca/taxi/rows=full"
+SVC = "classical/svc/taxi/rows=full"
+
+
+def be_new_board(gpu=GPU):
+    """new_board() as a real board writes it (our cells carry mode identical), plus two races outside the recipes."""
+    b = new_board(gpu)
+    for race in b["races"].values():
+        for c in race.get("cells", []) + race.get("infer_cells", []):
+            c["mode"] = "identical"
+    for rid, ms in ((PCA, 20.0), (SVC, 7.0)):
+        c = new_cell("ours", ms, lane=rid.split("/")[1])
+        c["mode"] = "identical"
+        b["races"][rid] = {"family": "classical", "lane": rid.split("/")[1], "dataset": "taxi", "cells": [c]}
+    return b
+
+
+def be_entry(ms, params=None, hash_="h-ours", device=GPU, release="0.8.25", date="2026-09-30"):
+    return {"ms": ms, "params": params, "hash": hash_, "device": device, "release": release, "date": date,
+            "commit": "c0ffee", "params_source": "cell" if params is not None else None}
+
+
+def be_doc(vendor="nvidia", **rows):
+    out = {}
+    for key, best in rows.items():
+        k = key.replace("__", " ")
+        out[k] = {"key": k, "best": best, "best_by_device": {best["device"]: best}, "latest": best,
+                  "flags": [], "timeline": [best]}
+    return {"schema": "mojolearn-board-best-ever/1", "vendor": vendor, "mined_at_head": "abc", "rows": out}
+
+
+class BestEver(unittest.TestCase):
+    def setUp(self):
+        self.doc = PC.extract_recipes(paper_board(), "nvidia")
+        k = {"km": "classical/kmeans/taxi/rows=full fit ours", "ols": "classical/ols/taxi/rows=full fit ours",
+             "gb": "trees/gbdt-depthwise/taxi/rows=full fit ours", "rf": "trees/rf/istella/rows=full fit ours",
+             "pca": PCA + " fit ours"}
+        self.keys = k
+        rows = {
+            k["km"]: be_entry(110.0, {"n_clusters": 9}),                  # 130 / 110 = 1.18, same params and hash
+            k["ols"]: be_entry(40.0, {"n_clusters": 8}, hash_="h-old"),  # another hash: PARAMS-DIFFER
+            k["gb"]: be_entry(3000.0, None),                              # no params recorded: UNCHECKED
+            k["rf"]: be_entry(600.0, {"n_clusters": 8}),                  # faster than ever: no flag
+            k["pca"]: be_entry(10.0, {"n_clusters": 8}, device="NVIDIA GeForce RTX 4090"),
+        }
+        self.best = be_doc(**{key.replace(" ", "__"): v for key, v in rows.items()})
+
+    def run_compare(self, best=True):
+        res = PC.compare(self.doc, [be_new_board()], {}, best_ever=self.best if best else None)
+        return res, {r["key"]: r for r in res["rows"]}, {r["key"]: r for r in res["extra_rows"]}
+
+    def test_flags_on_recipe_rows(self):
+        res, rows, _ = self.run_compare()
+        km = rows[self.keys["km"]]
+        self.assertIn("BEST-EVER-REGRESSION", km["flags"])
+        self.assertAlmostEqual(km["ratio_vs_best_ever"], 130.0 / 110.0)
+        self.assertEqual((km["best_ever_ms"], km["best_ever_release"], km["best_ever_date"]),
+                         (110.0, "0.8.25", "2026-09-30"))
+        self.assertIn("REGRESSION", km["flags"])            # the 0.8.55 flags are unchanged
+        self.assertIn("PARAMS-DIFF", km["flags"])
+        ols = rows[self.keys["ols"]]
+        self.assertIn("PARAMS-DIFFER", ols["flags"])
+        self.assertTrue(ols["best_ever_hash_differs"])
+        self.assertNotIn("BEST-EVER-REGRESSION", ols["flags"])
+        gb = rows[self.keys["gb"]]
+        self.assertIn("BEST-EVER-REGRESSION-UNCHECKED", gb["flags"])
+        rf = rows[self.keys["rf"]]
+        self.assertFalse({"BEST-EVER-REGRESSION", "PARAMS-DIFFER", "BEST-EVER-REGRESSION-UNCHECKED"} & set(rf["flags"]))
+        self.assertAlmostEqual(rf["ratio_vs_best_ever"], 500.0 / 600.0)
+        gm = rows["neural/gemm/gaussian/shape=full fit ours"]
+        self.assertEqual(gm["flags"], ["NOT-RUN"])
+        self.assertIsNone(gm["best_ever_ms"])
+        self.assertEqual(res["best_ever_label"], "best ever (NV)")
+        self.assertEqual(res["flag_counts"]["BEST-EVER-REGRESSION"], 1)
+
+    def test_extra_rows_outside_the_recipes(self):
+        res, _, extra = self.run_compare()
+        self.assertEqual(sorted(extra), [PCA + " fit ours", SVC + " fit ours"])
+        pca = extra[PCA + " fit ours"]
+        self.assertIn("BEST-EVER-REGRESSION", pca["flags"])
+        self.assertIn("BEST-EVER-HW-DIFF", pca["flags"])     # its best ran on another GPU
+        self.assertAlmostEqual(pca["ratio_vs_best_ever"], 2.0)
+        svc = extra[SVC + " fit ours"]
+        self.assertEqual(svc["flags"], [])
+        self.assertIsNone(svc["best_ever_ms"])
+        self.assertEqual(res["extra_flag_counts"]["BEST-EVER-REGRESSION"], 1)
+        md = PC.render_md(res)
+        self.assertIn("best ever (NV) ms", md)
+        self.assertIn("Rows outside the paper's recipes: 2", md)
+        self.assertIn("no earlier measurement", md)
+        self.assertIn("worse than best ever", PC.render_summary(res))
+
+    def test_without_best_ever_nothing_changes(self):
+        res, rows, extra = self.run_compare(best=False)
+        base = PC.compare(self.doc, [be_new_board()], {})
+        self.assertEqual(extra, {})
+        self.assertEqual(res["flag_counts"], base["flag_counts"])
+        self.assertNotIn("best_ever_ms", rows[self.keys["km"]])
+        self.assertNotIn("best ever", PC.render_md(res))
+
+    def test_vendor_mismatch_refused_and_cli(self):
+        with self.assertRaises(SystemExit):
+            PC.compare(self.doc, [be_new_board()], {}, best_ever=dict(self.best, vendor="amd"))
+        with tempfile.TemporaryDirectory() as td:
+            rec, brd, be = (os.path.join(td, n) for n in ("recipes.json", "board.json", "best.json"))
+            json.dump(self.doc, open(rec, "w"))
+            json.dump(be_new_board(), open(brd, "w"))
+            json.dump(self.best, open(be, "w"))
+            md = os.path.join(td, "C.md")
+            self.assertEqual(PC.main(["compare", "--recipes", rec, "--board", brd, "--best-ever", be,
+                                      "--out-md", md]), 0)
+            out = json.load(open(os.path.join(td, "compare-nvidia.json")))
+            self.assertEqual(len(out["extra_rows"]), 2)
+
+
+class IdsAll(unittest.TestCase):
+    def test_every_planned_race(self):
+        with tempfile.TemporaryDirectory() as td:
+            planner = os.path.join(td, "fake_board.py")
+            open(planner, "w").write(FAKE_PLANNER + 'FAMILIES = ("trees", "classical", "neural")\n')
+            out = os.path.join(td, "plan-all")
+            self.assertEqual(PC.main(["ids-all", "--vendor", "nvidia", "--planner", planner, "--out-dir", out]), 0)
+            full = open(os.path.join(out, "race-ids-full.txt")).read().split()
+            self.assertEqual(len(full), 7)          # kmeans, ols and gbdt-depthwise on two datasets, gemm
+            self.assertIn("classical/kmeans/istella/rows=full", full)
+            self.assertIn("neural/gemm/gaussian/shape=full", full)
+            smoke = open(os.path.join(out, "race-ids-smoke.txt")).read().split()
+            self.assertEqual(len(smoke), 7)
+            args = open(os.path.join(out, "board-args.txt")).read().split("\n")
+            self.assertNotIn("--gpu-opponents-only", args)
+            self.assertNotIn("--with-opponents", args)       # our arm only; stored opponent cells join
+            self.assertEqual(args[args.index("--families") + 1], "trees,classical,neural")
+            races = json.load(open(os.path.join(out, "races.json")))["recipes"]
+            self.assertEqual(len(races), 7)
+            self.assertEqual(json.load(open(os.path.join(out, "not-planned.json"))), {})
+
+    def test_job_script_board_all(self):
+        with open(JobScript.JOB) as fh:
+            text = fh.read()
+        self.assertEqual(subprocess.run(["bash", "-n", JobScript.JOB]).returncode, 0)
+        self.assertIn("paper_compare.py ids-all", text)
+        self.assertIn("--best-ever", text)
+        self.assertIn('smoke_shards "$NRACE"', text)
+        self.assertEqual(text.count("BYMEM"), 0)                     # one shard formula, in smoke_shards
+        self.assertIn('--out "$RES/board-all"', text)
+        self.assertNotIn("--with-opponents", text)
+
+
 if __name__ == "__main__":
     unittest.main()
