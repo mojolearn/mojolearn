@@ -38,8 +38,12 @@
    "status": "define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear"
   },
   "byte-lm-generic": {
-   "define": "MOJOLEARN_BYTE_LM_GENERIC_OPS",
-   "status": "define in code (training/byte_lm_program.mojo, autograd/block_step_ops.mojo): B = generic OPS_EMBEDDING and no next-norm fusion; A = op lm_embedding (+ ATTN_STEP_NEXT_NORM on Apple)"
+   "define": "MOJOLEARN_BYTE_LM_GENERIC_OPS,MOJOLEARN_BYTE_LM_PROGRAM_STEP",
+   "status": "define in code (training/byte_lm_program.mojo, autograd/block_step_ops.mojo): B = generic OPS_EMBEDDING and no next-norm fusion; A = op lm_embedding (+ ATTN_STEP_NEXT_NORM on Apple). Since 2026-11-13 the program is itself the B arm byte-lm-program-step, so this arm carries MOJOLEARN_BYTE_LM_PROGRAM_STEP too (compare it with byte-lm-program-step, not with the default hand step)"
+  },
+  "byte-lm-program-step": {
+   "define": "MOJOLEARN_BYTE_LM_PROGRAM_STEP",
+   "status": "define in code (training/byte_lm.mojo BYTE_LM_PROGRAM_STEP): B = lane x7's program step (one Program.fit per call, OPS_ATTN_STEP per layer, executor AdamW); A = the restored hand step (0.8.55 route: per-layer llama_decoder_layer_forward, tape backward autograd/rules_lm.mojo, certified optimizer / step-glue update). Candidate 4c2340386abc: lm-train-step bytes NV 48.9 ms, AMD 50.5 ms vs 35.5 / 43.9 ms for the hand step (0.8.55 / 0.8.66)"
   },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
@@ -546,9 +550,10 @@
    "dataset": "*",
    "rows": "full",
    "b_arms": [
+    "byte-lm-program-step",
     "byte-lm-generic"
    ],
-   "decides": "keep the restored ops (A) unless the generic capture is at least as fast with peak memory not worse on NVIDIA and AMD; the fusion is Apple-only, so NV/AMD time the embedding op alone"
+   "decides": "keep the hand step (A, default since 2026-11-13) unless byte-lm-program-step is at least as fast with quality equal and peak memory not worse on NVIDIA and AMD (then the program is promoted and the hand step deleted with a tombstone); within the program, keep the restored ops unless byte-lm-generic is at least as fast as byte-lm-program-step; the fusion is Apple-only, so NV/AMD time the embedding op alone. Bits differ between A and B (the program uses the executor's embedding / GEMM / CE / AdamW bodies)"
   },
   {
    "id": "r1-transformer-prefill",
