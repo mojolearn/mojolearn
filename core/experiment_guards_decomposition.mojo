@@ -88,6 +88,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_LU_FAST_SHARED_SUB"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_LU_FAST_SHARED_SUB, F02, the FAST LU trailing subtract through the scoped kernel's SUBTRACT epilogue (x_decomp/lu_fast_mma.mojo, gp/x_decomp_shared_sub_count), no verdict row (one-sample M3 factor B/A 0.62-0.96 slower) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
     # MOJOLEARN_CHOL_FAST_SHARED_SUB: no longer refused. Restored 2026-11-09 by lane r1-restore-measured-winners
     # (Apple FAST work is paused, not deleted; one M3 sample fit B/A 0.95): cholesky/checks/fast_trsm.mojo, default OFF.
+    # Lane restore-classical-measured-routes (2026-11-13): MinCovDet's Cholesky C-step is opt-in, so its _OFF is refused.
+    comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL_OFF"](), "renamed 2026-11-13 (lane restore-classical-measured-routes): the LU + Jacobi pinvh C-step is the IDENTICAL default again (x_decomp/mcd.mojo IDN_MCD_CHOL); the Cholesky C-step is -D MOJOLEARN_IDN_MCD_CHOL (owed row mcd-chol). Drop MOJOLEARN_IDN_MCD_CHOL_OFF from the build"
     return True
 
 
