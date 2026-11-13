@@ -3075,6 +3075,23 @@ struct DevExec(Exec):
         return executed
 
     @staticmethod
+    def ols_finite_status_check(
+        ctx: DeviceContext, dstat: DeviceBuffer[DType.int32], mut hstat: HostBuffer[DType.int32]
+    ) raises:
+        """`ols_tsqr_factor`'s two finite status words (X at 0, y at 1)
+        copied down and read at one drain; a nonzero word raises the entry's
+        non-finite refusal, which the door maps to scikit-learn's wording
+        (bindings/admitted_input_run.mojo admitted_finite_entry_refuse)."""
+        ctx.enqueue_copy(dst_ptr=hstat.unsafe_ptr(), src_buf=dstat)
+        ctx.synchronize()
+        var x_bad = hstat.unsafe_ptr().unsafe_load(0) != Int32(0)
+        var y_bad = hstat.unsafe_ptr().unsafe_load(1) != Int32(0)
+        if x_bad:
+            raise Error("mojolearn: X contains NaN or infinity")
+        if y_bad:
+            raise Error("mojolearn: y contains NaN or infinity")
+
+    @staticmethod
     def eigh_status_check(hs: HostBuffer[DType.int32], n: Int) raises:
         """An `_eigh_batch_enq` status word, read after the caller's sync: a
         nonzero word raises (DEVIATION 590)."""
@@ -4053,17 +4070,22 @@ struct DevExec(Exec):
         ctx.enqueue_copy(dst_ptr=ymean, src_buf=d_m64.create_sub_buffer[DType.uint64](d, 1))
         comptime if TARGET_COLUMN == COLUMN_APPLE:
             ctx.synchronize()
-        ts_factor_dispatch(plan, ctx, da, m, n, r, False)
-        ctx.enqueue_copy(dst_ptr=hstat.unsafe_ptr(), src_buf=dstat)
-        ctx.synchronize()
-        var x_bad = hstat.unsafe_ptr().unsafe_load(0) != Int32(0)
-        var y_bad = hstat.unsafe_ptr().unsafe_load(1) != Int32(0)
+        try:
+            ts_factor_dispatch(plan, ctx, da, m, n, r, False)
+        except factor_error:
+            # A non-finite X or y reaches R as NaN, and the factor's own R
+            # refusal (x_decomp/tsqr_device.mojo ts_factor_device, "R entry
+            # ... is NaN") drains and raises before the status words above
+            # are read: read them now, so a non-finite input refuses with
+            # the admission message first on every column (Apple, NVIDIA,
+            # AMD; lane ols-finite-refusal-apple, 2026-11-13). Only the
+            # refusal path pays this read; a finite fit reads the words once
+            # below, as before.
+            DevExec.ols_finite_status_check(ctx, dstat, hstat)
+            raise factor_error^
+        DevExec.ols_finite_status_check(ctx, dstat, hstat)
         _ = hstat^
         _ = dstat^
-        if x_bad:
-            raise Error("mojolearn: X contains NaN or infinity")
-        if y_bad:
-            raise Error("mojolearn: y contains NaN or infinity")
         _ = ta^
         _ = tb^
         _ = d_sx^
