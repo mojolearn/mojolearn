@@ -311,7 +311,24 @@ def neighbors_public_finish(model: PythonObject, operation: String, result: Pyth
         if operation.startswith("family_xn_knn_"):
             # Former NearestNeighbors._mojolearn_after_fit cache initialization.
             # The fit owner already released the previous resident before work.
-            py_setitem(call.fields, "_resident_holder", Python.dict())
+            # perf-neighbors (2026-11-13): the fresh holder keeps the "index"
+            # handle THIS fit prepared. Since lane a8b (b1ee4aaa38) `_nn_fit`
+            # uploads the index and tests it behind that upload
+            # (bindings/neighbors_knn_native_door.mojo `_resident_handle`
+            # test=True); replacing the holder here dropped that handle
+            # unreleased (a device copy of X leaked per fit) and the first
+            # query uploaded the index a second time. Measured on the record
+            # run of 4c2340386abc (L40S, fit + predict in the clock):
+            # knn-reg taxi 11.52 (0.8.55) -> 18.94 ms, istella 38.20 -> 46.26
+            # ms; knn-clf taxi 14.18 -> 21.64 ms, istella 40.76 -> 49.59 ms.
+            # Same bits: the handle names the same uploaded words.
+            var fresh = Python.dict()
+            var previous = py_get(call.fields, "_resident_holder")
+            if previous is not None and py_type(previous) is native_loaded_module("builtins").dict:
+                var held = py_get(previous, "index")
+                if held is not None:
+                    py_setitem(fresh, "index", held)
+            py_setitem(call.fields, "_resident_holder", fresh)
         if operation == "family_xn_loc_nc_fit":
             py_setitem(call.fields, "classes_", _public_labels(call.fields["classes_"], context))
     if call.outside and result is not model:
