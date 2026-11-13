@@ -22,8 +22,10 @@ since Oct 5); 49 rows had no measurement since 0.8.25-0.8.44. This tool producti
 
 FLAGS (per race key, in the file)
   PARAMS-DIFFER   the best cell's explicit parameters (a shared key with another value) or output hash differ from
-                  the latest cell's: the "loss" may be a parameter change, not a regression (the audit's dbscan,
+                  the newest cell that recorded them: the "loss" may be a parameter change, not a regression (the audit's dbscan,
                   gbdt-symmetric and gbdt-lossguide rows)
+  PARAMS-UNKNOWN  the best cell (or every later cell) recorded no parameters: a same-params claim cannot be checked
+                  (boards before the 2026-10-14 read-back kept none); the hash is still compared
   LATEST>BEST     the latest cell is more than 1.10x the best and PARAMS-DIFFER does not hold
 
 tools/paper_compare.py compare --best-ever reads these files (the "best ever" column). Tests:
@@ -127,6 +129,7 @@ def cell_records(board, blob_vendor_hint=""):
     if isinstance(races, list):
         races = {r.get("id"): r for r in races if isinstance(r, dict)}
     when = board.get("updated") or board.get("created")
+    box_version = ((board.get("box") or {}).get("mojolearn") or {}).get("version")
     out = []
     for rid, race in races.items():
         if not rid or not isinstance(race, dict):
@@ -144,7 +147,7 @@ def cell_records(board, blob_vendor_hint=""):
                 if vendor not in VENDORS:
                     continue
                 params, psrc = params_of(race, c)
-                version = c.get("version") or c.get("library_version")
+                version = c.get("version") or c.get("library_version") or box_version
                 out.append({"key": race_key(rid, phase, c.get("arm"), c.get("batch")), "race_id": rid,
                             "family": race.get("family"), "lane": race.get("lane"), "dataset": race.get("dataset"),
                             "phase": phase, "arm": c.get("arm"), "batch": c.get("batch"), "vendor": vendor,
@@ -296,13 +299,18 @@ def summarize(records, vendor):
             d = r.get("device") or "?"
             if d not in per_device or r["ms"] < per_device[d]["ms"]:
                 per_device[d] = _entry(r)
-        pdiff = params_differ(best.get("params"), latest.get("params"))
-        hdiff = bool(best.get("hash") and latest.get("hash") and best["hash"] != latest["hash"])
+        # the current params and hash: the newest cell that recorded them (a compare JSON's cell has neither)
+        cur_p = next((r for r in reversed(timeline) if isinstance(r.get("params"), dict)), None)
+        cur_h = next((r for r in reversed(timeline) if r.get("hash")), None)
+        pdiff = params_differ(best.get("params"), cur_p.get("params")) if cur_p else []
+        hdiff = bool(best.get("hash") and cur_h and best["hash"] != cur_h["hash"])
         flags = []
         if pdiff or hdiff:
             flags.append("PARAMS-DIFFER")
+        elif not isinstance(best.get("params"), dict) or cur_p is None:
+            flags.append("PARAMS-UNKNOWN")
         ratio = latest["ms"] / best["ms"]
-        if ratio > SLOWER and not flags:
+        if ratio > SLOWER and "PARAMS-DIFFER" not in flags:
             flags.append("LATEST>BEST")
         first = recs[0]
         rows[key] = {"key": key, "race_id": first.get("race_id"), "family": first.get("family"),
@@ -323,7 +331,7 @@ def write(records, stats, out_dir, repo):
         doc = {"schema": SCHEMA, "vendor": v, "mined_at_head": head, "search_dirs": list(SEARCH_DIRS),
                "stats": dict(stats, rows=len(rows)), "thresholds": {"latest_over_best_above": SLOWER},
                "flag_counts": {f: sum(f in r["flags"] for r in rows.values())
-                               for f in ("PARAMS-DIFFER", "LATEST>BEST")},
+                               for f in ("PARAMS-DIFFER", "PARAMS-UNKNOWN", "LATEST>BEST")},
                "rows": rows}
         p = os.path.join(out_dir, "%s.json" % v)
         with open(p, "w") as fh:
