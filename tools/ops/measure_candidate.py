@@ -99,7 +99,7 @@ def results_file(name, *roots):
 
 def check_b_arms(names, owed_file):
     """Refuse a B set name the owed file does not list (the job would report its rows "not planned")."""
-    known = sorted((PC.load_json(owed_file).get("b_arms") or {}))
+    known = sorted((PC.load_json(str(owed_file)).get("b_arms") or {}))
     bad = [n for n in names if n not in known]
     if bad:
         raise SystemExit(f"measure-candidate: --b-arm {', '.join(bad)} not in {owed_file} b_arms; "
