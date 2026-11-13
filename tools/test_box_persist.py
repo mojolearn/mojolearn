@@ -320,6 +320,38 @@ class TestRun(Base):
         self.assertIn("huge.bin", note)
         self.assertLessEqual(len(b), int(0.05 * 1024 * 1024))
 
+    def test_size_cap_tars_once(self):
+        # over the cap: the left-out files are chosen from their sizes before tar runs, so tar runs once and the
+        # note lists every left-out file with its size (2026-11-13: a 27 GB full tar first, then a truncated one)
+        tag, js = self.stage(extra=("--max-mb", "0.05"))
+        res = os.path.join(self.w, "res")
+        os.makedirs(os.path.join(res, "ev"))
+        for name in ("ev/a run.tar.gz", "ev/b.tar.gz"):
+            with open(os.path.join(res, name), "wb") as fh:
+                fh.write(os.urandom(30000))
+        with open(os.path.join(res, "BOARD.md"), "w") as fh:
+            fh.write("board")
+        log = os.path.join(self.w, "tar.calls")
+        shim = os.path.join(self.w, "shim")
+        os.makedirs(shim)
+        real = shutil.which("tar")
+        with open(os.path.join(shim, "tar"), "w") as fh:
+            fh.write('#!/bin/bash\necho "$*" >> %s\nexec %s "$@"\n' % (log, real))
+        os.chmod(os.path.join(shim, "tar"), 0o755)
+        self.env["PATH"] = shim + os.pathsep + self.env.get("PATH", os.environ["PATH"])
+        rc, _, _ = self.runner(js, res, "true")
+        self.assertEqual(rc, 0)
+        names = tar_names(self.obj(tag, "final.tgz"))
+        self.assertIn("BOARD.md", names)
+        self.assertNotIn("ev/a run.tar.gz", names)
+        self.assertNotIn("ev/b.tar.gz", names)
+        with open(log) as fh:
+            self.assertEqual(len([ln for ln in fh if "-czf" in ln]), 1, "one tar per snapshot")
+        note = open(os.path.join(res, "PERSIST_TRUNCATED.txt")).read()
+        self.assertIn("30000 ./ev/a run.tar.gz", note)
+        self.assertIn("TRUNCATED limit=", self.plog(res))
+        self.assertFalse(os.path.exists(os.path.join(self.box, "state", tag, "upload.tgz")))
+
     def _signal(self, sig, code):
         tag, js = self.stage()
         res = os.path.join(self.w, "res")
@@ -426,6 +458,8 @@ class TestRun(Base):
         rc, _, _ = self.runner(js, res, "exit 5")
         self.assertEqual(rc, 5)
         self.assertIn("FAILED name=final.tgz http=000", self.plog(res))
+        # the failed upload's staging tarball is deleted (two of them filled an 80 GB pod on 2026-11-13)
+        self.assertFalse(os.path.exists(os.path.join(self.box, "state", tag, "upload.tgz")))
 
     def test_failed_final_retried_by_flush_all(self):
         tag, js = self.stage()
