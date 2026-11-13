@@ -101,6 +101,21 @@ comptime IDN_SAMBA_RESIDENT_STEP = (
     and not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"]()
     and not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
 )
+# Samba stateless forward route (lane restore-samba-resident-forward,
+# 2026-11-13). Default: the resident forward (`samba_resident_forward`,
+# descriptor op 16), the measured winner: IDN_SAMBA_RESIDENT_STEP PROMOTED
+# samba-forward NVIDIA 12.0 -> 5.3 ms (0.44x), AMD 8.8 -> 5.8 ms (0.66x) vs the
+# per-op route (grid ge123e6f9); the 0.8.55 paper column (NVIDIA L40S 4.60 ms,
+# AMD MI300X 6.10 ms) ran it. Lane x6 replaced it with SambaStackProgram on
+# 2026-11-09 without a measurement; candidate 4c2340386abc measured that
+# program at NVIDIA 10.54 ms (2.29x), MI325X 8.36 ms (1.48x). -D
+# MOJOLEARN_SAMBA_PROGRAM_FORWARD selects the program for the stateless
+# forward: the B arm of the owed A/B (samba-forward A vs B, NVIDIA and AMD;
+# bench/results/paper_compare/owed-pre0867.json). Read by the public door
+# (bindings/samba_inference_native_door.mojo), so the binding that compiles the
+# door takes the define. Not keyed on _ENABLED: it picks a route, the resident
+# image's own op 24 (IDN_SAMBA_RESIDENT_STEP) still decides availability.
+comptime SAMBA_PROGRAM_FORWARD = is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"]()
 # attn_stash=recompute for the Samba training step only (lane grid-act-4,
 # 2026-10-08, IDENTICAL grid ge123e6f9, one run per arm, stash -> recompute
 # ms): samba-train-step NV 96.0 -> 79.5, AMD 147.2 -> 145.7 (0.905x) but
