@@ -61,11 +61,42 @@ EXPANSION_DOORS = (
 )
 
 #: Connections that join two families: when the key is loaded, the values are
-#: imported too, before the class connections run. The tree door's default
-#: member estimators (Ridge, LogisticRegression, LinearSVC) and its
-#: linear-predict identity (PermutationExplainer) come from these modules.
+#: imported too, before the class connections run (`_import_dependencies`,
+#: repeated until a pass imports nothing new). Each entry names the module
+#: whose import writes what the key family's native boundary reads; the
+#: populator -> consumer map (lane lazy-import-fix, 2026-11-12):
+#: - `_expansion_linear`, `linear_model`, `svm` -> `_expansion_trees`: the tree
+#:   door's default member estimators (Ridge, LogisticRegression, LinearSVC) and
+#:   its linear-predict identity (PermutationExplainer).
+#: - `models` (models/causal_lm.py `_connect_causal_native`) -> the neural block
+#:   modules: it writes `_native_neural_bridge.RUNTIME/CONTEXT`; importing it
+#:   after the block modules finish keeps the connection at family import
+#:   without the neural_inference -> _transformer_impl -> models cycle.
+#: - `mixture` -> `_expansion_cluster`: `family_mix_ctypes`, `family_mix_inits`
+#:   (BayesianGaussianMixture, bindings/mixture_native_door.mojo:658).
+#: - `neighbors` -> `_expansion_neighbors`: `host_archive_neighbor_metrics`,
+#:   `host_archive_unsupported_metrics`, `family_xn_radius_attributes` (the k-NN
+#:   metric resolution of LOF / label propagation, bindings/neighbors_knn_native_door.mojo:550);
+#:   `_ivf_impl` -> `_expansion_neighbors`: `family_xn_ann_ivf_metrics`,
+#:   `family_xn_ann_ivf_mode_codes` (bindings/neighbors_ann_native_door.mojo:194).
+#: - `_gpc_impl` -> `_gp_impl`: `family_gp_binary_laplace`, `family_gp_binary_namespace`
+#:   (every GP fitted-state admission, bindings/gp_svm_gp_state_door.mojo:117).
+#: - `_expansion_metrics` -> `model_selection` (the hub every estimator family
+#:   connects through): `family_metrics_prog_context`, `family_metrics_undefined`
+#:   (scorers and score methods, bindings/metrics_program_door.mojo:84,
+#:   bindings/metrics_native_support_door.mojo:125).
+#: The classifier label keys and the CV fast masks are written where their
+#: context is created (`_native_family_bridge.shared_context`,
+#: `_native_msel_dispatch.connect`), so they need no entry here.
 DEPENDS = {
     "_expansion_trees": ("_expansion_linear", "linear_model", "svm"),
+    "neural_inference": ("models",),
+    "_transformer_impl": ("models",),
+    "_mamba_impl": ("models",),
+    "_expansion_cluster": ("mixture",),
+    "_expansion_neighbors": ("neighbors", "_ivf_impl"),
+    "_gp_impl": ("_gpc_impl",),
+    "model_selection": ("_expansion_metrics",),
 }
 
 _STATE = threading.local()        # per-thread import depth and pass flag
