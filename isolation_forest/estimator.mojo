@@ -731,6 +731,21 @@ def iforest_run_resident(
     elif out_f32_addr == 0:
         raise Error("iforest_run_resident: the score output address is null")
 
+    if_resident_fit_if_empty(plan, held, key, new_token)
+    return if_resident_score(
+        held, key.n_features, query, query_addr, n_query, want, out_f32_addr, out_i32_addr, wide_scores,
+    )
+
+
+def if_resident_fit_if_empty(
+    plan: DevicePlan, mut held: List[IFResidentEntry], key: IFResidentKey, new_token: Int,
+) raises:
+    """The fit half of `iforest_run_resident` (moved word for word, lane
+    fix-iforest-save-device-forest): `held` empty fits a fresh forest from
+    `key.train_addr` and leaves it, under `new_token`, in `held`; one entry
+    is left as it is."""
+    if key.train_addr == 0:
+        raise Error("iforest_run_resident: the training matrix address is null")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     if len(held) == 0:
         var est = IsolationForestEstimator(ctx)
@@ -750,13 +765,30 @@ def iforest_run_resident(
         est.fit(ctx, List[Float32](), key.n_train, key.n_features,
                 src_addr=key.train_addr, plan=plan)
         held.append(IFResidentEntry(new_token, key, ctx, est^))
+    _ = ctx^
 
+
+def if_resident_score(
+    held: List[IFResidentEntry],
+    n_features: Int,
+    query: List[Float32],
+    query_addr: Int,
+    n_query: Int,
+    want: Int,
+    out_f32_addr: Int,
+    out_i32_addr: Int,
+    wide_scores: Bool,
+) raises -> IFRunOutputs:
+    """The scoring half of `iforest_run_resident` (moved word for word, lane
+    fix-iforest-save-device-forest) over the one entry in `held`: a fitted
+    forest or one imported from a saved model (`isolation_forest/
+    forest_io.mojo`); the same kernels either way."""
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = IFRunOutputs()
     out.offset_ = held[0].est.offset_
     out.max_samples_ = held[0].est.max_samples_
     out.n_features_in_ = held[0].est.n_features_in_
     out.token = held[0].token
-    var n_features = key.n_features
     # The scoring epilogue runs on the device and lands in the caller's
     # buffer (fam2-forests' `IDN_IF_EPILOGUE_DEVICE`; the only route on
     # every tier since cpu4-forest: the host epilogue arm is gone).
