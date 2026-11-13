@@ -1260,6 +1260,57 @@ def attn_step_run_kept(
         raise err
 
 
+def attn_step_run_kept_host(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
+    px: Int, py: Int, mut pre: AttnPrefill, forward_only: Bool,
+) raises:
+    """One decode token (L = 1) from and to the caller's host arrays (lane
+    fable-perf-neural-0855, 2026-11-13): x at `px` is copied straight into
+    the resident entry's `dx` and `residual2` comes straight back to `py`,
+    as 0.8.55's `_session_step_run` did (bindings/_mojolearn_transformer.mojo
+    at 4e927c9249:2515: upload into `s.dx`, the block, download from
+    `residual2`, one wait). The generic run went through the arm's `xio` /
+    `yio` buffers and queued two device-to-device copies per token on top
+    (`_run_attn_on`'s L = 1 branch); the board's `transformer-decode/gaussian`
+    (2048 steps) read 1105 -> 1406 ms on the L40S against 0.8.55. Same
+    `llama_decoder_layer_forward` on the same stages, same state word, so
+    the bits are the same; only the two copies go. `bufs[0]` names no
+    storage this run reads (the entry is matched on bufs[1..3]);
+    `counts[0]` is B * d_model. Same eviction on a failed run."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    if len(bufs) != 4 or len(counts) != 4:
+        raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
+    if px == 0 or py == 0:
+        raise Error("ops: attention_step: null x or y host address")
+    try:
+        var ctx = ex.ctx.copy()
+        var b = ints[0]
+        var dm = ints[1]
+        var n = b * dm
+        if counts[0] != n:
+            raise Error("ops: attention_step: a decode step takes one token per row")
+        var e = attn_step_entry(ex, sc, bufs, counts, ints)
+        ref blk = sc.attn[e]
+        var trace = IdentityTrace.disabled()
+        var pos0 = blk.kv.s
+        if n > len(blk.dx):
+            raise Error("ops: attention_step: the L = 1 stages hold a different input length")
+        ctx.enqueue_copy(dst_buf=blk.dx.create_sub_buffer[DType.float32](0, n), src_ptr=f32_ptr(px))
+        llama_decoder_layer_forward(
+            ctx, blk.stages, blk.kv, blk.rope, blk.w, blk.dx,
+            b, 1, pos0, trace, String("ops.step"), forward_only=forward_only)
+        if n != len(blk.stages.residual2):
+            raise Error("ops: attention_step: the L = 1 stages hold a different output length")
+        ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=blk.stages.residual2.create_sub_buffer[DType.float32](0, n))
+        var words: List[Int] = [blk.kv.s]
+        _write_words(ex, bufs[3], words)
+    except err:
+        pre.clear()
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
+
+
 #: Lane r1-restore-measured-winners (2026-11-09): the attention step op's
 #: stateless FRESH PREFILL arm. Default: `attn_step_fresh_prefill` below, the
 #: launch sequence of 0.8.66's block session prefill
