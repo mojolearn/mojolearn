@@ -68,6 +68,14 @@
   "chol-ops-fit": {
    "define": "MOJOLEARN_IDN_CHOL_OPS_FIT",
    "status": "define in code (cholesky/chol_ops.mojo:79): B = the N7/N8 Cholesky ops route for KernelRidge and GPR fits; A = potrf_lower + cho_solve (the 0.8.66 route, restored 2026-11-13 after AMD 1.14-1.25x)"
+  },
+  "program-run-entry": {
+   "define": "MOJOLEARN_PROGRAM_RUN_ENTRY",
+   "status": "define in code (providers/python/autograd_program_pyapi_door.mojo PROGRAM_RUN_ENTRY): B = every fixed-shape Program.run on autograd/program_entries.mojo program_execute_run (fb75472a87); A = OpsSession.run_program (0.8.55 route: scratch-tape inputs, cached replay, download into the caller's array)"
+  },
+  "session-call-descriptor": {
+   "define": "MOJOLEARN_SESSION_CALL_DESCRIPTOR",
+   "status": "define in code (providers/python/autograd_session_public_request_pyapi_pack.mojo SESSION_CALL_DESCRIPTOR): B = every public Session/Program call through the session_public_api_v1 descriptor (d2f14a3de4, ec806eaf6f, 1edde63a6a); A = a direct typed call when the calling image owns the session registry"
   }
  },
  "rows": [
@@ -631,6 +639,33 @@
     "autograd-optim"
    ],
    "decides": "the executor optimizer (B) becomes the one update only if at least as fast as the hand OP_OPT update on NVIDIA and AMD; digests must not move in either arm"
+  },
+  {
+   "id": "restore-executor-program-run",
+   "source": "lane restore-executor-fast-run (fb75472a87 2026-10-20 switched the fixed-shape Program.run off OpsSession.run_program with no A/B; candidate 4c2340386abc NV 1.70 ms vs 1.04 at 0.8.55)",
+   "kind": "ab",
+   "lane": "program-run",
+   "dataset": "gaussian",
+   "rows": "full",
+   "b_arms": [
+    "program-run-entry"
+   ],
+   "decides": "program_execute_run (B) becomes the one fixed-shape run only if at least as fast as run_program (A) on NVIDIA and AMD; output digests must match between arms (same _program_op replay)"
+  },
+  {
+   "id": "restore-executor-session-call",
+   "source": "lane restore-executor-fast-run (d2f14a3de4, ec806eaf6f, 1edde63a6a 2026-10-27 routed every Session call through the provider descriptor with no A/B; ops-session-step NV 2.30 (0.8.55) -> 2.60 ms candidate)",
+   "kind": "ab",
+   "lane": [
+    "ops-session-step",
+    "program-run"
+   ],
+   "dataset": "gaussian",
+   "rows": "full",
+   "b_arms": [
+    "session-call-descriptor"
+   ],
+   "decides": "the descriptor hop for same-image calls (B) returns only if at least as fast as the direct typed call (A) on NVIDIA and AMD; digests must not move"
   }
  ]
 }
