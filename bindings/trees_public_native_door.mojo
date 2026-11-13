@@ -16,6 +16,7 @@ from bindings.trees_public_lifecycle_native_door import forest_public_operation
 from bindings.trees_public_score_door import forest_score
 from bindings.trees_public_iforest_door import iforest_operation
 from bindings.iforest_public_lifecycle_pack import iforest_public_operation
+from bindings.trees_public_iforest_door import iforest_getstate
 from bindings.trees_bagging_members_native_pack import bagging_members, bagging_members_set
 from bindings.trees_public_boost_door import boost_operation
 from providers.python.tree_boost_public_lifecycle_pyapi_pack import tree_boost_public_operation
@@ -55,7 +56,11 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return gbdt_adapter_set_params(model, args[0], context)
     if operation == "trees_gbdt_adapter_is_fitted":
         return tree_is_fitted(model, False)
-    if operation == "trees_forest_getstate" or operation == "trees_iforest_getstate" or operation == "trees_gbdt_getstate":
+    if operation == "trees_iforest_getstate":
+        # Lane fix-iforest-save-device-forest: a fitted IsolationForest
+        # pickles its forest, not the (possibly borrowed) training matrix.
+        return iforest_getstate(model, context)
+    if operation == "trees_forest_getstate" or operation == "trees_gbdt_getstate":
         return tree_export_state(model, operation)
     if operation == "trees_embedding_apply":
         return embedding_apply(model, args, context)

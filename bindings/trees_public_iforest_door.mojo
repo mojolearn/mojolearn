@@ -36,7 +36,8 @@ from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.trees_public_inputs_door import (
     trees_builtins, trees_table, trees_entry, trees_address, trees_call,
 )
-from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view
+from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view, admitted_dtype
+from bindings.classical_arrays_door import classical_address
 from bindings.admitted_family_door import admitted_array as family_uninit_array
 from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
@@ -64,6 +65,15 @@ comptime _IF_FIT_OWN_X = is_defined["MOJOLEARN_IDN_IF_FIT_OWN_X"]()
 # whose `iforest_scores_f64` is 1 for the float64 scores (bindings/
 # _mojolearn_svm.mojo `_IF_WIDE_ROUTE`).
 comptime _WANT_WIDE_BASE = 3
+# Lane fix-iforest-save-device-forest (2026-11-13): the fitted forest itself,
+# as the compact host form (isolation_forest/forest_io.mojo): a tuple of five
+# Arrays (offsets <i4 n_trees + 1, feature <i4, threshold <f4, left <i4,
+# right <i4). `save()` and pickle write it in place of the training matrix
+# (the training matrix of a resident fit is the caller's borrowed buffer
+# since restore-iforest-kde, so an in-place edit after fit reached the saved
+# model); a loaded or unpickled estimator holds it instead of `_x` and
+# scores it through `iforest_forest_run`, with no fit.
+comptime _FOREST_FIELD = "_if_forest"
 
 
 def _repr(value: PythonObject) raises -> String:
@@ -461,11 +471,14 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
         var owned_view = py_call(native_buffer_view(x.array).cast, "B")
         x = admitted_words(owned_view, x.address, x.rows, x.cols)
     var had = Python.dict()
-    var kept = Python.tuple("_x", "n_features_in_")
-    for i in range(2):  # driver-loop: over fixed call structure, small-loop(kept): the two fitted field names restored on a refusal
+    # `_if_forest` (a loaded or unpickled estimator's saved forest) is
+    # replaced by this fit's training matrix, and restored on a refusal.
+    var kept = Python.tuple("_x", "n_features_in_", _FOREST_FIELD)
+    for i in range(3):  # driver-loop: over fixed call structure, small-loop(kept): the three fitted field names restored on a refusal
         if py_contains(fields, kept[i]):
             py_setitem(had, kept[i], fields[kept[i]])
     _release(model, fields)
+    _ = py_call(fields.pop, _FOREST_FIELD, PythonObject(None))
     var train = _as_array(x, context)
     py_setitem(fields, "_x", train)
     py_setitem(fields, "n_features_in_", PythonObject(x.cols))
@@ -477,10 +490,19 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     try:
         out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, False, context)
         _ = x  # keep the Python object alive through the native call above
+        # Lane fix-iforest-save-device-forest: the forest this fit built is
+        # read out now (the resident forest `_run` just kept, no second fit;
+        # a refit-per-call binary fits it once more here, never at save) and
+        # held as `_if_forest`. `save()` and pickle write it, so a caller's
+        # in-place edit of a borrowed X after fit, or a resident-store
+        # eviction, never changes a saved model. Scores are unchanged: the
+        # live estimator scores its resident forest as before.
+        py_setitem(fields, _FOREST_FIELD, iforest_export_forest(model, context))
+        _ = x  # keep the Python object alive through the native call above
     except error:
         var message = String(error)
         if device_scan and ("Input X contains" in message or "does not accept non-finite" in message):
-            for i in range(2):  # driver-loop: over fixed call structure, small-loop(kept): the two fitted field names restored on a refusal
+            for i in range(3):  # driver-loop: over fixed call structure, small-loop(kept): the three fitted field names restored on a refusal
                 _ = py_call(fields.pop, kept[i], PythonObject(None))
             _ = py_call(fields.update, had)
             raise Error(_NONFINITE)
@@ -492,13 +514,191 @@ def _score(model: PythonObject, X: PythonObject, want: Int, wide: Bool,
            context: PythonObject) raises -> PythonObject:
     """`score_samples` / `decision_function` / `predict`: `_run(X, want)`."""
     var fields = py_fields(model)
-    if not py_contains(fields, "_x"):
+    var trained = py_contains(fields, "_x")
+    if not trained and not py_contains(fields, _FOREST_FIELD):
         raise Error(_PREFIX + "call fit() first")
     var x = admit_f32(X, 2, "X", context, finite=False)
     var fitted = Int(py=py_call(trees_builtins().int, fields["n_features_in_"]))
     if x.cols != fitted:
         raise Error(_PREFIX + "X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    if not trained:
+        return _run_forest(model, fields, x, want, wide, context)
     return _run(model, fields, x, fields["_x"], want, False, wide, context)
+
+
+def iforest_forest_words(forest: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK: `(words, views)` of a saved forest tuple: the seven words
+    `iforest_forest_run` takes (five addresses, trees, nodes) after the
+    dtype, layout and length checks, and the views that keep the five
+    buffers alive through the native call. The node-level checks run in
+    the binding (`if_forest_check`)."""
+    var b = trees_builtins()
+    if py_type(forest) is not b.tuple or len(forest) != 5:
+        raise Error(_PREFIX + "the saved forest must be a tuple of five arrays")
+    var names = Python.tuple("offsets", "feature", "threshold", "left", "right")
+    var types = Python.tuple("<i4", "<i4", "<f4", "<i4", "<i4")
+    var words = Python.list()
+    var views = Python.list()
+    var sizes = List[Int]()
+    for i in range(5):  # driver-loop: over fixed call structure, small-loop(names): the five forest arrays
+        # Admitted here (an unpickled or loaded state is caller data).
+        var view = classical_view(forest[i], context, String(names[i]))
+        if (Int(py=view.ndim) != 1 or admitted_dtype(view, context) != String(types[i])
+                or not classical_c_order(view, context)):
+            raise Error(_PREFIX + "the saved forest's " + String(names[i]) + " must be a flat " + String(types[i]) + " array")
+        _ = py_call(words.append, classical_address(view))
+        _ = py_call(views.append, view)
+        sizes.append(Int(py=view.size))
+    var n_trees = sizes[0] - 1
+    var total = sizes[1]
+    if n_trees < 1 or sizes[2] != total or sizes[3] != total or sizes[4] != total:
+        raise Error(_PREFIX + "the saved forest's arrays do not have matching lengths")
+    _ = py_call(words.append, PythonObject(n_trees))
+    _ = py_call(words.append, PythonObject(total))
+    return Python.tuple(words, views)
+
+
+def _keep_token(model: PythonObject, svm: PythonObject, held: PythonObject, held_token: Int, anchor: PythonObject,
+                same: Bool, token: Int) raises:
+    """`_run`'s record rule for the token a call returned: the same token
+    on the same anchor keeps its lifetime; a new one gets its own, and
+    replacing the record releases the previous one."""
+    if token == 0 or (token == held_token and same):
+        return
+    var lifetime = PythonObject(None)
+    if token == held_token and held is not None:
+        lifetime = held[2]
+    else:
+        var release = py_get(svm, "iforest_resident_release")
+        if release is not None:
+            lifetime = trees_resident_new(release, token)
+    _ = trees_side_put(_TOKEN_SLOT, model, Python.list(PythonObject(token), anchor, lifetime, svm))
+
+
+def _held(model: PythonObject, svm: PythonObject) raises -> PythonObject:
+    """The resident record of this estimator for the binding `svm`, or None
+    (hazard C: a record from another table is not this forest's)."""
+    var held = trees_side_get(_TOKEN_SLOT, model)
+    if held is not None and (len(held) < 4 or held[3] is not svm):
+        return PythonObject(None)
+    return held
+
+
+def _run_forest(model: PythonObject, fields: PythonObject, x: AdmittedX, want: Int, wide: Bool,
+                context: PythonObject) raises -> PythonObject:
+    """`_run` for an estimator that holds its saved forest (`_if_forest`)
+    and no training matrix: `iforest_forest_run` scores the forest (uploaded
+    once, then kept under a token like a fitted one); no fit, and `offset_`
+    / `max_samples_` are the saved ones."""
+    var n_query = x.rows
+    var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
+    var run = trees_entry(svm, "iforest_forest_run")
+    if run is None:
+        raise Error("ImportError: mojolearn: the svm binding has no iforest_forest_run")
+    var forest = fields[_FOREST_FIELD]
+    var unpacked = iforest_forest_words(forest, context)
+    var wide_out = False
+    if wide and want != _WANT_PREDICT:
+        var f64_probe = trees_entry(svm, "iforest_scores_f64")
+        wide_out = f64_probe is not None and Int(py=py_call_typed(f64_probe)) == 1
+    var values = PythonObject(None) if want == _WANT_PREDICT else family_uninit_array(
+        Python.tuple(n_query), "<f8" if wide_out else "<f4", context)
+    var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
+    var info = admitted_vector(4, "<f8", context)
+    var held = _held(model, svm)
+    var held_token = Int(py=held[0]) if held is not None else 0
+    var same = held is not None and held[1] is forest
+    var b = trees_builtins()
+    var params = Python.list(
+        PythonObject(x.cols), PythonObject(n_query), py_call_typed(b.int, fields["max_samples_"]),
+        py_call_typed(b.float, fields["offset_"]), PythonObject(want + _WANT_WIDE_BASE if wide_out else want),
+        PythonObject(held_token if same else 0),
+    )
+    _ = trees_call(run, Python.list(unpacked[0], PythonObject(x.address),
+                                    PythonObject(0 if values is None else trees_address(values)),
+                                    PythonObject(0 if labels is None else trees_address(labels)),
+                                    PythonObject(trees_address(info)), params))
+    _ = unpacked  # keep the forest views alive through the native call above
+    _ = values  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(info))
+    var token = Int(words[3])
+    _ = info  # keep the Python object alive through the native read above
+    _keep_token(model, svm, held, held_token, forest, same, token)
+    _ = x.array
+    return labels if want == _WANT_PREDICT else values
+
+
+def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The fitted forest as a tuple of five Arrays (`_FOREST_FIELD`'s form),
+    for `save()` and pickle. A loaded or unpickled estimator returns the
+    forest it holds. A fitted one reads the resident forest its scores use
+    from the binding (`iforest_forest_export`: the device's node arrays,
+    or the CPU column's oracle trees); a binding with no live forest for
+    this estimator fits one from `_x` first and keeps it. Raises when the
+    estimator holds neither."""
+    var fields = py_fields(model)
+    # The forest held since fit (or since load / unpickle) is the saved one:
+    # no read from the binding, no refit from a possibly edited `_x`.
+    if py_contains(fields, _FOREST_FIELD):
+        _ = iforest_forest_words(fields[_FOREST_FIELD], context)  # refuse a malformed held forest here
+        return fields[_FOREST_FIELD]
+    if not py_contains(fields, "_x"):
+        raise Error("RuntimeError: " + _PREFIX + "this estimator is not fitted yet")
+    var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
+    var export = trees_entry(svm, "iforest_forest_export")
+    if export is None:
+        raise Error("ImportError: mojolearn: the svm binding has no iforest_forest_export")
+    var train = fields["_x"]
+    var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), 1, _WANT_SCORE_SAMPLES,
+                         context)
+    var resident = _resident_table(svm)
+    var held = _held(model, svm) if resident else PythonObject(None)
+    var held_token = Int(py=held[0]) if held is not None else 0
+    var same = held is not None and held[1] is train
+    _ = py_call(params.append, PythonObject(held_token if same else 0))
+    var info = admitted_vector(4, "<f8", context)
+    var address = PythonObject(trees_address(train))
+    # The sizes first (the binding keeps a fresh fit under its token), then
+    # the forest into storage of exactly that size.
+    var sized = trees_call(export, Python.list(address, PythonObject(trees_address(info)), params, Python.list()))
+    var token = Int(py=sized[0])
+    var n_trees = Int(py=sized[1])
+    var total = Int(py=sized[2])
+    py_setitem(params, PythonObject(16), PythonObject(token))
+    var offsets = family_uninit_array(Python.tuple(n_trees + 1), "<i4", context)
+    var feature = family_uninit_array(Python.tuple(total), "<i4", context)
+    var threshold = family_uninit_array(Python.tuple(total), "<f4", context)
+    var left = family_uninit_array(Python.tuple(total), "<i4", context)
+    var right = family_uninit_array(Python.tuple(total), "<i4", context)
+    var words = Python.list(
+        PythonObject(trees_address(offsets)), PythonObject(trees_address(feature)),
+        PythonObject(trees_address(threshold)), PythonObject(trees_address(left)),
+        PythonObject(trees_address(right)), PythonObject(n_trees), PythonObject(total),
+    )
+    var written = trees_call(export, Python.list(address, PythonObject(trees_address(info)), params, words))
+    _ = train  # keep the training matrix alive through the native calls above
+    _ = info  # keep the Python object alive through the native calls above
+    if resident:
+        _keep_token(model, svm, held, held_token, train, same, Int(py=written[0]))
+    return Python.tuple(offsets, feature, threshold, left, right)
+
+
+def iforest_getstate(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`IsolationForest.__getstate__`: the instance dictionary without the
+    process-local resident handles, and, for a fitted estimator, the fitted
+    forest (`iforest_export_forest`) in place of the training matrix, so a
+    pickle or copy scores the forest this estimator scores even after the
+    caller edits the fitted X in place."""
+    var fields = py_fields(model)
+    var state = py_call(trees_builtins().dict, fields)
+    _ = py_call(state.pop, "_if_token", PythonObject(None))
+    _ = py_call(state.pop, "_if_lifetime", PythonObject(None))
+    if py_contains(fields, "_x") or py_contains(fields, _FOREST_FIELD):
+        py_setitem(state, _FOREST_FIELD, iforest_export_forest(model, context))
+        _ = py_call(state.pop, "_x", PythonObject(None))
+    _ = fields
+    return state
 
 
 def iforest_operation_with_source(model: PythonObject, operation: String, args: PythonObject,

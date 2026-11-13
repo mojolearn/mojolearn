@@ -201,21 +201,34 @@ def host_density_save(model: PythonObject, args: PythonObject, context: PythonOb
     if not known or (family != "kde" and family != "iforest"):
         raise Error("TypeError: density checkpoint requires its connected native host class")
     var x = PythonObject(None)
-    try:
-        x = _density_save_attribute(model, "_x", context)
-    except error:
-        if String(error).startswith("AttributeError:"):
-            raise Error("RuntimeError: this estimator is not fitted yet")
-        raise error^
+    # Lane fix-iforest-save-device-forest: a HostIsolationForest loaded from
+    # a mojolearn-iforest-2 file holds its saved forest (`_if_forest`) and no
+    # training matrix; it saves that forest again in the same format.
+    var forest = family == "iforest" and not py_contains(fields, "_x") and py_contains(fields, "_if_forest")
+    if not forest:
+        try:
+            x = _density_save_attribute(model, "_x", context)
+        except error:
+            if String(error).startswith("AttributeError:"):
+                raise Error("RuntimeError: this estimator is not fitted yet")
+            raise error^
     if family == "iforest" and not py_contains(fields, "_seed"):
         _density_save_resolve_iforest(model, fields, plan, context)
     var values = Python.dict()
-    py_setitem(values, "format", "mojolearn-kde-1" if family == "kde" else "mojolearn-iforest-1")
+    py_setitem(values, "format", "mojolearn-kde-1" if family == "kde" else ("mojolearn-iforest-2" if forest else "mojolearn-iforest-1"))
     # Canonical family names let both host_model and class.load consume files
     # saved from explicit CPU classes or their ordinary registered subclasses.
     py_setitem(values, "estimator", "KernelDensity" if family == "kde" else "IsolationForest")
     py_setitem(values, "numeric_mode", _density_save_mode(model, context))
-    py_setitem(values, "x", x)
+    if forest:
+        var held = fields["_if_forest"]
+        var members = Python.tuple("tree_offsets", "node_feature", "node_threshold", "node_left", "node_right")
+        if py_type(held) is not py_type(Python.tuple()) or len(held) != 5:
+            raise Error("TypeError: IsolationForest saved forest must be a tuple of five arrays")
+        for i in range(5):  # driver-loop: the five fixed forest members
+            py_setitem(values, members[i], held[i])
+    else:
+        py_setitem(values, "x", x)
     if family == "kde":
         py_setitem(values, "kernel", _density_save_text(_density_save_attribute(model, "kernel", context), context))
         py_setitem(values, "metric", _density_save_text(_density_save_attribute(model, "metric", context), context))

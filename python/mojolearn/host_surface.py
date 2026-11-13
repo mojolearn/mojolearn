@@ -2436,6 +2436,8 @@ FAMILIES = (
             "svc_dual_gemv",
             # lane perf-trees-misc (2026-11-05): the resident host forest
             "iforest_resident", "iforest_resident_release",
+            # lane fix-iforest-save-device-forest (2026-11-13): the saved forest out and in
+            "iforest_forest_export", "iforest_forest_run", "iforest_forest_io",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "svm_binary_api_v1",
         ),

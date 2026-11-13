@@ -186,13 +186,94 @@ def _host_resident_entries(entry: PythonObject, context: PythonObject) raises ->
     return Python.tuple(release)
 
 
+def _host_forest_words(forest: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK: `(words, views)` of a held saved forest: five flat native
+    arrays (offsets int32 of n_trees + 1, feature int32, threshold float32,
+    left int32, right int32, equal node counts), their addresses, the tree
+    and node counts; the views keep the buffers alive through the call. The
+    node-level checks run in the binding (`if_forest_check`)."""
+    var b = native_loaded_module("builtins")
+    if py_type(forest) is not b.tuple or len(forest) != 5:
+        raise Error("IsolationForest saved forest must be a tuple of five arrays")
+    var kinds = Python.tuple("i", "i", "f", "i", "i")
+    var words = Python.list()
+    var views = Python.list()
+    var sizes = List[Int]()
+    for i in range(5):  # driver-loop: the five fixed forest arrays
+        var view = classical_input(forest[i], context, "IsolationForest saved forest")
+        if (Int(py=view.ndim) != 1 or classical_kind(view, context) != String(kinds[i])
+                or Int(py=view.itemsize) != 4 or not classical_c_order(view, context)
+                or (not classical_is_array(view, context) and not Bool(py=view.dtype.isnative))):
+            raise Error("IsolationForest saved forest requires flat native 32-bit storage")
+        _ = py_call(words.append, classical_address(view))
+        _ = py_call(views.append, view)
+        sizes.append(Int(py=view.size))
+    var total = sizes[1]
+    if sizes[0] < 2 or sizes[2] != total or sizes[3] != total or sizes[4] != total:
+        raise Error("IsolationForest saved forest arrays do not have matching lengths")
+    _ = py_call(words.append, PythonObject(sizes[0] - 1))
+    _ = py_call(words.append, PythonObject(total))
+    return Python.tuple(words, views)
+
+
+def _host_forest_inference(model: PythonObject, fields: PythonObject, query: PythonObject, rows: Int, features: Int,
+                           want: Int, name: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
+    """A saved forest (`mojolearn-iforest-2`, held as `_if_forest`, no
+    training matrix) scored on the CPU (lane fix-iforest-save-device-forest):
+    `iforest_forest_run` walks the same four node arrays the host export
+    writes, so the scores are those of the fit that saved them, on every
+    column. A resident binary keeps the imported forest under a token, the
+    record anchored on the held forest tuple."""
+    var forest = fields["_if_forest"]
+    var unpacked = _host_forest_words(forest, context)
+    var entry = _kernel_entry("iforest_forest_run", context)
+    if not py_contains(fields, "max_samples_") or not py_contains(fields, "offset_"):
+        raise Error("IsolationForest saved forest lacks its fitted offset_ or max_samples_")
+    var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", context["output_context"])
+    var info = host_archive_typed(Python.tuple(4), "<f8", context["output_context"])
+    var resident = _host_resident_entries(entry, context)
+    var record = Optional[PythonObject]()
+    var held = 0
+    var same = False
+    if resident is not None:
+        record = py_present(trees_side_get(_HOST_TOKEN_SLOT, model))
+        same = Bool(record) and record.value()[1] is forest
+        if same:
+            held = Int(py=record.value()[0])
+    var b = native_loaded_module("builtins")
+    var params = Python.list(PythonObject(features), PythonObject(rows), py_call(b.int, fields["max_samples_"]),
+                             py_call(b.float, fields["offset_"]), PythonObject(want), PythonObject(held))
+    try:
+        _ = py_call(entry, unpacked[0], classical_address(query), classical_address(out) if want != 2 else PythonObject(0),
+                    classical_address(out) if want == 2 else PythonObject(0), classical_address(info), params)
+    except error:
+        var text = String(error)
+        if ("NaN" in text or "Infinit" in text or "infinit" in text
+                or "nonfinite" in text or "non-finite" in text
+                or "not finite" in text or "requires finite" in text or "must be finite" in text):
+            raise Error("Input X contains NaN or infinity (" + String(name) + ": " + text + ")")
+        raise Error("HostIForestKernelError: " + text)
+    _ = unpacked  # keep the forest views alive through the native call above
+    _ = query
+    if resident is not None:
+        var token = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(info)))[3])
+        if token != 0 and (token != held or not same):
+            var lifetime = record.value()[2] if Bool(record) and token == Int(py=record.value()[0]) else trees_resident_new(resident[0], token)
+            _ = trees_side_put(_HOST_TOKEN_SLOT, model, Python.list(PythonObject(token), forest, lifetime))
+    _ = info^
+    if want != 2 and public:
+        out = host_tree_wide(out, context)
+    return classical_input(out, context, "isolation forest result") if public and py_get(context, "ndarray") is not None else out
+
+
 def host_iforest_inference(model: PythonObject, fields: PythonObject, source: PythonObject, want: Int,
                            context: PythonObject, public: Bool) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var name = py_call(b.type.__dict__["__name__"].__get__, py_type(model))
     if host_sparse_format(source).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + String(name) + " takes dense X only.)")
-    if not py_contains(fields, "_x"):
+    var forest_only = not py_contains(fields, "_x") and py_contains(fields, "_if_forest")
+    if not py_contains(fields, "_x") and not forest_only:
         raise Error("IsolationForest requires fit before scoring")
     var query = _svc_input(source, context)
     var rows = Int(py=query.shape[0])
@@ -201,6 +282,8 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
         raise Error("IsolationForest query width differs from fitted dimensions")
     if not Bool(py=py_get(fields, "_mojolearn_fitting", False)):
         host_inference_feature_names(model, fields, context)
+    if forest_only:
+        return _host_forest_inference(model, fields, query, rows, features, want, name, context, public)
     var train = classical_input(fields["_x"], context, "IsolationForest fitted samples")
     if Int(py=train.ndim) != 2 or Int(py=train.shape[1]) != features:
         raise Error("IsolationForest fitted sample shape differs from fitted dimensions")
