@@ -206,6 +206,25 @@ def host_array_py(h: HostArray) raises -> PythonObject:
     return py_call(state[].ndarray, dims, dtype=PythonObject("int32" if h.int_words else "float32"), buffer=storage)
 
 
+def output_array_unfilled(shape: ShapeN) raises -> Tuple[PythonObject, Int]:
+    """A float32 ndarray of `shape` over UNINITIALIZED storage and its data
+    address, for a native writer that fills every element before the array
+    is returned (Program.run's fixed-shape route downloads straight into it:
+    no zero fill, no `__array_interface__` dict, no host staging copy)."""
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if not state[].ready:
+        raise Error("program array boundary must be initialized during session setup")
+    var dims = Python.list()
+    for k in range(shape.ndim):  # small-loop(shape.ndim: tensor rank): shape metadata, never array elements
+        _ = py_call(dims.append, PythonObject(shape.d[k]))
+    var made = _uninitialized_storage(shape.count() * 4)
+    var storage = made[0]
+    var address = made[1]
+    # The C ndarray constructor retains storage as .base.
+    var array = py_call(state[].ndarray, dims, dtype=PythonObject("float32"), buffer=storage)
+    return (array, address)
+
+
 def host_arrays_py(hs: List[HostArray]) raises -> PythonObject:
     """A Python list of host_array_py results."""
     var out = Python.list()
