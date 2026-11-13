@@ -121,36 +121,51 @@ def _samba_admit_value_with_types(value: PythonObject, admission: PythonObject, 
     raise Error("TypeError: Samba requires native input types; Python-defined protocols and subclasses are not supported")
 
 
-def _samba_admit_record(value: PythonObject, cls: PythonObject, record: PythonObject, admission: PythonObject, bi: PythonObject, depth: Int) raises:
+def _samba_record_fields(value: PythonObject, record: PythonObject, bi: PythonObject) raises -> PythonObject:
+    """The record's native dictionary, refused unless it is an exact dict
+    with exact string keys (no Python hash or equality hook can run on a
+    later field lookup)."""
     var fields = py_call(record[1], value)
     if py_type(fields) is not bi.dict:
         raise Error("TypeError: Samba owner metadata requires its native dictionary")
-    var names = record[2]
     var keys = py_call(bi.list, fields)
     for j in range(len(keys)):  # driver-loop: over native record keys before hash lookup
         if py_type(keys[j]) is not bi.str:
             raise Error("TypeError: Samba owner metadata requires native string keys")
+    return fields
+
+
+def _samba_admit_field(fields: PythonObject, name: PythonObject, cls: PythonObject, admission: PythonObject,
+                       bi: PythonObject, depth: Int) raises:
+    """One stored field of an admitted record (the caller checked it is
+    present), by the field's category; `depth` is the record's own depth."""
+    var item = fields[name]
+    var key = String(name)
+    if key == "lr_schedule":
+        samba_admit_schedule(item, admission)
+    elif py_contains(admission["metadata_fields"], name):
+        _samba_metadata_with_types(item, admission, bi, depth + 1)
+    elif key == "_runtime_lock":
+        if item is not None and not _samba_exact(py_type(item), admission["opaque_types"]):
+            raise Error("TypeError: Samba runtime locks require native lock owners")
+    elif key == "layers" or key == "params" or key == "_blocks" or key == "_wopt" or (key == "offsets" and cls is not admission["optimizer_class"]):
+        if py_type(item) is not bi.list and py_type(item) is not bi.tuple:
+            raise Error("TypeError: Samba owner sequences require native lists or tuples")
+        if key == "offsets" or (key == "layers" and cls is admission["config_class"]):
+            _samba_metadata_with_types(item, admission, bi, depth + 1)
+    elif key == "_w" or key == "arrays":
+        if py_type(item) is not bi.list and py_type(item) is not bi.tuple and not _samba_exact(py_type(item), admission["mapping_types"]):
+            raise Error("TypeError: Samba parameter registries require native containers")
+    _samba_admit_value_with_types(item, admission, bi, depth + 1)
+
+
+def _samba_admit_record(value: PythonObject, cls: PythonObject, record: PythonObject, admission: PythonObject, bi: PythonObject, depth: Int) raises:
+    var fields = _samba_record_fields(value, record, bi)
+    var names = record[2]
     for j in range(len(names)):  # driver-loop: over stored owner metadata and buffer references
         var name = names[j]
         if py_contains(fields, name):
-            var item = fields[name]
-            var key = String(name)
-            if key == "lr_schedule":
-                samba_admit_schedule(item, admission)
-            elif py_contains(admission["metadata_fields"], name):
-                _samba_metadata_with_types(item, admission, bi, depth + 1)
-            elif key == "_runtime_lock":
-                if item is not None and not _samba_exact(py_type(item), admission["opaque_types"]):
-                    raise Error("TypeError: Samba runtime locks require native lock owners")
-            elif key == "layers" or key == "params" or key == "_blocks" or key == "_wopt" or (key == "offsets" and cls is not admission["optimizer_class"]):
-                if py_type(item) is not bi.list and py_type(item) is not bi.tuple:
-                    raise Error("TypeError: Samba owner sequences require native lists or tuples")
-                if key == "offsets" or (key == "layers" and cls is admission["config_class"]):
-                    _samba_metadata_with_types(item, admission, bi, depth + 1)
-            elif key == "_w" or key == "arrays":
-                if py_type(item) is not bi.list and py_type(item) is not bi.tuple and not _samba_exact(py_type(item), admission["mapping_types"]):
-                    raise Error("TypeError: Samba parameter registries require native containers")
-            _samba_admit_value_with_types(item, admission, bi, depth + 1)
+            _samba_admit_field(fields, name, cls, admission, bi, depth)
 
 
 # ---------------------------------------------------------------- admitted once
@@ -338,6 +353,80 @@ def _samba_remember(value: PythonObject, admission: PythonObject, bi: PythonObje
     py_setitem(table, py_call(bi.id, value), Python.tuple(admission, _samba_shadow(value, admission, bi)))
 
 
+# ---------------------------------------------------------------- read-only operations
+
+# lane perf-neural-sessions (2026-11-13): SambaStack.forward / step / loss
+# admit only the model fields they read, not the whole record. The whole-record
+# shadow compare walked every object the model reaches on each call: the
+# registry views three times over (`arrays`, the optimizer's `params`, each
+# block's `_w`; about 117 Array subtrees of ten slot reads each at the board's
+# four-layer shape), `names`, `shapes`, `offsets`, the optimizer and the
+# generator. A forward reads none of those. Measured: samba-forward/bytes
+# NVIDIA 4.60 ms (0.8.55, no door) -> 10.58 (0.8.66) -> 10.54 ms (candidate
+# 4c2340386abc), AMD 6.10 -> 9.43 -> 8.36 (docs/plans/REGRESSIONS_0866_VS_0855.md
+# C4: "something in the door is rebuilt per call"). Each field read below is
+# admitted by the same per-field rule as the full walk (_samba_admit_field);
+# the record classes' descriptor guards run first as before. A field the
+# operation does not read cannot run a Python hook, so leaving it out of the
+# walk loses no refusal. Callers that read another field admit it at the read
+# (samba_admit_model_fields).
+def _samba_forward_fields() -> List[String]:
+    return [String("config"), String("numeric_mode"), String("n_total"), String("flat"),
+            String("_native_cpu_inference")]
+
+
+def _samba_model_record(value: PythonObject, admission: PythonObject) raises -> PythonObject:
+    var cls = py_type(value)
+    var records = admission["records"]
+    for i in range(len(records)):  # driver-loop: over connected model/config/state class identities
+        if cls is records[i][0]:
+            return records[i]
+    raise Error("TypeError: Samba requires native input types; Python-defined protocols and subclasses are not supported")
+
+
+def _samba_admit_model_fields(model: PythonObject, names: List[String], admission: PythonObject,
+                              bi: PythonObject) raises:
+    """Admit the named stored fields of the record `model` (absent ones and
+    names outside the record's ABI are skipped, as the full walk skips them).
+    `_blocks` admits each block as a remembered record (its shadow is
+    compared, not re-walked, on later calls)."""
+    var record = _samba_model_record(model, admission)
+    var cls = py_type(model)
+    var fields = _samba_record_fields(model, record, bi)
+    var allowed = record[2]
+    for k in range(len(names)):  # driver-loop: over the operation's read field names (model structure)
+        var name = PythonObject(names[k])
+        if not py_contains(allowed, name) or not py_contains(fields, name):
+            continue
+        if names[k] == "_blocks":
+            var blocks = fields[name]
+            if py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple:
+                raise Error("TypeError: Samba owner sequences require native lists or tuples")
+            for i in range(len(blocks)):  # driver-loop: over the stack's layer block records
+                _samba_admit_value_with_types(blocks[i], admission, bi, 1)
+            continue
+        _samba_admit_field(fields, name, cls, admission, bi, 1)
+
+
+def samba_admit_model_fields(model: PythonObject, names: List[String], context: PythonObject) raises:
+    """Admit further model fields a read-only operation reads on one route
+    only (the host route's `arrays` and `_blocks`)."""
+    _samba_admit_model_fields(model, names, context["admission"], native_loaded_module("builtins"))
+
+
+def _samba_admit_read_only(operation: String, values: PythonObject, admission: PythonObject, bi: PythonObject) raises:
+    if py_type(values) is not bi.tuple or len(values) < 3:
+        raise Error("TypeError: Samba operations require their native argument tuple")
+    for i in range(1, len(values)):  # small-loop(the operation's inputs, state, targets and lengths)
+        _samba_admit_value_with_types(values[i], admission, bi, 1)
+    var names = _samba_forward_fields()
+    # A stateful forward and a step read each layer block (state shapes,
+    # arithmetic profile, reports).
+    if operation == "step" or (operation == "forward" and values[2] is not None):
+        names.append(String("_blocks"))
+    _samba_admit_model_fields(values[0], names, admission, bi)
+
+
 # Class-watcher slot of a passed Samba layout guard (one record per class).
 comptime _SAMBA_GUARD_SLOT = "p3_samba_layout_guard_v1_"
 
@@ -370,6 +459,9 @@ def samba_admit(operation: String, values: PythonObject, context: PythonObject) 
         if py_type(values) is not bi.tuple or len(values) != 2 or py_type(values[1]) is not bi.tuple or len(values[1]) != 11:
             raise Error("TypeError: Samba constructor requires its native argument tuple")
         samba_admit_schedule(values[1][7], admission)
+    if operation == "forward" or operation == "step" or operation == "loss":
+        _samba_admit_read_only(operation, values, admission, bi)
+        return
     _samba_admit_value_with_types(values, admission, bi)
     # Type identity alone is insufficient: Array is an admitted buffer, but
     # bool(Array), list(Array), or scalar conversion is a Python operation.

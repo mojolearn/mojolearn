@@ -36,6 +36,7 @@ from bindings.causal_lm_public_door import _mutable, _writeback
 from bindings.causal_lm_construct_door import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.byte_perf_helpers_unpack import byte_view_bytes
+from bindings.samba_admission_door import samba_admit_model_fields
 # RUN (lane rs-neural): typed pieces, no Python import.
 from training.samba_inference_run import _m3_shapes, _m3_names, _samba_host_ref
 
@@ -392,17 +393,28 @@ def _samba_program_call(model: PythonObject, fields: PythonObject, config: Pytho
     # run's reports, read back with the run's one wait
     # (training/samba_program.mojo enqueue_reports); then the state pieces.
     var addresses: List[Int] = [registry, Int(py=ids._addr), Int(py=output._addr), 0]
+    if state is None:
+        # lane perf-neural-sessions (2026-11-13): the stateless forward
+        # requests no Mamba-3 reports. A stack's Mamba-3 blocks discard them
+        # (`_discard_reports`, set by samba_build_blocks on every one), and
+        # the 0.8.55 resident forward (`samba_resident_forward`, the measured
+        # winner: samba-forward/bytes NVIDIA 4.60 ms vs 10.54 candidate
+        # 4c2340386abc, AMD 6.10 vs 8.36) published none. The program path
+        # allocated four zero-filled host arrays per Mamba-3 layer per call
+        # (2 x 12 x 64 x 128 floats for h_last alone at the board shape),
+        # downloaded the reports into them and rewrote four block fields.
+        # Reports stay on the stateful forward and the step, whose callers
+        # read them. No kernel and no logits byte changes.
+        var stateless_words: List[Int] = [b, l, 0]
+        _ = samba_program_call(program, SAMBA_PROGRAM_FORWARD, addresses, stateless_words)
+        _ = ids  # keep the Python object alive through the native call above
+        _ = output
+        return output
     var report_addresses = List[Int]()
     var reports = _samba_program_reports(fields, config, b, report_addresses)
     for i in range(len(report_addresses)):  # driver-loop: over the Mamba-3 layers' report addresses
         addresses.append(report_addresses[i])
     var words: List[Int] = [b, l, len(report_addresses)]
-    if state is None:
-        _ = samba_program_call(program, SAMBA_PROGRAM_FORWARD, addresses, words)
-        _ = ids  # keep the Python object alive through the native call above
-        _ = output
-        _samba_publish_reports(fields, config, reports)
-        return output
     # The state was admitted at the public door (samba_admit).
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
@@ -507,6 +519,11 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         # The host route (CPU builds and the CPU inference model): the
         # installed CPU kernels layer by layer. Device builds never come
         # here (samba_program_arm).
+        # lane perf-neural-sessions: the door admits only the fields every
+        # route reads (bindings/samba_admission_door.mojo
+        # _samba_admit_read_only); this route also reads the registry views
+        # and the layer blocks, admitted here before the reads.
+        samba_admit_model_fields(model, [String("arrays"), String("_blocks")], context)
         var blocks = fields["_blocks"]
         var states = PythonObject(None)
         if state is not None:
