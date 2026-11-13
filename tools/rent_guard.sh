@@ -19,7 +19,7 @@
 # Tests (no API): MOJOLEARN_RENT_GUARD_TEST_PODS="<live> <own>" stands in for the API count;
 # tools/test_rent_guard.sh.
 set -uo pipefail
-CAP="${MOJOLEARN_RUNPOD_CAP:-8}"
+CAP="${MOJOLEARN_RUNPOD_CAP:-12}"
 OWN_CAP=""
 while [ $# -gt 0 ]; do
     case "$1" in
