@@ -23,6 +23,9 @@ board. This tool:
         bench_board_args), written as race-ids-full.txt and race-ids-smoke.txt (the smoke's rows and shape), the
         board arguments as board-args.txt (one per line) and the races the board no longer plans as
         not-planned.json. A race the board does not plan is recorded, never a refusal of the whole run.
+  ids-all  --vendor V --planner tools/bench_board.py --out-dir DIR
+        ON THE BOX, the full-board screen: every race the board plans on V (every family and lane, identical, our
+        arms), in the same files as ids plus races.json (family/lane/dataset per race, for measure_owed data-keys).
   pass-ids --full-ids FILE --smoke-json SMOKE.json... --out FILE
         the full-size ids of the planned races whose smoke passed (smoke-failed.json beside --out lists the rest).
   compare  --recipes JSON --board BOARD.json... [--out-md MD] [--out-json JSON] [--summary TXT]
@@ -47,6 +50,18 @@ With --prior-compare (the 0.8.66 compare JSON on main; a third, middle column):
   REGRESSION-VS-PRIOR / FASTER-VS-PRIOR   new / prior median ms above 1.10 / below 0.90
   RECOVERED      the prior was a REGRESSION vs 0.8.55 and the new board is SAME or FASTER vs 0.8.55
   STILL-REGRESSED the prior was a REGRESSION vs 0.8.55 and the new board still is
+With --best-ever [FILE] (default bench/results/board_best_ever/<vendor>.json, tools/board_best_ever.py mine): a
+"best ever (NV)" / "(AMD)" column, our best time ever on that race key (the same device when it has one), with its
+date and release, and new / best-ever:
+  BEST-EVER-REGRESSION  new / best ever > 1.10 with the same explicit parameters and the same output hash
+  BEST-EVER-REGRESSION-UNCHECKED  new / best ever > 1.10, nothing differs, but the params or the hash of one side
+                 were not recorded (boards before the parameter read-back)
+  PARAMS-DIFFER  the best-ever cell's parameters (a shared key) or output hash differ from the new cell's: a slower
+                 time may be a parameter or algorithm change, not a regression
+  BEST-EVER-HW-DIFF  the best ever was measured on another device than the new board's
+Every our-arm cell of the new boards outside the recipes (a full-board screen, tools/ops/paper_compare_job.sh
+board-all) gets an extra row in its own table with the same best-ever column; the recipe rows and their flags are
+unchanged.
 A board made from candidate wheels (bench_board --candidate-wheel; box.mojolearn.wheel.source = candidate) is
 labelled "candidate <sha12> (<version>)" everywhere, with its source commit and wheel sha256s, never as a release.
 
@@ -66,6 +81,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import board_quality as BQ  # noqa: E402
+import board_best_ever as BE  # noqa: E402
 
 SCHEMA = "mojolearn-paper-compare-recipes/1"
 COMPARE_SCHEMA = "mojolearn-paper-compare/1"
@@ -365,6 +381,50 @@ def cmd_ids(args):
     return 0
 
 
+def plan_all(planner, vendor):
+    """The full-board screen (tools/ops/paper_compare_job.sh board-all): (full ids, smoke ids, {id: why not},
+    board args, races) of EVERY race the board plans on the vendor (every family and lane, the board's datasets,
+    identical, our arms; no --gpu-opponents-only: every own configuration is screened)."""
+    modes = planner.modes_for(vendor, "identical")
+    families = tuple(planner.FAMILIES)
+
+    def plan(rows, shape):
+        return {r["id"]: r for r in planner.plan_races(vendor, modes, families, None, planner.DATASETS, rows, shape)}
+
+    full = plan(None, "full")
+    smoke_rows = int(getattr(planner, "SMOKE_ROWS", 2000))
+    smoke = plan(smoke_rows, SMOKE_SHAPE)
+    full_ids, smoke_ids, missing = [], [], {}
+    for rid in sorted(full):
+        sid = smoke_id(rid, smoke_rows)
+        if sid not in smoke:
+            missing[rid] = "the board plans no smoke race %s" % sid
+            continue
+        full_ids.append(rid)
+        smoke_ids.append(sid)
+    bargs = ["--vendor", vendor, "--families", ",".join(families), "--modes", "identical",
+             "--datasets", ",".join(planner.DATASETS)]
+    races = [{"race_id": rid, "family": full[rid].get("family"), "lane": full[rid].get("lane"),
+              "dataset": full[rid].get("dataset")} for rid in full_ids]
+    return full_ids, smoke_ids, missing, bargs, races
+
+
+def cmd_ids_all(args):
+    planner = load_planner(args.planner)
+    full, smoke, missing, bargs, races = plan_all(planner, args.vendor)
+    os.makedirs(args.out_dir, exist_ok=True)
+    for name, lines in (("race-ids-full.txt", full), ("race-ids-smoke.txt", smoke), ("board-args.txt", bargs)):
+        with open(os.path.join(args.out_dir, name), "w") as fh:
+            fh.write("".join(x + "\n" for x in lines))
+    with open(os.path.join(args.out_dir, "not-planned.json"), "w") as fh:
+        json.dump(missing, fh, indent=1, sort_keys=True)
+    # the shape tools/measure_owed.py data-keys reads as --paper-recipes (family, lane, dataset per race)
+    with open(os.path.join(args.out_dir, "races.json"), "w") as fh:
+        json.dump({"recipes": races}, fh, indent=1, sort_keys=True)
+    print("PAPER-IDS-ALL vendor=%s planned=%d no_smoke=%d" % (args.vendor, len(full), len(missing)))
+    return 0
+
+
 def race_smoke_key(rid):
     """bench_board.smoke_key of a race id: family/lane/dataset, the key smoke.json files its races under and the
     board's smoke gate reads (the same race at smoke and at full size)."""
@@ -578,8 +638,62 @@ def attach_prior(row, prior):
     return row
 
 
-def compare(doc, boards, not_run_why=None, prior=None, prior_label=None):
-    """PRIOR: {recipe key: row} of the previous release's compare JSON (the middle column), or None."""
+VENDOR_TAG = {"nvidia": "NV", "amd": "AMD"}
+
+
+def new_cell_records(boards, vendor):
+    """{race key: our identical cell record} of the new boards (tools/board_best_ever.cell_records; later boards
+    win, as in merge_boards)."""
+    out = {}
+    for b in boards:
+        for rec in BE.cell_records(b):
+            if rec["vendor"] == vendor:
+                out[rec["key"]] = rec
+    return out
+
+
+def attach_best_ever(row, new_rec, best_rows):
+    """The best-ever column of one row (module docstring). NEW_REC: the new cell's record or None."""
+    b = (best_rows or {}).get(row["key"])
+    row.update(best_ever_ms=None, best_ever_date=None, best_ever_release=None, best_ever_commit=None,
+               best_ever_device=None, best_ever_hash=None, ratio_vs_best_ever=None, best_ever_params_differ=[],
+               best_ever_hash_differs=False)
+    if not b:
+        return row
+    device = (new_rec or {}).get("device")
+    best = (b.get("best_by_device") or {}).get(device) if device else None
+    best = best or b["best"]
+    row.update(best_ever_ms=best["ms"], best_ever_date=best.get("date"), best_ever_release=best.get("release"),
+               best_ever_commit=best.get("commit"), best_ever_device=best.get("device"),
+               best_ever_hash=best.get("hash"))
+    if not new_rec or not number(row.get("new_ms")):
+        return row
+    pd = BE.params_differ(best.get("params"), new_rec.get("params"))
+    hd = bool(best.get("hash") and new_rec.get("hash") and best["hash"] != new_rec["hash"])
+    row["best_ever_params_differ"], row["best_ever_hash_differs"] = pd, hd
+    ratio = row["new_ms"] / best["ms"] if best["ms"] else None
+    row["ratio_vs_best_ever"] = ratio
+    if pd or hd:
+        row["flags"].append("PARAMS-DIFFER")
+    elif ratio is not None and ratio > SLOWER:
+        known = (isinstance(best.get("params"), dict) and isinstance(new_rec.get("params"), dict)
+                 and best.get("hash") and new_rec.get("hash"))
+        row["flags"].append("BEST-EVER-REGRESSION" if known else "BEST-EVER-REGRESSION-UNCHECKED")
+    if device and best.get("device") and best["device"] != device:
+        row["flags"].append("BEST-EVER-HW-DIFF")
+    return row
+
+
+def extra_row(rec):
+    """A row for a new-board cell outside the recipes (the full-board screen): new time and best ever only."""
+    return {"key": rec["key"], "race_id": rec["race_id"], "family": rec.get("family"), "lane": rec.get("lane"),
+            "dataset": rec.get("dataset"), "phase": rec["phase"], "arm": rec["arm"], "batch": rec.get("batch"),
+            "new_ms": rec["ms"], "new_hash": rec.get("hash"), "new_device": rec.get("device"), "flags": []}
+
+
+def compare(doc, boards, not_run_why=None, prior=None, prior_label=None, best_ever=None):
+    """PRIOR: {recipe key: row} of the previous release's compare JSON (the middle column), or None.
+    BEST_EVER: a tools/board_best_ever.py document of the compare's vendor (the best-ever column), or None."""
     races, gpus, versions = merge_boards(boards)
     candidate = board_candidate(boards)
     paper_gpu = doc["source"].get("gpu")
@@ -587,6 +701,21 @@ def compare(doc, boards, not_run_why=None, prior=None, prior_label=None):
     rows = [compare_one(rec, races, not_run_why or {}, hw_diff) for rec in doc["recipes"]]
     if prior is not None:
         rows = [attach_prior(r, prior) for r in rows]
+    extra, extra_counts, be_label = [], {}, None
+    if best_ever is not None:
+        if best_ever.get("vendor") != doc["vendor"]:
+            raise SystemExit("paper_compare: the best-ever file is %s, the recipes %s"
+                             % (best_ever.get("vendor"), doc["vendor"]))
+        be_label = "best ever (%s)" % VENDOR_TAG.get(doc["vendor"], doc["vendor"])
+        new_recs = new_cell_records(boards, doc["vendor"])
+        best_rows = best_ever.get("rows") or {}
+        rows = [attach_best_ever(r, new_recs.get(r["key"]), best_rows) for r in rows]
+        recipe_keys = {r["key"] for r in doc["recipes"]}
+        extra = [attach_best_ever(extra_row(rec), rec, best_rows)
+                 for k, rec in sorted(new_recs.items()) if k not in recipe_keys]
+        for r in extra:
+            for f in r["flags"]:
+                extra_counts[f] = extra_counts.get(f, 0) + 1
     counts = {}
     for r in rows:
         for f in r["flags"]:
@@ -595,7 +724,9 @@ def compare(doc, boards, not_run_why=None, prior=None, prior_label=None):
             "new_versions": versions, "new_label": new_label(candidate, versions), "candidate": candidate,
             "prior_label": prior_label if prior is not None else None,
             "paper_gpu": paper_gpu, "new_gpus": gpus, "hw_diff": hw_diff,
-            "thresholds": doc.get("thresholds"), "recipes": len(rows), "flag_counts": counts, "rows": rows}
+            "thresholds": doc.get("thresholds"), "recipes": len(rows), "flag_counts": counts, "rows": rows,
+            "best_ever_label": be_label, "best_ever_source": (best_ever or {}).get("mined_at_head"),
+            "extra_rows": extra, "extra_flag_counts": extra_counts}
 
 
 def load_prior(path):
@@ -647,12 +778,16 @@ def render_md(res):
     lines.append("Flags: " + ", ".join("%s %d" % kv for kv in sorted(res["flag_counts"].items())))
     lines.append("")
     pcols = "%s ms | new/%s | " % (pl, pl) if pl else ""
-    lines.append("| recipe | %s ms | %snew ms | ratio | flags | quality %s | quality new | q | best opponent "
-                 "(ms) | vs opp %s | vs opp new | note |" % (res["paper_version"], pcols, res["paper_version"],
+    bl = res.get("best_ever_label")
+    bcols = "%s ms | best-ever date, release | new/best | " % bl if bl else ""
+    lines.append("| recipe | %s ms | %snew ms | ratio | %sflags | quality %s | quality new | q | best opponent "
+                 "(ms) | vs opp %s | vs opp new | note |" % (res["paper_version"], pcols, bcols, res["paper_version"],
                                                              res["paper_version"]))
-    lines.append("|---|---:|%s---:|---:|---|---|---|---|---|---:|---:|---|" % ("---:|---:|" if pl else ""))
+    lines.append("|---|---:|%s---:|---:|%s---|---|---|---|---|---:|---:|---|" % ("---:|---:|" if pl else "",
+                                                                             "---:|---|---:|" if bl else ""))
     for r in res["rows"]:
         pvals = ("%s | %s | " % (fmt_ms(r.get("prior_ms")), fmt_ratio(r.get("ratio_vs_prior")))) if pl else ""
+        bvals = best_ever_cells(r) if bl else ""
         b = r.get("best_opponent") or {}
         note = []
         if r.get("why"):
@@ -665,14 +800,43 @@ def render_md(res):
             note.append("quality: " + "; ".join(r["quality_failures"])[:200])
         if r.get("params_diff"):
             note.append("params: " + ",".join(r["params_diff"][:6]))
-        lines.append("| %s | %s | %s%s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
-            r["key"], fmt_ms(r.get("old_ms")), pvals, fmt_ms(r.get("new_ms")), fmt_ratio(r.get("ratio")),
+        if r.get("best_ever_params_differ") or r.get("best_ever_hash_differs"):
+            note.append("vs best ever: " + ",".join(r.get("best_ever_params_differ", [])[:6] +
+                                                    (["hash"] if r.get("best_ever_hash_differs") else [])))
+        lines.append("| %s | %s | %s%s | %s | %s%s | %s | %s | %s | %s | %s | %s | %s |" % (
+            r["key"], fmt_ms(r.get("old_ms")), pvals, fmt_ms(r.get("new_ms")), fmt_ratio(r.get("ratio")), bvals,
             " ".join(r["flags"]), fmt_q(r.get("old_quality")), fmt_q(r.get("new_quality")),
             r.get("quality_verdict", "-"),
             "%s (%s)" % (b.get("arm"), fmt_ms(b.get("opponent_ms"))) if b else "-",
             fmt_ratio(b.get("ratio")), fmt_ratio(b.get("ratio_new")), "; ".join(note).replace("|", "/")))
     lines.append("")
+    if bl:
+        ex = res.get("extra_rows") or []
+        lines.append("## Rows outside the paper's recipes: %d (new against %s)" % (len(ex), bl))
+        lines.append("")
+        if res.get("extra_flag_counts"):
+            lines.append("Flags: " + ", ".join("%s %d" % kv for kv in sorted(res["extra_flag_counts"].items())))
+            lines.append("")
+        lines.append("| race | new ms | %s ms | best-ever date, release | new/best | flags | note |" % bl)
+        lines.append("|---|---:|---:|---|---:|---|---|")
+        for r in ex:
+            note = ""
+            if r.get("best_ever_params_differ") or r.get("best_ever_hash_differs"):
+                note = "vs best ever: " + ",".join(r.get("best_ever_params_differ", [])[:6] +
+                                                   (["hash"] if r.get("best_ever_hash_differs") else []))
+            elif r.get("best_ever_ms") is None:
+                note = "no earlier measurement"
+            lines.append("| %s | %s | %s%s | %s |" % (r["key"], fmt_ms(r.get("new_ms")), best_ever_cells(r),
+                                                       " ".join(r["flags"]), note.replace("|", "/")))
+        lines.append("")
     return "\n".join(lines)
+
+
+def best_ever_cells(r):
+    """'best ms | date, release | new/best | ' of one row."""
+    when = ", ".join(str(x) for x in (r.get("best_ever_date"), r.get("best_ever_release")) if x) or "-"
+    return "%s | %s | %s | " % (fmt_ms(r.get("best_ever_ms")), when.replace("|", "/"),
+                                fmt_ratio(r.get("ratio_vs_best_ever")))
 
 
 def render_summary(res, top=8):
@@ -707,8 +871,21 @@ def render_summary(res, top=8):
             out.append("worse than %s:" % res["prior_label"])
             out += ["  %.2fx %s (%s -> %s ms)" % (r["ratio_vs_prior"], r["key"], fmt_ms(r["prior_ms"]),
                                                   fmt_ms(r["new_ms"])) for r in worse[:top]]
+    if res.get("best_ever_label"):
+        ex = res.get("extra_rows") or []
+        out.append("%s: extra rows outside the recipes=%d; extra flags: %s" % (
+            res["best_ever_label"], len(ex),
+            " ".join("%s=%d" % kv for kv in sorted((res.get("extra_flag_counts") or {}).items())) or "-"))
+        for label, pool in (("paper rows", rows), ("extra rows", ex)):
+            hit = sorted([r for r in pool if "BEST-EVER-REGRESSION" in r["flags"]],
+                         key=lambda r: -r["ratio_vs_best_ever"])
+            if hit:
+                out.append("worse than best ever, same params and hash (%s, %d):" % (label, len(hit)))
+                out += ["  %.2fx %s (best %s ms %s %s -> %s ms)" % (
+                    r["ratio_vs_best_ever"], r["key"], fmt_ms(r["best_ever_ms"]), r.get("best_ever_release"),
+                    r.get("best_ever_date"), fmt_ms(r["new_ms"])) for r in hit[:top]]
     for flag in ("RECOVERED", "STILL-REGRESSED", "FIXED", "BROKEN", "QUALITY-DROP", "QUALITY-CHANGE", "NOW-WINS",
-                 "NOW-LOSES", "PARAMS-DIFF", "NOT-RUN"):
+                 "NOW-LOSES", "PARAMS-DIFF", "NOT-RUN", "BEST-EVER-REGRESSION-UNCHECKED", "PARAMS-DIFFER"):
         hit = [r for r in rows if flag in r["flags"]]
         if hit:
             out.append("%s (%d): %s%s" % (flag, len(hit), ", ".join(r["key"] for r in hit[:6]),
@@ -735,7 +912,11 @@ def cmd_compare(args):
         prior, plabel = load_prior(args.prior_compare)
         if args.prior_label:
             plabel = args.prior_label
-    res = compare(doc, boards, why, prior, plabel)
+    best = None
+    if args.best_ever:
+        best = BE.load(os.path.join(REPO, "bench", "results", "board_best_ever", "%s.json" % doc["vendor"])
+                       if args.best_ever == "auto" else args.best_ever)
+    res = compare(doc, boards, why, prior, plabel, best)
     v = doc["vendor"]
     md = args.out_md or os.path.join(OUT_DIR, "COMPARE-%s.md" % v)
     js = args.out_json or os.path.join(os.path.dirname(os.path.abspath(md)), "compare-%s.json" % v)
@@ -762,6 +943,10 @@ def build_parser():
     i.add_argument("--recipes", required=True)
     i.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
     i.add_argument("--out-dir", required=True)
+    a = sub.add_parser("ids-all", help="(box) every race the board plans: the full-board screen")
+    a.add_argument("--vendor", required=True, choices=VENDORS)
+    a.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
+    a.add_argument("--out-dir", required=True)
     s = sub.add_parser("pass-ids", help="(box) the planned races whose smoke passed")
     s.add_argument("--full-ids", required=True)
     s.add_argument("--smoke-json", action="append", default=[])
@@ -775,6 +960,10 @@ def build_parser():
                    help="the previous release's compare JSON (bench/results/paper_compare/compare-<vendor>.json, "
                         "0.8.66): the middle column, REGRESSION-VS-PRIOR / RECOVERED / STILL-REGRESSED")
     c.add_argument("--prior-label", default=None, help="the middle column's name (default its new_versions)")
+    c.add_argument("--best-ever", nargs="?", const="auto", default=None, metavar="FILE",
+                   help="the best-ever column (tools/board_best_ever.py mine; no FILE: "
+                        "bench/results/board_best_ever/<vendor>.json): BEST-EVER-REGRESSION, PARAMS-DIFFER, and a "
+                        "row for every new cell outside the recipes")
     c.add_argument("--out-md", default=None)
     c.add_argument("--out-json", default=None)
     c.add_argument("--summary", default=None)
@@ -783,7 +972,8 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    return {"recipes": cmd_recipes, "ids": cmd_ids, "pass-ids": cmd_pass_ids, "compare": cmd_compare}[args.cmd](args)
+    return {"recipes": cmd_recipes, "ids": cmd_ids, "ids-all": cmd_ids_all, "pass-ids": cmd_pass_ids,
+            "compare": cmd_compare}[args.cmd](args)
 
 
 if __name__ == "__main__":

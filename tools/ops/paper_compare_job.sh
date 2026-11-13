@@ -41,6 +41,10 @@
 #            (tools/measure_owed.py units.tsv: neighbouring --rows groups, the prior arm, the B arms), then the
 #            driver rows (tools/measure_owed_driver.py per arm interpreter)
 #   compare  paper_compare compare (COMPARE/compare/SUMMARY-<vendor>) and measure_owed report (OWED*-<vendor>)
+#   board-all (PC_PARTS=board-all; the full-board NVIDIA screen, Andrew 2026-11-13) instead of the above: every race
+#            the board plans (tools/paper_compare.py ids-all), our arm only, smoke in the same parallel shards, one
+#            timed board, compare against the paper recipes and every row's best time ever (--best-ever); see the
+#            board-all block below and docs/plans/PRE_0867_MEASUREMENT.md "Full-board NVIDIA screen"
 # PC_PARTS (default all: plan,install,smoke,board,owed,drivers,compare) runs a subset and PC_OWED_ARMS (comma list,
 # default all) the owed units of some arms, so a job over the 240-minute nvidia_central.sh cap is split into
 # submits on the same results dir (the boards resume from board.json; a later submit reruns install, which only
@@ -267,6 +271,129 @@ if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
 fi
 B_CSV=$(IFS=,; echo "${B_NAMES[*]:-}")
 
+run_as() {   # arm: the board args that run on that arm's installed venv (no install)
+    echo --python-env "${ARM_PY[$1]}" --skip-install --wheel-manifest "${ARM_MAN[$1]}" --mojolearn-version "$(arm_version "$1")"
+}
+arm_version() { set -- ${ARM_ARGS[$1]}; echo "$2"; }   # ARM_ARGS starts with --mojolearn-version <v>
+# the parallel smoke shard count for NRACE races (see the smoke phase for why it is host-bound): min(nproc/2,
+# MemAvailable / PC_SMOKE_MEM_GB (12), NVIDIA GPU GB / PC_SMOKE_GPU_GB (3), PC_SMOKE_MAX (16), races);
+# PC_SMOKE_SHARDS overrides. Sets S, MEMG and GPUG.
+smoke_shards() {
+    local nrace=$1 bymem
+    MEMG=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo 2> /dev/null || echo 16)
+    S=${PC_SMOKE_SHARDS:-$(( $(nproc) / 2 ))}
+    bymem=$(( MEMG / ${PC_SMOKE_MEM_GB:-12} ))
+    GPUG=0
+    if [ "$V" = nvidia ]; then
+        GPUG=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2> /dev/null | head -1 | awk '{print int($1 / 1024)}')
+    fi
+    if [ -z "${PC_SMOKE_SHARDS:-}" ]; then
+        [ "$S" -gt "${PC_SMOKE_MAX:-16}" ] && S=${PC_SMOKE_MAX:-16}
+        [ "$S" -gt "$bymem" ] && S=$bymem
+        [ "${GPUG:-0}" -gt 0 ] && [ "$S" -gt $(( GPUG / ${PC_SMOKE_GPU_GB:-3} )) ] && S=$(( GPUG / ${PC_SMOKE_GPU_GB:-3} ))
+    fi
+    [ "$S" -gt "$nrace" ] && S=$nrace
+    [ "$S" -lt 1 ] && S=1
+    return 0
+}
+
+# ---- board-all: the full-board screen (Andrew, 2026-11-13) ------------------------------------------------------
+# PC_PARTS=board-all (= all-plan,all-install,all-smoke,all-board,all-compare; each can be given alone to split a
+# job over the 240-minute cap: the board resumes from board-all/board.json) runs EVERY race the board plans on this
+# vendor (tools/paper_compare.py ids-all: every family and lane, identical, our arms only; opponents are the stored
+# cells, never raced) instead of the paper flow, and compares the result against the paper recipes AND every row's
+# best time ever (tools/paper_compare.py compare --best-ever: bench/results/board_best_ever/<vendor>.json, mined by
+# tools/board_best_ever.py). The smoke runs in the smoke phase's parallel shards (smoke_shards); the timed board is
+# one process on the one GPU, serial by nature (timing must not share the GPU). Results: plan-all/, install-all/,
+# smoke-all-s<i>/, board-all/, COMPARE-ALL/compare-all/SUMMARY-ALL-<vendor>.
+[[ "$PARTS" == *",board-all,"* ]] && PARTS="$PARTS,all-plan,all-install,all-smoke,all-board,all-compare,"
+if part all-plan || part all-install || part all-smoke || part all-board || part all-compare; then
+    PA="$RES/plan-all"
+    mkdir -p "$PA"
+    if part all-plan; then
+        phase all-plan
+        $PY tools/paper_compare.py ids-all --vendor "$V" --planner tools/bench_board.py --out-dir "$PA" \
+            > "$RES/logs/ids-all.log" 2>&1
+        rc=$?; tail -n 2 "$RES/logs/ids-all.log"
+        phase_end $rc
+    fi
+    [ -s "$PA/race-ids-full.txt" ] || { say "no full-board plan in $PA (run part all-plan)"; exit 5; }
+    $PY tools/measure_owed.py data-keys --paper-recipes "$PA/races.json" --planner tools/bench_board.py \
+        --vendor "$V" --data-root "$DATA_ROOT" > "$PA/data-keys.tsv" 2> "$RES/logs/data-keys-all.log" || {
+        say "could not list the full board's datasets (logs/data-keys-all.log)"; exit 4; }
+    MISSING_KEYS=$(while IFS=$'\t' read -r key path; do [ -f "$path" ] || printf '%s ' "$key"; done < "$PA/data-keys.tsv")
+    if [ -n "$MISSING_KEYS" ]; then
+        say "missing datasets under $DATA_ROOT: $MISSING_KEYS; stage them from the Mac:" \
+            "sh tools/dataset_store.sh stage \"<ssh flags+target>\" $MISSING_KEYS"
+        exit 4
+    fi
+    mapfile -t BARGS_ALL < "$PA/board-args.txt"
+    COMMON_ALL=("${BARGS_ALL[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only --fixtures-venv "$CACHE_ROOT/venv-nf")
+    if part all-install; then
+        phase all-install
+        # shellcheck disable=SC2086
+        $PY tools/bench_board.py "${COMMON_ALL[@]}" ${ARM_ARGS[candidate]} --ours-install-only --install-only \
+            --venv "$CACHE_ROOT/venv-candidate" --cache "$CACHE_ROOT/i-candidate" --wheel-manifest "${ARM_MAN[candidate]}" \
+            --race-ids @"$PA/race-ids-full.txt" --out "$RES/install-all" > "$RES/logs/install-all.log" 2>&1
+        rc=$?; say "install candidate rc=$rc $(grep -m 1 -h '^BOARD-INSTALL' "$RES/logs/install-all.log" 2>/dev/null)"
+        phase_end $rc
+    fi
+    [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (logs/install-all.log)"; exit 6; }
+    if part all-smoke; then
+        phase all-smoke
+        NRACE=$(grep -c . "$PA/race-ids-smoke.txt")
+        smoke_shards "$NRACE"
+        say "full-board smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB)"
+        pids=()
+        # shellcheck disable=SC2046
+        for i in $(seq 1 "$S"); do
+            $PY tools/bench_board.py "${COMMON_ALL[@]}" $(run_as candidate) --cache "$CACHE_ROOT/c$i" \
+                --race-ids @"$PA/race-ids-smoke.txt" --smoke --drop-race-scratch --shard "$i/$S" \
+                --out "$RES/smoke-all-s$i" > "$RES/logs/smoke-all-s$i.log" 2>&1 &
+            pids+=($!)
+        done
+        src=0
+        for p in "${pids[@]}"; do wait "$p"; r=$?; [ $r -gt $src ] && src=$r; done
+        grep -h -E '^SMOKE (PASS|FAIL)' "$RES"/logs/smoke-all-s*.log | head -n 8
+        for d in "$RES"/smoke-all-s*/; do rm -rf "${d}work" "${d}evidence"; done
+        for c in "$CACHE_ROOT"/c*/; do case "$(basename "$c")" in c1) ;; c[0-9]*) rm -rf "$c" ;; esac; done
+        say "full-board smoke scratch pruned; $(df -h /root 2> /dev/null | awk 'NR==2 {print $4 " free on /root"}')"
+        phase_end $src
+    fi
+    SJA=()
+    for f in "$RES"/smoke-all-s*-smoke/smoke.json; do [ -f "$f" ] && SJA+=(--smoke-json "$f"); done
+    $PY tools/paper_compare.py pass-ids --full-ids "$PA/race-ids-full.txt" "${SJA[@]}" --out "$PA/race-ids-pass.txt" \
+        > "$RES/logs/pass-ids-all.log" 2>&1
+    tail -n 1 "$RES/logs/pass-ids-all.log"
+    if part all-board; then
+        phase all-board
+        if [ -s "$PA/race-ids-pass.txt" ]; then
+            # shellcheck disable=SC2046
+            $PY tools/bench_board.py "${COMMON_ALL[@]}" $(run_as candidate) --cache "$CACHE_ROOT/c1" \
+                --race-ids @"$PA/race-ids-pass.txt" "${SJA[@]}" --out "$RES/board-all" > "$RES/logs/board-all.log" 2>&1
+            rc=$?; say "board-all rc=$rc: $(tail -n 1 "$RES/logs/board-all.log" | head -c 200)"
+        else
+            say "no full-board race passed its smoke"; rc=6
+        fi
+        phase_end $rc
+    fi
+    if part all-compare; then
+        phase all-compare
+        NR=()
+        for f in "$PA/not-planned.json" "$PA/smoke-failed.json"; do [ -f "$f" ] && NR+=(--not-run "$f"); done
+        PR=()
+        [ "$MODE" = candidate ] && [ -f "$PRIOR_COMPARE" ] && PR=(--prior-compare "$PRIOR_COMPARE" --prior-label "$PRIOR")
+        $PY tools/paper_compare.py compare --recipes "$RECIPES" --board "$RES/board-all/board.json" "${NR[@]}" "${PR[@]}" \
+            --best-ever "${PC_BEST_EVER:-$TREE/bench/results/board_best_ever/$V.json}" \
+            --out-md "$RES/COMPARE-ALL-$V.md" --out-json "$RES/compare-all-$V.json" --summary "$RES/SUMMARY-ALL-$V.txt" \
+            > "$RES/logs/compare-all.log" 2>&1
+        rc=$?; head -n 4 "$RES/logs/compare-all.log"
+        phase_end $rc
+    fi
+    echo finished > "$J/.phase"
+    exit "$WORST"
+fi
+
 # ---- plan (CPU, seconds) -----------------------------------------------------------------------------------------
 if part plan; then
     phase plan
@@ -302,10 +429,6 @@ mapfile -t BARGS < "$BA"
 # board process makes them beside its algos blocks from one shared CPU-torch venv (candidate 4c2340386abc smoked
 # conv2d, gcn, graphsage and moe as "not run": no fixture set was on the box)
 COMMON=("${BARGS[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only --fixtures-venv "$CACHE_ROOT/venv-nf")
-run_as() {   # arm: the board args that run on that arm's installed venv (no install)
-    echo --python-env "${ARM_PY[$1]}" --skip-install --wheel-manifest "${ARM_MAN[$1]}" --mojolearn-version "$(arm_version "$1")"
-}
-arm_version() { set -- ${ARM_ARGS[$1]}; echo "$2"; }   # ARM_ARGS starts with --mojolearn-version <v>
 
 # ---- install (CPU, every arm at once) + the dry run ------------------------------------------------------------
 if part install; then
@@ -337,26 +460,13 @@ cat "$RES/plan/race-ids-smoke.txt" "$RES/plan-owed/smoke-ids.txt" 2> /dev/null |
 if part smoke; then
     phase smoke
     NRACE=$(grep -c . "$SMOKE_IDS")
-    MEMG=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo 2> /dev/null || echo 16)
     # NOT GPU-bound (read from the code; not measured): a smoke race runs SMOKE_ROWS=2000 rows at the `small` shape,
     # so each shard's time is CPU and I/O on the host: a fresh worker process per arm (interpreter start, `import
     # mojolearn`, the GPU context), the dataset npz read and sliced, the evidence sealed. Each shard runs one race at a
     # time and mostly one core, which is why 5 shards (nproc/4) showed busy 2-4 of 20 cores (2026-11-12, AMD). So the
     # shard count is nproc/2, bounded by host memory (PC_SMOKE_MEM_GB per shard), by GPU memory (PC_SMOKE_GPU_GB per
-    # shard's contexts and small buffers) and PC_SMOKE_MAX (16).
-    S=${PC_SMOKE_SHARDS:-$(( $(nproc) / 2 ))}
-    BYMEM=$(( MEMG / ${PC_SMOKE_MEM_GB:-12} ))
-    GPUG=0
-    if [ "$V" = nvidia ]; then
-        GPUG=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2> /dev/null | head -1 | awk '{print int($1 / 1024)}')
-    fi
-    if [ -z "${PC_SMOKE_SHARDS:-}" ]; then
-        [ "$S" -gt "${PC_SMOKE_MAX:-16}" ] && S=${PC_SMOKE_MAX:-16}
-        [ "$S" -gt "$BYMEM" ] && S=$BYMEM
-        [ "${GPUG:-0}" -gt 0 ] && [ "$S" -gt $(( GPUG / ${PC_SMOKE_GPU_GB:-3} )) ] && S=$(( GPUG / ${PC_SMOKE_GPU_GB:-3} ))
-    fi
-    [ "$S" -gt "$NRACE" ] && S=$NRACE
-    [ "$S" -lt 1 ] && S=1
+    # shard's contexts and small buffers) and PC_SMOKE_MAX (16): smoke_shards.
+    smoke_shards "$NRACE"
     say "smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB), one venv"
     pids=()
     # shellcheck disable=SC2046

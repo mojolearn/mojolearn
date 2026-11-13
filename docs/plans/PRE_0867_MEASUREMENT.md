@@ -175,3 +175,29 @@ release.
 
 Store the result under `bench/results/paper_compare/candidate-<sha12>/`. Never overwrite the 0.8.66
 `compare-<vendor>.json`: it is the middle column of the next compare.
+
+## 4. Full-board NVIDIA screen
+
+After the restores land (Andrew, 2026-11-13): every race the board knows on NVIDIA, our arm only (opponents are the
+stored cells, never raced), compared against the paper recipes and against every row's best time ever, to find
+regressions outside the paper's rows. Refresh the best-ever files first on the Mac (seconds, every core) and push
+them with the job tree: `python3 tools/board_best_ever.py mine` (writes `bench/results/board_best_ever/{nvidia,amd}.json`).
+
+Stage as in section 1 (the printed `SUBMIT` line), then submit with `PC_PARTS` set to the board-all steps. The
+plan lists every race (653 on 2026-11-13); at about 55 s per timed race that is about 10 h, so split it on the
+same `--results` dir (the board resumes from `board-all/board.json`):
+```
+bash tools/nvidia_central.sh submit measure --cap 240 --note all-<sha12>-nvidia --results box-out/all-<sha12>-nvidia \
+    --env PC_WHEEL_DIR=/root/pc-in/<sha12>/nvidia --env PC_SOURCE_COMMIT=<SHA40> \
+    --env PC_PARTS=all-plan,all-install,all-smoke,all-board tools/ops/paper_compare_job.sh
+# then, until phases.tsv shows all-board rc=0 (each resumes the board), and last with the compare:
+    --env PC_PARTS=all-plan,all-install,all-board
+    --env PC_PARTS=all-plan,all-install,all-board,all-compare
+```
+`PC_PARTS=board-all` runs every step in one job (AMD, no cap). A missing dataset stops the job after the plan and
+names the keys to stage (`sh tools/dataset_store.sh stage ...`). The smoke runs in the same parallel shards as the
+paper smoke; the timed board is one process on the GPU (serial by nature). Read:
+`head -n 20 <dest>/SUMMARY-ALL-nvidia.txt` (`BEST-EVER-REGRESSION`: slower than the best ever by more than 1.10x
+with the same params and hash; `PARAMS-DIFFER`: the best ever ran other parameters or gave another hash;
+`BEST-EVER-REGRESSION-UNCHECKED`: params or hash unrecorded on one side). The rows outside the paper are the second
+table of `COMPARE-ALL-nvidia.md`.
