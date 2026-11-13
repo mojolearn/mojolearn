@@ -5,15 +5,15 @@
  "head": "97e02b4bb",
  "controls": {
   "mcd_chol": {
-   "define": "MOJOLEARN_IDN_MCD_CHOL_OFF",
+   "define": "MOJOLEARN_IDN_MCD_CHOL",
    "kind": "switch",
    "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_MCD_CHOL_OFF"
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MCD_CHOL"
     ]
    },
-   "default": "on",
+   "default": "off",
    "source": [
     "x_decomp/mcd.mojo:60",
     "x_decomp/kit_device.mojo:1030",
@@ -22,8 +22,8 @@
    ],
    "binding": "_mojolearn_x_decomp (device) + _mojolearn_x_decomp_host (host column)",
    "bits_change": true,
-   "status": "new",
-   "note": "MinCovDet/EllipticEnvelope IDENTICAL C-step: log det by potrf_lower + chol_logdet and distances rowsum((Xc L^-T)^2) with L^-1 = trsm_lower(L, I), instead of partial-pivot LU + round-robin Jacobi pinvh per C-step (thousands of launches at p=220; Apple identical 225 s at 2,000 rows, race timeout at 100k). Non-PD covariance keeps -inf + pinvh. No size rule. A/B: NV + AMD min-cov-det / elliptic-envelope taxi and istella plus one non-board shape; quality: support Jaccard vs sklearn."
+   "status": "owed",
+   "note": "MinCovDet/EllipticEnvelope IDENTICAL C-step: log det by potrf_lower + chol_logdet and distances rowsum((Xc L^-T)^2) with L^-1 = trsm_lower(L, I), instead of partial-pivot LU + round-robin Jacobi pinvh per C-step (thousands of launches at p=220; Apple identical 225 s at 2,000 rows, race timeout at 100k). Non-PD covariance keeps -inf + pinvh. No size rule. A/B: NV + AMD min-cov-det / elliptic-envelope taxi and istella plus one non-board shape; quality: support Jaccard vs sklearn. 2026-11-13 (lane restore-classical-measured-routes): default flipped back to the measured LU + Jacobi pinvh C-step (board: min-cov-det taxi AMD 2116 ms at 0.8.25 -> 9852 ms at 0.8.42 after this switch, NV 2871 -> 3420; istella faster after it); the Cholesky C-step is now -D MOJOLEARN_IDN_MCD_CHOL (B arm), MOJOLEARN_IDN_MCD_CHOL_OFF removed. Owed A/B covers taxi AND istella on NV and AMD."
   },
   "gmm_fast_ff_cov": {
    "define": "MOJOLEARN_GMM_FAST_FF_COV_OFF",
