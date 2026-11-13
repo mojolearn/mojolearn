@@ -238,7 +238,7 @@ comptime XD_FAST_SVD_ONE_BLOCK = is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"]()
 
 # TOMBSTONE: MOJOLEARN_IDN_EIGH_SMALL_OFF, MOJOLEARN_IDN_EIGH_SMALL_N64, MOJOLEARN_IDN_EIGH_SMALL_N128 (superseded) deleted
 # 2026-11-09 by lane n9-decomp-eigh-families: the one-launch batched Jacobi (x_decomp/rr_batch.mojo, the same words as the
-# per-round launches) is now THE dense eigh below TD_MIN_N (x_decomp/eigh_ops.mojo `eigh_op_sym`), so the cut it
+# per-round launches) was made THE dense eigh below TD_MIN_N (x_decomp/eigh_ops.mojo `eigh_op_sym`), so the cut it
 # switched on and the per-round route it rolled back to are gone; code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
 #

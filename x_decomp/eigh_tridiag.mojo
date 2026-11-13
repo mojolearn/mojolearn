@@ -708,8 +708,8 @@ def eigh_td_enqueue(
     stream order dw (n) holds the eigenvalues ascending and dz (n x n) the
     unit eigenvectors in COLUMNS (not yet sign flipped), unless dinfo[2]
     != 0: refused (see the module note), dz / dw undefined, and the caller
-    takes its fallback on the device (x_decomp/eigh_ops.mojo
-    `eigh_op_sym`). `dinfo` holds 4 floats (zeroed here). n >= 2.
+    reads dinfo[2] at its own wait and takes its fallback
+    (x_decomp/device.mojo `DevExec._eigh_td_try_dev`). `dinfo` holds 4 floats (zeroed here). n >= 2.
 
     Lane n9-decomp-eigh-families (2026-11-09): this was `eigh_td_on`,
     which read dinfo home after stage 3 and returned the refusal as a Bool
