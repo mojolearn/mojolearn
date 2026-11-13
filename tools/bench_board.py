@@ -1267,11 +1267,17 @@ def locked_version(name, lock=None, envs=LOCK_ENV_ORDER):
 def ours_only_requirements(pins, lock=None):
     """The third-party packages an ours-only board venv installs beside our wheels: the scikit-learn pin of
     the trees opponent set (the drivers' data helpers and metrics; it pulls numpy, scipy, joblib and
-    threadpoolctl), then OURS_ONLY_LOCKED at their pixi.lock versions. Every other third-party import of the
+    threadpoolctl), its catboost pin (the border oracle of our pre-binned arms, never raced here), then OURS_ONLY_LOCKED at their pixi.lock versions. Every other third-party import of the
     drivers is an opponent arm's (lazy, inside that arm) or a download step's (pyarrow for parquet)."""
     trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
     sk = [r for r in (trees[1] if trees else []) if r.lower().startswith("scikit-learn==")]
     out = sk or ["scikit-learn"]
+    # SMOKE-NOT-RUN FIX (2026-11-13, candidate 4c2340386abc): our own pre-binned arms (`ours-prebinned` on
+    # gbdt-depthwise, `ours-gain0` on gbdt-lossguide; tools/board_pairing.py) fit on the GreedyLogSum bin ids that
+    # CatBoost's own Pool.quantize computes (tools/speed_gbdt_arm.py prebinned_data, untimed, the border oracle).
+    # Without catboost in this venv the trees driver refused both own arms ("No module named 'catboost'"), the
+    # probe built nothing and the four rows smoked as "arm=- not run". The oracle's pin is the trees set's.
+    out += [r for r in (trees[1] if trees else []) if r.lower().startswith("catboost==")][:1] or ["catboost"]
     for name in OURS_ONLY_LOCKED:
         version = locked_version(name, lock)
         out.append("%s==%s" % (name, version) if version else name)
@@ -2847,6 +2853,133 @@ def ensure_algos_prep(ctx, races):
                   % (rc, log), flush=True)
 
 
+#: The neural-layer fixtures (tools/neural_fixtures.py) are the one place torch makes the inputs and initial weights
+#: of our arm on the algos layer lanes (conv2d, gcn, graphsage, moe, ...). SMOKE-NOT-RUN FIX (2026-11-13, candidate
+#: 4c2340386abc): the ours-only measurement job staged no fixture set, so every such row's parameter probe refused
+#: ("neural fixtures missing ... no <cache>/algos-data/neural-fixtures/manifest.json"), preflight dropped the
+#: recipe, and the smoke reported "arm=- not run" on both vendors. With --fixtures-venv the board makes the set
+#: itself, untimed and before any probe: a CPU-torch venv (FIXTURES_TORCH_INDEX, torch at the board's pinned
+#: version without its device suffix, torch-geometric at the algos pin) that only runs `neural_fixtures.py
+#: generate`; our arm never imports torch, and CPU torch gives every vendor the same bytes.
+FIXTURES_TORCH_INDEX = "https://download.pytorch.org/whl/cpu"
+FIXTURES_VENV_MARKER = ".mojolearn-fixtures-venv"
+
+
+def fixtures_requirements(vendor):
+    """[numpy, torch==<board pin, no +cuda/+rocm suffix>, torch-geometric==<algos pin>]."""
+    torch = DEFAULT_TORCH_SPEC.get(vendor) or DEFAULT_TORCH_SPEC["apple"]
+    torch = torch.split()[0].split("+")[0]
+    pyg = [r for r in ALGOS.PINS_COMMON if r.lower().startswith("torch-geometric==")]
+    return ["numpy", torch] + pyg[:1]
+
+
+def layer_races(races):
+    """The algos races whose own arm reads the neural fixtures (lane kind "layer")."""
+    return [r for r in races if r["family"] == "algos"
+            and (ALGOS.LANES.get(r["lane"]) or {}).get("kind") == "layer"]
+
+
+def ensure_fixtures_venv(vdir, vendor, log):
+    """The generator interpreter at `vdir` (made once; parallel smoke shards share it under a lock), or None."""
+    import fcntl
+    reqs = fixtures_requirements(vendor)
+    py = os.path.join(vdir, "bin", "python")
+    marker = os.path.join(vdir, FIXTURES_VENV_MARKER)
+    os.makedirs(os.path.dirname(os.path.abspath(vdir)) or ".", exist_ok=True)
+    with open(os.path.abspath(vdir) + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            with open(marker) as fh:
+                if fh.read().split() == reqs and os.path.exists(py):
+                    return py
+        except OSError:
+            pass
+        if not os.path.exists(py) and run_logged([sys.executable, "-m", "venv", vdir], None, log, 1800) != 0:
+            return None
+        pip = [py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
+        if run_logged(pip + ["--index-url", FIXTURES_TORCH_INDEX, "--extra-index-url", "https://pypi.org/simple"]
+                      + reqs[:2], None, log, 3600) != 0:
+            return None
+        if len(reqs) > 2 and run_logged(pip + reqs[2:], None, log, 3600) != 0:
+            return None
+        with open(marker, "w") as fh:
+            fh.write("\n".join(reqs) + "\n")
+        return py
+
+
+def fixtures_cover(fixdir, races, data_dirs):
+    """Whether the manifest in `fixdir` was generated over every data dir and lane these races read."""
+    try:
+        with open(os.path.join(fixdir, "manifest.json")) as fh:
+            man = json.load(fh)
+    except (OSError, ValueError):
+        return False
+    have_dirs = {os.path.abspath(d) for d in man.get("data_dirs") or []}
+    have_lanes = {e.get("lane") for e in (man.get("entries") or {}).values()}
+    return (set(data_dirs) <= have_dirs) and {r["lane"] for r in races} <= have_lanes
+
+
+def ensure_neural_fixtures(ctx, races):
+    """Untimed: make the neural-layer fixture set the layer races' own arm reads, beside their algos blocks
+    (tools/neural_fixtures.default_dir), when --fixtures-venv is given and the set there does not cover them.
+    Without it (or on a failure) nothing is made and those races refuse by name in their probe, which the
+    preflight and the smoke verdict now carry ("probe refused: ... neural fixtures missing"), never "not run"."""
+    layer = layer_races(races)
+    if not layer:
+        return None
+    NF = _load_tool("neural_fixtures")
+    dirs = sorted({os.path.abspath(algos_data_dir(ctx, r["rows"], r)) for r in layer})
+    fixdir = NF.default_dir(dirs[0])
+    if fixtures_cover(fixdir, layer, dirs):
+        return fixdir
+    if not ctx.get("fixtures_venv"):
+        print("bench_board: neural fixtures missing for %d layer race(s) under %s and no --fixtures-venv; "
+              "their own arm refuses by name" % (len(layer), fixdir), flush=True)
+        return None
+    log = os.path.join(ctx["out"], "logs", "neural-fixtures.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    py = ensure_fixtures_venv(ctx["fixtures_venv"], ctx["vendor"], log)
+    if not py:
+        print("bench_board: the fixtures venv failed (see %s); the layer races refuse by name" % log, flush=True)
+        return None
+    # every algos mirror present beside them (the board's c1 cache holds the smoke's rows and the full rows): one
+    # manifest covers both, so the timed board does not regenerate what its smoke shard made
+    base = os.path.dirname(dirs[0])
+    present = os.listdir(base) if os.path.isdir(base) else []
+    mirrors = sorted({os.path.join(base, d) for d in present
+                      if d.startswith("rows-") and os.path.isdir(os.path.join(base, d))} | set(dirs))
+    lanes = sorted({r["lane"] for r in layer} | _fixture_lanes(fixdir))
+    tmp = fixdir + ".new"
+    shutil.rmtree(tmp, ignore_errors=True)
+    cmd = [py, "-u", os.path.join(HERE, "neural_fixtures.py"), "generate", "--out", tmp, "--lanes", ",".join(lanes)]
+    for d in mirrors:
+        cmd += ["--data", d]
+    env = child_env(ctx)
+    env.pop(NF.ENV_DIR, None)
+    print("bench_board: neural fixtures: generating %s over %d mirror(s) into %s" % (",".join(lanes), len(mirrors),
+                                                                                    fixdir), flush=True)
+    rc = run_logged(cmd, env, log, 3600, nice=ctx["nice"])
+    if rc == 0:
+        rc = run_logged([sys.executable, os.path.join(HERE, "neural_fixtures.py"), "verify", "--dir", tmp],
+                        None, log, 1800)
+    if rc != 0:
+        print("bench_board: neural fixtures generate/verify rc %d (see %s); the layer races refuse by name"
+              % (rc, log), flush=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None
+    shutil.rmtree(fixdir, ignore_errors=True)
+    os.replace(tmp, fixdir)
+    return fixdir
+
+
+def _fixture_lanes(fixdir):
+    try:
+        with open(os.path.join(fixdir, "manifest.json")) as fh:
+            return {e.get("lane") for e in (json.load(fh).get("entries") or {}).values()} - {None}
+    except (OSError, ValueError):
+        return set()
+
+
 def algos_cmd(ctx, race):
     """tools/bench_board_algos.py race for one algos (lane, dataset)."""
     rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
@@ -3528,6 +3661,35 @@ def params_probe(ctx, race, arms, scorer=None):
     return out
 
 
+#: A driver's refusal line for one arm in a probe log: FSPEED-REFUSED (trees), ALGOS-REFUSED (algos), ...
+_PROBE_REFUSAL = re.compile(r"^([A-Z0-9]+-REFUSED)\b.*?\barm=(\S+)\s+(.*)$")
+
+
+def probe_refusals(log_path, arms):
+    """{arm: first refusal text} the race's driver printed for `arms` in its probe log. SMOKE-NOT-RUN FIX
+    (2026-11-13, candidate 4c2340386abc): the preflight said only "missing parameter/version probe: ours" and the
+    smoke "arm=- not run" for ten rows whose probe log named the cause ("neural fixtures missing", "No module named
+    'catboost'"); the cause now travels with the problem. A generic "not built here" follow-up never replaces an
+    earlier specific line."""
+    out = {}
+    try:
+        with open(log_path, errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return out
+    starts = [i for i, line in enumerate(lines) if re.match(r"=== \d{4}-\d\d-\d\dT", line)]
+    for line in lines[starts[-1] if starts else 0:]:     # the last probe run only (the log is appended to)
+        m = _PROBE_REFUSAL.match(line)
+        if not m or m.group(2) not in arms:
+            continue
+        text = m.group(3).strip()
+        if m.group(2) in out and "not built here" in text:
+            continue
+        if m.group(2) not in out or "not built here" in out[m.group(2)]:
+            out[m.group(2)] = text[:400]
+    return out
+
+
 def real_implementation(record):
     """Whether an opponent arm's parameter record names the real library class it constructed: a module
     that is not the harness itself (__main__, bench_*, tools.*). A wrapper defined in the harness is
@@ -3575,6 +3737,9 @@ def preflight_check(ctx, race, arms):
     except P.ParamsRefused as exc:
         report = dict(verdict="REFUSED", arms=records, problems=[str(exc)], exceptions=[])
     report["problems"].extend("missing parameter/version probe: " + a for a in missing)
+    refused = probe_refusals(os.path.join(ctx["out"], "raw", "params-only", race["id"].replace("/", "."),
+                                          "probe.log"), missing)
+    report["problems"].extend("probe refused %s: %s" % kv for kv in sorted(refused.items()))
     # Failed probes still retain their settings for diagnosis; partial output
     # from a failed process can never admit a timed race.
     report["problems"].extend("parameter probe failed (rc %s): %s" % (p["probe_rc"], a)
@@ -4981,10 +5146,29 @@ def _evidence_failure_text(rec):
     return why + ("; missing " + " | ".join(gaps[:3]) if gaps else "")
 
 
-def smoke_verdict(race, rec, vendor):
-    """[(arm, reason)] of what keeps this race from passing ([] = PASS)."""
+def preflight_dropped(result, race_id):
+    """The preflight record of a race the plan audit kept from running ({"status", "problems", ...}), or None."""
+    for field in ("failed_preflight_recipes", "skipped_recipes"):
+        rec = (result.get(field) or {}).get(race_id)
+        if rec is not None:
+            return dict(rec, status=rec.get("status") or ("FAILED" if field.startswith("failed") else "REFUSED"))
+    return None
+
+
+def smoke_verdict(race, rec, vendor, preflight=None):
+    """[(arm, reason)] of what keeps this race from passing ([] = PASS). `preflight` is the race's record in
+    failed_preflight_recipes / skipped_recipes (preflight_dropped) when the plan audit kept it from running.
+
+    SMOKE-NOT-RUN FIX (2026-11-13, candidate 4c2340386abc): a race dropped by the preflight had no record and was
+    reported as "arm=- not run" on ten paper rows on both vendors; its preflight problems (with the driver's own
+    refusal line, probe_refusals) are now the reason. "not run" is left only for a race nothing ever reached."""
     import fnmatch
     if rec is None:
+        if preflight is not None:
+            problems = [str(p) for p in preflight.get("problems") or []] or ["no problem recorded"]
+            # the driver's refusal first: it names the cause the generic "missing probe" lines only imply
+            problems.sort(key=lambda p: not p.startswith("probe refused "))
+            return [("-", "preflight %s: %s" % (preflight.get("status"), "; ".join(problems[:4])[:600]))]
         return [("-", "not run")]
     fails = []
     # Resume/review may reconstruct the plan; use the retained actual binding
@@ -5063,7 +5247,7 @@ def write_smoke(out, races, result, vendor, shard):
     """smoke.json and the SMOKE PASS/FAIL lines; returns the number failing."""
     verdicts = {}
     for r in races:
-        fails = smoke_verdict(r, result["races"].get(r["id"]), vendor)
+        fails = smoke_verdict(r, result["races"].get(r["id"]), vendor, preflight_dropped(result, r["id"]))
         verdicts[smoke_key(r)] = {"id": r["id"], "pass": not fails,
                                   "unsupported": unsupported_our_arms(r),
                                   "eligible": not (bool(r.get("our_arms")) and set(r["our_arms"]) <= set(unsupported_our_arms(r))),
@@ -5294,6 +5478,10 @@ def build_parser():
                    help=argparse.SUPPRESS)
     p.add_argument("--algos-data", default=None,
                    help="algos block dir (default <cache>/algos-data); prep is untimed and once")
+    p.add_argument("--fixtures-venv", default=None, metavar="DIR",
+                   help="make the neural-layer fixtures our arm reads on the algos layer lanes (untimed, before "
+                        "any probe) with a CPU-torch venv at DIR (made once, shared under a lock); without it a "
+                        "box with no fixture set refuses those races by name")
     return p
 
 
@@ -5650,7 +5838,9 @@ def main(argv=None):
            "more_driver": os.path.abspath(args.more_driver),
            "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
            "algos_driver": os.path.abspath(args.algos_driver), "arm_python": arm_python,
-           "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
+           "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data")),
+           "fixtures_venv": (os.path.abspath(os.path.expanduser(args.fixtures_venv))
+                             if getattr(args, "fixtures_venv", None) else None)}
     ctx["artifact_manifest"] = os.path.abspath(args.artifact_manifest) if args.artifact_manifest else None
     ctx["artifact_identity"] = artifact_identity
     box = box_fingerprint(ctx)
@@ -5747,6 +5937,7 @@ def main(argv=None):
         ensure_more_prep(ctx, todo)
     if any(r["family"] == "algos" for r in todo):
         ensure_algos_prep(ctx, todo)
+        ensure_neural_fixtures(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
     if _synthetic_on():
