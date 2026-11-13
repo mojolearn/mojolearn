@@ -245,6 +245,8 @@ for w in want:
         printf '{"name":"%s","region":"%s","size":"%s","image":%s,"ssh_keys":["%s"],"tags":["%s"]}\n' \
             "$NAME" "$REGION" "$SIZE" "$DO_IMAGE" "$DO_SSH_KEY_FP" "$DO_TAG" > "$TMPD/create.json"
         say "creating $NAME ($SIZE) in $REGION. THE BILL STARTS HERE."
+        # the exact create call, printed before it runs (2026-11-13; the request body carries no secret)
+        say "CREATE: POST $DO_API/droplets $(cat "$TMPD/create.json")"
         do_call POST droplets "$TMPD/create.json"
         DROPLET_ID=$(jq_py 'print(d["droplet"]["id"])')
         [ -n "$DROPLET_ID" ] && break

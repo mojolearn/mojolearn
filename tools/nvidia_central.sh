@@ -336,6 +336,10 @@ up)
         for c in $NVC_GPU_COUNTS; do
             w=$NVC_STOCK_WAIT; [ "$c" != 1 ] || w=$NVC_STOCK_WAIT_1
             say "$k: asking RunPod for ${c}x of: $NVC_GPUS (out-of-stock retry $w min)"
+            # the exact create line, printed before it runs (2026-11-13: an `up` rented twice past the account cap
+            # with nothing in its output naming the create); dev_pod.sh runs tools/rent_guard.sh before the create
+            say "$k: CREATE: MOJOLEARN_DEVPOD_VIA_CENTRAL=1 MOJOLEARN_DEVPOD_GPU_COUNT=$c MOJOLEARN_DEVPOD_GPUS=$(sq "$NVC_GPUS")" \
+                "MOJOLEARN_DEVPOD_RETRY_MINUTES=$w MOJOLEARN_DEVPOD_DISK_GB=$MOJOLEARN_DEVPOD_DISK_GB $DEVPOD up $k 60"
             if MOJOLEARN_DEVPOD_VIA_CENTRAL=1 MOJOLEARN_DEVPOD_GPU_COUNT=$c MOJOLEARN_DEVPOD_GPUS="$NVC_GPUS" \
                     MOJOLEARN_DEVPOD_RETRY_MINUTES=$w "$DEVPOD" up $k 60 2>&1 | tee "$TMPD/up-$k-$c.log"; then
                 made=1; break
