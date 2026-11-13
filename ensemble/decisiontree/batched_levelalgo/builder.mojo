@@ -982,9 +982,42 @@ comptime IDN_RF_FUSED_PARTITION = (
 )
 
 
+# RESTORED DEFAULT (lane restore-rf-et-forest-loop, 2026-11-13): the HOST
+# queue level loop (`begin_batch_replay` / `advance_batch_replay`, K trees
+# pipelined over one queue by `fit_forest_prepared`, one drain per cycle for
+# every in-flight tree) is the fit route again, as at 0.8.25 (32b386409a), the
+# fastest RF fit the boards ever measured, same output hash and settings
+# (500 trees, depth 8, 128 bins, sqrt features):
+#   istella NV 5,045 ms (0.8.25) -> 24,471 (10-05, device loop) -> 30,769
+#   (0.8.55) -> 30,390 (candidate 4c2340386abc); istella AMD 5,107 -> 44,244
+#   -> 45,440 -> 44,680; taxi NV 5,798 -> 8,066 -> 9,443 -> 8,896; taxi AMD
+#   6,754 -> 16,390 -> 16,460 -> 16,370. Sources: bench/results/bench_board/
+#   recovered-2026-09-30/{nvc2/2026-09-29_nvidia,do-amd/2026-09-29_amd}/board.json
+#   at 09bb2eca3b; history audit hist-trees-neighbors-cluster row 1.
+# The structural cost of the device loop (window 32b386409a..a006da73d,
+# e344566c1a made it the only route with no A/B against the host loop; the
+# one A/B on record, 14fd20e348, compared device-loop K values): the host
+# cannot see whether a sampling round has nodes left, so EVERY batch enqueues
+# all `ceil(n_cols / n_sampled_cols)` sampling rounds (istella, 220 columns,
+# sqrt: 16 rounds; taxi far fewer) at proven bounds -- per round the retry
+# compact/stage/map launches, the setup launch, the histogram over
+# `1 + n_bound + rows / TPB` blocks and find_best_splits -- plus two pops,
+# the finalize and four push launches per batch. The host loop launches
+# round zero and stops at the first round with nothing to retry (their
+# `:456`), so its launch count per batch is a handful, not ~8 per round x 16.
+# The loss tracks the round count: 6x on istella, 1.5x / 2.4x on taxi.
+# Same kernels, same node ids, same queue order, same retry sets: the trees
+# (and the output hashes 46ef5c27f84cf904 istella / a660fbfbad84ade8 taxi)
+# do not move; the device loop was built to equal this queue.
+# `-D MOJOLEARN_IDN_RF_DEVICE_LOOP` restores the device loop (B arm of the
+# owed A/B `restore-rf-device-loop` in bench/results/paper_compare/
+# owed-pre0867.json; RUN OWED, NVIDIA + AMD, istella + taxi, fit). Until that
+# A/B lands neither arm is deleted.
+comptime IDN_RF_DEVICE_LOOP = is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP"]()
+
 # The level loop's control plane ON THE DEVICE (fam2-forests' candidate
-# `IDN_RF_DEVICE_LOOP`; the only GPU route since cpu4-forest, 2026-10-04, in
-# IDENTICAL and FAST on every vendor, no off switch). The queue
+# `IDN_RF_DEVICE_LOOP`; the only GPU route from cpu4-forest, 2026-10-04, to
+# 2026-11-13, now the B arm above, in IDENTICAL and FAST). The queue
 # (`NodeQueue::Pop`/`Push`), the block maps (`updateWorkloadInfo`), the
 # sampling rounds' retry sets (`doSplit`, `:452-458`) and the `max_leaves`
 # budget run as kernels (`kernels/level_loop_kernels.mojo`), so a tree
@@ -996,11 +1029,10 @@ comptime IDN_RF_FUSED_PARTITION = (
 # sampling round runs) and the device makes the excess inert. Same node
 # ids, same queue order, same retry sets, same row kernels: the tree is the
 # one the host queue builds (`ensemble/host/rf_oracle.mojo`, the host
-# column, is untouched), on every vendor. The host queue below
-# (`NodeQueue`, `begin_batch_replay`/`advance_batch_replay`) is reached only by the
-# check sabotage instantiations (`sabotage != 0`, ensemble/checks) and an
-# identity trace (which records per-round host split summaries); a fit
-# never builds it.
+# column, is untouched), on every vendor. Without the define the host queue
+# (`NodeQueue`, `begin_batch_replay`/`advance_batch_replay`) builds every
+# tree, as it already did for the check sabotage instantiations and an
+# identity trace.
 # Batches per drain: default 4; `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` is
 # the one sweep. The older `MOJOLEARN_IDN_RF_DEVICE_LOOP_K1/_K2/_K8` defines
 # (same knob, measured below) were DELETED by lane trees-small 2026-10-07
@@ -1781,7 +1813,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 + String(cap)
                 + " does not fit the device node table's Int32 ids"
             )
-        if n_sampled_rows > 0:
+        # The tables are sized to the node bound only under the device-loop
+        # B arm; the default host queue never reads them (one-entry stubs,
+        # `loop_cap` 0, so `begin_tree` never takes the device route).
+        comptime if not IDN_RF_DEVICE_LOOP:
+            cap = 1
+        if n_sampled_rows > 0 and IDN_RF_DEVICE_LOOP:
             self.loop_cap = cap
         self.loop_hdr = ctx.enqueue_create_buffer[DType.int32](
             LOOP_HDR_WORDS
@@ -1812,7 +1849,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var multi_round = max_sampling_rounds_for(
             n_cols, self.original_n_sampled_cols
         ) > 1
-        var retry_slots = max_batch if multi_round else 1
+        var retry_slots = max_batch if (
+            multi_round and IDN_RF_DEVICE_LOOP
+        ) else 1
         self.loop_retry = ctx.enqueue_create_buffer[DType.int32](
             loop_retry_words(retry_slots)
         )
@@ -3654,8 +3693,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
     ) raises:
         """`Builder::SetLeafPredictions`, `:630-687`, for a tree the HOST
-        queue built (check sabotage instantiations and identity traces
-        only; a fit's tree is finished by `_finish_tree_device`).
+        queue built (every fit tree by default; under
+        `-D MOJOLEARN_IDN_RF_DEVICE_LOOP` a fit's tree is finished by
+        `_finish_tree_device` instead).
 
         Their `leafKernel` runs over EVERY node and returns immediately for
         the ones that are not leaves (`:225`), so the launch is sized by
@@ -3838,11 +3878,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             False,
         )
         self.loop_active = False
-        comptime if sabotage == 0:
-            # A fit's tree with an expandable root runs its queue on the
-            # device (the block above `LOOP_K`). The host queue below
-            # serves only the check sabotage instantiations and an
-            # identity trace.
+        comptime if sabotage == 0 and IDN_RF_DEVICE_LOOP:
+            # B arm (`-D MOJOLEARN_IDN_RF_DEVICE_LOOP`, the block above
+            # `IDN_RF_DEVICE_LOOP`): a fit's tree with an expandable root
+            # runs its queue on the device. The default is the host queue
+            # below, the 0.8.25 route.
             if (
                 self.loop_cap > 0
                 and ts.queue.has_work()
