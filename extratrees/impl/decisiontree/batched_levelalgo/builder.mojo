@@ -5500,9 +5500,12 @@ def search_batch(
 # SAME BITS: node ids, queue order per tree and every draw are the host
 # queue's (see the kernel module's doc), so the trees equal what the host
 # queue produced and the host column (`train_tree_exact*`) is unchanged. This
-# is the default on every vendor in IDENTICAL and FAST; there is no arm that
-# restores the host queue on the GPU route. `NodeQueue` stays as the host
-# column's queue (`host_builder.mojo`, `train_tree_exact`) and the checks'.
+# was the default on every vendor in IDENTICAL and FAST from 2026-10-04 to
+# 2026-11-13; it is now the B arm `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` (and the
+# best-first route in both arms), and the depth-wise default is the host
+# queue again (`_et_run_depthwise_host`, see the block above
+# `ET_DEVICE_LOOP`). `NodeQueue` is also the host column's queue
+# (`host_builder.mojo`, `train_tree_exact`) and the checks'.
 # =============================================================================
 
 comptime ET_LOOP_K = max(1, T11_LEVELS) if T11 else (
@@ -6887,6 +6890,359 @@ def _et_run_bestfirst[
     return cyc
 
 
+# =============================================================================
+# RESTORED DEFAULT (lane restore-rf-et-forest-loop, 2026-11-13): the HOST
+# QUEUE level loop for the depth-wise merged-frontier ET forest, as it ran
+# before cpu4-forest (40286f2d28^, the route the 0.8.25 board measured): one
+# `NodeQueue` per in-flight tree, one merged batch per level cycle, the batch's
+# splits read back once, DEVIATION 205's rescue enqueued ONLY when a node needs
+# it, the partition, the push on the host. Board (same output hash, same
+# settings): istella NV 3,763 ms (f4c126ae66, 2026-10-01) -> 4,917 (10-09,
+# device loop); taxi NV 2,520 -> 4,359; AMD 1,198 / 889 at f4c126ae66, no
+# device-loop AMD row on record. Source: history audit
+# hist-trees-neighbors-cluster row 2 (best_ever.txt). The device loop
+# (40286f2d28) was never A/B'd against this loop. Its structural cost: the
+# host cannot see whether a batch has nodes to rescue, so EVERY batch
+# enqueues the rescue at the batch's proven bounds (retry compaction, an
+# all-column range survey over `n_cols` columns, the pick, the restage, a
+# one-column search, the merge) plus the second stage before the partition
+# and the push kernels; the host loop launches the rescue only for a batch
+# that has a node with all sampled columns constant.
+# Same kernels, same draws keyed by (seed, tree, node), same per-tree FIFO
+# order and node ids (the device loop was built to equal this queue: see
+# `kernels/et_loop_kernels.mojo`'s module doc), so no output bit moves.
+# `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` restores the device loop (B arm of the
+# owed A/B `restore-et-device-loop` in bench/results/paper_compare/
+# owed-pre0867.json; RUN OWED, NVIDIA + AMD, istella + taxi, fit). Best-first
+# growth (`max_leaf_nodes`) keeps the device loop in both arms (the board
+# grows depth-wise; the host best-first forest driver is not restored).
+# =============================================================================
+
+comptime ET_DEVICE_LOOP = is_defined["MOJOLEARN_IDN_ET_DEVICE_LOOP"]()
+
+
+def _et_search_host[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    k: Int,
+    params: DecisionTreeParams,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    item_trees: List[Int32],
+    seed: UInt64,
+    use_sampler: Bool,
+    range_only: Bool,
+    mut clock: PhaseClock,
+) raises -> Tuple[List[Split], List[Int32]]:
+    """The objective's host-staged batch search (`search_batch` /
+    `search_batch_regression`): the batch's splits and its any-non-constant
+    flags, read back after the batch's one drain (both empty when
+    `range_only`)."""
+    comptime if IS_CLF:
+        var f = search_batch(
+            ctx, ws, dataset, d_row_ids, work_items, k, params, n_classes,
+            n_rows, n_cols, item_trees, seed, use_sampler, List[Int32](),
+            range_only, clock,
+        )
+        return (f[0].copy(), f[1].copy())
+    else:
+        var f = search_batch_regression(
+            ctx, ws, dataset, d_row_ids, work_items, k, params, n_rows,
+            n_cols, item_trees, seed, use_sampler, List[Int32](), range_only,
+            clock,
+        )
+        return (f[0].copy(), f[1].copy())
+
+
+def _et_run_depthwise_host[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut queues: List[NodeQueue[DType.float32]],
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    mut d_mismatch: DeviceBuffer[DType.int32],
+    params: DecisionTreeParams,
+    k: Int,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    seed: UInt64,
+    sabotage: Int32,
+    tree_ids: List[Int32],
+    first: Int,
+    mut clock: PhaseClock,
+    mut trace: IdentityTrace,
+    gi: Int,
+) raises -> Int:
+    """`Builder::train`'s loop for the whole group on the HOST queues
+    (DEVIATION 211's merged frontier, 40286f2d28^'s body on today's search,
+    partition and staging): per level cycle, pop every tree's queue into one
+    batch, search, rescue the nodes whose sampled columns were all constant
+    (DEVIATION 205), partition, push. Returns the cycle count. `d_mismatch`
+    is the partition's direction-test tally (zeroed by the caller), read
+    once here after the last cycle."""
+    comptime TPB = DEVICE_TPB
+    var g = len(queues)
+    var max_batch = Int(params.max_batch_size)
+    var cyc = 0
+    while True:  # driver-loop: over the group's level cycles
+        var work_items = List[NodeWorkItem]()
+        var item_trees = List[Int32]()
+        var seg_queue = List[Int]()
+        var seg_start = List[Int]()
+        var seg_count = List[Int]()
+        for s in range(g):  # driver-loop: over the group's tree slots
+            if len(work_items) >= max_batch:
+                break
+            if not queues[s].has_work():
+                continue
+            var got = queues[s].pop_up_to(max_batch - len(work_items))
+            if len(got) == 0:
+                continue
+            seg_queue.append(s)
+            seg_start.append(len(work_items))
+            seg_count.append(len(got))
+            for i in range(len(got)):  # driver-loop: over one tree's popped nodes
+                work_items.append(got[i])
+                item_trees.append(tree_ids[first + s])
+        if len(work_items) == 0:
+            clock.tick(ctx, PHASE_HOST_QUEUE)
+            break
+        if sabotage == FOREST_SAB_SCALAR_TREE:
+            item_trees = List[Int32](
+                length=len(item_trees), fill=item_trees[0]
+            )
+        var n_nodes = len(work_items)
+        clock.tick(ctx, PHASE_HOST_QUEUE)
+
+        var found = _et_search_host[IS_CLF](
+            ctx, ws, dataset, d_row_ids, work_items, k, params, n_classes,
+            n_rows, n_cols, item_trees, seed, True, False, clock,
+        )
+        var splits = found[0].copy()
+        var any_nonconst = found[1].copy()
+        var tag_pre = String("")
+        if trace.enabled:
+            tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
+            trace.record_device(ctx, tag_pre + "colids", ws.d_colids, n_nodes * k)
+            trace.record_device(ctx, tag_pre + "range.min", ws.d_min, n_nodes * k)
+            trace.record_device(ctx, tag_pre + "range.max", ws.d_max, n_nodes * k)
+            trace.record_device(
+                ctx, tag_pre + "draw.thresh", ws.d_thresh, n_nodes * k
+            )
+            trace.record_device(ctx, tag_pre + "reduce.colid", ws.r_c, n_nodes)
+            comptime if IS_CLF:
+                trace.record_device(ctx, tag_pre + "reduce.num", ws.r_nu, n_nodes)
+                trace.record_device(ctx, tag_pre + "reduce.den", ws.r_de, n_nodes)
+            else:
+                trace.record_device(ctx, tag_pre + "reduce.gain", ws.r_m, n_nodes)
+
+        # DEVIATION 205: the nodes whose sampled columns were all constant
+        # (`etl_retry_kernel`'s test, in batch order).
+        var retry = List[Int]()
+        for i in range(n_nodes):  # driver-loop: over the batch's tree nodes
+            if any_nonconst[i] == 0 and work_items[i].instances.count > 0:
+                retry.append(i)
+        if len(retry) > 0:
+            var sub = List[NodeWorkItem]()
+            var sub_trees = List[Int32]()
+            for j in range(len(retry)):  # driver-loop: over the batch's nodes to rescue
+                sub.append(work_items[retry[j]])
+                sub_trees.append(item_trees[retry[j]])
+            var n_sub = len(sub)
+            _ = _et_search_host[IS_CLF](
+                ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                n_classes, n_rows, n_cols, sub_trees, seed, False, True, clock,
+            )
+            var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+            var h_pick = ctx.enqueue_create_host_buffer[DType.int32](n_sub)
+            ctx.enqueue_function[rescue_pick_kernel](
+                d_pick.unsafe_ptr(),
+                ws.d_colids.unsafe_ptr(),
+                ws.d_min.unsafe_ptr(),
+                ws.d_max.unsafe_ptr(),
+                ws.d_missing.unsafe_ptr(),
+                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                ws.d_tree.unsafe_ptr(),
+                Int32(n_sub),
+                n_cols,
+                seed,
+                grid_dim=ceildiv(n_sub, 64),
+                block_dim=64,
+            )
+            ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+            # The survey's staging copies retire before the one-column
+            # search restages the same pinned slots (DEVIATION 450's
+            # invariant, made explicit: this drain runs only for a batch
+            # that has a node to rescue).
+            ctx.synchronize()
+            var res2 = _et_search_host[IS_CLF](
+                ctx, ws, dataset, d_row_ids, sub, 1, params, n_classes,
+                n_rows, n_cols, sub_trees, seed, False, False, clock,
+            )
+            var rescued = res2[0].copy()
+            var pick = h_pick.unsafe_ptr()
+            for j in range(n_sub):  # driver-loop: over the batch's nodes to rescue
+                if pick[unsafe_offset=j] >= Int32(0):
+                    splits[retry[j]] = rescued[j]
+            _ = d_pick^
+            _ = h_pick^
+        if trace.enabled:
+            unsafe_memcpy(
+                dest=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+                src=splits.unsafe_ptr(),
+                count=n_nodes,
+            )
+            trace.record_host(
+                tag_pre + "split.records",
+                ws.h_splits.unsafe_ptr(),
+                n_nodes * size_of[Split](),
+            )
+
+        # THE PARTITION (deviation 203). With equal search and partition
+        # tiles and no rescue, `d_items` / `d_wl` still hold this batch's
+        # search staging (`IDN_ET_PART_ROWS`); otherwise restage.
+        var plan = build_workload_info(work_items, TPB * PART_ROWS_PER_THREAD)
+        if len(retry) > 0 or SEARCH_ROWS_PER_THREAD != PART_ROWS_PER_THREAD:
+            stage_batch(ctx, ws, work_items, item_trees, plan, k)
+            ctx.synchronize()
+        unsafe_memcpy(
+            dest=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            src=splits.unsafe_ptr(),
+            count=n_nodes,
+        )
+        ctx.enqueue_copy(dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr())
+        _et_enqueue_partition(
+            ctx, ws, dataset, d_row_ids,
+            ws.d_splits.unsafe_ptr()
+            .unsafe_bitcast[Split]()
+            .unsafe_origin_cast[MutAnyOrigin](),
+            n_nodes, plan.n_blocks_dimx, params, n_rows,
+            d_mismatch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        )
+        clock.tick(ctx, PHASE_PARTITION)
+        if trace.enabled:
+            trace.record_device(ctx, tag_pre + "partition.rowids", d_row_ids)
+        cyc += 1
+
+        # `NodeQueue::Push` per tree, each tree's own segment of the batch.
+        for t in range(len(seg_queue)):  # driver-loop: over the batch's tree slots
+            var items_s = List[NodeWorkItem]()
+            var splits_s = List[Split]()
+            for j in range(seg_count[t]):  # driver-loop: over one tree's nodes in the batch
+                items_s.append(work_items[seg_start[t] + j])
+                splits_s.append(splits[seg_start[t] + j])
+            queues[seg_queue[t]].push(items_s, splits_s)
+        clock.tick(ctx, PHASE_HOST_PUSH)
+
+    var h_mm = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h_mm, src_buf=d_mismatch)
+    ctx.synchronize()
+    var pm = Int(h_mm.unsafe_ptr()[unsafe_offset=0])
+    _ = h_mm^
+    if pm != 0:
+        raise Error(
+            "ET host level loop: "
+            + String(pm)
+            + " partitioned nodes sent a different number of rows left"
+            " than their split's n_left (the search and the partition"
+            " disagree on the direction test) -- a builder bug"
+        )
+    return cyc
+
+
+def _et_host_total_nodes(queues: List[NodeQueue[DType.float32]]) -> Int:
+    """The group's node count across its host queues."""
+    var total = 0
+    for s in range(len(queues)):  # driver-loop: over the group's tree slots
+        total += len(queues[s].tree.sparsetree)
+    return total
+
+
+def _et_host_upload_nodes(
+    ctx: DeviceContext,
+    mut queues: List[NodeQueue[DType.float32]],
+    mut d_nodes: DeviceBuffer[DType.uint8],
+    mut d_ranges: DeviceBuffer[DType.uint8],
+    total_nodes: Int,
+) raises:
+    """The host queues' finished trees, concatenated tree by tree in local-id
+    order (what `EtDeviceLoop.enqueue_scatter` builds on the device), as two
+    block copies per tree and one upload each."""
+    var n_alloc = total_nodes if total_nodes > 0 else 1
+    var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_alloc * size_of[SparseTreeNode[DType.float32]]()
+    )
+    var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_alloc * size_of[InstanceRange]()
+    )
+    ctx.synchronize()
+    var np = h_nodes.unsafe_ptr().unsafe_bitcast[
+        SparseTreeNode[DType.float32]
+    ]()
+    var rp = h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+    var base = 0
+    for s in range(len(queues)):  # driver-loop: over the group's tree slots, two block copies each
+        var n_s = len(queues[s].tree.sparsetree)
+        unsafe_memcpy(
+            dest=np + base,
+            src=queues[s].tree.sparsetree.unsafe_ptr(),
+            count=n_s,
+        )
+        unsafe_memcpy(
+            dest=rp + base,
+            src=queues[s].node_instances.unsafe_ptr(),
+            count=n_s,
+        )
+        base += n_s
+    if total_nodes > 0:
+        ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+    ctx.synchronize()
+    _ = h_nodes^
+    _ = h_ranges^
+
+
+def _et_host_download_trees(
+    ctx: DeviceContext,
+    mut queues: List[NodeQueue[DType.float32]],
+    mut d_leaves: DeviceBuffer[DType.float32],
+    total_nodes: Int,
+    k_out: Int,
+    mut trees_out: List[TreeMetaDataNode[DType.float32]],
+) raises:
+    """The group's model, once: the leaf values come back in one copy and
+    each host queue's tree takes its `vector_leaf` as one block copy."""
+    var n_alloc = total_nodes if total_nodes > 0 else 1
+    var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
+        n_alloc * k_out
+    )
+    if total_nodes > 0:
+        ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+    ctx.synchronize()
+    var lv = h_leaves.unsafe_ptr()
+    var base = 0
+    for s in range(len(queues)):  # driver-loop: over the group's tree slots, one block copy each
+        var tree = queues[s].get_tree()
+        var n_s = len(tree.sparsetree)
+        var leaves = List[Float32](length=n_s * k_out, fill=Float32(0.0))
+        unsafe_memcpy(
+            dest=leaves.unsafe_ptr(), src=lv + base * k_out, count=n_s * k_out
+        )
+        tree.vector_leaf = leaves^
+        trees_out.append(tree^)
+        base += n_s
+    _ = h_leaves^
+
+
 def train_forest_classification_device(
     ctx: DeviceContext,
     mut dataset: DeviceDataset,
@@ -7161,19 +7517,44 @@ def train_forest_classification_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        var lp = EtDeviceLoop(ctx, g, Int(params.max_batch_size), f_cap)
-        var shared_base = (
-            Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE else Int32(0)
-        )
-        lp.init_roots(
+        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` and for
+        # best-first growth; the default depth-wise group runs the HOST
+        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_LOOP`)
+        # and keeps a one-slot stub loop that it never drives.
+        var use_lp = bestfirst or ET_DEVICE_LOOP
+        var lp = EtDeviceLoop(
             ctx,
-            tree_ids,
-            first,
-            slot_rows,
-            shared_base,
-            et_root_expandable(params, slot_rows),
-            bestfirst,
+            g if use_lp else 1,
+            Int(params.max_batch_size) if use_lp else 1,
+            f_cap,
         )
+        var queues = List[NodeQueue[DType.float32]]()
+        var d_mismatch = ctx.enqueue_create_buffer[DType.int32](1)
+        if use_lp:
+            var shared_base = (
+                Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE
+                else Int32(0)
+            )
+            lp.init_roots(
+                ctx,
+                tree_ids,
+                first,
+                slot_rows,
+                shared_base,
+                et_root_expandable(params, slot_rows),
+                bestfirst,
+            )
+        else:
+            for s in range(g):  # driver-loop: over the group's tree slots, one queue each
+                var base = Int32(s) * slot_rows
+                if sabotage == FOREST_SAB_SHARED_ROW_BASE:
+                    base = Int32(0)
+                queues.append(
+                    NodeQueue[DType.float32](
+                        params, slot_rows, n_classes, tree_ids[first + s], base
+                    )
+                )
+            ctx.enqueue_memset(d_mismatch, Int32(0))
         clock.tick(ctx, PHASE_SETUP)
         var cyc: Int
         if bestfirst:
@@ -7182,10 +7563,16 @@ def train_forest_classification_device_timed(
                 n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
                 gi,
             )
-        else:
+        elif use_lp:
             cyc = _et_run_depthwise[True](
                 ctx, lp, ws, dataset, d_row_ids, params, Int(k), n_classes,
                 n_rows, n_cols, seed, sabotage, clock, trace, gi,
+            )
+        else:
+            cyc = _et_run_depthwise_host[True](
+                ctx, queues, ws, dataset, d_row_ids, d_mismatch, params,
+                Int(k), n_classes, n_rows, n_cols, seed, sabotage, tree_ids,
+                first, clock, trace, gi,
             )
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
@@ -7195,7 +7582,9 @@ def train_forest_classification_device_timed(
         # each tree's nodes in local-id order, its ranges beside them), and
         # the model comes back once (`download_trees`).
         var k_out = Int(n_classes)
-        var total_nodes = lp.word(ETL_H_NODES)
+        var total_nodes = (
+            lp.word(ETL_H_NODES) if use_lp else _et_host_total_nodes(queues)
+        )
         var n_alloc = total_nodes if total_nodes > 0 else 1
         var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
             n_alloc * size_of[SparseTreeNode[DType.float32]]()
@@ -7207,7 +7596,10 @@ def train_forest_classification_device_timed(
             n_alloc * k_out
         )
         var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
-        lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        if use_lp:
+            lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        else:
+            _et_host_upload_nodes(ctx, queues, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
         # folds that memset and `d_visit`'s into the launch itself -- each
@@ -7225,9 +7617,15 @@ def train_forest_classification_device_timed(
                 ctx, d_leaves, d_visit, d_nodes, d_ranges, d_row_ids,
                 dataset, k_out, total_nodes,
             )
-        lp.download_trees(
-            ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first, out
-        )
+        if use_lp:
+            lp.download_trees(
+                ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first,
+                out,
+            )
+        else:
+            _et_host_download_trees(
+                ctx, queues, d_leaves, total_nodes, k_out, out
+            )
         if trace.enabled:
             # The leaf pass's output for the whole group: the values the
             # model returns, still concatenated across the group's trees.
@@ -7238,13 +7636,20 @@ def train_forest_classification_device_timed(
         # DEVIATION 2663's measurement define: what the group's level loop
         # did, from the device header's tallies.
         comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
-            print(
-                "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
-                " nodes=", lp.word(ETL_H_STAT_NODES),
-                " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
-                " rescued=", lp.word(ETL_H_STAT_RESCUED),
-                " max_batch=", params.max_batch_size,
-            )
+            if use_lp:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc,
+                    " nodes=", lp.word(ETL_H_STAT_NODES),
+                    " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
+                    " rescued=", lp.word(ETL_H_STAT_RESCUED),
+                    " max_batch=", params.max_batch_size,
+                )
+            else:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc, " host_queue=1 max_batch=", params.max_batch_size,
+                )
         else:
             _ = cyc
         # Mojo frees a buffer at its LAST USE; these must outlive every
@@ -7254,6 +7659,8 @@ def train_forest_classification_device_timed(
         _ = d_leaves^
         _ = d_visit^
         _ = lp^
+        _ = queues^
+        _ = d_mismatch^
         _ = d_row_ids^
         _ = ws^
         gi += 1
@@ -8234,19 +8641,44 @@ def train_forest_regression_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        var lp = EtDeviceLoop(ctx, g, Int(params.max_batch_size), f_cap)
-        var shared_base = (
-            Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE else Int32(0)
-        )
-        lp.init_roots(
+        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` and for
+        # best-first growth; the default depth-wise group runs the HOST
+        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_LOOP`)
+        # and keeps a one-slot stub loop that it never drives.
+        var use_lp = bestfirst or ET_DEVICE_LOOP
+        var lp = EtDeviceLoop(
             ctx,
-            tree_ids,
-            first,
-            slot_rows,
-            shared_base,
-            et_root_expandable(params, slot_rows),
-            bestfirst,
+            g if use_lp else 1,
+            Int(params.max_batch_size) if use_lp else 1,
+            f_cap,
         )
+        var queues = List[NodeQueue[DType.float32]]()
+        var d_mismatch = ctx.enqueue_create_buffer[DType.int32](1)
+        if use_lp:
+            var shared_base = (
+                Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE
+                else Int32(0)
+            )
+            lp.init_roots(
+                ctx,
+                tree_ids,
+                first,
+                slot_rows,
+                shared_base,
+                et_root_expandable(params, slot_rows),
+                bestfirst,
+            )
+        else:
+            for s in range(g):  # driver-loop: over the group's tree slots, one queue each
+                var base = Int32(s) * slot_rows
+                if sabotage == FOREST_SAB_SHARED_ROW_BASE:
+                    base = Int32(0)
+                queues.append(
+                    NodeQueue[DType.float32](
+                        params, slot_rows, Int32(1), tree_ids[first + s], base
+                    )
+                )
+            ctx.enqueue_memset(d_mismatch, Int32(0))
         clock.tick(ctx, PHASE_SETUP)
         var cyc: Int
         if bestfirst:
@@ -8255,10 +8687,16 @@ def train_forest_regression_device_timed(
                 n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
                 gi,
             )
-        else:
+        elif use_lp:
             cyc = _et_run_depthwise[False](
                 ctx, lp, ws, dataset, d_row_ids, params, Int(k), Int32(1),
                 n_rows, n_cols, seed, sabotage, clock, trace, gi,
+            )
+        else:
+            cyc = _et_run_depthwise_host[False](
+                ctx, queues, ws, dataset, d_row_ids, d_mismatch, params,
+                Int(k), Int32(1), n_rows, n_cols, seed, sabotage, tree_ids,
+                first, clock, trace, gi,
             )
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
@@ -8268,7 +8706,9 @@ def train_forest_regression_device_timed(
         # each tree's nodes in local-id order, its ranges beside them), and
         # the model comes back once (`download_trees`).
         var k_out = 1
-        var total_nodes = lp.word(ETL_H_NODES)
+        var total_nodes = (
+            lp.word(ETL_H_NODES) if use_lp else _et_host_total_nodes(queues)
+        )
         var n_alloc = total_nodes if total_nodes > 0 else 1
         var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
             n_alloc * size_of[SparseTreeNode[DType.float32]]()
@@ -8280,7 +8720,10 @@ def train_forest_regression_device_timed(
             n_alloc * k_out
         )
         var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
-        lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        if use_lp:
+            lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        else:
+            _et_host_upload_nodes(ctx, queues, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
         # folds that memset and `d_visit`'s into the launch itself -- the
@@ -8326,9 +8769,15 @@ def train_forest_regression_device_timed(
                 grid_dim=(total_nodes, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-        lp.download_trees(
-            ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first, out
-        )
+        if use_lp:
+            lp.download_trees(
+                ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first,
+                out,
+            )
+        else:
+            _et_host_download_trees(
+                ctx, queues, d_leaves, total_nodes, k_out, out
+            )
         if trace.enabled:
             # The leaf pass's output for the whole group: the values the
             # model returns, still concatenated across the group's trees.
@@ -8339,13 +8788,20 @@ def train_forest_regression_device_timed(
         # DEVIATION 2663's measurement define: what the group's level loop
         # did, from the device header's tallies.
         comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
-            print(
-                "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
-                " nodes=", lp.word(ETL_H_STAT_NODES),
-                " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
-                " rescued=", lp.word(ETL_H_STAT_RESCUED),
-                " max_batch=", params.max_batch_size,
-            )
+            if use_lp:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc,
+                    " nodes=", lp.word(ETL_H_STAT_NODES),
+                    " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
+                    " rescued=", lp.word(ETL_H_STAT_RESCUED),
+                    " max_batch=", params.max_batch_size,
+                )
+            else:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc, " host_queue=1 max_batch=", params.max_batch_size,
+                )
         else:
             _ = cyc
         # Mojo frees a buffer at its LAST USE; these must outlive every
@@ -8355,6 +8811,8 @@ def train_forest_regression_device_timed(
         _ = d_leaves^
         _ = d_visit^
         _ = lp^
+        _ = queues^
+        _ = d_mismatch^
         _ = d_row_ids^
         _ = ws^
         gi += 1
