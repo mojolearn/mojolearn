@@ -170,7 +170,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_archive_door import classical_archive_write, _archive_array, _archive_unpack_member, _archive_class_name_unpack
 from bindings.classical_archive_read_door import _archive_builtin_repr
-from bindings.trees_public_iforest_door import iforest_validate
+from bindings.trees_public_iforest_door import iforest_export_forest
 from bindings.cholesky_archive_native_unpack import cholesky_archive_write
 from providers.python.array_layout_boundary_unpack import native_shape_unpack
 from core.linear_metadata import linear_mode_name
@@ -1021,13 +1021,23 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
                 var text = String(step[5]).replace("{want}", _archive_builtin_repr(wanted))
                 text = text.replace("{dtype}", parts[0]).replace("{shape}", _archive_builtin_repr(got))
                 _schema_fail(step[4], PythonObject(text), name)
-        elif kind == "iforest_knobs":
-            # IsolationForest.save on an instance assembled without fit or
-            # load: `_validate_params()` resolves the knobs first.
-            # The class's tables (numbers.Integral, a missing-field
-            # sentinel) are connected with its schema in the archive context.
-            if not _schema_has(fields, PythonObject("_seed")):
-                iforest_validate(model, fields, context["host_archive_context"])
+        elif kind == "iforest_forest":
+            # IsolationForest.save (lane fix-iforest-save-device-forest,
+            # format mojolearn-iforest-2): the fitted forest itself, read
+            # from the resident forest the scores use (the device's node
+            # arrays, or the CPU column's oracle trees), in place of the
+            # training matrix, which a resident fit borrows from the caller.
+            # `step`: (kind, refusal class, refusal text) for an unfitted
+            # estimator. The export resolves the knobs of an instance
+            # assembled without fit or load (`_validate_params()`, the
+            # former `iforest_knobs` step) through the tree owner's tables,
+            # connected with the schema as `iforest_trees_context`.
+            if not _schema_has(fields, PythonObject("_x")) and not _schema_has(fields, PythonObject("_if_forest")):
+                _schema_fail(step[1], step[2], name)
+            var forest = iforest_export_forest(model, context["host_archive_context"]["iforest_trees_context"])
+            var members = Python.tuple("tree_offsets", "node_feature", "node_threshold", "node_left", "node_right")
+            for j in range(5):  # driver-loop: over the five fixed forest members
+                py_setitem(values, members[j], forest[j])
         elif kind == "format":
             py_setitem(values, step[1], step[2])
         elif kind == "estimator":
