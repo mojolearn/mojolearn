@@ -57,7 +57,7 @@ binding.
 import os
 
 from . import _backend, _native_classical_bridge
-from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
+from ._iforest_impl import IsolationForest, _IFOREST_FORMAT, _IFOREST_FORMAT_FOREST
 from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, Cholesky
@@ -1236,6 +1236,8 @@ _FORMATS = {
     _KDE_FORMAT: {"KernelDensity": HostKernelDensity},
     _SVC_FORMAT: {"SVC": HostSVC},
     _IFOREST_FORMAT: {"IsolationForest": HostIsolationForest},
+    # lane fix-iforest-save-device-forest: the saved forest (no training rows)
+    _IFOREST_FORMAT_FOREST: {"IsolationForest": HostIsolationForest},
     _GMM_FORMAT: {"GaussianMixture": HostGaussianMixture},
     _HDBSCAN_FORMAT: {"HDBSCAN": HostHDBSCAN},
     _GP_FORMAT: {"GaussianProcessRegressor": HostGaussianProcessRegressor},
