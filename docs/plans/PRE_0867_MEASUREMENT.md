@@ -98,6 +98,15 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
 Bring up ONE NVIDIA pod: `MOJOLEARN_ORCHESTRATOR=1 bash tools/nvidia_central.sh up --pods 1` (one is also the
 default now; the old default of two rented an unused second L40S on 2026-11-12).
 
+**NVIDIA is measured on an L40S only**, the paper's NVIDIA device: compare on the same device (AMD: MI300X only).
+`up` asks RunPod for one `NVIDIA L40S` and nothing else (`NVIDIA_MEASURE_GPUS` in `tools/runpod_nvidia_sm89.env`);
+out of stock is retried, never filled with another model (on 2026-11-13 the old sm_89 walk rented a 2x RTX 6000 Ada).
+Another list only explicitly: `MOJOLEARN_NVC_GPUS`, else `MOJOLEARN_DEVPOD_GPUS`. `stage nvidia` reads the pod's
+`nvidia-smi` names and refuses anything but an L40S, and `tools/ops/paper_compare_job.sh` refuses it too (exit 3),
+unless `--allow-hw-diff` / `PC_ALLOW_HW_DIFF=1`; then every result row is flagged HW-DIFF, as for an AMD MI325X.
+Every RunPod create also passes `tools/rent_guard.sh`: no create while the account has `MOJOLEARN_RUNPOD_CAP` (8)
+or more live pods, whoever owns them.
+
 Before copying, the stage step checks free disk on `/root`: at least 40 GB (`--min-free-gb`), or the largest results
 dir already under the tree's `box-out/` plus 20 GB. It prints what can be pruned (earlier results dirs, once their
 bytes are home; `box_persist_run.sh` staging tarballs; other candidates' `/root/pc-in` sets; smoke caches `c2..`)
