@@ -68,6 +68,18 @@
   "chol-ops-fit": {
    "define": "MOJOLEARN_IDN_CHOL_OPS_FIT",
    "status": "define in code (cholesky/chol_ops.mojo:79): B = the N7/N8 Cholesky ops route for KernelRidge and GPR fits; A = potrf_lower + cho_solve (the 0.8.66 route, restored 2026-11-13 after AMD 1.14-1.25x)"
+  },
+  "mamba-call-program": {
+   "define": "MOJOLEARN_MAMBA_CALL_PROGRAM",
+   "status": "define in code (autograd/block_step_ops.mojo MAMBA_CALL_PROGRAM; mamba/impl/mamba_block_program.mojo MambaBlockProgram.run): B = lane x5's per-call route (session op into a y tensor, x copied D2D into a zeroed dx, output copied D2D then downloaded); A = x uploaded into the kept x tensor, the block reading it in place, residual_out downloaded straight to the caller (0.8.55 _mamba1_run/_mamba2_run shape)"
+  },
+  "transformer-decode-per-token-door": {
+   "define": "MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR",
+   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_DOOR): B = d37be875fc's per-token door (a (B, 1, d_model) Array view rebuilt per token by _neural_input); A = the (B, d_model) step input admitted as is (_neural_input_rows)"
+  },
+  "cnn-predict-program-copy": {
+   "define": "MOJOLEARN_CNN_PREDICT_PROGRAM_COPY",
+   "status": "define in code (sequence/cnn_classifier_program.mojo CNN_PREDICT_PROGRAM_COPY): B = lane x8b's resident predict per call (zero-filled X and (n, k) buffers, a new prepared replay, per-chunk OP_COPY); A = unfilled device buffers, the session's cached replay, one-chunk output read in place"
   }
  },
  "rows": [
@@ -631,6 +643,50 @@
     "autograd-optim"
    ],
    "decides": "the executor optimizer (B) becomes the one update only if at least as fast as the hand OP_OPT update on NVIDIA and AMD; digests must not move in either arm"
+  },
+  {
+   "id": "restore-mamba-call-path",
+   "source": "restore-neural-call-paths (2026-11-13, history-audit hist-neural rows 4/6/7/9/13, hist-judge candidates 2/4): x5 08332f3665 / 844ea17a80 per-call doors on the block step op with D2D x->dx and residual->y copies; 0.8.55 per-call shape restored as A",
+   "kind": "ab",
+   "lane": [
+    "mamba1-forward",
+    "mamba2-forward",
+    "mamba3-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mamba-call-program"
+   ],
+   "decides": "keep the direct call path (A) unless lane x5's copy route (B) is at least as fast on NVIDIA and AMD; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba1-forward 3.43 -> 4.08 ms, mamba2-forward 5.57 -> 7.58 ms (mamba3-forward 3.95 -> 6.75 ms runs the Mamba-3 prefill session, not this route); same kernels on the same bytes, digests must not move in either arm"
+  },
+  {
+   "id": "restore-transformer-decode-door",
+   "source": "restore-neural-call-paths (2026-11-13, history-audit hist-neural rows 4/6/7/9/13, hist-judge candidates 2/4): d37be875fc per-token native door (Array view rebuilt per token)",
+   "kind": "ab",
+   "lane": [
+    "transformer-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "transformer-decode-per-token-door"
+   ],
+   "decides": "keep the direct step input (A) unless B is at least as fast on NVIDIA and AMD; board on record NV L40S 1105 ms (0.8.55) -> 1455 (0.8.66) -> 1406 (candidate), MI300X 2445 -> 2699 (0.8.66); if A does not recover the ~145 us/token, profile one step on NV (the remaining host work is the kept-entry Python-level call and y allocation); digests must not move"
+  },
+  {
+   "id": "restore-cnn-predict-call",
+   "source": "restore-neural-call-paths (2026-11-13, history-audit hist-neural rows 4/6/7/9/13, hist-judge candidates 2/4): 3a138648de resident predict per-call zero fills, prepared replay and per-chunk copy",
+   "kind": "ab",
+   "lane": [
+    "cnn-clf"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "cnn-predict-program-copy"
+   ],
+   "decides": "keep the trimmed resident predict (A) unless B is at least as fast on NVIDIA and AMD (infer); no 0.8.55 cell (AMD MI325X 9.21 ms at 0.8.62); softmax/argmax stay the generic ops in both arms (x_cnn_res_argmax deleted at 7c9d9d5575); digests must not move"
   }
  ]
 }
