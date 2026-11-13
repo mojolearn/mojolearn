@@ -116,6 +116,15 @@ def source_tree(work, commit, dry):
         return tree
     tree.parent.mkdir(parents=True, exist_ok=True)
     sh("git", "worktree", "add", "--detach", str(tree), commit)
+    # A worktree added from a lean (sparse) checkout inherits its patterns and lacks bench/results, which
+    # holds the verification CTR models the pack stages; the source tree is the whole commit. Per worktree
+    # under extensions.worktreeConfig; a no-op on a full tree. (2026-11-12: two measurement builds packed
+    # 56/56 bindings and then refused on the missing models.)
+    sh("git", "-C", str(tree), "sparse-checkout", "disable")
+    models = tree / "bench/results/identity_break"
+    if not models.is_dir():
+        raise SystemExit(f"candidate: {tree} lacks {models.relative_to(tree)} after the checkout; "
+                         f"git worktree remove --force {tree} and rerun")
     return tree
 
 
