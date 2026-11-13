@@ -186,3 +186,34 @@ def test_decode_session_methods_are_native_and_equal_the_per_call_step(monkeypat
         assert owned.buffered_tokens == plain.buffered_tokens
     with pytest.raises(ValueError, match="state is required"):
         door(None)
+
+
+def test_mamba3_forward_unfilled_outputs_hold_the_zero_filled_bytes(monkeypatch):
+    # Lane fix-mamba3-unfilled-arrays (2026-11-13): the forward's y and four
+    # reports are allocated unfilled (bindings/neural_prefill_native_door.mojo
+    # MAMBA3_FORWARD_ZERO_FILL). Every byte must still come from the kernel:
+    # recycle freed allocator blocks of the same sizes filled with 0xFF (NaN
+    # bit patterns) between calls, and the bytes must equal the retained
+    # driver's y and the first call's reports, which the zero-filled arm
+    # (-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL) returns too.
+    block, dm = _block("mamba3")
+    x = _tokens(2, 5, dm)
+    expected = np.asarray(_mamba_block_reference.block_call(block, x, None, step=False)).copy()
+    names = ("h_last_", "k_last_", "v_last_", "theta_last_")
+    first = _native(monkeypatch, block.forward, x)
+    first_reports = [np.asarray(getattr(block, n)).copy() for n in names]
+    sizes = [np.asarray(first).nbytes] + [r.nbytes for r in first_reports]
+    assert np.asarray(first).tobytes() == expected.tobytes()
+    for _ in range(3):
+        junk = [bytearray(b"\xff" * n) for n in sizes for _ in range(4)]
+        del junk
+        y = _native(monkeypatch, block.forward, x)
+        assert isinstance(y, Array) and y.shape == (2, 5, dm) and y.dtype == "<f4"
+        assert np.asarray(y).tobytes() == expected.tobytes()
+        for name, want in zip(names, first_reports):
+            got = getattr(block, name)
+            assert isinstance(got, Array) and got.shape == want.shape
+            assert np.asarray(got).tobytes() == want.tobytes()
+        # The unfilled store is writable and pinned (no resize under the view).
+        assert y._readonly is False and memoryview(y).format == "f"
+        assert np.isfinite(np.asarray(y)).all()
