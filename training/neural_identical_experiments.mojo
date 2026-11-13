@@ -115,7 +115,7 @@ comptime IDN_SAMBA_RESIDENT_STEP = (
 # (bindings/samba_inference_native_door.mojo), so the binding that compiles the
 # door takes the define. Not keyed on _ENABLED: it picks a route, the resident
 # image's own op 24 (IDN_SAMBA_RESIDENT_STEP) still decides availability.
-comptime SAMBA_PROGRAM_FORWARD = is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"]()
+comptime IDN_SAMBA_PROGRAM_FORWARD = is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"]()
 # attn_stash=recompute for the Samba training step only (lane grid-act-4,
 # 2026-10-08, IDENTICAL grid ge123e6f9, one run per arm, stash -> recompute
 # ms): samba-train-step NV 96.0 -> 79.5, AMD 147.2 -> 145.7 (0.905x) but

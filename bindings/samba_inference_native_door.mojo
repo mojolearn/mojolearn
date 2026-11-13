@@ -41,7 +41,7 @@ from bindings.samba_admission_door import samba_admit_model_fields
 from training.samba_inference_run import _m3_shapes, _m3_names, _samba_host_ref
 # The stateless forward's route (lane restore-samba-resident-forward): the
 # resident forward by default, the stack program under the B-arm define.
-from training.neural_identical_experiments import SAMBA_PROGRAM_FORWARD
+from training.neural_identical_experiments import IDN_SAMBA_PROGRAM_FORWARD
 from providers.python.samba_resident_pyapi_door import samba_resident_native_forward
 
 
@@ -534,7 +534,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         # so the A/B can prove which arm ran: 0.8.66 measured 10.58 ms while
         # the resident forward still existed, and whether it was selected
         # there was never established.
-        comptime if not SAMBA_PROGRAM_FORWARD:
+        comptime if not IDN_SAMBA_PROGRAM_FORWARD:
             if state is None:
                 output = samba_resident_native_forward(fields, config, entries, ids)
         if output is None:
