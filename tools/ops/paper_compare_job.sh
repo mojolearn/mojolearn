@@ -269,7 +269,10 @@ fi
 # one board argument set for every process: the owed plan's union (paper + owed lanes), else the paper's
 BA="$RES/plan/board-args.txt"; [ "$OWED" = 1 ] && [ -s "$RES/plan-owed/board-args.txt" ] && BA="$RES/plan-owed/board-args.txt"
 mapfile -t BARGS < "$BA"
-COMMON=("${BARGS[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only)
+# --fixtures-venv: the algos layer lanes' own arm reads the neural-layer fixtures (tools/neural_fixtures.py); each
+# board process makes them beside its algos blocks from one shared CPU-torch venv (candidate 4c2340386abc smoked
+# conv2d, gcn, graphsage and moe as "not run": no fixture set was on the box)
+COMMON=("${BARGS[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only --fixtures-venv "$CACHE_ROOT/venv-nf")
 run_as() {   # arm: the board args that run on that arm's installed venv (no install)
     echo --python-env "${ARM_PY[$1]}" --skip-install --wheel-manifest "${ARM_MAN[$1]}" --mojolearn-version "$(arm_version "$1")"
 }
