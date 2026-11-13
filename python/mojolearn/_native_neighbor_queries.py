@@ -29,7 +29,7 @@ def _capture(binding, name, symbols):
     # binding records it at PyInit. The captured route carries it too, or every
     # resident/device query through a route refused "publishes no native
     # neighbors table" (lane lazy-import-fix).
-    key = vars(binding).get("neighbors_native_key")
+    key = vars(binding).get("neighbors_native_key") if type(binding) is ModuleType else None
     if type(key) is tuple:
         result.neighbors_native_key = key
     _BINDING_ALIASES[id(binding)] = (binding, result)

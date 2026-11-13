@@ -50,7 +50,6 @@ from . import _backend
 from . import _native_archive_bridge
 from . import _native_family_bridge
 from ._buffer import _native
-from ._labels import ClassLabels
 from ._mode import NumericModeMixin, available_if
 
 #: `SVC.save`'s format tag (the kde svc host lane, 2026-09-14).
@@ -1255,9 +1254,6 @@ def _svc_base_helpers():
 
 _native_family_bridge.tables(family_svc_native=_native, family_svc_base_helpers=_svc_base_helpers(),
                              family_svc_kernels=dict(_SVC_KERNELS),
-                             classifier_labels_class=ClassLabels,
-                             classifier_labels_namespace=dict(vars(ClassLabels)),
-                             classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
                              family_svc_refused=dict(_SVC_REFUSED_KERNELS),
                              family_svr_refused=dict(_SVR_REFUSED_KERNELS))
 

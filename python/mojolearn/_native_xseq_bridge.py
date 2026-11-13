@@ -107,11 +107,9 @@ def connect():
     except ImportError:
         r2_options = None
     from ._native_family_bridge import shared_context
-    from ._labels import ClassLabels
+    # The classifier label entries are in the shared context from its creation
+    # (_native_family_bridge.shared_context).
     lifecycle = shared_context()
-    lifecycle.update(classifier_labels_class=ClassLabels,
-                     classifier_labels_namespace=dict(vars(ClassLabels)),
-                     classifier_labels_mro=ClassLabels.__mro__)
     from ._native_owner_lifetime import connect_owner_context
     ownership = dict(lifecycle)
     connect_owner_context(ownership)

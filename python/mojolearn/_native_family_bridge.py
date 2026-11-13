@@ -37,8 +37,17 @@ def shared_context():
     if _CONTEXT is None:
         from types import BuiltinFunctionType
         from ._native_classical_bridge import _state_context
+        from ._labels import ClassLabels
         context = _state_context()
-        context.update(family_builtin_type=BuiltinFunctionType)
+        # The classifier label class every family door's label admission reads
+        # (bindings/label_admission_native_unpack.mojo, logistic_admission_unpack.mojo,
+        # prep_lda_admission_door.mojo, trees_public_state_unpack.mojo). It was
+        # written by the SVM and sequence-forecast imports, so a lazily loaded
+        # neighbors or semi-supervised family read no key (lane lazy-import-fix).
+        context.update(family_builtin_type=BuiltinFunctionType,
+                       classifier_labels_class=ClassLabels,
+                       classifier_labels_namespace=dict(vars(ClassLabels)),
+                       classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
         _CONTEXT = context
         _connect_context_module()
     return _CONTEXT
