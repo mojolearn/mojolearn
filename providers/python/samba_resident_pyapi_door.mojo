@@ -61,6 +61,43 @@ def samba_resident_address(session: PythonObject) raises -> Int:
 
 # TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_native_forward (descriptor op 16 forward) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
+# RESTORED 2026-11-13 (lane restore-samba-resident-forward) from
+# `git show 5b5490960d:providers/python/samba_resident_pyapi.mojo`, on today's
+# session owner (op 12, adopted as a descriptor resource; the address read
+# through `samba_resident_address(session)`). The measured winner of
+# samba-forward (training/neural_identical_experiments.mojo
+# SAMBA_PROGRAM_FORWARD has the numbers); same words, same kernels.
+
+
+def samba_resident_native_forward(fields: PythonObject, config: PythonObject, entries: PythonObject,
+                                  ids: PythonObject) raises -> PythonObject:
+    """`SambaStack.forward(inputs)` without state on the resident session:
+    `(B, L)` int32 ids -> a fresh `(B, L, vocab)` logits array, or None when
+    this stack's primitive image has no resident session (no primitive
+    provider, a dropout stack, or an image whose op 24 reports the resident
+    route compiled out: CPU, `fast`, MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or
+    MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2). UNPACK/PACK only: one reserved native
+    call (op 14 reserve, op 16 forward, op 15 release), the GIL released
+    around op 16."""
+    var provider = samba_resident_provider(fields, entries)
+    if provider is None:
+        return PythonObject(None)
+    if Float64(py=config["dropout"]) != 0.0 or neural_descriptor_execute(provider, 24, [], [], [], False) == 0:
+        return PythonObject(None)
+    var session = samba_resident_session(fields, config, provider)
+    var handle = samba_resident_address(session)
+    var shape = ids.shape
+    var b = Int(py=shape[0])
+    var l = Int(py=shape[1])
+    var output = generation_array([b, l, Int(py=config["vocab"])])
+    var parameters = fields["flat"]
+    _ = neural_descriptor_reserved_execute(provider, session, handle, 14, 15, 16,
+        [Int(py=parameters._addr), Int(py=ids._addr), Int(py=output._addr)], [b, l], [])
+    _ = parameters  # keep the Python objects alive through the native call above
+    _ = ids
+    _ = session
+    _ = provider
+    return output
 
 
 def samba_resident_native_step(fields: PythonObject, config: PythonObject, provider: PythonObject,
