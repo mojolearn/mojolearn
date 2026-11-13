@@ -462,7 +462,7 @@ struct HostExec(Exec):
                     m[i * n + j] = m[j * n + i]
         # lane n9-decomp-eigh-families (2026-11-09): the executor op's host
         # twin (x_decomp/eigh_ops_host.mojo `eigh_op_sym_host`), the route
-        # `DevExec.eigh` takes through `eigh_op_sym`: the IDENTICAL
+        # `DevExec.eigh` takes (`DevExec.eigh_into`): the IDENTICAL
         # tridiagonal solve from n = TD_MIN_N on a copy, the Jacobi on a
         # refusal or below. The same words as the inline route it replaces.
         if eigh_op_sym_host(F32Ptr(unsafe_from_address=Int(m.unsafe_ptr())), w, v, n) != 0:

@@ -11,7 +11,7 @@ enqueued launch, with no sync:
 
 - the launch sequences are DevExec's own (`launch_ew`, `launch_gemm`,
   `launch_colsum`, `launch_rowsum`, `launch_lu`, `rand_kernel`,
-  `gamma_kernel`, `launch_lda_rows`, `DevExec.eigh_enq`), so every value
+  `gamma_kernel`, `launch_lda_rows`, `DevExec.eigh_into`), so every value
   is the same bits as `Kit[DevExec]`, which is the same bits as the CPU
   column's kit (every x-decomp lane's GPU == CPU claim);
 - the host reads a value only where the search branches on it: a C-step's
@@ -35,7 +35,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr, I32Ptr
 from checks.numerics import ftz, identical_mul
 from x_decomp.cells import ew_cell
-from x_decomp.rr import RR_EIGH_SWEEPS
 from x_decomp.cells import X_DECOMP_SVD_SWEEPS
 from x_decomp.svd_ops import qr_op_q, svd_op_tall
 from core.step_gate import step_gate_open_word
@@ -68,7 +67,9 @@ from x_decomp.device import (
     rand_kernel,
     rowsum_scratch,
     xd_ctx,
+    XD_FAST_SVD_ONE_BLOCK,
 )
+from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.kit import (
     Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
@@ -386,11 +387,9 @@ struct DKit(Movable):
     var nan_word: DMat
     var nan_host: List[Int32]
     var nan_pending: Bool
-    # the eigh op's status words (`eigh` below), sticky until the next
-    # `sync` reads them (lane n9-decomp-eigh-families)
-    var eig_word: DMat
-    var eig_host: List[Float32]
-    var eig_pending: Bool
+    # TOMBSTONE: the eigh op's sticky status word (`eig_word`, `eig_host`, `eig_pending`, read at `sync`) deleted
+    # 2026-11-13 by lane perf-decomp-eigh: `eigh` runs `DevExec.eigh_into`, which raises on an unconverged
+    # solve itself; code recoverable at the lane's base (origin/main bc85d7e247).
     # the SVD op's status words (`svd` below), sticky the same way (lane
     # n9b-device-svd-qr)
     var svd_word: DMat
@@ -405,9 +404,6 @@ struct DKit(Movable):
         self.nan_word = DMat(1, 1)
         self.nan_host = List[Int32](length=1, fill=Int32(0))
         self.nan_pending = False
-        self.eig_word = DMat(1, 1)
-        self.eig_host = List[Float32](length=1, fill=Float32(0))
-        self.eig_pending = False
         self.svd_word = DMat(1, 1)
         self.svd_host_word = List[Float32](length=1, fill=Float32(0))
         self.svd_pending = False
@@ -421,9 +417,6 @@ struct DKit(Movable):
         var nv = _pool_buf_view(self.nan_word.id, 1)
         enqueue_fill(self.ctx, nv, Float32(0))
         _ = nv^
-        var ev = _pool_buf_view(self.eig_word.id, 1)
-        enqueue_fill(self.ctx, ev, Float32(0))
-        _ = ev^
         var sv = _pool_buf_view(self.svd_word.id, 1)
         enqueue_fill(self.ctx, sv, Float32(0))
         _ = sv^
@@ -459,17 +452,11 @@ struct DKit(Movable):
 
     def sync(mut self) raises:
         var check = self.nan_pending
-        var echeck = self.eig_pending
         var scheck = self.svd_pending
         if check:
             self.ctx.enqueue_copy(
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.nan_host.unsafe_ptr())),
                 src_buf=_pool_buf_view(self.nan_word.id, 1),
-            )
-        if echeck:
-            self.ctx.enqueue_copy(
-                dst_ptr=F32Ptr(unsafe_from_address=Int(self.eig_host.unsafe_ptr())),
-                src_buf=_pool_buf_view(self.eig_word.id, 1),
             )
         if scheck:
             self.ctx.enqueue_copy(
@@ -479,13 +466,6 @@ struct DKit(Movable):
         self.ctx.synchronize()
         self.hold_f.clear()
         self.hold_i.clear()
-        if echeck:
-            self.eig_pending = False
-            if self.eig_host[0] != Float32(0):
-                raise Error(
-                    "eigh: a resident solve did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps."
-                    " An unconverged decomposition is not returned as if it were one (DEVIATION 590)."
-                )
         if scheck:
             self.svd_pending = False
             if self.svd_host_word[0] != Float32(0):
@@ -778,7 +758,14 @@ struct DKit(Movable):
         (`svd_order`) and uploaded both again; FactorAnalysis EM, LLE's
         subspace iteration and PLS read them on the device now. The same
         words (the op's one-block Jacobi is the round launches' pairs, fold
-        and tree; the order is `svd_order`'s)."""
+        and tree; the order is `svd_order`'s).
+
+        Lane perf-decomp-eigh (2026-11-13): the one-block op is the owed B
+        arm (-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK, as for `DevExec._svd_on`);
+        the default is `DevExec.svd_desc_into`, 0.8.66's round launches with
+        the order on the device and S, Vt resident. Measured with the op as
+        the default against 0.8.66: factor-analysis/istella fit NVIDIA 6525
+        -> 15992 ms (2.45x), AMD 4143 -> 19733 ms (4.76x)."""
         var m = A.r
         var n = A.c
         if n <= 0 or m < n:
@@ -787,6 +774,14 @@ struct DKit(Movable):
         Vt = DMat(n, n)
         var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
         self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        comptime if not XD_FAST_SVD_ONE_BLOCK:
+            var ds0 = self._sub(S)
+            var dv0 = self._sub(Vt)
+            DevExec.svd_desc_into(self.ctx, da, m, n, QRB_CELLS, ds0, dv0)
+            _ = da^
+            _ = ds0^
+            _ = dv0^
+            return
         var gate = step_gate_open_word(self.ctx)
         var status = self.ctx.enqueue_create_buffer[DType.int32](1)
         var ds = self._sub(S)
@@ -1144,17 +1139,20 @@ struct DKit(Movable):
     # 2026-11-09 by lane n9-decomp-eigh-families; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
     def eigh(mut self, A: DMat) raises -> _Eig:
-        """`Kit.eigh` on the device: the executor op `eigh_op_sym` (through
-        `DevExec.eigh_enq`, `DevExec.eigh`'s route and words) on a device
-        copy of A, w and V left resident, ENQUEUED. The status word is
-        sticky until the next `sync`, which raises on an unconverged solve.
+        """`Kit.eigh` on the device: `DevExec.eigh_into` (`DevExec.eigh`'s
+        route and words) on a device copy of A, w and V left resident. The
+        route reads its refusal word and convergence tests on the host and
+        raises on an unconverged solve.
 
         Lane n9-decomp-eigh-families (2026-11-09): this ran `DevExec._eigh_on`
-        into host Mats (a wait every sweep, w and V home) and uploaded both
-        again; FastICA, FactorAnalysis, the rotation and MinCovDet's pinvh
-        read them on the device now. FAST: the op's route (the tridiagonal
-        solve from TD_MIN_N on Apple FAST, as `DevExec.eigh`) replaces the
-        Jacobi this kit kept at every n under FAST (quality only)."""
+        into host Mats and uploaded both again; FastICA, FactorAnalysis, the
+        rotation and MinCovDet's pinvh read them on the device now.
+        Lane perf-decomp-eigh (2026-11-13): n9's read-free op (`eigh_enq`,
+        `eigh_op_sym`) ran the Jacobi in ONE block for 33 <= n < TD_MIN_N and
+        for every refused tridiagonal solve (MinCovDet's singular covariances
+        on istella, 220 wide): min-cov-det/istella fit NVIDIA 303881 ->
+        2707673 ms (8.91x vs 0.8.66), AMD smoke timeout. `eigh_into` is the
+        0.8.66 route (multi-block rounds) with the outputs kept resident."""
         var n = A.r
         var wd = DMat(1, n)
         var vd = DMat(n, n)
@@ -1164,16 +1162,10 @@ struct DKit(Movable):
         self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
         var dw = self._sub(wd)
         var dv = self._sub(vd)
-        var status = DevExec.eigh_enq(self.ctx, da, dw, dv, n)
-        self.ctx.enqueue_function[dk_eig_sticky_kernel](
-            I32Ptr(unsafe_from_address=Int(status.unsafe_ptr())), self.eig_word.p(),
-            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-        )  # small-launch(one word): the op's status, sticky to the next sync
-        self.eig_pending = True
+        DevExec.eigh_into(self.ctx, da, dw, dv, n)
         _ = da^
         _ = dw^
         _ = dv^
-        _ = status^
         return _Eig(wd^, vd^)
 
     def rev_vec(self, A: DMat) raises -> DMat:

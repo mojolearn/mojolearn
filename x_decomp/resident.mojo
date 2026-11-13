@@ -837,11 +837,13 @@ def eigh_rev_kernel(w_asc: F32Ptr, v_asc: F32Ptr, w_out: F32Ptr, v_out: F32Ptr, 
 def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
     """The n x n device matrix a (left as it is) into the device matrices w
     (1 x n, eigenvalues DESCENDING) and v (n x n, the matching vectors in
-    columns): `eigh_op_sym` (`DevExec.eigh_enq`) on a device copy, then
-    `eigh_rev_kernel` (the column reversal the owners' host
-    `_reversed_columns` copied). One wait, for the status word (lane
-    n9-decomp-eigh-families: IncrementalPCA, FastICA's whitening and
-    FactorAnalysis's owner; was w and V home, reversed, uploaded again)."""
+    columns): `DevExec.eigh_into` on a device copy, then `eigh_rev_kernel`
+    (the column reversal the owners' host `_reversed_columns` copied), w and
+    V resident (lane n9-decomp-eigh-families: IncrementalPCA, FastICA's
+    whitening and FactorAnalysis's owner; was w and V home, reversed,
+    uploaded again). Lane perf-decomp-eigh (2026-11-13): `eigh_into` (the
+    0.8.66 route, multi-block Jacobi) replaces `eigh_enq`'s one-block
+    Jacobi; an unconverged solve raises inside it."""
     if n < 1:
         raise Error("x_decomp: the resident eigh needs n >= 1")
     var cells = n * n
@@ -855,30 +857,26 @@ def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
     ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     var dw = ctx.enqueue_create_buffer[DType.float32](n)
     var dv = ctx.enqueue_create_buffer[DType.float32](cells)
-    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+    DevExec.eigh_into(ctx, da, dw, dv, n)
     ctx.enqueue_function[eigh_rev_kernel](
         F32Ptr(unsafe_from_address=Int(dw.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dv.unsafe_ptr())),
         pw, pv, Int32(n), grid_dim=(cells + _EIGH_REV_TPB - 1) // _EIGH_REV_TPB, block_dim=_EIGH_REV_TPB,
     )
-    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
     ctx.synchronize()
     _ = da^
     _ = dw^
     _ = dv^
-    _ = status^
     _ = source^
-    DevExec.eigh_status_check(hs, n)
 
 
 def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
     """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
     device matrices w (n) and v (n x n, vectors in columns): the executor op
-    x_decomp/eigh_ops.mojo `eigh_op_sym` (`DevExec.eigh_enq`, `DevExec.eigh`'s
-    route and words) on a device copy; nothing but its status word comes
-    home (lane n9-decomp-eigh-families, 2026-11-09: the resident kits'
-    eigh no longer brings w and V down to upload them again). Waits once,
-    for the status; an unconverged solve raises."""
+    `DevExec.eigh_into` (`DevExec.eigh`'s route and words) on a device copy;
+    w and V stay on the device (lane n9-decomp-eigh-families, 2026-11-09:
+    the resident kits' eigh no longer brings w and V down to upload them
+    again). An unconverged solve raises. Lane perf-decomp-eigh
+    (2026-11-13): was `eigh_enq` (one-block Jacobi fallback)."""
     if n < 1:
         raise Error("x_decomp: the resident eigh needs n >= 1")
     if uplo > 2:
@@ -898,18 +896,14 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
         )
     var dw = weights.create_sub_buffer[DType.float32](0, n)
     var dv = vectors.create_sub_buffer[DType.float32](0, cells)
-    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
-    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+    DevExec.eigh_into(ctx, da, dw, dv, n)
     ctx.synchronize()
     _ = da^
     _ = dw^
     _ = dv^
-    _ = status^
     _ = source^
     _ = weights^
     _ = vectors^
-    DevExec.eigh_status_check(hs, n)
     return n
 
 
