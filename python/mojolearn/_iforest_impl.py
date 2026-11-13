@@ -42,9 +42,10 @@ from . import _native_archive_bridge, _native_trees_bridge
 from ._mode import NumericModeMixin
 
 
-#: The model file (the neighbors and density inference lane, 2026-09-15).
-#: DEVIATION 874 makes the fitted state the training matrix plus the
-#: constructor's resolved knobs, so that is what `save` writes: `x` `<f4` as
+#: The first model file format (the neighbors and density inference lane,
+#: 2026-09-15), still read by `load` and written by HostIsolationForest.
+#: DEVIATION 874 made the fitted state the training matrix plus the
+#: constructor's resolved knobs, so that is what it holds: `x` `<f4` as
 #: fitted, `ints` `<i8` [n_estimators, max_samples_mode, max_samples_int,
 #: max_depth, max_features_mode, max_features_int, bootstrap, seed,
 #: contamination_auto, n_features_in_, max_samples_], `reals` `<f8`
