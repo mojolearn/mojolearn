@@ -215,5 +215,5 @@ def test_mamba3_forward_unfilled_outputs_hold_the_zero_filled_bytes(monkeypatch)
             assert isinstance(got, Array) and got.shape == want.shape
             assert np.asarray(got).tobytes() == want.tobytes()
         # The unfilled store is writable and pinned (no resize under the view).
-        assert y._readonly is False and memoryview(y).format == "f"
+        assert y._readonly is False and y._mv.format == "f"
         assert np.isfinite(np.asarray(y)).all()
