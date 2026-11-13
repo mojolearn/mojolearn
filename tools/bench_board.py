@@ -5145,10 +5145,29 @@ def _evidence_failure_text(rec):
     return why + ("; missing " + " | ".join(gaps[:3]) if gaps else "")
 
 
-def smoke_verdict(race, rec, vendor):
-    """[(arm, reason)] of what keeps this race from passing ([] = PASS)."""
+def preflight_dropped(result, race_id):
+    """The preflight record of a race the plan audit kept from running ({"status", "problems", ...}), or None."""
+    for field in ("failed_preflight_recipes", "skipped_recipes"):
+        rec = (result.get(field) or {}).get(race_id)
+        if rec is not None:
+            return dict(rec, status=rec.get("status") or ("FAILED" if field.startswith("failed") else "REFUSED"))
+    return None
+
+
+def smoke_verdict(race, rec, vendor, preflight=None):
+    """[(arm, reason)] of what keeps this race from passing ([] = PASS). `preflight` is the race's record in
+    failed_preflight_recipes / skipped_recipes (preflight_dropped) when the plan audit kept it from running.
+
+    SMOKE-NOT-RUN FIX (2026-11-13, candidate 4c2340386abc): a race dropped by the preflight had no record and was
+    reported as "arm=- not run" on ten paper rows on both vendors; its preflight problems (with the driver's own
+    refusal line, probe_refusals) are now the reason. "not run" is left only for a race nothing ever reached."""
     import fnmatch
     if rec is None:
+        if preflight is not None:
+            problems = [str(p) for p in preflight.get("problems") or []] or ["no problem recorded"]
+            # the driver's refusal first: it names the cause the generic "missing probe" lines only imply
+            problems.sort(key=lambda p: not p.startswith("probe refused "))
+            return [("-", "preflight %s: %s" % (preflight.get("status"), "; ".join(problems[:4])[:600]))]
         return [("-", "not run")]
     fails = []
     # Resume/review may reconstruct the plan; use the retained actual binding
@@ -5227,7 +5246,7 @@ def write_smoke(out, races, result, vendor, shard):
     """smoke.json and the SMOKE PASS/FAIL lines; returns the number failing."""
     verdicts = {}
     for r in races:
-        fails = smoke_verdict(r, result["races"].get(r["id"]), vendor)
+        fails = smoke_verdict(r, result["races"].get(r["id"]), vendor, preflight_dropped(result, r["id"]))
         verdicts[smoke_key(r)] = {"id": r["id"], "pass": not fails,
                                   "unsupported": unsupported_our_arms(r),
                                   "eligible": not (bool(r.get("our_arms")) and set(r["our_arms"]) <= set(unsupported_our_arms(r))),
