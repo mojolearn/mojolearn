@@ -819,12 +819,72 @@ def gh(*args, check=True):
     return r.stdout
 
 
+#: `gh` failures that say nothing about the run: GitHub's quota and abuse refusals (HTTP 403/429, "secondary rate
+#: limit", the "scraping" notice), its 5xx answers and the network. On 2026-11-13 ten candidate controllers (30 legs
+#: polling every minute) emptied the 5000/h core quota and the "scraping" refusal of `gh run view` killed legs whose
+#: runs went on to succeed. These are retried, never a failed leg.
+RETRYABLE_GH = re.compile(r"http (403|429|5\d\d)\b|rate limit|scraping|abuse detection|error connecting|"
+                          r"connection reset|connection refused|timed out|timeout|unexpected eof|"
+                          r"temporarily unavailable|tls handshake", re.I)
+#: the quota part of RETRYABLE_GH: wait for the quota's reset, not a fixed pause
+RATE_LIMITED_GH = re.compile(r"http (403|429)\b|rate limit|scraping|abuse detection", re.I)
+#: a run polled this long is polled at LONG_POLL_SECONDS (a 30-leg wave fits the quota)
+LONG_RUN_SECONDS = 600
+LONG_POLL_SECONDS = 300
+
+
+def gh_retryable(text):
+    return bool(RETRYABLE_GH.search(str(text)))
+
+
+def rate_limit_wait():
+    """Seconds to wait after a quota refusal: until `gh api rate_limit` says the core quota resets when it is
+    empty (that endpoint costs no quota), else one minute (a secondary limit); 60 to 3600 s, 300 s when unreadable."""
+    r = subprocess.run([GH, "api", "rate_limit", "--jq", '.resources.core | "\\(.remaining) \\(.reset)"'],
+                       capture_output=True, text=True)
+    try:
+        remaining, reset = (int(x) for x in r.stdout.split())
+    except ValueError:
+        return 300
+    if remaining > 0:
+        return 60
+    return int(min(3600, max(60, reset - time.time() + 5)))
+
+
+def gh_read(*args, deadline=None):
+    """A READ-ONLY `gh` call (run view, run list, workflow list, run download) retried while it fails for a
+    retryable reason (RETRYABLE_GH): quota refusals sleep until the quota resets, the rest back off from 30 s
+    to 10 min. Never used for a workflow dispatch (a dispatch is not repeated). Raises the last error when the
+    failure is not retryable or the next wait would pass DEADLINE (time.time() seconds)."""
+    pause = 30
+    while True:
+        try:
+            return gh(*args)
+        except RuntimeError as exc:
+            if not gh_retryable(exc):
+                raise
+            wait = rate_limit_wait() if RATE_LIMITED_GH.search(str(exc)) else pause
+            pause = min(pause * 2, 600)
+            if deadline is not None and time.time() + wait > deadline:
+                raise
+            say(f"gh {' '.join(args[:2])}: retryable failure, again in {wait} s: {str(exc)[-160:]}")
+            time.sleep(wait)
+
+
+def poll_pause(base, running_seconds):
+    """The pause between two status reads of a run: BASE while the run is young, LONG_POLL_SECONDS once it has
+    run LONG_RUN_SECONDS (a shard compile takes tens of minutes; a minute's poll only spends quota)."""
+    if running_seconds is None or running_seconds < LONG_RUN_SECONDS:
+        return base
+    return max(base, LONG_POLL_SECONDS)
+
+
 def workflow_id():
     """The workflow's numeric id. A workflow that is not on the default branch
     yet is found by its path among the registered ones (GitHub resolves a
     file name only on the default branch)."""
-    out = gh("api", "--paginate", "repos/{owner}/{repo}/actions/workflows",
-             "--jq", '.workflows[] | "\\(.id) \\(.path)"')
+    out = gh_read("api", "--paginate", "repos/{owner}/{repo}/actions/workflows",
+                  "--jq", '.workflows[] | "\\(.id) \\(.path)"')
     for line in out.splitlines():
         wid, _, path = line.strip().partition(" ")
         if path == ".github/workflows/" + WORKFLOW and wid.isdigit():
@@ -832,9 +892,15 @@ def workflow_id():
     raise SystemExit(f".github/workflows/{WORKFLOW} is not registered with GitHub (docs/RELEASE_CHECKLIST.md 2d)")
 
 
-def tooling_ref(ref):
+def tooling_ref(ref, recorded=""):
     """(branch, sha): the branch the workflow runs from must hold exactly this
-    checkout's HEAD, and the route files must be committed."""
+    checkout's HEAD, and the route files must be committed.
+
+    RECORDED is the tooling sha a measurement build recorded at its first launch (release_candidate.py). On a
+    resume the branch may have moved on (2026-11-13: origin/main moved under the tooling checkout and every resume
+    refused with "push it"). The run then uses the branch tip, which is accepted when the tip still holds RECORDED
+    and its route files (the bytes the runners use) are the recorded ones and this checkout's; the returned sha is
+    the tip, the commit the run reports."""
     head = git("rev-parse", "HEAD")
     dirty = git("status", "--porcelain", "--", *ROUTE_FILES)
     if dirty:
@@ -842,10 +908,35 @@ def tooling_ref(ref):
     branch = ref or git("rev-parse", "--abbrev-ref", "HEAD")
     remote = subprocess.run(["git", "-C", str(ROOT), "ls-remote", "origin", "refs/heads/" + branch],
                             capture_output=True, text=True).stdout.split()
-    if not remote or remote[0] != head:
-        raise SystemExit(f"origin/{branch} is {remote[0][:12] if remote else 'absent'}, this checkout is "
-                         f"{head[:12]}: push it (the runners use the pushed tooling)")
-    return branch, head
+    if remote and remote[0] == head:
+        return branch, head
+    if remote and recorded:
+        tip = remote[0]
+        why = recorded_tooling_problem(branch, tip, head, recorded)
+        if why is None:
+            say(f"origin/{branch} moved to {tip[:12]}; it holds the recorded tooling {recorded[:12]} with the same "
+                f"route files, so the run uses it")
+            return branch, tip
+        raise SystemExit(f"origin/{branch} is {tip[:12]}, the recorded tooling {recorded[:12]}: {why}")
+    raise SystemExit(f"origin/{branch} is {remote[0][:12] if remote else 'absent'}, this checkout is "
+                     f"{head[:12]}: push it (the runners use the pushed tooling)")
+
+
+def recorded_tooling_problem(branch, tip, head, recorded):
+    """Why the branch TIP cannot stand in for the RECORDED tooling sha, or None (see tooling_ref)."""
+    def ok(*args):
+        return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True).returncode == 0
+    if not ok("cat-file", "-e", tip + "^{commit}"):
+        ok("fetch", "-q", "--no-write-fetch-head", "origin", "refs/heads/" + branch)
+        if not ok("cat-file", "-e", tip + "^{commit}"):
+            ok("fetch", "-q", "--no-write-fetch-head", "origin", tip)
+    if not ok("merge-base", "--is-ancestor", recorded, tip):
+        return "the branch no longer holds the recorded sha (push a branch that does, or pass --ref)"
+    if not ok("diff", "--quiet", recorded, tip, "--", *ROUTE_FILES):
+        return "the route files changed since the recorded sha (" + ", ".join(ROUTE_FILES[-2:]) + " ...)"
+    if not ok("diff", "--quiet", head, tip, "--", *ROUTE_FILES):
+        return f"this checkout ({head[:12]}) has other route files than the branch tip; push it"
+    return None
 
 
 def mint_map(creds, jobs_per_set, nsets, leg):
@@ -861,7 +952,7 @@ def mint_map(creds, jobs_per_set, nsets, leg):
 
 def find_run(tag, branch, wid, tries=30, pause=5):
     for _ in range(tries):
-        rows = json.loads(gh("run", "list", "--workflow", wid, "--branch", branch, "--event", "workflow_dispatch",
+        rows = json.loads(gh_read("run", "list", "--workflow", wid, "--branch", branch, "--event", "workflow_dispatch",
                              "--limit", "30", "--json", "databaseId,displayTitle,headSha,url") or "[]")
         for r in rows:
             if tag in (r.get("displayTitle") or ""):
@@ -879,26 +970,18 @@ def seconds(a, b):
 
 
 def wait_run(run_id, timeout_min, pause):
+    """The run's final view. Its status is read every PAUSE seconds while the run is young and every
+    LONG_POLL_SECONDS after LONG_RUN_SECONDS (poll_pause); a status read that fails for a retryable reason
+    (gh_read: the network, 5xx, quota or "scraping" refusals) is retried, never a failed leg. Both 216d04c7c
+    collectors exited on a transient api.github.com error while their remote jobs continued (2026-10-26); thirty
+    legs at one poll a minute emptied the core quota and the refusals killed legs whose runs succeeded
+    (2026-11-13)."""
     deadline = time.time() + timeout_min * 60
+    began = time.time()
     last = None
     while True:
-        # A failed status read must not strand an otherwise healthy build's
-        # artifacts. Retry only this read, never workflow dispatch. Both
-        # 216d04c7c collectors exited on a transient api.github.com connection
-        # error while their remote jobs continued (2026-10-26).
-        for attempt in range(3):
-            try:
-                view = json.loads(gh("run", "view", str(run_id), "--json",
-                                     "status,conclusion,jobs,headSha,url,createdAt,updatedAt"))
-                break
-            except RuntimeError as exc:
-                transient = any(text in str(exc).lower() for text in (
-                    "error connecting", "connection reset", "connection refused",
-                    "timed out", "timeout", "http 502", "http 503", "http 504"))
-                if not transient or attempt == 2 or time.time() >= deadline:
-                    raise
-                say(f"run {run_id} status read failed; retry {attempt + 1}/2: {exc}")
-                time.sleep(min(5, max(0, deadline - time.time())))
+        view = json.loads(gh_read("run", "view", str(run_id), "--json",
+                                  "status,conclusion,jobs,headSha,url,createdAt,updatedAt", deadline=deadline))
         jobs = view.get("jobs") or []
         line = ", ".join(f"{j['name']}={j.get('conclusion') or j.get('status')}" for j in jobs)
         if line != last:
@@ -908,7 +991,8 @@ def wait_run(run_id, timeout_min, pause):
             return view
         if time.time() > deadline:
             raise SystemExit(f"run {run_id} did not finish in {timeout_min} min ({view.get('url')})")
-        time.sleep(pause)
+        running = seconds(view.get("createdAt"), dt.datetime.now(dt.timezone.utc).isoformat())
+        time.sleep(poll_pause(pause, max(running or 0, time.time() - began)))
 
 
 def verify_tree(release_build, vendor, arch, commit):
@@ -1086,13 +1170,42 @@ def upload_donor(creds, donor, tag):
     return bincache.presign("GET", key, MAP_HOURS * 3600, creds), digest, key
 
 
-def download(run_id, name, out, failed):
-    """Artifact NAME of the run, moved into OUT (merged into what is there)."""
+#: download attempts per artifact, and the exit code of a collector whose run SUCCEEDED but whose artifact could
+#: not be downloaded: not a failed leg (release.py relaunches the leg attached to the run, --run-id)
+DOWNLOAD_TRIES = 6
+DOWNLOAD_PENDING_EXIT = 75
+#: `gh run download` answers that no retry changes (the artifact is not there)
+MISSING_ARTIFACT = re.compile(r"no valid artifacts|no artifact matches|no artifacts? found", re.I)
+
+
+def download(run_id, name, out, failed, conclusion=None):
+    """Artifact NAME of the run, moved into OUT (merged into what is there). A failed download is retried up to
+    DOWNLOAD_TRIES times with backoff (quota refusals wait for the quota's reset); after that, for a run that
+    concluded success the collector exits DOWNLOAD_PENDING_EXIT, never a failed leg (2026-11-13: download timeouts
+    and resets under the emptied quota marked succeeded runs' legs failed)."""
     with tempfile.TemporaryDirectory() as td:
-        r = subprocess.run([GH, "run", "download", str(run_id), "-n", name, "-D", td], capture_output=True, text=True)
-        if r.returncode != 0:
-            names = "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed) or "none failed"
-            raise SystemExit(f"no artifact {name} from run {run_id} ({r.stderr.strip()[-200:]}); failed jobs: {names}")
+        pause = 30
+        for attempt in range(1, DOWNLOAD_TRIES + 1):
+            shutil.rmtree(td, ignore_errors=True)
+            Path(td).mkdir(parents=True, exist_ok=True)
+            r = subprocess.run([GH, "run", "download", str(run_id), "-n", name, "-D", td],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                break
+            err = r.stderr.strip()[-200:]
+            if MISSING_ARTIFACT.search(r.stderr) and conclusion != "success":
+                attempt = DOWNLOAD_TRIES
+            if attempt == DOWNLOAD_TRIES:
+                names = "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed) or "none failed"
+                if conclusion == "success":
+                    say(f"DOWNLOAD PENDING: run {run_id} succeeded but artifact {name} did not download in "
+                        f"{DOWNLOAD_TRIES} tries ({err}); the leg is relaunched attached to the run (--run-id)")
+                    raise SystemExit(DOWNLOAD_PENDING_EXIT)
+                raise SystemExit(f"no artifact {name} from run {run_id} ({err}); failed jobs: {names}")
+            wait = rate_limit_wait() if RATE_LIMITED_GH.search(r.stderr) else pause
+            pause = min(pause * 2, 600)
+            say(f"artifact {name} of run {run_id}: download {attempt}/{DOWNLOAD_TRIES} failed, again in {wait} s: {err}")
+            time.sleep(wait)
         src = Path(td) / ("leg" if (Path(td) / "leg").is_dir() else "")
         Path(out).mkdir(parents=True, exist_ok=True)
         for p in sorted(src.iterdir()):
@@ -1115,14 +1228,14 @@ def run_modes(text):
         raise SystemExit(str(exc))
 
 
-def write_run_id(gha, run, attached=False):
+def write_run_id(gha, run, attached=False, source_commit=None, defines=None):
     """GHA/run-id.json: the producer run of this leg, written the moment it is
     known (before the wait). A collector that dies while the run goes on leaves
     it, so release.py reads that run's state instead of guessing (0.8.64: the
     sm_89 leg's begun compile runs stayed open after run 41364664603 failed)."""
     (gha / "run-id.json").write_text(json.dumps(dict(
         databaseId=run.get("databaseId"), url=run.get("url"), displayTitle=run.get("displayTitle"),
-        headSha=run.get("headSha"), attached=attached,
+        headSha=run.get("headSha"), attached=attached, source_commit=source_commit, defines=defines or None,
         recorded_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
 
 
@@ -1150,6 +1263,52 @@ def normalize_defines(text):
     if len(set(names)) != len(names):
         raise SystemExit(f"--defines: a name is given twice: {text!r}")
     return ",".join(sorted(entries, key=lambda e: e.split("=", 1)[0]))
+
+
+def read_doc(path):
+    try:
+        doc = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def drop_r2(creds, keys):
+    """Delete the run's R2 objects (URL map, host donor) after a successful collection; a failed delete only
+    leaves an object whose presigned URLs expire."""
+    if not creds or not keys:
+        return
+    import bincache
+    for key in keys:
+        try:
+            bincache.r2_request(creds, "DELETE", key)
+        except Exception:  # glue: a leftover object expires with its URLs
+            pass
+
+
+def succeeded_run(gha, commit, defines=""):
+    """The run GHA/run-id.json names when that run built COMMIT with DEFINES and concluded success, else None:
+    such a leg is collected again by --run-id, never dispatched again (release.py launch_detached; 2026-11-13: legs
+    whose runs succeeded were marked failed by the quota refusals and rebuilt from scratch). The commit and defines
+    come from run-id.json, else the dispatch.json of the same run; a leg that records neither is not attached."""
+    rid = read_doc(Path(gha) / "run-id.json")
+    disp = read_doc(Path(gha) / "dispatch.json")
+    run_id = rid.get("databaseId")
+    if not (isinstance(run_id, int) or (isinstance(run_id, str) and run_id.isdigit())):
+        return None
+    source = rid.get("source_commit") or disp.get("source_commit")
+    built = rid["defines"] if "defines" in rid else disp.get("defines")
+    if source != commit or (built or "") != (defines or ""):
+        return None
+    try:
+        view = json.loads(gh_read("run", "view", str(run_id), "--json", "status,conclusion,displayTitle"))
+    except (RuntimeError, ValueError):
+        return None
+    if disp.get("tag") and not rid.get("attached") and disp["tag"] not in (view.get("displayTitle") or ""):
+        return None
+    if view.get("status") == "completed" and view.get("conclusion") == "success":
+        return int(run_id)
+    return None
 
 
 def cmd_run(a):
@@ -1190,11 +1349,16 @@ def cmd_run(a):
                          "(gfx942 codegen varies run to run); pass --allow-cold-amd to build it anyway")
     cleanup = []
     if a.run_id:
-        run = json.loads(gh("run", "view", str(a.run_id), "--json", "databaseId,displayTitle,headSha,url"))
+        run = json.loads(gh_read("run", "view", str(a.run_id), "--json", "databaseId,displayTitle,headSha,url"))
         say(f"attached to run {a.run_id} ({run.get('url')})")
-        write_run_id(gha, run, attached=True)
+        # the R2 objects of the dispatch that made this run (release.py copies its dispatch.json here on an
+        # attach): dropped once this collection succeeds, as the dispatching collector would have
+        prior = read_doc(gha / "dispatch.json")
+        if prior.get("tag") and prior["tag"] in (run.get("displayTitle") or ""):
+            cleanup = list(prior.get("r2_objects") or [])
+        write_run_id(gha, run, attached=True, source_commit=a.commit, defines=defines)
     else:
-        branch, head = tooling_ref(a.ref)
+        branch, head = tooling_ref(a.ref, a.tooling_sha)
         tag = f"gha-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.urandom(3).hex()}"
         map_url = donor_url = donor_sha = ""
         jobs_per_set = max(a.shards + 1, MERGED_JOBS_PER_SET)
@@ -1223,7 +1387,7 @@ def cmd_run(a):
            # only when set: a workflow ref without the `defines` input still takes every release dispatch
            *(["-f", f"defines={defines}"] if defines else []))
         (gha / "dispatch.json").write_text(json.dumps(dict(
-            tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, host=a.host,
+            tag=tag, branch=branch, tooling_commit=head, recorded_tooling=a.tooling_sha or None, source_commit=a.commit, arch=a.arch, host=a.host,
             modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
             host_donor_sha256=donor_sha or None, r2_objects=cleanup, compile_groups=a.compile_groups,
             reuse_host_groups=a.reuse_host_groups, defines=defines or None,
@@ -1233,17 +1397,12 @@ def cmd_run(a):
         if run.get("headSha") != head:
             raise SystemExit(f"the run is at {run.get('headSha')}, this checkout at {head}")
         a.run_id = run["databaseId"]
-        write_run_id(gha, run)
-    try:
-        view = wait_run(a.run_id, a.timeout_min, a.poll)
-    finally:
-        if cleanup and creds:
-            import bincache
-            for key in cleanup:
-                try:
-                    bincache.r2_request(creds, "DELETE", key)
-                except Exception:
-                    pass
+        write_run_id(gha, run, source_commit=a.commit, defines=defines)
+    # The binding-cache map and the host donor stay in R2 until this collection succeeds (drop_r2 below): a
+    # collector that dies while the run goes on must not take them from its pending jobs (2026-11-13: a crashed
+    # collector's cleanup deleted the map and the run's assemble job failed HTTP 404 on "Binding-cache map").
+    # Left behind, their presigned URLs expire after MAP_HOURS and the next dispatch of the leg overwrites the map.
+    view = wait_run(a.run_id, a.timeout_min, a.poll)
     rows = []
     for j in view.get("jobs") or []:
         rows.append((j.get("name", ""), j.get("conclusion") or j.get("status"), j.get("startedAt"),
@@ -1256,8 +1415,8 @@ def cmd_run(a):
         # a complete set, an assembled build proof or an installed/runtime pass.
         dest = out / "shard-artifacts"
         dest.mkdir(exist_ok=True)
-        gh("run", "download", str(a.run_id), "--pattern", f"shard-{a.arch}-*", "--dir", str(dest))
-        download(a.run_id, "plan", gha / "plan", failed)
+        gh_read("run", "download", str(a.run_id), "--pattern", f"shard-{a.arch}-*", "--dir", str(dest))
+        download(a.run_id, "plan", gha / "plan", failed, view.get("conclusion"))
         plan = json.loads((gha / "plan" / "plan.json").read_text())
         expected = [r for r in plan["matrix"]["include"] if r["arch"] == a.arch]
         if not plan.get("compile_only") or plan.get("compile_groups") != a.compile_groups or not expected:
@@ -1271,16 +1430,18 @@ def cmd_run(a):
         message = f"COMPILE ONLY: {len(archives)} archives retained for {len(expected)} groups; no complete-build or runtime claim"
         (gha / "summary.txt").write_text(message + "\n")
         say(message)
+        if ok:
+            drop_r2(creds, cleanup)
         return 0 if ok else 1
     lines = [f"run {view.get('url')} {view.get('conclusion')}"]
     ok = True
     if a.arch:
-        download(a.run_id, f"release-{name}", out, failed)
+        download(a.run_id, f"release-{name}", out, failed, view.get("conclusion"))
         good, why = verify_tree(out / name / "release-build", vendor, a.arch, a.commit)
         ok &= good
         lines.append(("TREE OK: " if good else "TREE REFUSED: ") + why)
     if a.host:
-        download(a.run_id, "host-build", out / "host-build", failed)
+        download(a.run_id, "host-build", out / "host-build", failed, view.get("conclusion"))
         good, why = verify_host(out / "host-build", a.commit)
         ok &= good
         lines.append(("HOST OK: " if good else "HOST REFUSED: ") + why)
@@ -1293,6 +1454,7 @@ def cmd_run(a):
         lines.append("binding cache: " + promote(out, creds, a.arch))
     if ok:
         lines += next_steps(out, name, a)
+        drop_r2(creds, cleanup)
     (out / "wall.txt").write_text(f"wall_seconds={wall} run={a.run_id} conclusion={view.get('conclusion')}\n")
     (gha / "summary.txt").write_text("\n".join(lines) + "\n")
     for line in lines:
@@ -1373,6 +1535,8 @@ def main(argv=None):
     p.add_argument("--defines", default="", help="candidate build defines (NAME=V,NAME2 or '-D NAME=V -D NAME2'): "
                    "the workflow's `defines`, MOJOLEARN_BUILD_DEFINES in every compile (tools/release.py candidate)")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
+    p.add_argument("--tooling-sha", default="", help="the tooling sha a measurement build recorded at its first "
+                   "launch: a moved --ref is accepted while it holds this sha with the same route files")
     p.add_argument("--timeout-min", type=int, default=420)
     p.add_argument("--poll", type=int, default=60)
     p.set_defaults(fn=cmd_run)
