@@ -3660,6 +3660,35 @@ def params_probe(ctx, race, arms, scorer=None):
     return out
 
 
+#: A driver's refusal line for one arm in a probe log: FSPEED-REFUSED (trees), ALGOS-REFUSED (algos), ...
+_PROBE_REFUSAL = re.compile(r"^([A-Z0-9]+-REFUSED)\b.*?\barm=(\S+)\s+(.*)$")
+
+
+def probe_refusals(log_path, arms):
+    """{arm: first refusal text} the race's driver printed for `arms` in its probe log. SMOKE-NOT-RUN FIX
+    (2026-11-13, candidate 4c2340386abc): the preflight said only "missing parameter/version probe: ours" and the
+    smoke "arm=- not run" for ten rows whose probe log named the cause ("neural fixtures missing", "No module named
+    'catboost'"); the cause now travels with the problem. A generic "not built here" follow-up never replaces an
+    earlier specific line."""
+    out = {}
+    try:
+        with open(log_path, errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return out
+    starts = [i for i, line in enumerate(lines) if line.startswith("=== ")]
+    for line in lines[starts[-1] if starts else 0:]:     # the last probe run only (the log is appended to)
+        m = _PROBE_REFUSAL.match(line)
+        if not m or m.group(2) not in arms:
+            continue
+        text = m.group(3).strip()
+        if m.group(2) in out and "not built here" in text:
+            continue
+        if m.group(2) not in out or "not built here" in out[m.group(2)]:
+            out[m.group(2)] = text[:400]
+    return out
+
+
 def real_implementation(record):
     """Whether an opponent arm's parameter record names the real library class it constructed: a module
     that is not the harness itself (__main__, bench_*, tools.*). A wrapper defined in the harness is
@@ -3707,6 +3736,9 @@ def preflight_check(ctx, race, arms):
     except P.ParamsRefused as exc:
         report = dict(verdict="REFUSED", arms=records, problems=[str(exc)], exceptions=[])
     report["problems"].extend("missing parameter/version probe: " + a for a in missing)
+    refused = probe_refusals(os.path.join(ctx["out"], "raw", "params-only", race["id"].replace("/", "."),
+                                          "probe.log"), missing)
+    report["problems"].extend("probe refused %s: %s" % kv for kv in sorted(refused.items()))
     # Failed probes still retain their settings for diagnosis; partial output
     # from a failed process can never admit a timed race.
     report["problems"].extend("parameter probe failed (rc %s): %s" % (p["probe_rc"], a)
