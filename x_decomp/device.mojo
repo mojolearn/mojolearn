@@ -128,7 +128,8 @@ from x_decomp.exec_trait import Exec
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
-from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB
+from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
 # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (quarantined: observed convergence failure) device arm deleted 2026-11-09 by
 # lane n9-decomp-eigh-families (`DevExec._eigh_block_on`, x_decomp/rr_block_device.mojo); the op refuses the define.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
@@ -163,12 +164,20 @@ from cholesky.checks.potrf import CHOL_ELEM_TPB, add_jitter
 from cholesky.chol_ops import chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower
 from x_decomp.jacobi_par import (
     PJ_TPB,
+    eigh_par_cs_kernel,
+    eigh_par_off_fold_kernel,
+    eigh_par_off_part_kernel,
+    eigh_par_update_kernel,
     pj_identity_kernel,
     pj_transpose_kernel,
     sym_from_triangle_kernel,
 )
 from core.device_zero import enqueue_fill
-from x_decomp.eigh_ops import eigh_op_dense, eigh_op_sym
+from x_decomp.eigh_ops import eigh_op_dense
+from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
+from decomposition.spectrum_order_device import enqueue_eigh_ascending
+from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
+from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, eigh_td_enqueue, td_copy_kernel
 from core.step_gate import step_gate_open_word
 from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
@@ -232,6 +241,14 @@ comptime XD_FAST_SVD_ONE_BLOCK = is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"]()
 # per-round launches) is now THE dense eigh below TD_MIN_N (x_decomp/eigh_ops.mojo `eigh_op_sym`), so the cut it
 # switched on and the per-round route it rolled back to are gone; code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
+#
+# Lane perf-decomp-eigh (2026-11-13): the one-block cut is back at its 0.8.55 / 0.8.66 value. Up to
+# XD_EIGH_ONE_BLOCK_N the batched kernel's one block of RR_OFF_TPB threads covers a round's h h + n h cells
+# in a few steps, so one launch beats 2 (m - 1) launches a sweep; above it one block is short of threads
+# (n = 220: 36,300 cells a round on 256 threads, every round behind a block barrier) and the per-round
+# multi-block launches (`DevExec._eigh_par_dev`) win. Measured: n9's one block at every n gave
+# min-cov-det/istella fit 8.91x on NVIDIA (see `_eigh_par_test`). Every mode, every vendor (the same words).
+comptime XD_EIGH_ONE_BLOCK_N = 32
 
 # lane fam-decomp (2026-10-04), IDENTICAL: `DevExec.qr_r` uploads the caller's
 # matrix straight from its address and takes R straight into the caller's
@@ -1769,10 +1786,43 @@ def _pj_off_blocks(n: Int) -> Int:
     return max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
 
 
-# TOMBSTONE: DevExec._eigh_par_on's per-sweep convergence read (`_eigh_par_test`, three scalars and a wait before
-# every sweep) and the block Jacobi's `_eigh_block_test` deleted 2026-11-09 by lane n9-decomp-eigh-families: every
-# dense eigh is the executor op x_decomp/eigh_ops.mojo `eigh_op_sym` (the test on the device, no wait).
-# Code recoverable at the lane's parent commit (git log --grep 'n9: DevExec eigh').
+# TOMBSTONE: the block Jacobi's `_eigh_block_test` deleted 2026-11-09 by lane n9-decomp-eigh-families (the
+# quarantined MOJOLEARN_IDN_EIGH_BLOCK_ON arm); code recoverable at c96b36111c^.
+#
+# Lane perf-decomp-eigh (2026-11-13): `_eigh_par_test` is restored with the multi-block round-robin Jacobi
+# (`DevExec._eigh_par_dev`). n9 had made the one-block batched Jacobi (`eigh_op_dense`, ONE block of RR_OFF_TPB
+# threads for the whole n x n solve) the dense eigh for 33 <= n < TD_MIN_N and the fallback of every refused
+# tridiagonal solve (a singular covariance: repeated zero eigenvalues), at any n. Measured on candidate
+# 4c2340386abc against 0.8.66 (owed record 2026-11-13): min-cov-det/istella fit NVIDIA 303881 -> 2707673 ms
+# (8.91x; AMD smoke timeout), isomap smoke timeout on NVIDIA; both run pinvh / dense eigh on 220-wide or
+# n_samples-wide singular matrices. 0.8.55 / 0.8.66 ran this route.
+def _eigh_par_test(
+    ctx: DeviceContext,
+    mut da: DeviceBuffer[DType.float32],
+    mut doff: DeviceBuffer[DType.float32],
+    mut dpart: DeviceBuffer[DType.float32],
+    mut dfold: DeviceBuffer[DType.float32],
+    mut hfold: HostBuffer[DType.float32],
+    n: Int,
+) raises -> SIMD[DType.float32, 4]:
+    """The round-robin eigh's convergence test on the device: the block
+    trees of the rows' off-diagonal squares and a_kk^2 (a_kk left in
+    doff[2 n, 3 n)), then the tree past the blocks (x_decomp/rr.mojo
+    `rr_off_fold`, the host column's order). Returns (off, diag, ran, 0);
+    ran < 0 is a dispatch that did not run (the buffers are filled -1)."""
+    var nb = _pj_off_blocks(n)
+    enqueue_fill(ctx, dpart, Float32(-1.0))
+    enqueue_fill(ctx, dfold, Float32(-1.0))
+    ctx.enqueue_function[eigh_par_off_part_kernel](
+        da.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB
+    )
+    ctx.enqueue_function[eigh_par_off_fold_kernel](
+        dpart.unsafe_ptr(), dfold.unsafe_ptr(), Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB
+    )
+    ctx.enqueue_copy(dst_ptr=hfold.unsafe_ptr(), src_buf=dfold)
+    ctx.synchronize()
+    var p = hfold.unsafe_ptr()
+    return SIMD[DType.float32, 4](p.unsafe_load(0), p.unsafe_load(1), p.unsafe_load(2), Float32(0.0))
 
 
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
@@ -2827,12 +2877,12 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
-        """THE eigh at every size: the executor op x_decomp/eigh_ops.mojo
-        `eigh_op_sym` (the tridiagonal solve from n = TD_MIN_N with the
-        round-robin Jacobi as its device-decided fallback, the Jacobi below;
-        the host column runs `eigh_op_sym_host`). A solve that does not
-        converge raises. uplo 1 / 2 reads the lower / upper triangle
-        (numpy's UPLO), mirrored on the device; 0 the whole matrix."""
+        """THE eigh at every size (`eigh_into`: the tridiagonal solve from
+        n = TD_MIN_N, the round-robin Jacobi below it and whenever that
+        solve refuses; the host column runs `eigh_op_sym_host`, the same
+        route). A solve that does not converge raises. uplo 1 / 2 reads the
+        lower / upper triangle (numpy's UPLO), mirrored on the device; 0 the
+        whole matrix."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         DevExec._eigh_on(ctx, da, w, v, n, uplo)
@@ -2840,26 +2890,188 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def eigh_enq(
+    def eigh_into(
         ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
         mut dv: DeviceBuffer[DType.float32], n: Int,
-    ) raises -> DeviceBuffer[DType.int32]:
-        """`eigh_op_sym` on the device matrix in `da` (n x n, both triangles,
-        consumed) into the device buffers dw (n, ascending) and dv (n x n,
-        vectors in columns), outside a loop (an open gate). ENQUEUED: the
-        returned status word (0: holds) is the caller's to read at its own
-        sync (`eigh_status_check`). The resident kits (x_decomp/kit_device.mojo
-        `DKit.eigh`) keep w and V on the device through this."""
-        var gate = step_gate_open_word(ctx)
-        var status = ctx.enqueue_create_buffer[DType.int32](1)
-        eigh_op_sym(ctx, gate, da, dw, dv, status, n)
-        _ = gate^
-        return status^
+    ) raises:
+        """The dense symmetric eigh of the device matrix in `da` (n x n, both
+        triangles, consumed) into the device buffers dw (n, ascending) and
+        dv (n x n, vectors in columns, sign-flipped). Host-driven: the
+        tridiagonal route's refusal word and the Jacobi's convergence test
+        are read on the host (0.8.55 / 0.8.66's `_eigh_on` route), and an
+        unconverged solve raises here. dw and dv stay on the device, so the
+        resident kits (x_decomp/kit_device.mojo `DKit.eigh`,
+        x_decomp/resident.mojo) keep w and V resident.
+
+        Lane perf-decomp-eigh (2026-11-13): replaces `eigh_enq` (the
+        read-free executor op `eigh_op_sym`), whose Jacobi ran in ONE block
+        for 33 <= n < TD_MIN_N and for every refused tridiagonal solve (see
+        `_eigh_par_test`). The same words: x_decomp/rr_batch.mojo is the
+        multi-block solver's cells in its order."""
+        comptime if EIGH_TRIDIAG_ROUTE:
+            if n >= TD_MIN_N:
+                if DevExec._eigh_td_try_dev(ctx, da, dw, dv, n):
+                    return
+        DevExec._eigh_jacobi_dev(ctx, da, dw, dv, n)
+
+    @staticmethod
+    def _eigh_jacobi_dev(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
+    ) raises:
+        """The round-robin Jacobi of `da` (consumed) into dw, dv: up to
+        XD_EIGH_ONE_BLOCK_N the one-launch batched kernel with a batch of
+        one (`_eigh_batch_on`, one sync), above it the per-round multi-block
+        launches (`_eigh_par_dev`). An unconverged solve raises."""
+        comptime if IDN_EIGH_BLOCK:
+            # the quarantined block Jacobi (MOJOLEARN_IDN_EIGH_BLOCK_ON, DROPPED:
+            # observed convergence failure) has no device arm; refuse it by name
+            if rb_use(n):
+                raise Error(
+                    "eigh: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device arm;"
+                    " build without it"
+                )
+        if n <= XD_EIGH_ONE_BLOCK_N:
+            DevExec._eigh_batch_on(ctx, da, 1, n, dw, dv)
+            return
+        _ = DevExec._eigh_par_dev(ctx, da, dw, dv, n)
+
+    @staticmethod
+    def _eigh_td_try_dev(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
+    ) raises -> Bool:
+        """x_decomp/eigh_tridiag.mojo on a device copy of `da` (left
+        untouched for the fallback), its refusal word read at ONE wait; on
+        success the sign flip, the ascending order and the unscale into dw,
+        dv (enqueued). False: refused, dw and dv not written. (The 0.8.66
+        `_eigh_td_try`, outputs on the device.)"""
+        var nn = n * n
+        var dwork = ctx.enqueue_create_buffer[DType.float32](nn)
+        ctx.enqueue_function[td_copy_kernel](
+            da.unsafe_ptr(), dwork.unsafe_ptr(), Int32(nn), grid_dim=_pj_blocks(nn), block_dim=PJ_TPB
+        )
+        # the Jacobi's power-of-two range scale on the copy
+        var dfac = enqueue_es_scale(ctx, _p(dwork), 1, n)
+        var dz = ctx.enqueue_create_buffer[DType.float32](nn)
+        var dwt = ctx.enqueue_create_buffer[DType.float32](n)
+        var dinfo = ctx.enqueue_create_buffer[DType.float32](4)
+        var hinfo = ctx.enqueue_create_host_buffer[DType.float32](4)
+        eigh_td_enqueue(ctx, dwork, n, dz, dwt, dinfo)
+        ctx.enqueue_copy(dst_buf=hinfo, src_buf=dinfo)
+        ctx.synchronize()
+        _ = dwork^
+        _ = dinfo^
+        var refused = hinfo.unsafe_ptr().unsafe_load(2) != Float32(0.0)
+        _ = hinfo^
+        if refused:
+            _ = dfac^
+            _ = dz^
+            _ = dwt^
+            return False
+        ctx.enqueue_function[sign_flip_kernel](
+            dz.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+        )
+        var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+        enqueue_eigh_ascending(ctx, _p(dwt), 1, _p(dz), n, dpos, _p(dw), _p(dv))
+        enqueue_es_unscale(ctx, _p(dw), dfac, 1, n)
+        _ = dfac^
+        _ = dpos^
+        _ = dz^
+        _ = dwt^
+        return True
+
+    @staticmethod
+    def _eigh_par_dev(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
+    ) raises -> Int:
+        """The two-sided Jacobi in the round-robin ordering on the device
+        copy in `da` (consumed): `eigh_par_cs_kernel` / `eigh_par_update_kernel`
+        per round over the whole grid, the convergence test before every
+        sweep folded on the device (`_eigh_par_test`, three scalars read),
+        then `sign_flip_kernel` and the ascending permutation into dw (n) and
+        dv (n x n), enqueued. Returns the sweeps run. (The 0.8.66
+        `_eigh_par_on`, outputs on the device.)"""
+        # lane idn-cov-overflow: the power-of-two range scale
+        # (x_decomp/eigh_scale.mojo; the host's `host_eigh_rr_sorted` takes
+        # the same), so the convergence test's squares stay finite
+        var dfac = enqueue_es_scale(ctx, _p(da), 1, n)
+        var m = n + (n % 2)
+        var h = m // 2
+        var dvr = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+        var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+        var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(n))
+        var dfold = ctx.enqueue_create_buffer[DType.float32](3)
+        var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
+        ctx.enqueue_function[pj_identity_kernel](dvr.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        var converged = False
+        var executed = 0
+        var fro_in = Float32(-1.0)
+        var fro_now = Float32(0.0)
+        var off_last = Float32(0.0)
+        for sweep in range(RR_EIGH_SWEEPS + 1):  # driver-loop: over Jacobi sweeps (host convergence test)
+            var tst = _eigh_par_test(ctx, da, doff, dpart, dfold, hfold, n)
+            if not (tst[2] >= Float32(0.0)):
+                raise Error(
+                    "eigh: a block of the round-robin Jacobi's convergence test did not run (its mark is"
+                    " still -1): a launch failure, not a convergence failure. Check that the binding is"
+                    " built for this device."
+                )
+            off_last = tst[0]
+            fro_now = ftz(tst[0] + tst[1])
+            if fro_in < Float32(0.0):
+                fro_in = fro_now
+            if rr_converged(tst[0], tst[1], Float32(JACOBI_TOL)):
+                converged = True
+                break
+            if sweep == RR_EIGH_SWEEPS:
+                break
+            executed += 1
+            for rd in range(m - 1):  # driver-loop: over Jacobi rounds of one sweep
+                ctx.enqueue_function[eigh_par_cs_kernel](
+                    da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                    grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+                )
+                ctx.enqueue_function[eigh_par_update_kernel](
+                    da.unsafe_ptr(), dvr.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                    grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+                )
+                _round_sync(ctx, rd)
+        # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+        if converged and not rr_fro_kept(fro_in, fro_now):
+            converged = False
+        if not converged:
+            raise Error(
+                "eigh: the round-robin Jacobi did not converge in " + String(RR_EIGH_SWEEPS)
+                + " sweeps at n = " + String(n) + " (off-diagonal mass " + String(off_last)
+                + " of " + String(fro_now) + "). An unconverged decomposition is not returned as if"
+                " it were one (DEVIATION 590)."
+            )
+        ctx.enqueue_function[sign_flip_kernel](
+            dvr.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+        )
+        # the last test's kernel left the diagonal of the converged A in
+        # doff[2n, 3n); the ascending order on the device
+        # (decomposition/spectrum_order_device.mojo)
+        var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+        enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dvr), n, dpos, _p(dw), _p(dv))
+        enqueue_es_unscale(ctx, _p(dw), dfac, 1, n)
+        _ = dfac^
+        _ = dpos^
+        _ = dvr^
+        _ = dcs^
+        _ = doff^
+        _ = dpart^
+        _ = dfold^
+        _ = hfold^
+        return executed
 
     @staticmethod
     def eigh_status_check(hs: HostBuffer[DType.int32], n: Int) raises:
-        """An `eigh_enq` / `_eigh_batch_enq` status word, read after the
-        caller's sync: a nonzero word raises (DEVIATION 590)."""
+        """An `_eigh_batch_enq` status word, read after the caller's sync: a
+        nonzero word raises (DEVIATION 590)."""
         var bad = Int(hs.unsafe_ptr().unsafe_load(0))
         if bad != 0:
             raise Error(
@@ -2873,33 +3085,21 @@ struct DevExec(Exec):
         ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int, uplo: Int
     ) raises:
         """`eigh` on the device matrix in `da` (n x n, overwritten): the
-        triangle mirrored when uplo != 0, then `eigh_enq`, w and v out to
-        host memory with the status word at ONE sync. `eigh` and the
-        resident entry (x_decomp/resident.mojo `dev_eigh_run`) both call it.
-
-        Lane n9-decomp-eigh-families (2026-11-09): this was the host-driven
-        route, `_eigh_td_try` (a wait for the refusal word, then w and V
-        home) or `_eigh_par_on` (two launches a round and a three-scalar
-        wait before every sweep from n = IDN_EIGH_SMALL_N; one launch below).
-        Both are deleted; the op takes the same route and the same words
-        (x_decomp/rr_batch.mojo: the one-block Jacobi is the multi-block
-        solver's cells in its order) with nothing read back inside."""
+        triangle mirrored when uplo != 0, then `eigh_into`, w and v out to
+        host memory at one sync. `eigh` and the resident entry
+        (x_decomp/resident.mojo `dev_eigh_run`) both call it."""
         if uplo != 0:
             ctx.enqueue_function[sym_from_triangle_kernel](
                 da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
             )
         var dw = ctx.enqueue_create_buffer[DType.float32](n)
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+        DevExec.eigh_into(ctx, da, dw, dv, n)
         _down(ctx, dw, w, n)
         _down(ctx, dv, v, n * n)
-        var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
         ctx.synchronize()
         _ = dw^
         _ = dv^
-        _ = status^
-        DevExec.eigh_status_check(hs, n)
 
     @staticmethod
     def _eigh_batch_enq(
@@ -2920,24 +3120,21 @@ struct DevExec(Exec):
     def _eigh_jacobi_on(
         ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int
     ) raises:
-        """The round-robin Jacobi at EVERY n (`eigh_op_dense`, a batch of
-        one) on the device matrix in `da` (consumed), w and v out to host
-        memory with the status word at ONE sync. For the callers whose host
-        oracle is the Jacobi at every size (the spectral Lanczos projected
-        solve, x_decomp/rr_solve.mojo); `_eigh_on` takes the tridiagonal
-        route from TD_MIN_N."""
+        """The round-robin Jacobi at EVERY n (`_eigh_jacobi_dev`: one block up
+        to XD_EIGH_ONE_BLOCK_N, the per-round multi-block launches above) on
+        the device matrix in `da` (consumed), w and v out to host memory. For
+        the callers whose host oracle is the Jacobi at every size (the
+        spectral Lanczos projected solve, x_decomp/rr_solve.mojo); `_eigh_on`
+        takes the tridiagonal route from TD_MIN_N. Lane perf-decomp-eigh
+        (2026-11-13): was `eigh_op_dense` (one block) at every n."""
         var dw = ctx.enqueue_create_buffer[DType.float32](n)
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var status = DevExec._eigh_batch_enq(ctx, da, 1, n, dw, dv)
+        DevExec._eigh_jacobi_dev(ctx, da, dw, dv, n)
         _down(ctx, dw, w, n)
         _down(ctx, dv, v, n * n)
-        var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
         ctx.synchronize()
         _ = dw^
         _ = dv^
-        _ = status^
-        DevExec.eigh_status_check(hs, n)
 
     @staticmethod
     def _eigh_batch_on(
