@@ -39,6 +39,10 @@ from bindings.byte_perf_helpers_unpack import byte_view_bytes
 from bindings.samba_admission_door import samba_admit_model_fields
 # RUN (lane rs-neural): typed pieces, no Python import.
 from training.samba_inference_run import _m3_shapes, _m3_names, _samba_host_ref
+# The stateless forward's route (lane restore-samba-resident-forward): the
+# resident forward by default, the stack program under the B-arm define.
+from training.neural_identical_experiments import SAMBA_PROGRAM_FORWARD
+from providers.python.samba_resident_pyapi_door import samba_resident_native_forward
 
 
 def samba_state_construct(state: PythonObject, b: PythonObject, maximum: PythonObject, layers: PythonObject) raises -> PythonObject:
@@ -500,10 +504,11 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     # The binding reads below load and admit the image that publishes the
     # key's entries; RUN reaches them through the tables only.
     var key = SambaEntryKey(1, 0)
+    var entries = PythonObject(None)
     if cpu_inference:
         _ = _model_bindings(PythonObject("cpu"), "mamba3", context["neural"], PythonObject("identical"))["primitives"]
     else:
-        _ = samba_entries(context, fields["numeric_mode"])
+        entries = samba_entries(context, fields["numeric_mode"])
         key = samba_entry_key(context, fields["numeric_mode"])
     var d = Int(py=config["d_model"])
     var v = Int(py=config["vocab"])
@@ -513,8 +518,31 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     var l = Int(py=ids.shape[1])
     var output = PythonObject(None)
     if samba_program_arm(fields, key):
-        # ONE path on a device build: the stack program (lane x6).
-        output = _samba_program_call(model, fields, config, key, ids, state, context)
+        # A device build. The stateless forward runs the resident session's
+        # forward (`samba_resident_forward`, descriptor op 16 on the stack's
+        # primitive image; training/samba_resident.mojo), the measured winner
+        # of samba-forward: IDN_SAMBA_RESIDENT_STEP PROMOTED NVIDIA 12.0 ->
+        # 5.3 ms (0.44x), AMD 8.8 -> 5.8 ms (0.66x); 0.8.55 paper column
+        # NVIDIA 4.60 / AMD 6.10 ms. Lane x6 (2026-11-09) put every call on
+        # the stack program without a measurement (candidate 4c2340386abc:
+        # NVIDIA 10.54 ms, MI325X 8.36 ms). -D MOJOLEARN_SAMBA_PROGRAM_FORWARD
+        # is the program B arm of the owed A/B. The stateful forward and the
+        # step stay on the program (the resident session holds no carried
+        # state); an image without the resident route (op 24 == 0) or a
+        # dropout stack falls through to the program as well.
+        # The route taken is recorded on the model (`_samba_forward_route`)
+        # so the A/B can prove which arm ran: 0.8.66 measured 10.58 ms while
+        # the resident forward still existed, and whether it was selected
+        # there was never established.
+        comptime if not SAMBA_PROGRAM_FORWARD:
+            if state is None:
+                output = samba_resident_native_forward(fields, config, entries, ids)
+        if output is None:
+            output = _samba_program_call(model, fields, config, key, ids, state, context)
+            if state is None:
+                py_setitem(fields, "_samba_forward_route", PythonObject("program"))
+        else:
+            py_setitem(fields, "_samba_forward_route", PythonObject("resident"))
     else:
         # The host route (CPU builds and the CPU inference model): the
         # installed CPU kernels layer by layer. Device builds never come
