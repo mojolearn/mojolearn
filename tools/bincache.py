@@ -940,6 +940,11 @@ def host_cpu(machine):
     EPYC inside kmeans_fit -- on the architecture where the fix for it does
     not apply. So the host CPU is an input there and it is keyed there.
 
+    The x86-64 pin is --target-cpu AND --target-features (2026-11-13): `mojo
+    build` defaults the features to the build machine's even with the CPU
+    pinned, and until then one key compiled to one byte variant per runner
+    CPU (candidate 4c2340386abc.svd1: _mojolearn_native_x_host.so on EPYC
+    7763, 9V74 and 9V45 gave three unstaged hashes). With both pinned:
     It is NOT keyed on x86-64, where the pin makes it irrelevant and where
     keying it would cost every hit for nothing: a rented pod's exact EPYC or
     Xeon model changes from rental to rental, which is precisely the drift

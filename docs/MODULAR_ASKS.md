@@ -294,6 +294,12 @@ tested.
 **Where.** Every Linux release build: the host bindings ship once in `mojolearn-core`, and the release proves that
 every build leg produced them.
 
+**Cause found on our side (2026-11-13, lane bincache-define-host-leg).** `mojo build --help` says
+`--target-features` "Defaults to the host features", independently of `--target-cpu`. Our scripts pinned only the
+CPU, so the build machine's features reached the compile. Every Linux x86-64 pin now passes
+`--target-features` with the x86-64-v3 list (`bindings/merged_build.sh`). This ask is withdrawn once one candidate
+shows equal host bytes from runners with different CPUs; then the composition below is deleted.
+
 **Meanwhile.** `tools/release.py` linux-wait passes a host byte mismatch with identical recorded inputs to
 `tools/release_host_composition.py`, which ships the host owner leg's (cuda/sm_89) retained bytes in every set under
 a witnessed receipt. Any difference in source, compiler or flags is still refused. Evidence:

@@ -75,7 +75,7 @@ if [ "$host_system" = Darwin ]; then
 elif [ "$host_system" = Linux ]; then
     [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "$label: a CPU build takes no MOJOLEARN_GPU_ARCHS" >&2; exit 2; }
     case "$(uname -m)" in
-        x86_64) set -- --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} ;;
+        x86_64) set -- --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave} ;;
         aarch64) set -- ;;
         *) echo "$label: unsupported Linux host architecture" >&2; exit 2 ;;
     esac
