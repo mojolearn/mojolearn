@@ -549,7 +549,11 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
     return out
 
 
-def byte_lm_host_train_step(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def byte_lm_host_train_step(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject,
+                            evaluate: Bool = False) raises -> PythonObject:
+    """`train_step` (one composed host step, its outputs published) or, with
+    `evaluate`, `loss`: the step's forward on the current parameters and
+    nothing published."""
     classical_connect_numpy(context)
     var fields = py_fields(trainer)
     # (batch, length + 1, vocab_size, n_total), retained at construction
@@ -571,6 +575,26 @@ def byte_lm_host_train_step(mut mods: NativeModules, trainer: PythonObject, args
                     + String(bad // width) + ", position " + String(bad % width))
         _ = tokens  # keep the Python object alive through the native call above
     _ = tokens  # keep the Python object alive through the native calls above
+    if evaluate:
+        # `loss` (lane byte-lm-host-step-words, 2026-11-13): the training
+        # forward's mean loss on these ids at the CURRENT parameters, with
+        # nothing updated and the step count unmoved. Until this lane it ran
+        # a whole step and published it, so `loss` then `train_step` on one
+        # trainer returned the loss after an update
+        # (test_byte_lm_step_routes.py::test_host_step_loss_equals_host_loss).
+        # Operation 2 of the host provider (training/byte_lm_host_dispatch.mojo:
+        # byte_host_loss_native, threaded on every core): the words of the
+        # step's own forward and of the GPU trainer's `evaluate`.
+        var eval_provider = _host_provider(fields)
+        mods.released()
+        var eval_descriptors: List[Int] = [Int(py=classical_address(fields["_parameters"])),
+            Int(py=classical_address(tokens))]
+        var eval_words = _host_words(mods, fields, 1, 0)
+        var loss_bits = neural_descriptor_execute(eval_provider, 2, eval_descriptors, eval_words, List[Float64](), False)
+        mods.released()
+        _ = tokens  # keep the Python object alive through the native call above
+        _ = tokens^
+        return PythonObject(loss_bits)
     var grad = _f32_array(n, context)
     var post_p = _f32_array(n, context)
     var post_m = _f32_array(n, context)
@@ -637,7 +661,7 @@ def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C")
             return neural_descriptor_info(py_fields(call[0])["_native_provider"]).steal_data()
         if operation != "train_step" and operation != "loss":
             raise Error("RuntimeError: unknown byte LM host trainer operation " + operation)
-        var result = byte_lm_host_train_step(mods, call[0], call[2], call[3])
+        var result = byte_lm_host_train_step(mods, call[0], call[2], call[3], operation == "loss")
         if operation == "loss":
             return PythonObject(Float64(bitcast[DType.float32](UInt32(py=result)))).steal_data()
         return result.steal_data()

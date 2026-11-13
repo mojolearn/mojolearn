@@ -145,12 +145,12 @@ def test_host_and_device_give_the_same_words():
 # ---------------------------------------------------------------------------
 # Forward-only bisect of the CPU column (lane byte-lm-host-step-words,
 # 2026-11-13). The Mac run of this file (verify-20261112/fix20261113) passed
-# the first assertion of test_host_and_device_give_the_same_words (the host
-# trainer's `loss`, the threaded kernel forward, gave the device's words) and
-# failed on the step losses: the composed host step's own forward
-# (training/byte_lm_host_backward.mojo byte_host_gradient: the block oracles,
-# gemm_host_rows for the head, loss_host_rows.mojo for the loss) gave
-# 1085368213 where the device and the threaded host loss gave 1085370318.
+# the first assertion of test_host_and_device_give_the_same_words and failed
+# on the step losses (host 1085368213, device 1085370318 at step 0). The
+# bisect found every host forward equal and the cause in the door:
+# `LanguageModelHostTrainer.loss` ran a whole training step and published it
+# (bindings/byte_lm_host_trainer_native_door.mojo), so the `train_step` after
+# it reported the loss AFTER an update. `loss` is now the forward alone.
 # Every test below runs on the CPU column alone and compares one pair of host
 # forwards, so a failing pair names the stage:
 #   logits reference vs threaded     the block oracles + gemm_oracle head
