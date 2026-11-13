@@ -898,10 +898,13 @@ def iforest_forest_export_binding(
     var ip = f64_ptr(Int(py=info_addr))
     var token = Int(py=params[16])
     var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
-    var held = if_resident_take(token, key) if _IF_RESIDENT_ROUTE else List[IFResidentEntry]()
+    # The sizes call keeps its forest in the store on every route, so the
+    # copy call (same token) never fits again; a refit-per-call binary drops
+    # it after the copy.
+    var held = if_resident_take(token, key)
     var new_token = 0
     if len(held) == 0:
-        new_token = if_resident_new_token() if _IF_RESIDENT_ROUTE else 0
+        new_token = if_resident_new_token()
     var n_trees = 0
     var n_nodes = 0
     try:
@@ -913,7 +916,7 @@ def iforest_forest_export_binding(
             if write:
                 if_held_forest_export(held, dst)
     except e:
-        if new_token == 0 and _IF_RESIDENT_ROUTE:
+        if new_token == 0:
             if_resident_put(held)
         raise e
     var held_token = held[0].token
@@ -921,7 +924,7 @@ def iforest_forest_export_binding(
     ip.unsafe_store(1, Float64(held[0].est.max_samples_))
     ip.unsafe_store(2, Float64(key.n_features))
     ip.unsafe_store(3, Float64(held_token))
-    comptime if _IF_RESIDENT_ROUTE:
+    if _IF_RESIDENT_ROUTE or not write:
         if_resident_put(held)
     return Python.list(PythonObject(held_token), PythonObject(n_trees), PythonObject(n_nodes))
 

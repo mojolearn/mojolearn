@@ -654,10 +654,13 @@ def iforest_forest_export_binding(
         dst = _forest_words(words)
     var ip = f64_ptr(_index(info_addr))
     var token = _index(params[16])
-    var held = if_host_resident_take(token, key) if IDN_IF_RESIDENT else List[IForestHostEntry]()
+    # The sizes call keeps its forest in the store on every route, so the
+    # copy call (same token) never fits again; a refit-per-call binary drops
+    # it after the copy.
+    var held = if_host_resident_take(token, key)
     var new_token = 0
     if len(held) == 0:
-        new_token = if_host_resident_new_token() if IDN_IF_RESIDENT else 0
+        new_token = if_host_resident_new_token()
     var n_trees = 0
     var n_nodes = 0
     try:
@@ -669,7 +672,7 @@ def iforest_forest_export_binding(
             if write:
                 if_host_forest_export(held[0].fitted, dst)
     except e:
-        if new_token == 0 and IDN_IF_RESIDENT:
+        if new_token == 0:
             if_host_resident_put(held)
         raise e
     var held_token = held[0].token
@@ -677,7 +680,7 @@ def iforest_forest_export_binding(
     ip[1] = Float64(held[0].fitted.max_samples_)
     ip[2] = Float64(key.n_features)
     ip[3] = Float64(held_token)
-    comptime if IDN_IF_RESIDENT:
+    if IDN_IF_RESIDENT or not write:
         if_host_resident_put(held)
     return Python.list(PythonObject(held_token), PythonObject(n_trees), PythonObject(n_nodes))
 
