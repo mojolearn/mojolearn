@@ -15,6 +15,8 @@ next case runs. Drivers (the row's "driver" field):
                 once per check_every value the row's arms name (None = the loop's own choice, 1, 8)
   pandas_input  each estimator's fit on the same float32 data as an ndarray and as a pandas DataFrame
   mlp_fit       MLPClassifier.fit on a non-board shape
+  kde_widths    KernelDensity fit + score_samples on synthetic rows at each width the row names (the KDE_QTILE
+                cost rule's neighbouring and wide non-board shapes)
 
 Runs nothing at import; standard library + numpy + pandas + mojolearn in the arm's venv only (it never imports the
 repo's tools). Serial by nature: the cases are timed calls on one GPU and must not share it.
@@ -131,7 +133,23 @@ def case_mlp_fit(row, arm_cases):
     return [("MLPClassifier hidden=%s n=%d d=%d" % (list(hidden), n, d), ms, why)]
 
 
-DRIVERS = {"while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit}
+def case_kde_widths(row, arm_cases):
+    import numpy as np
+    ml = _ml()
+    sh = row["shape"]
+    n, q = int(sh["rows"]), int(sh["queries"])
+    out = []
+    for d in sh["features"]:  # serial by nature: timed calls on one GPU
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((n, int(d))).astype(np.float32)
+        Q = X[:q].copy()
+        ms, why = timed(lambda: ml.KernelDensity(bandwidth=1.0).fit(X).score_samples(Q))
+        out.append(("KernelDensity fit+score_samples n=%d q=%d d=%d" % (n, q, int(d)), ms, why))
+    return out
+
+
+DRIVERS = {"while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
+           "kde_widths": case_kde_widths}
 
 
 def arm_cases(row, arm):
