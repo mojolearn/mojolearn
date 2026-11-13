@@ -52,7 +52,7 @@ from training.byte_lm_afn import (
     AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE, afn_upload_ids,
 )
 from training.checkpoint import Checkpoint
-from training.byte_lm_config import ByteConfig
+from training.byte_lm_config import ByteConfig, BYTE_LM_PROGRAM_STEP
 from training.checks.train_loop import (
     _zeros, _zeros_i32, _upload, _ones, _copy_into, download_f32,
 )
@@ -218,10 +218,11 @@ comptime BYTE_LM_RELEASE_EAGER = (
 
 comptime BYTE_LM_CE_UNALIASED = is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"]()
 # lane restore-byte-lm-hand-step (2026-11-13): the B arm of the restored hand
-# step (see "the hand step (default)" below).
-comptime BYTE_LM_PROGRAM_STEP = is_defined["MOJOLEARN_BYTE_LM_PROGRAM_STEP"]()
-"""A/B arm (default off): every step, gradient, update and evaluation of
-the trainer on its captured program (lane x7) instead of the hand step."""
+# step (see "the hand step (default)" below). A/B arm (default off): every
+# step, gradient, update and evaluation of the trainer on its captured program
+# (lane x7) instead of the hand step. The switch is defined once in
+# training/byte_lm_config.mojo (BYTE_LM_PROGRAM_STEP) so the CPU column reads
+# the same one (lane restore-byte-lm-host-step).
 """DEVIATION 3011: build the five `[M, V]` cross-entropy buffers as five
 SEPARATE allocations, the way they were before the LM step memory work
 aliased them.
