@@ -3,8 +3,9 @@
 
 0.8.66 regressions C3 and C5 (docs/plans/REGRESSIONS_0866_VS_0855.md): a
 k-NN fit keeps a caller's float32 C matrix by reference (as scikit-learn
-does) and never freezes or writes it; IsolationForest keeps its own copy,
-because scoring reads the training matrix after fit. A block forward reads a
+does) and never freezes or writes it; IsolationForest borrows it too on a
+binary that keeps the forest resident (as 0.8.55 did) and keeps its own copy
+on one that refits per scoring call, which reads the training matrix again. A block forward reads a
 C-contiguous float32 `x` in place and never writes it or its flags. The
 outputs are byte-identical to the copied path's.
 """
@@ -68,6 +69,21 @@ def test_iforest_fit_copies_and_never_changes_the_caller_matrix():
     assert sa == np.asarray(b.score_samples(reference)).tobytes()
     X[:] = 0.0  # scoring reads the fit's own copy of the training matrix
     assert np.asarray(a.score_samples(reference)).tobytes() == sa
+
+
+def test_iforest_public_scores_are_the_float32_scores_widened():
+    # Lane restore-iforest-kde: the device epilogue writes the float64
+    # scores itself (IDN_IF_SCORES_F64); they are float32 values widened
+    # exactly, as the door's cast wrote them, and decision_function is
+    # score_samples - offset_ rounded once in float32.
+    X = _x(rows=256)
+    a = ml.IsolationForest(n_estimators=8, random_state=5).fit(X)
+    s = np.asarray(a.score_samples(X))
+    d = np.asarray(a.decision_function(X))
+    assert s.dtype == np.float64 and d.dtype == np.float64
+    assert s.tobytes() == s.astype(np.float32).astype(np.float64).tobytes()
+    expected = (s.astype(np.float32) - np.float32(a.offset_)).astype(np.float64)
+    assert d.tobytes() == expected.tobytes()
 
 
 @pytest.mark.parametrize("form", ["float64", "strided", "fortran"])

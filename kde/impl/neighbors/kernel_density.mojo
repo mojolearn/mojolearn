@@ -3641,6 +3641,41 @@ comptime KDE_QT_Q = 4
 comptime KDE_QT_CELL = 16
 comptime KDE_QT_FEAT = 256
 comptime KDE_QT_TILE_FLOATS = KDE_QT_CELL * KDE_QT_FEAT
+# Lane restore-iforest-kde (2026-11-13, history audit row 5): the promotion
+# above kept a measured +24% loss on istella on BOTH vendors (B/A NV 1.231,
+# AMD 1.246; record measurement of candidate 4c2340386abc: NV istella fit
+# 27.70 ms at 0.8.55 -> 34.47 ms). 0.8.55's pass (kde_chunk_lse_kernel)
+# is the measured winner there, so the query-tile pass now runs only where
+# its cost model wins. COST RULE (no dataset or dimension target): per
+# (query, train) pair and feature, the default body reads the query word
+# once per 64-cell train tile and stages train once per 128 queries
+# (3d/128 words); the query-tile body reads it once per 16-cell tile and
+# stages train once per 512 queries (33d/512 words). Both grow linearly
+# in d, so the query-tile body only wins while its re-read query rows hit
+# the per-SM/CU L1: the 4 query rows of every thread in a block,
+# q_tpb * KDE_QT_Q * d * 4 bytes, against the smaller vendor L1 that votes
+# (32 KiB vector L1 per CU on MI300X/MI325X; the L40S has more). Past that
+# every 16-cell tile re-fetches 4 rows per thread from L2, 4x the default
+# body's query traffic, which is the istella loss; under it the coalesced
+# staging and the 4x train reuse are the taxi gain (B/A NV 0.300, AMD
+# 0.387). At the default q_tpb = 128 the rule takes the query tile for
+# d <= 16 and the default body above, covering every neighbouring width.
+# The A/B is owed (bench/results/paper_compare/owed-pre0867.json):
+# `-D MOJOLEARN_IDN_KDE_QTILE_FORCE` (the promoted every-d form, B arm),
+# this rule (A), on istella, taxi and one wide non-board dataset, NV and
+# AMD. Same bits either way (see the BITS note above): both bodies write
+# the same partial planes word for word.
+comptime KDE_IDN_QTILE_FORCE = KDE_IDN_QTILE and is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"]()
+comptime KDE_QT_QUERY_CACHE_BYTES = 32 * 1024
+
+
+@always_inline
+def kde_qtile_applies(n_features: Int, q_tpb: Int) -> Bool:
+    """True when the query-tile pass is the cheaper one for this width and
+    block (the cost rule above); `_FORCE` takes it at every width."""
+    comptime if KDE_IDN_QTILE_FORCE:
+        return True
+    return q_tpb * KDE_QT_Q * n_features * 4 <= KDE_QT_QUERY_CACHE_BYTES
 
 
 @always_inline
@@ -4006,8 +4041,12 @@ def _kde_score_samples_chunk_lse_reused_locked(
     if has_weights:
         ctx.enqueue_function[log_weights_kernel](sc.logw.unsafe_ptr(),weights.unsafe_ptr(),Int32(n_train),
             grid_dim=((n_train+elem_tpb-1)//elem_tpb,1,1),block_dim=(elem_tpb,1,1))
+    var qtile=False
     comptime if KDE_IDN_QTILE:
-        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel).
+        qtile=kde_qtile_applies(n_features,q_tpb)
+    if qtile:
+        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel);
+        # only where the cost rule (kde_qtile_applies) says it wins.
         var qt_span=q_tpb*KDE_QT_Q
         ctx.enqueue_function[kde_chunk_lse_qtile_kernel](sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),query.unsafe_ptr(),train.unsafe_ptr(),
             sc.logw.unsafe_ptr(),Int32(n_query),Int32(n_train),Int32(n_features),Int32(n_chunks),Int32(chunk_rows),
@@ -4084,8 +4123,12 @@ def kde_score_samples_chunk_lse_identical(
     var part = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
     var psum = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
     var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var qtile = False
     comptime if KDE_IDN_QTILE:
-        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel).
+        qtile = kde_qtile_applies(n_features, q_tpb)
+    if qtile:
+        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel);
+        # only where the cost rule (kde_qtile_applies) says it wins.
         ctx.enqueue_function[kde_chunk_lse_qtile_kernel](
             part.unsafe_ptr(),
             psum.unsafe_ptr(),

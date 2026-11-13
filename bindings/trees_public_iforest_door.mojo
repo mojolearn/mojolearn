@@ -27,6 +27,7 @@
 # predict X with it) instead of the fit's one-row run and a second run for
 # predict, and X is converted and handed over once.
 from std.memory import unsafe_memcpy
+from std.sys import is_defined
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_typed_call import py_call_typed
@@ -54,6 +55,15 @@ comptime _WANT_PREDICT = 2
 comptime _PREFIX = "mojolearn IsolationForest: "
 comptime _NONFINITE = "mojolearn IsolationForest: X contains NaN or infinity"
 comptime _TOKEN_SLOT = "trees_iforest_resident_v1"
+# Lane restore-iforest-kde (2026-11-13, history audit row 3): the B arm of
+# the owed fit A/B. Default (absent): a fit on a binary that keeps the forest
+# resident borrows a float32 C-order X as 0.8.55 did (no copy). Defined: the
+# fit owns a parallel copy of it (0292b73ab3, 2026-11-06). See `_fit`.
+comptime _IF_FIT_OWN_X = is_defined["MOJOLEARN_IDN_IF_FIT_OWN_X"]()
+# Lane restore-iforest-kde (history audit row 4): `want` + 3 asks a binary
+# whose `iforest_scores_f64` is 1 for the float64 scores (bindings/
+# _mojolearn_svm.mojo `_IF_WIDE_ROUTE`).
+comptime _WANT_WIDE_BASE = 3
 
 
 def _repr(value: PythonObject) raises -> String:
@@ -208,13 +218,32 @@ def _release(model: PythonObject, fields: PythonObject) raises:
         _ = py_call(fields.pop, "_if_lifetime", PythonObject(None))
 
 
+def _resident_table(svm: PythonObject) raises -> Bool:
+    """True when the binding `svm` keeps the fitted forest resident
+    between calls (`iforest_resident`)."""
+    var probe = trees_entry(svm, "iforest_resident")
+    return probe is not None and Int(py=py_call_typed(probe)) == 1
+
+
 def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonObject, want: Int, fresh: Bool,
-         context: PythonObject) raises -> PythonObject:
+         wide: Bool, context: PythonObject) raises -> PythonObject:
     """`IsolationForest._run` on a converted query: one fit-and-score
     `iforest_run`, the resident token kept or renewed, `offset_` and
-    `max_samples_` read back. Returns the float32 scores or int32 labels."""
+    `max_samples_` read back. Returns the float32 scores or int32 labels;
+    with `wide` (a public caller's score_samples / decision_function) the
+    float64 scores when the binary writes them (`iforest_scores_f64`),
+    else the float32 scores the public door widens."""
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
+    var resident = _resident_table(svm)
+    # Lane restore-iforest-kde (history audit row 4, IDN_IF_SCORES_F64): the
+    # device epilogue writes the public float64 scores into this buffer, so
+    # the public door's cast pass and its float32 buffer are gone for this
+    # binary. Bits unchanged (the float32 values widened exactly).
+    var wide_out = False
+    if wide and resident and want != _WANT_PREDICT:
+        var f64_probe = trees_entry(svm, "iforest_scores_f64")
+        wide_out = f64_probe is not None and Int(py=py_call_typed(f64_probe)) == 1
     # Lane perf-iforest (2026-11-13): the score vector is uninitialised
     # storage (admitted_family_door.admitted_array): `iforest_run` writes all
     # n_query words for want 0 and 1, so the zero fill (native_array_zeros)
@@ -223,12 +252,11 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     # 3.27 -> 5.32 (test) and 5.61 -> 8.63 (large), AMD MI325X 2.91 -> 3.56.
     # Bits unchanged (the kernel's words, read as before).
     var values = PythonObject(None) if want == _WANT_PREDICT else family_uninit_array(
-        Python.tuple(n_query), "<f4", context)
+        Python.tuple(n_query), "<f8" if wide_out else "<f4", context)
     var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
-    var probe = trees_entry(svm, "iforest_resident")
-    var resident = probe is not None and Int(py=py_call_typed(probe)) == 1
     var info = admitted_vector(4 if resident else 3, "<f8", context)
-    var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), n_query, want, context)
+    var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), n_query,
+                         want + _WANT_WIDE_BASE if wide_out else want, context)
     # The held record: (token, the training matrix it was minted for, its
     # lifetime). A record for another training matrix is not this forest's.
     var held = trees_side_get(_TOKEN_SLOT, model) if resident else PythonObject(None)
@@ -350,8 +378,8 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # measurement of candidate 4c2340386abc against 0.8.55 (ms): istella fit
     # NVIDIA L40S 197 -> 1318, AMD MI325X 180 -> 888; taxi fit NVIDIA
     # 149 -> 320, AMD 189 -> 267 (measure-candidate/{nv,amd}-p1-4c2340386abc).
-    # Now a float32 C-order view is borrowed and copied once (the branch
-    # below); any other input is cast once into uninitialised storage this
+    # Now a float32 C-order view is borrowed (and copied once only on a
+    # refit-per-call binary, the branch below); any other input is cast once into uninitialised storage this
     # fit owns, which is kept as it is (no second copy). The same float32
     # bytes either way: no bit change.
     var x = admit_f32(view, 2, "X", context, finite=False, admitted=True)
@@ -368,9 +396,11 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # as the caller's own buffer. The resident forest token is keyed on the
     # training matrix object, so keeping the caller's buffer as `_x` let an
     # in-place edit of X after fit diverge the device forest from `_x`,
-    # save() and pickle. The fit now owns its training matrix: one native
+    # save() and pickle. On a refit-per-call binary (or under
+    # MOJOLEARN_IDN_IF_FIT_OWN_X) the fit owns its training matrix: one native
     # copy of the same float32 bytes (the forest and the scores keep their
-    # bits). `input_copied_` still reports whether the conversion copied.
+    # bits); a resident binary borrows it (restore-iforest-kde, below).
+    # `input_copied_` still reports whether the conversion copied.
     # The copy stays: every later score_samples / decision_function /
     # predict reads the training matrix again (`_score` -> `_run(...,
     # fields["_x"])` -> `iforest_run`, and the resident forest token is
@@ -384,7 +414,38 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # same float32 bytes: no bit change.
     # TOMBSTONE: iforest fit zero-filled trees_empty copy destination deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
     # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
-    if x.borrowed:
+    # Lane restore-iforest-kde (2026-11-13, history audit row 3): on a
+    # binary that keeps the forest resident (`iforest_resident` 1) the fit
+    # borrows a float32 C-order X again, as 0.8.55 did
+    # (`git show 0e4de0f46e:python/mojolearn/_iforest_impl.py` 463-506:
+    # `self._x = x` from as_f32_c, no copy). The resident forest is built
+    # from X inside this fit and every later score_samples / decision_function
+    # / predict scores that forest with no refit, so the caller's buffer is
+    # read again only to refit after a token miss (a pickle or copy, a mode
+    # switch) and by save(). `_x` holds the caller's buffer (its `_store` and
+    # `_pin`), which keeps it alive for as long as the estimator holds `_x`.
+    # Record measurement of candidate 4c2340386abc (ms), fit: istella NVIDIA
+    # L40S 197 (0.8.55) -> 8,422 (0.8.66) -> 1,318, AMD MI325X 180 -> 888;
+    # taxi NVIDIA 149 -> 320, AMD 189 -> 267. The copy (0292b73ab3, hazard A)
+    # stays: on a refit-per-call binary (`iforest_resident` 0, the CPU column
+    # with IDN_IF_RESIDENT off), whose every score refits from `_x`, and
+    # behind `-D MOJOLEARN_IDN_IF_FIT_OWN_X` as the B arm of the owed A/B.
+    # Same float32 bytes either way: no bit change. What the borrow gives up:
+    # a caller editing X in place after fit changes what save() and pickle
+    # write (as at 0.8.55); the scores of this estimator do not change.
+    var keep_borrowed = False
+    comptime if not _IF_FIT_OWN_X:
+        keep_borrowed = x.borrowed and _resident_table(trees_table(context, _mode(fields, context), "_mojolearn_svm"))
+    if keep_borrowed:
+        # The caller's float32 C-order buffer itself: a mojolearn Array is
+        # kept as it is (`_as_array`); an ndarray is kept as a one-dimensional
+        # byte view of its buffer, whose `obj` is the caller's ndarray, so
+        # `_as_array` wraps it as the zero-copy Array 0.8.55's
+        # `Array.from_buffer` made.
+        if py_type(x.array) is not context["array_class"]:
+            var caller_view = py_call(native_buffer_view(x.array).cast, "B")
+            x = admitted_words(caller_view, x.address, x.rows, x.cols)
+    elif x.borrowed:
         var count = x.rows * x.cols
         var owned = native_scratch_bytes(count * 4)
         var dst = native_scratch_address(owned)
@@ -414,7 +475,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     _ = x  # keep the Python object alive through the native call above
     var out = PythonObject(None)
     try:
-        out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, context)
+        out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, False, context)
         _ = x  # keep the Python object alive through the native call above
     except error:
         var message = String(error)
@@ -427,7 +488,8 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     return model if want < 0 else out
 
 
-def _score(model: PythonObject, X: PythonObject, want: Int, context: PythonObject) raises -> PythonObject:
+def _score(model: PythonObject, X: PythonObject, want: Int, wide: Bool,
+           context: PythonObject) raises -> PythonObject:
     """`score_samples` / `decision_function` / `predict`: `_run(X, want)`."""
     var fields = py_fields(model)
     if not py_contains(fields, "_x"):
@@ -436,24 +498,28 @@ def _score(model: PythonObject, X: PythonObject, want: Int, context: PythonObjec
     var fitted = Int(py=py_call(trees_builtins().int, fields["n_features_in_"]))
     if x.cols != fitted:
         raise Error(_PREFIX + "X has " + String(x.cols) + " features, fit saw " + String(fitted))
-    return _run(model, fields, x, fields["_x"], want, False, context)
+    return _run(model, fields, x, fields["_x"], want, False, wide, context)
 
 
 def iforest_operation_with_source(model: PythonObject, operation: String, args: PythonObject,
-                                  context: PythonObject, copy_source: PythonObject) raises -> PythonObject:
+                                  context: PythonObject, copy_source: PythonObject,
+                                  wide: Bool) raises -> PythonObject:
+    """One IsolationForest operation. `wide`: the caller returns float64
+    scores (the public door for a caller outside the package), so a
+    binary that writes them directly is asked to."""
     if operation == "trees_iforest_fit":
         return _fit(model, args[0], -1, context, copy_source)
     if operation == "trees_iforest_fit_predict":
         return _fit(model, args[0], _WANT_PREDICT, context, copy_source)
     if operation == "trees_iforest_score_samples":
-        return _score(model, args[0], _WANT_SCORE_SAMPLES, context)
+        return _score(model, args[0], _WANT_SCORE_SAMPLES, wide, context)
     if operation == "trees_iforest_decision_function":
-        return _score(model, args[0], _WANT_DECISION_FUNCTION, context)
+        return _score(model, args[0], _WANT_DECISION_FUNCTION, wide, context)
     if operation == "trees_iforest_predict":
-        return _score(model, args[0], _WANT_PREDICT, context)
+        return _score(model, args[0], _WANT_PREDICT, False, context)
     raise Error("unknown IsolationForest operation " + operation)
 
 
 def iforest_operation(model: PythonObject, operation: String, args: PythonObject,
                       context: PythonObject) raises -> PythonObject:
-    return iforest_operation_with_source(model, operation, args, context, args[0])
+    return iforest_operation_with_source(model, operation, args, context, args[0], False)

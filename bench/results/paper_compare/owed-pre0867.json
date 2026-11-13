@@ -76,6 +76,18 @@
   "session-call-descriptor": {
    "define": "MOJOLEARN_SESSION_CALL_DESCRIPTOR",
    "status": "define in code (providers/python/autograd_session_public_request_pyapi_pack.mojo SESSION_CALL_DESCRIPTOR): B = every public Session/Program call through the session_public_api_v1 descriptor (d2f14a3de4, ec806eaf6f, 1edde63a6a); A = a direct typed call when the calling image owns the session registry"
+  },
+  "if-fit-own-x": {
+   "define": "MOJOLEARN_IDN_IF_FIT_OWN_X",
+   "status": "define in code (bindings/trees_public_iforest_door.mojo _IF_FIT_OWN_X): B = the fit owns a parallel copy of a borrowed float32 X (0292b73ab3); A = a resident binary borrows X (0.8.55)"
+  },
+  "if-scores-f64-off": {
+   "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF",
+   "status": "define in code (isolation_forest/impl/isolation_forest.mojo IDN_IF_SCORES_F64): B = float32 download + the door's admit_family_f64 cast (115b5eb8bb); A = the epilogue writes the public float64 scores"
+  },
+  "kde-qtile-force": {
+   "define": "MOJOLEARN_IDN_KDE_QTILE_FORCE",
+   "status": "define in code (kde/impl/neighbors/kernel_density.mojo KDE_IDN_QTILE_FORCE): B = the query-tile pass at every width (the 2026-10-11 promotion); A = kde_qtile_applies cost rule (query tile only while q_tpb*4*d*4 <= 32 KiB)"
   }
  },
  "rows": [
@@ -666,6 +678,64 @@
     "session-call-descriptor"
    ],
    "decides": "the descriptor hop for same-image calls (B) returns only if at least as fast as the direct typed call (A) on NVIDIA and AMD; digests must not move"
+  },
+  {
+   "id": "rk-iforest-fit-borrow",
+   "source": "restore-iforest-kde (history audit row 3: 0292b73ab3 owned-X copy, istella fit NV 197 -> 1,318 ms, AMD 180 -> 888)",
+   "kind": "ab",
+   "lane": "iforest",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "if-fit-own-x"
+   ],
+   "decides": "keep the borrow (A) unless the owned copy (B) is at least as fast on the NVIDIA+AMD average; digests must not move in either arm"
+  },
+  {
+   "id": "rk-iforest-scores-f64",
+   "source": "restore-iforest-kde (history audit row 4: 115b5eb8bb f64 cast pass, taxi score_samples NV 3.27 -> 5.32 ms)",
+   "kind": "ab",
+   "lane": "iforest",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "if-scores-f64-off"
+   ],
+   "decides": "keep the float64 epilogue (A) unless the float32 download + host cast (B) is at least as fast on the vendor average (infer column); digests must not move"
+  },
+  {
+   "id": "rk-kde-qtile-rule",
+   "source": "restore-iforest-kde (history audit row 5: 1fe7a161e5 KDE_QTILE promoted with istella B/A NV 1.231 / AMD 1.246)",
+   "kind": "ab",
+   "lane": "kde",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "kde-qtile-force"
+   ],
+   "decides": "keep the cost rule (A) unless the every-width query tile (B) is at least as fast on the vendor average; digests must not move"
+  },
+  {
+   "id": "rk-kde-qtile-widths",
+   "source": "restore-iforest-kde (the cost rule's neighbouring widths and one wide non-board shape)",
+   "kind": "driver",
+   "driver": "kde_widths",
+   "shape": {
+    "rows": 200000,
+    "queries": 20000,
+    "features": [
+     12,
+     16,
+     24,
+     48,
+     512
+    ]
+   },
+   "arms": [
+    "candidate",
+    "prior"
+   ],
+   "decides": "the prior (0.8.66) takes the query tile at every width (= the B arm): the candidate must not be slower at any width; a loss at 24 or 48 moves the 32 KiB budget, with the reason in kernel_density.mojo"
   }
  ]
 }
