@@ -739,6 +739,11 @@ def iforest_forest_run_binding(
     return PythonObject(n_query)
 
 
+def iforest_forest_io_binding() raises -> PythonObject:
+    """1: this binary has `iforest_forest_export` and `iforest_forest_run`."""
+    return PythonObject(1)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_svm_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -778,6 +783,7 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[iforest_resident_release_binding]("iforest_resident_release")
         module.def_function[iforest_forest_export_binding]("iforest_forest_export")
         module.def_function[iforest_forest_run_binding]("iforest_forest_run")
+        module.def_function[iforest_forest_io_binding]("iforest_forest_io")
         module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[svc_ovo_layout_host_binding]("svc_ovo_layout")
