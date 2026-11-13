@@ -70,6 +70,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
+from core.weight_epoch import WeightKey
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.contract import OP_NT
@@ -431,6 +432,19 @@ struct SambaResidentSession(Movable, Writable):
     #: the loss node's value word (the tape reads no value of it)
     var tape_loss: DeviceBuffer[DType.float32]
     var busy: Bool
+    # ---- lane fix-samba-weight-upload (2026-11-13): the stateless forward
+    #: uploads the registry only when `param` does not hold the bytes at the
+    #: caller's address: keyed by that address and the process weight epoch
+    #: (core/weight_epoch.mojo, as SambaStackProgram.refresh_weights). Every
+    #: operation that writes the registry bumps the epoch
+    #: (bindings/samba_public_native_pack.mojo, training/samba_public_run.mojo
+    #: `_samba_writes_registry`) and the public views are read-only, so an
+    #: unchanged key means unchanged bytes: no pass over the weights. Empty
+    #: (never current) at open and while a step rewrites `param`.
+    var wkey: WeightKey
+    #: registry uploads (host -> `param`) this session has made, open included;
+    #: returned by the forward (descriptor op 16) as the session's report
+    var param_uploads: Int
 
     def __init__(
         out self,
@@ -488,6 +502,10 @@ struct SambaResidentSession(Movable, Writable):
         self.grad.enqueue_fill(Float32(0.0))
         ctx.enqueue_copy(dst_buf=self.param, src_ptr=param_ptr)
         ctx.synchronize()
+        self.param_uploads = 1
+        # Empty key: open scans only the attention views (their constructor),
+        # so the first forward still uploads and admits the whole registry.
+        self.wkey = WeightKey()
         # ---- placeholders for the shape-keyed workspaces (rebuilt on first use)
         self.b = 0
         self.l = 0
