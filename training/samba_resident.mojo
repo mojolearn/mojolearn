@@ -472,7 +472,7 @@ struct SambaResidentSession(Movable, Writable):
             self.ldims.validate()
         self.lean = _lean_stages(hd) if self.has_attn else False
         # ---- the registry offsets, SambaConfig.registry's order (one helper,
-        # shared with the stack program: training/samba_program.mojo)
+        # shared with the decode session: training/samba_decode_resident.mojo)
         self.offsets = List[Int]()
         self.slot = List[Int]()
         var running = samba_registry_layout(kinds, vocab, dm, self.ldims, it, tie, self.offsets, self.slot)
@@ -682,7 +682,7 @@ def _admit_registry(mut s: SambaResidentSession) raises:
         s.m3_w[j].weights_checked = True
 
 
-def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
+def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: Bool) raises:
     """Embedding output in `acts[0]` -> `acts[i + 1] = block_i(acts[i])` for
     every layer, in stack order, each from its certified zero state."""
     var m = b * l
@@ -707,15 +707,15 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
             s.kv.value().k.enqueue_fill(Float32(0.0))
             s.kv.value().v.enqueue_fill(Float32(0.0))
             s.t_stages[j].reset(s.ctx)
-            # attn_stash=recompute for the Samba train step (grid ge123e6f9:
-            # samba-train-step 0.905x; the LM step keeps its stash, 1.24x
-            # slower there). Every call here is a train step since the
-            # forward moved to SambaStackProgram (lane x6).
+            # attn_stash=recompute for the Samba train step only (grid
+            # ge123e6f9: samba-train-step 0.905x; the LM step keeps its
+            # stash, 1.24x slower there). A forward-only call keeps the
+            # build's profile (samba-forward was not measured with it).
             comptime if IDN_SAMBA_ATTN_RECOMPUTE:
-                s.t_stages[j].attn_recompute_backward = True
+                s.t_stages[j].attn_recompute_backward = not forward_only
             llama_decoder_layer_forward(
                 s.ctx, s.t_stages[j], s.kv.value(), s.rope.value(), s.t_w[j], s.acts[i],
-                b, l, 0, trace, String("samba.resident.attn"), forward_only=False,
+                b, l, 0, trace, String("samba.resident.attn"), forward_only=forward_only,
             )
             _d2d(s.ctx, s.acts[i + 1], 0, s.t_stages[j].residual2, m * dm)
 
@@ -970,22 +970,71 @@ def _upload_tokens(
     s.ctx.enqueue_copy(dst_buf=s.ids, src_ptr=ids_ptr)
 
 
-def _norm_head_forward(mut s: SambaResidentSession, m: Int) raises:
-    """`hn = norm_f(acts[L])`, `logits = hn . head^T`, the head GEMM at
-    `ROLE_HEAD` as `samba_head_loss_host` runs it. (Its forward-only arm went
-    with `samba_resident_forward`, lane x6.)"""
+def _norm_head_forward(mut s: SambaResidentSession, m: Int, train: Bool) raises:
+    """`hn = norm_f(acts[L])`, `logits = hn . head^T`. The train step's head
+    GEMM runs at `ROLE_HEAD` as `samba_head_loss_host` does; the forward's
+    at the default role as `samba_linear_forward_host` does (an execution
+    plan tag, the same bits)."""
     var nw = s.view(s.norm_f_index())
     var hw = s.view(s.head_index())
     llama_rms_norm(s.ctx, s.sumsq, s.hn, s.acts[s.n_layers()], nw, m, s.dm, s.eps)
-    identical_gemm_into[ROLE=ROLE_HEAD](
-        s.ctx, s.logits, s.hn, hw, s.head_ws, m, s.vocab, s.dm, OP_NT
-    )
+    if train:
+        identical_gemm_into[ROLE=ROLE_HEAD](
+            s.ctx, s.logits, s.hn, hw, s.head_ws, m, s.vocab, s.dm, OP_NT
+        )
+    else:
+        identical_gemm_into(s.ctx, s.logits, s.hn, hw, s.head_ws, m, s.vocab, s.dm, OP_NT)
     _ = nw^
     _ = hw^
 
 
+def samba_resident_forward(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    b: Int,
+    l: Int,
+) raises -> Int:
+    """`SambaStack.forward(inputs)`: `(B, L)` ids -> `(B * L, vocab)` logits
+    written to `out_ptr`, every block from its zero state, no dropout. The
+    registry goes up once, the ids once, the logits come down once (the
+    board's forward span includes that download, as for lm-forward).
+    Returns `B * L * vocab`."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+    _ensure_shape(s, b, l)
+    var m = b * l
+    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+    _upload_tokens(s, ids_ptr)
+    _admit_registry(s)
+    # The token-range refusal is the embedding entry's own
+    # (`emb_refuse_device_ids`): the ids are checked on the device before
+    # the gather reads them, so Python makes no min/max pass over them.
+    var emb = EmbConfig.llama(s.vocab, s.dm)
+    var ew = s.view(0)
+    identical_embedding_forward_into(s.ctx, s.acts[0], ew, s.ids, m, emb)
+    _forward_blocks(s, b, l, True)
+    _norm_head_forward(s, m, False)
+    s.ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=s.logits)
+    s.ctx.synchronize()
+    _ = ew^
+    return m * s.vocab
+
+
 # TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_forward (the resident stateless forward; SambaStack.forward runs SambaStackProgram, training/samba_program.mojo) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
+# RESTORED 2026-11-13 (lane restore-samba-resident-forward) from
+# `git show 5b5490960d:training/samba_resident.mojo`, body unchanged: lane x6
+# deleted it on reasoning, never A/B'd (AGENTS.md "A measured winner is never
+# deleted on reasoning"). Numbers on record: IDN_SAMBA_RESIDENT_STEP PROMOTED
+# (docs/apple-fast/EXPERIMENTS.md, grid ge123e6f9) samba-forward NVIDIA 12.0 ->
+# 5.3 ms (0.44x), AMD 8.8 -> 5.8 ms (0.66x) vs the per-op route; the 0.8.55
+# paper column (NVIDIA L40S 4.60 ms, AMD MI300X 6.10 ms) ran this function. The
+# program forward that replaced it measured NVIDIA 10.54 ms (2.29x), MI325X
+# 8.36 ms (1.48x) at candidate 4c2340386abc. B arm: -D
+# MOJOLEARN_SAMBA_PROGRAM_FORWARD (SambaStackProgram); RUN OWED samba-forward
+# A vs B on NVIDIA and AMD (bench/results/paper_compare/owed-pre0867.json).
 
 
 def samba_resident_train_step(
@@ -1064,8 +1113,8 @@ def samba_resident_train_step(
     var emb = EmbConfig.llama(v, dm)
     var ew = s.view(0)
     identical_embedding_forward_into(s.ctx, s.acts[0], ew, s.ids, m, emb)
-    _forward_blocks(s, b, l)
-    _norm_head_forward(s, m)
+    _forward_blocks(s, b, l, False)
+    _norm_head_forward(s, m, True)
 
     # ---- the loss: the logits refusal (the oracle's walk, on the device),
     # then `identical_ce_loss_resident` with the gradient left on the device
@@ -1189,8 +1238,8 @@ def samba_resident_accumulated_step(
         var cfg = CeConfig(v, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), total_count)
         ce_refuse_shape(m, m * v, cfg)
         identical_embedding_forward_into(s.ctx, s.acts[0], ew, s.ids, m, emb)
-        _forward_blocks(s, rows_per, l)
-        _norm_head_forward(s, m)
+        _forward_blocks(s, rows_per, l, False)
+        _norm_head_forward(s, m, True)
         var bad = device_first_nonfinite(s.ctx, s.logits, m * v)
         if bad >= 0:
             var is_nan = device_classify_nonfinite(s.ctx, s.logits, bad)
