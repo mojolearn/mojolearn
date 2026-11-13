@@ -104,6 +104,7 @@ from autograd.rules_mamba import (
     mamba2_step_backward,
 )
 from autograd.rules_mamba3 import mamba3_step_backward
+from mamba.impl.modules.afn_defines import IDN_M3_SESSION_STAGE_REUSE, IDN_MAMBA3_REPORTS_ON_REQUEST
 
 # Session operation codes (autograd/ops_api.mojo OPS_*; autograd/program.mojo
 # PROGRAM_MAX_CODE covers them, record version 3).
@@ -482,6 +483,12 @@ struct _M3Block(Movable):
     var reports: List[DeviceBuffer[DType.float32]]
     #: IDN_M3_DECODE_WINDOW_REUSE: the previous L = 1 step's stages
     var decode_stages: Optional[Mamba3DeviceStages]
+    #: lane restore-samba-resident-forward: an inference-only session's
+    #: (`BlockStepScratch.inference_only`) last L > 1 run's stages and input
+    #: copy, kept for the next run of the same (B, L, buf_len) and refilled
+    #: with the constructor's zeros (IDN_M3_SESSION_STAGE_REUSE)
+    var held_stages: Optional[Mamba3DeviceStages]
+    var held_x: Optional[DeviceBuffer[DType.float32]]
     #: lane x56d: the last recorded run's token count, its zero-state stages
     #: and its input copy, kept until the backward reads them
     var train_l: Int
@@ -512,6 +519,8 @@ struct _M3Block(Movable):
         for i in range(4):  # small-loop(the four Mamba-3 report buffers)
             self.reports.append(mamba_zeros(ctx, sizes[i]))
         self.decode_stages = None
+        self.held_stages = None
+        self.held_x = None
         self.train_l = 0
         self.train_st = None
         self.train_x = None
@@ -675,6 +684,18 @@ struct BlockStepScratch(Movable):
     var last_train_s: Int
     var last_train_q: Int
     var last_train_y: Int
+    #: lane restore-samba-resident-forward (2026-11-13): the session's runs
+    #: are never read by a backward (the Samba stack program,
+    #: training/samba_program.mojo). Its Mamba-3 L > 1 runs keep their
+    #: stages and input copy in the entry (`_run_m3`), and its attention runs
+    #: launch `forward_only=True` on the entry's kept L > 1 stages
+    #: (`_run_attn`), as the 0.8.55 resident forward did
+    #: (training/samba_resident.mojo `_forward_blocks`).
+    var inference_only: Bool
+    #: the current run requests no Mamba-3 reports (the caller reads none
+    #: before the next run): `_run_m3` skips the four report copies
+    #: (IDN_MAMBA3_REPORTS_ON_REQUEST). Set per run by the caller.
+    var skip_reports: Bool
 
     def __init__(out self):
         self.m1 = List[_M1Block]()
@@ -689,6 +710,8 @@ struct BlockStepScratch(Movable):
         self.last_train_s = 0
         self.last_train_q = 0
         self.last_train_y = 0
+        self.inference_only = False
+        self.skip_reports = False
 
     def parked(self) -> Int:
         return (len(self.parked_m1) + len(self.parked_m2) + len(self.parked_m3) + len(self.parked_attn)
@@ -953,9 +976,40 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     _expect(OPS_M3_STEP, "state", counts[2], block_part_floats(OPS_M3_STEP, ints, BLOCK_PART_STATE))
     _expect(OPS_M3_STEP, "state words", counts[3], 2)
     var e = _m3_entry(ex, sc, bufs, counts, b, dm)
-    ref blk = sc.m3[e]
     var dims = Mamba3Dims.of(dm)
     var n = b * l * dm
+    # lane restore-samba-resident-forward (2026-11-13): an inference-only
+    # session (`sc.inference_only`, the Samba stack program) keeps its L > 1
+    # stages and input copy in the entry, as the 0.8.55 resident forward kept
+    # them per (B, L) (training/samba_resident.mojo `_ensure_shape`): no 43
+    # fresh zero-filled buffers and no input allocation per layer per call.
+    # A kept set is refilled with the constructor's zeros (`rezero`,
+    # IDN_M3_SESSION_STAGE_REUSE), so the forward starts from the same bytes
+    # and no bit moves. A set kept for another (B, L, buf_len) is parked, not
+    # freed, while the stream may still read it (lane x45c).
+    var hold = False
+    comptime if IDN_M3_SESSION_STAGE_REUSE and MAMBA_GUARD == 0:
+        hold = sc.inference_only and l > 1
+    var kept = Optional[Mamba3DeviceStages]()
+    var kept_x = Optional[DeviceBuffer[DType.float32]]()
+    if hold:
+        var q0 = sc.m3[e].st.buf_len
+        if sc.m3[e].held_stages:
+            var prev = sc.m3[e].held_stages.take()
+            if prev.b == b and prev.l == l and prev.q0 == q0:
+                prev.rezero()
+                kept = prev^
+            else:
+                sc.make_room(ctx)
+                sc.parked_m3.append(prev^)
+        if sc.m3[e].held_x:
+            var px = sc.m3[e].held_x.take()
+            if len(px) == n:
+                kept_x = px^
+            else:
+                sc.make_room(ctx)
+                sc.parked_x.append(px^)
+    ref blk = sc.m3[e]
     var x = _view(ex, bufs[0], n)
     var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
@@ -964,34 +1018,52 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     # length, or, under IDN_M3_DECODE_WINDOW_REUSE, the previous L = 1
     # step's stages re-windowed at the carried buf_len.
     var stages: Mamba3DeviceStages
-    comptime if IDN_M3_DECODE_WINDOW_REUSE:
-        if l == 1 and blk.decode_stages:
-            stages = blk.decode_stages.take()
-        elif l == 1:
-            stages = Mamba3DeviceStages(ctx, b, 1, M3_CHUNK_SIZE, dims)
-        else:
-            stages = Mamba3DeviceStages(ctx, b, l, blk.st.buf_len, dims)
-        if l == 1:
-            stages.reuse_decode_window(blk.st.buf_len)
-    else:
+    if kept:
+        stages = kept.take()
+    elif hold:
         stages = Mamba3DeviceStages(ctx, b, l, blk.st.buf_len, dims)
+    else:
+        stages = _m3_call_stages(ctx, blk, b, l, dims)
     var report_n = m3_report_floats(b, dm)
+    var held_x = Optional[DeviceBuffer[DType.float32]]()
     if l == 1:
         _d2d(ctx, blk.dx, x, n)
         mamba3_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, trace, String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
     else:
-        var dx = mamba_zeros(ctx, n)
+        var dx: DeviceBuffer[DType.float32]
+        if kept_x:
+            dx = kept_x.take()
+        elif hold:
+            # overwritten whole by the copy below, so no zero fill
+            dx = ctx.enqueue_create_buffer[DType.float32](n)
+        else:
+            dx = mamba_zeros(ctx, n)
         _d2d(ctx, dx, x, n)
         mamba3_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
-        sc.parked_x.append(dx^)
-    _d2d(ctx, blk.reports[0], stages.h_last, report_n[0])
-    _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
-    _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
-    _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
+        if hold:
+            held_x = dx^
+        else:
+            sc.parked_x.append(dx^)
+    # The four reports, unless the caller requests none for this run
+    # (`sc.skip_reports`, IDN_MAMBA3_REPORTS_ON_REQUEST: the stateless Samba
+    # forward reads none; the 0.8.55 resident forward copied none).
+    var copy_reports = True
+    comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
+        copy_reports = not sc.skip_reports
+    if copy_reports:
+        _d2d(ctx, blk.reports[0], stages.h_last, report_n[0])
+        _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
+        _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
+        _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
     var words: List[Int] = [blk.st.buf_len, 1 if blk.st.pending else 0]
     _write_words(ex, bufs[3], words)
+    if hold:
+        # kept by the entry; the next run refills them in stream order
+        sc.m3[e].held_stages = stages^
+        sc.m3[e].held_x = held_x^
+        return
     # lane x45c: no wait; the stages stay with the entry (reuse, kept by the
     # entry and only re-windowed in stream order) or are parked
     comptime if IDN_M3_DECODE_WINDOW_REUSE:
@@ -1000,6 +1072,22 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
             return
     sc.make_room(ctx)
     sc.parked_m3.append(stages^)
+
+
+def _m3_call_stages(ctx: DeviceContext, mut blk: _M3Block, b: Int, l: Int, dims: Mamba3Dims) raises -> Mamba3DeviceStages:
+    """The stages of one run that holds none: built per call at the open
+    chunk's length, or, under IDN_M3_DECODE_WINDOW_REUSE, the previous L = 1
+    step's stages re-windowed at the carried buf_len."""
+    comptime if IDN_M3_DECODE_WINDOW_REUSE:
+        if l == 1:
+            if blk.decode_stages:
+                var reused = blk.decode_stages.take()
+                reused.reuse_decode_window(blk.st.buf_len)
+                return reused^
+            var fresh = Mamba3DeviceStages(ctx, b, 1, M3_CHUNK_SIZE, dims)
+            fresh.reuse_decode_window(blk.st.buf_len)
+            return fresh^
+    return Mamba3DeviceStages(ctx, b, l, blk.st.buf_len, dims)
 
 
 def _same_ints(a: List[Int], b: List[Int]) -> Bool:
