@@ -404,11 +404,8 @@ def read_json(path):
 
 
 def write_json(path, doc):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
-    tmp.replace(path)
+    # a per-process, per-thread temp name and one atomic rename (concurrent controllers; release_reuse)
+    release_reuse.atomic_write_text(path, json.dumps(doc, indent=1, sort_keys=True) + "\n")
 
 
 # ---------------------------------------------------------------- freeze helpers
@@ -912,10 +909,13 @@ def github_legs(ctx):
         rb, out = leg_layout(legs_dir, "github", name)
         defines = candidate_defines(ctx)
         ref = getattr(getattr(ctx, "args", None), "candidate_ref", "") or ""
+        # the tooling sha the measurement build recorded at its first launch (release_candidate.py): a resume
+        # runs from a moved ref that still holds it (release_github_build.tooling_ref)
+        tooling = getattr(getattr(ctx, "args", None), "candidate_tooling_sha", "") or ""
         legs.append(Leg(name, vendor, arch,
                         ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
                          "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else [])
-                        + (["--ref", ref] if ref else []),
+                        + (["--ref", ref] if ref else []) + (["--tooling-sha", tooling] if tooling else []),
                         {}, rb, legs_dir, out))
     return legs
 
@@ -969,6 +969,7 @@ def launch_detached(ctx, legs):
         compile_requirements = None
         if type(leg) is Leg and callable(getattr(ctx, "begin_compile_requirements", None)) and ledger_on(ctx):
             compile_requirements = ctx.begin_compile_requirements(leg)
+        attach = github_attach_run(ctx, leg) if compile_requirements is None else None
         leg.workdir.mkdir(parents=True, exist_ok=True)
         stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         for p in (leg.log, leg.exit_file, leg.pid_file, leg.provenance_file):
@@ -978,6 +979,13 @@ def launch_detached(ctx, legs):
         if out.exists():
             out.rename(out.with_name(out.name + f".failed-{stamp}"))
             ctx.say(f"  {leg.name}: previous attempt moved aside to {out.name}.failed-{stamp}")
+        if attach:
+            carry_github_records(out.with_name(out.name + f".failed-{stamp}") / "GHA", out / "GHA")
+            command = list(leg.command)
+            if "--run-id" in command:
+                del command[command.index("--run-id"):command.index("--run-id") + 2]
+            leg.command = command + ["--run-id", str(attach)]
+            ctx.say(f"  {leg.name}: collecting the succeeded GitHub run {attach} (--run-id; no new dispatch)")
         prov = leg.provenance
         if prov is None and type(leg) is Leg and callable(getattr(ctx, "leg_provenance", None)):
             prov = ctx.leg_provenance(leg)
@@ -992,6 +1000,35 @@ def launch_detached(ctx, legs):
         ctx.say(f"  {leg.name}: launched pid {proc}, log {leg.log}")
         started += 1
     return started
+
+
+#: the GitHub records an attached collector keeps from the attempt that dispatched its run
+GITHUB_RECORDS = ("dispatch-intent.json", "dispatch.json", "run-id.json")
+#: relaunches per leg of a collector whose run succeeded and whose download did not (DOWNLOAD_PENDING_EXIT)
+DOWNLOAD_PENDING_RELAUNCHES = 3
+
+
+def github_attach_run(ctx, leg):
+    """The GitHub run a relaunched collector of LEG attaches to (--run-id) instead of dispatching a new one: the
+    run its command already names, else the run its last attempt's GHA/run-id.json names when that run built this
+    commit with these defines and concluded success (release_github_build.succeeded_run). None for any other leg.
+    2026-11-13: collectors killed by GitHub's quota refusals left succeeded runs; their reruns dispatched anew."""
+    if type(leg) is not Leg or not any("release_github_build.py" in str(c) for c in leg.command or []):
+        return None
+    if "--run-id" in leg.command:
+        return leg.command[leg.command.index("--run-id") + 1]
+    if getattr(ctx, "dry", False) or not (leg.out_dir / "GHA" / "run-id.json").is_file():
+        return None
+    return release_github_build.succeeded_run(leg.out_dir / "GHA", ctx.commit, candidate_defines(ctx))
+
+
+def carry_github_records(src, dest):
+    """Copy the dispatch and run records of a moved-aside attempt into the attached attempt's GHA directory (its
+    collector drops the dispatch's R2 objects after it collects the run)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in GITHUB_RECORDS:
+        if (src / name).is_file():
+            shutil.copy2(src / name, dest / name)
 
 
 def host_digest_mismatches(legs):
@@ -1598,9 +1635,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return
         with self._lock:
             self.base.mkdir(parents=True, exist_ok=True)
-            tmp = self.state_path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.state, indent=2, sort_keys=True) + "\n")
-            tmp.replace(self.state_path)
+            release_reuse.atomic_write_text(self.state_path, json.dumps(self.state, indent=2, sort_keys=True) + "\n")
 
     def head(self):
         return git("rev-parse", "HEAD")
@@ -3582,6 +3617,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if not any(l.pid() or l.exit_code() is not None for l in legs):
             launch_detached(self, legs)
         tried = {l.name: 0 for l in legs}
+        pending = {l.name: 0 for l in legs}
         # A leg that failed on stock walks to its next GPU type AT ONCE, while
         # the other legs keep running (0.8.19: the sm_89 leg sat an hour behind
         # the AMD build before its walk).
@@ -3598,6 +3634,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     l.compile_provider_retry = True
                     l.provider, l.provider_reason = "hotaisle", "walked: DigitalOcean refused a rental"
                     self._amd_route = ("hotaisle", l.provider_reason)
+                    again.append(l)
+                    continue
+                if (l.exit_code() == release_github_build.DOWNLOAD_PENDING_EXIT and type(l) is Leg
+                        and pending[l.name] < DOWNLOAD_PENDING_RELAUNCHES):
+                    # its run succeeded and only the artifact download failed: collect that run again
+                    # (launch_detached attaches by --run-id), never a failed leg
+                    pending[l.name] += 1
+                    self.say(f"  {l.name}: its run succeeded, the download did not; collecting it again "
+                             f"({pending[l.name]}/{DOWNLOAD_PENDING_RELAUNCHES})")
                     again.append(l)
                     continue
                 walk = NVIDIA_WALK.get(l.arch) if l.vendor == "cuda" and "--gpu" in l.command else None
