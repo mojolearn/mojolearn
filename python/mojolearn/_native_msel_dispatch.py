@@ -20,8 +20,23 @@ def connect(context, package):
     preprocessing, _expansion_prep = loaded('preprocessing'), loaded('_expansion_prep')
     resample = loaded('resample')
     _backend.default_mode()  # glue: settle the shared default before native metadata reads
-    if resample is not None and 'family_msel_fast_masks' not in context:
-        context["family_msel_fast_masks"] = {mode: resample.fast_defines(mode) for mode in ("identical", "fast")}  # glue: existing compiled option masks, no product resolver callback
+    # The CV's FAST define masks (bindings/msel_cv_door.mojo:232 reads the
+    # current mode's entry). `identical` is 0 by definition (resample.fast_defines);
+    # the `fast` mask needs the resample binding, so it is read when resample is
+    # loaded, or now when the process runs FAST. Before that it is 0, and it is
+    # rewritten when resample loads (lane lazy-import-fix: the key used to be
+    # written only when resample was already imported).
+    masks = context.get('family_msel_fast_masks')
+    if masks is None or (resample is not None and not context.get('family_msel_fast_masks_read')):
+        if resample is None and _backend.default_mode() == "fast":
+            import importlib
+            resample = importlib.import_module(package.__name__ + '.resample')
+        fresh = {"identical": 0, "fast": resample.fast_defines("fast") if resample is not None else 0}
+        if masks is None:
+            context["family_msel_fast_masks"] = fresh
+        else:
+            masks.update(fresh)  # glue: two fixed mode entries
+        context["family_msel_fast_masks_read"] = resample is not None
     context.update(family_msel_rows_entry=_arena_io._ROWS_CALL,
                    family_msel_rows_context=_arena_io._ROWS_CONTEXT,
                    family_msel_json_string=encode_basestring_ascii)
@@ -100,7 +115,10 @@ def connect(context, package):
     forests = tuple(getattr(module, name) for module, names in (  # glue: exact native forest schemas of loaded families
         (loaded('randomforest'), ('RandomForestClassifier', 'RandomForestRegressor')),
         (loaded('extratrees'), ('ExtraTreesClassifier', 'ExtraTreesRegressor')),
-        (loaded('tree'), ('DecisionTreeClassifier', 'DecisionTreeRegressor')))
+        # The trees' defining module, not the `tree` re-export: `mojolearn.DecisionTree*` routes to
+        # `_expansion_trees` (_LAZY_NAMES), so gating on `tree` left them unregistered and an
+        # ensemble member was refused by Sequential admission (lane lazy-import-fix).
+        (loaded('_expansion_trees'), ('DecisionTreeClassifier', 'DecisionTreeRegressor')))
         if module is not None for name in names)
     if any(cls not in registry for cls in forests):
         from . import _native_trees_bridge

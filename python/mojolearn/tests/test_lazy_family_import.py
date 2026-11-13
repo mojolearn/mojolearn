@@ -160,3 +160,126 @@ def test_every_public_name_is_routed_once_and_doors_match_their_all():
         target = name if where is None else where.lstrip(".")
         path = PKG / (target.replace(".", "/") + ".py")
         assert path.exists() or (PKG / target.replace(".", "/") / "__init__.py").exists(), (name, where)
+
+
+# One family alone in a fresh interpreter (lane lazy-import-fix, 2026-11-12):
+# its first import must bring in everything its native boundary reads, as
+# `load_all()` does, without `load_all()`. The probe replaces `load_all` with a
+# refusal, so a family that only works after the enumeration fails here, and
+# it checks that the package did not import every family on the way.
+_FAMILY_PROBE = r"""
+import json, sys
+import numpy as np
+import mojolearn
+from mojolearn import _families
+
+
+def _refuse():
+    raise AssertionError("load_all() was called by a single-family operation")
+
+
+_families.load_all = _refuse
+rs = np.random.RandomState(0)
+X = rs.rand(400, 8).astype(np.float32)
+y = (X[:, 0] > 0.5).astype(np.int64)
+yr = X[:, 1].astype(np.float32)
+{action}
+missing = [name for name in _families.EAGER_BEFORE if _families.loaded(name) is None]
+print(json.dumps(dict(missing=missing)))
+"""
+
+
+def _family(action):
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(PKG.parent), env.get("PYTHONPATH"))))
+    done = subprocess.run([sys.executable, "-c", _FAMILY_PROBE.replace("{action}", action)], env=env,
+                          capture_output=True, text=True, timeout=900)
+    assert done.returncode == 0, done.stderr[-4000:]
+    seen = json.loads(done.stdout.strip().splitlines()[-1])
+    assert seen["missing"], "a single-family operation imported every family"
+    return seen
+
+
+def test_neural_inference_imports_alone():
+    # neural_inference -> _transformer_impl must not reach models.causal_lm
+    # while neural_inference is half-initialized; the causal connection still
+    # runs at this family's import (DEPENDS) and fills the neural slots.
+    _family("""
+import mojolearn.neural_inference as ni
+from mojolearn import _native_neural_bridge as bridge
+assert ni.TransformerBlockInference.__mro__[1].__name__ == "TransformerBlock"
+assert bridge.RUNTIME is not None and type(bridge.CONTEXT) is dict
+assert "mojolearn.models.causal_lm" in sys.modules
+""")
+
+
+def test_transformer_block_imports_alone_and_connects():
+    _family("""
+from mojolearn import TransformerBlock
+from mojolearn import _native_neural_bridge as bridge
+assert bridge.RUNTIME is not None and type(bridge.CONTEXT) is dict
+""")
+
+
+def test_nearest_centroid_alone():
+    _family("mojolearn.NearestCentroid().fit(X, y).predict(X)")
+
+
+def test_label_propagation_alone():
+    _family("""
+from mojolearn.semi_supervised import LabelPropagation
+yy = y.copy(); yy[::2] = -1
+LabelPropagation(max_iter=5).fit(X, yy).predict(X)
+""")
+
+
+def test_label_spreading_alone():
+    _family("""
+from mojolearn.semi_supervised import LabelSpreading
+yy = y.copy(); yy[::2] = -1
+LabelSpreading(max_iter=5).fit(X, yy).predict(X)
+""")
+
+
+def test_radius_neighbors_alone():
+    _family("""
+rn = mojolearn.RadiusNeighbors(radius=0.5).fit(X)
+distances, indices = rn.radius_neighbors(X[:20], sort_results=True)
+assert len(indices) == 20
+""")
+
+
+def test_bayesian_gaussian_mixture_alone():
+    _family("""
+for ct in ("full", "tied", "diag", "spherical"):
+    mojolearn.BayesianGaussianMixture(n_components=2, covariance_type=ct, max_iter=5, random_state=0).fit(X)
+""")
+
+
+def test_voting_classifier_with_package_level_members_alone():
+    # The members come from the package attributes, as the race builds them:
+    # `mojolearn.DecisionTreeClassifier` routes to `_expansion_trees`, never
+    # importing `tree`, so its CV registration must not depend on `tree`.
+    _family("""
+vc = mojolearn.VotingClassifier([("lr", mojolearn.LogisticRegression(max_iter=200)), ("nb", mojolearn.GaussianNB()),
+                                 ("dt", mojolearn.DecisionTreeClassifier(max_depth=3, random_state=0))], voting="soft")
+vc.fit(X, y).predict(X[:10])
+""")
+
+
+def test_stacking_regressor_with_package_level_members_alone():
+    _family("""
+sr = mojolearn.StackingRegressor([("lasso", mojolearn.Lasso(alpha=0.01, tol=1e-3, max_iter=1000)),
+                                  ("dt", mojolearn.DecisionTreeRegressor(max_depth=3, random_state=0))],
+                                 final_estimator=mojolearn.Ridge(alpha=1.0), cv=5)
+sr.fit(X, yr).predict(X[:10])
+""")
+
+
+def test_cross_validation_alone():
+    # The CV owner reads its fast-define masks (bindings/msel_cv_door.mojo) and
+    # the scorer's metrics program without the resample family loaded.
+    _family("""
+scores = mojolearn.cross_val_score(mojolearn.Ridge(alpha=1.0), X, yr, cv=3)
+assert len(scores) == 3
+""")

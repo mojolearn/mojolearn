@@ -1,7 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Import-time connection slots for the compiled standalone neural owner."""
-RUNTIME = None
-CONTEXT = None
+"""Connection slots for the compiled standalone neural owner.
+
+`RUNTIME` and `CONTEXT` are written by `models/causal_lm.py` when it imports
+(`_connect_causal_native`). Nothing defines them here: the first read of
+either one imports `models.causal_lm`, which connects them, so every neural
+family (`_transformer_impl`, `_mamba_impl`, `_samba_impl`, `neural_inference`)
+reaches the same connection whatever is imported first.
+"""
+
+
+def __getattr__(name):
+    # glue: lazy family import (lane lazy-import-fix, 2026-11-12). The block
+    # modules used to import `models.causal_lm` at their own module end to run
+    # this connection; when `neural_inference` imported first, that closed the
+    # cycle neural_inference -> _transformer_impl -> models.causal_lm ->
+    # neural_inference (partially initialized). The connection now runs at the
+    # first read of a slot, after every class it pins exists.
+    if name not in ("RUNTIME", "CONTEXT"):
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+    importlib.import_module(__name__.rpartition(".")[0] + ".models.causal_lm")
+    slots = globals()
+    if name not in slots:
+        # Read while models.causal_lm itself is still connecting.
+        raise AttributeError(f"mojolearn: the native neural connection ({__name__}.{name}) is read "
+                             "before models.causal_lm finished connecting it")
+    return slots[name]
 
 
 def connect_training(backend, vendor, inference_bindings):

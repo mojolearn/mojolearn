@@ -24,6 +24,14 @@ def _capture(binding, name, symbols):
         if type(entry) is not BuiltinFunctionType:
             raise TypeError(f"{name}.{symbol} must be compiled")
         setattr(result, symbol, entry)
+    # The k-NN owner reads the image's neighbors table key from the module it
+    # is handed (bindings/neighbors_knn_native_door.mojo knn_ops_key); the
+    # binding records it at PyInit. The captured route carries it too, or every
+    # resident/device query through a route refused "publishes no native
+    # neighbors table" (lane lazy-import-fix).
+    key = vars(binding).get("neighbors_native_key") if type(binding) is ModuleType else None
+    if type(key) is tuple:
+        result.neighbors_native_key = key
     _BINDING_ALIASES[id(binding)] = (binding, result)
     _BINDING_ALIASES[id(result)] = (result, result)
     return result
