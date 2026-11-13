@@ -5460,6 +5460,21 @@ reverses the inference head fold only).
 - Code recoverable at `5fff22515a` (the lane's base); patches `experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch` and
   `experiments/removed/BYTE_LM_X7_LEFTOVERS.patch` (the reverse of the lane's change to the code files; `git apply` restores
   them).
+- **Restored 2026-11-13 as the CPU column's default step** (lane restore-byte-lm-host-step, after lane restore-byte-lm-hand-step
+  made the GPU columns' hand step the default again): with the hand step on the GPUs, the host program above would no longer give
+  the GPU columns' words, so the CPU column follows the same switch. One definition, `BYTE_LM_PROGRAM_STEP` in
+  `training/byte_lm_config.mojo` (read by `training/byte_lm.mojo` and the host files): default = the composed host step and loss
+  (`training/byte_lm_host_backward.mojo` `byte_host_train_step` / `byte_host_gradient`, `training/byte_lm_host.mojo`
+  `byte_host_loss`, `ce_causal_mean_loss_fast` and its `check_loss`, `training/chunked_lm_head_gemm_host.mojo`,
+  `training/loss_host_rows.mojo`, `MOJOLEARN_BYTE_LM_HOST_STEP_ROWS`, `tools/byte_lm_host_step_check.py` and its
+  `tools/hostpr_both.sh` line), restored from `5fff22515a` by hand (the patch no longer applies); `-D MOJOLEARN_BYTE_LM_PROGRAM_STEP`
+  = the host program (`training/byte_lm_host_program.mojo`, kept). The session keeps the GPU trainer's call rules: `train_steps`
+  is one native call of k composed steps on the call's own lists, committed together, none on a refusal; every momentum flag is
+  set after a step. Not restored: `training/chunked_lm_head_host.mojo` (its only import was unused), the probe
+  `training/checks/byte_lm_host_bwd_probe.mojo` and `tools/byte_lm_host_step_profile.mojo`; `byte_host_adamw` stays in
+  `training/byte_lm_host_execution.mojo`. Bits: the default build's CPU column returns to the composed step's (0.8.55 / 0.8.66)
+  words, equal to the GPU columns' hand step; a `MOJOLEARN_BYTE_LM_PROGRAM_STEP` build gives the program's words on every column.
+  The entries above are kept as written.
 
 ## CausalLM generate as one Program.decode (2026-11-09)
 
