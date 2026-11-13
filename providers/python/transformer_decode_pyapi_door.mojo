@@ -12,7 +12,9 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_address, py_ints
 from bindings.causal_lm_construct_door import _model_shape
-from bindings.neural_block_public_door import _neural_input
+from std.sys.compile import is_defined
+from bindings.native_loaded_module_door import NativeModules
+from bindings.neural_block_public_door import _neural_input, _neural_input_rows
 from bindings.neural_block_admission_door import neural_record_fields, neural_block_fields, neural_block_snapshot, neural_array_snapshot, neural_metadata_snapshot, neural_string_keys
 from bindings.transformer_public_native_door import _transformer_fields, _transformer_state_words, _transformer_configuration, _transformer_same_words
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
@@ -24,6 +26,22 @@ from transformer.block_options import BlockOptions
 from bindings.py_cpython_table import cpython_table
 from bindings.py_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
 from core.shared_slot import SharedSlot
+
+
+#: Lane restore-neural-call-paths (2026-11-13; AGENTS.md "A measured winner is
+#: never deleted on reasoning"): the per-token door of a decode step. Default
+#: (A): a (B, d_model) step input is admitted as is and its address handed to
+#: the session (`_neural_input_rows`), as 0.8.55's per-token path did (one
+#: upload, one llama_decoder_layer_forward, one download, one wait per token;
+#: python/_transformer_impl.py at 0e4de0f46e:1788). Board on record (NV L40S):
+#: transformer-decode 1105 ms (0.8.55) -> 1455 (0.8.66, native step identical
+#: to 0.8.55, so the door) -> 1406 (candidate 4c2340386abc); MI300X 2445 ->
+#: 2699 at 0.8.66. `-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR` keeps the
+#: door of d37be875fc (B arm of the owed A/B, owed-pre0867.json row
+#: restore-transformer-decode-door): a (B, 1, d_model) Array view rebuilt per
+#: token (`_neural_input`). Same bytes at the same address in both arms, so no
+#: output bit moves.
+comptime TRANSFORMER_DECODE_PER_TOKEN_DOOR = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"]()
 
 
 struct TransformerDecodeHandle(Movable, Writable):
@@ -611,10 +629,17 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
         _transformer_decode_compatible(h[], fields, slots)
         width = Int(py=fields["d_model"])
         rows = Int(py=slots["batch_size"])
-    var x = _neural_input(input, width, step, context)
-    var shape = x.shape
-    var batch = Int(py=shape[0])
-    var length = Int(py=shape[1])
+    var batch = 0
+    var length = 0
+    var x = PythonObject(None)
+    comptime if TRANSFORMER_DECODE_PER_TOKEN_DOOR:
+        x = _neural_input(input, width, step, context)
+        var shape = x.shape
+        batch = Int(py=shape[0])
+        length = Int(py=shape[1])
+    else:
+        var mods = NativeModules()
+        x = _neural_input_rows(mods, input, width, step, context, batch, length)
     if batch != rows:
         raise Error("TransformerDecodeSession: input rows differ from the state")
     var y = generation_array([batch, length, width])

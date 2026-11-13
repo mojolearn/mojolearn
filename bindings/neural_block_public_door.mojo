@@ -574,6 +574,37 @@ def _neural_input(mut mods: NativeModules, value: PythonObject, d_model: Int, st
     return x
 
 
+def _neural_input_rows(mut mods: NativeModules, value: PythonObject, d_model: Int, step: Bool, context: PythonObject,
+                       mut rows: Int, mut length: Int) raises -> PythonObject:
+    # `_neural_input` for a caller that reads only x's address and its (B, L)
+    # (the Transformer decode session's per-token door; lane
+    # restore-neural-call-paths 2026-11-13): a (B, d_model) step input is
+    # admitted as is, B rows of one token in the same C-order bytes, without
+    # the (B, 1, d_model) metadata view `_neural_input` builds (a new Array
+    # object, fourteen attribute writes and two tuples per token). The same
+    # admission (admit_block_f32 BLOCK_READ) and the same refusals with the
+    # same messages; `rows` and `length` receive B and L.
+    var x = admit_block_f32(mods, value, "x", context, BLOCK_READ)
+    if step and len(x.shape) == 2:
+        var b2 = Int(py=x.shape[0])
+        var d2 = Int(py=x.shape[1])
+        if b2 < 1 or d2 != d_model:
+            raise Error("neural block: x must be (B, L, d_model) -- or (B, d_model) for a step -- with positive B and L"
+                        + " and the weights' d_model " + String(d_model) + ", got shape (" + String(b2) + ", 1, "
+                        + String(d2) + ")")
+        rows = b2
+        length = 1
+        return x
+    if len(x.shape) != 3 or Int(py=x.shape[0]) < 1 or Int(py=x.shape[1]) < 1 or Int(py=x.shape[2]) != d_model:
+        raise Error("neural block: x must be (B, L, d_model)" + (String(" -- or (B, d_model) for a step --") if step else String("")) +
+                    " with positive B and L and the weights' d_model " + String(d_model) + ", got shape " + String(x.shape))
+    if step and Int(py=x.shape[1]) != 1:
+        raise Error("neural block: a decode step takes exactly one token per row, got L = " + String(x.shape[1]) + "; use forward() for prefill")
+    rows = Int(py=x.shape[0])
+    length = Int(py=x.shape[1])
+    return x
+
+
 def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
     # Classical and other callers keep their per-call module checks.
     var mods = NativeModules()
