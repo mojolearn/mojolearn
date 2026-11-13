@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn
 """tools/test_measure_candidate.py -- tools/ops/measure_candidate.py stage's checks on in-memory fixtures (no box):
-the B arm names against the owed file, the free-disk verdict and its prune list, and where the candidate's source
-tree (the dataset pins) is found. Each test is independent (the suite runs its files in parallel)."""
+the B arm names against the owed file, the free-disk verdict and its prune list, where the candidate's source
+tree (the dataset pins) is found, and the L40S-only GPU check of `stage nvidia`. Each test is independent (the suite runs its files in parallel)."""
 import json
 import os
 import sys
@@ -108,6 +108,48 @@ class Source(unittest.TestCase):
         amd = MC.StagePlan.__new__(MC.StagePlan)
         amd.vendor, amd.lane, amd.wrapper = "amd", "measure", "tools/do_amd_steward.sh"
         self.assertEqual(amd.results_base(), "/root/mojolearn/box-out")
+
+
+class GpuCheck(unittest.TestCase):
+    """`stage nvidia` measures on an L40S only (2026-11-13: an out-of-stock L40S got a 2x RTX 6000 Ada rented)."""
+
+    class Runner:
+        def __init__(self, out):
+            self.out, self.calls = out, []
+
+        def must(self, argv, what, timeout=None):
+            self.calls.append(argv)
+            return type("Got", (), {"stdout": self.out})()
+
+    def plan(self):
+        nv = MC.StagePlan.__new__(MC.StagePlan)
+        nv.vendor, nv.lane, nv.wrapper = "nvidia", "measure", "tools/nvidia_central.sh"
+        return nv
+
+    def test_non_l40s_name_refused(self):
+        r = self.Runner("NVIDIA RTX 6000 Ada Generation\nNVIDIA RTX 6000 Ada Generation\n")
+        with self.assertRaises(SystemExit) as cm:
+            MC.check_gpu(r, self.plan(), allow_hw_diff=False)
+        self.assertIn("RTX 6000 Ada", str(cm.exception))
+        self.assertIn("--allow-hw-diff", str(cm.exception))
+        self.assertEqual(r.calls[0][-1], MC.GPU_SCRIPT)
+
+    def test_unreadable_names_refused(self):
+        with self.assertRaises(SystemExit):
+            MC.check_gpu(self.Runner(""), self.plan(), allow_hw_diff=False)
+
+    def test_l40s_passes_and_allow_goes_on(self):
+        MC.check_gpu(self.Runner("NVIDIA L40S\n"), self.plan(), allow_hw_diff=False)
+        MC.check_gpu(self.Runner("NVIDIA GeForce RTX 4090\n"), self.plan(), allow_hw_diff=True)
+
+    def test_verdict_needs_every_gpu_to_be_l40s(self):
+        self.assertEqual(MC.gpu_verdict("NVIDIA L40S\nNVIDIA L40S\n"), (["NVIDIA L40S", "NVIDIA L40S"], True))
+        self.assertFalse(MC.gpu_verdict("NVIDIA L40S\nNVIDIA L4\n")[1])
+
+    def test_job_script_refuses_another_nvidia_gpu(self):
+        job = (Path(HERE) / "ops" / "paper_compare_job.sh").read_text()
+        self.assertIn('[ "$V" = nvidia ] && [ "${PC_ALLOW_HW_DIFF:-0}" != 1 ]', job)
+        self.assertIn("TOKEN=${PC_GPU_TOKEN:-L40S}", job)
 
 
 if __name__ == "__main__":
