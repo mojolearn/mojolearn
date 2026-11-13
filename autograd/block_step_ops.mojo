@@ -137,6 +137,29 @@ comptime IDN_M3_DECODE_WINDOW_REUSE = (
     and MAMBA_GUARD == 0
 )
 
+#: Lane restore-neural-call-paths (2026-11-13; AGENTS.md "A measured winner
+#: is never deleted on reasoning"): the per-call Mamba door's call path.
+#: Default (A): the block reads the caller's x in place from the op's x
+#: tensor (the Mamba-1/2/3 block forwards only read x: "residual =
+#: hidden_states, a NAME, not a copy", modeling_mamba.mojo
+#: mamba_block_forward, and the S22 / out_proj residual of Mamba-2/3), and a
+#: per-call door (`mamba_step_run_host`, MambaBlockProgram.run) downloads the
+#: block output straight from the stages' `residual_out` into the caller's
+#: array: one upload, the block, one download, one wait, as 0.8.55's
+#: `_mamba1_run` / `_mamba2_run` (bindings/_mojolearn_mamba.mojo at
+#: 0e4de0f46e:354 / :920) did. Board on record (NV L40S, candidate
+#: 4c2340386abc vs 0.8.55): mamba3-forward 3.95 -> 6.75 ms, mamba2-forward
+#: 5.57 -> 7.58, mamba1-forward 3.43 -> 4.08 (AMD MI325X 2.91 / 4.25 / 3.29).
+#: `-D MOJOLEARN_MAMBA_CALL_PROGRAM` keeps lane x5's route (B arm of the owed
+#: A/B, bench/results/paper_compare/owed-pre0867.json row
+#: restore-mamba-call-path): x copied device-to-device into a fresh zeroed dx
+#: (`mamba_zeros`) per run, and the output copied device-to-device into the
+#: op's y tensor, then downloaded. Same kernels on the same input bytes in
+#: both arms, so no output bit moves. A poison build (MAMBA_GUARD > 0) keeps
+#: the copy: the guard band lives only in `mamba_zeros` buffers.
+comptime MAMBA_CALL_PROGRAM = is_defined["MOJOLEARN_MAMBA_CALL_PROGRAM"]()
+comptime _MAMBA_X_IN_PLACE = not MAMBA_CALL_PROGRAM and MAMBA_GUARD == 0
+
 
 def m2_report_floats(b: Int, dm: Int) raises -> Int:
     """The Mamba-2 h_last report: b * heads * 64 * 128 floats."""
@@ -893,8 +916,20 @@ def _m3_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], coun
     return len(sc.m3) - 1
 
 
+def _block_out(ctx: DeviceContext, ex: DeviceExec, y_out: FP, y_host: Int, src: DeviceBuffer[DType.float32],
+               n: Int) raises:
+    """A Mamba block's output `src[0:n]`: straight into the caller's host
+    array at `y_host` when it is non-zero (queued; the caller waits: the
+    MAMBA_CALL_PROGRAM A arm), else device-to-device into the op's y
+    tensor at `y_out`."""
+    if y_host != 0:
+        ctx.enqueue_copy(dst_ptr=f32_ptr(y_host), src_buf=src.create_sub_buffer[DType.float32](0, n))
+    else:
+        _d2d(ctx, _view(ex, y_out, n), src, n)
+
+
 def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-            y_out: FP) raises:
+            y_out: FP, y_host: Int = 0) raises:
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -905,29 +940,38 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     ref blk = sc.m1[e]
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
-    var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
     if l == 1:
-        # `_m1_session_step_run`: x into the resident buffer, mamba_step on
-        # the resident stages; the output stays on the device.
-        _d2d(ctx, blk.dx, x, n)
-        mamba_step(ctx, blk.stages, blk.st, blk.w, blk.dx, b, trace, String("ops.step"))
-        _d2d(ctx, y, blk.stages.residual_out, n)
+        # `_m1_session_step_run`: mamba_step on the resident stages.
+        comptime if _MAMBA_X_IN_PLACE:
+            # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+            mamba_step(ctx, blk.stages, blk.st, blk.w, x, b, trace, String("ops.step"))
+        else:
+            _d2d(ctx, blk.dx, x, n)
+            mamba_step(ctx, blk.stages, blk.st, blk.w, blk.dx, b, trace, String("ops.step"))
+        _block_out(ctx, ex, y_out, y_host, blk.stages.residual_out, n)
     else:
         var dims = MambaDims.of(dm)
         var stages = MambaDeviceStages(ctx, b, l, dims)
-        var dx = mamba_zeros(ctx, n)
-        _d2d(ctx, dx, x, n)
-        mamba_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
-        _d2d(ctx, y, stages.residual_out, n)
-        # lane x45c: parked, no wait (the stream may still read them)
-        sc.make_room(ctx)
-        sc.parked_m1.append(stages^)
-        sc.parked_x.append(dx^)
+        comptime if _MAMBA_X_IN_PLACE:
+            mamba_block_forward(ctx, stages, blk.st, blk.w, x, b, l, trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+            # lane x45c: parked, no wait (the stream may still read them)
+            sc.make_room(ctx)
+            sc.parked_m1.append(stages^)
+        else:
+            var dx = mamba_zeros(ctx, n)
+            _d2d(ctx, dx, x, n)
+            mamba_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+            # lane x45c: parked, no wait (the stream may still read them)
+            sc.make_room(ctx)
+            sc.parked_m1.append(stages^)
+            sc.parked_x.append(dx^)
 
 
 def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-            fs: List[Float32], y_out: FP) raises:
+            fs: List[Float32], y_out: FP, y_host: Int = 0) raises:
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -940,25 +984,31 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var dims = Mamba2Dims.of(dm)
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
-    var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
     # `_m2_session_step_run`: call-shaped stages at the open chunk's length.
     var stages = Mamba2DeviceStages(ctx, b, l, blk.st.buf_len, dims)
     var h_n = m2_report_floats(b, dm)
-    if l == 1:
-        _d2d(ctx, blk.dx, x, n)
-        mamba2_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, fs[0], fs[1], trace,
+    comptime if _MAMBA_X_IN_PLACE:
+        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+        mamba2_block_forward(ctx, stages, blk.st, blk.w, x, b, l, fs[0], fs[1], trace,
                              String("ops.step"))
-        _d2d(ctx, y, stages.residual_out, n)
+        _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
         _d2d(ctx, blk.h_last, stages.h_last, h_n)
     else:
-        var dx = mamba_zeros(ctx, n)
-        _d2d(ctx, dx, x, n)
-        mamba2_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, fs[0], fs[1], trace,
-                             String("ops.step"))
-        _d2d(ctx, y, stages.residual_out, n)
-        _d2d(ctx, blk.h_last, stages.h_last, h_n)
-        sc.parked_x.append(dx^)
+        if l == 1:
+            _d2d(ctx, blk.dx, x, n)
+            mamba2_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, fs[0], fs[1], trace,
+                                 String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+            _d2d(ctx, blk.h_last, stages.h_last, h_n)
+        else:
+            var dx = mamba_zeros(ctx, n)
+            _d2d(ctx, dx, x, n)
+            mamba2_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, fs[0], fs[1], trace,
+                                 String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+            _d2d(ctx, blk.h_last, stages.h_last, h_n)
+            sc.parked_x.append(dx^)
     var words: List[Int] = [blk.st.buf_len]
     _write_words(ex, bufs[3], words)
     # lane x45c: the call-shaped stages parked, no wait
@@ -967,7 +1017,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
 
 
 def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-            y_out: FP) raises:
+            y_out: FP, y_host: Int = 0) raises:
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -1011,7 +1061,6 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
                 sc.parked_x.append(px^)
     ref blk = sc.m3[e]
     var x = _view(ex, bufs[0], n)
-    var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
     # The Mamba-3 decode session's body (the one body since lane
     # x5-mamba-on-executor): stages built per call at the open chunk's
@@ -1025,6 +1074,7 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     else:
         stages = _m3_call_stages(ctx, blk, b, l, dims)
     var report_n = m3_report_floats(b, dm)
+<<<<<<< HEAD
     var held_x = Optional[DeviceBuffer[DType.float32]]()
     if l == 1:
         _d2d(ctx, blk.dx, x, n)
@@ -1057,6 +1107,27 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
         _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
         _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
         _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
+=======
+    comptime if _MAMBA_X_IN_PLACE:
+        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+        mamba3_block_forward(ctx, stages, blk.st, blk.w, x, b, l, trace, String("ops.step"))
+        _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+    else:
+        if l == 1:
+            _d2d(ctx, blk.dx, x, n)
+            mamba3_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+        else:
+            var dx = mamba_zeros(ctx, n)
+            _d2d(ctx, dx, x, n)
+            mamba3_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+            sc.parked_x.append(dx^)
+    _d2d(ctx, blk.reports[0], stages.h_last, report_n[0])
+    _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
+    _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
+    _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
+>>>>>>> origin/lane/restore-neural-call-paths
     var words: List[Int] = [blk.st.buf_len, 1 if blk.st.pending else 0]
     _write_words(ex, bufs[3], words)
     if hold:
@@ -1931,6 +2002,36 @@ def block_step_run(
             sc.forget(Int(bufs[k]))
         raise err
     raise Error("ops: " + String(code) + " is not a block step op")
+
+
+def mamba_step_run_host(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int],
+    fs: List[Float32], y_host: Int,
+) raises:
+    """A Mamba step op's run for a per-call door (MAMBA_CALL_PROGRAM's A arm,
+    lane restore-neural-call-paths): the same body as `block_step_run`, with
+    the block output enqueued straight from the stages into the caller's
+    host array at `y_host` (no y tensor, no device-to-device copy); the
+    caller waits. `bufs` / `counts` are [x, weights, state, (words)] as the
+    session's `_block_step` passes them, checked here the same way
+    (`block_step_check`). Same eviction of the pair's entry on a failed
+    run."""
+    _ = block_step_check(code, len(bufs), ints, fs)
+    if y_host == 0:
+        raise Error("ops: mamba step: null output address")
+    try:
+        if code == OPS_M1_STEP:
+            _run_m1(ex, sc, bufs, counts, ints, bufs[0], y_host)
+        elif code == OPS_M2_STEP:
+            _run_m2(ex, sc, bufs, counts, ints, fs, bufs[0], y_host)
+        elif code == OPS_M3_STEP:
+            _run_m3(ex, sc, bufs, counts, ints, bufs[0], y_host)
+        else:
+            raise Error("ops: " + String(code) + " is not a Mamba step op")
+    except err:
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's three or four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
 
 
 # ---------------------------------------------------------------- resident readers

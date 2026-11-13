@@ -66,7 +66,10 @@ from autograd.ops_api import (
     OPS_ARGMAX, ops_session_open, ops_session_close, ops_session, ops_session_registry_token,
 )
 from autograd.program_runtime import train_program_control, parameter_buffers, replay_values_prepared
-from autograd.program_replay_metadata import PreparedProgramReplay
+from autograd.program_inference_metadata import PreparedInferenceReplay
+from autograd.ops_api import _SLOT_BITS, _SLOT_MASK
+from sequence.exec_device import DeviceExec
+from std.sys.compile import is_defined
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast
 from autograd.cnn_block_op import OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR, CNN_FUSED_OPS
@@ -96,6 +99,42 @@ comptime CNN_PREDICT_WORDS = 6
 comptime CNN_PREDICT_ARRAYS = 2
 # the resident session's one program: the forward and its softmax
 comptime _RESIDENT_PROGRAM = 1
+
+#: Lane restore-neural-call-paths (2026-11-13; AGENTS.md "A measured winner
+#: is never deleted on reasoning"): the resident predict's per-call work.
+#: Default (A): the images' and the probabilities' device buffers are taken
+#: without a zero fill (the upload and the chunk copies write every element
+#: before anything reads them), the forward's prepared replay is the
+#: session's cached one (OpsSession.program_replays, the inventory
+#: `run_program` keeps; built once per resident session, not per call), and a
+#: prediction that fits one chunk downloads (or argmaxes) the forward's output
+#: in place, with no (n, k) buffer and no OP_COPY. The resident weights of
+#: lane x8b stay (a gain). 0.8.55 predicted through the hand path
+#: (`_expansion_cnn.py@0e4de0f46e:1651 _run_predict`, x_cnn_conv_block_forward_r
+#: / x_cnn_softmax_xent_r / x_cnn_res_argmax) with no per-call zero fills or
+#: program copies; the board has no 0.8.55 cell (AMD MI325X 9.21 ms at 0.8.62;
+#: the 1.29x of the brief has no source cell). The tuned x_cnn_res_argmax is
+#: deleted (7c9d9d5575) and softmax_xent_row_at is not an executor op, so the
+#: generic OPS_SOFTMAX / OPS_ARGMAX stay in both arms (swapping them would move
+#: the probability bits on every column). `-D MOJOLEARN_CNN_PREDICT_PROGRAM_COPY`
+#: keeps lane x8b's per-call shape (B arm of the owed A/B, owed-pre0867.json
+#: row restore-cnn-predict-call): zero-filled X and output buffers, a new
+#: PreparedProgramReplay per call and the per-chunk copy. Same kernels on the
+#: same bytes in both arms, so no output bit moves.
+comptime CNN_PREDICT_PROGRAM_COPY = is_defined["MOJOLEARN_CNN_PREDICT_PROGRAM_COPY"]()
+
+
+def _device_scratch(mut ex: DeviceExec, n: Int) raises -> FP:
+    return ex._alloc(n, False)
+
+
+def _cnn_scratch[E: Exec & Movable & Deinitable](mut s: OpsSession[E], n: Int) raises -> FP:
+    """n floats of executor storage that the caller writes in full before
+    any read: no zero fill on the device (CNN_PREDICT_PROGRAM_COPY's A arm);
+    the host executor's `alloc` (a plain list) and the B arm keep `alloc`."""
+    comptime if E.IS_DEVICE and not CNN_PREDICT_PROGRAM_COPY:
+        return _device_scratch(rebind[DeviceExec](s.ex), n)
+    return s.ex.alloc(n)
 
 
 struct CnnGeometry(Copyable, Movable):
@@ -373,9 +412,10 @@ def _resident_predict[E: Exec & Movable & Deinitable](
 ) raises:
     """Replay the resident forward over the n images at x_addr (uploaded
     once) in chunks of `chunk` rows, each chunk's (m, k) probabilities
-    copied on the executor into one (n, k) buffer, then ONE download: the
-    probabilities, or (codes) the int32 OPS_ARGMAX of the whole buffer.
-    The parameters are the session's, read in place; nothing else moves."""
+    copied on the executor into one (n, k) buffer (one chunk: read in place,
+    CNN_PREDICT_PROGRAM_COPY), then ONE download: the probabilities, or
+    (codes) the int32 OPS_ARGMAX of the whole buffer. The parameters are the
+    session's, read in place; nothing else moves."""
     if len(s.programs) != _RESIDENT_PROGRAM:
         raise Error("native CNN: the resident session holds no forward program")
     var p = s.program(_RESIDENT_PROGRAM)
@@ -386,13 +426,27 @@ def _resident_predict[E: Exec & Movable & Deinitable](
     var k = p.out_shapes[0].d[1]
     var params = parameter_buffers(s, p)
     var trainable = List[Bool](length=len(p.params), fill=False)
-    var prepared = PreparedProgramReplay(p)
+    # A arm: the session's cached replay inventory for program 1 (built once,
+    # loaned to this call and returned on every exit, as run_program does).
+    var pi = s._program_index(_RESIDENT_PROGRAM)
+    var loaned: PreparedInferenceReplay
+    comptime if not CNN_PREDICT_PROGRAM_COPY:
+        if len(s.program_replays[pi]) == 0:
+            s.program_replays[pi].append(PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK))
+        loaned = s.program_replays[pi].pop()
+    else:
+        # B arm (lane x8b): a new prepared replay per call
+        loaned = PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK)
+    # One chunk: the forward's output is read in place (no (n, k) buffer).
+    var direct = (not CNN_PREDICT_PROGRAM_COPY) and n <= chunk
     var temps = List[Int]()
     var phs = List[Int]()
     var none = List[Float32]()
-    var xb = s.ex.alloc(n * row)
+    var xb = _cnn_scratch(s, n * row)
     try:
-        var ob = s.ex.alloc(n * k)
+        var ob = xb
+        if not direct:
+            ob = _cnn_scratch(s, n * k)
         # the scratch tape in, the session tape aside (Session.run_program's
         # order): the replay's tensors never touch the parameters' tape
         var held = Tape()
@@ -411,33 +465,54 @@ def _resident_predict[E: Exec & Movable & Deinitable](
                 var ins: List[FP] = [xb + start * row]
                 shape.d[0] = m
                 var shapes: List[ShapeN] = [shape]
-                var outs = replay_values_prepared(s, p, prepared, ins, shapes, params, trainable, temps, phs)
-                var a = Args()
-                a.p0 = s.tape.value_of(s.ex, s.tensor(outs[0]))
-                a.p1 = ob + start * k
-                s.ex.launch[OP_COPY](a, m * k)
+                var outs = replay_values_prepared(s, p, loaned.replay, ins, shapes, params, trainable, temps, phs)
+                var src = s.tape.value_of(s.ex, s.tensor(outs[0]))
+                if direct:
+                    # the whole prediction in one chunk: read the output in place
+                    if codes:
+                        var ph = s._leaf(src, ShapeN.matrix(n, k))
+                        temps.append(ph)
+                        var hs: List[Int] = [ph]
+                        var am_ints: List[Int] = [1, 0, 0]
+                        var am = s.run_op(OPS_ARGMAX, hs, am_ints, none)
+                        temps.append(am)
+                        s.download(am, FP(unsafe_from_address=dst))
+                    else:
+                        s.ex.download(FP(unsafe_from_address=dst), src, n * k)
+                else:
+                    var a = Args()
+                    a.p0 = src
+                    a.p1 = ob + start * k
+                    s.ex.launch[OP_COPY](a, m * k)
                 start += m
             s._drop_temps(temps)
             temps.clear()
             s.tape.reset()
-            if codes:
-                var ph = s._leaf(ob, ShapeN.matrix(n, k))
-                temps.append(ph)
-                var hs: List[Int] = [ph]
-                var am_ints: List[Int] = [1, 0, 0]
-                var am = s.run_op(OPS_ARGMAX, hs, am_ints, none)
-                temps.append(am)
-                s.download(am, FP(unsafe_from_address=dst))
-            else:
-                s.ex.download(FP(unsafe_from_address=dst), ob, n * k)
+            if not direct:
+                if codes:
+                    var ph = s._leaf(ob, ShapeN.matrix(n, k))
+                    temps.append(ph)
+                    var hs: List[Int] = [ph]
+                    var am_ints: List[Int] = [1, 0, 0]
+                    var am = s.run_op(OPS_ARGMAX, hs, am_ints, none)
+                    temps.append(am)
+                    s.download(am, FP(unsafe_from_address=dst))
+                else:
+                    s.ex.download(FP(unsafe_from_address=dst), ob, n * k)
         finally:
             s._drop_temps(temps)
             s.tape.reset()
             swap(held, s.tape)
             swap(held, s.prog_tape)
-            s.ex.free(ob)
+            if not direct:
+                s.ex.free(ob)
     finally:
         s.ex.free(xb)
+        loaned.clear_live()
+        comptime if not CNN_PREDICT_PROGRAM_COPY:
+            s.program_replays[pi].append(loaned^)
+        else:
+            _ = loaned^
 
 
 def cnn_predict_program[E: Exec & Movable & Deinitable, KIND: Int](
