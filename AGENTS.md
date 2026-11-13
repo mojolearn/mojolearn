@@ -149,6 +149,23 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   speed is only ever made from a published wheel's measurement.
 - Order: all code in, one compile, (measure, fix, measure again when the release is about speed), freeze, the one
   cross-vendor verification, publish, then measure the published wheel.
+
+### Fix everything first, then one compile, then one measurement (Andrew, 2026-11-13: "fix fix fix")
+
+- A measurement is taken only when nothing known is left to fix. Before any box is rented or any GitHub build is
+  started for measurement, the orchestrator lists every open fix (FOLLOWUPS, lane reports, audit findings, owed
+  deletions) and either lands it in the same integration branch or writes, beside the list, why it cannot be
+  known without the measurement. A fix that lands within the hour after a measurement starts is evidence the
+  list was not read.
+- Work moves in waves: fix wave (every lane the findings call for, at once) -> one integration branch -> one
+  GitHub build -> one measurement on NVIDIA and AMD together -> read every flag -> the next fix wave. Never a
+  box run for one lane, one row or one family; never a second measurement of the same sha for rows that a later
+  sha changes. Between waves the boxes come down.
+- The only measurement that may run with known fixes outstanding is a discovery screen whose purpose is to find
+  unknown regressions (the full-board run against best-ever), and only when the outstanding fixes do not touch
+  the rows it is for; its result opens the next fix wave, not a release decision.
+- Owed A/B arms are built and timed with the wave's sha, never a sha behind it, unless the switch they decide is
+  untouched by the later sha (say so in the owed row).
 - A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
   release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
   measured clean (Andrew, 2026-11-09).
