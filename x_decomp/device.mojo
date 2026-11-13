@@ -1786,8 +1786,10 @@ def _pj_off_blocks(n: Int) -> Int:
     return max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
 
 
-# TOMBSTONE: the block Jacobi's `_eigh_block_test` deleted 2026-11-09 by lane n9-decomp-eigh-families (the
-# quarantined MOJOLEARN_IDN_EIGH_BLOCK_ON arm); code recoverable at c96b36111c^.
+# TOMBSTONE: DevExec._eigh_par_on's per-sweep convergence read (`_eigh_par_test`, three scalars and a wait before
+# every sweep) and the block Jacobi's `_eigh_block_test` deleted 2026-11-09 by lane n9-decomp-eigh-families: every
+# dense eigh is the executor op x_decomp/eigh_ops.mojo `eigh_op_sym` (the test on the device, no wait).
+# Code recoverable at the lane's parent commit (git log --grep 'n9: DevExec eigh').
 #
 # Lane perf-decomp-eigh (2026-11-13): `_eigh_par_test` is restored with the multi-block round-robin Jacobi
 # (`DevExec._eigh_par_dev`). n9 had made the one-block batched Jacobi (`eigh_op_dense`, ONE block of RR_OFF_TPB
