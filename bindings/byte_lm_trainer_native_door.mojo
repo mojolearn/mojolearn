@@ -20,8 +20,9 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array, classical_dtype_str
+from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_admitted_layout, classical_dtype_str
 from core.cast_in import CAST_KIND_SIGNED
+from core.native_array_layout import NativeArrayLayout
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.byte_lm_state_admission_door import byte_state_admit
@@ -1379,7 +1380,11 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
         store = pooled.value()
     else:
         store = py_call(context["array_type"], "f", py_call(context["native_bytes_type"], count * 4))
-    var out = classical_wrap_array(store, Python.tuple(batch, length, vocab), "<f4", "C", context["byte_lm_pooled_context"])
+    # The pooled class was admitted above (_admit_pooled_logits_layout: exact
+    # MRO and every Array slot descriptor pinned at import), so the slots are
+    # written directly; the shared Array admission refuses any subclass.
+    var out = classical_wrap_admitted_layout(context["byte_lm_pooled_class"], store,
+        NativeArrayLayout([batch, length, vocab], 4, "C"), "<f4")
     py_setitem(py_fields(out), "_pool", pool)
     return out
 

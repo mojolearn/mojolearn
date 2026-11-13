@@ -5,6 +5,7 @@ import _struct
 import _thread
 import builtins
 import itertools
+import mmap
 import math  # exact integer exports only; see the connect_module('math', ...) call below
 import numbers
 import operator
@@ -77,6 +78,9 @@ connect_module('builtins', builtins, tuple(name for name in vars(builtins)  # gl
                                           if not name.startswith('__')))
 connect_module('sys', sys, ('modules',))
 connect_module('array', array, ('array',))
+# mmap: the exact mapped-file exporter that lm_corpus and the safetensors checkpoint reader
+# connect (providers/python/borrowed_buffer_pyapi_unpack.mojo connect_native_mmap_exporter).
+connect_module('mmap', mmap, ('mmap',))
 # Resident fold storage admits an exact native thread-local object before
 # reading its dictionary. This standard-library owner is needed even when
 # NumPy is absent; connect the consumed type once rather than importing at use.

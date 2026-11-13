@@ -69,7 +69,8 @@ class CorpusPublicSource(unittest.TestCase):
         for name in ("__new__", "__init__", "__del__", "__buffer__", "__release_buffer__"):
             self.assertIn('"' + name + '"', source)
         self.assertIn('connect_native_mmap_exporter(context["mmap_class"])', source)
-        self.assertIn('_corpus_connect_module("mmap", _corpus_mmap, ("mmap",))', PUBLIC.read_text())
+        self.assertIn("connect_module('mmap', mmap, ('mmap',))",
+                      (PUBLIC.parent / "_native_loaded_modules.py").read_text())
 
     def test_mutable_records_are_admitted_before_instance_storage(self):
         source = METADATA.read_text()

@@ -913,8 +913,7 @@ def _connect_trainer():
                    byte_lm_vendors=('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal'),
                    byte_lm_profile=PROFILE, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))
     module = _tokenizer_binding()._module
-    pooled_context = dict(context, array_class=_PooledLogits)
-    context.update(byte_lm_pooled_class=_PooledLogits, byte_lm_pooled_context=pooled_context,
+    context.update(byte_lm_pooled_class=_PooledLogits,
                    byte_lm_store_getter=vars(_Array)["_store"].__get__)
     _PooledLogits.__del__ = module.classical_attribute_descriptor(
         MethodType(module.byte_lm_pooled_finalize_call, context))

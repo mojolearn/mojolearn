@@ -23,4 +23,4 @@ def test_pooled_hooks_are_pinned_after_native_finalizer_and_checked_before_write
     assert source.index('_PooledLogits.__del__ = module.classical_attribute_descriptor') < source.index('layout = tuple((base, tuple((name, vars(base).get(name))')
     native = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
     pooled = native.split('def _pooled_logits(')[1].split('def byte_lm_pooled_finalize(')[0]
-    assert pooled.index('_admit_pooled_logits_layout(mods, context)') < pooled.index('classical_wrap_array(')
+    assert pooled.index('_admit_pooled_logits_layout(mods, context)') < pooled.index('classical_wrap_admitted_layout(')
