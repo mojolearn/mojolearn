@@ -184,13 +184,18 @@ def _forward(owner: MutPointer[SambaStackProgram, MutUntrackedOrigin], a: List[I
             owner[].load_state(sp, sc)
         else:
             owner[].zero_state()
+        # The Mamba-3 report copies run only when this call reads them
+        # (BlockStepScratch.skip_reports; the program's default is to skip).
+        owner[].s.steps.skip_reports = len(reports) == 0
         owner[].run(ids, logits, l)
+        owner[].s.steps.skip_reports = True
         if len(reports) > 0:
             owner[].enqueue_reports(reports)
         if stateful:
             exported = owner[].enqueue_export(sp)
         owner[].finish()
     except error:
+        owner[].s.steps.skip_reports = True
         _unreserve(owner, True, False)
         raise error
     _unreserve(owner, False, False)

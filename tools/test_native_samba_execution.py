@@ -28,8 +28,13 @@ def test_public_boundary_uses_native_model_and_preserves_partial_publication():
     assert 'if not layer.visited:' in source
     assert 'layer.refresh_layouts.append(pin.layout.value().copy())' in source
     public=(ROOT/'bindings/samba_inference_native_door.mojo').read_text()
-    assert 'samba_provider_forward(' not in public  # lane x6: one device path, the stack program
+    assert 'samba_provider_forward(' not in public  # lane x6: no provider tier
     assert '_samba_program_call(model, fields, config, key, ids, state, context)' in public
+    # lane restore-samba-resident-forward: the stateless device forward is the
+    # resident forward (op 16) unless the B-arm define selects the program.
+    route=public.split('if samba_program_arm(fields, key):')[1]
+    assert route.index('comptime if not SAMBA_PROGRAM_FORWARD:') < route.index('samba_resident_native_forward(')
+    assert route.index('samba_resident_native_forward(') < route.index('_samba_program_call(')
 
 
 def test_native_backward_walk_preserves_saved_tapes_and_original_loss_routes():
@@ -50,7 +55,7 @@ def test_native_backward_walk_preserves_saved_tapes_and_original_loss_routes():
 
 def test_resident_lifecycle_uses_shared_owner_and_validates_before_reserving():
     native=(ROOT/'training/native_resident_dispatch.mojo').read_text()
-    for function in ('samba_resident_train_step',
+    for function in ('samba_resident_forward', 'samba_resident_train_step',
                      'samba_resident_accumulated_step', 'resident_open',
                      'resident_upload', 'resident_download', 'resident_close'):
         assert f'return {function}(' in native

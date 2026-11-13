@@ -88,6 +88,10 @@
   "kde-qtile-force": {
    "define": "MOJOLEARN_IDN_KDE_QTILE_FORCE",
    "status": "define in code (kde/impl/neighbors/kernel_density.mojo KDE_IDN_QTILE_FORCE): B = the query-tile pass at every width (the 2026-10-11 promotion); A = kde_qtile_applies cost rule (query tile only while q_tpb*4*d*4 <= 32 KiB)"
+  },
+  "samba-program-forward": {
+   "define": "MOJOLEARN_SAMBA_PROGRAM_FORWARD",
+   "status": "define in code (training/neural_identical_experiments.mojo SAMBA_PROGRAM_FORWARD, read by bindings/samba_inference_native_door.mojo samba_forward): B = the stateless SambaStack.forward on SambaStackProgram (lane x6; its per-call waste fixed: held Mamba-3 stages, kept forward-only attention stages, no report copies); A = the restored resident forward samba_resident_forward (descriptor op 16, training/samba_resident.mojo)"
   }
  },
  "rows": [
@@ -736,6 +740,18 @@
     "prior"
    ],
    "decides": "the prior (0.8.66) takes the query tile at every width (= the B arm): the candidate must not be slower at any width; a loss at 24 or 48 moves the 32 KiB budget, with the reason in kernel_density.mojo"
+  },
+  {
+   "b_arms": [
+    "samba-program-forward"
+   ],
+   "dataset": "*",
+   "decides": "the stack program (B) replaces the restored resident forward (A) as the stateless SambaStack.forward only if at least as fast on NVIDIA and AMD (average of the two vendors' ratios) with logits quality equal; the arms' attention layers both run forward_only=True, so digests may differ only by the program's options-constructor weights; read the model's _samba_forward_route ('resident' / 'program') to prove which arm ran",
+   "id": "restore-samba-resident-forward",
+   "kind": "ab",
+   "lane": "samba-forward",
+   "rows": "full",
+   "source": "restore-samba-resident-forward (2026-11-13): samba_resident_forward (IDN_SAMBA_RESIDENT_STEP PROMOTED samba-forward NV 12.0 -> 5.3, AMD 8.8 -> 5.8 ms; 0.8.55 paper NV 4.60 / AMD 6.10 ms) restored from 5b5490960d after lane x6 (d38aa3ba43, 2f8537c34b) deleted it unmeasured; candidate 4c2340386abc program NV 10.54 / MI325X 8.36 ms"
   }
  ]
 }

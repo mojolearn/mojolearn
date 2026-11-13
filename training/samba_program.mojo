@@ -35,10 +35,18 @@ device id refusal is the token-range check), `llama_rms_norm` and the `OP_NT`
 head GEMM at the default role (`identical_gemm_into`) are the ones the
 resident forward and the decode residency launched; the layers are the step
 ops' bodies (the Mamba-3 and transformer decode sessions'). Bits: the
-attention layers now run the step op's options-constructor weights and its
-`forward_only=False` launch set (the decode residency ran `forward_only=True`);
-same kernels on every vendor and in every column, so a version-level change
-at most (identity lane `samba`).
+attention layers run the step op's options-constructor weights and, since
+lane restore-samba-resident-forward (2026-11-13), the `forward_only=True`
+launch set the resident forward and the decode residency ran (the session is
+inference only); same kernels on every vendor and in every column, so a
+version-level change at most (identity lane `samba`).
+
+Route (lane restore-samba-resident-forward, 2026-11-13): the stateless
+`SambaStack.forward` runs the restored resident forward
+(training/samba_resident.mojo `samba_resident_forward`, the measured winner);
+this program serves it only under -D MOJOLEARN_SAMBA_PROGRAM_FORWARD, the B
+arm of the owed samba-forward A/B. The stateful forward, the step and the
+decode session stay here.
 
 Weights: the caller's flat registry is the truth (`SambaStack.parameters()`
 are read-only views of it since lane x56d: callers cannot edit it in place,
@@ -241,6 +249,15 @@ struct SambaStackProgram(Movable, Writable):
         self.hn = ctx2.enqueue_create_buffer[DType.float32](1)
         self.logits = ctx2.enqueue_create_buffer[DType.float32](1)
         self.head_ws = ctx2.enqueue_create_buffer[DType.float32](1)
+        # lane restore-samba-resident-forward (2026-11-13): no backward ever
+        # reads this session's runs, so its step ops hold their L > 1 stages
+        # per layer and run attention forward-only (BlockStepScratch
+        # `inference_only`), and no run copies the Mamba-3 reports unless
+        # `_forward` asks for them (`skip_reports`), as the 0.8.55 resident
+        # forward did. Same kernels; the attention layers take the resident
+        # forward's forward-only launch set (their bytes move to it).
+        s.steps.inference_only = True
+        s.steps.skip_reports = True
         self.s = s^
         self.vocab = vocab
         self.dm = dm
