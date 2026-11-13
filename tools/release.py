@@ -1020,7 +1020,9 @@ def compose_host_mismatch(legs, mismatch, source_root, out_dir):
     """THE HOST OWNER RULE FOR A HOST BYTE MISMATCH (0.8.63): the Mojo compiler's
     host output can differ by build machine CPU with identical recorded inputs
     (MOJOLEARN_LINUX_CPU=x86-64-v3 on every leg; the Modular ask is in
-    docs/MODULAR_ASKS.md). Instead of stopping, every set ships the owner leg's
+    docs/MODULAR_ASKS.md). Cause found 2026-11-13: --target-features defaulted
+    to the build machine's; every pin now names them (bindings/merged_build.sh).
+    Delete this composition once a candidate shows equal host bytes across runners. Instead of stopping, every set ships the owner leg's
     retained host bytes through tools/release_host_composition.py, a witnessed
     packaging choice that leaves every original proof untouched.
 

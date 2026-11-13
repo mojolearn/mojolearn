@@ -30,7 +30,7 @@ if [ "$(uname)" = Darwin ]; then
     target_flags="--target-cpu apple-m1 --target-accelerator metal:1"
 else
     case "$(uname -m)" in
-        x86_64) target_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        x86_64) target_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" ;;
     esac
     if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ]; then
         case "$MOJOLEARN_GPU_ARCHS" in *,*) echo "one GPU architecture required" >&2; exit 2 ;; esac

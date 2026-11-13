@@ -84,7 +84,7 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 TARGET_FLAGS="--target-cpu apple-m1"
 if [ "$(uname)" != "Darwin" ]; then
     case "$(uname -m)" in
-        x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" ;;
         *)      TARGET_FLAGS="" ;;   # linux arm: host cpu + its GPU
     esac
 fi

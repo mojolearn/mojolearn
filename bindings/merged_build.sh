@@ -29,7 +29,8 @@
 #           The byte LM's -D MOJOLEARN_COLUMN_APPLE is what TARGET_COLUMN
 #           detects on a Metal target (checks/kernel_matrix.mojo), so it joins
 #           the default file unchanged.
-#   Linux   --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} on x86_64, and ONE
+#   Linux   --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} and the matching
+#           --target-features (MOJOLEARN_LINUX_CPU_FEATURES) on x86_64, and ONE
 #           explicit --target-accelerator from MOJOLEARN_GPU_ARCHS (required:
 #           the byte LM script already requires it, and the x_* scripts would
 #           otherwise read it from nvidia-smi while the rest default).
@@ -132,8 +133,19 @@ if [ "$plat" = darwin ]; then
     link_flags="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $sdk"
     base_flags="--target-cpu apple-m1"
 else
+    # THE FEATURES ARE PINNED WITH THE CPU (2026-11-13, lane bincache-define-host-leg).
+    # `mojo build --help`: --target-features "Defaults to the host features",
+    # independently of --target-cpu. With only the CPU pinned, the same key
+    # (source, compiler, flags, env) compiled _mojolearn_native_x_host.so to
+    # three byte variants that follow the runner, not the leg: EPYC 7763 ->
+    # unstaged 3221fc47, EPYC 9V74 -> 7d24cd7b, EPYC 9V45 -> 52e0243c (candidate
+    # 4c2340386abc.svd1, legs/*/release-build/build/build-provenance.json). That
+    # is the "host bytes depend on the build machine" of docs/MODULAR_ASKS.md
+    # (0.8.63) and the reason linux-wait needed tools/release_host_composition.py.
+    # The list is exactly the x86-64-v3 level (v2 + AVX, AVX2, BMI1/2, F16C, FMA,
+    # LZCNT, MOVBE, XSAVE); set MOJOLEARN_LINUX_CPU_FEATURES with any other CPU.
     case "$(uname -m)" in
-        x86_64) base_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        x86_64) base_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" ;;
         aarch64) base_flags="" ;;
         *) echo "merged_build: unsupported Linux host architecture" >&2; exit 2 ;;
     esac

@@ -48,7 +48,7 @@ esac
 # Fixed compiler concurrency; this script never starts a second worker/build.
 set -- --target-accelerator "$MOJOLEARN_GPU_ARCHS"
 case "$(uname -m)" in
-    x86_64) set -- "$@" --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} ;;
+    x86_64) set -- "$@" --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave} ;;
     aarch64) ;;
     *) echo 'byte LM: unsupported Linux host architecture' >&2; exit 2 ;;
 esac

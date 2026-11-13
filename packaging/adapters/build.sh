@@ -59,7 +59,7 @@ MOJOC="$OUT/mojolearn_ops.mojoc"
 mojo_flags=(--emit shared-lib -j "${MOJOLEARN_COMPILE_JOBS:-2}" -D MOJOLEARN_NUMERIC_IDENTICAL=1)
 link_flags=()
 if [[ "$PLATFORM" = linux ]]; then
-  mojo_flags+=(--target-cpu "${MOJOLEARN_LINUX_CPU:-x86-64-v3}" --target-accelerator "$ARCH")
+  mojo_flags+=(--target-cpu "${MOJOLEARN_LINUX_CPU:-x86-64-v3}" --target-features "${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" --target-accelerator "$ARCH")
 else
   unset MACOSX_DEPLOYMENT_TARGET
   sdk=$(xcrun --sdk macosx --show-sdk-version)

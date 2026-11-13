@@ -292,6 +292,13 @@ def adapter_group(directory, root, site, compiler, patchelf, evidence):
     return {PREFIX + '_adapters': dict(files=files, manifest_sha256=files['adapters.json'])}
 
 
+#: The --target-features packaging/adapters/build.sh pins with --target-cpu x86-64-v3 (the
+#: x86-64-v3 level; `mojo build` otherwise takes the BUILD MACHINE's features, which made host
+#: bytes follow the runner CPU: bindings/merged_build.sh, 2026-11-13).
+LINUX_CPU_FEATURES = ('+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,'
+                      '+sse4.1,+sse4.2,+ssse3,+xsave')
+
+
 def adapter_commands(capture, build, vendor='hip', arch='gfx942'):
     require((vendor, arch) in (('hip', 'gfx942'), ('cuda', 'sm_89')), 'unsupported adapter target')
     command = capture['command']
@@ -300,7 +307,7 @@ def adapter_commands(capture, build, vendor='hip', arch='gfx942'):
     out, logs = command[2:4]
     expected_native = ['pixi', 'run', 'mojo', 'build', '--emit', 'shared-lib', '-j',
         str(capture['compiler_workers']), '-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1',
-        '--target-cpu', 'x86-64-v3', '--target-accelerator', arch, '-D',
+        '--target-cpu', 'x86-64-v3', '--target-features', LINUX_CPU_FEATURES, '--target-accelerator', arch, '-D',
         'MOJOLEARN_COLUMN_AMD' if vendor == 'hip' else 'MOJOLEARN_COLUMN_NVIDIA',
         '-I', '.', '-I', 'bindings', 'adapters/native/c_api.mojo', '-o', out + '/libmojolearn_adapter.so']
     require(build['commands']['native'] == expected_native, 'native adapter flags differ')
