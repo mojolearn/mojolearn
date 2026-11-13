@@ -70,6 +70,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
+from core.weight_epoch import WeightKey
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.contract import OP_NT
@@ -431,6 +432,19 @@ struct SambaResidentSession(Movable, Writable):
     #: the loss node's value word (the tape reads no value of it)
     var tape_loss: DeviceBuffer[DType.float32]
     var busy: Bool
+    # ---- lane fix-samba-weight-upload (2026-11-13): the stateless forward
+    #: uploads the registry only when `param` does not hold the bytes at the
+    #: caller's address: keyed by that address and the process weight epoch
+    #: (core/weight_epoch.mojo, as SambaStackProgram.refresh_weights). Every
+    #: operation that writes the registry bumps the epoch
+    #: (bindings/samba_public_native_pack.mojo, training/samba_public_run.mojo
+    #: `_samba_writes_registry`) and the public views are read-only, so an
+    #: unchanged key means unchanged bytes: no pass over the weights. Empty
+    #: (never current) at open and while a step rewrites `param`.
+    var wkey: WeightKey
+    #: registry uploads (host -> `param`) this session has made, open included;
+    #: returned by the forward (descriptor op 16) as the session's report
+    var param_uploads: Int
 
     def __init__(
         out self,
@@ -450,8 +464,9 @@ struct SambaResidentSession(Movable, Writable):
         """The registry on the device and the weight views. `param_ptr` is the
         stack's flat float32 registry, uploaded once here so the attention
         weight views can run their constructor's own finiteness refusal
-        (`LlamaDeviceWeights._validate_finite`); every later call uploads
-        the registry again and scans it whole."""
+        (`LlamaDeviceWeights._validate_finite`); a train step uploads the
+        registry again and scans it whole, a forward only when the weight
+        key (`wkey`) is not current."""
         if vocab < 2 or dm < 1 or len(kinds) < 1:
             raise Error("mojolearn samba resident: vocab >= 2, d_model >= 1 and at least one layer are required")
         self.ctx = ctx.copy()
@@ -488,6 +503,10 @@ struct SambaResidentSession(Movable, Writable):
         self.grad.enqueue_fill(Float32(0.0))
         ctx.enqueue_copy(dst_buf=self.param, src_ptr=param_ptr)
         ctx.synchronize()
+        self.param_uploads = 1
+        # Empty key: open scans only the attention views (their constructor),
+        # so the first forward still uploads and admits the whole registry.
+        self.wkey = WeightKey()
         # ---- placeholders for the shape-keyed workspaces (rebuilt on first use)
         self.b = 0
         self.l = 0
@@ -998,16 +1017,36 @@ def samba_resident_forward(
 ) raises -> Int:
     """`SambaStack.forward(inputs)`: `(B, L)` ids -> `(B * L, vocab)` logits
     written to `out_ptr`, every block from its zero state, no dropout. The
-    registry goes up once, the ids once, the logits come down once (the
-    board's forward span includes that download, as for lm-forward).
-    Returns `B * L * vocab`."""
+    registry goes up (and is scanned) only when `param` does not already
+    hold the bytes at `param_ptr` (`s.wkey`, the address and the weight
+    epoch); the ids go up once, the logits come down once (the board's
+    forward span includes that download, as for lm-forward). Returns the
+    session's registry upload count (`s.param_uploads`), its report."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
         raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     _ensure_shape(s, b, l)
     var m = b * l
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    _upload_tokens(s, ids_ptr)
-    _admit_registry(s)
+    # lane fix-samba-weight-upload (2026-11-13): 0.8.55's forward (restored
+    # body) copied the whole registry (~22 MB at the board shape) up and
+    # scanned it on every call. Now only when the key is not current: same
+    # bytes in `param`, same kernels, same bits. Per call at unchanged
+    # weights this drops one registry host->device copy, the non-finite
+    # scan's launch and its one-word read-back. The epoch is read BEFORE the
+    # upload (a bump in between only costs one more upload); the key is set
+    # only after the admission passed, so a refused registry is uploaded and
+    # refused again at the next call.
+    var addrs: List[Int] = [Int(param_ptr)]
+    var fresh = s.wkey.current(addrs)
+    if fresh:
+        _upload_tokens(s, ids_ptr)
+    else:
+        var key = WeightKey.take(addrs)
+        s.wkey = WeightKey()
+        s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+        s.param_uploads += 1
+        _upload_tokens(s, ids_ptr)
+        _admit_registry(s)
+        s.wkey = key^
     # The token-range refusal is the embedding entry's own
     # (`emb_refuse_device_ids`): the ids are checked on the device before
     # the gather reads them, so Python makes no min/max pass over them.
@@ -1019,7 +1058,7 @@ def samba_resident_forward(
     s.ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=s.logits)
     s.ctx.synchronize()
     _ = ew^
-    return m * s.vocab
+    return s.param_uploads
 
 
 # TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_forward (the resident stateless forward; SambaStack.forward runs SambaStackProgram, training/samba_program.mojo) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
@@ -1097,8 +1136,12 @@ def samba_resident_train_step(
     _ensure_shape(s, b, l)
     var dm = s.dm
     var v = s.vocab
-    # ---- transport in: the registry, the ids, the targets
+    # ---- transport in: the registry, the ids, the targets. The step
+    # rewrites `param`; the forward's key is current again only after its
+    # own upload (the dispatcher bumps the epoch around every step).
+    s.wkey = WeightKey()
     s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+    s.param_uploads += 1
     _upload_tokens(s, ids_ptr)
     s.ctx.enqueue_copy(dst_buf=s.targets, src_ptr=targets_ptr)
     # ---- the targets' range refusal and the ignore-index count, on the
@@ -1222,7 +1265,11 @@ def samba_resident_accumulated_step(
     _ensure_shape(s, rows_per, l)
     var dm = s.dm
     var v = s.vocab
+    # The step rewrites `param`: the forward's weight key is cleared first
+    # (lane fix-samba-weight-upload; see samba_resident_train_step).
+    s.wkey = WeightKey()
     s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+    s.param_uploads += 1
     _admit_registry(s)
     var stacked = s.ctx.enqueue_create_buffer[DType.float32](a * n)
     var losses = List[Float32](length=a, fill=Float32(0.0))

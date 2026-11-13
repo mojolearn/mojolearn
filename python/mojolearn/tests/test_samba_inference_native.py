@@ -181,6 +181,38 @@ def test_device_stateless_forward_takes_the_resident_route():
     assert vars(dropped).get("_samba_forward_route") == "program"
 
 
+def test_resident_forward_uploads_unchanged_weights_once():
+    # lane fix-samba-weight-upload (2026-11-13): the resident forward keys its
+    # device registry by the registry address and the process weight epoch
+    # (core/weight_epoch.mojo). Two forwards with unchanged weights make one
+    # registry upload between them; every registry writer (train_step,
+    # load_state_dict) moves the epoch, so the next forward uploads again and
+    # its logits are the new weights' bits, never stale ones.
+    model, twin = _models(["mamba3", "attention"])
+    ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
+    targets = np.array([[2, 3, 4], [5, 6, 7]], dtype="i4")
+    first = np.asarray(audit_native_call(model.forward, ids).assert_native()).copy()
+    if vars(model).get("_samba_forward_route") != "resident":
+        pytest.skip("no resident forward on this build")
+    uploads = vars(model)["_samba_resident_uploads"]
+    second = np.asarray(audit_native_call(model.forward, ids).assert_native()).copy()
+    assert vars(model)["_samba_resident_uploads"] == uploads, "unchanged weights were uploaded again"
+    assert second.tobytes() == first.tobytes()
+    saved = model.state_dict()
+    model.train_step(ids, targets)
+    twin.train_step(ids, targets)
+    trained = np.asarray(model.forward(ids)).copy()
+    assert vars(model)["_samba_resident_uploads"] > uploads, "train_step did not invalidate the resident registry"
+    # the twin's fresh session holds the trained weights: the same bits
+    assert trained.tobytes() == np.asarray(twin.forward(ids)).tobytes()
+    assert trained.tobytes() != first.tobytes()
+    uploads = vars(model)["_samba_resident_uploads"]
+    model.load_state_dict(saved)
+    restored = np.asarray(model.forward(ids)).copy()
+    assert vars(model)["_samba_resident_uploads"] > uploads, "load_state_dict did not invalidate the resident registry"
+    assert restored.tobytes() == first.tobytes()
+
+
 class _HookedInt(int):
     def __index__(self):  # pragma: no cover - must never run
         raise AssertionError("Python hook ran inside a native Samba forward")
