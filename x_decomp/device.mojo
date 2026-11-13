@@ -135,7 +135,7 @@ from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
 from x_decomp.rr_svd import RS_TPB
 from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
-from x_decomp.svd_ops import svd_op_tall
+from x_decomp.svd_ops import so_desc_commit_kernel, so_desc_rank_kernel, svd_op_tall
 from x_decomp.lle_local import hessian_ncy
 from x_decomp.lle_device import (
     lle_apply_kernel,
@@ -227,7 +227,10 @@ comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
 #: Jacobi's rounds as ONE gated block with the sweep test on the device, the
 #: descending order on the device, one status read) instead of the round
 #: launches below (one launch per round, a wait every XD_SVD_GROUP sweeps).
-#: Default off: today's round launches. Two SVD paths exist; the A/B on
+#: Default off: today's round launches. Lane perf-decomp-eigh (2026-11-13): the
+#: switch also covers the resident kit's `DKit.svd` (x_decomp/kit_device.mojo),
+#: which n9b had put on the op unconditionally (factor-analysis/istella fit 2.45x
+#: NVIDIA, 4.76x AMD vs 0.8.66). Two SVD paths exist; the A/B on
 #: pca / tsvd / randomized-svd (owed row svd-tall-vs-rounds, B arm
 #: svd-one-block) decides which one is deleted. Bits: the op's module note
 #: says the words are the rounds' (the same pairs, fold and tree); s and v
@@ -3388,12 +3391,88 @@ struct DevExec(Exec):
         comptime if XD_FAST_SVD_ONE_BLOCK:
             DevExec._svd_on_op(ctx, da, m, n, s, v)
             return
+        var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
+        var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        DevExec._svd_rounds(ctx, da, m, n, qr_cells, s_buf, vt)
+        var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+        ctx.enqueue_function[pj_transpose_kernel](_p(vt), _p(v_buf), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        _down(ctx, s_buf, s, n)
+        _down(ctx, v_buf, v, n * n)
+        ctx.synchronize()
+        # a NaN left is a launch cut short (or a NaN input): refused (the
+        # test runs on the device copy, lane cpu3-core)
+        var t_nan = xd_first_where(ctx, s_buf, n, 1, 2)
+        if t_nan >= 0:
+            raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
+                        + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
+        _ = vt^
+        _ = v_buf^
+        _ = s_buf^
+
+    @staticmethod
+    def svd_desc_into(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, qr_cells: Int,
+        mut s_out: DeviceBuffer[DType.float32], mut vt_out: DeviceBuffer[DType.float32],
+    ) raises:
+        """`_svd_on`'s solve (the round launches, `_svd_rounds`) of the tall
+        device matrix in `da` (m x n, consumed) with the outputs left on the
+        device in the descending order every caller sorts into: s_out (n,
+        descending, ties in index order) and vt_out (n x n, row a the right
+        singular vector of s_out[a]), by `svd_op_tall`'s order kernels
+        (`so_desc_rank_kernel`, `so_desc_commit_kernel`: `svd_order`'s
+        words). A NaN singular value raises (one wait, `_svd_on`'s test).
+
+        Lane perf-decomp-eigh (2026-11-13): the resident kit's SVD
+        (x_decomp/kit_device.mojo `DKit.svd`; FactorAnalysis EM every
+        iteration, LLE's subspace iteration, PLS) ran `svd_op_tall`, the
+        Jacobi of R in ONE block, by default since lane n9b-device-svd-qr
+        (2026-11-09), while that route is the owed B arm
+        MOJOLEARN_XD_FAST_SVD_ONE_BLOCK of `_svd_on`. Measured against
+        0.8.66: factor-analysis/istella fit NVIDIA 6525 -> 15992 ms (2.45x),
+        AMD 4143 -> 19733 ms (4.76x). This is 0.8.66's solve (round
+        launches over the whole grid) with n9b's resident order."""
+        var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
+        var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        DevExec._svd_rounds(ctx, da, m, n, qr_cells, s_buf, vt)
+        var t_nan = xd_first_where(ctx, s_buf, n, 1, 2)
+        if t_nan >= 0:
+            raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
+                        + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
+        var gate = step_gate_open_word(ctx)
+        var gp = I32Ptr(unsafe_from_address=Int(gate.unsafe_ptr()))
+        var pos = ctx.enqueue_create_buffer[DType.int32](n)
+        var bad = ctx.enqueue_create_buffer[DType.int32](1)
+        enqueue_fill(ctx, bad, Int32(0))
+        var pp = I32Ptr(unsafe_from_address=Int(pos.unsafe_ptr()))
+        var pb = I32Ptr(unsafe_from_address=Int(bad.unsafe_ptr()))
+        ctx.enqueue_function[so_desc_rank_kernel](
+            gp, _p(s_buf), pp, pb, Int32(n), grid_dim=_blocks(n), block_dim=TPB
+        )
+        ctx.enqueue_function[so_desc_commit_kernel](
+            gp, _p(s_buf), _p(vt), pp, pb, _p(s_out), _p(vt_out), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+        )
+        _ = gate^
+        _ = pos^
+        _ = bad^
+        _ = s_buf^
+        _ = vt^
+
+    @staticmethod
+    def _svd_rounds(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, qr_cells: Int,
+        mut s_buf: DeviceBuffer[DType.float32], mut vt: DeviceBuffer[DType.float32],
+    ) raises:
+        """The solve `_svd_on` and `svd_desc_into` share, on the device matrix
+        in `da` (m x n, overwritten by the QR): the range scale, the bounded
+        QR, the round-robin one-sided Jacobi of R^T by round launches (a
+        wait every XD_SVD_GROUP sweeps for the convergence word), the
+        norms and the unscale. On return (in stream order) s_buf (n) holds
+        the singular values in the Jacobi's column order and vt (n x n) the
+        right singular vectors in its ROWS. An unconverged solve raises.
+        (Lane perf-decomp-eigh: `_svd_on`'s body, split out unchanged.)"""
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
         var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         var mm = n + (n % 2)
         var h = mm // 2
         # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
@@ -3449,23 +3528,10 @@ struct DevExec(Exec):
             )
         ctx.enqueue_function[rs_norm_kernel](_p(rt), _p(s_buf), Int32(n), grid_dim=n, block_dim=RS_TPB)
         enqueue_es_unscale(ctx, _p(s_buf), dfac, 1, n)
-        ctx.enqueue_function[pj_transpose_kernel](_p(vt), _p(v_buf), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-        _down(ctx, s_buf, s, n)
-        _down(ctx, v_buf, v, n * n)
-        ctx.synchronize()
-        # a NaN left is a launch cut short (or a NaN input): refused (the
-        # test runs on the device copy, lane cpu3-core)
-        var t_nan = xd_first_where(ctx, s_buf, n, 1, 2)
-        if t_nan >= 0:
-            raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
-                        + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
         _ = dfac^
         _ = scratch^
         _ = r_buf^
         _ = rt^
-        _ = vt^
-        _ = v_buf^
-        _ = s_buf^
         _ = flags^
         _ = dfirst^
         _ = hfirst^

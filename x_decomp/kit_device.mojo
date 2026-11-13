@@ -67,7 +67,9 @@ from x_decomp.device import (
     rand_kernel,
     rowsum_scratch,
     xd_ctx,
+    XD_FAST_SVD_ONE_BLOCK,
 )
+from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.kit import (
     Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
@@ -756,7 +758,14 @@ struct DKit(Movable):
         (`svd_order`) and uploaded both again; FactorAnalysis EM, LLE's
         subspace iteration and PLS read them on the device now. The same
         words (the op's one-block Jacobi is the round launches' pairs, fold
-        and tree; the order is `svd_order`'s)."""
+        and tree; the order is `svd_order`'s).
+
+        Lane perf-decomp-eigh (2026-11-13): the one-block op is the owed B
+        arm (-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK, as for `DevExec._svd_on`);
+        the default is `DevExec.svd_desc_into`, 0.8.66's round launches with
+        the order on the device and S, Vt resident. Measured with the op as
+        the default against 0.8.66: factor-analysis/istella fit NVIDIA 6525
+        -> 15992 ms (2.45x), AMD 4143 -> 19733 ms (4.76x)."""
         var m = A.r
         var n = A.c
         if n <= 0 or m < n:
@@ -765,6 +774,14 @@ struct DKit(Movable):
         Vt = DMat(n, n)
         var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
         self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        comptime if not XD_FAST_SVD_ONE_BLOCK:
+            var ds0 = self._sub(S)
+            var dv0 = self._sub(Vt)
+            DevExec.svd_desc_into(self.ctx, da, m, n, QRB_CELLS, ds0, dv0)
+            _ = da^
+            _ = ds0^
+            _ = dv0^
+            return
         var gate = step_gate_open_word(self.ctx)
         var status = self.ctx.enqueue_create_buffer[DType.int32](1)
         var ds = self._sub(S)
