@@ -30,8 +30,11 @@
 #            wheels + scikit-learn + pandas, no opponent stack: the 0.8.66 smoke made a 13 GB venv per shard), each
 #            checked against its wheel manifest and our GPU set once; plus the board's dry run
 #   smoke    the paper races + the owed full-row races in parallel shards on the one GPU (not timed), all on the
-#            candidate venv (--python-env --skip-install: no per-shard install); shards = min(nproc/4, MemAvailable
-#            / PC_SMOKE_MEM_GB (default 12), PC_SMOKE_MAX (default 8), races); PC_SMOKE_SHARDS overrides
+#            candidate venv (--python-env --skip-install: no per-shard install); shards = min(nproc/2, MemAvailable
+#            / PC_SMOKE_MEM_GB (default 12), NVIDIA GPU memory / PC_SMOKE_GPU_GB (default 3), PC_SMOKE_MAX (default
+#            16), races); PC_SMOKE_SHARDS overrides. The shards are host-bound, not GPU-bound (2000-row races: worker
+#            start, import, data read; see the smoke phase). After it each shard's work/ and evidence/ and the
+#            caches c2.. are deleted (BOARD.md, board.json, smoke.json and logs/ stay)
 #   board    TIMED, SERIAL BY NATURE: one board process at a time on the one GPU with nothing else running
 #            (timing must not share the GPU; AGENTS.md "Full-machine CPU race resources"; the drivers themselves
 #            use every core, no thread caps): candidate paper+owed full rows, then each owed unit
@@ -56,8 +59,10 @@
 # box.txt, status.json, wheel-manifest-<arm>.json), COMPARE/SUMMARY/OWED files. Venvs and data blocks live under
 # $PC_CACHE_ROOT (default /root/pc-cache), outside the persisted dir.
 #
-# Inputs on the box: the datasets under $PC_DATA_ROOT (default /root/datasets/gbm-bench: taxi/taxi_speed.npz,
-# istella/istella_speed.npz; `sh tools/dataset_store.sh stage` from the Mac). Knobs: PC_GPU_TOKEN (the paper's GPU,
+# Inputs on the box: the datasets under $PC_DATA_ROOT (default /root/datasets/gbm-bench), the list being
+# tools/measure_owed.py data-keys (the board's data_needs over the paper and owed races; checked after the plan,
+# exit 4 when one is missing), staged by tools/ops/measure_candidate.py stage through tools/dataset_store.sh stage.
+# At start the job deletes the box_persist_run.sh staging tarballs of finished jobs. Knobs: PC_GPU_TOKEN (the paper's GPU,
 # default L40S / MI300X), PC_REQUIRE_SAME_GPU=1 (stop on another GPU instead of recording HW-DIFF and going on).
 # Tests: tools/test_paper_compare.py (syntax and the argument checks of this script).
 set -uo pipefail
@@ -182,12 +187,22 @@ if ! grep -q "$TOKEN" "$J/gpu.txt"; then
     say "HW-DIFF: the paper ran on $TOKEN; this box: $(head -c 300 "$J/gpu.txt" | tr '\n' ' ')"
     [ "${PC_REQUIRE_SAME_GPU:-0}" = 1 ] && exit 3
 fi
-for f in taxi/taxi_speed.npz istella/istella_speed.npz; do
-    [ -f "$DATA_ROOT/$f" ] || {
-        say "missing dataset $DATA_ROOT/$f: stage it from the Mac first:" \
-            "sh tools/dataset_store.sh stage \"<ssh flags+target>\" gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz"
-        exit 4; }
-done
+# staging tarballs of finished box-persisted jobs (a failed or killed upload left them: 36 GB on the L40S pod,
+# 2026-11-13); this job's own and running jobs' are kept
+prune_persist_staging() {
+    local root f tag pid
+    root=$(dirname "$(dirname "${MOJOLEARN_PERSIST_RUNNER:-/root/box-persist/bin/x}")")
+    for f in "$root"/state/*/upload.tgz; do
+        [ -f "$f" ] || continue
+        tag=$(basename "$(dirname "$f")")
+        [ "$tag" = "${MOJOLEARN_PERSIST_TAG:-}" ] && continue
+        pid=$(sed -n 's/^PID=//p' "$root/active/$tag.env" 2> /dev/null | head -1)
+        [ -n "$pid" ] && kill -0 "$pid" 2> /dev/null && continue
+        say "pruning $(du -sh "$f" 2> /dev/null | cut -f1) staging tarball of finished job $tag: $f"
+        rm -f "$f" "$(dirname "$f")/upload.sha256"
+    done
+}
+prune_persist_staging
 
 # ---- the candidate wheels: exactly the core and the vendor wheel of one version ---------------------------------
 CAND=()
@@ -266,6 +281,20 @@ if part plan; then
     phase_end $rc
 fi
 [ -s "$RES/plan/race-ids-full.txt" ] || { say "no paper plan in $RES/plan (run part plan)"; exit 5; }
+# every dataset the races read, from the board's own data_needs over the paper and owed races (tools/measure_owed.py
+# data-keys; the same list tools/ops/measure_candidate.py stage stages): a missing one stops the job here, before any
+# install (2026-11-12: a missing higgs failed half the smoke shards)
+DK_OWED=(); [ "$OWED" = 1 ] && DK_OWED=(--owed "$OWED_FILE")
+$PY tools/measure_owed.py data-keys "${DK_OWED[@]}" --paper-recipes "$RECIPES" --planner tools/bench_board.py \
+    --vendor "$V" --data-root "$DATA_ROOT" > "$RES/plan/data-keys.tsv" 2> "$RES/logs/data-keys.log" || {
+    say "could not list the datasets (logs/data-keys.log)"; exit 4; }
+MISSING_KEYS=$(while IFS=$'\t' read -r key path; do [ -f "$path" ] || printf '%s ' "$key"; done < "$RES/plan/data-keys.tsv")
+if [ -n "$MISSING_KEYS" ]; then
+    say "missing datasets under $DATA_ROOT: $MISSING_KEYS; stage them from the Mac (tools/ops/measure_candidate.py stage" \
+        "does it): sh tools/dataset_store.sh stage \"<ssh flags+target>\" $MISSING_KEYS"
+    exit 4
+fi
+say "datasets present: $(cut -f1 "$RES/plan/data-keys.tsv" | tr '\n' ' ')"
 # one board argument set for every process: the owed plan's union (paper + owed lanes), else the paper's
 BA="$RES/plan/board-args.txt"; [ "$OWED" = 1 ] && [ -s "$RES/plan-owed/board-args.txt" ] && BA="$RES/plan-owed/board-args.txt"
 mapfile -t BARGS < "$BA"
@@ -306,15 +335,26 @@ if part smoke; then
     phase smoke
     NRACE=$(grep -c . "$SMOKE_IDS")
     MEMG=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo 2> /dev/null || echo 16)
-    S=${PC_SMOKE_SHARDS:-$(( $(nproc) / 4 ))}
+    # NOT GPU-bound (read from the code; not measured): a smoke race runs SMOKE_ROWS=2000 rows at the `small` shape,
+    # so each shard's time is CPU and I/O on the host: a fresh worker process per arm (interpreter start, `import
+    # mojolearn`, the GPU context), the dataset npz read and sliced, the evidence sealed. Each shard runs one race at a
+    # time and mostly one core, which is why 5 shards (nproc/4) showed busy 2-4 of 20 cores (2026-11-12, AMD). So the
+    # shard count is nproc/2, bounded by host memory (PC_SMOKE_MEM_GB per shard), by GPU memory (PC_SMOKE_GPU_GB per
+    # shard's contexts and small buffers) and PC_SMOKE_MAX (16).
+    S=${PC_SMOKE_SHARDS:-$(( $(nproc) / 2 ))}
     BYMEM=$(( MEMG / ${PC_SMOKE_MEM_GB:-12} ))
+    GPUG=0
+    if [ "$V" = nvidia ]; then
+        GPUG=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2> /dev/null | head -1 | awk '{print int($1 / 1024)}')
+    fi
     if [ -z "${PC_SMOKE_SHARDS:-}" ]; then
-        [ "$S" -gt "${PC_SMOKE_MAX:-8}" ] && S=${PC_SMOKE_MAX:-8}
+        [ "$S" -gt "${PC_SMOKE_MAX:-16}" ] && S=${PC_SMOKE_MAX:-16}
         [ "$S" -gt "$BYMEM" ] && S=$BYMEM
+        [ "${GPUG:-0}" -gt 0 ] && [ "$S" -gt $(( GPUG / ${PC_SMOKE_GPU_GB:-3} )) ] && S=$(( GPUG / ${PC_SMOKE_GPU_GB:-3} ))
     fi
     [ "$S" -gt "$NRACE" ] && S=$NRACE
     [ "$S" -lt 1 ] && S=1
-    say "smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB), one venv"
+    say "smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB), one venv"
     pids=()
     # shellcheck disable=SC2046
     for i in $(seq 1 "$S"); do
@@ -325,6 +365,12 @@ if part smoke; then
     src=0
     for p in "${pids[@]}"; do wait "$p"; r=$?; [ $r -gt $src ] && src=$r; done
     grep -h -E '^SMOKE (PASS|FAIL)' "$RES"/logs/smoke-s*.log | head -n 8
+    # the smoke scratch is not needed past this point: each shard keeps BOARD.md, board.json, smoke.json and logs/
+    # (what pass-ids and the persisted record read); its work/ and evidence/ go, and the shards' caches c2.. (the timed
+    # boards use c1). The 80 GB L40S pod filled with 12 GB of smoke scratch on 2026-11-13.
+    for d in "$RES"/smoke-s*/; do rm -rf "${d}work" "${d}evidence"; done
+    for c in "$CACHE_ROOT"/c*/; do case "$(basename "$c")" in c1) ;; c[0-9]*) rm -rf "$c" ;; esac; done
+    say "smoke scratch pruned; $(df -h /root 2> /dev/null | awk 'NR==2 {print $4 " free on /root"}')"
     phase_end $src     # a SMOKE FAIL exits 1: recorded, the passed races still go on
 fi
 SJ=()

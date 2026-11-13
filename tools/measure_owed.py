@@ -229,8 +229,8 @@ def cmd_plan(a):
 
 def cmd_data_keys(a):
     """One `<key> TAB <path>` line per input (tools/ops/paper_compare_job.sh checks each path after its plan)."""
-    keys = data_keys(PC.load_json(a.owed), PC.load_json(a.paper_recipes), load_planner(a.planner), a.vendor,
-                     a.data_root)
+    doc = PC.load_json(a.owed) if a.owed else {"rows": []}
+    keys = data_keys(doc, PC.load_json(a.paper_recipes), load_planner(a.planner), a.vendor, a.data_root)
     sys.stdout.write("".join("%s\t%s\n" % kp for kp in keys))
     return 0
 
@@ -413,7 +413,7 @@ def build_parser():
     pl.add_argument("--b-arms", default="", help="comma list of the B wheel sets staged on this box")
     pl.add_argument("--out-dir", required=True)
     d = sub.add_parser("data-keys", help="the R2 dataset keys the paper and owed races read, with their paths")
-    d.add_argument("--owed", required=True)
+    d.add_argument("--owed", default=None, help="the owed file (omitted: the paper races only)")
     d.add_argument("--paper-recipes", required=True)
     d.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
     d.add_argument("--vendor", required=True, choices=PC.VENDORS)
