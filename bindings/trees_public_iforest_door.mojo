@@ -653,7 +653,7 @@ def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> 
     var token = Int(py=sized[0])
     var n_trees = Int(py=sized[1])
     var total = Int(py=sized[2])
-    params[16] = PythonObject(token)
+    py_setitem(params, PythonObject(16), PythonObject(token))
     var offsets = family_uninit_array(Python.tuple(n_trees + 1), "<i4", context)
     var feature = family_uninit_array(Python.tuple(total), "<i4", context)
     var threshold = family_uninit_array(Python.tuple(total), "<f4", context)
