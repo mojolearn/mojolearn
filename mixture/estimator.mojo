@@ -122,6 +122,7 @@ from mixture.checks.mstep import (
     gmm_mstep_scratch_floats,
     gmm_precision_cholesky,
     gmm_precision_enqueue,
+    gmm_precision_reads_host,
     gmm_precision_status,
     gmm_status_put,
     resp_exp_kernel,
@@ -1520,7 +1521,15 @@ def gaussian_mixture_fit(
     # TOMBSTONE: gmm-em-host-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n1-gmm-bgmm-loops; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
     var check_every = em_loop_check_every(n, ncomp, d)
-    if trace.enabled or sabotage != GMM_SAB_NONE or gmm_device_count(dplan) > 1:
+    # gmm_precision_reads_host: the host-read precision chain (no one-launch
+    # factor at this d; lane fix-chol-ops-remaining-callers) reads every
+    # iteration, like a sabotage arm, so nothing runs past a stop
+    if (
+        trace.enabled
+        or sabotage != GMM_SAB_NONE
+        or gmm_device_count(dplan) > 1
+        or gmm_precision_reads_host(d)
+    ):
         check_every = 1
     var step = GmmEmStep(
         dplan.copy(), dx.copy(), logresp.copy(), resp.copy(), mahal.copy(),
