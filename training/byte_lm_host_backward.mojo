@@ -66,7 +66,9 @@ would no longer give the GPU columns' words. The program arm is the same
 switch as on the GPUs, -D MOJOLEARN_BYTE_LM_PROGRAM_STEP
 (training/byte_lm_config.mojo BYTE_LM_PROGRAM_STEP), so each build has one
 route on every column. Restored unchanged from 5fff22515a except that
-`byte_host_adamw` stays in training/byte_lm_host_execution.mojo.
+`byte_host_adamw` stays in training/byte_lm_host_execution.mojo and the
+unused import of training/chunked_lm_head_host.mojo (never called; not
+restored) is gone.
 
 BATCH COMPOSITION IS PART OF THE CLAIM. Nine of the gradients contract over
 the token count, so `gemm_backward.mojo`'s own statement applies: the gradient
@@ -97,7 +99,6 @@ from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
 from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.optimizer_oracle import optimizer_step_oracle
 from training.loss_host_rows import ce_host_rows
-from training.chunked_lm_head_host import chunked_lm_head_gemm_host_train
 from training.optimizer_host_rows import adam_host_rows
 from transformer.checks.transformer_fixture import ScorePlant, TransformerWeights
 from transformer.checks.transformer_oracle import (
