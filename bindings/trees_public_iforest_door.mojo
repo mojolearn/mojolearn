@@ -532,7 +532,8 @@ def _forest_words(forest: PythonObject, context: PythonObject) raises -> PythonO
     var views = Python.list()
     var sizes = List[Int]()
     for i in range(5):  # driver-loop: over fixed call structure, small-loop(names): the five forest arrays
-        var view = classical_view(forest[i], context, String(names[i]), True)
+        # Admitted here (an unpickled or loaded state is caller data).
+        var view = classical_view(forest[i], context, String(names[i]))
         if (Int(py=view.ndim) != 1 or admitted_dtype(view, context) != String(types[i])
                 or not classical_c_order(view, context)):
             raise Error(_PREFIX + "the saved forest's " + String(names[i]) + " must be a flat " + String(types[i]) + " array")
