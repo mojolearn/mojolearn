@@ -1284,7 +1284,7 @@ def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.f
     # one). The copy completes inside the synchronize below.
     var word = List[Int32](length=1, fill=Int32(0))
     var word_address = Int(word.unsafe_ptr())
-    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=word_address), src_buf=status)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=word_address), src_buf=status)
     ctx.synchronize()
     var result = word[0]
     _ = word^
