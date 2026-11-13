@@ -236,3 +236,22 @@ def test_methods_run_as_one_native_call():
     audit_native_call(_raw(mojolearn.KNeighborsRegressor, "score"), reg, Q, Q[:, 0]).assert_native()
     nn = mojolearn.NearestNeighbors()
     audit_native_call(_raw(mojolearn.NearestNeighbors, "fit"), nn, X).assert_native()
+
+
+@pytest.mark.parametrize("cls", [mojolearn.KNeighborsRegressor, mojolearn.KNeighborsClassifier])
+def test_fit_keeps_the_resident_index_it_prepared(cls):
+    # perf-neighbors (2026-11-13): a GPU fit uploads and tests the index once
+    # and the first predict reuses that handle; the public fit envelope used
+    # to replace the holder, dropping the handle unreleased and uploading the
+    # index again at the first predict. The CPU column holds no handle.
+    X, Xq, rng = _data(3)
+    y = (rng.random(X.shape[0]) > 0.5).astype(np.int32) if cls is mojolearn.KNeighborsClassifier \
+        else rng.random(X.shape[0], dtype=np.float32)
+    model = cls(n_neighbors=3).fit(X, y)
+    held = vars(model)["_resident_holder"].get("index")
+    model.predict(Xq)
+    after = vars(model)["_resident_holder"].get("index")
+    if held is None:
+        assert after is None or after[1] != 0  # CPU column: nothing prepared at fit
+        return
+    assert after is not None and after[1] == held[1]
