@@ -140,3 +140,115 @@ def test_host_and_device_give_the_same_words():
         assert words([host.loss(data[0])]) == words([device.evaluate(data[0])])
     finally:
         device.close()
+
+
+# ---------------------------------------------------------------------------
+# Forward-only bisect of the CPU column (lane byte-lm-host-step-words,
+# 2026-11-13). The Mac run of this file (verify-20261112/fix20261113) passed
+# the first assertion of test_host_and_device_give_the_same_words (the host
+# trainer's `loss`, the threaded kernel forward, gave the device's words) and
+# failed on the step losses: the composed host step's own forward
+# (training/byte_lm_host_backward.mojo byte_host_gradient: the block oracles,
+# gemm_host_rows for the head, loss_host_rows.mojo for the loss) gave
+# 1085368213 where the device and the threaded host loss gave 1085370318.
+# Every test below runs on the CPU column alone and compares one pair of host
+# forwards, so a failing pair names the stage:
+#   logits reference vs threaded     the block oracles + gemm_oracle head
+#                                    against byte_lm_host_kernels.mojo
+#   loss reference vs threaded       ce_forward_oracle against
+#                                    ce_causal_mean_loss_fast on each path's logits
+#   step (rows) vs step (oracle)     loss_host_rows.ce_host_rows against
+#                                    ce_forward_oracle inside the step
+#   step (oracle) vs loss reference  gemm_host_rows head + ce_forward_oracle
+#                                    against gemm_oracle head + ce_forward_oracle
+#   step vs trainer loss             the composed step against the threaded loss
+# The last pair is the one the Mac run showed failing.
+
+STEP_ROWS_ENV = 'MOJOLEARN_BYTE_LM_HOST_STEP_ROWS'
+
+
+def _host_inference(threaded):
+    """The CPU column's inference forward at the same initialization, or a
+    skip naming why the host binding is not loadable in this install."""
+    try:
+        from mojolearn import LanguageModelInference
+        return LanguageModelInference(initial(), shape=Shape(), threaded=threaded)
+    except (ImportError, OSError) as error:
+        pytest.skip(f'the CPU byte LM binding is not loadable here: {error}')
+
+
+def _inputs(ids):
+    """The (batch, length) input rows of a (batch, length + 1) training batch."""
+    return np.ascontiguousarray(ids[:, :-1])
+
+
+def test_host_logits_reference_equals_threaded():
+    ids = batches()[0]
+    reference = _host_inference(threaded=False)
+    threaded = _host_inference(threaded=True)
+    assert _bytes(reference.logits(_inputs(ids))) == _bytes(threaded.logits(_inputs(ids)))
+
+
+def test_host_loss_reference_equals_threaded():
+    ids = batches()[0]
+    reference = _host_inference(threaded=False)
+    threaded = _host_inference(threaded=True)
+    assert int(reference.loss_bits(ids)) == int(threaded.loss_bits(ids))
+
+
+def test_host_trainer_loss_equals_threaded_inference_loss():
+    ids = batches()[0]
+    host = _host_trainer()
+    threaded = _host_inference(threaded=True)
+    assert words([host.loss(ids)]) == [int(threaded.loss_bits(ids))]
+
+
+def test_host_step_loss_equals_host_loss():
+    """The composed step's forward against the threaded loss on the same
+    parameters: the pair the Mac run showed failing."""
+    ids = batches()[0]
+    host = _host_trainer()
+    before = words([host.loss(ids)])
+    assert [int(host.train_step(ids))] == before
+
+
+def test_host_step_rows_equals_step_oracle(monkeypatch):
+    """`ce_host_rows` and `adam_host_rows` (the default) against the serial
+    oracle calls (MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0): loss, gradient,
+    parameters and both moments, every byte."""
+    ids = batches()[0]
+    monkeypatch.delenv(STEP_ROWS_ENV, raising=False)
+    rows = _host_trainer()
+    rows_loss = int(rows.train_step(ids))
+    monkeypatch.setenv(STEP_ROWS_ENV, '0')
+    oracle = _host_trainer()
+    oracle_loss = int(oracle.train_step(ids))
+    assert rows_loss == oracle_loss
+    assert _bytes(rows.gradient_) == _bytes(oracle.gradient_)
+    assert _bytes(rows.parameters_) == _bytes(oracle.parameters_)
+    assert _bytes(rows.m_) == _bytes(oracle.m_)
+    assert _bytes(rows.v_) == _bytes(oracle.v_)
+
+
+def test_host_step_oracle_loss_equals_reference_inference_loss(monkeypatch):
+    """The composed step with the serial oracle loss (gemm_host_rows head,
+    ce_forward_oracle) against the reference inference forward (gemm_oracle
+    head, ce_forward_oracle): the two differ only in the head GEMM call."""
+    ids = batches()[0]
+    monkeypatch.setenv(STEP_ROWS_ENV, '0')
+    host = _host_trainer()
+    reference = _host_inference(threaded=False)
+    assert int(host.train_step(ids)) == int(reference.loss_bits(ids))
+
+
+def test_host_and_device_give_the_same_loss_words():
+    """Forward only: the CPU column's loss against the device's evaluation
+    before any step (the first assertion of
+    test_host_and_device_give_the_same_words on its own)."""
+    ids = batches()[0]
+    host = _host_trainer()
+    device = Trainer(initial(), data_schedule={'dataset': 'route-test'}, resident=True)
+    try:
+        assert words([host.loss(ids)]) == words([device.evaluate(ids)])
+    finally:
+        device.close()
