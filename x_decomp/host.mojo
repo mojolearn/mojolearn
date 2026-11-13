@@ -37,6 +37,7 @@ from std.sys.compile import is_defined
 
 from decomposition.host.linalg_public import host_eigh, host_qr_r
 from checks.numerics import ftz
+from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
@@ -844,7 +845,13 @@ struct HostExec(Exec):
         a: F32Ptr, b: F32Ptr, r: F32Ptr, mu: F32Ptr, ymean: MutPointer[UInt64, MutAnyOrigin], m: Int, d: Int
     ) raises:
         """The host column of DevExec.ols_tsqr_factor: the same items
-        (glm/host/center_host.mojo), then the TSQR's host replay."""
+        (glm/host/center_host.mojo), then the TSQR's host replay. X and y
+        are tested finite here as the device entry tests the words it
+        uploads (the door defers them to this entry; one wording)."""
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(a)), m * d):
+            raise Error("mojolearn: X contains NaN or infinity")
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(b)), m):
+            raise Error("mojolearn: y contains NaN or infinity")
         var sums = List[UInt64](length=d + 1, fill=UInt64(0))
         var sp = Int(sums.unsafe_ptr())
         col_sums_on_cpu(Int(a), sp, m, d)

@@ -172,6 +172,7 @@ from x_decomp.jacobi_par import (
     pj_transpose_kernel,
     sym_from_triangle_kernel,
 )
+from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
 from x_decomp.eigh_ops import eigh_op_dense
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
@@ -4024,6 +4025,21 @@ struct DevExec(Exec):
         var n = d + 1
         var ta = _up(ctx, a, m * d)
         var tb = _up(ctx, b, m)
+        # The finite test of the words this entry uploads (lane
+        # fable-perf-classical-0855, 2026-11-13; core/admitted_finite_status.mojo):
+        # two status words on the stream, read with the factor's one drain.
+        # Before, LinearRegression's door scanned X on the host (its one
+        # new pass over X against 0.8.55, whose as_f32_c scanned nothing):
+        # ols/taxi fit NVIDIA L40S 16.5 -> 18.9 ms, AMD 13.2 -> 14.2 ms
+        # (candidate 4c2340386abc vs the 0.8.55 column, 2026-11-13,
+        # ~/mojolearn-evidence/measure-candidate/*-4c2340386abc). The door
+        # defers X to this entry and refuses in scikit-learn's wording
+        # (bindings/admitted_input_run.mojo admitted_finite_entry_refuse).
+        var dstat = ctx.enqueue_create_buffer[DType.int32](2)
+        enqueue_fill(ctx, dstat, Int32(0))
+        enqueue_finite_status(ctx, ta.unsafe_ptr(), m * d, dstat.unsafe_ptr(), 0)
+        enqueue_finite_status(ctx, tb.unsafe_ptr(), m, dstat.unsafe_ptr(), 1)
+        var hstat = ctx.enqueue_create_host_buffer[DType.int32](2)
         var d_sx = ctx.enqueue_create_buffer[DType.uint64](d)
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
         col_sums_pair_buf(ctx, ta, tb, d_sx, d_sy, m, d)
@@ -4038,7 +4054,16 @@ struct DevExec(Exec):
         comptime if TARGET_COLUMN == COLUMN_APPLE:
             ctx.synchronize()
         ts_factor_dispatch(plan, ctx, da, m, n, r, False)
+        ctx.enqueue_copy(dst_ptr=hstat.unsafe_ptr(), src_buf=dstat)
         ctx.synchronize()
+        var x_bad = hstat.unsafe_ptr().unsafe_load(0) != Int32(0)
+        var y_bad = hstat.unsafe_ptr().unsafe_load(1) != Int32(0)
+        _ = hstat^
+        _ = dstat^
+        if x_bad:
+            raise Error("mojolearn: X contains NaN or infinity")
+        if y_bad:
+            raise Error("mojolearn: y contains NaN or infinity")
         _ = ta^
         _ = tb^
         _ = d_sx^
