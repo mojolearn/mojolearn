@@ -865,7 +865,7 @@ def gh_read(*args, deadline=None):
                 raise
             wait = rate_limit_wait() if RATE_LIMITED_GH.search(str(exc)) else pause
             pause = min(pause * 2, 600)
-            if deadline is not None and time.time() + wait > deadline:
+            if deadline is not None and time.time() + wait >= deadline:
                 raise
             say(f"gh {' '.join(args[:2])}: retryable failure, again in {wait} s: {str(exc)[-160:]}")
             time.sleep(wait)
@@ -1174,15 +1174,14 @@ def upload_donor(creds, donor, tag):
 #: not be downloaded: not a failed leg (release.py relaunches the leg attached to the run, --run-id)
 DOWNLOAD_TRIES = 6
 DOWNLOAD_PENDING_EXIT = 75
-#: `gh run download` answers that no retry changes (the artifact is not there)
-MISSING_ARTIFACT = re.compile(r"no valid artifacts|no artifact matches|no artifacts? found", re.I)
 
 
 def download(run_id, name, out, failed, conclusion=None):
     """Artifact NAME of the run, moved into OUT (merged into what is there). A failed download is retried up to
     DOWNLOAD_TRIES times with backoff (quota refusals wait for the quota's reset); after that, for a run that
     concluded success the collector exits DOWNLOAD_PENDING_EXIT, never a failed leg (2026-11-13: download timeouts
-    and resets under the emptied quota marked succeeded runs' legs failed)."""
+    and resets under the emptied quota marked succeeded runs' legs failed). A failed run's download is retried only
+    for a network or quota error (its artifact may never have been made)."""
     with tempfile.TemporaryDirectory() as td:
         pause = 30
         for attempt in range(1, DOWNLOAD_TRIES + 1):
@@ -1193,9 +1192,8 @@ def download(run_id, name, out, failed, conclusion=None):
             if r.returncode == 0:
                 break
             err = r.stderr.strip()[-200:]
-            if MISSING_ARTIFACT.search(r.stderr) and conclusion != "success":
-                attempt = DOWNLOAD_TRIES
-            if attempt == DOWNLOAD_TRIES:
+            # a succeeded run's artifact exists: every failure is retried; a failed run's only on the network/quota
+            if attempt == DOWNLOAD_TRIES or (conclusion != "success" and not gh_retryable(r.stderr)):
                 names = "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed) or "none failed"
                 if conclusion == "success":
                     say(f"DOWNLOAD PENDING: run {run_id} succeeded but artifact {name} did not download in "

@@ -545,7 +545,7 @@ class Run(unittest.TestCase):
         os.environ.update(self.env)
         self.gh, rgb.GH = rgb.GH, str(gh)
         self.tooling = rgb.tooling_ref
-        rgb.tooling_ref = lambda ref: ("lane/x", "h" * 40)
+        rgb.tooling_ref = lambda ref, recorded="": ("lane/x", "h" * 40)
         os.environ["STUB_HEAD"] = "h" * 40
 
     def tearDown(self):
@@ -679,7 +679,9 @@ class StatusReadRecovery(unittest.TestCase):
         self.assertTrue(all(call.args[:3] == ("run", "view", "123") for call in gh.call_args_list))
 
     def test_persistent_or_nontransient_errors_still_fail(self):
-        for message, count in (("error connecting to api.github.com", 3), ("HTTP 403 forbidden", 1)):
+        # a network error is retried until the next wait would pass the run's deadline (1 min here); a 404 is not
+        # retried. HTTP 403/429 quota refusals are retried (tools/test_release_candidate_controller.py).
+        for message, count in (("error connecting to api.github.com", 2), ("HTTP 404 not found", 1)):
             with self.subTest(message=message), \
                     unittest.mock.patch.object(rgb, "gh", side_effect=RuntimeError(message)) as gh, \
                     unittest.mock.patch.object(rgb.time, "sleep"), \
