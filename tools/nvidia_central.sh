@@ -3,8 +3,8 @@
 # shared RunPod pods, never one per lane.
 #
 # THE ONLY WAY A LANE USES NVIDIA. At most NVC_MAX_PODS (3, the account cap in
-# tools/dev_pod.sh) shared RunPod pods, each with several cheap GPUs (4x or 2x
-# RTX 4090 where RunPod has them; a 1-GPU pod is the fallback), keyed nvc1,
+# tools/dev_pod.sh) shared RunPod pods, by default one L40S each (the paper's
+# NVIDIA device; NVIDIA_MEASURE_GPUS in tools/runpod_nvidia_sm89.env), keyed nvc1,
 # nvc2, nvc3 in the dev_pod state. Every lane's GPU work goes through the
 # pod's FIFO queue (tools/gpu_queue_box.sh, the same queue as the central AMD
 # box), one job per GPU slot, in the lane's own tree /root/mojolearn-<lane>.
@@ -79,14 +79,17 @@ CONF="${MOJOLEARN_NVC_CONF:-$HOME/mojolearn-evidence/nvidia_central.env}"
 [ ! -f "$CONF" ] || . "$CONF"
 NVC_MAX_PODS=3                                        # the account cap (tools/dev_pod.sh MAX_RUNPOD_PODS)
 NVC_PODS=${NVC_PODS:-1}                               # `up` with no N brings the set to this many
-# The ordered GPU types and counts are shared with tools/prebuild_changed.py --rent: one constant.
+# The GPU types and counts live in tools/runpod_nvidia_sm89.env (one constant file, shared with
+# tools/prebuild_changed.py --rent).
 # shellcheck disable=SC1091
 . "$ROOT/tools/runpod_nvidia_sm89.env"
-NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_SM89_GPU_COUNTS}  # GPUs per pod, tried in order (1 = the plain dev_pod fallback)
-# Only sm_89 / sm_90 GPUs: every mojolearn release carries cuda sm_89 and sm_90a
-# only, so an sm_86 pod (RTX A6000, A40) runs our arm on NOTHING (2026-09-29: an
-# A40 pod refused our arm in every board race, "compiled=identical/cpu").
-NVC_GPUS=${NVC_GPUS:-$NVIDIA_SM89_GPUS}
+NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_MEASURE_GPU_COUNTS}  # GPUs per pod, tried in order (1 = the plain dev_pod fallback)
+# L40S ONLY BY DEFAULT (2026-11-13): this `up` brings up the measurement box, and the paper's NVIDIA device is the
+# L40S ("compare on the same device"; AMD: MI300X). The old default, the sm_89 walk (4090, L40S, RTX 6000 Ada, L4),
+# rented a 2x RTX 6000 Ada when the L40S was out of stock. Another list only explicitly: MOJOLEARN_NVC_GPUS, else
+# MOJOLEARN_DEVPOD_GPUS (ignored here before; the orchestrator's L40S-only rent loop set it in vain). Only sm_89 /
+# sm_90 types belong in either: an sm_86 pod (RTX A6000, A40) runs our arm on nothing (2026-09-29).
+NVC_GPUS=${MOJOLEARN_NVC_GPUS:-${MOJOLEARN_DEVPOD_GPUS:-$NVIDIA_MEASURE_GPUS}}
 NVC_STOCK_WAIT=${NVC_STOCK_WAIT:-5}                   # minutes of out-of-stock retry per multi-GPU count
 NVC_STOCK_WAIT_1=${NVC_STOCK_WAIT_1:-30}              # ... and for the 1-GPU fallback
 NVC_MIN_BALANCE=${NVC_MIN_BALANCE:-10}                # `up` refuses below this RunPod balance (USD)

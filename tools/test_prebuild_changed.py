@@ -303,14 +303,18 @@ class Wiring(unittest.TestCase):
         self.assertRegex(text, r'NVIDIA_CAMPAIGN" = 7 \] && _bc_slots="\$\{MOJOLEARN_BINCACHE_SLOTS:-192\}"')
 
     def test_sm89_walk_is_the_shared_nvidia_central_constant(self):
-        # One constant: nvidia_central.sh sources it and holds no list of its own.
+        # One constant file: nvidia_central.sh sources it and holds no list of its own; its `up` defaults to the
+        # L40S-only measurement walk (2026-11-13), the sm_89 walk stays prebuild's.
         gpus, counts = pc.shared_walk()
         self.assertEqual(pc.GPU_WALK["sm_89"], gpus)
         self.assertEqual(pc.GPU_COUNT_WALK["sm_89"], counts)
         central = (TOOLS / "nvidia_central.sh").read_text()
         self.assertIn('. "$ROOT/tools/runpod_nvidia_sm89.env"', central)
-        self.assertIn("NVC_GPUS=${NVC_GPUS:-$NVIDIA_SM89_GPUS}", central)
-        self.assertIn("NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_SM89_GPU_COUNTS}", central)
+        self.assertIn("NVC_GPUS=${MOJOLEARN_NVC_GPUS:-${MOJOLEARN_DEVPOD_GPUS:-$NVIDIA_MEASURE_GPUS}}", central)
+        self.assertIn("NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_MEASURE_GPU_COUNTS}", central)
+        env = (TOOLS / "runpod_nvidia_sm89.env").read_text()
+        self.assertIn('NVIDIA_MEASURE_GPUS="NVIDIA L40S"\n', env)      # the measurement pod is an L40S only
+        self.assertIn('NVIDIA_MEASURE_GPU_COUNTS="1"\n', env)
         for gpu in gpus:
             self.assertNotIn('"' + gpu, central)
         self.assertGreater(len(gpus), 1)
