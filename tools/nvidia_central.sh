@@ -39,6 +39,8 @@
 #   tools/nvidia_central.sh run    <lane> [--gpus N] [--wait MIN] <command>
 #                                                      SHORT interactive GPU command on N free slots
 #                                                      (yields to queued jobs; exit 75 if no slot came)
+#   tools/nvidia_central.sh ssh-target <lane>          prints "<ssh flags> <target>" of the lane's pod (for
+#                                                      tools/dataset_store.sh stage)
 #   tools/nvidia_central.sh sh     <lane> <command>    NO GPU (CUDA_VISIBLE_DEVICES=-1): builds, pixi, tail, git
 #   tools/nvidia_central.sh fetch  <lane> <path> <local dir>   tar a box path back to the Mac
 #   tools/nvidia_central.sh install <pod>              ORCHESTRATOR ONLY (up does this) install/upgrade queue + lease
@@ -480,6 +482,11 @@ sh)
     # every GPU hidden (an invalid index shows no device); `hold` keeps the pod's lease busy while it runs
     inner="mkdir -p /root/mojolearn-$lane; export CUDA_VISIBLE_DEVICES=-1; $BOX_PATH; cd /root/mojolearn-$lane && bash -c $(sq "$*")"
     BOX_TIMEOUT=14400 box "$NVQ hold $(sq "$inner")"
+    ;;
+ssh-target)
+    # the "<ssh flags+target>" of the lane's pod, for tools/dataset_store.sh stage (tools/ops/measure_candidate.py)
+    lane="${1:-}"; lane_ok "$lane"; need_lane_pod "$lane"
+    echo "$SSH_OPTS $SSH_TARGET"
     ;;
 fetch)
     lane="${1:-}"; lane_ok "$lane"; p="${2:?fetch <lane> <path> <local dir>}"; out="${3:?local dir}"

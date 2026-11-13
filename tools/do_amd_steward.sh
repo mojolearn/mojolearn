@@ -21,6 +21,7 @@
 #                                           persists to R2 from the droplet (measurements/box-jobs/<date>/<tag>-..)
 #                                           every 10 min and on any exit, also when the droplet self-destructs
 #   tools/do_amd_steward.sh ssh <command>   one command on the droplet, as root (status and housekeeping only)
+#   tools/do_amd_steward.sh ssh-target      prints "<ssh flags> root@<ip>" (for tools/dataset_store.sh stage)
 #   tools/do_amd_steward.sh status          droplet, deadlines, service, queue
 #   tools/do_amd_steward.sh down            DELETE, verify 404, disarm, release the lock
 #
@@ -351,6 +352,10 @@ run)
     fi
     # shellcheck disable=SC2086
     ssh $SSH_OPTS "root@$IP" "export PATH=/root/.pixi/bin:/opt/rocm/bin:\$PATH; cd /root/mojolearn && $cmd"
+    ;;
+ssh-target)
+    # the "<ssh flags+target>" of the droplet, for tools/dataset_store.sh stage (tools/ops/measure_candidate.py)
+    load_state; echo "$SSH_OPTS root@$IP"
     ;;
 ssh)
     load_state; [ $# -gt 0 ] || die "ssh needs a command"
