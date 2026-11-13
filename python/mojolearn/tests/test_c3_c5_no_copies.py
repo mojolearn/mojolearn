@@ -70,6 +70,29 @@ def test_iforest_fit_copies_and_never_changes_the_caller_matrix():
     assert np.asarray(a.score_samples(reference)).tobytes() == sa
 
 
+@pytest.mark.parametrize("form", ["float64", "strided", "fortran"])
+def test_iforest_fit_keeps_its_cast_copy_and_matches_the_float32_fit(form):
+    # Lane perf-iforest: a non-float32-C X is cast once into storage the fit
+    # owns and kept as the training matrix (no zero-filled store, no second
+    # copy); the forest and the scores equal the float32 C fit's.
+    reference = _x(rows=256)
+    if form == "float64":
+        X = reference.astype(np.float64)
+    elif form == "strided":
+        X = np.repeat(reference, 2, axis=1)[:, ::2]
+    else:
+        X = np.asfortranarray(reference)
+    a = ml.IsolationForest(n_estimators=8, random_state=5).fit(X)
+    b = ml.IsolationForest(n_estimators=8, random_state=5).fit(reference.copy())
+    assert type(a.__dict__["_x"]) is type(b.__dict__["_x"])
+    assert np.asarray(a.__dict__["_x"]).tobytes() == reference.tobytes()
+    sa = np.asarray(a.score_samples(reference)).tobytes()
+    assert sa == np.asarray(b.score_samples(reference)).tobytes()
+    X[...] = 0.0  # the fit kept its own cast copy
+    assert np.asarray(a.score_samples(reference)).tobytes() == sa
+    assert np.asarray(a.__dict__["_x"]).tobytes() == reference.tobytes()
+
+
 @pytest.mark.parametrize("kind", ["mamba1", "mamba2", "mamba3"])
 def test_block_forward_reads_x_in_place_and_matches_the_copy(kind):
     from mojolearn.tests.test_mamba_native_public import _block, _tokens
