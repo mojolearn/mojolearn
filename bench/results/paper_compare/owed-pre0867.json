@@ -43,7 +43,7 @@
   },
   "byte-lm-program-step": {
    "define": "MOJOLEARN_BYTE_LM_PROGRAM_STEP",
-   "status": "define in code (training/byte_lm.mojo BYTE_LM_PROGRAM_STEP): B = lane x7's program step (one Program.fit per call, OPS_ATTN_STEP per layer, executor AdamW); A = the restored hand step (0.8.55 route: per-layer llama_decoder_layer_forward, tape backward autograd/rules_lm.mojo, certified optimizer / step-glue update). Candidate 4c2340386abc: lm-train-step bytes NV 48.9 ms, AMD 50.5 ms vs 35.5 / 43.9 ms for the hand step (0.8.55 / 0.8.66)"
+   "status": "define in code (training/byte_lm_config.mojo:10 (one switch for the host and GPU columns) BYTE_LM_PROGRAM_STEP): B = lane x7's program step (one Program.fit per call, OPS_ATTN_STEP per layer, executor AdamW); A = the restored hand step (0.8.55 route: per-layer llama_decoder_layer_forward, tape backward autograd/rules_lm.mojo, certified optimizer / step-glue update). Candidate 4c2340386abc: lm-train-step bytes NV 48.9 ms, AMD 50.5 ms vs 35.5 / 43.9 ms for the hand step (0.8.55 / 0.8.66)"
   },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
