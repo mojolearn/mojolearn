@@ -40,7 +40,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
-from core.gemm import gemv_n
+from core.gemm import gemv_n_ols_predict
 from core.identity_trace import IdentityTrace
 from glm.impl.ols import (
     OLS_ALGO_EIG,
@@ -384,7 +384,7 @@ def ols_predict_host(
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
     ctx.synchronize()
-    gemv_n(ctx, out, x, coef, n_rows, n_features)
+    gemv_n_ols_predict(ctx, out, x, coef, n_rows, n_features)
     # A HOST FLOAT COMPARISON DECIDING A LAUNCH, audited for DEVIATION 527
     # and left as it is. `intercept` is a value the caller hands in, not one
     # this repository computed on the device, so the compare is against a

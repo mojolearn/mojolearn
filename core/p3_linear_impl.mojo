@@ -11,7 +11,7 @@ binary64 words straight in the caller's output. No host loop over rows.
 """
 from max.gpu.host import DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
-from core.gemm import gemv_n
+from core.gemm import gemv_n_ols_predict
 from checks.soft_f64 import sf64_from_f32
 from glm.estimator import _add_scalar_kernel
 
@@ -45,7 +45,7 @@ def ols_predict_wide_device(
     if n_features > 0:
         ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
     ctx.synchronize()
-    gemv_n(ctx, out, x, coef, n_rows, n_features)
+    gemv_n_ols_predict(ctx, out, x, coef, n_rows, n_features)
     # The same host compare of a caller-supplied constant as ols_predict_host
     # (DEVIATION 527): `x + 0.0` is skipped exactly as there.
     if intercept != Float32(0.0):
