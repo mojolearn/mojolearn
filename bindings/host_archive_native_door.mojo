@@ -1404,11 +1404,12 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
 
 
 def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: PythonObject,
-                                context: PythonObject) raises -> PythonObject:
+                                context: PythonObject, forest: Bool = False) raises -> PythonObject:
     """`IsolationForest.load(path)`: the public loader's refusals in its
     order and wording; the saved knobs pass through the constructor's checks
     again (`iforest_validate`, the native `_validate_params`), then the saved
-    mode, the training matrix and the fitted scalars."""
+    mode, the training matrix (`mojolearn-iforest-1`) or the fitted forest
+    (`forest`, `mojolearn-iforest-2`) and the fitted scalars."""
     var b = native_loaded_module("builtins")
     var where = host_archive_where(path, context)
     var ints = _archive_exact(arrays, "ints", "<i8", context)
@@ -1452,11 +1453,35 @@ def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: P
     py_setitem(fields, "numeric_mode", PythonObject(None))
     iforest_validate(model, fields, context)
     host_archive_mode(arrays, fields, context)
-    var x = _archive_exact(arrays, "x", "<f4", context)
-    if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != nf or Int(py=x.shape[0]) < 1:
-        raise Error(where + " x has shape " + _archive_builtin_repr(py_call(b.tuple, x.shape)) + ", meta says "
-                    + String(nf) + " features")
-    py_setitem(fields, "_x", x)
+    if forest:
+        # Lane fix-iforest-save-device-forest: the saved trees (flat arrays
+        # whose lengths agree with n_estimators); the node-level checks run
+        # in the binding when the forest is first scored (if_forest_check).
+        if nf < 1 or resolved < 1:
+            raise Error(where + " carries " + String(nf) + " features and max_samples_ " + String(resolved))
+        var members = Python.tuple("tree_offsets", "node_feature", "node_threshold", "node_left", "node_right")
+        var types = Python.tuple("<i4", "<i4", "<f4", "<i4", "<i4")
+        var parts = Python.list()
+        for i in range(5):  # driver-loop: over the five fixed forest members
+            var part = _archive_exact(arrays, String(members[i]), String(types[i]), context)
+            if Int(py=part.ndim) != 1:
+                raise Error(where + " " + String(members[i]) + " must be one-dimensional")
+            _ = py_call(parts.append, part)
+        var total = Int(py=parts[1].size)
+        if Int(py=parts[0].size) != trees + 1 or total < trees:
+            raise Error(where + " tree_offsets holds " + String(Int(py=parts[0].size)) + " words for "
+                        + String(trees) + " trees")
+        for i in range(2, 5):  # driver-loop: over the fixed node members
+            if Int(py=parts[i].size) != total:
+                raise Error(where + " " + String(members[i]) + " holds " + String(Int(py=parts[i].size))
+                            + " nodes, node_feature " + String(total))
+        py_setitem(fields, "_if_forest", py_call(b.tuple, parts))
+    else:
+        var x = _archive_exact(arrays, "x", "<f4", context)
+        if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != nf or Int(py=x.shape[0]) < 1:
+            raise Error(where + " x has shape " + _archive_builtin_repr(py_call(b.tuple, x.shape)) + ", meta says "
+                        + String(nf) + " features")
+        py_setitem(fields, "_x", x)
     py_setitem(fields, "n_features_in_", nf)
     py_setitem(fields, "offset_", offset)
     py_setitem(fields, "max_samples_", resolved)
@@ -2885,6 +2910,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         py_setitem(sequential_fields(model), "_resident_holder", holder)
     elif fmt == "mojolearn-iforest-1" and Bool(public_owner):
         model = host_archive_public_iforest(cls, arrays, path, context)
+    elif fmt == "mojolearn-iforest-2":
+        model = host_archive_public_iforest(cls, arrays, path, context, True)
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":
