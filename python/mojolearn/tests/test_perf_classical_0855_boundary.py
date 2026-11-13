@@ -23,15 +23,30 @@ def _xy(rows=96, cols=4, seed=0):
     return x, y
 
 
+# rows: one TSQR block, and several blocks (the tree combine runs). The fit
+# takes whichever column the build selects (Apple Metal on the Mac wheel,
+# NVIDIA or AMD on the Linux GPU wheels, the host column on the CPU wheel);
+# every column refuses with the admission message before the factor's own
+# "R entry ... is NaN" refusal.
+@pytest.mark.parametrize("rows", [96, 3 * 4096 + 17])
 @pytest.mark.parametrize("bad", ["X", "y"])
 @pytest.mark.parametrize("value", [np.nan, np.inf])
-def test_linear_regression_fit_refuses_non_finite_on_the_entry(bad, value):
-    x, y = _xy()
+def test_linear_regression_fit_refuses_non_finite_on_the_entry(bad, value, rows):
+    x, y = _xy(rows=rows)
     if bad == "X":
         x[7, 2] = value
     else:
         y[7] = value
     with pytest.raises(ValueError, match="Input %s contains NaN or infinity" % bad):
+        ml.LinearRegression().fit(x, y)
+
+
+def test_linear_regression_fit_refuses_non_finite_x_before_y():
+    # Both bad: X's status word is read first, as the host column scans X first.
+    x, y = _xy()
+    x[5, 1] = np.nan
+    y[9] = np.nan
+    with pytest.raises(ValueError, match="Input X contains NaN or infinity"):
         ml.LinearRegression().fit(x, y)
 
 
