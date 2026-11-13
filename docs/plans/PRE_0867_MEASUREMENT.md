@@ -72,11 +72,16 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
    running anything.
 2. **Job tree.** The tree the job runs `tools/` from must contain this lane's commits (the integration branch
    after merge). It is a different commit from the measurement build's source commit.
-3. **Datasets** on each box: `sh tools/dataset_store.sh stage "<ssh flags+target>" gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz gbm-bench/istella/istella_rank.npz gbm-bench/higgs/higgs_speed.npz`
-   (the rank rows need `istella_rank`; without it both installs refuse; the 2026-11-12 run lost 86 of 174 smoke races
-   because `higgs` was missing: half the smoke shards refused on it).
+3. **Datasets** on each box: the stage step stages them. It asks `tools/measure_owed.py data-keys` (the board's own
+   `data_needs` over the paper recipes and the owed rows; today taxi_speed, istella_speed, istella_rank and
+   higgs_speed) and runs `tools/dataset_store.sh stage` with the pins of the measurement build's full source tree
+   (`<work dir>/source/<commit12>/bench/results/dataset_store/manifest.tsv`; `--source-tree` overrides). A file
+   already at its pins is kept. The job checks the same list after its plan and stops (exit 4) on a missing one
+   (2026-11-12: the first AMD submit died on a missing taxi; a missing higgs failed 86 of 174 smoke races).
 4. **B wheel sets** for the define A/Bs. Stage each with the A set: `--b-arm em-check-1=<B work dir>/<commit12>/linux/final@<SHA40>`
    (likewise `em-check-8`, `sgd-check-1`). The stage step reads each B set's own version from its `candidate.json`.
+   NAME must be one of the owed file's `b_arms` (em-check-1, svd-one-block, ...); the stage step refuses any
+   other name and lists the valid ones (2026-11-13: six sets staged as `svd1`, `gbdtoff`, ... were "not planned").
    `svd-one-block` is `-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK` (label `svd1`): B routes PCA / TSVD / randomized-svd through `svd_op_tall`. Rows without a staged set report
    `B-NOT-RUN`.
 5. **The ours-only venv** gets our wheels, `scikit-learn` (the trees opponent pin, 1.7.2), and `pandas` and
@@ -89,6 +94,14 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
    names one.
 
 ## 1. Submit commands (orchestrator; boxes already up)
+
+Bring up ONE NVIDIA pod: `MOJOLEARN_ORCHESTRATOR=1 bash tools/nvidia_central.sh up --pods 1` (one is also the
+default now; the old default of two rented an unused second L40S on 2026-11-12).
+
+Before copying, the stage step checks free disk on `/root`: at least 40 GB (`--min-free-gb`), or the largest results
+dir already under the tree's `box-out/` plus 20 GB. It prints what can be pruned (earlier results dirs, once their
+bytes are home; `box_persist_run.sh` staging tarballs; other candidates' `/root/pc-in` sets; smoke caches `c2..`)
+and refuses below the need unless `--allow-low-disk` (the 80 GB L40S pod filled twice on 2026-11-13).
 
 NVIDIA (lane tree `/root/mojolearn-measure`; the stage step syncs it from `--tree`):
 ```
@@ -126,14 +139,16 @@ the timed board took 3405 s for 62 races, about 55 s per race.
 |---|---|---|---|---|
 | plan | CPU | one process, seconds | < 1 min | - |
 | install | CPU (+1 GPU set load per arm) | every arm at once + the dry run | 3-6 min | ~1 GB per arm venv (candidate, prior, each B) under `/root/pc-cache` |
-| smoke | one GPU, not timed | min(nproc/4, MemAvailable/12 GB, 8, races) shards on ONE venv | 10-15 min | data blocks per shard cache, ~1-2 GB each |
+| smoke | one GPU, not timed; host-bound (2000-row races: worker start, import, data read) | min(nproc/2, MemAvailable/12 GB, NVIDIA GPU GB/3, 16, races) shards on ONE venv | 10-15 min | data blocks per shard cache, ~1-2 GB each; work/, evidence/ and caches c2.. deleted after the phase |
 | board (paper + owed measurement-build full rows, ~62 + ~90 races) | one GPU, timed | serial by nature, nothing else on the box | 2.5 h | results ~1.5 GB |
 | owed: B arms and neighbour rows (~30 races) | one GPU, timed | serial | 30-40 min | ~0.3 GB |
 | owed: prior 0.8.66 (~80 races) | one GPU, timed | serial | 1.2-1.5 h | ~1 GB |
 | drivers | one GPU, timed | serial | 5-10 min | - |
 | compare + report | CPU | seconds | < 1 min | - |
 
-Total: about 5 h per box. Budget 20 GB of free disk. The 0.8.66 smoke made a 13 GB venv per shard because it
+Total: about 5 h per box. Budget 40 GB of free disk (the stage step checks it; the 2026-11-13 NVIDIA run wrote
+14 GB of board evidence). A results dir over the 4 GB persist cap is tarred once without its largest files, chosen
+from their sizes before the tar (`PERSIST_TRUNCATED.txt` names them); fetch those from the box before it goes. The 0.8.66 smoke made a 13 GB venv per shard because it
 installed the opponent stack. An ours-only run installs our wheels, scikit-learn and pandas once per arm.
 
 Busy cores: `job/cores.log` samples every 60 s and `job/job.log` gets a `BUSY` line every 5 minutes. Install and
