@@ -644,10 +644,7 @@
    "decides": "the stack program (B) replaces the restored resident forward (A) as the stateless SambaStack.forward only if at least as fast on NVIDIA and AMD (average of the two vendors' ratios) with logits quality equal; the arms' attention layers both run forward_only=True, so digests may differ only by the program's options-constructor weights; read the model's _samba_forward_route ('resident' / 'program') to prove which arm ran",
    "id": "restore-samba-resident-forward",
    "kind": "ab",
-   "lane": [
-    "samba-forward",
-    "samba-infer"
-   ],
+   "lane": "samba-forward",
    "rows": "full",
    "source": "restore-samba-resident-forward (2026-11-13): samba_resident_forward (IDN_SAMBA_RESIDENT_STEP PROMOTED samba-forward NV 12.0 -> 5.3, AMD 8.8 -> 5.8 ms; 0.8.55 paper NV 4.60 / AMD 6.10 ms) restored from 5b5490960d after lane x6 (d38aa3ba43, 2f8537c34b) deleted it unmeasured; candidate 4c2340386abc program NV 10.54 / MI325X 8.36 ms"
   }
