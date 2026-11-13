@@ -14,7 +14,7 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_contains
 from bindings.native_array_snapshot_door import native_array_slots, native_array_snapshot
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros, native_scratch_bytes, native_scratch_address
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_foreign
 from core.weight_epoch import weight_epoch_bump
@@ -177,6 +177,62 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
     _generation_slot_set(slots, result, "_pin", PythonObject(None))
     _generation_slot_set(slots, result, "_mv", py_call(g[].bi.memoryview, store))
     _generation_slot_set(slots, result, "_addr", store.buffer_info()[0])
+    _generation_slot_set(slots, result, "_readonly", PythonObject(False))
+    _generation_slot_set(slots, result, "shape", shape)
+    _generation_slot_set(slots, result, "dtype", PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
+    _generation_slot_set(slots, result, "ndim", PythonObject(len(dims)))
+    _generation_slot_set(slots, result, "size", PythonObject(n))
+    _generation_slot_set(slots, result, "nbytes", PythonObject(n * itemsize))
+    _generation_slot_set(slots, result, "itemsize", PythonObject(itemsize))
+    _generation_slot_set(slots, result, "order", PythonObject("C"))
+    _generation_slot_set(slots, result, "strides", strides)
+    return result
+
+
+def generation_array_unfilled(dims: List[Int], code: String = "f") raises -> PythonObject:
+    """`generation_array` over UNINITIALIZED storage, for an output that one
+    native call overwrites element by element before anything reads it (lane
+    fix-mamba3-unfilled-arrays, 2026-11-13: the Mamba-3 forward's y and four
+    reports were zero-filled per call where 0.8.55 left them unfilled). The
+    store is an uninitialized bytearray (`native_scratch_bytes`, no fill
+    pass) and `_mv` is its memoryview cast to `code`: the same field shape
+    `Array.from_buffer(bytearray)` produces, which the snapshot admission
+    (bindings/native_array_snapshot_door.mojo) already accepts. The `_mv`
+    export pins the bytearray against resizing for the Array's lifetime.
+    Never use it for a buffer a kernel reads, accumulates into or writes
+    only in part: those keep `generation_array`'s zeros."""
+    var n = 1
+    for i in range(len(dims)):  # small-loop(array shape dimension words)
+        if dims[i] < 0 or (dims[i] != 0 and n > 2147483647 // dims[i]):
+            raise Error("generation: invalid shape or signed 32-bit kernel indexing overflow")
+        n *= dims[i]
+    if n == 0:
+        # Nothing to fill: the zero-length store costs no fill pass.
+        return generation_array(dims, code)
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if g[].array_cls is None:
+        raise Error("RuntimeError: generation requires its import-time Array connection")
+    var slots = _generation_slots()
+    if code != "f" and code != "i" and code != "b":
+        raise Error("generation: unsupported native allocation dtype")
+    var itemsize = 1 if code == "b" else 4
+    var store = native_scratch_bytes(n * itemsize)
+    var address = native_scratch_address(store)
+    var view = py_call(py_call(g[].bi.memoryview, store).cast, PythonObject(code))
+    var result = py_call(g[].bi.object.__new__, g[].array_cls)
+    var stride_words = List[Int](length=len(dims), fill=0)
+    var stride = itemsize
+    for i in range(len(dims)):  # small-loop(array shape dimension words)
+        var axis = len(dims) - i - 1
+        stride_words[axis] = stride
+        stride *= dims[axis]
+    var shape = py_call(g[].bi.tuple, py_ints(dims))
+    var strides = py_call(g[].bi.tuple, py_ints(stride_words))
+    _generation_slot_set(slots, result, "_store", store)
+    _generation_slot_set(slots, result, "_base", PythonObject(None))
+    _generation_slot_set(slots, result, "_pin", PythonObject(None))
+    _generation_slot_set(slots, result, "_mv", view)
+    _generation_slot_set(slots, result, "_addr", PythonObject(address))
     _generation_slot_set(slots, result, "_readonly", PythonObject(False))
     _generation_slot_set(slots, result, "shape", shape)
     _generation_slot_set(slots, result, "dtype", PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
