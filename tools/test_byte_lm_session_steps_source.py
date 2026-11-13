@@ -21,8 +21,9 @@ def test_train_steps_has_one_native_frontdoor():
 
 def test_both_columns_take_n_steps_through_operation_1():
     # lane x7-byte-lm-on-executor: operation 12 is gone on both columns;
-    # operation 1 takes the step count (p[14]) and the device runs the steps
-    # as ONE Program.fit on the trainer's program.
+    # operation 1 takes the step count (p[14]). The device runs the steps as
+    # k restored hand steps in one native call (default since 2026-11-13) or,
+    # under -D MOJOLEARN_BYTE_LM_PROGRAM_STEP, as ONE Program.fit.
     device = _read('training/byte_lm_native_dispatch.mojo')
     assert 'BYTE_LM_NATIVE_OPERATION_COUNT = 13' in device
     assert 'byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1, max(1, p[14]))' in device
@@ -39,8 +40,13 @@ def test_both_columns_take_n_steps_through_operation_1():
     run = ops.split('def byte_session_steps_run(')[1].split('def byte_owner_step(')[0]
     assert 'byte_train_steps_resident(' in run
     lm = _read('training/byte_lm.mojo')
-    steps = lm.split('def byte_steps_device(')[1].split('def _byte_step_device(')[0]
-    assert 'byte_program_fit(' in steps
+    steps = lm.split('def byte_train_steps_resident(')[1].split('def byte_rollback(')[0]
+    assert 'comptime if BYTE_LM_PROGRAM_STEP:' in steps and '_byte_program_steps(' in steps
+    # the hand arm: one hand step per batch, the call's entry state restored on a refusal
+    assert 'byte_train_step_resident(' in steps and '# driver-loop: over the call\'s training steps' in steps
+    assert 'trainer.completed_steps = call_step' in steps
+    program_steps = lm.split('def _byte_program_steps(')[1].split('def _byte_program_gradient(')[0]
+    assert 'byte_program_fit(' in program_steps
     program = _read('training/byte_lm_program.mojo')
     assert 'train_program_control(' in program
 
