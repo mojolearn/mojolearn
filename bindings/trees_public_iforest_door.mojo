@@ -36,6 +36,7 @@ from bindings.trees_public_inputs_door import (
     trees_builtins, trees_table, trees_entry, trees_address, trees_call,
 )
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view
+from bindings.admitted_family_door import admitted_array as family_uninit_array
 from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 # TOMBSTONE: trees_f32 / trees_all_finite / TreesMatrix / trees_vector / trees_empty uses and _copied (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -214,7 +215,15 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     `max_samples_` read back. Returns the float32 scores or int32 labels."""
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
-    var values = PythonObject(None) if want == _WANT_PREDICT else admitted_vector(n_query, "<f4", context)
+    # Lane perf-iforest (2026-11-13): the score vector is uninitialised
+    # storage (admitted_family_door.admitted_array): `iforest_run` writes all
+    # n_query words for want 0 and 1, so the zero fill (native_array_zeros)
+    # was one more pass per scoring call. Record measurement of candidate
+    # 4c2340386abc against 0.8.55, taxi score_samples (ms): NVIDIA L40S
+    # 3.27 -> 5.32 (test) and 5.61 -> 8.63 (large), AMD MI325X 2.91 -> 3.56.
+    # Bits unchanged (the kernel's words, read as before).
+    var values = PythonObject(None) if want == _WANT_PREDICT else family_uninit_array(
+        Python.tuple(n_query), "<f4", context)
     var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
     var probe = trees_entry(svm, "iforest_resident")
     var resident = probe is not None and Int(py=py_call_typed(probe)) == 1
