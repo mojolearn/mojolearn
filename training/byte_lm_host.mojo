@@ -41,11 +41,12 @@ leaf, so the reversal changes the fold and nothing else. It is the gate's
 negative control: a build with it defined must fail the loss comparison, or
 the comparison is not reaching the arithmetic. The threaded path reverses the
 fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
-That reversal reaches the inference head (logits, next bytes) only; the
-training loss runs the trainer's program on a host session, where the same
-define scales every training logit by 1 + 2^-20
-(training/byte_lm_program.mojo, BYTE_LM_HOST_SABOTAGE), so the loss
-comparison fails under it too (lane m2-neural-leftovers, 2026-11-09).
+The default training loss (`byte_host_loss`, restored 2026-11-13) runs the
+same head (gemm_oracle or gemm_nt_rows), so the reversal reaches it too.
+Under -D MOJOLEARN_BYTE_LM_PROGRAM_STEP the training loss runs the trainer's
+program on a host session, where the same define scales every training logit
+by 1 + 2^-20 (training/byte_lm_program.mojo, BYTE_LM_HOST_SABOTAGE), so the
+loss comparison fails under it too (lane m2-neural-leftovers, 2026-11-09).
 """
 
 from std.math import max, min
