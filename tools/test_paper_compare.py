@@ -332,6 +332,15 @@ class JobScript(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
         self.assertIn("box_persist_run.sh", p.stderr)
 
+    def test_datasets_from_data_keys_and_smoke_scratch_pruned(self):
+        # 2026-11-12/13: a hand-written dataset list missed higgs; smoke scratch and staging tarballs filled the pod
+        with open(self.JOB) as fh:
+            text = fh.read()
+        self.assertIn("measure_owed.py data-keys", text)
+        self.assertNotIn("for f in taxi/taxi_speed.npz", text)
+        self.assertIn('rm -rf "${d}work" "${d}evidence"', text)
+        self.assertIn("prune_persist_staging", text)
+
 
 if __name__ == "__main__":
     unittest.main()
