@@ -1021,19 +1021,23 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
                 var text = String(step[5]).replace("{want}", _archive_builtin_repr(wanted))
                 text = text.replace("{dtype}", parts[0]).replace("{shape}", _archive_builtin_repr(got))
                 _schema_fail(step[4], PythonObject(text), name)
+        elif kind == "iforest_fitted":
+            # IsolationForest.save on an unfitted estimator: it holds neither
+            # a training matrix nor a saved forest. `step`: (kind, refusal
+            # class, refusal text).
+            if not _schema_has(fields, PythonObject("_x")) and not _schema_has(fields, PythonObject("_if_forest")):
+                _schema_fail(step[1], step[2], name)
         elif kind == "iforest_forest":
             # IsolationForest.save (lane fix-iforest-save-device-forest,
             # format mojolearn-iforest-2): the fitted forest itself, read
             # from the resident forest the scores use (the device's node
             # arrays, or the CPU column's oracle trees), in place of the
             # training matrix, which a resident fit borrows from the caller.
-            # `step`: (kind, refusal class, refusal text) for an unfitted
-            # estimator. The export resolves the knobs of an instance
-            # assembled without fit or load (`_validate_params()`, the
-            # former `iforest_knobs` step) through the tree owner's tables,
-            # connected with the schema as `iforest_trees_context`.
-            if not _schema_has(fields, PythonObject("_x")) and not _schema_has(fields, PythonObject("_if_forest")):
-                _schema_fail(step[1], step[2], name)
+            # The export resolves the knobs of an instance assembled without
+            # fit or load (`_validate_params()`, the former `iforest_knobs`
+            # step) through the tree owner's tables, connected with the
+            # schema as `iforest_trees_context`. It runs before the `ints`
+            # and `reals` steps, which read the resolved knobs.
             var forest = iforest_export_forest(model, context["host_archive_context"]["iforest_trees_context"])
             var members = Python.tuple("tree_offsets", "node_feature", "node_threshold", "node_left", "node_right")
             for j in range(5):  # driver-loop: over the five fixed forest members

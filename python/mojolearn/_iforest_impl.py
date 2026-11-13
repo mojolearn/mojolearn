@@ -54,6 +54,14 @@ from ._mode import NumericModeMixin
 _IFOREST_FORMAT = "mojolearn-iforest-1"
 _IFOREST_INTS = 11
 _IFOREST_REALS = 4
+#: Lane fix-iforest-save-device-forest (2026-11-13): `IsolationForest.save`
+#: writes the fitted forest, not the training matrix: the same `ints` and
+#: `reals`, then `tree_offsets` `<i4` (n_estimators + 1), `node_feature`
+#: `<i4`, `node_threshold` `<f4`, `node_left` `<i4`, `node_right` `<i4`
+#: (isolation_forest/forest_io.mojo). A fit on a resident binary borrows the
+#: caller's X, so a saved X was whatever the caller had written into it
+#: since. `load` reads this format and the training-matrix format above.
+_IFOREST_FORMAT_FOREST = "mojolearn-iforest-2"
 
 # The compiled owners, connected once at import: `fit`, `score_samples`,
 # `decision_function`, `predict` and `fit_predict` are one call each into the
@@ -180,8 +188,9 @@ class IsolationForest(NumericModeMixin):
         self.output_type = output_type
 
     def __getstate__(self):
-        # The token names a forest in THIS process's binding; a copy or an
-        # unpickled estimator fits its own on its first scoring call.
+        # The fitted forest, not the training matrix; the token names a
+        # forest in THIS process's binding, so a copy or an unpickled
+        # estimator uploads its forest on its first scoring call.
         return _TREES(self, "trees_iforest_getstate", (), _TREES_CONTEXT)
 
     # sk-edges: no `sample_weight` parameter. The forest builder
@@ -241,8 +250,8 @@ class IsolationForest(NumericModeMixin):
     def save(self, path):
         """Write the fitted model to `path` as an npz file.
 
-        The file holds the training matrix and the resolved parameters the
-        forest is built from, so it is as large as the training data.
+        The file holds the fitted trees and the resolved parameters. A
+        loaded model scores exactly as this one does.
         """
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
@@ -257,22 +266,21 @@ class IsolationForest(NumericModeMixin):
 
 
 # `save` and `load` are one native call each (bindings/archive_schema_native_door.mojo
-# writes this schema, the members, dtypes and order of the 0.8.55 Python
-# `save`; bindings/host_archive_native_door.mojo `host_archive_public_iforest`
+# writes this schema: the 0.8.55 members with the fitted forest in place of
+# `x`, lane fix-iforest-save-device-forest; bindings/host_archive_native_door.mojo `host_archive_public_iforest`
 # builds the loaded model with the Python loader's refusals, the saved knobs
 # checked again by the native `_validate_params`).
-_native_archive_bridge.register(IsolationForest, _IFOREST_FORMAT, (
-    ("need", "_x", "RuntimeError", "this estimator is not fitted yet"),
-    ("iforest_knobs",),
-    ("format", "format", _IFOREST_FORMAT),
+_native_archive_bridge.register(IsolationForest, (_IFOREST_FORMAT_FOREST, _IFOREST_FORMAT), (
+    ("iforest_fitted", "RuntimeError", "this estimator is not fitted yet"),
+    ("format", "format", _IFOREST_FORMAT_FOREST),
     ("estimator", "estimator"),
     ("mode", "numeric_mode", "mojolearn: "),
-    ("array", "x", "_x"),
+    ("iforest_forest",),
     ("i8", "ints", (("int", "_n_estimators"), ("int", "_max_samples_mode"), ("int", "_max_samples_int"),
                     ("int", "_max_depth"), ("int", "_max_features_mode"), ("int", "_max_features_int"),
                     ("bool", "_bootstrap"), ("int", "_seed"), ("bool", "_contamination_auto"),
                     ("int", "n_features_in_"), ("int", "max_samples_"))),
     ("f8", "reals", (("float", "_max_samples_frac"), ("float", "_max_features_frac"),
                      ("float", "_contamination"), ("float", "offset_"))),
-), trees_integral_type=numbers.Integral, trees_missing=object())
+), trees_integral_type=numbers.Integral, trees_missing=object(), iforest_trees_context=_TREES_CONTEXT)
 _native_trees_bridge.register(IsolationForest, "iforest")
