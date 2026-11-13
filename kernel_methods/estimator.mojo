@@ -1020,12 +1020,14 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         )
         trace.record_device(ctx, "krr.weighted", dk, cells)
 
-    # The ridge, the factor and the solve enqueued read-free (lane
-    # n8-gp-krr-smo, the executor's Cholesky ops); `info` comes home with
-    # the dual coefficients and a failed factor raises after that one drain
-    # (before: a drain inside the factor for `info`, then the download's).
-    # The identity-trace route and a multi-GPU plan keep `kernel_ridge_solve`'s
-    # `potrf_lower` (its records; the trailing rows across owners).
+    # Under -D MOJOLEARN_IDN_CHOL_OPS_FIT the ridge, the factor and the
+    # solve are enqueued read-free (lane n8-gp-krr-smo, the executor's
+    # Cholesky ops); `info` comes home with the dual coefficients and a
+    # failed factor raises after that one drain. The default, the
+    # identity-trace route and a multi-GPU plan keep `kernel_ridge_solve`'s
+    # `potrf_lower` (one drain inside the factor for `info`, then the
+    # download's): the measured 0.8.66 route (cholesky/chol_ops.mojo
+    # CHOL_OPS_FIT, lane fable-perf-classical-0855).
     var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
     var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
     if not kernel_ridge_ops_route(trace):

@@ -44,6 +44,7 @@ factor's A/B). The log-determinant is `enqueue_logdet`'s fold
 (cholesky/logdet_fold.mojo) with a guarded store; host twin:
 `CholHostFactor.logdet`.
 """
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_idx, thread_idx
 
@@ -74,6 +75,27 @@ from core.step_gate import StepI32, step_fail_joins_loop
 
 #: The info word of an op whose loop was already done (nothing ran).
 comptime CHOL_OP_GATED = Int32(-1)
+
+#: The one-factor fits' route (lane fable-perf-classical-0855, 2026-11-13).
+#: `-D MOJOLEARN_IDN_CHOL_OPS_FIT` runs KernelRidge's and
+#: GaussianProcessRegressor's factor + solve on these ops (lane n8-gp-krr-smo,
+#: 2026-11-09: read-free, one drain per fit); absent, the fits keep the
+#: measured 0.8.66 route (`potrf_lower` with its one info read, then
+#: `cho_solve`), the same kernels in the same order plus that one drain.
+#: The ops went in without an NVIDIA + AMD measurement; the first one
+#: (candidate 4c2340386abc vs 0.8.66 on the same MI325X, 2026-11-13,
+#: ~/mojolearn-evidence/measure-candidate/amd-owed-4c2340386abc) is AMD
+#: kernel-ridge istella 1642 -> 2050 ms (1.25x), taxi 1651 -> 2001 (1.21x),
+#: gpr taxi 167 -> 197 (1.18x), istella 182 -> 207 (1.14x), gpc taxi
+#: 959 -> 1160 (1.21x), istella 1442 -> 1728 (1.20x); NVIDIA L40S
+#: kernel-ridge 533 -> 530 (same). The sources of every launch are the
+#: same between the two routes except the solves' guarded twins
+#: (trsm_*_guarded_kernel) and the toolchain (Mojo 1.0 -> 1.2.0), so the
+#: A/B of this define on AMD is what settles it (AGENTS.md "A measured
+#: winner is never deleted on reasoning"). The GPC Newton loop runs only on
+#: the ops (gaussian_process/gpc_newton.mojo); its old host loop is
+#: recoverable at 24c4eed3a5^ should the A/B blame the ops.
+comptime CHOL_OPS_FIT = is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"]()
 
 comptime _F32 = MutPointer[Float32, MutAnyOrigin]
 
