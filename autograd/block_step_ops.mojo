@@ -1074,28 +1074,32 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     else:
         stages = _m3_call_stages(ctx, blk, b, l, dims)
     var report_n = m3_report_floats(b, dm)
-<<<<<<< HEAD
     var held_x = Optional[DeviceBuffer[DType.float32]]()
-    if l == 1:
-        _d2d(ctx, blk.dx, x, n)
-        mamba3_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, trace, String("ops.step"))
-        _d2d(ctx, y, stages.residual_out, n)
+    comptime if _MAMBA_X_IN_PLACE:
+        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+        mamba3_block_forward(ctx, stages, blk.st, blk.w, x, b, l, trace, String("ops.step"))
+        _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
     else:
-        var dx: DeviceBuffer[DType.float32]
-        if kept_x:
-            dx = kept_x.take()
-        elif hold:
-            # overwritten whole by the copy below, so no zero fill
-            dx = ctx.enqueue_create_buffer[DType.float32](n)
+        if l == 1:
+            _d2d(ctx, blk.dx, x, n)
+            mamba3_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
         else:
-            dx = mamba_zeros(ctx, n)
-        _d2d(ctx, dx, x, n)
-        mamba3_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
-        _d2d(ctx, y, stages.residual_out, n)
-        if hold:
-            held_x = dx^
-        else:
-            sc.parked_x.append(dx^)
+            var dx: DeviceBuffer[DType.float32]
+            if kept_x:
+                dx = kept_x.take()
+            elif hold:
+                # overwritten whole by the copy below, so no zero fill
+                dx = ctx.enqueue_create_buffer[DType.float32](n)
+            else:
+                dx = mamba_zeros(ctx, n)
+            _d2d(ctx, dx, x, n)
+            mamba3_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
+            if hold:
+                held_x = dx^
+            else:
+                sc.parked_x.append(dx^)
     # The four reports, unless the caller requests none for this run
     # (`sc.skip_reports`, IDN_MAMBA3_REPORTS_ON_REQUEST: the stateless Samba
     # forward reads none; the 0.8.55 resident forward copied none).
@@ -1107,27 +1111,6 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
         _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
         _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
         _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
-=======
-    comptime if _MAMBA_X_IN_PLACE:
-        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
-        mamba3_block_forward(ctx, stages, blk.st, blk.w, x, b, l, trace, String("ops.step"))
-        _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
-    else:
-        if l == 1:
-            _d2d(ctx, blk.dx, x, n)
-            mamba3_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, trace, String("ops.step"))
-            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
-        else:
-            var dx = mamba_zeros(ctx, n)
-            _d2d(ctx, dx, x, n)
-            mamba3_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
-            _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
-            sc.parked_x.append(dx^)
-    _d2d(ctx, blk.reports[0], stages.h_last, report_n[0])
-    _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
-    _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
-    _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
->>>>>>> origin/lane/restore-neural-call-paths
     var words: List[Int] = [blk.st.buf_len, 1 if blk.st.pending else 0]
     _write_words(ex, bufs[3], words)
     if hold:
