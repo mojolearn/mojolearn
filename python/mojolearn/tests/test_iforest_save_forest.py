@@ -95,3 +95,36 @@ def test_refit_of_a_loaded_forest_uses_the_new_data(tmp_path):
 def test_unfitted_save_is_refused(tmp_path):
     with pytest.raises(RuntimeError, match="not fitted"):
         IsolationForest().save(str(tmp_path / "never.npz"))
+
+
+def test_host_column_loads_scores_and_resaves_a_saved_forest(tmp_path):
+    # Save (mojolearn-iforest-2), load on the host column (HostIsolationForest,
+    # no training matrix), score: equal to the scores before the save. The
+    # loaded host model saves its forest again and that file scores the same.
+    from mojolearn import _classical_host as host
+    X, query = _data()
+    model = IsolationForest(n_estimators=8, max_samples=64, random_state=13, contamination=0.1).fit(X)
+    before = _scores(model, query)
+    _mutate(X)
+    path = tmp_path / "forest.npz"
+    model.save(str(path))
+    loaded = host.HostIsolationForest.load(str(path))
+    assert "_x" not in vars(loaded)
+    _assert_same(_scores(loaded, query), before)
+    again = tmp_path / "again.npz"
+    loaded.save(str(again))
+    with np.load(str(again)) as members:
+        assert str(members["format"]) == "mojolearn-iforest-2"
+        assert "x" not in members.files
+    _assert_same(_scores(host.HostIsolationForest.load(str(again)), query), before)
+
+
+def test_fitted_estimator_holds_its_forest_from_fit():
+    # The forest is read out at fit end, so save and pickle never refit from
+    # the (possibly edited) training matrix.
+    X, _ = _data()
+    model = IsolationForest(n_estimators=4, max_samples=32, random_state=2).fit(X)
+    forest = vars(model)["_if_forest"]
+    assert len(forest) == 5 and np.asarray(forest[0]).shape == (5,)
+    state = model.__getstate__()
+    assert "_x" not in state and state["_if_forest"] is forest
