@@ -68,6 +68,14 @@
   "chol-ops-fit": {
    "define": "MOJOLEARN_IDN_CHOL_OPS_FIT",
    "status": "define in code (cholesky/chol_ops.mojo:79): B = the N7/N8 Cholesky ops route for KernelRidge and GPR fits; A = potrf_lower + cho_solve (the 0.8.66 route, restored 2026-11-13 after AMD 1.14-1.25x)"
+  },
+  "rf-device-loop": {
+   "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP",
+   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo:1016 IDN_RF_DEVICE_LOOP): B = the device level loop (every sampling round enqueued per batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue level loop, K trees pipelined (0.8.25 route)"
+  },
+  "et-device-loop": {
+   "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP",
+   "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6921 ET_DEVICE_LOOP): B = the depth-wise device level loop (rescue enqueued every batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue merged-frontier loop (40286f2d28^ route)"
   }
  },
  "rows": [
@@ -631,6 +639,30 @@
     "autograd-optim"
    ],
    "decides": "the executor optimizer (B) becomes the one update only if at least as fast as the hand OP_OPT update on NVIDIA and AMD; digests must not move in either arm"
+  },
+  {
+   "id": "restore-rf-device-loop",
+   "source": "restore-rf-et-forest-loop (history audit hist-trees-neighbors-cluster row 1: RF fit istella NV 5,045 ms at 0.8.25 32b386409a -> 30,390 candidate, AMD 5,107 -> 44,680; taxi NV 5,798 -> 8,896, AMD 6,754 -> 16,370; same hash; host-queue level loop restored as default)",
+   "kind": "ab",
+   "lane": "rf",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "rf-device-loop"
+   ],
+   "decides": "keep the host-queue loop (A) unless the device loop (B) is at least as fast on the NVIDIA+AMD average of istella and taxi fit; output hashes 46ef5c27f84cf904 / a660fbfbad84ade8 must not move in either arm"
+  },
+  {
+   "id": "restore-et-device-loop",
+   "source": "restore-rf-et-forest-loop (history audit hist-trees-neighbors-cluster row 2: ET fit NV istella 3,763 -> 4,917 ms, taxi 2,520 -> 4,359, f4c126ae66 -> 4f2bd7e765, same hash; host-queue depth-wise loop restored as default)",
+   "kind": "ab",
+   "lane": "et",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "et-device-loop"
+   ],
+   "decides": "keep the host-queue loop (A) unless the device loop (B) is at least as fast on the NVIDIA+AMD average of istella and taxi fit; ET output hashes must not move in either arm"
   }
  ]
 }
