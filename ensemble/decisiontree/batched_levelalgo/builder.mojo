@@ -64,6 +64,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import (
     LOOP_HDR_WORDS,
     LOOP_H_CUR,
     LOOP_H_HEAD,
+    LOOP_H_NEXT,
     LOOP_H_NODES,
     LOOP_H_OVERFLOW,
     LOOP_H_TAIL,
@@ -1015,6 +1016,37 @@ comptime IDN_RF_FUSED_PARTITION = (
 # A/B lands neither arm is deleted.
 comptime IDN_RF_DEVICE_LOOP = is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP"]()
 
+# THIRD FORM (lane fix-rf-et-device-loop-early-exit, 2026-11-13): the device
+# loop that EARLY-EXITS like the host queue. `-D
+# MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` (default off; the host queue above
+# stays the default, the plain device loop stays the B arm). It decides
+# whether the device queue (same kernels, same node ids, same queue order,
+# same retry sets as `IDN_RF_DEVICE_LOOP`) may stop a batch's sampling rounds
+# at the first round with nothing to retry. Per round r >= 1 the retry
+# compaction (`launch_loop_retry_next`) writes the round's count into
+# `LOOP_H_NEXT`; the host reads that ONE 4-byte word back and, when it is
+# zero, skips the rest of the batch's rounds (each would be inert: its search
+# runs over dummies, its merge writes nothing, and `loop_retry_finish` then
+# overwrites every split slot from the batch's final splits). At a batch
+# boundary the batch's tail (finish, re-pop, finalize, partition, push) and
+# the NEXT batch's head (pop, round 0, merge, round 1's compaction) are
+# enqueued together and the 16-word header (which carries `LOOP_H_NEXT`) is
+# read once, so a batch costs one drain per round it actually runs; a batch
+# enqueued after the queue emptied is inert end to end, as in the device
+# loop. A tree with one sampling round (`max_sampling_rounds_for == 1`) has
+# nothing to exit early from and runs the device loop's `LOOP_K` batches per
+# drain unchanged. SAME BITS as `IDN_RF_DEVICE_LOOP` and the host queue: the
+# rounds skipped are exactly the inert ones. Owed A/B: row
+# `rf-device-loop-early-exit` in bench/results/paper_compare/
+# owed-pre0867.json (RUN OWED, NVIDIA + AMD, istella + taxi, fit). Wins over
+# both arms -> promote and retire the plain device loop; loses -> delete.
+comptime IDN_RF_DEVICE_LOOP_EARLY_EXIT = is_defined[
+    "MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT"
+]()
+# Either device-loop form: the device tables are sized and `begin_tree`
+# takes the device route.
+comptime RF_DEVICE_QUEUE = IDN_RF_DEVICE_LOOP or IDN_RF_DEVICE_LOOP_EARLY_EXIT
+
 # The level loop's control plane ON THE DEVICE (fam2-forests' candidate
 # `IDN_RF_DEVICE_LOOP`; the only GPU route from cpu4-forest, 2026-10-04, to
 # 2026-11-13, now the B arm above, in IDENTICAL and FAST). The queue
@@ -1491,6 +1523,19 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var loop_batch: Int
     # the tree in flight runs on the device queue
     var loop_active: Bool
+    # `IDN_RF_DEVICE_LOOP_EARLY_EXIT` only: the sampling round whose retry
+    # count (`LOOP_H_NEXT`) the next drain reads (>= 1), whether that drain
+    # read the whole header (a batch boundary) or the one count word, and
+    # the device / pinned views of that word
+    var loop_round: Int
+    var loop_hdr_fresh: Bool
+    # CHECK HOOK: True makes `begin_tree` take the host queue even when a
+    # device-loop form is compiled in, so one binary can grow the same tree
+    # both ways (`checks/native_tests/rf_device_loop_early_exit_gpu_suite`).
+    # Product code never sets it.
+    var force_host_queue: Bool
+    var loop_next_d: DeviceBuffer[DType.int32]
+    var loop_next_h: HostBuffer[DType.int32]
     # Tree op TREE_OP_FOREST_FINISH (lane t1b-tree-leaf-and-node-ops,
     # gbdt/tree_ops.mojo): a device-loop tree's finish is ENQUEUED only -- node table to
     # `SparseTreeNode`s, leaf pass, the two downloads -- and its host model
@@ -1782,6 +1827,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.loop_cap = 0
         self.loop_batch = 0
         self.loop_active = False
+        self.loop_round = 0
+        self.loop_hdr_fresh = False
+        self.force_host_queue = False
         self.tree_tag = -1
         self.pending_nodes = 0
         self.pending_out = 0
@@ -1816,15 +1864,21 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # The tables are sized to the node bound only under the device-loop
         # B arm; the default host queue never reads them (one-entry stubs,
         # `loop_cap` 0, so `begin_tree` never takes the device route).
-        comptime if not IDN_RF_DEVICE_LOOP:
+        comptime if not RF_DEVICE_QUEUE:
             cap = 1
-        if n_sampled_rows > 0 and IDN_RF_DEVICE_LOOP:
+        if n_sampled_rows > 0 and RF_DEVICE_QUEUE:
             self.loop_cap = cap
         self.loop_hdr = ctx.enqueue_create_buffer[DType.int32](
             LOOP_HDR_WORDS
         )
         self.loop_h_hdr = ctx.enqueue_create_host_buffer[DType.int32](
             LOOP_HDR_WORDS
+        )
+        self.loop_next_d = self.loop_hdr.create_sub_buffer[DType.int32](
+            LOOP_H_NEXT, 1
+        )
+        self.loop_next_h = self.loop_h_hdr.create_sub_buffer[DType.int32](
+            LOOP_H_NEXT, 1
         )
         self.loop_queue = ctx.enqueue_create_buffer[DType.int32](
             cap * LOOP_QUEUE_INTS
@@ -1850,7 +1904,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             n_cols, self.original_n_sampled_cols
         ) > 1
         var retry_slots = max_batch if (
-            multi_round and IDN_RF_DEVICE_LOOP
+            multi_round and RF_DEVICE_QUEUE
         ) else 1
         self.loop_retry = ctx.enqueue_create_buffer[DType.int32](
             loop_retry_words(retry_slots)
@@ -3234,13 +3288,159 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
              again at partition granularity (`TPB_DEFAULT`: the pop does
              not move the head, so items and map are rebuilt as they were),
              finalize, partition, push."""
-        var max_batch = Int(self.params.max_batch_size)
         var max_rounds = max_sampling_rounds_for(
             self.n_cols, self.original_n_sampled_cols
         )
-        var ds_split = dataset.copy()
-        ds_split.n_sampled_cols = Int32(self.original_n_sampled_cols)
+        for _ in range(LOOP_K):  # driver-loop: over batches per drain
+            self._loop_batch_head(ctx)
+            for r in range(max_rounds):  # driver-loop: over sampling rounds
+                if r > 0:
+                    self._loop_retry_next(ctx, r)
+                self._loop_round(
+                    ctx, dataset, quantiles, smem_config, instr, r, max_rounds
+                )
+            self._loop_batch_tail(ctx, dataset, max_rounds)
+        log_launch_ctx(ctx, "xfer_loop_header")
+        ctx.enqueue_copy(dst_buf=self.loop_h_hdr, src_buf=self.loop_hdr)
+
+    def _ee_multi_round(self) -> Bool:
+        """The early-exit form applies: more than one sampling round."""
+        return max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        ) > 1
+
+    def _loop_n_bound(self) -> Int:
+        """Batch `loop_batch`'s proven item bound, `min(max_batch_size, 2^b)`
+        (the queue at most doubles per batch)."""
+        var max_batch = Int(self.params.max_batch_size)
+        var b = self.loop_batch
+        var n_bound = max_batch
+        if b < 30 and (1 << b) < max_batch:
+            n_bound = 1 << b
+        return n_bound
+
+    def _loop_blocks_bound(self, n_bound: Int) -> Int:
+        """The block map's proven bound for a batch of `n_bound` items."""
+        return 1 + n_bound + self.n_sampled_rows // TPB_DEFAULT
+
+    def _loop_batch_head(mut self, ctx: DeviceContext) raises:
+        """Step 1 of a device-loop batch: pop at histogram granularity
+        (`HIST_WORKLOAD_GRANULARITY`) and build the histogram's block map."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
+        self.cur_wl_rel = calculate_aligned_bytes(
+            n_bound * size_of[NodeWorkItem]()
+        )
+        var hist_scale = self.hist_task_rows // TPB_DEFAULT
+        launch_loop_pop(
+            ctx,
+            self.loop_hdr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self.loop_queue.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            self._work_items_ptr(),
+            self._workload_ptr(),
+            self.loop_scan.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            max_batch,
+            n_bound,
+            blocks_bound,
+            self.hist_task_rows,
+            hist_scale,
+        )
+
+    def _loop_retry_next(mut self, ctx: DeviceContext, r: Int) raises:
+        """Sampling round `r >= 1`'s retry set: the nodes of round `r - 1`
+        still without a split (and not pure), compacted in batch order into
+        round `r`'s items and map; the count lands in `LOOP_H_NEXT`."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
+        var hist_scale = self.hist_task_rows // TPB_DEFAULT
+        launch_loop_retry_next[Self.O.DataT, RETRY_PURE_NODES](
+            ctx,
+            self.loop_hdr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self._splits_ptr(),
+            self._work_items_ptr(),
+            self._workload_ptr(),
+            self.loop_items_s.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[NodeWorkItem](),
+            self.loop_retry.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            self.loop_scan.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            max_batch,
+            n_bound,
+            blocks_bound,
+            self.hist_task_rows,
+            hist_scale,
+            r == 1,
+        )
+
+    def _loop_round(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
+        r: Int,
+        max_rounds: Int,
+    ) raises:
+        """Sampling round `r`'s split search over its column window, then
+        (more than one round) the merge of its candidates into the batch's
+        final splits at their original slots."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
         var no_items = List[NodeWorkItem]()
+        var n_sampled_cols = sampled_cols_in_round(
+            self.n_cols, self.original_n_sampled_cols, r
+        )
+        var ds_round = dataset.copy()
+        ds_round.n_sampled_cols = Int32(n_sampled_cols)
+        self.enqueue_best_splits(
+            ctx, ds_round, quantiles, no_items,
+            r * self.original_n_sampled_cols, n_sampled_cols,
+            smem_config, instr, String(""),
+            dev_n=n_bound, dev_blocks=blocks_bound,
+        )
+        if max_rounds > 1:
+            launch_loop_retry_merge[Self.O.DataT, RETRY_PURE_NODES](
+                ctx,
+                self.loop_hdr.unsafe_ptr().unsafe_origin_cast[
+                    MutUntrackedOrigin
+                ](),
+                self._splits_ptr(),
+                self.loop_final.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin]()
+                .unsafe_bitcast[Split[Self.O.DataT]](),
+                self.loop_retry.unsafe_ptr().unsafe_origin_cast[
+                    MutUntrackedOrigin
+                ](),
+                max_batch,
+                n_bound,
+                r == 0,
+            )
+
+    def _loop_batch_tail(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        max_rounds: Int,
+    ) raises:
+        """Step 3 of a device-loop batch: the batch's answer back into the
+        split slots, the re-pop at partition granularity (`TPB_DEFAULT`; the
+        pop does not move the head, so items and map are rebuilt as they
+        were), finalize, partition, push. Advances `loop_batch`."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
         var hdrp = self.loop_hdr.unsafe_ptr().unsafe_origin_cast[
             MutUntrackedOrigin
         ]()
@@ -3250,150 +3450,167 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var scanp = self.loop_scan.unsafe_ptr().unsafe_origin_cast[
             MutUntrackedOrigin
         ]()
-        var retryp = self.loop_retry.unsafe_ptr().unsafe_origin_cast[
-            MutUntrackedOrigin
-        ]()
-        var items_sp = (
-            self.loop_items_s.unsafe_ptr()
-            .unsafe_origin_cast[MutUntrackedOrigin]()
-            .unsafe_bitcast[NodeWorkItem]()
+        var ds_split = dataset.copy()
+        ds_split.n_sampled_cols = Int32(self.original_n_sampled_cols)
+        if max_rounds > 1:
+            launch_loop_retry_finish[Self.O.DataT](
+                ctx,
+                self._splits_ptr(),
+                self.loop_final.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin]()
+                .unsafe_bitcast[Split[Self.O.DataT]](),
+                n_bound,
+            )
+        launch_loop_pop(
+            ctx,
+            hdrp,
+            queuep,
+            self._work_items_ptr(),
+            self._workload_ptr(),
+            scanp,
+            max_batch,
+            n_bound,
+            blocks_bound,
+            TPB_DEFAULT,
+            1,
         )
-        var finalp = (
-            self.loop_final.unsafe_ptr()
-            .unsafe_origin_cast[MutUntrackedOrigin]()
-            .unsafe_bitcast[Split[Self.O.DataT]]()
+        launch_loop_finalize[Self.O.DataT, not RETRY_PURE_NODES](
+            ctx,
+            self._splits_ptr(),
+            hdrp,
+            n_bound,
         )
-        var hist_scale = self.hist_task_rows // TPB_DEFAULT
-        for _ in range(LOOP_K):
-            var b = self.loop_batch
-            var n_bound = max_batch
-            if b < 30 and (1 << b) < max_batch:
-                n_bound = 1 << b
-            var blocks_bound = 1 + n_bound + self.n_sampled_rows // TPB_DEFAULT
-            self.cur_wl_rel = calculate_aligned_bytes(
-                n_bound * size_of[NodeWorkItem]()
+        if not self.node_split_args_ready:
+            _ = self.node_split_args.upload(
+                ctx, NodeSplitArgs(ds_split.copy())
             )
-            # 1. pop + the histogram's block map
-            launch_loop_pop(
-                ctx,
-                hdrp,
-                queuep,
-                self._work_items_ptr(),
-                self._workload_ptr(),
-                scanp,
-                max_batch,
-                n_bound,
-                blocks_bound,
-                self.hist_task_rows,
-                hist_scale,
-            )
-            # 2. every sampling round
-            for r in range(max_rounds):
-                if r > 0:
-                    launch_loop_retry_next[
-                        Self.O.DataT, RETRY_PURE_NODES
-                    ](
-                        ctx,
-                        hdrp,
-                        self._splits_ptr(),
-                        self._work_items_ptr(),
-                        self._workload_ptr(),
-                        items_sp,
-                        retryp,
-                        scanp,
-                        max_batch,
-                        n_bound,
-                        blocks_bound,
-                        self.hist_task_rows,
-                        hist_scale,
-                        r == 1,
-                    )
-                var n_sampled_cols = sampled_cols_in_round(
-                    self.n_cols, self.original_n_sampled_cols, r
-                )
-                var ds_round = dataset.copy()
-                ds_round.n_sampled_cols = Int32(n_sampled_cols)
-                self.enqueue_best_splits(
-                    ctx, ds_round, quantiles, no_items,
-                    r * self.original_n_sampled_cols, n_sampled_cols,
-                    smem_config, instr, String(""),
-                    dev_n=n_bound, dev_blocks=blocks_bound,
-                )
-                if max_rounds > 1:
-                    launch_loop_retry_merge[Self.O.DataT, RETRY_PURE_NODES](
-                        ctx,
-                        hdrp,
-                        self._splits_ptr(),
-                        finalp,
-                        retryp,
-                        max_batch,
-                        n_bound,
-                        r == 0,
-                    )
-            # 3. the batch's answer, the partition map, finalize, partition
-            if max_rounds > 1:
-                launch_loop_retry_finish[Self.O.DataT](
-                    ctx, self._splits_ptr(), finalp, n_bound
-                )
-            launch_loop_pop(
-                ctx,
-                hdrp,
-                queuep,
-                self._work_items_ptr(),
-                self._workload_ptr(),
-                scanp,
-                max_batch,
-                n_bound,
-                blocks_bound,
-                TPB_DEFAULT,
-                1,
-            )
-            launch_loop_finalize[Self.O.DataT, not RETRY_PURE_NODES](
-                ctx,
-                self._splits_ptr(),
-                hdrp,
-                n_bound,
-            )
-            if not self.node_split_args_ready:
-                _ = self.node_split_args.upload(
-                    ctx, NodeSplitArgs(ds_split.copy())
-                )
-                self.node_split_args_ready = True
-            var argsp = self.node_split_args.device_ptr()
-            launch_node_split_kernel(
-                ctx,
-                ds_split,
-                self._work_items_ptr(),
-                self._splits_ptr(),
-                self._workload_ptr(),
-                blocks_bound,
-                n_bound,
-                self.partition_row_ids.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                self.node_split_scratch,
-                argsp,
-            )
-            launch_loop_push[Self.O.DataT](
-                ctx,
-                hdrp,
-                queuep,
-                self.loop_nodes_i.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                self.loop_nodes_f.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                self._work_items_ptr(),
-                self._splits_ptr(),
-                scanp,
-                max_batch,
-                n_bound,
-                Int(self.params.max_depth),
-                Int(self.params.min_samples_split),
-                self.loop_cap,
-                Int(self.params.max_leaves),
-            )
-            self.loop_batch += 1
+            self.node_split_args_ready = True
+        var argsp = self.node_split_args.device_ptr()
+        launch_node_split_kernel(
+            ctx,
+            ds_split,
+            self._work_items_ptr(),
+            self._splits_ptr(),
+            self._workload_ptr(),
+            blocks_bound,
+            n_bound,
+            self.partition_row_ids.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.node_split_scratch,
+            argsp,
+        )
+        launch_loop_push[Self.O.DataT](
+            ctx,
+            hdrp,
+            queuep,
+            self.loop_nodes_i.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.loop_nodes_f.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self._work_items_ptr(),
+            self._splits_ptr(),
+            scanp,
+            max_batch,
+            n_bound,
+            Int(self.params.max_depth),
+            Int(self.params.min_samples_split),
+            self.loop_cap,
+            Int(self.params.max_leaves),
+        )
+        self.loop_batch += 1
+
+    def _ee_enqueue_batch_head(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
+    ) raises:
+        """`IDN_RF_DEVICE_LOOP_EARLY_EXIT`, more than one sampling round: a
+        batch's head (pop, round 0's search and merge, round 1's retry
+        compaction), then the header download the next `advance_tree`
+        reads (its `LOOP_H_NEXT` word is round 1's retry count)."""
+        var max_rounds = max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        )
+        self._loop_batch_head(ctx)
+        self._loop_round(
+            ctx, dataset, quantiles, smem_config, instr, 0, max_rounds
+        )
+        self._loop_retry_next(ctx, 1)
+        self.loop_round = 1
+        self.loop_hdr_fresh = True
         log_launch_ctx(ctx, "xfer_loop_header")
         ctx.enqueue_copy(dst_buf=self.loop_h_hdr, src_buf=self.loop_hdr)
+
+    def _ee_loop_advance(
+        mut self,
+        ctx: DeviceContext,
+        quantiles: Quantiles[Self.O.DataT],
+        mut ts: TreeState[Self.O],
+        mut instr: FitInstruments,
+    ) raises -> Bool:
+        """`IDN_RF_DEVICE_LOOP_EARLY_EXIT`'s consume step (more than one
+        sampling round). Call ONLY after a synchronize covering the last
+        enqueue's download. After a header download (a batch boundary):
+        queue empty -> finish the tree on the device. Then the pending
+        round's retry count: nonzero -> enqueue that round and the next
+        round's compaction plus the 4-byte count download; zero (or the
+        last round done) -> enqueue the batch's tail and the next batch's
+        head plus the header download."""
+        var hp = self.loop_h_hdr.unsafe_ptr()
+        if self.loop_hdr_fresh:
+            self.loop_hdr_fresh = False
+            if hp.unsafe_load(LOOP_H_OVERFLOW) != Int32(0):
+                raise Error(
+                    "RandomForest device level loop: the tree outgrew the"
+                    + " device node table ("
+                    + String(self.loop_cap)
+                    + " nodes, a proven bound; this is a bug)"
+                )
+            var head = Int(hp.unsafe_load(LOOP_H_HEAD))
+            var tail = Int(hp.unsafe_load(LOOP_H_TAIL))
+            if head == tail:
+                # The batch enqueued with this header popped nothing: it is
+                # inert end to end (as the device loop's trailing batches).
+                var n_nodes = Int(hp.unsafe_load(LOOP_H_NODES))
+                if n_nodes < 1 or n_nodes > self.loop_cap:
+                    raise Error(
+                        "RandomForest device level loop: device header"
+                        + " reports "
+                        + String(n_nodes)
+                        + " nodes"
+                    )
+                self.loop_active = False
+                self._finish_tree_device(ctx, ts, n_nodes, instr)
+                return True
+        var max_rounds = max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        )
+        var r = self.loop_round
+        # driver-loop: over sampling rounds -- the one 4-byte retry count of
+        # round r decides whether rounds r.. run (the host queue's stop at
+        # the first round with nothing to retry); a decision over model
+        # structure, never a loop over rows or a downloaded buffer.
+        var n_retry = Int(hp.unsafe_load(LOOP_H_NEXT))
+        if n_retry > 0:
+            self._loop_round(
+                ctx, ts.ds, quantiles, ts.smem_config, instr, r, max_rounds
+            )
+            if r + 1 < max_rounds:
+                self._loop_retry_next(ctx, r + 1)
+                self.loop_round = r + 1
+                log_launch_ctx(ctx, "xfer_loop_retry_count")
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_next_h, src_buf=self.loop_next_d
+                )
+                return False
+        self._loop_batch_tail(ctx, ts.ds, max_rounds)
+        self._ee_enqueue_batch_head(
+            ctx, ts.ds, quantiles, ts.smem_config, instr
+        )
+        return False
 
     def _loop_advance(
         mut self,
@@ -3878,7 +4095,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             False,
         )
         self.loop_active = False
-        comptime if sabotage == 0 and IDN_RF_DEVICE_LOOP:
+        comptime if sabotage == 0 and RF_DEVICE_QUEUE:
             # B arm (`-D MOJOLEARN_IDN_RF_DEVICE_LOOP`, the block above
             # `IDN_RF_DEVICE_LOOP`): a fit's tree with an expandable root
             # runs its queue on the device. The default is the host queue
@@ -3887,6 +4104,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 self.loop_cap > 0
                 and ts.queue.has_work()
                 and not instr.trace.enabled
+                and not self.force_host_queue
             ):
                 self.loop_active = True
                 self.loop_batch = 0
@@ -3909,6 +4127,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                         LOOP_HDR_WORDS + LOOP_QUEUE_INTS
                     ),
                 )
+                comptime if IDN_RF_DEVICE_LOOP_EARLY_EXIT:
+                    if self._ee_multi_round():
+                        self._ee_enqueue_batch_head(
+                            ctx, ts.ds, quantiles, ts.smem_config, instr
+                        )
+                        return ts^
                 self._enqueue_loop_batches(
                     ctx, ts.ds, quantiles, ts.smem_config, instr
                 )
@@ -3938,6 +4162,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         if ts.done:
             return True
         if self.loop_active:
+            comptime if IDN_RF_DEVICE_LOOP_EARLY_EXIT:
+                if self._ee_multi_round():
+                    return self._ee_loop_advance(ctx, quantiles, ts, instr)
             return self._loop_advance(ctx, quantiles, ts, instr)
         # DEVIATION 2510 -- this step's HOST work, stamped piecewise with
         # no drain so the stage table can split `other`: `advance_batch_replay`

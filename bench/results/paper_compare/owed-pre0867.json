@@ -152,6 +152,14 @@
   "samba-weight-epoch-global": {
    "define": "MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL",
    "status": "define in code (core/weight_epoch.mojo SAMBA_WEIGHT_EPOCH_GLOBAL, read by registry_epoch / registry_epoch_bump): B = the Samba resident registry copies (samba_resident_forward, SambaStackProgram.refresh_weights) keyed by the process weight epoch, so any model's weight write re-uploads every stack's registry; A = keyed per registry (RegistryKey: the written registry's own stamp)"
+  },
+  "rf-device-loop-early-exit": {
+   "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT",
+   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo IDN_RF_DEVICE_LOOP_EARLY_EXIT): B = the device level loop that reads each sampling round's 4-byte retry count back and stops the batch's rounds at the first empty one (one drain per round run); A = the host-queue level loop (default)"
+  },
+  "et-device-loop-early-exit": {
+   "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT",
+   "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo ET_DEVICE_LOOP_EARLY_EXIT): B = the depth-wise device level loop that reads each batch's 4-byte rescue count back and skips an empty DEVIATION 205 rescue; A = the host-queue merged-frontier loop (default)"
   }
  },
  "rows": [
@@ -1025,6 +1033,30 @@
    "lane": "samba-forward",
    "rows": "full",
    "source": "fix-samba-weight-epoch-per-model (2026-11-13; fix-samba-weight-upload 6baf0f6292 doubt: the weight epoch was process-wide, so one model's write re-uploaded every other stack's ~22 MB registry once per interleaved call)"
+  },
+  {
+   "id": "rf-device-loop-early-exit",
+   "source": "fix-rf-et-device-loop-early-exit (the device loop that early-exits like the host queue; restore-rf-device-loop's cause: every sampling round enqueued per batch)",
+   "kind": "ab",
+   "lane": "rf",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "rf-device-loop-early-exit"
+   ],
+   "decides": "promote the early-exit device loop (B) over the host-queue loop (A) only if B is at least as fast on the NVIDIA+AMD average of istella and taxi fit; read with restore-rf-device-loop (plain device loop) in the same build; output hashes 46ef5c27f84cf904 / a660fbfbad84ade8 must not move in any arm"
+  },
+  {
+   "id": "et-device-loop-early-exit",
+   "source": "fix-rf-et-device-loop-early-exit (the device loop that skips an empty rescue like the host queue; restore-et-device-loop's cause: the rescue enqueued every batch)",
+   "kind": "ab",
+   "lane": "et",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "et-device-loop-early-exit"
+   ],
+   "decides": "promote the early-exit device loop (B) over the host-queue loop (A) only if B is at least as fast on the NVIDIA+AMD average of istella and taxi fit; read with restore-et-device-loop (plain device loop) in the same build; ET output hashes must not move in any arm"
   }
  ]
 }
