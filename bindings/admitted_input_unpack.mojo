@@ -104,7 +104,7 @@ from bindings.classical_pandas_door import native_pandas_exact, native_pandas_f3
 from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
-from bindings.native_array_storage_door import native_scratch_bytes, native_array_zeros, native_array_from_values, native_array_from_bytes
+from bindings.native_array_storage_door import native_scratch_bytes, native_array_zeros, native_array_unfilled, native_array_from_values, native_array_from_bytes
 from bindings.py_attr import py_attr
 from bindings.py_admitted_registry import (
     admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols, admitted_held_finite,
@@ -273,8 +273,8 @@ def admitted_storage_f32(rows: Int, cols: Int, context: PythonObject, order: Str
     words whose contents are NOT initialised: the destination of one cast
     that writes every word before anything reads it. With NumPy it is an
     ndarray over an uninitialised bytearray (no fill pass); without NumPy it
-    is a mojolearn Array (its array.array store has no uninitialised
-    constructor, so that install keeps the zero-filled store)."""
+    is a mojolearn Array over an uninitialised array.array store
+    (`native_array_unfilled`, no fill pass)."""
     # REGRESSIONS F3 / C3: the zero fill of a destination the cast then
     # overwrote in full was a second pass over X.
     return admitted_storage_native(native_matrix_shape(rows, cols), "<f4", context,
@@ -291,9 +291,9 @@ def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject
     is partly written, or accumulated into, keeps a zero-filled allocator.
     With NumPy it is an ndarray over an uninitialised bytearray
     (`native_scratch_bytes`: no fill pass). Without NumPy it is a mojolearn
-    Array over the zero-filled array.array store (array.array has no
-    uninitialised constructor); `as_array` asks for that Array whatever is
-    installed (a door whose result must never be an ndarray)."""
+    Array over an uninitialised array.array store (`native_array_unfilled`,
+    no fill pass); `as_array` asks for that Array whatever is installed (a
+    door whose result must never be an ndarray)."""
     # The zero-fill-then-overwrite sites that move here are listed by owning
     # lane in ~/mojolearn-evidence/a5-zero-fill-sites.md.
     return admitted_storage_native(native_shape_unpack(shape), typestr, context, order, as_array)
@@ -305,7 +305,9 @@ def admitted_storage_native(shape: List[Int], typestr: String, context: PythonOb
         raise Error("ValueError: admitted storage order must be 'C' or 'F', not " + order)
     if as_array or not classical_numpy(context):
         var layout = NativeArrayLayout(shape.copy(), _array_itemsize(typestr), order)
-        return classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
+        # lane fix-output-zero-fill (2026-11-14): the Array store is unfilled
+        # too (was native_array_zeros: a fill pass the writer overwrote).
+        return classical_wrap_layout(native_array_unfilled(_store_code(typestr), layout.count), layout, typestr, context)
     var key = _admitted_storage_key(typestr)
     var width = 4 if typestr == "<f4" else 8
     var layout = NativeArrayLayout(shape.copy(), width, order)
@@ -948,11 +950,24 @@ def admitted_shape_tuple(shape: List[Int]) raises -> PythonObject:
 
 
 def admitted_zeros(shape: List[Int], typestr: String, context: PythonObject) raises -> AdmittedBuf:
-    """A new zero-filled C-order Array of any Array dtype. Array stores have
-    no uninitialised constructor (admitted_storage keeps the same zeros
-    without NumPy), so the one fill pass stays."""
+    """A new zero-filled C-order Array of any Array dtype, for a destination
+    a writer fills only in part or accumulates into. A destination one native
+    writer fills in full takes `admitted_unfilled`."""
     var layout = NativeArrayLayout(shape.copy(), admitted_width(typestr))
     var array = classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
+    var addr = Int(py=classical_address(array))
+    return AdmittedBuf(array, addr, shape.copy())
+
+
+def admitted_unfilled(shape: List[Int], typestr: String, context: PythonObject) raises -> AdmittedBuf:
+    """`admitted_zeros` with NO fill pass (lane fix-output-zero-fill,
+    2026-11-14): a new C-order Array of any Array dtype over an uninitialised
+    array.array store (`native_array_unfilled`), for a destination one native
+    writer (a kernel and its download) fills in full before anything reads it
+    or it is returned. The zero fill of matmul's output was 80.8% of the gemm
+    row (L40S profile, 2026-11-14)."""
+    var layout = NativeArrayLayout(shape.copy(), admitted_width(typestr))
+    var array = classical_wrap_layout(native_array_unfilled(_store_code(typestr), layout.count), layout, typestr, context)
     var addr = Int(py=classical_address(array))
     return AdmittedBuf(array, addr, shape.copy())
 
