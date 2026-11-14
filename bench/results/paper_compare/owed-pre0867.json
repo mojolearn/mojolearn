@@ -176,6 +176,10 @@
   "transformer-decode-per-token-admission": {
    "define": "MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION",
    "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_ADMISSION): B = the per-token admission of the GPU decode step (owner record fields of 3 names, block and state generation words, option-tail content check, a new NativeModules per token, x and y address re-snapshots and a keep list, the state generation re-stamp); A = 0.8.55's per-token shape: when the session's _state is the state admitted at init and the handle holds its registry session, the step admits only x, allocates y, reads/writes state.cached_tokens (exact int) and makes one native call on the pinned session"
+  },
+  "nv-mul-rn-asm": {
+   "define": "MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD",
+   "status": "define in code (checks/numerics.mojo IDN_NV_MUL_RN_ASM_OLD; nv_mul_rn_kernel_f32/_f64, nv_flush_by_one_kernel; callers checks/numerics.mojo ftz (NVIDIA hardware flush) and pinned_mul_f32/_f64 (every identical_mul/identical_mul64), neighbors/checks/pinned_distance_tile.mojo _rt_step, gemm/checks/gemm_identical.mojo _tuned_step/_fold_flush, transformer/impl/llama/fused_attention.mojo _step/_step_preflushed): B = PTX mul.rn.f32/.f64 and mul.rn.ftz.f32 x,1 as inline asm (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f/.d(a, b, -0.0) and llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0), schedulable like 0.8.55's llvm.nvvm.mul.rn.* intrinsics. Same IEEE word for every input (exact product plus -0.0 rounded once; the by-one product is exact), same fold order; NVIDIA identical column only (AMD is a no-change check)"
   }
  },
  "rows": [
@@ -1113,7 +1117,10 @@
    "id": "fix-gbdt-prebinned-infer",
    "source": "fix-gbdt-prebinned-infer (2026-11-13, paper compare of ba08dac006 on L40S: trees/gbdt-depthwise/istella infer ours-prebinned large 71.04 -> 82.71 ms vs 0.8.66, single scored run, warm-up 77.10; ours large flat 68.87 -> 68.66 on the same path): the resident Depthwise/Lossguide predict packs the ensemble once (NsResidentPack) instead of per call",
    "kind": "ab",
-   "lane": ["gbdt-depthwise", "gbdt-lossguide"],
+   "lane": [
+    "gbdt-depthwise",
+    "gbdt-lossguide"
+   ],
    "dataset": "*",
    "rows": "full",
    "b_arms": [
@@ -1134,6 +1141,35 @@
     "transformer-decode-per-token-admission"
    ],
    "decides": "keep the admitted per-token path (A, default) unless the per-token admission (B, -D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION) is at least as fast on the NVIDIA and AMD average; board on record NV L40S 1105 ms (0.8.55) -> 1455 (0.8.66) -> 1406 (candidate 4c2340386abc), MI300X 2445 -> 2699 (0.8.66); same native call on the same AttnStepArm, same kernels and order: digests must not move between the arms"
+  },
+  {
+   "id": "fix-nv-mul-rn-via-fma",
+   "source": "fix-nv-mul-rn-via-fma (2026-11-14; best-ever history audit wave 2 row 3: HDBSCAN taxi NV best 407.71 ms at 0.8.44, 0.8.55 423, candidate ba08dac006 546; 0.8.55 ran the distance tile on llvm.nvvm.fma.rn.f + llvm.nvvm.mul.rn.ftz.f, fix-hdbscan-nv restored only the fma; the tile repair step, every NVIDIA ftz and every pinned product still issued opaque asm)",
+   "kind": "ab",
+   "lane": [
+    "hdbscan",
+    "knn-clf",
+    "knn-reg",
+    "knn",
+    "lm-train-step",
+    "lm-forward",
+    "transformer-forward",
+    "transformer-decode",
+    "transformer-infer",
+    "ols",
+    "ridge",
+    "pca",
+    "tsvd",
+    "kernel-ridge",
+    "gpr",
+    "logreg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "nv-mul-rn-asm"
+   ],
+   "decides": "keep the schedulable fma.rn spellings (A) unless the asm mul.rn / mul.rn.ftz (B) is at least as fast on NVIDIA; every NVIDIA identical kernel that calls ftz or identical_mul runs it, the lanes listed are the NV-only regressions on record. Digests must not move in either arm (neighbors/checks/knn_distance_fma_boundary_check.mojo and tools/probe_ftz_hw.mojo judge the words). If A does not compile (Mojo 1.2 rejecting llvm.nvvm.fma.rn.d or llvm.nvvm.fma.rn.ftz.f), build with the define on and record the row as not runnable"
   }
  ]
 }

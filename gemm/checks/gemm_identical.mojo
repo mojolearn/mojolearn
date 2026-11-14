@@ -161,7 +161,7 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
     identical_mul_add_simd,
-    nv_mul_rn_ftz_f32,
+    nv_flush_by_one_kernel,
 )
 from checks.nv_fma_rn import nv_fma_rn_kernel
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
@@ -1369,7 +1369,9 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """
     comptime if TUNED_HW_FTZ_FMA:
         var rounded = nv_fma_rn_kernel(a, b, acc)
-        return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
+        # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
+        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        return nv_flush_by_one_kernel(rounded)
     comptime if TUNED_CLASS_FLUSH:
         return _ftz_class(identical_mul_add(a, b, acc))
     # Apple (lane/apple-seam-repair): the native FMA flushes before rounding;
@@ -1813,7 +1815,9 @@ def _fold_flush[HW: Bool](x: Float32) -> Float32:
     spelling is six. Every other column, and every caller that does not ask,
     keeps the software `ftz`, so no bit can move anywhere."""
     comptime if HW and TUNED_HW_FTZ_FMA:
-        return nv_mul_rn_ftz_f32(x, Float32(1.0))
+        # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
+        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        return nv_flush_by_one_kernel(x)
     return ftz(x)
 
 
