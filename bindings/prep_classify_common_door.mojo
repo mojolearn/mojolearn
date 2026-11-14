@@ -47,10 +47,6 @@ comptime OP_CSB1_PART = 162
 comptime OP_CSB1_NEG = 163
 comptime OP_CSR_DENSE = 164
 comptime OP_CSB1_SS = 165
-comptime OP_P2M_CCOUNT = 200
-comptime OP_P2M_CSCAN = 201
-comptime OP_P2M_CSTART = 202
-comptime OP_P2M_CWRITE = 203
 comptime OP_F2_CLAMP0 = 235
 comptime OP_GB_PART = 236
 comptime OP_GB_PART_ROW = 237
@@ -74,8 +70,6 @@ comptime IDN_NB_CSR_DENSE = 8
 # _IDN_FAM2 bits.
 comptime F2_GRAM = 16
 comptime F2_GRAM_ROWTILE = 32
-# `_p2m_chunks`: at most this many chunks (_II_CH).
-comptime II_CH = 1024
 
 
 def cls_builtins() raises -> PythonObject:
@@ -482,17 +476,6 @@ def nb_counts(mut pr: ClsProg, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int
     pr.stage(OP_CSB_FOLD, K * d, ps, pc, nb, K, d, cn, cnt, NONE, sums, wo)
     if neg != NONE:
         pr.stage(OP_CSB1_NEG, d, ng, nb, d, neg)
-
-
-def p2m_class_counts(mut pr: ClsProg, co: Int, n: Int, K: Int) -> Int:
-    """`_p2m_class_rows(pr, co, n, K, rows=False)`: the class counts' offset."""
-    var ch = max(II_CH, (n + II_CH - 1) // II_CH, (n * K + 16777215) // 16777216, 1)
-    var nch = max(1, (n + ch - 1) // ch)
-    var cnt = pr.alloc(nch * K)
-    var tot = pr.alloc(K)
-    pr.stage(OP_P2M_CCOUNT, nch, co, n, K, ch, cnt)
-    pr.stage(OP_P2M_CSCAN, K, cnt, nch, K, tot)
-    return tot
 
 
 # ---------------------------------------------------------------- labels
