@@ -158,7 +158,7 @@ def edge_values() -> List[Float64]:
         fmax * 2, -fmax * 2, 1e39, -1e39, 1e308,
         tiny, -tiny, sub, -sub,
         bitcast[DType.float64](UInt64(1)), bitcast[DType.float64](UInt64(0x8000000000000001)),
-        1e-46, pow2(-15)0,
+        1e-46, pow2(-150),
         bitcast[DType.float64](UInt64(0x7FF0000000000000)), bitcast[DType.float64](UInt64(0xFFF0000000000000)),
         bitcast[DType.float64](UInt64(0x7FF8000000000000)), bitcast[DType.float64](UInt64(0xFFF8000000000000)),
         bitcast[DType.float64](UInt64(0x7FF8DEADBEEF0001)),
