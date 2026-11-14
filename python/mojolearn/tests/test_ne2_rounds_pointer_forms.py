@@ -4,6 +4,9 @@ forms and the per-block / per-operation resolutions return what the old
 routes returned. Each check compares against a reference that does not
 depend on the changed route (NumPy indexing, the batch-invariance handle,
 an enclosing resident scope), so it holds on every vendor and tier.
+
+The index, bootstrap and permutation batch invariants (N053, N078) run
+natively in checks/native_tests/core_ne2_rounds_{cpu,gpu}.mojo.
 """
 import numpy as np
 import pytest
@@ -16,62 +19,11 @@ def _np(a):
     return np.asarray(a)
 
 
-# --------------------------------------------------------------- N053 indices
-@pytest.mark.parametrize("replace", [True, False])
-def test_resample_indices_into_caller_buffer(replace):
-    n, count = 1000, 357
-    a = _np(rs.resample_indices(n, count, replace=replace, random_state=7))
-    b = _np(rs.resample_indices(n, count, replace=replace, random_state=7))
-    assert a.dtype == np.int32 or a.dtype == np.int64
-    assert a.shape == (count,)
-    assert np.array_equal(a, b)
-    assert a.min() >= 0 and a.max() < n
-    if not replace:
-        assert len(np.unique(a)) == count
-        # the first `count` of a permutation: a prefix of the full permutation
-        full = _np(rs.resample_indices(n, n, replace=False, random_state=7))
-        assert np.array_equal(full[:count], a)
-        assert np.array_equal(np.sort(full), np.arange(n))
-
-
-# ----------------------------------------------------------- N078 bootstrap
+# ----------------------------------------------------------- N078 refusal
 def _x(n=257, seed=0, d=1):
     rng = np.random.default_rng(seed)
     x = (rng.random((n, d), dtype=np.float32) * 2.0 - 1.0).astype(np.float32)
     return x[:, 0].copy() if d == 1 else x
-
-
-def test_bootstrap_distribution_batches_equal_whole():
-    x = _x()
-    whole = rs.bootstrap(x, "mean", n_resamples=400, random_state=3)
-    a = rs.bootstrap(x, "mean", n_resamples=150, random_state=3, r_first=0)
-    b = rs.bootstrap(x, "mean", n_resamples=250, random_state=3, r_first=150)
-    dist = _np(whole.distribution)
-    assert dist.shape == (400,)
-    assert np.array_equal(np.concatenate([_np(a.distribution), _np(b.distribution)]).view(np.uint32),
-                          dist.view(np.uint32))
-    assert np.array_equal(np.sort(dist).view(np.uint32), _np(whole.sorted_distribution).view(np.uint32))
-
-
-def test_bootstrap_unpaired_distribution_lands():
-    x, y = _x(120, 1), _x(90, 2)
-    r = rs.bootstrap((x, y), "diff_means", n_resamples=300, random_state=5, paired=False)
-    dist = _np(r.distribution)
-    assert dist.shape == (300,) and np.all(np.isfinite(dist))
-    assert np.array_equal(np.sort(dist).view(np.uint32), _np(r.sorted_distribution).view(np.uint32))
-    again = rs.bootstrap((x, y), "diff_means", n_resamples=300, random_state=5, paired=False)
-    assert np.array_equal(dist.view(np.uint32), _np(again.distribution).view(np.uint32))
-
-
-@pytest.mark.parametrize("ptype", ["independent", "samples"])
-def test_permutation_null_batches_equal_whole(ptype):
-    x, y = _x(80, 4), _x(80, 6)
-    kw = dict(statistic="diff_means", alternative="two-sided", random_state=9, permutation_type=ptype)
-    whole = rs.permutation_test(x, y, n_resamples=300, **kw)
-    a = rs.permutation_test(x, y, n_resamples=100, r_first=0, **kw)
-    b = rs.permutation_test(x, y, n_resamples=200, r_first=100, **kw)
-    assert np.array_equal(np.concatenate([_np(a.null_distribution), _np(b.null_distribution)]).view(np.uint32),
-                          _np(whole.null_distribution).view(np.uint32))
 
 
 def test_permutation_refuses_nonfinite_in_second_sample_by_pooled_position():
