@@ -748,10 +748,18 @@ def iforest_run_binding(
         info    3  token    (the resident forest's token after this call)
 
     Sixteen params is the DEVIATION 874 form, unchanged.
+
+    Lane fix-iforest-double-fit (2026-11-13): EVERY binary takes the
+    seventeen-param form. A refit-per-call binary (`iforest_resident()` 0,
+    `-D MOJOLEARN_IDN_IF_RESIDENT_OFF`) receives it only from `fit` (token
+    0): the forest that fit builds stays in the store under the returned
+    token just long enough for `iforest_forest_export` to read it out, which
+    drops it (`iforest_forest_export_binding`'s put rule). Before it that
+    binary fitted TWICE per `fit`: once here (the sixteen-param one-shot,
+    whose forest died with the call) and once more inside the export. Its
+    scoring calls still send sixteen params and refit per call, unchanged.
     """
-    var resident = False
-    comptime if _IF_RESIDENT_ROUTE:
-        resident = len(params) == 17
+    var resident = len(params) == 17
     if len(params) != 16 and not resident:
         raise Error(
             "iforest_run: params must contain 16 values, got " + String(len(params))
@@ -802,40 +810,39 @@ def iforest_run_binding(
     # below reads it again (isolation_forest/multi_gpu.mojo::fit_dispatch).
     var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
     var res = IFRunOutputs()
-    comptime if _IF_RESIDENT_ROUTE:
-        if resident:
-            # The take and the put run under the GIL; the fit (on a miss) and
-            # the scoring run with it released, on an entry no other thread
-            # can reach while it is out of the store.
-            var token = Int(py=params[16])
-            var out_f32 = Int(py=out_f32_addr)
-            var out_i32 = Int(py=out_i32_addr)
-            var key = IFResidentKey(
-                Int(tp), n_train, n_features, n_estimators, max_samples_mode,
-                max_samples_int, max_samples_frac, max_depth, max_features_mode,
-                max_features_int, max_features_frac, bootstrap, random_state,
-                contamination_auto, contamination,
-            )
-            var held = if_resident_take(token, key)
-            var new_token = 0
-            if len(held) == 0:
-                new_token = if_resident_new_token()
-            try:
-                with GILReleased(Python()):
-                    res = iforest_run_resident(
-                        plan, held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
-                        wide_scores,
-                    )
-            except e:
-                # Preserve an existing caller-owned forest after a refused
-                # query. A new token has not reached Python yet: caching it
-                # here would orphan its buffers until native-global teardown.
-                if new_token == 0:
-                    if_resident_put(held)
-                raise e
-            if_resident_put(held)
-            iforest_resident_info_run(res, ip)
-            return PythonObject(n_query)
+    if resident:
+        # The take and the put run under the GIL; the fit (on a miss) and
+        # the scoring run with it released, on an entry no other thread
+        # can reach while it is out of the store.
+        var token = Int(py=params[16])
+        var out_f32 = Int(py=out_f32_addr)
+        var out_i32 = Int(py=out_i32_addr)
+        var key = IFResidentKey(
+            Int(tp), n_train, n_features, n_estimators, max_samples_mode,
+            max_samples_int, max_samples_frac, max_depth, max_features_mode,
+            max_features_int, max_features_frac, bootstrap, random_state,
+            contamination_auto, contamination,
+        )
+        var held = if_resident_take(token, key)
+        var new_token = 0
+        if len(held) == 0:
+            new_token = if_resident_new_token()
+        try:
+            with GILReleased(Python()):
+                res = iforest_run_resident(
+                    plan, held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
+                    wide_scores,
+                )
+        except e:
+            # Preserve an existing caller-owned forest after a refused
+            # query. A new token has not reached Python yet: caching it
+            # here would orphan its buffers until native-global teardown.
+            if new_token == 0:
+                if_resident_put(held)
+            raise e
+        if_resident_put(held)
+        iforest_resident_info_run(res, ip)
+        return PythonObject(n_query)
     with GILReleased(Python()):
         res = iforest_run_host(
             plan, train, n_train, n_features, query, n_query, n_estimators,
@@ -900,7 +907,9 @@ def iforest_forest_export_binding(
     var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
     # The sizes call keeps its forest in the store on every route, so the
     # copy call (same token) never fits again; a refit-per-call binary drops
-    # it after the copy.
+    # it after the copy. At `fit` the token is the one `iforest_run` just
+    # returned on every route (lane fix-iforest-double-fit), so neither call
+    # fits: the export reads the forest that fit built.
     var held = if_resident_take(token, key)
     var new_token = 0
     if len(held) == 0:
@@ -1051,9 +1060,11 @@ def iforest_scores_f64_binding() raises -> PythonObject:
 
 def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
     """Drop the resident forest `token` names (the Python estimator was
-    refitted or collected). A token nobody holds is a no-op. Returns 0."""
-    comptime if _IF_RESIDENT_ROUTE:
-        if_resident_release(Int(py=token))
+    refitted or collected). A token nobody holds is a no-op. Returns 0.
+    Every route releases: a refit-per-call binary keeps a forest in the
+    store between `fit`'s `iforest_run` and its export (lane
+    fix-iforest-double-fit), so a refused export never orphans it."""
+    if_resident_release(Int(py=token))
     return PythonObject(0)
 
 

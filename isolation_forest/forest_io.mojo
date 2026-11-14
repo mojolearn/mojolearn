@@ -33,8 +33,6 @@ from isolation_forest.impl.isolation_forest import (
     IsolationForestModel,
     compute_c_normalization,
     if_pack_nodes_kernel,
-    read_f32,
-    read_i32,
 )
 from core.neural_context import process_ctx
 from isolation_forest.estimator import IsolationForestEstimator, IFResidentEntry, IFResidentKey, _DEVCTX_SLOT
@@ -91,28 +89,46 @@ def _export_part(
     words: IFForestWords,
 ) raises:
     """Trees `first .. first + count` of one owner (the model, or one tree
-    shard on its own device): the node arrays come down once each, then
-    each tree's used nodes are copied to their compact place, one task per
-    tree across the host cores."""
+    shard on its own device): the tree offsets and the four node arrays come
+    down in ONE download (five copies enqueued into pinned host buffers, one
+    synchronize), then each tree's used nodes are copied from those buffers
+    to their compact place, one task per tree across the host cores.
+
+    Lane fix-iforest-double-fit (2026-11-13): before it each array came down
+    through `read_i32` / `read_f32`, a synchronize per array (five per owner)
+    plus a zero-filled List and a full copy of the pinned buffer into it per
+    array, before the compact copy. Same words, same compact layout: no bit
+    moves. The used-node counts (`prefix`) are the fit's host words
+    (`tree_n_nodes_host`), data dependent, so the caller still sizes the
+    destination from `if_forest_sizes` first (no device read for that)."""
     if count <= 0:
         return
-    var dev_off = read_i32(ctx, tree_offsets, count)
-    var h_feat = read_i32(ctx, feature, len(feature))
-    var h_thr = read_f32(ctx, threshold, len(threshold))
-    var h_left = read_i32(ctx, left, len(left))
-    var h_right = read_i32(ctx, right, len(right))
-    var capacity = len(h_feat)
+    var h_off = ctx.enqueue_create_host_buffer[DType.int32](len(tree_offsets))
+    var h_feat = ctx.enqueue_create_host_buffer[DType.int32](len(feature))
+    var h_thr = ctx.enqueue_create_host_buffer[DType.float32](len(threshold))
+    var h_left = ctx.enqueue_create_host_buffer[DType.int32](len(left))
+    var h_right = ctx.enqueue_create_host_buffer[DType.int32](len(right))
+    ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=tree_offsets)
+    ctx.enqueue_copy(dst_ptr=h_feat.unsafe_ptr(), src_buf=feature)
+    ctx.enqueue_copy(dst_ptr=h_thr.unsafe_ptr(), src_buf=threshold)
+    ctx.enqueue_copy(dst_ptr=h_left.unsafe_ptr(), src_buf=left)
+    ctx.enqueue_copy(dst_ptr=h_right.unsafe_ptr(), src_buf=right)
+    ctx.synchronize()
+    if len(tree_offsets) < count:
+        raise Error("IsolationForest export: " + String(count) + " trees but " + String(len(tree_offsets))
+                    + " tree offsets")
+    var capacity = len(feature)
+    var op = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(h_off.unsafe_ptr()))
     for t in range(count):  # driver-loop: over trees, bounds of each tree's stored nodes
         var n = prefix[first + t + 1] - prefix[first + t]
-        var src = Int(dev_off[t])
-        if src < 0 or src + n > capacity or src + n > len(h_thr) or src + n > len(h_left) or src + n > len(h_right):
+        var src = Int(op[t])
+        if src < 0 or src + n > capacity or src + n > len(threshold) or src + n > len(left) or src + n > len(right):
             raise Error("IsolationForest export: tree " + String(first + t) + " lies outside its node storage")
-    var op = rebind[MutPointer[Int32, MutUntrackedOrigin]](dev_off.unsafe_ptr())
     var pp = rebind[MutPointer[Int, MutUntrackedOrigin]](prefix.unsafe_ptr())
-    var fs = rebind[MutPointer[Int32, MutUntrackedOrigin]](h_feat.unsafe_ptr())
-    var ts = rebind[MutPointer[Float32, MutUntrackedOrigin]](h_thr.unsafe_ptr())
-    var ls = rebind[MutPointer[Int32, MutUntrackedOrigin]](h_left.unsafe_ptr())
-    var rs = rebind[MutPointer[Int32, MutUntrackedOrigin]](h_right.unsafe_ptr())
+    var fs = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(h_feat.unsafe_ptr()))
+    var ts = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(h_thr.unsafe_ptr()))
+    var ls = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(h_left.unsafe_ptr()))
+    var rs = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(h_right.unsafe_ptr()))
     var fd = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=words.feature_addr)
     var td = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=words.threshold_addr)
     var ld = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=words.left_addr)
@@ -131,7 +147,7 @@ def _export_part(
         task(0)
     else:
         host_parallelize(task, count)
-    _ = dev_off^  # keep the host copies alive past the parallel copies above
+    _ = h_off^  # keep the pinned host buffers alive past the parallel copies above
     _ = h_feat^
     _ = h_thr^
     _ = h_left^
