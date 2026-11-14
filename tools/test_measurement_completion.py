@@ -61,3 +61,25 @@ def test_self_reference_and_failed_arms_are_not_invented_missing_scores():
 
 def test_no_scored_cells_is_not_a_success_claim():
     assert B.measurement_completion(dict(cells=[]))["status"] == "not measured"
+
+
+def test_a_cell_that_states_why_it_has_no_quality_is_recorded_not_incomplete():
+    # QUALITY-MISSING FIX (2026-11-13): the trees large inference batch (training rows) states quality_unavailable;
+    # before, MEASUREMENT_INCOMPLETE read it as "its scorer did not run" and every test-batch metric as missing
+    rec = result()
+    rec.update(family="trees", lane="gbdt-depthwise", cells=[])
+    test = dict(result()["cells"][0], batch="test", quality=dict(auc=.6, logloss=.5))
+    large = dict(result()["cells"][0], batch="large", quality={"quality_unavailable": "large batch = training rows"})
+    rec["infer_cells"] = [test, large]
+    B.mark_not_scored(rec["infer_cells"])
+    assert large["status"] == B.NOT_SCORED and "training rows" in large["scorer_error"]
+    assert test["status"] == "ok"
+    report = B.measurement_completion(rec)
+    assert report["status"] == "recorded", report
+    # an empty quality with no reason is still reported
+    large.update(quality={}, status="ok")
+    large.pop("scorer_error")
+    B.mark_not_scored(rec["infer_cells"])
+    report = B.measurement_completion(rec)
+    assert report["status"] == "incomplete"
+    assert any("its scorer did not run" in m for m in report["issues"][0]["missing"])

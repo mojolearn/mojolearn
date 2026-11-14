@@ -213,6 +213,11 @@ def test_run_infer_cells_ratios_and_board(ienv):
         expected_status = "not-scored" if c["batch"] == "large" and c["arm"] != "ours-ab" else "ok"
         assert c["phase"] == "infer" and c["status"] == expected_status and len(c["times_ms"]) == 3
         assert c["hash_stable"] is True and c["call"].startswith("stub ")
+    # QUALITY-MISSING FIX (2026-11-13): the large batch (training rows) states why it has no quality
+    assert "training rows" in ic[("ours", "large")]["quality"]["quality_unavailable"]
+    assert "training rows" in ic[("ours", "large")]["scorer_error"]
+    assert "quality_unavailable" not in ic[("ours", "test")]["quality"]
+    assert "quality_unavailable" not in ic[("ours-ab", "large")]["quality"]     # it records its agreement
     # median ours = 100/10+2 = 12, ours-ab 10, opponents 22 on `test`; x2 on `large`
     ir = _matched_infer_ratios(rf)
     assert ir[("sklearn-rf-cpu", "test")]["ratio_ours_identical_over"] == pytest.approx(12 / 22)
