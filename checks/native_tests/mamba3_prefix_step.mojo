@@ -86,6 +86,9 @@ def _run_cpu(mut report: Report) raises:
     _ = last^
     _ = weights^
     _ = unread^
+    # The step reads and writes the carried state by address; its last named use was the second `_abi`
+    # call, so it was freed before the step ran (word 0 of buf_krot read tcmalloc's free-list word: NaN).
+    _ = state^
     print("PASS Mamba-3 prefix + step (CPU)", 1)
 
 
