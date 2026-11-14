@@ -19,6 +19,7 @@ from std.math import sqrt, cos, log
 from core.entry_table import EntryRef
 from core.xcnn_entry_table import XcnnEntryKey, xcnn_entry_ref
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from x_cnn.bn_run import BnSettings, bn_run_prep, bn_run_aux_head, bn_run_aux_count, bn_run_forward, bn_run_backward
 from x_cnn.conv_run import (
     ConvGeom, conv_run_explicit, conv_run_conv_pad, conv_run_words, conv_run_padded, conv_run_out,
     conv_run_pad_params, conv_run_pad_code, conv_run_take_channels, conv_run_put_channels, conv_run_copy_words,
@@ -362,3 +363,160 @@ def pad_adjoint_host(cs: ConvCase, dxp: List[Float32]) -> List[Float32]:
                 if si >= 0 and sj >= 0:
                     out[(nc * cs.h + si) * cs.w + sj] += dxp[(nc * hp + i) * wp + j]
     return out^
+
+
+# ---------------------------------------------------------------- batch normalization
+
+struct BnReference(Movable):
+    """y, dx, dgamma, dbeta and the updated running mean and variance."""
+    var y: List[Float64]
+    var dx: List[Float64]
+    var dgamma: List[Float64]
+    var dbeta: List[Float64]
+    var rm: List[Float64]
+    var rv: List[Float64]
+
+    def __init__(out self, var y: List[Float64], var dx: List[Float64], var dgamma: List[Float64],
+                 var dbeta: List[Float64], var rm: List[Float64], var rv: List[Float64]):
+        self.y = y^
+        self.dx = dx^
+        self.dgamma = dgamma^
+        self.dbeta = dbeta^
+        self.rm = rm^
+        self.rv = rv^
+
+
+def ref_bn(n: Int, c: Int, hw: Int, x: List[Float32], gamma: List[Float64], beta: List[Float64],
+           rm: List[Float64], rv: List[Float64], training: Bool, momentum: Float64, eps: Float64,
+           g: List[Float32]) -> BnReference:
+    """`ref_bn` of the Python test: PyTorch's batch_norm over (N, C, HW) in
+    float64 (training: batch statistics and the running update with the
+    unbiased variance; eval: the running statistics)."""
+    var count = n * hw
+    var mean = List[Float64](length=c, fill=0.0)
+    var var_ = List[Float64](length=c, fill=0.0)
+    var new_rm = rm.copy()
+    var new_rv = rv.copy()
+    for ch in range(c):  # small-loop(reference channels)
+        if training:
+            var s = 0.0
+            for i in range(n):  # small-loop(reference images)
+                for k in range(hw):  # small-loop(reference positions)
+                    s += Float64(x[(i * c + ch) * hw + k])
+            var m = s / Float64(count)
+            var q = 0.0
+            for i in range(n):  # small-loop(reference images)
+                for k in range(hw):  # small-loop(reference positions)
+                    var d = Float64(x[(i * c + ch) * hw + k]) - m
+                    q += d * d
+            mean[ch] = m
+            var_[ch] = q / Float64(count)
+            new_rm[ch] = (1.0 - momentum) * rm[ch] + momentum * m
+            new_rv[ch] = (1.0 - momentum) * rv[ch] + momentum * var_[ch] * Float64(count) / Float64(count - 1)
+        else:
+            mean[ch] = rm[ch]
+            var_[ch] = rv[ch]
+    var total = n * c * hw
+    var y = List[Float64](length=total, fill=0.0)
+    var dx = List[Float64](length=total, fill=0.0)
+    var dgamma = List[Float64](length=c, fill=0.0)
+    var dbeta = List[Float64](length=c, fill=0.0)
+    for ch in range(c):  # small-loop(reference channels)
+        var invstd = 1.0 / sqrt(var_[ch] + eps)
+        for i in range(n):  # small-loop(reference images)
+            for k in range(hw):  # small-loop(reference positions)
+                var at = (i * c + ch) * hw + k
+                var xhat = (Float64(x[at]) - mean[ch]) * invstd
+                y[at] = xhat * gamma[ch] + beta[ch]
+                dbeta[ch] += Float64(g[at])
+                dgamma[ch] += Float64(g[at]) * xhat
+        for i in range(n):  # small-loop(reference images)
+            for k in range(hw):  # small-loop(reference positions)
+                var at = (i * c + ch) * hw + k
+                if training:
+                    var xhat = (Float64(x[at]) - mean[ch]) * invstd
+                    dx[at] = (Float64(g[at]) - dbeta[ch] / Float64(count) - xhat * dgamma[ch] / Float64(count)) * (
+                        invstd * gamma[ch])
+                else:
+                    dx[at] = Float64(g[at]) * invstd * gamma[ch]
+    return BnReference(y^, dx^, dgamma^, dbeta^, new_rm^, new_rv^)
+
+
+struct BnLayer(Movable):
+    """The product layer's state the door keeps (bindings/xcnn_bn_native_door.mojo):
+    gamma, beta, the running block [mean | var], the batch counter and the
+    last forward's aux block (eps, factor, then seven words per channel)."""
+    var c: Int
+    var gamma: List[Float32]
+    var beta: List[Float32]
+    var running: List[Float32]
+    var aux: List[Float32]
+    var tracked: Int
+    var stats: Bool
+
+    def __init__(out self, c: Int):
+        self.c = c
+        self.gamma = List[Float32](length=c, fill=1.0)
+        self.beta = zeros32(c)
+        self.running = zeros32(2 * c)
+        for ch in range(c):  # small-loop(unit running variances)
+            self.running[c + ch] = 1.0
+        self.aux = zeros32(bn_run_aux_count(c))
+        self.tracked = 0
+        self.stats = True
+
+    def forward(mut self, mut x: List[Float32], n: Int, hw: Int, training: Bool, track: Bool,
+                has_momentum: Bool, momentum: Float64) raises -> List[Float32]:
+        """`_prep` then the host forward entry; an untracked layer normalizes
+        with batch statistics into a scratch running block."""
+        var prep = bn_run_prep(BnSettings(self.c, 1e-5, training, track, self.tracked, has_momentum, momentum))
+        self.tracked = prep.tracked
+        self.stats = prep.batch_stats
+        self.aux = zeros32(bn_run_aux_count(self.c))
+        bn_run_aux_head(addr(self.aux), 1e-5, prep.factor)
+        for ch in range(self.c):  # small-loop(gamma and beta words)
+            self.aux[2 + 5 * self.c + ch] = self.gamma[ch]
+            self.aux[2 + 6 * self.c + ch] = self.beta[ch]
+        var y = zeros32(len(x))
+        if track:
+            bn_run_forward(cnn_entry(), addr(x), addr(y), addr(self.running), addr(self.aux), n, self.c, hw,
+                           prep.batch_stats)
+        else:
+            var scratch = zeros32(2 * self.c)
+            for ch in range(self.c):  # small-loop(unit running variances)
+                scratch[self.c + ch] = 1.0
+            bn_run_forward(cnn_entry(), addr(x), addr(y), addr(scratch), addr(self.aux), n, self.c, hw,
+                           prep.batch_stats)
+            _ = scratch^
+        return y^
+
+    def backward(mut self, mut x: List[Float32], mut g: List[Float32], n: Int, hw: Int) raises -> List[Float32]:
+        var dx = zeros32(len(x))
+        var shape: List[Int] = [n, self.c, hw]
+        bn_run_backward(cnn_entry(), addr(x), addr(g), addr(dx), addr(self.aux), 0, False, shape, self.c,
+                        1 if self.stats else 0)
+        return dx^
+
+    def grad_bias(self) -> List[Float32]:
+        var out = zeros32(self.c)
+        for ch in range(self.c):  # small-loop(channel words)
+            out[ch] = self.aux[2 + 3 * self.c + ch]
+        return out^
+
+    def grad_weight(self) -> List[Float32]:
+        var out = zeros32(self.c)
+        for ch in range(self.c):  # small-loop(channel words)
+            out[ch] = self.aux[2 + 4 * self.c + ch]
+        return out^
+
+    def running_mean(self) -> List[Float32]:
+        var out = zeros32(self.c)
+        for ch in range(self.c):  # small-loop(channel words)
+            out[ch] = self.running[ch]
+        return out^
+
+    def running_var(self) -> List[Float32]:
+        var out = zeros32(self.c)
+        for ch in range(self.c):  # small-loop(channel words)
+            out[ch] = self.running[self.c + ch]
+        return out^
