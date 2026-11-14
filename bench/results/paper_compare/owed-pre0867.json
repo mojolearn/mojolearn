@@ -136,6 +136,10 @@
   "mamba3-forward-zero-fill": {
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
    "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
+  },
+  "knn-i32-label-range-old": {
+   "define": "MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD",
+   "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_I32_LABEL_RANGE_OLD, knn_labels_already_int32; bindings/neighbors_knn_native_door.mojo _clf_fit): B = int32 labels widened to int64, min and max as two device reductions, narrowed back (every release since 0.8.44); A = int32 labels copied straight into the label columns, no range check (it cannot refuse int32). Same bits"
   }
  },
  "rows": [
@@ -941,6 +945,21 @@
     "mamba3-forward-zero-fill"
    ],
    "decides": "keep the unfilled outputs (A) unless the zero-filled arrays (B) are at least as fast on the NVIDIA and AMD average; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba3-forward 3.95 -> 6.75 ms; same kernels, digests must not move in either arm"
+  },
+  {
+   "id": "wave2-knn-0844-gap",
+   "source": "fix-knn-0844-gap (2026-11-13; history audit hist-trees-neighbors-cluster item 6: kNN NV fit+predict 0.8.44 32.7/30.0/13.7/12.4 -> 0.8.55 40.8/38.2/14.2/11.5 -> candidate 4c2340386abc 49.6/46.3/21.6/18.9 ms, istella clf/reg, taxi clf/reg)",
+   "kind": "ab",
+   "lane": [
+    "knn-clf",
+    "knn-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "knn-i32-label-range-old"
+   ],
+   "decides": "keep A (int32 labels skip the vacuous int32 range check) unless B is at least as fast on the NVIDIA and AMD average (knn-reg is the control: its fit has no int labels, both arms must match). Same board run measures the unmeasured plumbing fixes already on main: bb875c780c (one index upload per fit+predict, no leaked device copy) and c7d202c67c (no pinned status buffer per call); expect knn-clf/knn-reg NV at or below 0.8.55 and near 0.8.44 (the 0.8.55 extra was _sk_validate's device all_finite pass over X at fit, a second upload of X; gone since a7b). Digests must not move in either arm"
   }
  ]
 }
