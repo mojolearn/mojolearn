@@ -228,6 +228,10 @@ struct _Slots(Movable):
         self.floats.append(value)
         self.bad.append(UInt8(GBDT_ARG_NO_INT))
 
+    def request(deinit self, x: Int, y: Int, weights: Int, flags: Int, eval_x: Int, eval_y: Int,
+                var strs: List[String]) raises -> GbdtFitArgs:
+        return GbdtFitArgs(x, y, weights, flags, eval_x, eval_y, self.ints^, self.floats^, self.bad^, strs^)
+
 
 def _symmetric(o: GbdtOpts) -> Bool:
     return o.grow_policy == "SymmetricTree"
@@ -453,8 +457,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     var ex_addr = Int(inp.eval_x.unsafe_ptr()) if n_eval > 0 else x_addr
     var ey_addr = Int(inp.eval_y.unsafe_ptr()) if n_eval > 0 else y_addr
     var strs: List[String] = [o.loss, _bootstrap(o), o.od_type, o.nan_mode]
-    var args = GbdtFitArgs(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), ex_addr, ey_addr,
-                           s.ints^, s.floats^, s.bad^, strs^)
+    var args = s^.request(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), ex_addr, ey_addr, strs^)
     var outcome = I.fit(False, args)
     _ = args^
     _ = flags^
