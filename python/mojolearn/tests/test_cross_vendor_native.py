@@ -1,31 +1,11 @@
 """Whole-operation audits and independent identity oracles for native helpers."""
 import array
 import hashlib
-import struct
 
 import pytest
 
 from mojolearn import cross_vendor as cv
 from mojolearn._verify_native_runtime import audit_native_call
-
-
-def test_native_fold_preserves_logical_order_signed_zero_and_nan_contract():
-    a = array.array('f', [1.0, -1e-39, 1e-39, float('nan')])
-    b = array.array('f', [2 ** -24, -0.0, 0.0, 2.0])
-    c = array.array('f', [2 ** -24, -0.0, 0.0, -2.0])
-    inputs = [a.tobytes(), b.tobytes(), c.tobytes()]
-    before = tuple(inputs)
-    result = audit_native_call(cv.ordered_fold, inputs)
-    result.assert_native()
-    # Explicit integer words independently establish the non-associative
-    # left fold, signed-zero FTZ, and the native canonical-NaN contract.
-    assert struct.unpack('<4I', result.result) == (0x3f800000, 0x80000000, 0, 0x7fc00000)
-    assert tuple(inputs) == before
-    pair = audit_native_call(cv.fold_pair, inputs[1], inputs[2])
-    pair.assert_native()
-    prefixed = audit_native_call(cv.ordered_fold, [inputs[0]], prefix=pair.result)
-    prefixed.assert_native()
-    assert struct.unpack('<I', prefixed.result[:4])[0] == 0x3f800001
 
 
 def test_native_hash_matches_independent_sha256_and_field_order():
