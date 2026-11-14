@@ -72,6 +72,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
         finally:
             _ = entries
             _ = decomp_pins
+    plan.one_entry = entry_tests_x
     if not admitted_x.finite and not entry_tests_x:
         # parallel: finiteness scan across host cores (core/host_finite_scan.mojo)
         if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=admitted_x.address), rows * cols):

@@ -9,7 +9,7 @@ from core.linear_tsqr_run import linear_tsqr_solve
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from glm.impl.lm_finish import lm_intercept
-from x_decomp.descriptor_schema import XD_MODE, XD_VENDOR, XD_FLAGS, XD_TSQR_R, XD_OLS_TSQR_R
+from x_decomp.descriptor_schema import XD_MODE, XD_VENDOR, XD_TSQR_R, XD_OLS_TSQR_R
 
 
 def linear_ols_plan(entry: NativeDescriptorCall, rows: Int, cols: Int, estimator: String) raises -> LinearOlsPlan:
@@ -46,7 +46,7 @@ def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
             if native_descriptor_call(decomp, XD_MODE, [], [], []) != plan.numeric_mode:
                 raise Error("RuntimeError: TSQR numeric mode differs from selected execution")
         if not done and plan.tsqr and center and not weighted:
-            if native_descriptor_call(decomp, XD_FLAGS, [], [], []) & 1:
+            if plan.one_entry:
                 var ra = List[Float32](length=(cols + 1) * (cols + 1), fill=0.0)
                 try:
                     _ = native_descriptor_call(decomp, XD_OLS_TSQR_R,
