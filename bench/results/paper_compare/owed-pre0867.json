@@ -1081,6 +1081,18 @@
     "mamba-backward-generic"
    ],
    "decides": "keep the hand chain (A, candidate) unless the tape graph (B, mamba-backward-generic) is at least as fast on the NVIDIA and AMD average for Mamba1Block.backward and Mamba2Block.backward; record on file (mamba_tape_backward_time n=20, final-01, hand -> tape): NV L40S m1 1.942 -> 2.035 ms, m2 6.462 -> 6.554; AMD MI325X m1 5.131 -> 5.285, m2 17.620 -> 18.458; same kernels, every gradient word must match between the arms"
+  },
+  {
+   "id": "fix-gbdt-prebinned-infer",
+   "source": "fix-gbdt-prebinned-infer (2026-11-13, paper compare of ba08dac006 on L40S: trees/gbdt-depthwise/istella infer ours-prebinned large 71.04 -> 82.71 ms vs 0.8.66, single scored run, warm-up 77.10; ours large flat 68.87 -> 68.66 on the same path): the resident Depthwise/Lossguide predict packs the ensemble once (NsResidentPack) instead of per call",
+   "kind": "ab",
+   "lane": ["gbdt-depthwise", "gbdt-lossguide"],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "gbdt-prebinned-infer-old"
+   ],
+   "decides": "keep the held pack (A, default) unless the per-call pack (B, -D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD) is faster on the NVIDIA+AMD average of infer test and large, arms ours, ours-prebinned (depthwise) and ours, ours-gain0 (lossguide), istella and taxi; same kernels, same arguments, same tree order: every infer hash must be equal between A and B"
   }
  ]
 }
