@@ -66,11 +66,8 @@ numeric labels and a Python list for str labels. Nothing in this module
 imports NumPy.
 """
 
-from . import _portable_math as math
-import numbers
-
 from . import _mojolearn_rf, _native_archive_bridge, _native_trees_bridge
-from ._labels import argmax_rows, decode_labels, is_bool
+from ._labels import argmax_rows, decode_labels
 from ._mode import NumericModeMixin
 from ._forest_protocol import ForestProtocol, forest_estimator
 
@@ -151,7 +148,7 @@ _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 # The other three constants below WERE re-read against the pin in the
 # same pass and are correct: `randomforest_common.pyx:319` is
 # `n_bins=128`, `:324` is `max_batch_size=4096`, `:326` is `n_streams=4`.
-_PORT_DEFAULT_MAX_DEPTH = 2147483647
+# `max_depth=None` -> 2147483647 is `_INT32_MAX` in bindings/trees_public_forest_door.mojo `_rf_base`.
 _CUML_DEFAULT_N_BINS = 128
 _CUML_DEFAULT_N_STREAMS = 4
 _CUML_DEFAULT_MAX_BATCH = 4096
@@ -229,195 +226,18 @@ _MAX_LEAF_NODES_WHY = (
 )
 
 
-_NONFINITE_REFUSAL = "X contains NaN or infinity; the forest has no missing-value arm"
-
-
-def _refuse(name, why):
-    raise NotImplementedError(
-        f"{name} is not implemented: {why} Refused by name rather than accepted"
-        " and ignored."
-    )
-
-
-def _min_weight_fraction(value, who):
-    """scikit-learn's `min_weight_fraction_leaf` check, its wording
-    (`Interval(Real, 0.0, 0.5, closed="both")`). The bound itself is
-    applied by the fit binding (slot 16 of `_fit_params`)."""
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        f = None
-    if isinstance(value, bool) or f is None or not 0.0 <= f <= 0.5:
-        raise ValueError(
-            f"The 'min_weight_fraction_leaf' parameter of {who} must be a float"
-            f" in the range [0.0, 0.5]. Got {value!r} instead.")
-    return f
-
-
-def _criterion_code(criterion, table, who):
-    """A criterion NAME into the engine's `CRITERION` enumerator, or a
-    refusal by name (DEVIATION 407)."""
-    if criterion in table:
-        return table[criterion]
-    if criterion in _UNSUPPORTED_CRITERIA:
-        _refuse(f"criterion={criterion!r}", _UNSUPPORTED_CRITERIA[criterion])
-    raise ValueError(
-        f"criterion={criterion!r} is not a {who} criterion here; accepted"
-        f" are {sorted(table)}"
-    )
-
-
-def _max_features_fraction(max_features, n_features):
-    """sklearn's max_features forms into the fraction the binding takes,
-    resolved the way cuML's python layer resolves them."""
-    if max_features is None:
-        return 1.0
-    if isinstance(max_features, str):
-        if max_features == "sqrt":
-            # The owned host helper uses the correctly rounded CPU sqrt instruction.
-            return math.sqrt(n_features) / n_features
-        if max_features == "log2":
-            # Use the same pinned portable_log2_64 arithmetic as the Mojo
-            # builder. Keep the fraction: the kernel truncates after FP32
-            # conversion. Powers of two are exact; max(2, n) retains the
-            # existing nonzero fraction for a one-feature input.
-            return math.log2(max(2, n_features)) / n_features
-        raise ValueError(
-            f"max_features={max_features!r} is not a recognised form;"
-            " accepted are 'sqrt', 'log2', None, a float fraction or an"
-            " int count"
-        )
-    if isinstance(max_features, numbers.Integral) and not is_bool(
-        max_features
-    ):
-        if not 1 <= int(max_features) <= n_features:
-            raise ValueError(
-                f"max_features={max_features} is outside [1, {n_features}]"
-            )
-        return int(max_features) / n_features
-    f = float(max_features)
-    if not 0.0 < f <= 1.0:
-        raise ValueError(f"max_features={f} is outside (0, 1]")
-    return f
-
-
-def _max_leaves_slot(max_leaves):
-    """cuML's `max_leaves` into slot 5 of the params list.
-
-    -1 is THEIR sentinel for unlimited, not ours (`decisiontree.hpp:83`,
-    `randomforest_common.pyx:318`, and the default table in
-    `ensemble/randomforest.mojo`); a positive int is a cap. `None` is
-    accepted as a spelling of -1 because a Python caller reaches for it.
-    Everything else is refused HERE rather than by
-    `DecisionTreeParams.check()` (`ensemble/decisiontree/decisiontree.mojo`
-    :257-258, which raises "Invalid max leaves"), so the message can name
-    the sentinel the caller was supposed to pass.
-    """
-    if max_leaves is None:
-        return -1
-    if is_bool(max_leaves) or not isinstance(
-        max_leaves, numbers.Integral
-    ):
-        raise ValueError(
-            f"max_leaves={max_leaves!r} must be None, -1 (cuML's sentinel"
-            " for unlimited) or a positive int count"
-        )
-    v = int(max_leaves)
-    if v == -1 or v > 0:
-        return v
-    raise ValueError(
-        f"max_leaves={v} is not a leaf cap: cuML accepts -1 (unlimited) or"
-        " a positive count, and ensemble/decisiontree/decisiontree.mojo"
-        ":257-258 raises on anything else"
-    )
+# The constructor checks and the native configuration they derive are the
+# forests' native owner's (bindings/trees_public_forest_door.mojo: `_refuse`
+# via xtrees/trees_forest_run.mojo, `_criterion_code`, `_min_weight_fraction`,
+# `_max_leaves_slot`, `_rf_base`, `_rf_derive`; `_max_features_fraction` at
+# fit). They run at fit on the stored parameters, which the native
+# constructor (bindings/trees_constructor_native_pack.mojo) stores as given.
+# Lane py-trees (2026-11-14) deleted the Python copies of those checks here.
 
 
 class _RandomForestBase(ForestProtocol, NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
-
-    def __init__(
-        self,
-        n_estimators,
-        max_depth,
-        max_leaf_nodes,
-        max_leaves,
-        max_features,
-        n_bins,
-        min_samples_leaf,
-        min_samples_split,
-        min_impurity_decrease,
-        bootstrap,
-        max_samples,
-        random_state,
-        n_streams,
-        max_batch_size,
-        oob_score,
-        warm_start,
-        ccp_alpha,
-        class_weight,
-        monotonic_cst,
-        n_jobs,
-        verbose,
-        device,
-        criterion_code,
-    ):
-        if device != "gpu":
-            raise ValueError(
-                f"device must be 'gpu', got {device!r}: the fit runs on the"
-                " GPU binding, or, on a CPU-only install with the rf host"
-                " binding built, on its host restatement"
-                " (ensemble/host/rf_oracle.mojo) under the same device='gpu'"
-            )
-        if max_leaf_nodes is not None:
-            _refuse("max_leaf_nodes", _MAX_LEAF_NODES_WHY)
-        if not is_bool(oob_score):
-            raise ValueError("oob_score must be a boolean; callable scoring is not supported")
-        if oob_score and not bootstrap:
-            raise ValueError("oob_score=True requires bootstrap=True")
-        if warm_start:
-            _refuse("warm_start=True", "there is no incremental fit here,"
-                    " and accepting it would silently refit from scratch.")
-        if ccp_alpha:
-            _refuse("ccp_alpha", "cost-complexity pruning is a"
-                    " post-processing pass neither cuML nor this implementation"
-                    " implements. Only 0.0 is accepted.")
-        if class_weight is not None and not isinstance(class_weight, dict):
-            if not isinstance(class_weight, str) or class_weight != "balanced":
-                raise ValueError("class_weight must be None, a dict, or 'balanced'; balanced_subsample is unsupported")
-        if monotonic_cst is not None:
-            _refuse("monotonic_cst", "no cuML counterpart.")
-        if n_jobs is not None:
-            _refuse("n_jobs", "there is no CPU thread pool here -- the fit"
-                    " is one host thread driving the GPU.")
-        if verbose:
-            _refuse("verbose", "nothing in the Mojo layer logs per-tree"
-                    " progress.")
-        if max_samples is not None and not 0.0 < float(max_samples) <= 1.0:
-            raise ValueError(
-                f"max_samples={max_samples} is outside (0, 1]"
-            )
-        self.device = device
-        self._cfg = dict(
-            criterion=int(criterion_code),
-            n_estimators=int(n_estimators),
-            max_depth=(
-                _PORT_DEFAULT_MAX_DEPTH if max_depth is None
-                else int(max_depth)
-            ),
-            max_leaves=_max_leaves_slot(max_leaves),
-            max_features=max_features,
-            n_bins=int(n_bins),
-            min_samples_leaf=int(min_samples_leaf),
-            min_samples_split=int(min_samples_split),
-            min_impurity_decrease=float(min_impurity_decrease),
-            bootstrap=bool(bootstrap),
-            max_samples=(1.0 if max_samples is None else float(max_samples)),
-            random_state=(0 if random_state is None else int(random_state)),
-            n_streams=int(n_streams),
-            max_batch_size=int(max_batch_size),
-            oob_score=bool(oob_score),
-        )
 
     def save(self, path):
         """Write the fitted forest to `path` as an npz file.
@@ -609,18 +429,9 @@ class RandomForestClassifier(_RandomForestBase):
         device="gpu",
         inference_engine="auto",
     ):
-        code = _criterion_code(criterion, _CLS_CRITERIA, "classifier")
-        mwf = _min_weight_fraction(min_weight_fraction_leaf, type(self).__name__)
-        super().__init__(
-            n_estimators, max_depth, max_leaf_nodes, max_leaves,
-            max_features, n_bins,
-            min_samples_leaf, min_samples_split, min_impurity_decrease,
-            bootstrap, max_samples, random_state, n_streams, max_batch_size,
-            oob_score, warm_start, ccp_alpha, class_weight, monotonic_cst,
-            n_jobs, verbose, device, code,
-        )
-        self.criterion = criterion
-        self._cfg["min_weight_fraction_leaf"] = mwf
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None, *, feature_importances=False):
         """Fit the forest.
@@ -826,18 +637,9 @@ class RandomForestRegressor(_RandomForestBase):
         device="gpu",
         inference_engine="auto",
     ):
-        code = _criterion_code(criterion, _REG_CRITERIA, "regressor")
-        mwf = _min_weight_fraction(min_weight_fraction_leaf, type(self).__name__)
-        super().__init__(
-            n_estimators, max_depth, max_leaf_nodes, max_leaves,
-            max_features, n_bins,
-            min_samples_leaf, min_samples_split, min_impurity_decrease,
-            bootstrap, max_samples, random_state, n_streams, max_batch_size,
-            oob_score, warm_start, ccp_alpha, None, monotonic_cst,
-            n_jobs, verbose, device, code,
-        )
-        self.criterion = criterion
-        self._cfg["min_weight_fraction_leaf"] = mwf
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None, *, feature_importances=False):
         """Fit the forest.
