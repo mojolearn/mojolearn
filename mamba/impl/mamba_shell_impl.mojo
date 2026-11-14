@@ -625,6 +625,10 @@ struct Mamba3PrefillSession(Movable, Writable):
     var x_stage: List[Float32]
     var backward_reuses: Int
     var backward_recomputes: Int
+    # lane fix-mamba-forward-per-call (2026-11-14): MOJOLEARN_MAMBA3_RETAIN_STAGES
+    # read once when the session is made, not once per forward (the former
+    # `_m3_retain_stages()` getenv at the end of every `_m3_prefill_run`).
+    var retain_stages: Bool
 
     def __init__(out self):
         self.ctx = None
@@ -648,6 +652,7 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.x_stage = List[Float32]()
         self.backward_reuses = 0
         self.backward_recomputes = 0
+        self.retain_stages = _m3_retain_stages()
 
     def write_to(self, mut writer: Some[Writer]): writer.write("Mamba3PrefillSession")
     def write_repr_to(self, mut writer: Some[Writer]): writer.write("Mamba3PrefillSession")
@@ -889,8 +894,11 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     ctx.synchronize()
     m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
-    ctx.synchronize()
-    if force_retain or _m3_retain_stages():
+    # lane fix-mamba-forward-per-call (2026-11-14): the second
+    # ctx.synchronize() that stood here is gone: nothing is enqueued between
+    # the wait above and this point, so it waited on an empty stream once
+    # per forward. The retain answer is the session's, read at construction.
+    if force_retain or s.retain_stages:
         s.stages = dstages^
         s.state = dstate^
         s.stages_b = b
