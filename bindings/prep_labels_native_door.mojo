@@ -29,7 +29,7 @@ from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.x_prep_native_owner_door import xprep_values
 from bindings.prep_encode_native_door import (
     EncProg, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
-from bindings.prep_encode_prog_run import OUT_MARK
+from bindings.prep_encode_prog_run import OUT_MARK, enc_label_load
 from bindings.str_labels_native_door import str_lookup, _read, str_unique_into, str_codes_into
 from bindings.str_labels_native_run import StrTable, str_classes
 from bindings.boundary_read_door import text_buffer_view, read_text_rows_into, pack_ucs4_str, admitted_buffer_view
@@ -55,7 +55,6 @@ comptime OP_LABEL_BINARIZE = 51
 comptime OP_SCATTER_ONES = 52
 comptime OP_BLOCK_ARGMAX = 76
 comptime OP_INDICATOR = 87
-comptime OP_LAB_LOAD = 119
 comptime OP_UNIQ_COUNT = 120
 comptime OP_UNIQ_SCAN = 121
 comptime OP_UNIQ_WRITE = 122
@@ -230,9 +229,11 @@ def _label_buffer(y: PythonObject, context: PythonObject) raises -> Optional[Lab
 
 def _label_load(mut p: EncProg, lb: LabelBuf) raises -> Int:
     # `_label_load`: the float32 word of each label (NaN when float32 cannot hold it).
+    # UNPACK: the label words' input record (its Python owner held by the
+    # door); RUN: the typed stage (bindings/prep_encode_prog_run.mojo).
     var x = p.work(lb.n)
     var wo = p.put(lb.words, lb.nw)
-    _stage(p.prog.program, OP_LAB_LOAD, lb.n, wo, lb.kind, x)
+    enc_label_load(p.prog, lb.n, wo, lb.kind, x)
     return x
 
 
