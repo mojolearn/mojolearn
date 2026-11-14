@@ -104,28 +104,6 @@ def _f32_scalar(v):
 _KPCA_RESIDENT_KERNELS = ("rbf", "linear", "poly", "sigmoid")
 
 
-def _argmax_labels(est, classes, M):
-    """The class of every row's first maximum: the argmax on the device
-    (`row_argmax`), the labels by `_class_array`."""
-    n, C = M.shape
-    codes = empty((n,), "<i4")
-    if n > 0:
-        est._op("row_argmax", [(M, 0), (codes, 1)], (n, C))
-    return _class_array(classes, codes)
-
-
-def _class_array(classes, codes):
-    """classes[codes] for int32 codes (an Array): int or bool classes an
-    int64 Array, real classes a float64 Array (the native gather of
-    `decode_labels`), other labels a list (`decode_labels`)."""
-    from ._labels import decode_labels
-    if all(isinstance(v, (bool, int)) for v in classes):  # glue: type check over the k class labels
-        return decode_labels([int(v) for v in classes], codes)   # glue: the k class values
-    if all(isinstance(v, (int, float)) for v in classes):  # glue: type check over the k class labels
-        return decode_labels([float(v) for v in classes], codes)  # glue: k class labels as floats
-    return decode_labels(classes, codes)
-
-
 #: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
 #: fuses, `sqdist` then `knn_select` through an n x m matrix. Same bits.
 _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
@@ -598,19 +576,6 @@ class NearestCentroid(_XNeighbors):
         """
         return _NATIVE(self, _OP.family_xn_loc_nc_decision_function, (None, X), _NATIVE_CONTEXT)
 
-    def _decision_matrix(self, X):
-        """The (n_queries, n_classes) discriminant scores."""
-        if self.metric != "euclidean":
-            raise AttributeError("decision_function is available for metric='euclidean' only")
-        Q = _f32(X)
-        C = len(self.classes_)
-        prior = Array.from_list(self.class_prior_.tolist(), "<f4")
-        std = self.within_class_std_dev_
-        out = _empty_out((Q.shape[0], C), "<f4")
-        self._op("nc_decision", [(Q, 0), (self.centroids_, 0), (std, 0), (prior, 0), (out, 1)],
-                 (Q.shape[0], Q.shape[1], C))
-        return out
-
     @_native_local_method
     def predict_proba(self, X):
         """Class probabilities: the softmax of :meth:`decision_function`.
@@ -1026,36 +991,7 @@ class KernelPCA(_XNeighbors):
         return _NATIVE(self, _OP.family_xn_names_kpca, (input_features,), _NATIVE_CONTEXT)
 
 
-# ====================================================================== RandomState
-def _seed_word(seed):
-    """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
-    None (numpy's global RandomState) or a caller's numpy RandomState gives
-    ONE draw, a word in [0, 2^31), and that word seeds the device
-    counter-based generator exactly as an int random_state would. The
-    O(d * n_components) table is then drawn on the device. Not
-    scikit-learn's numbers for those two inputs (theirs are not reproducible
-    for None either); the distribution is the same. Anything else is
-    refused. (Lane py-runtime-b deleted the MT19937 Python stream that the
-    _OFF arms drew from.)"""
-    if isinstance(seed, int) and not isinstance(seed, bool):
-        return seed
-    if seed is None:
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_neighbors')
-        seed = np.random.mtrand._rand
-    elif not (hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform")):
-        raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
-    return int(seed.randint(0, 1 << 31, size=1)[0])
-
-
 # ====================================================================== PolynomialCountSketch
-# Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
-# 1.9.0): `indexHash_` (`randint(0, n_components, (degree, n_features))`)
-# and `bitHash_` (`choice([-1, 1], (degree, n_features))`); here drawn by the
-# device counter-based generator (x_neighbors/kfeat_rng.mojo, see
-# `_seed_word`), the same distribution, not their legacy RandomState words.
-# The transform is the count sketches' circular convolution, computed
-# directly instead of through an FFT (DEVIATION 5203).
 class PolynomialCountSketch(_XNeighbors):
     """Polynomial kernel approximation by tensor sketch.
 
@@ -1761,42 +1697,6 @@ class KNNImputer(_XNeighbors):
         self.copy = copy
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
-
-    def _check(self):
-        mv = self.missing_values
-        import numbers
-        if mv is None or isinstance(mv, (str, bool)) or not isinstance(mv, numbers.Real):
-            raise NotImplementedError("KNNImputer: missing_values must be a number or NaN (float input)")
-        if self.metric != "nan_euclidean":
-            raise NotImplementedError("KNNImputer: metric must be 'nan_euclidean'")
-        if self.weights not in ("uniform", "distance"):
-            raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
-
-    def _nan_cells(self, X, colmiss_only=0):
-        """(cells, colmiss, count): the flat indices of the NaN cells of X
-        ascending (an int32 Array of n * d slots, the first `count` used), the
-        NaN count per column as a list, and the count (xn_nan_cells).
-        colmiss_only=1 (fit): a build with MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY
-        may skip the cell list; the counts are the same integers."""
-        n, d = X.shape
-        # FAST Apple default MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU (_OFF rollback): a binary
-        # whose fit-time op ignores the cell list gets a one-slot one (no
-        # n * d allocation)
-        lean = colmiss_only and int(getattr(self._bind(), "x_neighbors_nc_fit_lean", lambda: 0)())
-        cells = empty((1 if lean else max(n * d, 1),), "<i4")
-        colmiss = empty((max(d, 1),), "<i4")
-        info = empty((1,), "<i4")
-        self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d, colmiss_only))
-        return cells, colmiss.tolist(), int(info.tolist()[0])
-
-    def _masked(self, X):
-        X = _f32(X)
-        mv = self.missing_values
-        if mv == mv and X.size:           # a number: its cells become NaN
-            out = empty(X.shape, "<f4")
-            self._op("p2m_mask_value", [(X, 0), (out, 1)], (X.size,), (_f32_scalar(mv),))
-            X = out
-        return X
 
     @_native_local_method
     def fit(self, X, y=None):
