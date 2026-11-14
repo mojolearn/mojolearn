@@ -12,7 +12,7 @@ from bindings.native_json_door import native_json_parse, native_json_read, nativ
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_instance_item_pack import native_instance_item
-from bindings.native_array_storage_door import native_array_empty, native_array_zeros
+from bindings.native_array_storage_door import native_array_empty, native_array_zeros, native_array_unfilled
 from std.memory import unsafe_memcpy
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_numpy_metadata_pack import native_numpy_type
@@ -209,7 +209,8 @@ def _checkpoint_store_pinned(pin: AdmittedBorrowedBuffer, code: String) raises -
     var itemsize = Int(py=native_array_empty(code).itemsize)
     if itemsize <= 0 or nbytes % itemsize != 0:
         raise Error("ValueError: bytes length not a multiple of item size")
-    var store = native_array_zeros(code, nbytes // itemsize)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the copy below writes all nbytes.
+    var store = native_array_unfilled(code, nbytes // itemsize)
     if nbytes > 0:
         var destination = native_buffer_address(store)
         if layout.contiguous():

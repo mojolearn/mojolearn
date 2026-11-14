@@ -2,7 +2,7 @@
 # Native array-like admission preserving ndarray, standard buffer, and
 # rectangular scalar/array sequence inputs. Container traversal and scalar
 # serialization are host ABI work; existing kernels still own model math.
-from bindings.native_array_storage_door import native_array_zeros, native_scratch_bytes
+from bindings.native_array_storage_door import native_scratch_bytes, native_array_unfilled
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from std.memory import bitcast
@@ -234,7 +234,9 @@ def sequential_sequence_native(mut mods: NativeModules, value: PythonObject, con
     var storage = PythonObject(None)
     if array_storage:
         var code = String("f") if float32_target else String(context["buffer_codes"][Python.tuple(capture.plan.kind, capture.plan.itemsize)])
-        storage = native_array_zeros(code, layout.count)
+        # lane fix-output-zero-fill (2026-11-14): unfilled like the bytearray branch below; the
+        # parallel writer initializes every item.
+        storage = native_array_unfilled(code, layout.count)
     else:
         # ndarray consumes any native byte owner: no zero-fill pass before the
         # parallel writer initializes every byte of this newly allocated store.

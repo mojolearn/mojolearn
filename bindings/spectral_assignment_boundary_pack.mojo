@@ -11,7 +11,7 @@ from core.spectral_assignment_api import (
 )
 from core.native_array_layout import NativeArrayLayout
 from bindings.spectral_umap_routes_unpack import spectral_umap_entry
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.classical_arrays_door import classical_wrap_layout
 from providers.python.neural_descriptor_pyapi_door import (
@@ -24,7 +24,8 @@ def spectral_assignment_pack(output: SpectralAssignmentOutput, rows: Int,
     # The old ClusterOut serializer copied one labels list into one exporter.
     # Retain that copy and owning exporter without its nested Python lists.
     var count = len(output.storage[0].labels)
-    var store = native_array_zeros("i", count)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the memcpy below writes all count labels.
+    var store = native_array_unfilled("i", count)
     if count > 0:
         unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(store)),
             src=output.storage[0].labels.unsafe_ptr(), count=count)

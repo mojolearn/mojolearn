@@ -41,7 +41,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.classical_arrays_door import classical_wrap_layout
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter
@@ -534,8 +534,13 @@ def pack_room(typestr: String, var shape: List[Int], context: PythonObject) rais
     place. `context` is the family context that holds `array_class` and
     `array_storage_slots` (every family door already has it). A constant
     number of CPython calls (the store, its address, the Array slots)."""
+    return _pack_room(typestr, shape^, context, False)
+
+
+def _pack_room(typestr: String, var shape: List[Int], context: PythonObject, unfilled: Bool) raises -> PackedArray:
     var layout = NativeArrayLayout(shape^, native_array_itemsize(typestr), "C")
-    var store = native_array_zeros(native_array_code(typestr), layout.count)
+    var code = native_array_code(typestr)
+    var store = native_array_unfilled(code, layout.count) if unfilled else native_array_zeros(code, layout.count)
     var address = native_buffer_address(store)
     var array = classical_wrap_layout(store, layout, typestr, context)
     return PackedArray(array^, address)
@@ -546,7 +551,9 @@ def _pack_copy(typestr: String, width: Int, src_address: Int, rows: Int, cols: I
     var shape = List[Int](length=1, fill=rows)
     if cols >= 0:
         shape.append(cols)
-    var room = pack_room(typestr, shape^, context)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the memcpy below writes all count
+    # items (pack_f32/f64/i32/i64, every family's copy of a Mojo result).
+    var room = _pack_room(typestr, shape^, context, True)
     var count = rows * (cols if cols >= 0 else 1)
     if count > 0:
         unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=room.address),

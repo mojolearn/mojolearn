@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared native scaler admission and typed row-snapshot ownership.
-from bindings.native_array_storage_door import native_array_from_bytes, native_array_zeros
+from bindings.native_array_storage_door import native_array_from_bytes, native_array_unfilled
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
 from bindings.p3_array_arena_records_unpack import P3_ROWS_EXACT_LAYOUT, p3_layout_admitted, p3_layout_admit
 from std.os import getenv
@@ -209,7 +209,8 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
     cpython_table()[].PyBuffer_Release(bp)
     _ = buffer^  # the Py_buffer words stay alive through the release above
     if String(order) == "F":
-        packed = native_array_zeros(String(code), nr*d)
+        # lane fix-output-zero-fill (2026-11-14): unfilled; strided_copy_bytes writes all nr*d items.
+        packed = native_array_unfilled(String(code), nr*d)
         var dims = List[Int64](length=8,fill=0)
         dims[0] = Int64(nr)
         dims[1] = Int64(d)
@@ -222,7 +223,8 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
         address = destination
     elif String(order) != "C":
         raise Error("TypeError: native row selection requires C or Fortran Array order")
-    var store = native_array_zeros(String(code), n*d)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; maxabs_gather_rows writes all n rows of d.
+    var store = native_array_unfilled(String(code), n*d)
     var output = classical_wrap_array(store,Python.tuple(n,d),dtype,"C",context["output_context"])
     _ = py_call(context["maxabs_gather_rows"],address,classical_address(output),classical_address(indices),nr,n,item*d)
     # PyBuffer_Release above releases its temporary export, not the native

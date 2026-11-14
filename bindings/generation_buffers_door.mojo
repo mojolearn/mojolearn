@@ -239,7 +239,8 @@ def generation_address(value: PythonObject, mut keep: List[PythonObject]) raises
 
 def _generation_pack_foreign(view: PythonObject, format: String, mut keep: List[PythonObject]) raises -> Int:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var packed = native_array_zeros(format, Int(py=view.nbytes) // Int(py=view.itemsize))
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the slice assignment writes every byte.
+    var packed = native_array_unfilled(format, Int(py=view.nbytes) // Int(py=view.itemsize))
     var destination = py_call(py_call(g[].bi.memoryview, packed).cast, "B")
     py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.cast, "B"))
     keep.append(view)
@@ -333,7 +334,8 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
         return out
     # Pack strided buffer inputs with the CPython buffer implementation; all
     # validation and conversion below is a Mojo loop over native storage.
-    var packed = native_array_zeros(fmt, Int(py=view.nbytes) // Int(py=view.itemsize))
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the slice assignment writes every byte.
+    var packed = native_array_unfilled(fmt, Int(py=view.nbytes) // Int(py=view.itemsize))
     var destination = py_call(py_call(g[].bi.memoryview, packed).cast, "B")
     py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.tobytes, "C"))
     generation_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l, column_major, vocab, dst)
