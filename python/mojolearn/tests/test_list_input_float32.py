@@ -50,16 +50,18 @@ def test_float64_buffer_keeps_its_dtype():
     got = materialize_f32_lists(store, "y")[0]
     assert got.dtype == "<f8"
     with pytest.raises(TypeError, match="float32"):
-        StandardScaler._input(Array.from_list(_ROWS, dtype="<f8"))
+        StandardScaler().fit(Array.from_list(_ROWS, dtype="<f8"))
     with pytest.raises(TypeError, match="float32"):
         GradientBoostingRegressor._regression_target(got, "y")
 
 
 @pytest.mark.parametrize("scaler", [StandardScaler, MinMaxScaler])
 def test_scaler_input_accepts_lists(scaler):
-    values = scaler._input(_ROWS)
-    assert values.dtype == "<f4"
-    assert values.tobytes() == as_f32_c(_ROWS, ndim=2, name="X")[0].tobytes()
+    # the native admission (bindings/scaler_native_door.mojo) takes the list
+    # rows as float32, the same words as the array
+    from_list = scaler().fit(_ROWS).transform(_ROWS)
+    from_array = scaler().fit(as_f32_c(_ROWS, ndim=2, name="X")[0]).transform(as_f32_c(_ROWS, ndim=2, name="X")[0])
+    assert from_list.tobytes() == from_array.tobytes()
 
 
 def test_regressor_target_accepts_lists():
