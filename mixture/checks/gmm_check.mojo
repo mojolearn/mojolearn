@@ -55,7 +55,8 @@ is about.
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cholesky.checks.potrf import CHOL_ELEM_TPB
+from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_NB_PINNED, chol_workspace_floats
+from cholesky.chol_ops import CHOL_OPS_FIT
 from core.identity_trace import (
     IdentityTrace,
     first_divergence,
@@ -137,6 +138,8 @@ from mixture.checks.gmm_sabotage import (
 )
 from mixture.checks.mstep import (
     gmm_chol_dwork_floats,
+    gmm_chol_ws_floats,
+    gmm_chol_ws_offset,
     gmm_m_step,
     gmm_mstep_gemm_workspace_floats,
     gmm_mstep_scratch_floats,
@@ -2551,6 +2554,86 @@ def check_gmm_sabotages() raises:
     )
 
 
+def check_chain_workspace_is_leased() raises:
+    """The precision chain's factor workspace is a region of the fit's
+    `dwork`, sized once (lane fix-gmm-chol-leftovers, 2026-11-13).
+
+    1. The layout: at d = 8, 33, 300 the workspace region starts past the
+       three fixed regions on a 64-float boundary and ends at
+       `gmm_chol_dwork_floats(d)`; on the default route it holds
+       `potrf_lower`'s workspace at the pinned width.
+    2. The run: at d = 300 (seven 32-wide panels and more, the route the fit
+       takes where no one-launch factor applies), two components of a
+       diagonally dominant covariance, the chain runs TWICE against ONE
+       `dwork` of exactly `gmm_chol_dwork_floats(300)` floats, as two EM
+       iterations of one fit do. `potrf_lower` refuses a workspace shorter
+       than it needs, so a pass is the lease holding the factor; the two
+       runs' precisions and log-determinants must be the same bits (the
+       reused region changes no word).
+    """
+    var dims: List[Int] = [8, 33, 300]
+    for i in range(len(dims)):
+        var dl = dims[i]
+        var off = gmm_chol_ws_offset(dl)
+        if off < 2 * dl * dl + dl + 1 or off % 64 != 0:
+            raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace offset " + String(off))
+        if gmm_chol_dwork_floats(dl) != off + gmm_chol_ws_floats(dl):
+            raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " dwork does not end at the workspace")
+        comptime if not CHOL_OPS_FIT:
+            if gmm_chol_ws_floats(dl) < chol_workspace_floats(dl, CHOL_NB_PINNED):
+                raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace shorter than potrf_lower's")
+
+    var d = 300
+    var ncomp = 2
+    var dd = d * d
+    var cov_h = List[Float32](length=ncomp * dd, fill=0.0)
+    var state = UInt32(12345)
+    for kc in range(ncomp):
+        for r in range(d):
+            for c in range(r):
+                state = state * UInt32(1664525) + UInt32(1013904223)
+                # off-diagonal in [-0.001, 0.001): every row sum < 0.3 < the diagonal
+                var v = (Float32(Int(state >> 8)) / Float32(16777216.0) - Float32(0.5)) * Float32(0.002)
+                cov_h[kc * dd + r * d + c] = v
+                cov_h[kc * dd + c * d + r] = v
+            cov_h[kc * dd + r * d + r] = Float32(1.0) + Float32(kc) * Float32(0.25)
+    var ctx = DeviceContext()
+    var quiet = IdentityTrace.disabled()
+    var cov = _upload(ctx, cov_h, 0, Float32(0.0))
+    var chol_l = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var linv = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var prec = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var ldc = ctx.enqueue_create_buffer[DType.float32](ncomp)
+    var dwork = ctx.enqueue_create_buffer[DType.float32](gmm_chol_dwork_floats(d))
+    var first = gmm_precision_cholesky(
+        ctx, cov, chol_l, linv, prec, ldc, dwork, d, ncomp, quiet, String("lease.first")
+    )
+    if first.info != 0:
+        raise Error("check_chain_workspace_is_leased: first run info=" + String(first.info))
+    var prec1 = _download(ctx, prec, ncomp * dd)
+    var ld1 = _download(ctx, ldc, ncomp)
+    var second = gmm_precision_cholesky(
+        ctx, cov, chol_l, linv, prec, ldc, dwork, d, ncomp, quiet, String("lease.second")
+    )
+    if second.info != 0:
+        raise Error("check_chain_workspace_is_leased: second run info=" + String(second.info))
+    var prec2 = _download(ctx, prec, ncomp * dd)
+    var ld2 = _download(ctx, ldc, ncomp)
+    for i in range(ncomp * dd):
+        if not _same_bits(prec1[i], prec2[i]):
+            raise Error("check_chain_workspace_is_leased: precision word " + String(i) + " moved on reuse")
+    for kc in range(ncomp):
+        if not _same_bits(ld1[kc], ld2[kc]):
+            raise Error("check_chain_workspace_is_leased: log-determinant " + String(kc) + " moved on reuse")
+    _ = cov^
+    _ = chol_l^
+    _ = linv^
+    _ = prec^
+    _ = ldc^
+    _ = dwork^
+    print("  check_chain_workspace_is_leased: d=300 x2 on one dwork of " + String(gmm_chol_dwork_floats(d)) + " floats: PASS")
+
+
 def main() raises:
     print(
         "== mixture/checks/gmm_check.mojo ["
@@ -2562,6 +2645,7 @@ def main() raises:
         + " =="
     )
     check_gmm_refusals()
+    check_chain_workspace_is_leased()
     check_collapse_is_identical()
     check_iteration_count_is_identical()
     check_estep_vs_oracle()
