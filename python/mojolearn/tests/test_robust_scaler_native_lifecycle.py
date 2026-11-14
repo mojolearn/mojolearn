@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Public RobustScaler lifecycle; inherited sklearn tags are separate scope."""
+"""Public RobustScaler lifecycle; inherited sklearn tags are separate scope.
+
+The fit_transform/transform quantile, NaN and constant-feature contract is
+checked natively in checks/native_tests/prep_robust_scaler_native_lifecycle_suite.mojo.
+"""
 import os
 import subprocess
 import sys
@@ -41,43 +45,6 @@ def test_constructor_parameter_and_fitted_state_lifecycle_is_native():
     assert audit_native_call(model.__sklearn_is_fitted__).assert_native()
     assert model.scale_.tobytes() == before  # set_params preserves existing fitted state.
     _refused(audit_native_call(model.set_params, unknown=True), ValueError)
-
-
-@pytest.mark.parametrize('blocked', ['0', '1'])
-@pytest.mark.parametrize('center,scale', [(False, False), (False, True), (True, False), (True, True)])
-@pytest.mark.parametrize('rows', [19, 2049])
-def test_public_fit_and_transform_keep_quantiles_nan_and_constant_columns(blocked, center, scale, rows, monkeypatch):
-    monkeypatch.setenv('MOJOLEARN_XPREP_BLOCKED', blocked)
-    x = _data(rows)
-    before = x.tobytes()
-    model = ml.RobustScaler(with_centering=center, with_scaling=scale, copy=False)
-    actual = audit_native_call(model.fit_transform, x).assert_native()
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', RuntimeWarning)
-        quantiles = np.nanpercentile(x, [25., 50., 75.], axis=0)
-    # The existing x_prep quantile kernel returns zero when a feature has no
-    # observed samples; its zero scale then becomes one. Preserve that contract.
-    quantiles[:, np.isnan(x).all(axis=0)] = 0
-    expected_center = quantiles[1].astype('f4') if center else None
-    expected_scale = (quantiles[2] - quantiles[0]).astype('f4') if scale else None
-    if scale:
-        expected_scale[expected_scale < 10 * np.finfo('f4').eps] = 1
-        np.testing.assert_allclose(model.scale_, expected_scale, rtol=2e-6, atol=2e-6)
-    else:
-        assert model.scale_ is None
-    if center:
-        np.testing.assert_allclose(model.center_, expected_center, rtol=2e-6, atol=2e-6)
-    else:
-        assert model.center_ is None
-    expected = x.copy()
-    if center:
-        expected -= expected_center
-    if scale:
-        expected /= expected_scale
-    np.testing.assert_allclose(actual, expected, rtol=2e-6, atol=2e-6)
-    assert np.array_equal(np.isnan(actual), np.isnan(x))
-    assert actual is not x and x.tobytes() == before
-    assert actual.tobytes() == audit_native_call(model.transform, x).assert_native().tobytes()
 
 
 @pytest.mark.parametrize('layout', ['f64', 'integer', 'fortran', 'strided', 'readonly', 'memoryview', 'array', 'list', 'bigendian'])
