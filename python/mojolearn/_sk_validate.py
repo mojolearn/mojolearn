@@ -30,9 +30,10 @@ scikit-learn's wording, without a copy of the check in each estimator:
 After a fit it sets `n_features_in_` (when the estimator did not) and
 `feature_names_in_` for a DataFrame with string column names.
 
-Every look at VALUES (finiteness, integrality) is a native helper on an
-`Array` view of the input (`_buffer.all_finite`, the core `reduce_stat`):
-Python only reads shapes, formats and tags. The X finiteness scan runs only
+Every refusal and every look at VALUES (finiteness, integrality) is one
+native operation (bindings/labels_admission_unpack.mojo
+`admission_check_x_op` / `admission_check_y_op`, scikit-learn's wording):
+Python only reads shapes, formats and tags and hands them over. The X finiteness scan runs only
 for the estimators in `_SCANS_X_HERE`; every other estimator's kernels scan
 X themselves, and their refusal (a plain `Exception` raised by the binding)
 is re-raised here as the `ValueError` scikit-learn's callers catch.
@@ -102,6 +103,17 @@ _RESHAPE_HINT = ("Reshape your data either using array.reshape(-1, 1) if your da
                  "single feature or array.reshape(1, -1) if it contains a single sample.")
 
 _MISSING = object()
+
+#: `bindings/labels_native_entry_pack.mojo` admission operations (lane py-admission).
+_OP_CHECK_X = 12
+_OP_CHECK_Y = 13
+
+
+def _admission():
+    """`(entry, context)`: the compiled label entry whose admission
+    operations raise the X and y refusals (connected once)."""
+    from ._native_labels_bridge import labels_entry
+    return labels_entry()
 
 
 class DataConversionWarning(UserWarning):
@@ -301,30 +313,9 @@ def _column_names(X):
     return names
 
 
-def _all_finite(obj):
-    """True unless a float buffer or list holds NaN or infinity (the base
-    binding's `all_finite` over a zero-copy `Array` view when it can be)."""
-    from ._buffer import _materialize
-    a, _ = _materialize(obj, "X")
-    return _finite_array(a)
-
-
-def _finite_array(a):
-    from ._buffer import all_finite
-    if a.dtype not in ("<f4", "<f8"):
-        return True
-    return all_finite(a)
-
-
-def _integral_array(a):
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from ._buffer import _native, addr_ro
-    from ._labels import unique_inverse
-    if a.dtype not in ("<f4", "<f8") or a.size == 0 or a.size != max(a.shape):  # glue: largest axis of the shape
-        return True
-    classes, _ = unique_inverse(a._as_c().reshape((a.size,)))
-    return bool(_native("reduce_stat")(addr_ro(classes, name="classes"), _NATIVE_CODE[classes.dtype],
-                                       int(classes.size), _REDUCE_INTEGRAL))
+# TOMBSTONE: _sk_validate._all_finite / _finite_array / _integral_array (the value scans) deleted
+# 2026-11-14 by lane py-admission: bindings/labels_admission_unpack.mojo admission_check_x_op /
+# admission_check_y_op scan X and y natively; code recoverable at 1fac46234f.
 
 
 # TOMBSTONE: _sk_validate.whole_float_labels (no product caller: bindings/neighbors_knn_native_door.mojo
@@ -362,29 +353,21 @@ def _check_X(est, X, fitting=True):
                 "Sparse data was passed for X, but dense data is required. Use "
                 f"'.toarray()' to convert to a dense numpy array. ({name} takes dense X only.)")
         return info
-    if kind == "complex":
-        raise ValueError(f"Complex data not supported: {name} got a complex X.")
-    if container != "frame" and kind is None:
-        return None  # strings, objects, records: the estimator's own input step
-    if not _input_tag(cls, "two_d_array", True) or _input_tag(cls, "one_d_array", False):
-        return None
-    ndim = len(shape)
-    if ndim < 2:
-        raise ValueError(
-            f"Expected 2D array, got {'scalar' if ndim == 0 else '1D'} array instead "
-            f"(shape={shape}). {_RESHAPE_HINT}")
-    if ndim == 2:
-        if shape[0] == 0:
-            raise ValueError(f"Found array with 0 sample(s) (shape={shape}) while a "
-                             f"minimum of 1 is required by {name}.")
-        if shape[1] == 0:
-            raise ValueError(f"Found array with 0 feature(s) (shape={shape}) while a "
-                             f"minimum of 1 is required by {name}.")
-    if (container in ("buffer", "list") and kind == "float"
+    complex_x = kind == "complex"
+    if not complex_x:
+        if container != "frame" and kind is None:
+            return None  # strings, objects, records: the estimator's own input step
+        if not _input_tag(cls, "two_d_array", True) or _input_tag(cls, "one_d_array", False):
+            return None
+    scan = (container in ("buffer", "list") and kind == "float"
             and not _input_tag(cls, "allow_nan", False)
             and not _allows_nan_now(est)
-            and _scans_x(cls, fitting) and not _all_finite(X)):
-        raise ValueError(f"Input X contains NaN or infinity ({name}).")
+            and _scans_x(cls, fitting))
+    # The refusals (complex, rank, no samples, no features) and the finiteness
+    # scan, in scikit-learn's words: one native call
+    # (bindings/labels_admission_unpack.mojo `admission_check_x_op`).
+    entry, context = _admission()
+    entry(_OP_CHECK_X, (X, name, shape, complex_x, scan), context)
     return info
 
 
@@ -417,24 +400,30 @@ def _check_width(est, X, info):
 # ------------------------------------------------------------------ y
 
 
-def _check_y(est, y):
-    """Refuse or reshape y as scikit-learn's `validate_data(..., y)` does;
-    return the y to fit on."""
+def _check_y(est, y, x_rows=-1):
+    """Refuse or reshape y as scikit-learn's `validate_data(..., y)` does,
+    and refuse an X and y of different lengths (`check_consistent_length`,
+    `x_rows` the rows of X or -1); return the y to fit on."""
+    from ._native_labels_bridge import (
+        ADMISSION_Y_COMPLEX, ADMISSION_Y_SCAN, ADMISSION_Y_CLASSIFIER, ADMISSION_Y_MISSING)
     cls = type(est)
     name = cls.__name__
     kind = _kind(est)
+    entry, context = _admission()
     if y is None:
         if _target_tag(cls, "required", kind in ("classifier", "regressor")):
-            raise ValueError(f"{name} requires y to be passed, but the target y is None.")
+            entry(_OP_CHECK_Y, (None, name, ADMISSION_Y_MISSING, -1, -1), context)
         return y
     info = describe(y)
     if info is None:
         return y
     container, shape, vkind = info
+    y_rows = shape[0] if shape else -1
     if container == "sparse":
+        entry(_OP_CHECK_Y, (y, name, 0, x_rows, y_rows), context)
         return y
     if vkind == "complex":
-        raise ValueError(f"Complex data not supported: {name} got a complex y.")
+        entry(_OP_CHECK_Y, (y, name, ADMISSION_Y_COMPLEX, x_rows, y_rows), context)
     if (len(shape) == 2 and shape[1] == 1 and container != "list"
             and not _target_tag(cls, "multi_output", False, est) and hasattr(y, "reshape")):
         warnings.warn(
@@ -442,30 +431,19 @@ def _check_y(est, y):
             "the shape of y to (n_samples, ), for example using ravel().",
             _conversion_warning(), stacklevel=4)
         y = y.reshape(-1)
-    if container in ("buffer", "list") and vkind == "float":
-        # One admission of y serves both native scans (was materialized twice).
-        from ._buffer import _materialize
-        a, _ = _materialize(y, "y")
-        if not _finite_array(a):
-            raise ValueError(f"Input y contains NaN or infinity ({name}).")
-        if kind == "classifier" and not _integral_array(a):
-            raise ValueError(
-                "Unknown label type: continuous. Maybe you are trying to fit a classifier, "
-                "which expects discrete classes on a regression target with continuous values.")
+    # NaN or infinity in a float y, a continuous y for a classifier and the
+    # lengths, in scikit-learn's words: one native call
+    # (bindings/labels_admission_unpack.mojo `admission_check_y_op`).
+    flags = ADMISSION_Y_SCAN if container in ("buffer", "list") and vkind == "float" else 0
+    if kind == "classifier":
+        flags |= ADMISSION_Y_CLASSIFIER
+    entry(_OP_CHECK_Y, (y, name, flags, x_rows, y_rows), context)
     return y
 
 
-def _check_lengths(info, y):
-    """scikit-learn's `check_consistent_length` over X and y, from their
-    shapes."""
-    if info is None or y is None or not info[1]:
-        return
-    yinfo = describe(y)
-    if yinfo is None or not yinfo[1]:
-        return
-    if yinfo[1][0] != info[1][0]:
-        raise ValueError("Found input variables with inconsistent numbers of samples: "
-                         f"[{info[1][0]}, {yinfo[1][0]}]")
+# TOMBSTONE: _sk_validate._check_lengths deleted 2026-11-14 by lane py-admission: the
+# lengths refusal is admission_check_y_op's (bindings/labels_admission_unpack.mojo), called
+# by _check_y with the rows of X; code recoverable at 1fac46234f.
 
 
 # ------------------------------------------------------------- the hooks
@@ -522,10 +500,10 @@ def before_fit(est, method, slots, args, kwargs):
         _check_width(est, X, info)
     y = _get(args, kwargs, iy, yname)
     if y is not _MISSING:
-        y2 = _check_y(est, _array_like(y))
+        x_rows = info[1][0] if info is not None and info[1] else -1
+        y2 = _check_y(est, _array_like(y), x_rows)
         if y2 is not y:
             args, kwargs = _put(args, kwargs, iy, yname, y2)
-        _check_lengths(info, y2)
     prior = None if method == "partial_fit" else vars(est).get("n_features_in_", _MISSING)
     return args, kwargs, Check(X, info, True, prior)
 
