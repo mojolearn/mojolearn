@@ -181,6 +181,11 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
   at least as fast as 0.8.55 with quality equal.
 - Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions.
+- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
+  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
+  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
+  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
+  lane at once on the integration branch, and no measurement is repeated for it alone.
 - Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
   is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
   "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
