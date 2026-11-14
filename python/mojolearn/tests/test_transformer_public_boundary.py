@@ -182,6 +182,63 @@ def test_decode_rejects_mutable_state_hooks_without_invocation():
         state.cached_tokens = 0
 
 
+def _block_and_weights():
+    d, it = 16, 32
+    rng = np.random.default_rng(27)
+    names = TransformerBlock._W_NAMES
+    shapes = ((d,), (d,), (d, d), (d, d), (d, d), (d, d), (it, d), (it, d), (d, it))
+    weights = {name: rng.normal(0, .01, shape).astype(np.float32) for name, shape in zip(names, shapes)}
+    weights[names[0]].fill(1)
+    weights[names[1]].fill(1)
+    return TransformerBlock(weights, n_heads=1, numeric_mode="identical"), weights
+
+
+def test_decode_admitted_steps_keep_the_admitted_block():
+    # Lane fix-transformer-decode-step-admission: a step on an open session
+    # admits only x (0.8.55's per-token path). Weights edited in place and a
+    # replaced `_block` between steps do not reach the open session: it runs
+    # on what it admitted at open, bit for bit; the owner check still refuses
+    # the replaced block at sync, and a replaced `_state` at the next step.
+    rng = np.random.default_rng(41)
+    tokens = rng.normal(0, .1, (6, 1, 16)).astype(np.float32)
+    reference_block = _block()
+    reference = reference_block.allocate_state(1, 8)
+    with reference_block.decode_session(reference) as session:
+        expected = [np.asarray(session.step(t)).copy() for t in tokens]
+    block, weights = _block_and_weights()
+    state = block.allocate_state(1, 8)
+    session = block.decode_session(state)
+    # The admitted step is the GPU registry session's (its native marker is
+    # the handle word, an int); the host route admits in full every step.
+    admitted = isinstance(session._native, int)
+    original = session._block
+    try:
+        for i, t in enumerate(tokens):
+            if i == 2:
+                for value in weights.values():
+                    value *= 3
+            if i == 4 and admitted:
+                session._block = _block()
+            actual = session.step(t)
+            assert np.asarray(actual).shape == (1, 1, 16)
+            assert np.asarray(actual).tobytes() == expected[i].tobytes()
+            assert state.cached_tokens == i + 1
+        if admitted:
+            with pytest.raises(TypeError):
+                session.sync_state()
+        session._block = original
+        session.sync_state()
+        np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
+        replaced = session._state
+        session._state = block.allocate_state(1, 8)
+        with pytest.raises(TypeError):
+            session.step(tokens[0])
+        session._state = replaced
+        assert state.cached_tokens == len(tokens)
+    finally:
+        session.discard()
+
+
 def test_decode_rejects_replaced_session_owners():
     block = _block()
     state = block.allocate_state(1, 6)

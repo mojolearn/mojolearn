@@ -172,6 +172,10 @@
   "gbdt-prebinned-infer-old": {
    "define": "MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD",
    "status": "define in code (gbdt/models/add_non_symmetric_tree_doc_parallel.mojo IDN_NS_RESIDENT_PACK): B = the resident Depthwise/Lossguide predict re-packing the ensemble every call through doc_parallel_boosting.predict (layout build, node staging, sixteen allocations, eight uploads, bins buffer); A = the pack held from the first predict (NsResidentPack), node offsets and bins buffer rewritten only when the row count changes (default). Same kernels, same arguments, same tree order: same bits"
+  },
+  "transformer-decode-per-token-admission": {
+   "define": "MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION",
+   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_ADMISSION): B = the per-token admission of the GPU decode step (owner record fields of 3 names, block and state generation words, option-tail content check, a new NativeModules per token, x and y address re-snapshots and a keep list, the state generation re-stamp); A = 0.8.55's per-token shape: when the session's _state is the state admitted at init and the handle holds its registry session, the step admits only x, allocates y, reads/writes state.cached_tokens (exact int) and makes one native call on the pinned session"
   }
  },
  "rows": [
@@ -1116,6 +1120,20 @@
     "gbdt-prebinned-infer-old"
    ],
    "decides": "keep the held pack (A, default) unless the per-call pack (B, -D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD) is faster on the NVIDIA+AMD average of infer test and large, arms ours, ours-prebinned (depthwise) and ours, ours-gain0 (lossguide), istella and taxi; same kernels, same arguments, same tree order: every infer hash must be equal between A and B"
+  },
+  {
+   "id": "fix-transformer-decode-step-admission",
+   "source": "fix-transformer-decode-step-admission (2026-11-13, wave 2; best-ever history audit row 3, neural/transformer-decode/gaussian: 1104.95 ms at 0.8.55 0e4de0f46e; d37be875fc moved the step behind a per-token admission, +125-170 us/token both vendors): the per-token owner/generation/tail checks and the per-token NativeModules skipped when the session's state and registry word are those admitted at init",
+   "kind": "ab",
+   "lane": [
+    "transformer-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "transformer-decode-per-token-admission"
+   ],
+   "decides": "keep the admitted per-token path (A, default) unless the per-token admission (B, -D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION) is at least as fast on the NVIDIA and AMD average; board on record NV L40S 1105 ms (0.8.55) -> 1455 (0.8.66) -> 1406 (candidate 4c2340386abc), MI300X 2445 -> 2699 (0.8.66); same native call on the same AttnStepArm, same kernels and order: digests must not move between the arms"
   }
  ]
 }
