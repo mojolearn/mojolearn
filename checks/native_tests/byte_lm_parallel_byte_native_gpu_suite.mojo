@@ -54,7 +54,7 @@ struct Exported(Movable):
     var flags: List[Int32]
 
 
-def export(mut owner: ByteParallelTrainer, cfg: ByteConfig) raises -> Exported:
+def export_replica(mut owner: ByteParallelTrainer, cfg: ByteConfig) raises -> Exported:
     var n = cfg.n_total()
     var state = Exported(List[Float32](length=n, fill=Float32(-1)), List[Float32](length=n, fill=Float32(-1)),
                          List[Float32](length=n, fill=Float32(-1)), List[Int32](length=cfg.n_tensors(), fill=Int32(-1)))
@@ -116,7 +116,7 @@ def run_checks() raises:
             require(abs(Float64(losses[k]) - expected_loss) <= 2e-6,
                     "shard " + String(k) + " loss " + String(losses[k]) + " is not log(16)")
         require(owner.trainers[0].completed_steps == 1, "the cooperative step did not complete one step")
-        var exported = export(owner, cfg)
+        var exported = export_replica(owner, cfg)
         var decayed = List[Float32](capacity=n)
         for i in range(n):  # driver-loop: over the fixture's parameter cells
             decayed.append(p[i] * Float32(1.0 - 0.125 * 0.25))
@@ -132,8 +132,8 @@ def run_checks() raises:
         replay.open(first, 3, exported.p, exported.m, exported.v, replay_flags, 1, opt, cfg, False)
         _ = owner.step(shards())
         _ = replay.step(shards())
-        var a = export(owner, cfg)
-        var b = export(replay, cfg)
+        var a = export_replica(owner, cfg)
+        var b = export_replica(replay, cfg)
         same_f32(a.p, b.p, "replay parameters")
         same_f32(a.m, b.m, "replay first moment")
         same_f32(a.v, b.v, "replay second moment")
