@@ -46,7 +46,7 @@ def install(fake, *, fail=False, extra=0.0):
     def train_step(addresses, native, scalars, completed):
         assert len(addresses) == 8
         assert all(type(a) is int for a in addresses)
-        assert list(native) == host_mod._native_shape(SHAPE)
+        assert list(native) == list(SHAPE.native_shape)
         assert len(scalars) == 5 and all(type(s) is float for s in scalars)
         assert type(completed) is int
         calls.append(dict(scalars=list(scalars), completed=completed,

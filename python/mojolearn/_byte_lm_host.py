@@ -32,7 +32,6 @@ from pathlib import Path
 
 from . import _backend
 from . import _numeric_profile
-from ._buffer import addr, addr_ro, as_f32_c
 from ._byte_lm_config import ByteLanguageModelConfig
 from . import _ragged
 
@@ -56,53 +55,12 @@ def _load():
     return _backend.load_door_host(_EXTENSION)
 
 
-def _native_shape(shape):
-    if not isinstance(shape, ByteLanguageModelConfig):
-        raise TypeError('shape must be a ByteLanguageModelConfig')
-    # The config owns the ABI, including its optional chunked-head selector.
-    # Both inference and trainer adapters must pass the same complete shape.
-    return list(shape.native_shape)
+# The shape, thread-count and parameter-dict admission (`_native_shape`,
+# `_thread_count`, `_flatten_parameters`) run in the native host trainer door; their
+# dead Python twins are gone (lane py-lm-neural, 2026-11-14).
 
-
-_MAX_THREADS = 1024
 #: torch's `ignore_index`, which the loss oracle skips as a target.
 _IGNORE_INDEX = -100
-
-
-def _thread_count(value):
-    """None is one thread per physical core, sent to the binding as 0."""
-    if value is None:
-        return 0
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError('threads must be an int or None')
-    if not 1 <= value <= _MAX_THREADS:
-        raise ValueError(f'threads must be in [1, {_MAX_THREADS}]')
-    return value
-
-
-def _flatten_parameters(params, shape):
-    """The registry dict (names from `shape.parameter_names`, values float32
-    or packed) to the flat float32 vector the binding takes, and the one
-    format the packed tensors share. NumPy-free: the materialized tensors
-    are `mojolearn.Array`s and the copy goes through the flat buffer views."""
-    from . import lowbit as _lowbit
-    from ._buffer import empty as _empty
-    from ._bufcheck import flat_view as _flat
-    names = shape.parameter_names
-    missing = [n for n in names if n not in params]
-    extra = [n for n in params if n not in names]
-    if missing or extra:
-        raise ValueError(f"mojolearn.LanguageModelInference: parameter dict mismatch; missing {missing!r}, unknown {extra!r}")
-    fmt = _lowbit.format_of(params)
-    flat = _empty((shape.n_total,), '<f4')
-    dst = _flat(flat, 'f')
-    offsets = shape.offsets
-    for j, (name, shp) in enumerate(zip(names, shape.parameter_shapes)):
-        a, _ = as_f32_c(_lowbit.materialize_one(params[name], name), ndim=None, name=name)
-        if tuple(a.shape) != tuple(shp):
-            raise ValueError(f"mojolearn.LanguageModelInference: {name} has shape {tuple(a.shape)}, want {tuple(shp)}")
-        dst[offsets[j]:offsets[j + 1]] = _flat(a, 'f')
-    return flat, fmt
 
 
 # Forward-only byte LM on the CPU. The parameters are copied at
