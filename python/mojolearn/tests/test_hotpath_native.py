@@ -32,8 +32,6 @@ import numpy as np
 import pytest
 
 from mojolearn import _array, _buffer, _labels, _metrics_impl as M
-from mojolearn import model_selection as MS
-from mojolearn.tests import _fold_reference as _REF
 from mojolearn.tests import _array_reference
 from mojolearn._array import Array
 
@@ -602,128 +600,11 @@ def test_int32_range_refusal_and_weights():
 
 
 # --------------------------------------------------------- model_selection
-
-
-def _fold_lists(folds):
-    return [(list(train), list(test)) for train, test in folds]
-
-
-def _fold_labels():
-    n = 3000
-    return {
-        "int64": _arr(_RNG.integers(0, 4, n)),
-        "int32 signed": _arr(_RNG.integers(-3, 3, n).astype(np.int32)),
-        "uint8 bool": _arr(_RNG.integers(0, 2, n).astype(np.uint8)),
-        "float integral": _arr(_RNG.integers(0, 4, n).astype(np.float32)),
-        "float zeros": _arr(np.where(_RNG.integers(0, 2, n) == 0, -0.0, 0.0)),
-        "float regression": _arr(_RNG.standard_normal(n).astype(np.float32)),
-        "float nan": _arr(np.where(np.arange(n) == 9, np.nan, 1.0)),
-        "rare class": _arr(np.where(np.arange(n) < 3, 9, _RNG.integers(0, 3, n))),
-        "all rare": _arr(np.arange(n)),
-        "many classes": _arr(np.arange(n) % 1500),
-        "sorted": _arr(np.sort(_RNG.integers(0, 4, n))),
-        "list": _RNG.integers(0, 4, n).tolist(),
-        "strs": [("c%d" % v) for v in _RNG.integers(0, 4, n)],
-        "short": _arr(_RNG.integers(0, 2, 40)),
-        "odd length": _arr(_RNG.integers(0, 4, 2999)),
-    }
-
-
-@pytest.mark.parametrize("classifier", [True, False])
-@pytest.mark.parametrize("name", list(_fold_labels()))
-def test_default_folds_match(name, classifier):
-    y = _fold_labels()[name]
-    for splits in (2, 3, 5, 7, 1, True, 2.0, len(y) + 1):
-        python_only = (name in ("short",) or (classifier and name in ("list", "strs"))
-                       or splits in (1, True, 2.0) or splits > len(y)
-                       or (classifier and name == "all rare"))
-        # a refusal (a class with fewer members than folds) is raised between
-        # the two helpers, so only `fold_ids` is pinned for every case
-        expect = () if python_only else ("fold_ids",)
-        _same(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)), expect,
-              group="folds", ref_fn=lambda: _fold_lists(_REF.default_folds(y, splits, classifier)))
-        if not _EXPECT_SABOTAGE and not python_only:
-            clean = _outcome(lambda: _fold_lists(_REF.default_folds(y, splits, classifier)))
-            fast = _outcome(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)))
-            assert clean == fast
-
-
-def test_one_row_per_fold():
-    y = _arr(_RNG.integers(0, 2, 300))
-    for classifier in (True, False):
-        _same(lambda: _fold_lists(MS._default_fold_arrays(y, 300, classifier)), ("fold_ids",),
-              group="folds", ref_fn=lambda: _fold_lists(_REF.default_folds(y, 300, classifier)))
-
-
-def test_the_fold_sabotage_control_still_moves_the_folds():
-    y = _arr(_RNG.integers(0, 4, 3000))
-    clean = _fold_lists(MS._default_fold_arrays(y, 4, True))
-    os.environ["MOJOLEARN_FOLD_ORDER_SABOTAGE"] = "1"
-    os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE_SAVED"] = os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE", "")
-    os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE"] = "1"
-    try:
-        # the control runs in the core helpers too (lane py-runtime-b)
-        with _Spy() as spy:
-            rotated = _fold_lists(MS._default_fold_arrays(y, 4, True))
-        assert "fold_ids" in spy.calls
-        assert rotated == _fold_lists(_REF.default_folds(y, 4, True))
-        if not _EXPECT_SABOTAGE:
-            assert rotated != clean
-    finally:
-        os.environ.pop("MOJOLEARN_FOLD_ORDER_SABOTAGE")
-        saved = os.environ.pop("MOJOLEARN_HOST_ALLOW_SABOTAGE_SAVED")
-        if saved:
-            os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE"] = saved
-        else:
-            os.environ.pop("MOJOLEARN_HOST_ALLOW_SABOTAGE")
-
-
-def _indices_definition(value, n, name):
-    """`MS._indices`' definition in NumPy: its Python route was deleted (index
-    checks native only since d53d84a0f), so the reference arm runs this."""
-    a = np.asarray(value)
-    if a.ndim != 1 or a.dtype.kind not in "iu" or not a.size:
-        raise ValueError(f"{name} must be a nonempty 1-D integer index array")
-    a = a.astype(np.int64)
-    if ((a < 0) | (a >= n)).any():
-        raise ValueError(f"{name} contains an out-of-range index")
-    if np.unique(a).size != a.size:
-        raise ValueError(f"{name} contains duplicate indices")
-    return Array.from_list(a.tolist(), "<i8")
-
-
-def _overlap_definition(a, b, n):
-    """`MS._overlap`'s definition: two accepted index Arrays share a row."""
-    if not a.size or not b.size or n <= 0:
-        return False
-    return bool(np.intersect1d(np.frombuffer(a.tobytes(), "<i8"), np.frombuffer(b.tobytes(), "<i8")).size)
-
-
-def test_indices_and_overlap_match():
-    n = 5000
-    perm = _RNG.permutation(n)
-    cases = {
-        "ok int64": perm[:3000], "ok int32": perm[:3000].astype(np.int32),
-        "ok uint32": perm[:3000].astype(np.uint32), "ok uint8": np.arange(200, dtype=np.uint8),
-        "strided": perm[::2], "list": perm[:3000].tolist(), "short": perm[:10],
-        "negative": np.where(np.arange(3000) == 7, -1, perm[:3000]),
-        "too big": np.where(np.arange(3000) == 7, n, perm[:3000]),
-        "duplicate": np.where(np.arange(3000) == 7, perm[8], perm[:3000]),
-        "duplicate and too big": np.concatenate([perm[:3000], [perm[0], n]]),
-        "floats": perm[:3000].astype(np.float32), "two dim": perm[:3000].reshape(1500, 2),
-        "empty": np.zeros(0, np.int64),
-    }
-    for name, value in cases.items():
-        native = name not in ("short", "floats", "two dim", "empty", "ok uint8")
-        _same(lambda: MS._indices(value, n, "train"),
-              ("check_indices_i64",) if native else (), group="indices",
-              ref_fn=lambda: _indices_definition(value, n, "train"))
-    a = MS._indices(perm[:2500], n, "train")
-    for other, hit in ((perm[2500:], False), (perm[2499:], True), (perm[:2500], True)):
-        b = MS._indices(other, n, "test")
-        ref = _same(lambda: MS._overlap(a, b, n), ("indices_overlap_i64",), group="indices",
-                    ref_fn=lambda: _overlap_definition(a, b, n))
-        assert ref[0] == ("ok", ("bool", hit))
+# The fold seams (`_indices`, `_overlap`, the default folds and their sabotage
+# control) have no Python route left: their Python copies were deleted (lane
+# py-msel-prep-cnn, 2026-11-14); bindings/msel_cv_door.mojo and
+# msel_split_door.mojo own them, held to tests/_fold_reference.py by
+# tools/cross_val_folds_oracle_check.py and test_model_selection_numpy_free.py.
 
 
 # ------------------------------------------- the C-builtin seams, pinned
