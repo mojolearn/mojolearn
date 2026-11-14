@@ -146,9 +146,10 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
             # its image's caps (read once when it opened); a table call only
             # before the first session
             var existing = py_get(fields, "_prefill_session")
+            caps = -1
             if mamba3_prefill_session_serves(existing, session_entry):
                 caps = mamba3_prefill_session_caps(existing)
-            else:
+            if caps < 0:
                 caps = mamba3_prefill_caps(session_entry)
         else:
             caps = mamba3_prefill_caps(session_entry)

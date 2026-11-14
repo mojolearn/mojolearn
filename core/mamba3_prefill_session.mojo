@@ -55,8 +55,8 @@ struct Mamba3PrefillHandle(Movable, Writable):
     var handle: Int
     """The session's handle word; 0 once closed."""
     var caps: Int
-    """The image's capability bits (MAMBA3_CAP_*, fixed per build), read once
-    when the session opens (lane fix-mamba-forward-doors: the forward door
+    """The image's capability bits (MAMBA3_CAP_*, fixed per build; -1 when
+    the read failed), read once when the session opens (lane fix-mamba-forward-doors: the forward door
     read them with a table call per forward)."""
 
     def __init__(out self, entry: EntryRef) raises:
@@ -68,7 +68,11 @@ struct Mamba3PrefillHandle(Movable, Writable):
         if created <= 0:
             raise Error("native provider: state admission returned a null handle")
         self.handle = created
-        self.caps = entry_ref_call(entry, NEURAL_MAMBA3_SESSION_CAPS, List[Int](), List[Int](), List[Float64]())
+        try:
+            self.caps = entry_ref_call(entry, NEURAL_MAMBA3_SESSION_CAPS, List[Int](), List[Int](), List[Float64]())
+        except:
+            # unknown: the door asks the image per forward, as before
+            self.caps = -1
 
     def serves(self, entry: EntryRef) -> Bool:
         """Whether this open session belongs to the image `entry` was resolved
