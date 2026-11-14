@@ -197,6 +197,8 @@ check-native-training-small-mlp-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1
 check-native-training-small-mlp-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/training_small_mlp_gpu.mojo"
 check-native-training-primitives-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/training_primitives_cpu.mojo"
 check-native-training-primitives-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/training_primitives_gpu.mojo"
+check-native-gbdt-public-fits-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/gbdt_public_fits_cpu.mojo"
+check-native-gbdt-public-fits-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gbdt_public_fits_gpu.mojo"
 check-native-spectral-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_state.mojo"
 check-native-spectral-resident-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_resident_gpu.mojo"
 check-native-spectral-assignment-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/spectral_assignment_cpu.mojo"

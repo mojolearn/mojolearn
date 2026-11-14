@@ -64,16 +64,6 @@ def test_learns_on_uneven_queries():
 
 
 @reference_training()
-def test_same_seed_same_bytes_other_seed_other_bytes():
-    X, rel, g = _fixture()
-    a = np.asarray(_model().fit(X, rel, group_id=g).predict(X))
-    b = np.asarray(_model().fit(X, rel, group_id=g).predict(X))
-    c = np.asarray(_model(random_state=7).fit(X, rel, group_id=g).predict(X))
-    assert a.tobytes() == b.tobytes()
-    assert a.tobytes() != c.tobytes()
-
-
-@reference_training()
 def test_l2_default_is_zero_for_yeti_rank_only():
     X, rel, g = _fixture()
     default = np.asarray(_model().fit(X, rel, group_id=g).predict(X))

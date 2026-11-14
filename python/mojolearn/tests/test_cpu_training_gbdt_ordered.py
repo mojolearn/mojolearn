@@ -21,10 +21,10 @@ level-two rebuild without subtraction, the host leaf fold); the sabotage
 define reaches both; the CPU identity gate workflow triggers on both files.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded): a small OrderedRMSE fit and a small
-ExperimentalTwoLevelFeatureFreq fit each run twice through the host binding
-and return the same model text and predictions, survive a save and load,
-and a weighted fit of each refuses by name. It is a plumbing check. The bit
+absent or a GPU set loaded): a small OrderedRMSE fit survives a save and
+load, and the CTR model's predictions repeat and score its eval curve. The
+two-fit repeats and the refusals by name are the native check
+`gbdt_public_fits_cpu` (lane tmig-trees, 2026-11-14). It is a plumbing check. The bit
 claim against the GPU columns is the CPU identity gate's, not this file's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_gbdt_ordered
@@ -187,7 +187,12 @@ def test_workflow_triggers_on_both_oracles():
 
 
 @reference_training()
-def test_ordered_and_feature_freq_fit_on_the_host_when_built():
+def test_ordered_save_load_and_ctr_predictions_on_the_host_when_built():
+    """The boundary arms of the host check: the OrderedRMSE archive round
+    trip and the CTR model's predictions (served by the host CTR door). The
+    two-fit repeats, the weighted and unweighted refusals, the one-hot and
+    CTR model texts, the CTR eval curve and the best-model tree count are the
+    native check `gbdt_public_fits_cpu` (lane tmig-trees, 2026-11-14)."""
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
         return
@@ -201,87 +206,27 @@ def test_ordered_and_feature_freq_fit_on_the_host_when_built():
     x = rng.standard_normal((1200, 6)).astype(np.float32)
     y = (x[:, 0] + 0.5 * x[:, 1]).astype(np.float32)
     perm = rng.permutation(1200)
-    outs = []
-    for _ in range(2):
-        m = mojolearn.OrderedRMSE(n_estimators=3, max_depth=3).fit(x, y, permutation=perm)
-        outs.append((m.model_, np.asarray(m.predict(x)).tobytes()))
-    assert outs[0] == outs[1], "two ordered host fits returned different bytes"
+    m = mojolearn.OrderedRMSE(n_estimators=3, max_depth=3).fit(x, y, permutation=perm)
+    expected = np.asarray(m.predict(x)).tobytes()
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "ordered.npz")
         m.save(path)
         back = mojolearn.OrderedRMSE.load(path)
-        assert np.asarray(back.predict(x)).tobytes() == outs[0][1]
-    try:
-        mojolearn.OrderedRMSE(n_estimators=2, max_depth=2).fit(
-            x, y, permutation=perm, sample_weight=np.ones(1200, np.float32))
-    except Exception as exc:
-        assert "no CPU implementation of" in str(exc), str(exc)
-    else:
-        raise AssertionError("a weighted OrderedRMSE fit did not refuse on the host binding")
+        assert np.asarray(back.predict(x)).tobytes() == expected
 
     coded = np.column_stack([
         (x[:, 2] > 0).astype(np.float32),
         ((x[:, 3] > 0).astype(np.int32) * 2 + (x[:, 4] > 0)).astype(np.float32),
         x[:, :4],
     ]).astype(np.float32)
-    outs = []
-    for _ in range(2):
-        f = mojolearn.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(coded, y)
-        outs.append((f.model_, np.asarray(f.predict(coded)).tobytes()))
-    assert outs[0] == outs[1], "two FeatureFreq host fits returned different bytes"
-    try:
-        mojolearn.ExperimentalTwoLevelFeatureFreq(sources=[0, 1]).fit(
-            coded, y, sample_weight=np.ones(1200, np.float32))
-    except Exception as exc:
-        assert "no CPU implementation of" in str(exc), str(exc)
-    else:
-        raise AssertionError("a weighted FeatureFreq fit did not refuse on the host binding")
-
-    # the pointwise eval arm, and its by-name refusal without weights
     yc = (x[:, 0] > 0).astype(np.int32)
-    xe = rng.standard_normal((300, 6)).astype(np.float32)
-    ye = (xe[:, 0] > 0).astype(np.int32)
-    wts = rng.uniform(0.5, 1.5, 1200).astype(np.float32)
-    kw = dict(n_estimators=4, max_depth=3, loss="Logloss", score_function="L2",
-              use_pointwise_searcher=True, bootstrap_type="Bayesian", bagging_temperature=0.5,
-              boost_from_average=True, od_type="Iter", od_wait=2, use_best_model=True)
-    outs = []
-    for _ in range(2):
-        g = mojolearn.GradientBoosting(**kw).fit(x, yc, sample_weight=wts, eval_set=(xe, ye))
-        outs.append((g.model_, np.asarray(g.predict(x)).tobytes()))
-    assert outs[0] == outs[1], "two pointwise host fits returned different bytes"
-    try:
-        mojolearn.GradientBoosting(**kw).fit(x, yc, eval_set=(xe, ye))
-    except Exception as exc:
-        assert "no CPU implementation of" in str(exc), str(exc)
-    else:
-        raise AssertionError("an unweighted pointwise fit did not refuse on the host binding")
-
-    # the one-hot and CTR categorical arms.
-    # The host's one-hot arm restates the deterministic fit the
-    # gbdt-categorical-ctr lane records (identity_break._gbdt_legacy_kw: no
-    # bootstrap, random_strength 0); the SymmetricTree defaults since
-    # 2026-09-19 are CatBoost's stochastic ones, which it refuses by name.
     det = dict(bootstrap_type="No", random_strength=0.0)
-    outs = []
-    for _ in range(2):
-        c = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss", cat_features=[0],
-                                       one_hot_features=[1], **det).fit(coded, yc)
-        outs.append((c.model_, np.asarray(c.predict(coded)).tobytes()))
-    assert outs[0] == outs[1], "two one-hot host fits returned different bytes"
-    assert "type cat" in outs[0][0] and "ctr_" not in outs[0][0]
-    # A CTR column (above one_hot_max_size) trains on the host since
-    # gbdt-categorical-ctr-tables (98b823c46, gbdt/host/gbdt_oracle_ctr.mojo).
-    outs = []
-    for _ in range(2):
-        c = mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1],
-                                       **det).fit(coded, yc)
-        outs.append((c.model_, np.asarray(c.predict(coded)).tobytes()))
-    assert outs[0] == outs[1], "two CTR host fits returned different bytes"
-    # Added with the CTR eval route on 2026-10-27. The full CPU binding
-    # compiled for x86-64-v3 on 2026-10-28; this fixture remains unexecuted.
-    # SkipTest must leave the learn model unchanged even when evaluation
-    # contains unseen categories and a different target distribution.
+    preds = [np.asarray(mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss",
+                                                   cat_features=[1], **det).fit(coded, yc).predict(coded)).tobytes()
+             for _ in range(2)]
+    assert preds[0] == preds[1], "two CTR host fits predicted different bytes"
+    # The evaluation cursor must use final CTR tables, as public predict
+    # does, rather than the ordered learn-only training columns.
     ex_ctr = coded[:300].copy()
     ex_ctr[::7, 1] = 31
     ey_ctr = 1 - yc[:300]
@@ -289,24 +234,10 @@ def test_ordered_and_feature_freq_fit_on_the_host_when_built():
         n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1],
         use_best_model=False, **det,
     ).fit(coded, yc, eval_set=(ex_ctr, ey_ctr))
-    assert heldout.model_ == outs[0][0], "CTR eval rows changed the learn model"
     curve = np.asarray(heldout.test_loss_curve_)
-    assert curve.shape == (2,) and np.isfinite(curve).all(), curve
-    # The evaluation cursor must use final CTR tables, as public predict
-    # does, rather than the ordered learn-only training columns.
     margins = np.asarray(heldout.predict(ex_ctr), dtype=np.float64)
     expected_loss = np.mean(np.logaddexp(0.0, margins) - ey_ctr * margins)
     np.testing.assert_allclose(curve[-1], expected_loss, rtol=2e-6, atol=1e-7)
-
-    best = mojolearn.GradientBoosting(
-        n_estimators=4, max_depth=3, loss="Logloss", cat_features=[1],
-        use_best_model=True, best_model_min_trees=2, **det,
-    ).fit(coded, yc, eval_set=(ex_ctr, ey_ctr))
-    best_curve = np.asarray(best.test_loss_curve_)
-    assert best_curve.shape == (4,), best_curve
-    expected_trees = int(np.argmin(best_curve[1:])) + 2
-    tree_record = re.search(r"^trees (\d+)$", best.model_, re.M)
-    assert tree_record is not None and int(tree_record[1]) == expected_trees
 
 
 if __name__ == "__main__":
