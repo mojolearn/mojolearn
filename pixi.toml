@@ -137,6 +137,7 @@ check-native-decomp-holtwinters-inference-cpu = "mojo run -D MOJOLEARN_NUMERIC_I
 check-native-tsa-sequence-ets-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsa_sequence_ets_cpu.mojo"
 check-native-tsa-sequence-ets-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsa_sequence_ets_gpu.mojo"
 check-native-tsa-holtwinters-initialization-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsa_holtwinters_initialization_cpu.mojo"
+check-native-tsa-training-arima-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsa_training_arima_cpu.mojo"
 check-native-optimizer-descriptor-cpu = "mojo run -I . checks/native_tests/optimizer_descriptor_cpu.mojo"
 check-native-optimizer-descriptor-gpu = "mojo run -I . checks/native_tests/optimizer_descriptor_gpu.mojo"
 check-native-optimizer-device-cpu = "mojo run -I . checks/native_tests/optimizer_device_cpu.mojo"
