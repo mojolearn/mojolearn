@@ -10,6 +10,7 @@ and wording are unchanged. Nothing here imports Python.
 """
 from std.math import isfinite
 from std.memory import unsafe_memcpy
+from std.sys.compile import is_defined
 from core.family_cast_impl import family_min_f32
 from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_finite_status
 
@@ -194,6 +195,25 @@ def knn_int32_low_fits(low: Int) -> Bool:
 def knn_check_int32_labels(low: Int, high: Int) raises:
     if low < KNN_INT32_LOW or high > KNN_INT32_HIGH:
         raise Error("mojolearn: y does not fit int32")
+
+
+#: wave2-knn-0844-gap (2026-11-13): B arm of the owed A/B. Defined, the
+#: classifier fit widens int32 labels to int64, reads their minimum and maximum
+#: (two device reductions: two uploads of the label words, two launches, two
+#: synchronisations) and narrows them back, as every release since 0.8.44 did.
+comptime KNN_I32_LABEL_RANGE_OLD = is_defined["MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD"]()
+
+
+def knn_labels_already_int32(typestr: String) -> Bool:
+    """True when labels of dtype `typestr` are int32 words already: every value
+    fits int32, so the classifier fit's range check cannot refuse them and the
+    int64 widening it reads is skipped. The label columns are a plain copy of
+    the same words (the widen-then-narrow round trip is the identity on them),
+    so the bits do not change. Every other dtype keeps the widening and the
+    range check."""
+    comptime if KNN_I32_LABEL_RANGE_OLD:
+        return False
+    return typestr == "<i4"
 
 
 def _order_byte(c: Int) -> Bool:

@@ -81,7 +81,8 @@ from neighbors.neighbors_knn_run import (
     knn_refuse_metric_name, knn_refuse_metric_unimplemented, knn_refuse_metric_unknown, knn_refuse_inert_p,
     knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_metric_reads_host_queries,
     knn_refuse_callable_weights, knn_refuse_weights, knn_weights_code, knn_check_y_rank, knn_check_y_rows,
-    knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_float_format, knn_labels_finite,
+    knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_labels_already_int32, knn_float_format,
+    knn_labels_finite,
     knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
 )
 
@@ -831,31 +832,44 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var count = Int(py=view.size)
     var y_typestr = admitted_dtype(view, context)
     var wide = PythonObject(None)
+    # The words the int32 label columns are copied from, and their dtype.
     var wide_addr = Int(py=classical_address(view))
-    if y_typestr != "<i8":
-        wide = family_array(Python.tuple(count), "<i8", context)
-        wide_addr = Int(py=classical_address(wide))
-        labels_cast(Int(py=classical_address(view)), y_typestr, wide_addr, "<i8", count, context)
-        _ = wide  # keep the Python object alive through the native call above
-    _ = view  # keep the Python object alive through the native call above
-    var low = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MIN, context).i
-    _ = wide  # keep the Python object alive through the native call above
-    _ = view  # keep the Python object alive through the native call above
-    var high = 0
-    if knn_int32_low_fits(low):
-        high = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MAX, context).i
+    var wide_type = String("<i8")
+    if knn_labels_already_int32(y_typestr):
+        # wave2-knn-0844-gap (2026-11-13): int32 labels (the board's, and the
+        # dtype the refusal below tells callers to cast to) always fit int32,
+        # so the range check cannot refuse them: no int64 widening, no
+        # minimum and maximum (two device reductions, each an upload of the
+        # labels, a launch and a synchronisation) and no narrowing back. The
+        # columns below copy the same int32 words: same bits. The old form is
+        # the B arm, -D MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD
+        # (neighbors/neighbors_knn_run.mojo knn_labels_already_int32).
+        wide_type = "<i4"
+    else:
+        if y_typestr != "<i8":
+            wide = family_array(Python.tuple(count), "<i8", context)
+            wide_addr = Int(py=classical_address(wide))
+            labels_cast(Int(py=classical_address(view)), y_typestr, wide_addr, "<i8", count, context)
+            _ = wide  # keep the Python object alive through the native call above
+        _ = view  # keep the Python object alive through the native call above
+        var low = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MIN, context).i
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
-    knn_check_int32_labels(low, high)
+        var high = 0
+        if knn_int32_low_fits(low):
+            high = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MAX, context).i
+            _ = wide  # keep the Python object alive through the native call above
+            _ = view  # keep the Python object alive through the native call above
+        knn_check_int32_labels(low, high)
     var n = shape[0]
     var n_out = 1 if len(shape) == 1 else shape[1]
     py_setitem(fields, "outputs_2d_", PythonObject(len(shape) == 2 and shape[1] != 1))
     if n_out == 1:
         # One output is already its own contiguous column: the int64 ->
-        # int32 narrowing (exact after the range check) and the classes from
-        # the native encoder on that buffer.
+        # int32 narrowing (exact after the range check; an int32 copy for
+        # int32 labels) and the classes from the native encoder on that buffer.
         var y32 = family_array(Python.tuple(n), "<i4", context)
-        labels_cast(wide_addr, "<i8", Int(py=classical_address(y32)), "<i4", n, context)
+        labels_cast(wide_addr, wide_type, Int(py=classical_address(y32)), "<i4", n, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
@@ -869,7 +883,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # host binding's same op on a CPU-only install). Integers: the same
     # column words as the former storage-order narrowing of an F-ordered y.
     var y32 = family_array(Python.tuple(n, n_out), "<i4", context)
-    labels_cast(wide_addr, "<i8", Int(py=classical_address(y32)), "<i4", count, context)
+    labels_cast(wide_addr, wide_type, Int(py=classical_address(y32)), "<i4", count, context)
     _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     if n:
