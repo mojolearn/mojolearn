@@ -42,6 +42,8 @@ FLAGS (per recipe; a recipe can carry several)
   QUALITY-DROP   tools/board_quality.compare(new, old) FAILs on a one-sided score or a reference bound: the new
                  release is worse than 0.8.55 beyond the board's declared margin (the quality-parity policy)
   QUALITY-CHANGE the same policy FAILs on a symmetric metric (no better side)
+  QUALITY-MISSING the 0.8.55 record holds a judged quality metric the new cell lacks (quality_missing lists them,
+                 quality_unavailable the cell's own reason); the row cannot be judged on it. Shown, never a gate
   NOW-WINS       slower than the paper's fastest stored opponent in 0.8.55, at least as fast now
   NOW-LOSES      the reverse
   PARAMS-DIFF    the explicit parameters our arm read back differ from the paper's
@@ -153,6 +155,28 @@ def scored_quality(quality):
     q = quality or {}
     keep = set(BQ.ABSOLUTE) | set(BQ.RELATIVE) | set(BQ.REFERENCE) | set(BQ.AGREEMENT)
     return {k: v for k, v in q.items() if k in keep}
+
+
+#: a cell's explicit reason for a quality metric it could not record (bench_board_neural, bench_board_infer)
+UNAVAILABLE = "quality_unavailable"
+
+
+def shown_quality(quality):
+    """QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): what the compare SHOWS of a cell's quality: the
+    judged metrics, every other finite number the scorer recorded (the own-host reference distances of the forward
+    and decode lanes, program-run's max_abs_err_vs_fp64) and the cell's quality_unavailable reason. Before, only the
+    judged metrics were kept, so those rows read new_quality={} although the board held their quality."""
+    q = quality or {}
+    out = {k: v for k, v in q.items() if number(v) and not isinstance(v, bool)}
+    out.update(scored_quality(q))
+    if q.get(UNAVAILABLE):
+        out[UNAVAILABLE] = str(q[UNAVAILABLE])[:600]
+    return out
+
+
+def quality_missing(old_quality, new_quality):
+    """The judged metrics the old record holds and the new cell does not (QUALITY-MISSING; shown, never a gate)."""
+    return sorted(set(scored_quality(old_quality)) - set(scored_quality(new_quality)))
 
 
 def kernel_ms(cell):
@@ -528,7 +552,7 @@ def compare_one(rec, races, not_run_why, hw_diff):
     row = {"key": rec["key"], "race_id": rec["race_id"], "family": rec["family"], "lane": rec["lane"],
            "dataset": rec["dataset"], "phase": rec["phase"], "arm": rec["arm"], "batch": rec["batch"],
            "old_ms": old["median_ms"] if old_t else None, "old_status": old["status"],
-           "old_quality": scored_quality(old["quality"]), "flags": []}
+           "old_quality": shown_quality(old["quality"]), "flags": []}
     if cell is None:
         row.update(new_ms=None, new_status="missing", ratio=None, new_quality={},
                    why=not_run_why.get(rec["race_id"]) or ("race not in the new board" if race is None
@@ -539,7 +563,15 @@ def compare_one(rec, races, not_run_why, hw_diff):
     new_status = short_status(cell.get("status"))
     new_t = timed(new_status, cell.get("median_ms"))
     row.update(new_ms=cell.get("median_ms") if new_t else None, new_status=new_status,
-               new_quality=scored_quality(cell.get("quality")))
+               new_quality=shown_quality(cell.get("quality")))
+    missing = quality_missing(old["quality"], cell.get("quality")) if new_t else []   # untimed: BROKEN says it
+    if missing:
+        # QUALITY-MISSING (2026-11-13): the 0.8.55 record holds a judged metric the new cell lacks; the row cannot be
+        # judged on it. Shown with the cell's own reason when it gave one; never a gate.
+        row["flags"].append("QUALITY-MISSING")
+        row["quality_missing"] = missing
+        row["quality_unavailable"] = (str((cell.get("quality") or {}).get(UNAVAILABLE) or "")[:600]
+                                      or "the new cell recorded no reason (its scorer did not record it)")
     if old_t and new_t:
         row["ratio"] = row["new_ms"] / row["old_ms"] if row["old_ms"] else None
         r = row["ratio"]
@@ -762,7 +794,12 @@ def fmt_ratio(v):
 def fmt_q(q):
     if not q:
         return "-"
-    return " ".join("%s=%.4g" % (k, v) for k, v in sorted(q.items())[:3] if number(v)) or "-"
+    judged = scored_quality(q)
+    keys = sorted(judged) + sorted(k for k in q if k not in judged and number(q[k]) and not isinstance(q[k], bool))
+    text = " ".join("%s=%.4g" % (k, q[k]) for k in keys[:3])
+    if q.get(UNAVAILABLE):
+        text = (text + " " if text else "") + "unavailable"
+    return text or "-"
 
 
 def render_md(res):
@@ -807,6 +844,9 @@ def render_md(res):
             note.append("old: " + str(r["old_status"])[:120])
         if r.get("quality_failures"):
             note.append("quality: " + "; ".join(r["quality_failures"])[:200])
+        if r.get("quality_missing"):
+            note.append("quality missing: %s (%s)" % (",".join(r["quality_missing"]),
+                                                      str(r.get("quality_unavailable") or "")[:160]))
         if r.get("params_diff"):
             note.append("params: " + ",".join(r["params_diff"][:6]))
         if r.get("best_ever_params_differ") or r.get("best_ever_hash_differs"):
@@ -893,7 +933,8 @@ def render_summary(res, top=8):
                 out += ["  %.2fx %s (best %s ms %s %s -> %s ms)" % (
                     r["ratio_vs_best_ever"], r["key"], fmt_ms(r["best_ever_ms"]), r.get("best_ever_release"),
                     r.get("best_ever_date"), fmt_ms(r["new_ms"])) for r in hit[:top]]
-    for flag in ("RECOVERED", "STILL-REGRESSED", "FIXED", "BROKEN", "QUALITY-DROP", "QUALITY-CHANGE", "NOW-WINS",
+    for flag in ("RECOVERED", "STILL-REGRESSED", "FIXED", "BROKEN", "QUALITY-DROP", "QUALITY-CHANGE",
+                 "QUALITY-MISSING", "NOW-WINS",
                  "NOW-LOSES", "PARAMS-DIFF", "NOT-RUN", "BEST-EVER-REGRESSION-UNCHECKED", "PARAMS-DIFFER"):
         hit = [r for r in rows if flag in r["flags"]]
         if hit:

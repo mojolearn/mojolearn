@@ -2451,6 +2451,28 @@ def flag_recompiles(cells):
     return cells
 
 
+#: a cell's explicit reason for a quality it does not record (bench_board_infer, bench_board_neural); shown with the
+#: cell, never a gate and never a quality failure of the arm
+QUALITY_UNAVAILABLE = "quality_unavailable"
+#: quality keys that are not a score: a cell holding only these recorded no quality
+QUALITY_NON_METRIC = ("scorer", "reference", "rows", QUALITY_UNAVAILABLE)
+
+
+#: inference batches the scorer is defined not to score, per family: the trees `large` batch is the first
+#: --infer-large-rows TRAINING rows (bench/speed/forest_speed_arm.py), a throughput batch; only `test` is scored, and
+#: the 0.8.55 record is "not-scored" too. The completion check never asks these for quality (records written before
+#: bench_board_infer stated quality_unavailable included).
+UNSCORED_INFER_BATCHES = {"trees": ("large",)}
+
+
+def unscored_by_design(rec, phase, cell):
+    """The reason a cell has no quality by design (no scorer is defined for it), else None."""
+    if phase == "infer" and cell.get("batch") in UNSCORED_INFER_BATCHES.get(rec.get("family"), ()):
+        return "%s infer batch %s: training rows, no scorer by design (the test batch is scored)" % (
+            rec.get("family"), cell.get("batch"))
+    return None
+
+
 def mark_not_scored(cells):
     """"ok" only if scored (lane harness-evidence, 2026-10-14). A cell timed in every round whose quality scorer
     failed or never ran gets status "not-scored" and `scorer_error`; its times stay exactly as measured. The
@@ -2462,8 +2484,9 @@ def mark_not_scored(cells):
             continue
         q = c.get("quality") or {}
         why = BQ.scorer_failure(q)
-        if why is None and not any(k not in ("scorer", "reference", "rows") for k in q):
-            why = "the race recorded no quality for this arm (its scorer did not run)"
+        if why is None and not any(k not in QUALITY_NON_METRIC for k in q):
+            why = (("quality unavailable: " + str(q[QUALITY_UNAVAILABLE])) if q.get(QUALITY_UNAVAILABLE) else
+                   "the race recorded no quality for this arm (its scorer did not run)")
         if why is not None:
             c.update(status=NOT_SCORED, scorer_error=why[:2000])
     return cells
@@ -2502,11 +2525,20 @@ def measurement_completion(rec):
                     missing.append(key)
             quality = cell.get("quality") or {}
             why = BQ.scorer_failure(quality)
-            if why or cell.get("status") == NOT_SCORED:
-                missing.append("quality scorer: " + str(why or cell.get("scorer_error") or "not scored"))
+            declared = quality.get(QUALITY_UNAVAILABLE) or unscored_by_design(rec, phase, cell)
+            if why:
+                missing.append("quality scorer: " + str(why))
+            elif declared and not any(k not in QUALITY_NON_METRIC for k in quality):
+                # QUALITY-MISSING FIX (2026-11-13): a cell that states why it records no quality (the trees large
+                # batch: training rows) is recorded with its reason, not incomplete; the reason is shown
+                pass
+            elif cell.get("status") == NOT_SCORED:
+                missing.append("quality scorer: " + str(cell.get("scorer_error") or "not scored"))
             elif not any(k not in ("scorer", "reference", "rows") for k in quality):
                 missing.append("quality scores")
             for metric in sorted(metrics):
+                if declared and metric not in quality:
+                    continue    # the cell's own reason covers the metrics it does not record
                 if not finite(BQ.metric_value(cell, quality, metric)):
                     missing.append("quality metric: " + metric)
             if missing:
@@ -2866,11 +2898,39 @@ FIXTURES_VENV_MARKER = ".mojolearn-fixtures-venv"
 
 
 def fixtures_requirements(vendor):
-    """[numpy, torch==<board pin, no +cuda/+rocm suffix>, torch-geometric==<algos pin>]."""
+    """[numpy, torch==<board pin, no +cuda/+rocm suffix>, torch-geometric==<algos pin>, NEURAL_PINS...].
+
+    QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): the same CPU-torch venv is the interpreter of the
+    neural forward lanes' untimed eager FP32 quality reference (bench_board_neural --reference-python), which needs
+    einops (the Mamba-1 reference scan) and transformers (the transformer twin); the ours-only measurement venv has
+    no torch, so rel_fro_vs_torch_eager_fp32 was silently missing on mamba1/2/3-forward and transformer-forward."""
     torch = DEFAULT_TORCH_SPEC.get(vendor) or DEFAULT_TORCH_SPEC["apple"]
     torch = torch.split()[0].split("+")[0]
     pyg = [r for r in ALGOS.PINS_COMMON if r.lower().startswith("torch-geometric==")]
-    return ["numpy", torch] + pyg[:1]
+    return ["numpy", torch] + pyg[:1] + list(NEURAL_PINS)
+
+
+def ensure_reference_python(ctx, races):
+    """The CPU-torch reference interpreter for the neural races whose quality has a torch reference
+    (bench_board_neural.TORCH_REFERENCE_LANES), made from --fixtures-venv; ctx["reference_python"]. Without
+    --fixtures-venv nothing is made and the reference runs in the race's own --theirs-python (a full opponent
+    venv has torch); when that fails the arm's cell says quality_unavailable, never a silent gap."""
+    lanes = set(NEURAL_TORCH_REFERENCE_LANES)
+    if not ctx.get("fixtures_venv") or not any(r["family"] == "neural" and r["lane"] in lanes for r in races):
+        return None
+    log = os.path.join(ctx["out"], "logs", "neural-fixtures.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    py = ensure_fixtures_venv(ctx["fixtures_venv"], ctx["vendor"], log)
+    if not py:
+        print("bench_board: the reference venv failed (see %s); the torch quality reference says "
+              "quality_unavailable" % log, flush=True)
+        return None
+    ctx["reference_python"] = py
+    return py
+
+
+#: bench_board_neural.TORCH_REFERENCE_LANES (kept literal: this module never imports the neural driver)
+NEURAL_TORCH_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward")
 
 
 def layer_races(races):
@@ -3042,6 +3102,8 @@ def neural_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
            "--round-seconds", str(rsec), "--keep-outputs"]
+    if ctx.get("reference_python") and race["lane"] in NEURAL_TORCH_REFERENCE_LANES:
+        cmd += ["--reference-python", shlex.quote(ctx["reference_python"])]
     if race.get("dataset") == "higgs":
         cmd += ["--higgs", race_data_files(ctx, race)[0][1]]
     n = len(race["arms"])
@@ -5938,6 +6000,8 @@ def main(argv=None):
     if any(r["family"] == "algos" for r in todo):
         ensure_algos_prep(ctx, todo)
         ensure_neural_fixtures(ctx, todo)
+    if any(r["family"] == "neural" for r in todo):
+        ensure_reference_python(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
     if _synthetic_on():
