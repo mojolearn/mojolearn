@@ -4028,8 +4028,15 @@ struct TTreeWorkspace(Movable):
         # a comptime truth at every construction site, passed as a value
         # because the workspace itself has no shared-memory mode
         acc_live: Bool,
+        # gbdt-per-node-regression (2026-11-14): the leaf slots the caller
+        # addresses. 0 keeps the symmetric pool's `1 << max_depth`. The
+        # Lossguide grower passes its leaf capacity: its slot ids never reach
+        # past it, and at max_depth 16 the depth-sized pool was 65,536 slots
+        # (128x the capacity of a 256-leaf fit) that the grower zeroed whole
+        # every tree.
+        leaf_slots: Int = 0,
     ) raises:
-        var max_leaves = 1 << max_depth
+        var max_leaves = leaf_slots if leaf_slots > 0 else (1 << max_depth)
         var n_features = len(layout.features)
         var hist_cells_per_leaf = layout.hist_cells
         var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
