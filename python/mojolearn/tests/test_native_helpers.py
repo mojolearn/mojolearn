@@ -106,19 +106,8 @@ def test_all_finite_refuses_null_and_negative(width):
         fn(_addr(buf), -1)
 
 
-def test_gather_rows_bytes_checks_and_copies_exactly():
-    import numpy as np
-    source = np.arange(35, dtype=np.uint8).reshape(5, 7)
-    indices = np.array([4, 0, 4, 2], dtype=np.int64)
-    out = np.full((4, 7), 255, dtype=np.uint8)
-    _ext.gather_rows_bytes(source.ctypes.data, out.ctypes.data,
-                           indices.ctypes.data, 5, 4, 7)
-    assert out.tobytes() == source[indices].tobytes()
-    for bad in (-1, 5):
-        indices[-1] = bad
-        before = out.tobytes()
-        with pytest.raises(Exception, match='index out of bounds'):
-            _ext.gather_rows_bytes(source.ctypes.data, out.ctypes.data,
-                                  indices.ctypes.data, 5, 4, 7)
-        assert out.tobytes() == before
+def test_gather_rows_bytes_empty_reads_nothing():
+    # The copy and the out-of-bounds report run natively in
+    # checks/native_tests/core_helpers_{cpu,gpu}.mojo; the binding's empty
+    # short cut (no buffer is read) stays here.
     assert _ext.gather_rows_bytes(0, 0, 0, 0, 0, 7) == 0
