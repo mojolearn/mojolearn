@@ -44,7 +44,7 @@ from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.byte_checkpoint_native_door import byte_checkpoint_save, byte_checkpoint_load
 from providers.python.byte_lm_json_checkpoint_pyapi_door import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
-from bindings.tsa_hw_native_door import tsa_array
+from bindings.tsa_hw_native_door import tsa_array, tsa_array_unfilled
 from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
 from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers_pack import byte_int_list_from_i64
@@ -169,6 +169,11 @@ def _admitted_shape(mut mods: NativeModules, trainer: PythonObject, state: Pytho
 
 def _f32(n: Int, context: PythonObject) raises -> PythonObject:
     return tsa_array("f", "<f4", Python.tuple(n), n, 4, context)
+
+
+def _f32_unfilled(n: Int, context: PythonObject) raises -> PythonObject:
+    """`_f32` with no fill pass, for an output the native call fills in full."""
+    return tsa_array_unfilled("f", "<f4", Python.tuple(n), n, 4, context)
 
 
 def _i32(n: Int, context: PythonObject) raises -> PythonObject:
@@ -403,9 +408,17 @@ def _export_release(mut mods: NativeModules, fields: PythonObject, shape: _Shape
     """`_export_state_impl(release=True)`."""
     var state = fields["_state"]
     var n = shape.n_total()
-    var out_p = _f32(n, context)
-    var out_m = _f32(n, context)
-    var out_v = _f32(n, context)
+    # lane fix-output-zero-fill (2026-11-14): parameters, m and v are
+    # unfilled. byte_session_export_state (training/byte_lm_session_ops.mojo)
+    # copy_f32-s all n floats of each from its staged download before
+    # returning, and a failed export raises before this dict escapes. The
+    # zero fill of these three was 86.7% of the lm-forward profile's samples
+    # (its per-round state_dict receipt, outside the clock). The flags stay
+    # zero-filled (n_tensors words; `_write_flags` writes the session's own
+    # flag count). No output bit changes.
+    var out_p = _f32_unfilled(n, context)
+    var out_m = _f32_unfilled(n, context)
+    var out_v = _f32_unfilled(n, context)
     var out_flags = _i32(shape.n_tensors(), context)
     var completed = state["completed_steps"]
     var addresses: List[Int] = [Int(py=classical_address(state["flags"])), Int(py=classical_address(out_p)),

@@ -20,7 +20,7 @@ forecast host binding from the module table.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled
 from bindings.arena_materialize_native_door import _owned
 from bindings.native_numpy_metadata_pack import native_numpy_module_fields
 from bindings.classical_archive_door import classical_archive_write
@@ -77,6 +77,17 @@ def tsa_array(code: String, typestr: String, shape: PythonObject, count: Int, wi
     if count < 0 or count > 9223372036854775807 // width:
         raise Error("ValueError: TSA output exceeds native indexing bounds")
     var store = native_array_zeros(code, count)
+    return _owned(store, shape, typestr, context)
+
+
+def tsa_array_unfilled(code: String, typestr: String, shape: PythonObject, count: Int, width: Int,
+                       context: PythonObject) raises -> PythonObject:
+    """`tsa_array` with NO fill pass (lane fix-output-zero-fill, 2026-11-14):
+    the store is `native_array_unfilled`. Only for an output one native
+    writer fills in full before anything reads it or it is returned."""
+    if count < 0 or count > 9223372036854775807 // width:
+        raise Error("ValueError: TSA output exceeds native indexing bounds")
+    var store = native_array_unfilled(code, count)
     return _owned(store, shape, typestr, context)
 
 
