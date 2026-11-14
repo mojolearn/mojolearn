@@ -79,12 +79,12 @@ from mamba.checks.mamba3_fixture import Mamba3Dims, M3_CHUNK_SIZE, M3_HEADDIM, M
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceWeights, MambaDeviceState, MambaDeviceStages, mamba_block_forward, mamba_zeros, MAMBA_GUARD,
-    _m1_weight_sizes, _m1_state_sizes,
+    _m1_weight_sizes, _m1_state_sizes, _m1_stage_sizes,
 )
 from mamba.impl.modules.mamba_simple import mamba_step
 from mamba.impl.modules.mamba2 import (
     Mamba2DeviceWeights, Mamba2DeviceState, Mamba2DeviceStages, mamba2_block_forward,
-    _m2_weight_sizes, _m2_state_sizes,
+    _m2_weight_sizes, _m2_state_sizes, _m2_stage_sizes,
 )
 from mamba.impl.modules.mamba3 import (
     Mamba3DeviceWeights, Mamba3DeviceState, Mamba3DeviceStages, mamba3_block_forward,
@@ -159,6 +159,34 @@ comptime IDN_M3_DECODE_WINDOW_REUSE = (
 #: the copy: the guard band lives only in `mamba_zeros` buffers.
 comptime MAMBA_CALL_PROGRAM = is_defined["MOJOLEARN_MAMBA_CALL_PROGRAM"]()
 comptime _MAMBA_X_IN_PLACE = not MAMBA_CALL_PROGRAM and MAMBA_GUARD == 0
+
+#: Lane fix-mamba12-forward-exec (2026-11-13): what this switch decides is
+#: whether the Mamba-1/2 per-call forward pays per-call plumbing the kernels
+#: never needed. Default (A): a session whose `BlockStepScratch.keep_stages`
+#: is set (the per-call block programs, mamba/impl/mamba_block_program.mojo)
+#: keeps its last L > 1 Mamba-1/2 stages in the resident entry and reuses
+#: them for the next run of the same (B, L[, buf_len]), refilled with the
+#: constructor's zeros (`rezero`): no 19 / 28 allocations and, for Mamba-1,
+#: no constructor wait per call (0.8.55's `_mamba1_run` / `_mamba2_run` also
+#: built them per call; the held-stages pattern is the Samba resident lane's
+#: IDN_M3_SESSION_STAGE_REUSE). A held Mamba-2 run's h_last report is read
+#: straight from the held stages (no device-to-device copy into the entry's
+#: report buffer). The public doors run a stateless forward as the fresh
+#: (discard-state) call: one device zero fill of the state tensor instead of
+#: a host zero state uploaded and downloaded per call, and the door's y (and
+#: Mamba-2 h_last) arrays are allocated unfilled (bindings/
+#: causal_lm_public_door.mojo, bindings/neural_block_public_door.mojo,
+#: mamba/impl/mamba_block_program.mojo). Same kernels, same launch order,
+#: same input bytes: no output bit moves on any vendor.
+#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD` restores the per-call
+#: stages, the h_last copy, the host zero state round trip and the
+#: zero-filled door arrays (B arm of the owed A/B,
+#: bench/results/paper_compare/owed-pre0867.json row fix-mamba12-forward-exec;
+#: L40S candidate ba08dac006: mamba1-forward 3.43 -> 3.83 ms, mamba2-forward
+#: 5.57 -> 6.31 ms vs 0.8.55). A poison build (MAMBA_GUARD > 0) keeps the
+#: per-call stages (its fills cover a body view only).
+comptime IDN_MAMBA12_FORWARD_COPIES_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD"]()
+comptime _M12_HOLD = not IDN_MAMBA12_FORWARD_COPIES_OLD and _MAMBA_X_IN_PLACE
 
 
 def m2_report_floats(b: Int, dm: Int) raises -> Int:
@@ -415,6 +443,11 @@ struct _M1Block(Movable):
     #: the L = 1 stages and x buffer, as `Mamba1DecodeSession` keeps them
     var stages: MambaDeviceStages
     var dx: DeviceBuffer[DType.float32]
+    #: lane fix-mamba12-forward-exec: a `keep_stages` session's last L > 1
+    #: run's stages, kept for the next run of the same (B, L) and refilled
+    #: with the constructor's zeros (`_m1_held_take`), and their float count
+    var held: Optional[MambaDeviceStages]
+    var held_n: Int
     #: lane x56d: the last RECORDED run (`mamba_step_train_run`): its token
     #: count (0: none) and its one-block tape stack (weights over the
     #: weights tensor, input copy, stages, backward workspaces), kept until
@@ -434,6 +467,8 @@ struct _M1Block(Movable):
         self.dm = dm
         self.stages = MambaDeviceStages(ctx, b, 1, dims)
         self.dx = mamba_zeros(ctx, b * dm)
+        self.held = None
+        self.held_n = 0
         self.train_l = 0
         self.train = None
         self.arena_w = aw^
@@ -456,6 +491,13 @@ struct _M2Block(Movable):
     #: the last run's h_last report (stage S17 after the final padded chunk,
     #: NOT the resumption state), copied out of the call-shaped stages
     var h_last: DeviceBuffer[DType.float32]
+    #: lane fix-mamba12-forward-exec: a `keep_stages` session's last L > 1
+    #: run's stages (kept per (B, L, buf_len), `_m2_held_take`), their float
+    #: count, and whether the last run's h_last report is the held stages'
+    #: `h_last` (no copy into `h_last` above) rather than `h_last`
+    var held: Optional[Mamba2DeviceStages]
+    var held_n: Int
+    var h_in_held: Bool
     #: lane x56d: the last recorded run's token count and tape stack
     var train_l: Int
     var train: Optional[Mamba2TapeStack]
@@ -482,6 +524,9 @@ struct _M2Block(Movable):
         self.dm = dm
         self.dx = mamba_zeros(ctx, b * dm)
         self.h_last = mamba_zeros(ctx, m2_report_floats(b, dm))
+        self.held = None
+        self.held_n = 0
+        self.h_in_held = False
         self.train_l = 0
         self.train = None
         self.arena_w = aw^
@@ -719,6 +764,13 @@ struct BlockStepScratch(Movable):
     #: before the next run): `_run_m3` skips the four report copies
     #: (IDN_MAMBA3_REPORTS_ON_REQUEST). Set per run by the caller.
     var skip_reports: Bool
+    #: lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
+    #: the session's Mamba-1/2 L > 1 runs are never read by a backward (a
+    #: recorded run goes through `mamba_step_train_run`, which keeps its own
+    #: tape stack), so `_run_m1` / `_run_m2` keep their stages in the entry
+    #: (`held`) for the next run of the same shape. Set by the per-call
+    #: block programs (mamba/impl/mamba_block_program.mojo).
+    var keep_stages: Bool
 
     def __init__(out self):
         self.m1 = List[_M1Block]()
@@ -735,6 +787,17 @@ struct BlockStepScratch(Movable):
         self.last_train_y = 0
         self.inference_only = False
         self.skip_reports = False
+        self.keep_stages = False
+
+    def held_floats(self) -> Int:
+        """The device floats of the Mamba-1/2 stages the entries hold
+        (`keep_stages`), for the per-call program cache's byte bound."""
+        var n = 0
+        for i in range(len(self.m1)):  # driver-loop: over resident Mamba-1 blocks
+            n += self.m1[i].held_n
+        for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
+            n += self.m2[i].held_n
+        return n
 
     def parked(self) -> Int:
         return (len(self.parked_m1) + len(self.parked_m2) + len(self.parked_m3) + len(self.parked_attn)
@@ -928,6 +991,47 @@ def _block_out(ctx: DeviceContext, ex: DeviceExec, y_out: FP, y_host: Int, src: 
         _d2d(ctx, _view(ex, y_out, n), src, n)
 
 
+def _sum_floats(sizes: List[Int]) -> Int:
+    var n = 0
+    for i in range(len(sizes)):  # small-loop(sizes: a stage set's field lengths, model structure): size sum, no data
+        n += sizes[i]
+    return n
+
+
+def _m1_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, l: Int,
+                  dims: MambaDims) raises -> MambaDeviceStages:
+    """Lane fix-mamba12-forward-exec: the stages of a `keep_stages` L > 1
+    Mamba-1 run: the entry's held set when it was built for (B, L), refilled
+    with the constructor's zeros in stream order (no allocation, no wait),
+    else a new set (a held set of another shape is parked, not freed, while
+    the stream may still read it)."""
+    if sc.m1[e].held:
+        var prev = sc.m1[e].held.take()
+        sc.m1[e].held_n = 0
+        if prev.b == b and prev.l == l:
+            prev.rezero()
+            return prev^
+        sc.make_room(ctx)
+        sc.parked_m1.append(prev^)
+    return MambaDeviceStages(ctx, b, l, dims)
+
+
+def _m2_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, l: Int, q0: Int,
+                  dims: Mamba2Dims) raises -> Mamba2DeviceStages:
+    """`_m1_held_take` for Mamba-2: the held set is reused for the same
+    (B, L, buf_len), the shape its working buffers were sized for."""
+    if sc.m2[e].held:
+        var prev = sc.m2[e].held.take()
+        sc.m2[e].held_n = 0
+        sc.m2[e].h_in_held = False
+        if prev.b == b and prev.l == l and prev.q0 == q0:
+            prev.rezero()
+            return prev^
+        sc.make_room(ctx)
+        sc.parked_m2.append(prev^)
+    return Mamba2DeviceStages(ctx, b, l, q0, dims)
+
+
 def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
             y_out: FP, y_host: Int = 0) raises:
     var ctx = ex.ctx.copy()
@@ -937,10 +1041,22 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     _expect(OPS_M1_STEP, "weights", counts[1], block_part_floats(OPS_M1_STEP, ints, BLOCK_PART_WEIGHTS))
     _expect(OPS_M1_STEP, "state", counts[2], block_part_floats(OPS_M1_STEP, ints, BLOCK_PART_STATE))
     var e = _m1_entry(ex, sc, bufs, counts, b, dm)
-    ref blk = sc.m1[e]
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
     var trace = IdentityTrace.disabled()
+    comptime if _M12_HOLD:
+        # lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD,
+        # header): the entry keeps its L > 1 stages; x read in place.
+        if l > 1 and sc.keep_stages:
+            var dims = MambaDims.of(dm)
+            var held = _m1_held_take(ctx, sc, e, b, l, dims)
+            ref hb = sc.m1[e]
+            mamba_block_forward(ctx, held, hb.st, hb.w, x, b, l, trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, held.residual_out, n)
+            hb.held_n = _sum_floats(_m1_stage_sizes(b, l, dims))
+            hb.held = held^
+            return
+    ref blk = sc.m1[e]
     if l == 1:
         # `_m1_session_step_run`: mamba_step on the resident stages.
         comptime if _MAMBA_X_IN_PLACE:
@@ -980,14 +1096,33 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     _expect(OPS_M2_STEP, "state", counts[2], block_part_floats(OPS_M2_STEP, ints, BLOCK_PART_STATE))
     _expect(OPS_M2_STEP, "state words", counts[3], 1)
     var e = _m2_entry(ex, sc, bufs, counts, b, dm)
-    ref blk = sc.m2[e]
     var dims = Mamba2Dims.of(dm)
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
     var trace = IdentityTrace.disabled()
+    var h_n = m2_report_floats(b, dm)
+    # this run's report is copied into the entry's h_last unless it stays in
+    # held stages (set below)
+    sc.m2[e].h_in_held = False
+    comptime if _M12_HOLD:
+        # lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD,
+        # header): the entry keeps its L > 1 stages, x read in place, and the
+        # h_last report is read from the held stages, not copied.
+        if l > 1 and sc.keep_stages:
+            var q0 = sc.m2[e].st.buf_len
+            var held = _m2_held_take(ctx, sc, e, b, l, q0, dims)
+            ref hb = sc.m2[e]
+            mamba2_block_forward(ctx, held, hb.st, hb.w, x, b, l, fs[0], fs[1], trace, String("ops.step"))
+            _block_out(ctx, ex, y_out, y_host, held.residual_out, n)
+            var held_words: List[Int] = [hb.st.buf_len]
+            _write_words(ex, bufs[3], held_words)
+            hb.held_n = _sum_floats(_m2_stage_sizes(b, l, q0, dims))
+            hb.h_in_held = True
+            hb.held = held^
+            return
+    ref blk = sc.m2[e]
     # `_m2_session_step_run`: call-shaped stages at the open chunk's length.
     var stages = Mamba2DeviceStages(ctx, b, l, blk.st.buf_len, dims)
-    var h_n = m2_report_floats(b, dm)
     comptime if _MAMBA_X_IN_PLACE:
         # the block reads x in place (MAMBA_CALL_PROGRAM, header)
         mamba2_block_forward(ctx, stages, blk.st, blk.w, x, b, l, fs[0], fs[1], trace,
@@ -1884,6 +2019,7 @@ def mamba_step_train_run(
             blk.st.buf_len = 0
             mamba2_step_forward(S, blk.st, y_out)
             _d2d(ctx, blk.h_last, S.stages[0].h_last, m2_report_floats(b, dm))
+            blk.h_in_held = False
             var words: List[Int] = [blk.st.buf_len]
             _write_words(ex, bufs[3], words)
             blk.train = S^
@@ -2076,8 +2212,15 @@ def block_step_reports_to_host(ctx: DeviceContext, sc: BlockStepScratch, code: I
                     raise Error("ops: mamba2_step has one report (h_last)")
                 if dsts[0] != 0:
                     var n = m2_report_floats(sc.m2[i].b, sc.m2[i].dm)
-                    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dsts[0]),
-                                     src_buf=sc.m2[i].h_last.create_sub_buffer[DType.float32](0, n))
+                    var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dsts[0])
+                    # lane fix-mamba12-forward-exec: a held run's report is
+                    # the held stages' h_last (S17 after the final padded
+                    # chunk), never copied into the entry
+                    if sc.m2[i].h_in_held and sc.m2[i].held:
+                        ctx.enqueue_copy(dst_ptr=dst,
+                                         src_buf=sc.m2[i].held.value().h_last.create_sub_buffer[DType.float32](0, n))
+                    else:
+                        ctx.enqueue_copy(dst_ptr=dst, src_buf=sc.m2[i].h_last.create_sub_buffer[DType.float32](0, n))
                 return
     elif code == OPS_M3_STEP:
         for i in range(len(sc.m3)):  # driver-loop: over resident Mamba-3 blocks
