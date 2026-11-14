@@ -24,7 +24,7 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct_door import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
-from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
+from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
@@ -509,14 +509,14 @@ def _neural_allocate(mut mods: NativeModules, owner: NativeBlockExecution, b: In
     return causal_layer_allocate_fields(mods, plan.kind, owner.fields, plan.entries, plan.numeric_profile, b, cap)
 
 
-def _neural_layer_run(mut mods: NativeModules, owner: NativeBlockExecution, x: PythonObject, state: PythonObject, step: Bool) raises -> PythonObject:
+def _neural_layer_run(mut mods: NativeModules, owner: NativeBlockExecution, x: PythonObject, state: PythonObject, step: Bool, stateless: Bool = False) raises -> PythonObject:
     # TOMBSTONE: the Mamba-2 public-step workspace owner (Mamba2PublicWorkspace, mamba2_workspace_api_v1) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
     # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
     # Every Mamba step and forward reaches the cached block program through
     # the one native Mamba descriptor (mamba/native_state_dispatch.mojo).
     ref plan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
     var result = causal_layer_run_fields(mods, owner.fields, plan.entries, plan.kind, plan.d_model,
-        plan.packed, plan.layer, x, state, step)
+        plan.packed, plan.layer, x, state, step, stateless)
     _ = owner
     return result
 
@@ -842,6 +842,16 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                     lock_lease.release()
                 _ = keep^
                 return y
+        # lane fix-mamba12-forward-exec: a Mamba-1/2 device forward with no
+        # state runs stateless (no host zero state allocated, uploaded and
+        # read back per call; `causal_layer_stateless`)
+        if supplied_state is None:
+            ref nplan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
+            if causal_layer_stateless(nplan.kind, nplan.entries, step):
+                var fresh_result = _neural_layer_run(mods, owner, x, PythonObject(None), step, True)
+                if locked:
+                    lock_lease.release()
+                return fresh_result
         var state = supplied_state
         if state is None:
             state = _neural_allocate(mods, owner, b, l)

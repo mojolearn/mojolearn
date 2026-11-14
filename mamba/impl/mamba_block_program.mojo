@@ -53,7 +53,7 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
     block_buffer_view, block_part_floats, block_offsets, block_guard, mamba_step_train_run, mamba_step_backward,
-    mamba_step_run_host, MAMBA_CALL_PROGRAM,
+    mamba_step_run_host, MAMBA_CALL_PROGRAM, IDN_MAMBA12_FORWARD_COPIES_OLD,
 )
 from core.shared_slot import SharedSlot
 
@@ -116,8 +116,11 @@ struct MambaBlockProgram(Movable):
     var w_addrs: List[Int]
     #: the weight epoch at the last weight load (lane x45c: the version key)
     var epoch: Int
-    #: the device floats this program holds (the cache's byte bound)
+    #: the device floats this program holds (the cache's byte bound): its
+    #: weights, state and words (`base_floats`) plus the Mamba-1/2 stages its
+    #: step entries keep (lane fix-mamba12-forward-exec, `_release`)
     var floats: Int
+    var base_floats: Int
     var busy: Bool
     var stamp: Int
 
@@ -129,6 +132,12 @@ struct MambaBlockProgram(Movable):
         var epoch = weight_epoch()
         var ex = DeviceExec(neural_ctx[_NEURAL_CTX]())
         var s = OpsSession[DeviceExec](ex^, False)
+        comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
+            # lane fix-mamba12-forward-exec: this program's step runs are
+            # never read by a backward (`mamba_program_backward` records its
+            # own run), so the Mamba-1/2 L > 1 runs keep their stages
+            # (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_COPIES_OLD)
+            s.steps.keep_stages = True
         var ints: List[Int] = [b, dm]
         var wsizes = block_weight_sizes(code, ints)
         var w = s.upload_block(code, ints, BLOCK_PART_WEIGHTS, _pieces(weights, wsizes, "mamba weights", False),
@@ -151,6 +160,7 @@ struct MambaBlockProgram(Movable):
         self.epoch = epoch
         self.floats = (block_part_floats(code, ints, BLOCK_PART_WEIGHTS)
                        + block_part_floats(code, ints, BLOCK_PART_STATE) + k)
+        self.base_floats = self.floats
         self.s = s^
         self.code = code
         self.b = b
@@ -527,6 +537,10 @@ def _release(p: _ProgramPtr, cached: Bool, failed: Bool):
                     _ = c[].programs.pop(i)
                     break
         else:
+            # lane fix-mamba12-forward-exec: the held Mamba-1/2 stages count
+            # toward the cache's byte bound (least recently used idle
+            # programs, and their stages, go first)
+            p[].floats = p[].base_floats + p[].s.steps.held_floats()
             p[].busy = False
         _unlock(c)
         if failed:
@@ -696,6 +710,13 @@ def mamba_block_cache_clear() raises:
         _destroy(_ProgramPtr(unsafe_from_address=drop[i]))
 
 
+def _all_zero(addrs: List[Int]) -> Bool:
+    for i in range(len(addrs)):  # small-loop(at most ten state addresses): address scan, no data
+        if addrs[i] != 0:
+            return False
+    return True
+
+
 def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int,
                          dt_lo: Float32, dt_hi: Float32, fresh: Bool = False) raises -> Int:
     """`mamba_block_call` over the per-call ABI's one address list (the
@@ -709,7 +730,8 @@ def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: I
 
     Returns the post-call buf_len (Mamba-2/3; 0 for Mamba-1). `fresh` runs
     from a zero state and leaves the state slots unread and unwritten (the
-    discard-state prefill)."""
+    discard-state prefill); so does a call whose state addresses are all 0
+    (the stateless public forward; its carried integers must be 0)."""
     var code = mamba_step_code(kind)
     var nw = 10 if kind == 1 else 9
     var ns = 2 if kind == 1 else (4 if kind == 2 else 10)
@@ -736,5 +758,19 @@ def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: I
     elif kind == 3:
         words.append(q0)
         words.append(pend)
-    var out = mamba_block_call(code, weights, state, words, a[0], y, reports, b, l, dm, fs, fresh)
+    var discard = fresh
+    comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
+        # lane fix-mamba12-forward-exec: every state address 0 is the
+        # stateless forward (the public doors' `forward(x)` with no state,
+        # bindings/causal_lm_public_door.mojo): a zero state on the device
+        # (one fill) and nothing read back, where the door used to allocate a
+        # host zero state per call that this call uploaded and downloaded.
+        # The carried integers must be zero then (a fresh sequence).
+        if not discard and _all_zero(state):
+            for i in range(len(words)):  # small-loop(at most two carried integers): refusal, no data
+                if words[i] != 0:
+                    raise Error("mamba" + String(kind) + ": a stateless call (every state address 0) starts a"
+                                + " fresh sequence; its carried integers must be 0")
+            discard = True
+    var out = mamba_block_call(code, weights, state, words, a[0], y, reports, b, l, dm, fs, discard)
     return out[0] if len(out) > 0 else 0
