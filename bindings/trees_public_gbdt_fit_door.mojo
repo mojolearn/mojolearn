@@ -1550,6 +1550,19 @@ def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject)
     return learner
 
 
+def adapter_new_learner(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_GBDTAdapter._new_learner(mode)` and (with the stored `numeric_mode`)
+    `_GBDTAdapter._validate_params()`, one native call each from Python
+    (lane py-trees, 2026-11-14): the numeric_mode refusal, the regressor's
+    class_weights refusal, then the learner the native constructor builds."""
+    return _new_learner(model, mode, context)
+
+
+def adapter_validate_params(model: PythonObject, context: PythonObject) raises:
+    """`_GBDTAdapter._validate_params()`: `_new_learner(self.numeric_mode)`."""
+    _ = _new_learner(model, _field(py_fields(model), model, "numeric_mode"), context)
+
+
 def _clear_fit(fields: PythonObject, context: PythonObject) raises:
     """`_GBDTAdapter._clear_fit`: drop every fitted attribute."""
     var keys = py_call(_b().list, fields)
