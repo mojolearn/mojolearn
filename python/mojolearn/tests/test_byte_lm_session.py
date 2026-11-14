@@ -111,18 +111,16 @@ def test_lean_result_keys_and_export_gradients():
     trainer.close()
 
 
-def test_full_result_on_a_resident_session_is_the_lean_step_plus_the_gradient_export():
-    full, lean = model('full'), model('lean')
+def test_full_result_keys_on_a_resident_session():
+    # The full step's loss and flat gradient equal a lean step's loss and
+    # gradient export: checks/native_tests/byte_lm_trainer_session_cases.mojo
+    # unit 6 (lane tmig-lm-1). The result's keys and named shapes stay here.
+    full = model('full')
     result = full.train_step(ids())
-    lean_result = lean.train_step(ids())
     assert set(result) == {'loss', 'step', 'completed_steps', 'next_batch_index',
                            'flat_gradients', 'gradients'}
-    assert result['loss'] == lean_result['loss']
-    assert (np.asarray(result['flat_gradients']).tobytes()
-            == np.asarray(lean.export_gradients()['flat_gradients']).tobytes())
     assert np.asarray(result['gradients']['embed']).shape == (256, 32)
     full.close()
-    lean.close()
 
 
 def test_exports_are_copies_and_mutation_cannot_reach_the_device():
