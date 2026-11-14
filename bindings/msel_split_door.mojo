@@ -19,6 +19,9 @@ from std.os import getenv
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.msel_common_door import msel_signed32
+from bindings.msel_split_run import (
+    MselFoldRows, msel_fold_rows_fits, msel_shuffled_fold_rows_plan, msel_stratified_fold_rows_plan,
+)
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_helpers_released_unpack import (
     msel_fold_ids, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_group_fold_perm_i32, msel_leave_range_i64,
@@ -347,28 +350,23 @@ def msel_truth(value: PythonObject) raises -> Bool:
 # ---------------------------------------------------------------- fold programs
 
 
-def _fold_rows_run(mut prog: MetricDoorProg, n: Int, k: Int, code: Int, order: Int, context: PythonObject) raises -> PythonObject:
-    """`_fold_rows_run`: the `fold_rows` stage, then each fold's (train,
-    test) int64 rows read out of the arena."""
-    var out_slot = prog.alloc(2 * n * k)
-    var out = prog.want(out_slot, 2 * n * k)
-    var sz_slot = prog.alloc(k)
-    var sz = prog.want(sz_slot, k)
-    prog.stage("fold_rows", 1, [n, k, code, order, out, sz])
+def _fold_rows_run(prog: MetricDoorProg, rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
+    """`_fold_rows_run`: the program run, then each fold's (train, test)
+    int64 rows read out of the arena (the table's layout:
+    bindings/msel_split_run.mojo `MselFoldRows`)."""
     var arena = metric_door_run(prog, PythonObject(None), context)
     var base = arena.base()
-    var counts = FAMILY_I32P(unsafe_from_address=base + 4 * sz)
+    var n = rows.n
     var res = Python.list()
-    for f in range(k):  # driver-loop: over folds
-        var c = Int(counts[f])
-        var at = out + 2 * n * f
+    for f in range(rows.k):  # driver-loop: over folds
+        var c = rows.size(base, f)
         var test = msel_new(c, "<i8", context)
         var train = msel_new(n - c, "<i8", context)
         if c > 0:
-            unsafe_memcpy(dest=msel_p64(test), src=FAMILY_I64P(unsafe_from_address=base + 4 * at), count=c)
+            unsafe_memcpy(dest=msel_p64(test), src=FAMILY_I64P(unsafe_from_address=rows.test_rows(base, f)), count=c)
             _ = test  # keep the Python object alive through the native call above
         if n - c > 0:
-            unsafe_memcpy(dest=msel_p64(train), src=FAMILY_I64P(unsafe_from_address=base + 4 * (at + 2 * c)), count=n - c)
+            unsafe_memcpy(dest=msel_p64(train), src=FAMILY_I64P(unsafe_from_address=rows.train_rows(base, f)), count=n - c)
             _ = train  # keep the Python object alive through the native call above
         _ = py_call(res.append, Python.tuple(train, test))
     _ = arena^  # count words and copied row addresses remain owned through the final fold
@@ -376,50 +374,33 @@ def _fold_rows_run(mut prog: MetricDoorProg, n: Int, k: Int, code: Int, order: I
 
 
 def msel_fold_rows_shuffled(n: Int, k: Int, mut rng: MselRng, context: PythonObject) raises -> PythonObject:
-    """`fold_rows(n, k, rng=rng)`; None past the table bound (no draw made)."""
-    if n < 2 or k < 1 or 2 * n * k > MSEL_FOLD_ROWS_BOUND:
+    """`fold_rows(n, k, rng=rng)`; None past the table bound (no draw made).
+    The program is built by bindings/msel_split_run.mojo."""
+    if not msel_fold_rows_fits(n, k):
         return PythonObject(None)
     var prog = MetricDoorProg()
-    var order = rng.permute_stage(prog, n)
-    var code = prog.scratch(n)
-    return _fold_rows_run(prog, n, k, code, order, context)
+    var counter = rng.counter()
+    var rows = msel_shuffled_fold_rows_plan(prog.plan, n, k, counter)
+    rng.draws = counter.draws
+    return _fold_rows_run(prog, rows, context)
 
 
 def msel_stratified_fold_rows(enc: PythonObject, counts: List[Int], alloc: PythonObject, k: Int,
                               mut rng: MselRng, shuffle: Bool, context: PythonObject) raises -> PythonObject:
     """`stratified_fold_rows`: StratifiedKFold's folds in one program; None
-    past the table bound."""
+    past the table bound. UNPACK: the pinned codes and the allocation
+    table's address; RUN: bindings/msel_split_run.mojo builds the program."""
     var n = Int(py=enc.size)
-    var m = len(counts)
-    if n < 2 or k < 1 or 2 * n * k > MSEL_FOLD_ROWS_BOUND:
+    if not msel_fold_rows_fits(n, k):
         return PythonObject(None)
     var prog = MetricDoorProg()
     var enc_slot = prog.put_i32(enc)
-    var off = prog.alloc(m + 1)
-    var ordr = prog.scratch(n)
-    prog.stage("group_sort", 1, [enc_slot, n, m, off, ordr])
-    var pb = MSEL_NONE
-    if shuffle:
-        var at = 0
-        for c in range(m):  # driver-loop: over classes (one permutation stage each)
-            var o = rng.permute_stage(prog, counts[c])
-            if c == 0:
-                pb = o
-            if o != pb + at:
-                raise Error("RuntimeError: stratified_fold_rows: the class permutations are not contiguous")
-            at += counts[c]
-    var cum = List[Int]()
-    var table = msel_p64(alloc)
-    for c in range(m):  # driver-loop: over classes (fold-by-class offsets)
-        var acc = 0
-        cum.append(0)
-        for f in range(k):  # driver-loop: over folds
-            acc += Int(table[f * m + c])
-            cum.append(acc)
-    var cum_slot = prog.put_i32(msel_i32_list(cum, context))
-    var code = prog.scratch(n)
-    prog.stage("strat_codes", n, [enc_slot, ordr, off, pb, cum_slot, k, code])
-    return _fold_rows_run(prog, n, k, code, MSEL_NONE, context)
+    var counter = rng.counter()
+    var rows = msel_stratified_fold_rows_plan(prog.plan, enc_slot, n, counts, Int(msel_p64(alloc)), k,
+                                              counter, shuffle)
+    _ = alloc  # keep the Python object alive through the build above
+    rng.draws = counter.draws
+    return _fold_rows_run(prog, rows, context)
 
 
 # ---------------------------------------------------------------- default folds

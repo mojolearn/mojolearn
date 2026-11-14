@@ -41,6 +41,9 @@ from bindings.metrics_native_support_door import metric_warn
 from bindings.native_torch_admission_door import native_torch_exact
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from core.entry_table import EntryRef
+from bindings.msel_split_run import (
+    MselCounterRng, msel_split_mix64, msel_split_signed32, MSEL_SPLIT_FOLD_ROWS_BOUND, MSEL_SPLIT_GOLDEN,
+)
 from bindings.msel_helpers_released_unpack import (
     msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8, msel_fold_ids,
     msel_select_fold_i64, msel_select_folds_i64, msel_gather_i32,
@@ -49,9 +52,10 @@ from bindings.msel_helpers_released_unpack import (
 comptime MSEL_NONE = -1
 comptime MSEL_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 comptime MSEL_U32P = MutPointer[UInt32, MutUntrackedOrigin]
-#: `_expansion_metrics._FOLD_ROWS_BOUND`: the largest K-fold row table.
-comptime MSEL_FOLD_ROWS_BOUND = 1 << 27
-comptime MSEL_GOLDEN: UInt64 = 0x9E3779B97F4A7C15
+# The draw words and the fold-table bound live once, in the typed split
+# programs (bindings/msel_split_run.mojo, lane py-msel-prep-cnn).
+comptime MSEL_FOLD_ROWS_BOUND = MSEL_SPLIT_FOLD_ROWS_BOUND
+comptime MSEL_GOLDEN: UInt64 = MSEL_SPLIT_GOLDEN
 
 
 # ---------------------------------------------------------------- calls
@@ -786,11 +790,8 @@ def msel_select_folds_plan(fold_store: PythonObject, fold_counts: PythonObject, 
 
 
 def msel_mix64(var x: UInt64) -> UInt64:
-    """splitmix64's finalizer (`_expansion_metrics._mix64`), in wrapping
-    64-bit arithmetic: the exact Python integers modulo 2**64."""
-    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9
-    x = (x ^ (x >> 27)) * 0x94D049BB133111EB
-    return x ^ (x >> 31)
+    """splitmix64's finalizer (bindings/msel_split_run.mojo)."""
+    return msel_split_mix64(x)
 
 
 def msel_u64(value: PythonObject) raises -> UInt64:
@@ -803,9 +804,8 @@ def msel_u64(value: PythonObject) raises -> UInt64:
 
 
 def msel_signed32(v: UInt64) -> Int:
-    """A 32-bit word as the signed parameter `_Prog.stage` records."""
-    var w = Int(v & 0xFFFFFFFF)
-    return w - (1 << 32) if w >= (1 << 31) else w
+    """A 32-bit word as the signed stage parameter (bindings/msel_split_run.mojo)."""
+    return msel_split_signed32(v)
 
 
 struct MselRng(Movable):
@@ -827,16 +827,21 @@ struct MselRng(Movable):
         self.seed = msel_u64(state)
         self.draws = 0
 
+    def counter(self) -> MselCounterRng:
+        """The typed draw state (bindings/msel_split_run.mojo)."""
+        return MselCounterRng(self.seed, self.draws)
+
     def salt(mut self) -> UInt64:
-        var s = msel_mix64(self.seed * MSEL_GOLDEN + self.draws + 1)
-        self.draws += 1
+        var rng = self.counter()
+        var s = rng.salt()
+        self.draws = rng.draws
         return s
 
     def permute_stage(mut self, mut prog: MetricDoorProg, n: Int) raises -> Int:
         """The next draw as a `permute` stage of `prog`; returns its slot."""
-        var s = self.salt()
-        var out = prog.alloc(max(n, 1))
-        prog.stage("permute", 1, [n, out, msel_signed32(s), msel_signed32(s >> 32)])
+        var rng = self.counter()
+        var out = rng.permute_stage(prog.plan, n)
+        self.draws = rng.draws
         return out
 
     def permutation_rows(mut self, sizes: List[Int], context: PythonObject) raises -> PythonObject:
