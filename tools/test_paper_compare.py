@@ -253,6 +253,18 @@ def gpu_opponents_only(races, vendor):
 '''
 
 
+class ParamsDiff(unittest.TestCase):
+    def test_prebinned_rows_clause_is_spelling_only(self):
+        old = {"input_binning": "pre-binned input on both arms (GreedyLogSum, 254 borders); bins sha256 ab",
+               "max_depth": 8}
+        new = {"input_binning": "pre-binned input on both arms (GreedyLogSum, 254 borders); 2043304 training rows; "
+                                "bins sha256 ab", "max_depth": 8}
+        self.assertEqual(PC.params_diff(old, new), [])
+        moved = dict(new, input_binning=new["input_binning"].replace("sha256 ab", "sha256 cd"))
+        self.assertEqual(PC.params_diff(old, moved), ["input_binning"])
+        self.assertEqual(PC.params_diff(old, dict(new, max_depth=6)), ["max_depth"])
+
+
 class Ids(unittest.TestCase):
     def test_plan_ids_and_pass_ids(self):
         doc = PC.extract_recipes(paper_board(), "nvidia")
