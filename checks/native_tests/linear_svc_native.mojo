@@ -117,7 +117,7 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
         intercept, unit == 0, 3 if unit == 2 else 4, l1, l2, 0.000001, 0.000000001)
     var plan = LinearSvcFitPlan(fits, d + Int(intercept))
     plan.storage[0].prepare_info(fits)
-    driver.fit(LinearSvcFitRequest(Int(xp), Int(cp), Int(sp) if unit == 4 or unit == 5 else 0, options), plan)
+    driver.fit(LinearSvcFitRequest(Int(xp), Int(cp), Int(sp) if unit == 4 or unit == 5 else 0, options.copy()), plan)
     var expected_w = Float64(0.8)
     var expected_bias = Float64(0)
     var expected_objective = Float64(0.2)

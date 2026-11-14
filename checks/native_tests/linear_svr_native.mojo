@@ -54,7 +54,7 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
     if unit == 5:
         var refused = False
         try:
-            moved.run(driver.qn(), request)
+            moved.run(driver.qn(), request.copy())
         except problem:
             require(String(problem).startswith("qn_fit: svr_eps must be finite and non-negative"),
                 "epsilon refusal text changed")
@@ -64,7 +64,7 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
         _ = target
         _ = coefficients
         return
-    moved.run(driver.qn(), request)
+    moved.run(driver.qn(), request.copy())
     var t = 1 - epsilon
     var strength = l2 / Float64(n) if unit == 0 else l2
     var expected_w = (2 * t - l1) / (2 + strength)

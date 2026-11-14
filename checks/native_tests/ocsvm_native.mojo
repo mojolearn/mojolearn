@@ -132,7 +132,7 @@ def fixture(driver: XnDriver, resident_driver: OcResidentDriver, unit: Int, resi
     var training = OcMatrix(n, d, Int(xp))
     if weights.selected:
         training = oc_take_rows(driver, Int(xp), n, d, oc_i32_address(weights.rows), m)
-    var gamma = Float64(0.1 if original else (1 if kernel == 1 else 0.5))
+    var gamma = Float64(0.1 if original else (1.0 if kernel == 1 else 0.5))
     if unit == 6 or unit == 10:
         var variance = oc_variance(driver, Int(xp), n * d)
         gamma = Float64(Float32(1 / (Float64(d) * variance) if variance != 0 else 1))
@@ -229,8 +229,8 @@ def fixture(driver: XnDriver, resident_driver: OcResidentDriver, unit: Int, resi
     if not original:
         def fill_query(row: Int) {imm qp, imm d, imm kernel}:
             if kernel == 4:
-                qp[row * d] = Float32(0.2 if row == 0 else (1.2 if row == 1 else (1 if row == 2 else -0.2)))
-                qp[row * d + 1] = Float32(0.2 if row == 0 else (1 if row == 2 else 0))
+                qp[row * d] = Float32(0.2 if row == 0 else (1.2 if row == 1 else (1.0 if row == 2 else -0.2)))
+                qp[row * d + 1] = Float32(0.2 if row == 0 else (1.0 if row == 2 else 0.0))
             else:
                 qp[row * d] = Float32(-2.0 if row == 0 else (-0.5 if row == 1 else (0.5 if row == 2 else 2.0)))
         host_parallelize(fill_query, nq)

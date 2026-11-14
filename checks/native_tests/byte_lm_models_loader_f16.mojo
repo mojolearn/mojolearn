@@ -88,7 +88,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(F16_CHUNKS)
     for chunk in range(F16_CHUNKS):
         if failures[chunk] >= 0:
-            cases.fail(chunk, error)
+            cases.fail(chunk, "f16 chunk " + String(chunk) + " mismatch at half " + String(failures[chunk]))
 
 
 # ---- The device column (was byte_lm_models_loader_f16_gpu_suite.mojo) ----
@@ -112,7 +112,7 @@ def _run_gpu(mut report: Report) raises:
     var cases = report.cases(F16_CHUNKS)
     for chunk in range(F16_CHUNKS):
         if failures[chunk] >= 0:
-            cases.fail(chunk, error)
+            cases.fail(chunk, "f16 chunk " + String(chunk) + " mismatch at half " + String(failures[chunk]))
 
 
 def run_cases(column: Column, mut report: Report):

@@ -160,13 +160,13 @@ def _run_gpu(mut report: Report) raises:
             for j in range(start, min(start + BF16_CHUNK, BF16_NARROW_COUNT)):
                 var expected = expected_narrow(input_word(j))
                 if np.unsafe_load(j) != expected or bitcast[DType.uint32](wp.unsafe_load(j)) != expected_widen(expected):
-                    cases.fail(unit, error)
+                    cases.fail(unit, "bf16 narrow/widen word mismatch at index " + String(j))
                     return
         else:
             var start = (unit - BF16_NARROW_UNITS) * BF16_CHUNK
             for j in range(start, start + BF16_CHUNK):
                 if bitcast[DType.uint32](rwp.unsafe_load(j)) != expected_widen(UInt16(j)):
-                    cases.fail(unit, error)
+                    cases.fail(unit, "bf16 widen word mismatch at half " + String(j))
                     return
     report.parallel(check, BF16_UNITS)
     # Keep pinned host allocations and device storage alive through the last
