@@ -474,6 +474,41 @@ struct Mamba2DeviceStages(Movable):
         self.out_proj = mamba_zeros(ctx, m * dm)
         self.residual_out = mamba_zeros(ctx, m * dm)
 
+    def rezero(mut self) raises:
+        """Lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
+        every stage back to the zeros its constructor filled, on the buffers
+        already held (no allocation, no wait). Fills only, in stream order
+        ahead of the next forward's launches. Not for a guarded (poison)
+        build, whose fills cover a body view."""
+        self.norm_sumsq.enqueue_fill(Float32(0.0))
+        self.norm_out.enqueue_fill(Float32(0.0))
+        self.in_proj.enqueue_fill(Float32(0.0))
+        self.a_out.enqueue_fill(Float32(0.0))
+        self.conv_out.enqueue_fill(Float32(0.0))
+        self.silu_out.enqueue_fill(Float32(0.0))
+        self.conv_win.enqueue_fill(Float32(0.0))
+        self.dtraw_work.enqueue_fill(Float32(0.0))
+        self.dt_work.enqueue_fill(Float32(0.0))
+        self.xbc_work.enqueue_fill(Float32(0.0))
+        self.xd_work.enqueue_fill(Float32(0.0))
+        self.da_work.enqueue_fill(Float32(0.0))
+        self.dacs.enqueue_fill(Float32(0.0))
+        self.seg_l.enqueue_fill(Float32(0.0))
+        self.cb_g.enqueue_fill(Float32(0.0))
+        self.ydiag_work.enqueue_fill(Float32(0.0))
+        self.decay.enqueue_fill(Float32(0.0))
+        self.cstate.enqueue_fill(Float32(0.0))
+        self.pass_states.enqueue_fill(Float32(0.0))
+        self.yoff_work.enqueue_fill(Float32(0.0))
+        self.y_work.enqueue_fill(Float32(0.0))
+        self.h_last.enqueue_fill(Float32(0.0))
+        self.skip_out.enqueue_fill(Float32(0.0))
+        self.gnorm_gate.enqueue_fill(Float32(0.0))
+        self.gnorm_sumsq.enqueue_fill(Float32(0.0))
+        self.gnorm_out.enqueue_fill(Float32(0.0))
+        self.out_proj.enqueue_fill(Float32(0.0))
+        self.residual_out.enqueue_fill(Float32(0.0))
+
     def __init__(
         out self,
         ctx: DeviceContext,
