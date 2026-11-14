@@ -35,6 +35,20 @@ def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonOb
     return sequential_array(mods, shape, dtype, context)
 
 
+def sequential_array_uninit(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`sequential_array` without the zero fill: NumPy's own allocation
+    (`ndarray(shape, dtype)`, C order, owned, writable), its words left
+    uninitialised. Only for an output the native entry writes in full before
+    the door returns it (fix-classical-infer-xq: PCA.transform zero-filled
+    rows x width words per call that the download then overwrote)."""
+    var mods = NativeModules()
+    var layout = NativeArrayLayout(native_shape_unpack(shape), Int(py=dtype.itemsize))
+    var packed_shape = native_shape_pack(layout.shape)
+    var result = py_call(context["ndarray"], packed_shape, dtype=dtype)
+    mods.released()
+    return result^
+
+
 def sequential_address(value: PythonObject) raises -> PythonObject:
     return value.__array_interface__["data"][0]
 

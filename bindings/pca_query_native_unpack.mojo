@@ -2,10 +2,10 @@
 # Native PCA transform/inverse_transform envelope: admitted private state,
 # captured inputs, existing native execution, and the finished owned ndarray.
 from std.python import Python, PythonObject
-from bindings.device_rows_door import door_rows_refuse
+from bindings.device_rows_door import door_rows_refuse, door_is_device_rows
 from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.classical_validate_run import classical_check_width
-from bindings.sequential_arrays_door import sequential_array, sequential_address
+from bindings.sequential_arrays_door import sequential_array_uninit, sequential_address
 from bindings.pca_exact_run import pca_refusal
 from bindings.pca_descriptor_boundary_door import pca_fold_connection, pca_run_query
 from x_decomp.pca_descriptor_boundary_run import pca_mode, pca_whiten_capability
@@ -37,8 +37,13 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     # base binding's, on the identical context); a `fast` model's fold is
     # gathered on the host and its own `fast` binding uploads it on the
     # `fast` context, as QN's door does (bindings/qn_native.mojo).
+    # fix-classical-infer-xq (2026-11-14): the fold provider is connected
+    # (provider lookup, vendor and mode refusals) only for a DeviceRows fold,
+    # the one input it can serve; 0.8.66 had no such step and wave-9 ran it
+    # on every identical transform of a plain array. Same refusals, same
+    # route for a fold.
     var fold_connection = -1
-    if not inverse and not whiten and pca_mode(connection) == 1:
+    if not inverse and not whiten and pca_mode(connection) == 1 and door_is_device_rows(source, context):
         fold_connection = pca_fold_connection(context)
     var fold_ok = fold_connection >= 0
     # The plain transform's entry tests a borrowed X on the device after its
@@ -59,9 +64,12 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     var mean_pin = ArrayPin()
     var components = pca_state_snapshot(fields, "components_", [count, features], context, components_pin, scan)
     var mean = pca_state_snapshot(fields, "mean_", [features], context, mean_pin, scan)
-    # NumPy's native ndarray constructor owns this fresh bytearray-backed
-    # C-order float32 output. No later Python wrapper converts its result.
-    var output = sequential_array(Python.tuple(rows, features if inverse else count), context["float32"], context)
+    # NumPy's native ndarray constructor owns this fresh C-order float32
+    # output, uninitialised: every route writes all rows x width words
+    # before it is returned (a refused X discards it), so the bytearray's
+    # zero fill of the whole output (one host pass, in 0.8.66 too) is gone
+    # (fix-classical-infer-xq). No later Python wrapper converts its result.
+    var output = sequential_array_uninit(Python.tuple(rows, features if inverse else count), context["float32"], context)
     var output_address = Int(py=sequential_address(output))
     var fold = PCAFoldStore()
     if x.store.active():
