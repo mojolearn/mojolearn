@@ -172,6 +172,10 @@
   "gbdt-prebinned-infer-old": {
    "define": "MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD",
    "status": "define in code (gbdt/models/add_non_symmetric_tree_doc_parallel.mojo IDN_NS_RESIDENT_PACK): B = the resident Depthwise/Lossguide predict re-packing the ensemble every call through doc_parallel_boosting.predict (layout build, node staging, sixteen allocations, eight uploads, bins buffer); A = the pack held from the first predict (NsResidentPack), node offsets and bins buffer rewritten only when the row count changes (default). Same kernels, same arguments, same tree order: same bits"
+  },
+  "query-x-held-off": {
+   "define": "MOJOLEARN_IDN_QUERY_X_HELD_OFF",
+   "status": "define in code (core/query_x_held.mojo IDN_QUERY_X_HELD): B = every resident kernel predict (SVC, SVR, GPR, GPC, KernelRidge) creating its query x, status pair (plus a fill launch) and pinned pair per call (DeviceQueryX per call, main 5005c07e74's shape); A = the buffers held by the model's lease or handle (high-water rows, grow only, prefix view for fewer rows), status pair filled once and flagged by a per-call mark, one pinned pair for the life of the model (default). Same kernels, same bytes: same bits"
   }
  },
  "rows": [
@@ -1109,13 +1113,33 @@
    "id": "fix-gbdt-prebinned-infer",
    "source": "fix-gbdt-prebinned-infer (2026-11-13, paper compare of ba08dac006 on L40S: trees/gbdt-depthwise/istella infer ours-prebinned large 71.04 -> 82.71 ms vs 0.8.66, single scored run, warm-up 77.10; ours large flat 68.87 -> 68.66 on the same path): the resident Depthwise/Lossguide predict packs the ensemble once (NsResidentPack) instead of per call",
    "kind": "ab",
-   "lane": ["gbdt-depthwise", "gbdt-lossguide"],
+   "lane": [
+    "gbdt-depthwise",
+    "gbdt-lossguide"
+   ],
    "dataset": "*",
    "rows": "full",
    "b_arms": [
     "gbdt-prebinned-infer-old"
    ],
    "decides": "keep the held pack (A, default) unless the per-call pack (B, -D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD) is faster on the NVIDIA+AMD average of infer test and large, arms ours, ours-prebinned (depthwise) and ours, ours-gain0 (lossguide), istella and taxi; same kernels, same arguments, same tree order: every infer hash must be equal between A and B"
+  },
+  {
+   "id": "fix-svc-query-resident",
+   "source": "fix-svc-query-resident (2026-11-14, best-ever history audit wave 2 rows 3-4: classical/svc/istella infer ours Xq 2.23 ms best (0.8.66) vs candidate 2.49-2.88; classical/svc/taxi 5.20 best (0.8.25) vs candidate 5.83-6.11; per-call DeviceQueryX allocations + fill launch + pinned pair since f78c468a5d): the resident predict query is held by the model",
+   "kind": "ab",
+   "lane": [
+    "svc",
+    "gpr",
+    "gpc",
+    "kernel-ridge"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "query-x-held-off"
+   ],
+   "decides": "keep the held query (A, default) unless the per-call buffers (B, -D MOJOLEARN_IDN_QUERY_X_HELD_OFF) are faster on the NVIDIA+AMD average of infer Xq, arm ours, istella and taxi (svc; gpr, gpc and kernel-ridge infer rows of the same build are read for regressions only); same kernels, same bytes: every infer hash must be equal between A and B"
   }
  ]
 }
