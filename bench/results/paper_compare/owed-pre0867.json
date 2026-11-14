@@ -135,7 +135,7 @@
   },
   "mamba3-forward-zero-fill": {
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
-   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
+   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = every Mamba-3 output a native call writes whole zero-filled per call (the forward's y and four reports; since fix-mamba3-unfilled-rest also _m3_state_call's y and reports in bindings/samba_inference_native_door.mojo, the kind-3 session step/decode outputs via _session_output in bindings/mamba_public_native_door.mojo, and the tape prefill y) (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
   }
  },
  "rows": [
@@ -932,15 +932,19 @@
   },
   {
    "id": "restore-mamba3-forward-unfilled",
-   "source": "fix-mamba3-unfilled-arrays (2026-11-13; restore-neural-call-paths doubt: Mamba-3 forward still zero-fills 5 arrays per call in _prefill_mamba3_reports)",
+   "source": "fix-mamba3-unfilled-arrays (2026-11-13; restore-neural-call-paths doubt: Mamba-3 forward still zero-fills 5 arrays per call in _prefill_mamba3_reports; extended by fix-mamba3-unfilled-rest (2026-11-13): the carried-state forward and step, the resident session step/decode and the tape prefill y, same switch)",
    "kind": "ab",
-   "lane": "mamba3-forward",
+   "lane": [
+    "mamba3-forward",
+    "mamba3-decode",
+    "mamba3-infer"
+   ],
    "dataset": "*",
    "rows": "full",
    "b_arms": [
     "mamba3-forward-zero-fill"
    ],
-   "decides": "keep the unfilled outputs (A) unless the zero-filled arrays (B) are at least as fast on the NVIDIA and AMD average; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba3-forward 3.95 -> 6.75 ms; same kernels, digests must not move in either arm"
+   "decides": "keep the unfilled outputs (A) unless the zero-filled arrays (B) are at least as fast on the NVIDIA and AMD average; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba3-forward 3.95 -> 6.75 ms; mamba3-decode (session step, y + four reports per token) and mamba3-infer (CPU host forward) carry the same switch since fix-mamba3-unfilled-rest; same kernels, digests must not move in either arm"
   }
  ]
 }
