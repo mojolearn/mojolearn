@@ -5,7 +5,7 @@ from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_arrays_door import classical_input, classical_address, classical_dtype_str
-from bindings.tsa_hw_native_door import tsa_array
+from bindings.tsa_hw_native_door import tsa_array_unfilled
 from core.training_input_copy import training_copy_f32, training_copy_words32
 
 
@@ -49,7 +49,9 @@ def training_words32_owned(source: PythonObject, dims: List[Int], name: String,
     # admission and NumPy's __array_interface__ shape contract on Python <3.12.
     output_shape = py_call(bi.tuple, output_shape)
     var source_addr = Int(py=classical_address(value))
-    var output = tsa_array("i" if integer else "f", dtype, output_shape, count, 4, context)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the strided copy below
+    # writes every one of the count words (was a zero fill it overwrote).
+    var output = tsa_array_unfilled("i" if integer else "f", dtype, output_shape, count, 4, context)
     if integer:
         training_copy_words32(source_addr, Int(py=classical_address(output)), dims, native_strides)
     else:

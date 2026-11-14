@@ -203,7 +203,8 @@ def _loss(out_loss: PythonObject) raises -> PythonObject:
 
 
 def _copy_i32(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    var out = _i32(n, context)
+    # Unfilled (lane fix-output-zero-fill): the memcpy below writes all n words.
+    var out = tsa_array_unfilled("i", "<i4", Python.tuple(n), n, 4, context)
     if n > 0:
         unsafe_memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(out))),
                src=_I32P(unsafe_from_address=Int(py=classical_address(source))), count=n)
