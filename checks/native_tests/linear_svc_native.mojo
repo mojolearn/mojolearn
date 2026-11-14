@@ -143,7 +143,11 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
         expected_objective = Float64(3) / 7
     require(plan.iterations() > 0 and plan.iterations() <= 200, "solver iteration result range")
     for fit in range(fits):  # metadata: one objective per model target
-        require(close(plan.storage[0].info[3 * fit], expected_objective), "analytic fitted objective")
+        require(close(plan.storage[0].info[3 * fit], expected_objective),
+            "analytic fitted objective: unit " + String(unit) + " fit " + String(fit) + " reported "
+            + String(plan.storage[0].info[3 * fit]) + ", expected " + String(expected_objective) + ", retcode "
+            + String(plan.storage[0].info[3 * fit + 1]) + ", iterations " + String(plan.storage[0].info[3 * fit + 2])
+            + ", coefficients " + String(plan.storage[0].coefficients[0]) + " " + String(plan.storage[0].coefficients[1]))
     var w = List[Float32](length=fits * (d + Int(intercept)), fill=0)
     var coefficients = List[Float32](length=fits * d, fill=0)
     var biases = List[Float32](length=fits, fill=0)
