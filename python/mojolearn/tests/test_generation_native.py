@@ -254,3 +254,27 @@ def test_public_execution_methods_are_one_native_call():
             assert isinstance(body[0].value, ast.Call), node.name
             checked.append(node.name)
     assert set(checked) == methods
+
+
+@pytest.mark.parametrize("family", ["llama", "mamba", "mamba2"])
+def test_admitted_registry_plain_entries_pass_owner_capture(tmp_path, family):
+    """Every plain registry entry the admission writes passes the owner capture.
+
+    On the GPU the registry carries the route words ``resident``,
+    ``resident_vendor`` (Transformer) and ``program_read`` (every kind) beside
+    the compiled entries; ``generate`` captures the registry and must admit
+    them instead of refusing them as non-functions.
+    """
+    model = load_fixture(tmp_path, family)
+    entries = model._native_entries
+    assert isinstance(entries["entry_mode"], int) and isinstance(entries["entry_vendor"], int)
+    if DEVICE == "gpu":
+        assert entries["cpu"] is False
+        assert isinstance(entries["program_read"], int)
+        if model.kind == "transformer":
+            assert entries["resident"] is True
+            assert entries["resident_vendor"] == model._native_vendor
+    else:
+        assert entries["cpu"] is True
+    ids = np.array([[1, 2]], dtype="i4")
+    assert np.asarray(model.generate(ids, 2)).shape == (1, 4)
