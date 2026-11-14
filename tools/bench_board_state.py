@@ -415,6 +415,8 @@ def scored_receipt(outputs, runner=None, model=None):
         # FAIRNESS FIX (2026-10-13 audit): tree/model receipts used to hash
         # temporary exports and discard the actual bytes. Capture each scored
         # call centrally, before a later round can replace its output/state.
+        # Outputs above MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES (default 256 MiB) are hashed, not retained: the box
+        # persist leaves out files that large anyway, and on 2026-11-13 they filled the L40S pod's disk.
         try:
             import numpy as np
             root = Path(receipts).parent / "scored"
@@ -422,13 +424,24 @@ def scored_receipt(outputs, runner=None, model=None):
             directory = Path(tempfile.mkdtemp(prefix=str(os.getpid()) + "-", dir=root))
             if present:
                 path = directory / "outputs.npz"
+                limit = int(os.environ.get("MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES") or 268435456)
+                size = None
                 if all(isinstance(value, np.ndarray) for value in outputs.values()):
-                    np.savez(path, **outputs)
+                    size = sum(int(value.nbytes) for value in outputs.values())
+                    if size <= limit:
+                        np.savez(path, **outputs)
                     encoding = 'numpy output arrays'
                 else:
                     save_typed_state(path, outputs)
+                    size = path.stat().st_size
+                    if size > limit:
+                        path.unlink()
                     encoding = 'typed canonical state npz'
-                receipt['retained_output'] = dict(_retained_export(path), encoding=encoding)
+                if size > limit:
+                    receipt['retained_output'] = {'omitted': True, 'bytes': size, 'limit': limit,
+                                                  'reason': 'over MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES'}
+                else:
+                    receipt['retained_output'] = dict(_retained_export(path), encoding=encoding)
         except Exception as exc:
             # Preserve the completed clock and its hash. Seal records the
             # retention failure and blocks the next race, never reruns this one.
