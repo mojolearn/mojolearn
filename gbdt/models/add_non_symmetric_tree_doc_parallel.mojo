@@ -753,7 +753,7 @@ struct NsResidentPack(Movable):
         self.d_vals = d_vals^
         self.off_rows = -1
         self.bins = Optional[DeviceBuffer[DType.uint32]]()
-        self.bins_rows = 0
+        self.bins_rows = -1
 
 
 def ns_resident_apply(
@@ -777,14 +777,13 @@ def ns_resident_apply(
             ho.unsafe_store(i, UInt32(pack.off_unit[i] * n_rows))
         ctx.enqueue_copy(dst_buf=pack.d_off, src_ptr=ho)
         pack.off_rows = n_rows
-    if pack.bins_rows != n_rows or not pack.bins:
+    if pack.bins_rows != n_rows:
         # exact size, no high-water cache: the old buffer goes first
         pack.bins = None
         pack.bins = ctx.enqueue_create_buffer[DType.uint32](
             n_rows if n_rows > 0 else 1
         )
         pack.bins_rows = n_rows
-    var bins_ptr = pack.bins.value().unsafe_ptr()
     var bin_blocks = (n_rows + NS_BINS_BLOCK_SIZE - 1) // NS_BINS_BLOCK_SIZE
     if bin_blocks < 1:
         bin_blocks = 1
@@ -807,13 +806,13 @@ def ns_resident_apply(
             Int32(pack.nodes_of[t]),
             cindex.unsafe_ptr(),
             Int32(n_rows),
-            bins_ptr,
+            pack.bins.value().unsafe_ptr(),
             grid_dim=(bin_blocks, 1, 1),
             block_dim=(NS_BINS_BLOCK_SIZE, 1, 1),
         )
         ctx.enqueue_function[add_bin_model_value_kernel](
             pack.d_vals.unsafe_ptr() + vbase,
-            bins_ptr,
+            pack.bins.value().unsafe_ptr(),
             Int32(n_rows),
             Int32(pack.dims[t]),
             Int32(n_rows),
