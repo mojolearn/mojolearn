@@ -18,8 +18,8 @@ parser reads `ntree` and `node` records; the CPU identity gate runs by hand sinc
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small Depthwise fit and a small Lossguide fit
-each run twice through the host binding, return the same model text and
-predictions, carry `ntree` records, and survive a save and load. It is a
+survive a save and load. Their two-fit repeat and `ntree` records are the
+native check `gbdt_public_fits_cpu` (lane tmig-trees, 2026-11-14). It is a
 plumbing check. The bit claim against the GPU columns is the CPU identity
 gate's, not this file's.
 
@@ -146,7 +146,7 @@ def test_sabotage_reaches_both_policies():
 
 
 @reference_training()
-def test_non_symmetric_fits_on_the_host_when_built():
+def test_non_symmetric_save_load_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
         return
@@ -163,17 +163,15 @@ def test_non_symmetric_fits_on_the_host_when_built():
     y = (x[:, 3] + 0.5 * x[:, 4] > 0).astype(np.int32)
     for kwargs in (dict(max_depth=3, grow_policy="Depthwise"),
                    dict(max_leaves=8, grow_policy="Lossguide")):
-        outs = []
-        for _ in range(2):
-            m = mojolearn.GradientBoosting(n_estimators=3, loss="Logloss", **kwargs).fit(x, y)
-            outs.append((m.model_, np.asarray(m.predict(x)).tobytes()))
-        assert outs[0] == outs[1], f"two host fits returned different bytes: {kwargs}"
-        assert "\nntree 0 " in m.model_, kwargs
+        # The two-fit repeat and the model text moved to the native check
+        # gbdt_public_fits_cpu (lane tmig-trees); the archive round trip stays.
+        m = mojolearn.GradientBoosting(n_estimators=3, loss="Logloss", **kwargs).fit(x, y)
+        expected = np.asarray(m.predict(x)).tobytes()
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "m.npz")
             m.save(path)
             back = type(m).load(path)
-            assert np.asarray(back.predict(x)).tobytes() == outs[0][1], kwargs
+            assert np.asarray(back.predict(x)).tobytes() == expected, kwargs
 
 
 if __name__ == "__main__":
