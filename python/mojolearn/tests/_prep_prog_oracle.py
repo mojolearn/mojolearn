@@ -23,9 +23,28 @@ from mojolearn import _expansion_prep as _ep
 from mojolearn._array import Array
 from mojolearn._buffer import as_f32_c
 from mojolearn._expansion_prep import (
-    _IDN_CLASS_ONEPASS, _IDN_STATS_BLOCKED, _OPS, _PROG_CALL, _PROG_CONTEXT, _Scratch, _XB, _blocked, _idn_fam,
+    _OPS, _PROG_CALL, _PROG_CONTEXT, _Scratch, _XB, _blocked,
     _mode, _optional_prep_entry, _prep_binding)
 from mojolearn._expansion_prep import _Prog as _ProgRecord
+
+#: The IDENTICAL binding's family switch bits (bindings/_mojolearn_x_prep*.mojo
+#: `idn_fam_binding`); moved here with `_idn_fam` when the product copy was
+#: deleted (the doors read the word: bindings/prep_classify_common_door.mojo).
+_IDN_STATS_BLOCKED, _IDN_CLASS_ONEPASS, _IDN_SELECT_BLOCKED, _IDN_PT_BLOCKED = 1, 2, 4, 8
+_IDN_FAM = {}
+
+
+def _idn_fam(mode):
+    """The binding's `x_prep_idn_fam` bits on IDENTICAL, 0 otherwise."""
+    if mode != "identical":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _IDN_FAM.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_idn_fam")
+        v = _IDN_FAM[key] = int(fn()) if fn is not None else 0
+    return v
 
 
 def __getattr__(name):
