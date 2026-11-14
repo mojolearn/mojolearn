@@ -5801,6 +5801,10 @@ struct EtDeviceLoop(Movable):
     var f_cap: Int
     var hdr: DeviceBuffer[DType.int32]
     var h_hdr: HostBuffer[DType.int32]
+    #: `ET_DEVICE_LOOP_EARLY_EXIT`: the device view of `ETL_H_NSUB` and its
+    #: pinned 4-byte landing word (`read_nsub`)
+    var nsub_d: DeviceBuffer[DType.int32]
+    var h_nsub: HostBuffer[DType.int32]
     var queue: DeviceBuffer[DType.int32]
     var g_nodes: DeviceBuffer[DType.uint8]
     var g_meta: DeviceBuffer[DType.int32]
@@ -5867,6 +5871,8 @@ struct EtDeviceLoop(Movable):
         self.f_cap = f_cap
         self.hdr = ctx.enqueue_create_buffer[DType.int32](ETL_HDR_WORDS)
         self.h_hdr = ctx.enqueue_create_host_buffer[DType.int32](ETL_HDR_WORDS)
+        self.nsub_d = self.hdr.create_sub_buffer[DType.int32](ETL_H_NSUB, 1)
+        self.h_nsub = ctx.enqueue_create_host_buffer[DType.int32](1)
         self.queue = ctx.enqueue_create_buffer[DType.int32](cap0 * ETL_Q_INTS)
         self.g_nodes = ctx.enqueue_create_buffer[DType.uint8](
             cap0 * size_of[SparseTreeNode[DType.float32]]()
@@ -5919,6 +5925,15 @@ struct EtDeviceLoop(Movable):
         self.tree_base = ctx.enqueue_create_buffer[DType.int32](g + 1)
         self.retired_u8 = List[DeviceBuffer[DType.uint8]]()
         self.retired_i32 = List[DeviceBuffer[DType.int32]]()
+
+    def read_nsub(mut self, ctx: DeviceContext) raises -> Int:
+        """`ET_DEVICE_LOOP_EARLY_EXIT`: the batch's rescue count
+        (`ETL_H_NSUB`, written by `etl_retry_kernel`), read back as ONE
+        4-byte word after a synchronize. Not a header drain: the retired
+        buffers stay alive until the next `drain`."""
+        ctx.enqueue_copy(dst_buf=self.h_nsub, src_buf=self.nsub_d)
+        ctx.synchronize()
+        return Int(self.h_nsub.unsafe_ptr()[unsafe_offset=0])
 
     def word(self, w: Int) -> Int:
         """Header word `w` as of the last drain."""
@@ -6611,8 +6626,18 @@ def _et_rescue[
     compacted into a sub-batch, surveyed over every column, given a column
     by `rescue_pick_kernel`, searched with `k = 1`, and the rescued splits
     replace theirs where a column was found. Launched at the batch's bounds;
-    an empty sub-batch is all dummies and does nothing."""
+    an empty sub-batch is all dummies and does nothing.
+
+    Under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` the host reads the
+    sub-batch's count back (one 4-byte word) and skips the rest when it is
+    zero (see the block above `ET_DEVICE_LOOP_EARLY_EXIT`)."""
     lp.enqueue_retry(ctx, ws, n_bound)
+    comptime if ET_DEVICE_LOOP_EARLY_EXIT:
+        # driver-loop: over rescue rounds -- one per batch; the 4-byte count
+        # decides whether this batch's rescue runs (the host queue's
+        # "rescue only a batch that needs it"), never a loop over rows.
+        if lp.read_nsub(ctx) == 0:
+            return
     lp.enqueue_stage(
         ctx, ws, ETL_SRC_SUB, ETL_H_NSUB, n_bound, Int(n_cols), tile_s,
         tile_p, bound_s, scalar_tree,
@@ -6919,6 +6944,29 @@ def _et_run_bestfirst[
 # =============================================================================
 
 comptime ET_DEVICE_LOOP = is_defined["MOJOLEARN_IDN_ET_DEVICE_LOOP"]()
+
+# THIRD FORM (lane fix-rf-et-device-loop-early-exit, 2026-11-13): the device
+# loop that EARLY-EXITS the rescue like the host queue. `-D
+# MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` (default off; the host queue above
+# stays the depth-wise default, the plain device loop stays the B arm). It
+# decides whether the device loop may skip a batch's DEVIATION 205 rescue
+# when no node needs it. The rescue's first kernel (`etl_retry_kernel`)
+# writes the batch's rescue count into `ETL_H_NSUB`; the host reads that ONE
+# 4-byte word back (`EtDeviceLoop.read_nsub`) and, when it is zero, skips
+# the rest of the rescue: the sub-batch stage, the all-column survey, the
+# pick, the restage, the `k = 1` search and the merge, which over an empty
+# sub-batch are all dummies (the merge stops at `ETL_H_NSUB`, so
+# `b_splits` is unchanged, and the partition's stage rewrites every
+# workspace word the partition reads). SAME BITS as `ET_DEVICE_LOOP` and the
+# host queue. Depth-wise growth runs the device loop under this define;
+# best-first growth (device loop in every arm) skips the empty rescue too.
+# Owed A/B: row `et-device-loop-early-exit` in bench/results/paper_compare/
+# owed-pre0867.json (RUN OWED, NVIDIA + AMD, istella + taxi, fit).
+comptime ET_DEVICE_LOOP_EARLY_EXIT = is_defined[
+    "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT"
+]()
+# Either device-loop form runs the depth-wise group on the device.
+comptime ET_DEVICE_QUEUE = ET_DEVICE_LOOP or ET_DEVICE_LOOP_EARLY_EXIT
 
 
 def _et_search_host[
@@ -7521,7 +7569,7 @@ def train_forest_classification_device_timed(
         # best-first growth; the default depth-wise group runs the HOST
         # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_LOOP`)
         # and keeps a one-slot stub loop that it never drives.
-        var use_lp = bestfirst or ET_DEVICE_LOOP
+        var use_lp = bestfirst or ET_DEVICE_QUEUE
         var lp = EtDeviceLoop(
             ctx,
             g if use_lp else 1,
@@ -8645,7 +8693,7 @@ def train_forest_regression_device_timed(
         # best-first growth; the default depth-wise group runs the HOST
         # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_LOOP`)
         # and keeps a one-slot stub loop that it never drives.
-        var use_lp = bestfirst or ET_DEVICE_LOOP
+        var use_lp = bestfirst or ET_DEVICE_QUEUE
         var lp = EtDeviceLoop(
             ctx,
             g if use_lp else 1,
