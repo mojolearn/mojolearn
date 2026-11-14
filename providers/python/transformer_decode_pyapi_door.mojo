@@ -46,7 +46,7 @@ from core.causal_lm_entry_table_sessions import (
 #: to 0.8.55, so the door) -> 1406 (candidate 4c2340386abc); MI300X 2445 ->
 #: 2699 at 0.8.66. `-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR` keeps the
 #: door of d37be875fc (B arm of the owed A/B, owed-pre0867.json row
-#: restore-transformer-decode-door): a (B, 1, d_model) Array view rebuilt per
+#: wave2-transformer-decode-loop, formerly restore-transformer-decode-door): a (B, 1, d_model) Array view rebuilt per
 #: token (`_neural_input`). Same bytes at the same address in both arms, so no
 #: output bit moves.
 #:
