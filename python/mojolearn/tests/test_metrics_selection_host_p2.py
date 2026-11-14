@@ -3,7 +3,11 @@
 """Release gate 2026-10-22 (part 2): the metrics, model-selection helpers and
 saved-model CPU prediction endpoints changed since 0.8.55, on the real binding
 path: each result against a NumPy restatement on small data, and each
-endpoint's refusal of a bad call.
+endpoint's refusal of a bad call. The metric values against their counts
+and Float64 references are native: metrics/checks/regression_errors_check.mojo
+(MAE, RMSE), metrics/checks/classification_metrics_check.mojo (precision,
+recall, F1) and checks/native_tests/metrics_selection_host_p2_{cpu,gpu}.mojo
+(precision_recall_curve).
 """
 import os
 
@@ -33,13 +37,6 @@ def _cls_pair(n=60, seed=1):
 
 # ------------------------------------------------------------------ metrics
 
-def test_mean_absolute_error_and_rmse_match_numpy():
-    y, p = _reg_pair()
-    d = y.astype(np.float64) - p.astype(np.float64)
-    assert metrics.mean_absolute_error(y, p) == pytest.approx(np.abs(d).mean(), rel=1e-5)
-    assert metrics.root_mean_squared_error(y, p) == pytest.approx(np.sqrt((d * d).mean()), rel=1e-5)
-
-
 def test_mean_absolute_error_and_rmse_refusals():
     y, p = _reg_pair()
     with pytest.raises(TypeError):
@@ -52,17 +49,6 @@ def test_mean_absolute_error_and_rmse_refusals():
         metrics.root_mean_squared_error(y[:-2], p)
 
 
-def test_precision_recall_f1_match_counts():
-    y, p = _cls_pair()
-    tp = int(np.sum((y == 1) & (p == 1)))
-    fp = int(np.sum((y == 0) & (p == 1)))
-    fn = int(np.sum((y == 1) & (p == 0)))
-    prec, rec = tp / (tp + fp), tp / (tp + fn)
-    assert metrics.precision_score(y, p) == pytest.approx(prec, rel=1e-6)
-    assert metrics.recall_score(y, p) == pytest.approx(rec, rel=1e-6)
-    assert metrics.f1_score(y, p) == pytest.approx(2 * prec * rec / (prec + rec), rel=1e-6)
-
-
 def test_precision_recall_f1_refuse_bad_options():
     y, p = _cls_pair()
     with pytest.raises(ValueError):
@@ -73,20 +59,6 @@ def test_precision_recall_f1_refuse_bad_options():
         metrics.f1_score(y, p, average="median")
     with pytest.raises(ValueError):
         metrics.precision_score(y, p[:-1])
-
-
-def test_precision_recall_curve_matches_counts_at_each_threshold():
-    rng = np.random.default_rng(2)
-    y = rng.integers(0, 2, 40).astype(np.int64)
-    s = (y * 0.6 + rng.random(40)).astype(np.float32)
-    prec, rec, thr = (np.asarray(a, np.float64) for a in metrics.precision_recall_curve(y, s))
-    assert prec.shape == rec.shape == (thr.size + 1,)
-    assert prec[-1] == 1.0 and rec[-1] == 0.0
-    for i, t in enumerate(thr):
-        pred = s >= np.float32(t)
-        tp = np.sum(pred & (y == 1))
-        assert prec[i] == pytest.approx(tp / np.sum(pred), rel=1e-5)
-        assert rec[i] == pytest.approx(tp / np.sum(y == 1), rel=1e-5)
 
 
 def test_precision_recall_curve_refusals():
