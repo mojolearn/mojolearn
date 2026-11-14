@@ -249,6 +249,8 @@ check-native-core-partitioned-program-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENT
 check-native-core-partitioned-program-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_partitioned_program_gpu.mojo"
 check-native-core-stratified-group-fp64-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/core_stratified_group_fp64_cpu.mojo"
 check-native-core-stratified-group-fp64-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_stratified_group_fp64_gpu.mojo"
+check-native-core-verifier-gap-methods-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/core_verifier_gap_methods_cpu.mojo"
+check-native-core-verifier-gap-methods-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_verifier_gap_methods_gpu.mojo"
 check-native-spectral-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_state.mojo"
 check-native-spectral-resident-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_resident_gpu.mojo"
 check-native-spectral-assignment-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/spectral_assignment_cpu.mojo"
