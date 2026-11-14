@@ -136,6 +136,10 @@
   "mamba3-forward-zero-fill": {
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
    "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
+  },
+  "lm-forward-zero-fill": {
+   "define": "MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL",
+   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_ZERO_FILL, _pooled_logits): B = a fresh resident logits store made as array.array('f', bytes(count * 4)) (zero-filled bytes, then a copy into the array; 0.8.66 / candidate shape); A = an unfilled bytearray store (native_scratch_bytes, _wrap_pooled_unfilled), every byte written by the one logits download. Same bits"
   }
  },
  "rows": [
@@ -941,6 +945,18 @@
     "mamba3-forward-zero-fill"
    ],
    "decides": "keep the unfilled outputs (A) unless the zero-filled arrays (B) are at least as fast on the NVIDIA and AMD average; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba3-forward 3.95 -> 6.75 ms; same kernels, digests must not move in either arm"
+  },
+  {
+   "id": "wave2-lm-forward-door",
+   "source": "fix-lm-forward-door (2026-11-13; hist-neural REPORT row 10: lm-forward NV 44.9 -> 60.3 ms, AMD 58.5 -> 66.9 ms, 0.8.55 -> 0.8.66, same kernel)",
+   "kind": "ab",
+   "lane": "lm-forward",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "lm-forward-zero-fill"
+   ],
+   "decides": "keep the unfilled pooled logits store (A) unless the zero-filled array.array store (B) is at least as fast on the NVIDIA and AMD average; same kernels, digests must not move in either arm"
   }
  ]
 }
