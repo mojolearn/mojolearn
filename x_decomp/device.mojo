@@ -178,6 +178,7 @@ from x_decomp.jacobi_par import (
     pj_transpose_kernel,
     sym_from_triangle_kernel,
 )
+from core.step_phase import step_count_d2h, step_count_sync
 from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
 from x_decomp.eigh_ops import eigh_op_dense
@@ -4107,8 +4108,16 @@ struct DevExec(Exec):
         ctx.enqueue_copy(dst_ptr=ymean, src_buf=d_m64.create_sub_buffer[DType.uint64](d, 1))
         ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(hstat.unsafe_ptr())),
                          src_buf=dstat)
+        # This entry's own copies down and waits, counted under
+        # -D MOJOLEARN_STEP_PHASE_TIMERS (core/step_phase.mojo; nothing
+        # otherwise; checks/ols_call_cost_check.mojo). The factor's own
+        # waits (col_sums_buf, ts_factor_finish) are not counted here.
+        step_count_d2h()
+        step_count_d2h()
+        step_count_d2h()
         comptime if TARGET_COLUMN == COLUMN_APPLE:
             ctx.synchronize()
+            step_count_sync()
         try:
             ts_factor_dispatch(plan, ctx, da, m, n, r, False)
         except factor_error:
@@ -4122,6 +4131,7 @@ struct DevExec(Exec):
             # below, as before. The refusal path drains again before it reads
             # them: a factor error raised before the factor's own drain.
             ctx.synchronize()
+            step_count_sync()
             DevExec.ols_finite_status_check(hstat)
             raise factor_error^
         # ts_factor_dispatch's last step synchronizes (R into the host r),
