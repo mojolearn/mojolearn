@@ -215,3 +215,45 @@ def enc_label_load(mut prog: EncProgram, n: Int, words: Int, kind: Int, x: Int):
     # `_label_load`'s stage: the float32 word of each of the n labels at
     # `words` (raw words of dtype `kind`) into x (NaN when float32 cannot hold it).
     prep_program_stage(prog.program, ENC_OP_LAB_LOAD, n, words, kind, x)
+
+
+# ---------------------------------------------------------------- user cv index lists
+# Lane door-run-split (2026-11-14): `_assign_fold` and `_check_train` read
+# only the int64 words of an admitted index list; they took the door's
+# Python-holding `IndexI64`, and now take its address and length. The door
+# keeps each `IndexI64` (its owner) alive past these calls.
+comptime ENC_I32P = MutPointer[Int32, MutUntrackedOrigin]
+comptime ENC_I64P = MutPointer[Int64, MutUntrackedOrigin]
+
+
+def enc_assign_fold_i64(addr: Int, size: Int, rows: Int, fold: Int, folds: ENC_I32P) -> Int:
+    # `assign_fold_i64`: 0, 1 when an index is outside [0, rows), 2 when the row already has a fold.
+    var ip = ENC_I64P(unsafe_from_address=addr)
+    for i in range(size):  # cpu-route: one user cv test index list, read once (its rows)
+        var r = Int(ip[i])
+        if r < 0 or r >= rows:
+            return 1
+        if folds[r] != -1:
+            return 2
+        folds[r] = Int32(fold)
+    return 0
+
+
+def enc_check_train_i64(addr: Int, size: Int, rows: Int, fold: Int, folds: ENC_I32P) -> Bool:
+    # `check_indices_i64` (all in [0, rows) and distinct) and
+    # `count_fold_hits_i64` (none in `fold`): True when the list passes.
+    var ip = ENC_I64P(unsafe_from_address=addr)
+    for i in range(size):  # cpu-route: one user cv train index list, read once (its rows)
+        var r = Int(ip[i])
+        if r < 0 or r >= rows:
+            return False
+    var seen = List[Bool](length=rows, fill=False)
+    for i in range(size):  # cpu-route: one user cv train index list, read once (its rows)
+        var r = Int(ip[i])
+        if seen[r]:
+            return False
+        seen[r] = True
+    for i in range(size):  # cpu-route: one user cv train index list, read once (its rows)
+        if folds[Int(ip[i])] == Int32(fold):
+            return False
+    return True
