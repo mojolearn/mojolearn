@@ -474,20 +474,32 @@ struct Mamba2DeviceStages(Movable):
 
     def rezero(mut self) raises:
         """Lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
-        every stage back to the zeros its constructor filled, on the buffers
-        already held (no allocation, no wait). Fills only, in stream order
-        ahead of the next forward's launches. Not for a guarded (poison)
-        build, whose fills cover a body view."""
-        self.norm_sumsq.enqueue_fill(Float32(0.0))
-        self.norm_out.enqueue_fill(Float32(0.0))
-        self.in_proj.enqueue_fill(Float32(0.0))
-        self.a_out.enqueue_fill(Float32(0.0))
-        self.conv_out.enqueue_fill(Float32(0.0))
-        self.silu_out.enqueue_fill(Float32(0.0))
-        self.conv_win.enqueue_fill(Float32(0.0))
-        self.dtraw_work.enqueue_fill(Float32(0.0))
-        self.dt_work.enqueue_fill(Float32(0.0))
-        self.xbc_work.enqueue_fill(Float32(0.0))
+        the held stages made ready for the next forward on the buffers
+        already held (no allocation, no wait). Not for a guarded (poison)
+        build, whose fills cover a body view.
+
+        Lane fix-wave2-leftovers (audit NOTE block_step_ops.mojo:1028): a
+        stage is refilled only where some route of `mamba2_block_forward`
+        (held sets are L > 1 only, so the l == 1 step arm never runs on
+        them) leaves it partly or wholly unwritten. Written whole by every
+        route, so the zeros were overwritten before any read (same bits):
+          norm_sumsq [M], norm_out [M,dm]: mamba_rms_norm (rows / tree);
+          in_proj [M,dip]: afn_proj_gemm_into or mamba_proj_gemm;
+          a_out [H]: a_from_a_log over nh;
+          conv_out, silu_out [M,CD]: every conv arm (plain, cell, nn35 pair)
+            stores both per (b, token, c); conv_win [B,CD,4]: the window
+            kernel over b*cd*4;
+          xbc_work [B,T,CD], dtraw_work, dt_work [B,T,H]: the assemble and
+            dt kernels over b*t_work*(cd | nh), prefix q0 rows included;
+          skip_out [M,H,P]: m2_skip_kernel over m*nh*p;
+          gnorm_gate, gnorm_out [M,di], gnorm_sumsq [M]: both gate-norm
+            orders (mamba_rms_norm + m2_gate_kernel over m*di);
+          residual_out [M,dm]: residual_add_kernel, or the fused out_proj
+            seeded by a whole copy of x.
+        KEPT: the twelve SSD working and chunk buffers (ssd_forward takes
+        trace.enabled and skips trace-only intermediates when it is off, and
+        chunk-shaped buffers are padded to nc * Q >= T), and out_proj under
+        AFN_MAMBA_PROJ_ROUTE (the fused launch never writes it)."""
         self.xd_work.enqueue_fill(Float32(0.0))
         self.da_work.enqueue_fill(Float32(0.0))
         self.dacs.enqueue_fill(Float32(0.0))
@@ -500,12 +512,8 @@ struct Mamba2DeviceStages(Movable):
         self.yoff_work.enqueue_fill(Float32(0.0))
         self.y_work.enqueue_fill(Float32(0.0))
         self.h_last.enqueue_fill(Float32(0.0))
-        self.skip_out.enqueue_fill(Float32(0.0))
-        self.gnorm_gate.enqueue_fill(Float32(0.0))
-        self.gnorm_sumsq.enqueue_fill(Float32(0.0))
-        self.gnorm_out.enqueue_fill(Float32(0.0))
-        self.out_proj.enqueue_fill(Float32(0.0))
-        self.residual_out.enqueue_fill(Float32(0.0))
+        comptime if AFN_MAMBA_PROJ_ROUTE:
+            self.out_proj.enqueue_fill(Float32(0.0))
 
     def __init__(
         out self,
