@@ -2331,6 +2331,9 @@ def fit_non_symmetric_tree[
     # Empty stays empty: their `UpdateFeatureWeightsForBestSplits` leaves
     # 1.0 everywhere when there are no CTRs (`update_feature_weights.cpp
     # :14-22`), which is what the workspace already holds.
+    # gbdt-per-node-regression: the grower's own `ctx.synchronize` calls,
+    # which the manager's `sync_count` does not see (`last_tree_drains`)
+    var direct_drains = 0
     if len(options.feature_weights) != 0:
         if len(options.feature_weights) != len(fold_counts):
             raise Error(
@@ -2347,6 +2350,7 @@ def fit_non_symmetric_tree[
             hfw.unsafe_ptr().unsafe_store(i, options.feature_weights[i])
         ctx.enqueue_copy(dst_buf=ws[0].ffw, src_ptr=hfw.unsafe_ptr())
         ctx.synchronize()
+        direct_drains += 1
         # past the drain; `mojo-buffer-freed-at-last-use`
         _ = hfw^
 
@@ -4111,14 +4115,18 @@ def fit_non_symmetric_tree[
             # capacity: every slot leaf, or the replay's final leaves (at
             # most `max_leaves`), whichever is larger
             var lv_cap = max(len(leaves), options.max_leaves) + 1
-            var lv_cells = lv_cap * max(1, lv_dim)
-            var d_leaf_vals = ctx.enqueue_create_buffer[DType.float32](lv_cells)
-            var h_leaf_vals = ctx.enqueue_create_host_buffer[DType.float32](
-                lv_cells
-            )
-            var d_sums64 = ctx.enqueue_create_buffer[DType.uint64](
-                lv_cap * stat_count
-            )
+            # gbdt-per-node-regression: the fit's pooled scratch (was four
+            # allocations per tree); a tree past the capacity is a
+            # bookkeeping break, never a data condition
+            if lv_cap > dws[0].lv_cap_key:
+                raise Error(
+                    String("tree tail: ") + String(lv_cap)
+                    + " leaf rows past the pool's " + String(dws[0].lv_cap_key)
+                )
+            ref d_leaf_vals = dws[0].d_leaf_vals
+            ref h_leaf_vals = dws[0].h_leaf_vals
+            ref d_sums64 = dws[0].d_sums64
+            ref h_sums64 = dws[0].h_sums64
             var lv_l2_bits = bitcast[DType.uint64](Float64(options.l2_reg))
             var lv_eps_bits = bitcast[DType.uint64](Float64(1e-20))
             var lv_mc = Int32(1) if multiclass_optimization else Int32(0)
@@ -4221,27 +4229,27 @@ def fit_non_symmetric_tree[
             # same kernel takes the Newton step on them; plain trees already
             # have their values home from the stats wait.
             # the replay's double sums come home for the model weights
-            var h_sums64 = ctx.enqueue_create_host_buffer[DType.uint64](
-                lv_cap * stat_count if lv_on_sums else 1
-            )
+            # (`h_sums64`, pooled with the rest of the tail's scratch)
             if lv_on_sums and num_leaves > 0:
                 # the walk's slot lists and kept nodes (model structure) go
                 # up; the partition stats stay on the device, where
                 # `dw_lg_final_sums_kernel` folds them in the walk's order
                 var n_slots = len(lg_slots)
                 var n_nstats = len(lg_node_stats)
-                var h_slot_off = ctx.enqueue_create_host_buffer[DType.int32](
-                    num_leaves + 1
-                )
-                var h_slots = ctx.enqueue_create_host_buffer[DType.int32](
-                    max(n_slots, 1)
-                )
-                var h_kept = ctx.enqueue_create_host_buffer[DType.int32](
-                    num_leaves
-                )
-                var h_nstats = ctx.enqueue_create_host_buffer[DType.float32](
-                    max(n_nstats, 1)
-                )
+                if (
+                    num_leaves + 1 > dws[0].lv_cap_key
+                    or n_slots > dws[0].lv_cap_key
+                    or n_nstats > dws[0].lg_nstats_cap
+                ):
+                    raise Error(
+                        String("Lossguide replay: ") + String(num_leaves)
+                        + " leaves, " + String(n_slots) + " slots, "
+                        + String(n_nstats) + " node stats past the pool"
+                    )
+                ref h_slot_off = dws[0].h_lg_slot_off
+                ref h_slots = dws[0].h_lg_slots
+                ref h_kept = dws[0].h_lg_kept
+                ref h_nstats = dws[0].h_lg_nstats
                 unsafe_memcpy(
                     dest=h_slot_off.unsafe_ptr(),
                     src=lg_slot_off.unsafe_ptr(),
@@ -4264,16 +4272,12 @@ def fit_non_symmetric_tree[
                         src=lg_node_stats.unsafe_ptr(),
                         count=n_nstats,
                     )
-                var d_slot_off = ctx.enqueue_create_buffer[DType.int32](
-                    num_leaves + 1
-                )
-                var d_slots = ctx.enqueue_create_buffer[DType.int32](
-                    max(n_slots, 1)
-                )
-                var d_kept = ctx.enqueue_create_buffer[DType.int32](num_leaves)
-                var d_nstats = ctx.enqueue_create_buffer[DType.float32](
-                    max(n_nstats, 1)
-                )
+                ref d_slot_off = dws[0].d_lg_slot_off
+                ref d_slots = dws[0].d_lg_slots
+                ref d_kept = dws[0].d_lg_kept
+                ref d_nstats = dws[0].d_lg_nstats
+                # whole pooled buffers, host to device (a few KiB; the
+                # kernel reads only the first `num_leaves` rows)
                 ctx.enqueue_copy(dst_buf=d_slot_off, src_ptr=h_slot_off.unsafe_ptr())
                 ctx.enqueue_copy(dst_buf=d_slots, src_ptr=h_slots.unsafe_ptr())
                 ctx.enqueue_copy(dst_buf=d_kept, src_ptr=h_kept.unsafe_ptr())
@@ -4307,16 +4311,7 @@ def fit_non_symmetric_tree[
                     dst_ptr=h_sums64.unsafe_ptr(), src_buf=d_sums64
                 )
                 ctx.synchronize()
-                _ = h_slot_off^  # past the drain (step-33 race class)
-                _ = h_slots^
-                _ = h_kept^
-                _ = h_nstats^
-                _ = d_slot_off^
-                _ = d_slots^
-                _ = d_kept^
-                _ = d_nstats^
-            _ = d_sums64^
-            _ = d_leaf_vals^
+                direct_drains += 1
             var hlv = h_leaf_vals.unsafe_ptr()
             # model assembly from the device's results: the weight is the
             # stats word (or the replay's double sum) widened, the values
@@ -4356,8 +4351,6 @@ def fit_non_symmetric_tree[
                 if not lg_path_done:
                     result_paths.append(leaves[leaf_id].path.copy())
                     final_rows.append(leaves[leaf_id].size)
-            _ = h_leaf_vals^  # `hlv` points into it (last-use rule)
-            _ = h_sums64^
             comptime if NS_INHERIT_PARTITION:
                 # the result leaves in the model's leaf order, which is
                 # their order along the row index; a total that is not
@@ -4401,6 +4394,10 @@ def fit_non_symmetric_tree[
         trace.record_list_f32(tag_prefix + "final.leafweights", flat_w)
 
     # `return BuildTreeLikeModel<TModel>(leaves, leavesWeights, leavesValues)`
+    # the tree's step cost, for `checks/gbdt_step_cost_check.mojo`
+    dws[0].last_tree_drains = mgr.sync_count() + direct_drains
+    dws[0].last_tree_rounds = iteration
+
     comptime if NS_INHERIT_PARTITION:
         dws[0].final_offsets = inherit_offsets.copy()
         dws[0].final_sizes = inherit_sizes.copy()
