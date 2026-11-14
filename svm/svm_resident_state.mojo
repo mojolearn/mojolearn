@@ -50,7 +50,7 @@ from core.fitted_resident_store import (
     fitted_resident_stats,
 )
 # TOMBSTONE: check_finite_device on the resident query (the synchronising first-non-finite scan, DEVIATION 636 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr: the query's finite word rides back with the decisions (core/device_query_x.mojo). Never reached main: recoverable at 5b5490960d.
-from core.device_query_x import DeviceQueryX, QueryFold, query_context
+from core.device_query_x import QueryFold, query_context, resident_query_x, resident_query_x_done
 from svm.estimator import _family_ctx, _kernel_params, svc_predict_host, svr_predict_host
 from svm.impl.svc_impl import svc_predict_batch_rows, svc_predict_dev
 from svm.impl.svm_parameter import KERNEL_PRECOMPUTED, SvmModel
@@ -128,11 +128,15 @@ def _svm_resident_decide(
     var card = IdentityTrace()
     card.header(header)
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
-    var qx = DeviceQueryX(ctx, x_addr, n_rows, n_cols, fold)
+    # fix-svc-query-resident: the lease's held query buffers (no device or
+    # pinned allocation, no fill launch per call); per-call for a fold or
+    # lease 0 (core/query_x_held.mojo IDN_QUERY_X_HELD).
+    var store = svm_resident_store()
+    var qx = resident_query_x(store, ctx, lease, x_addr, n_rows, n_cols, fold)
     var n_batch = svc_predict_batch_rows(n_rows, n_support, buffer_size_mib)
     # A fold runs on the fold store's context: its fresh model is uploaded
     # for this call (lease 0), never kept under the family context's lease.
-    var held = fitted_resident_view(svm_resident_store(), ctx, 0 if fold.active() else lease, slot,
+    var held = fitted_resident_view(store, ctx, 0 if fold.active() else lease, slot,
                                     [sv_addr, dual_addr], [n_support * n_cols, n_support])
     var sv = held.bufs[0].copy()
     var dual = held.bufs[1].copy()
@@ -157,7 +161,8 @@ def _svm_resident_decide(
             count=n_rows,
         )
     _ = preds^
-    _ = qx^
+    # Back to the lease after svc_predict_dev's synchronisation (words read).
+    resident_query_x_done(store, lease, qx^)
     _ = sv^
     _ = dual^
     _ = held^

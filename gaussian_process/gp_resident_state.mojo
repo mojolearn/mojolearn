@@ -42,7 +42,7 @@ from core.fitted_resident_store import (
 from gaussian_process.checks.kernels import GPKernelSpec, gp_kernel_diag, gp_validate_kernel
 from gaussian_process.estimator import _family_ctx
 # TOMBSTONE: _gpc_upload_checked on the resident GPR query (the synchronising first-non-finite scan, DEVIATION 1768 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr: the query's finite word rides back with the result (core/device_query_x.mojo). Never reached main: recoverable at 5b5490960d.
-from core.device_query_x import DeviceQueryX, QueryFold, query_context
+from core.device_query_x import QueryFold, query_context, resident_query_x, resident_query_x_done
 from gaussian_process.gpr_resident import gpr_predict_dev
 from gaussian_process.gp_resident_store import gp_resident_store
 
@@ -131,7 +131,9 @@ def gpr_predict_resident_device(
 
     var store = gp_resident_store()
     var ctx = query_context(fold, _family_ctx())
-    var qx = DeviceQueryX(ctx, xs_addr, n_star, n_features, fold)
+    # fix-svc-query-resident: the lease's held query buffers (per-call for
+    # a fold or lease 0; core/query_x_held.mojo IDN_QUERY_X_HELD).
+    var qx = resident_query_x(store, ctx, lease, xs_addr, n_star, n_features, fold)
     # A fold runs on the fold store's context: its fresh model is uploaded
     # for this call (lease 0), never kept under the family context's lease.
     var use_lease = 0 if fold.active() else lease
@@ -156,7 +158,8 @@ def gpr_predict_resident_device(
     _ = dx^
     _ = ddual^
     _ = dl^
-    _ = qx^
+    # Back to the lease after gpr_predict_dev's synchronisation (words read).
+    resident_query_x_done(store, lease, qx^)
     _ = model^
     # DEVIATION 1946: the context dies LAST.
     _ = ctx^
