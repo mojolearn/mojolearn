@@ -162,30 +162,63 @@ class DataKeys(unittest.TestCase):
         self.assertTrue(any(r["lane"] == "gmm" for r in seen), "the owed rows' races count too")
 
 
+def write_boards(res, specs, hosts=None):
+    """SPECS: (board dir, race id, ms); HOSTS: {board dir: host id} (default one host for all: the same job)."""
+    cell = lambda ms: {"arm": "ours", "status": "ok", "median_ms": ms}  # noqa: E731
+    for sub, rid, ms in specs:
+        os.makedirs(os.path.join(res, sub), exist_ok=True)
+        p = os.path.join(res, sub, "board.json")
+        doc = json.load(open(p)) if os.path.exists(p) else {"races": {}}
+        host = (hosts or {}).get(sub, "pod-a/GPU-0")
+        if host:
+            doc["box"] = {"host_probe": {"schema": "mojolearn-host-probe/1", "host_id": host}}
+        doc["races"][rid] = {"cells": [cell(ms)], "host": {"hostname": "x", "host_id": host}}
+        json.dump(doc, open(p, "w"))
+
+
 class Report(unittest.TestCase):
+    SPECS = (("board", "algos/rfe/taxi/rows=full", 10.0), ("board", "algos/gmm/taxi/rows=full", 10.0),
+             ("board-prior-0.8.66", "algos/rfe/taxi/rows=full", 5.0),
+             ("board-b1-full", "algos/gmm/taxi/rows=full", 5.0))
+
+    def plan(self, d):
+        plan_dir, res = os.path.join(d, "plan"), os.path.join(d, "res")
+        os.makedirs(plan_dir)
+        json.dump({"r-board": ["algos/rfe/taxi/rows=full"], "r-ab": ["algos/gmm/taxi/rows=full"]},
+                  open(os.path.join(plan_dir, "rowmap.json"), "w"))
+        json.dump({}, open(os.path.join(plan_dir, "not-planned.json"), "w"))
+        return plan_dir, res, dict(OWED, rows=[r for r in OWED["rows"] if r["id"] in ("r-board", "r-ab")])
+
     def test_prior_ratio_and_b_flags(self):
-        cell = lambda ms: {"arm": "ours", "status": "ok", "median_ms": ms}  # noqa: E731
         with tempfile.TemporaryDirectory() as d:
-            plan_dir, res = os.path.join(d, "plan"), os.path.join(d, "res")
-            os.makedirs(plan_dir)
-            json.dump({"r-board": ["algos/rfe/taxi/rows=full"], "r-ab": ["algos/gmm/taxi/rows=full"]},
-                      open(os.path.join(plan_dir, "rowmap.json"), "w"))
-            json.dump({}, open(os.path.join(plan_dir, "not-planned.json"), "w"))
-            for sub, rid, ms in (("board", "algos/rfe/taxi/rows=full", 10.0), ("board", "algos/gmm/taxi/rows=full", 10.0),
-                                 ("board-prior-full", "algos/rfe/taxi/rows=full", 5.0),
-                                 ("board-b1-full", "algos/gmm/taxi/rows=full", 5.0)):
-                os.makedirs(os.path.join(res, sub), exist_ok=True)
-                p = os.path.join(res, sub, "board.json")
-                doc = json.load(open(p)) if os.path.exists(p) else {"races": {}}
-                doc["races"][rid] = {"cells": [cell(ms)]}
-                json.dump(doc, open(p, "w"))
-            doc = dict(OWED, rows=[r for r in OWED["rows"] if r["id"] in ("r-board", "r-ab")])
-            rep = MO.report(doc, plan_dir, res, None, "nvidia")
+            plan_dir, res, doc = self.plan(d)
+            write_boards(res, self.SPECS)
+            # the prior's full rows come from the prior release's own on-box board (board-prior-<version>)
+            rep = MO.report(doc, plan_dir, res, "nvidia", "0.8.66")
             by = {r["row"]: r for r in rep["rows"]}
             self.assertIn("REGRESSION", by["r-board"]["flags"])
             self.assertAlmostEqual(by["r-board"]["ratio_vs_prior"], 2.0)
             self.assertIn("b1:B-FASTER", by["r-ab"]["flags"])
             self.assertIn("b2:B-NOT-RUN", by["r-ab"]["flags"])
+            self.assertEqual(rep["host_id"], "pod-a/GPU-0")
+            self.assertEqual(MO.board_dir(res, "prior", "full", "0.8.66"), os.path.join(res, "board-prior-0.8.66"))
+            self.assertEqual(MO.board_dir(res, "prior", "300000", "0.8.66"), os.path.join(res, "board-prior-300000"))
+
+    def test_prior_of_another_host_refuses_and_no_probe_is_not_compared(self):
+        with tempfile.TemporaryDirectory() as d:
+            plan_dir, res, doc = self.plan(d)
+            write_boards(res, self.SPECS, {"board-prior-0.8.66": "pod-b/GPU-9"})
+            with self.assertRaises(SystemExit) as cm:
+                MO.report(doc, plan_dir, res, "nvidia", "0.8.66")
+            self.assertIn("REFUSED", str(cm.exception))
+        with tempfile.TemporaryDirectory() as d:
+            plan_dir, res, doc = self.plan(d)
+            write_boards(res, self.SPECS, {"board-prior-0.8.66": None, "board-b1-full": None})
+            rep = MO.report(doc, plan_dir, res, "nvidia", "0.8.66")
+            by = {r["row"]: r for r in rep["rows"]}
+            self.assertEqual(by["r-board"]["flags"], ["NOT-COMPARED"])     # the ratio is shown, never a verdict
+            self.assertAlmostEqual(by["r-board"]["ratio_vs_prior"], 2.0)
+            self.assertIn("b1:B-NOT-COMPARED", by["r-ab"]["flags"])
 
 
 class AtomicResults(unittest.TestCase):
@@ -225,7 +258,7 @@ class AtomicResults(unittest.TestCase):
             with open(os.path.join(res, "drivers", "drivers.jsonl"), "w") as fh:
                 fh.write(good + "\n" + good[:40] + "\n")
             doc = dict(OWED, rows=[r for r in OWED["rows"] if r["id"] == "r-drv"])
-            rep = MO.report(doc, plan_dir, res, None, "nvidia")
+            rep = MO.report(doc, plan_dir, res, "nvidia", "0.8.66")
             self.assertEqual(rep["drivers"][0]["ms"], 1.5)
             self.assertEqual(rep["drivers"][1]["status"], "UNREADABLE")
             self.assertEqual(rep["drivers"][1]["line"], 2)
@@ -241,15 +274,37 @@ class AtomicResults(unittest.TestCase):
 
 
 class PriorColumn(unittest.TestCase):
+    """The prior column is the prior release re-timed on this box (board-prior-<version>), judged against the on-box
+    baseline (old_ms); a stored compare is a reference column only."""
+
+    def row(self, new_ms, old_ms, flags):
+        return {"key": "r fit ours", "race_id": "r", "phase": "fit", "arm": "ours", "batch": None,
+                "new_ms": new_ms, "old_ms": old_ms, "flags": list(flags)}
+
+    def races(self, ms):
+        return {"r": {"cells": [{"arm": "ours", "status": "ok", "median_ms": ms}]}}
+
     def test_recovered_and_regression_vs_prior(self):
-        row = {"key": "k", "new_ms": 10.0, "flags": ["SAME"]}
-        PC.attach_prior(row, {"k": {"new_ms": 50.0, "flags": ["REGRESSION"]}})
+        row = PC.attach_prior_board(self.row(10.0, 10.0, ["SAME"]), "0.8.66", self.races(50.0), True)
         self.assertIn("RECOVERED", row["flags"])
         self.assertIn("FASTER-VS-PRIOR", row["flags"])
-        row = {"key": "k", "new_ms": 60.0, "flags": ["REGRESSION"]}
-        PC.attach_prior(row, {"k": {"new_ms": 50.0, "flags": ["REGRESSION"]}})
+        row = PC.attach_prior_board(self.row(60.0, 10.0, ["REGRESSION"]), "0.8.66", self.races(50.0), True)
         self.assertIn("STILL-REGRESSED", row["flags"])
         self.assertIn("REGRESSION-VS-PRIOR", row["flags"])
+        self.assertAlmostEqual(row["priors"]["0.8.66"]["ratio"], 1.2)
+
+    def test_unverified_prior_and_reference_never_flag(self):
+        row = PC.attach_prior_board(self.row(60.0, 10.0, ["REGRESSION"]), "0.8.66", self.races(50.0), False)
+        self.assertEqual(row["flags"], ["REGRESSION"])
+        self.assertAlmostEqual(row["priors"]["0.8.66"]["ratio"], 1.2)
+        row = PC.attach_reference(self.row(60.0, 10.0, []), {"r fit ours": {"new_ms": 5.0, "flags": ["REGRESSION"]}})
+        self.assertEqual((row["ref_prior_ms"], row["flags"]), (5.0, []))
+
+    def test_prior_without_a_cell_is_not_run(self):
+        row = PC.attach_prior_board(self.row(60.0, 10.0, ["REGRESSION"]), "0.8.66", {}, True)
+        self.assertEqual(row["prior_status"], "NOT-RUN on this box")
+        self.assertIsNone(row["ratio_vs_prior"])
+        self.assertEqual(row["flags"], ["REGRESSION"])
 
     def test_candidate_label(self):
         board = {"box": {"mojolearn": {"wheel": {"source": "candidate", "candidate": {
