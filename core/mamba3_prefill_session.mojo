@@ -32,7 +32,7 @@ Creation and release are small metadata operations with no independent
 numerical work to split.
 """
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_same
-from core.neural_entry_table import NEURAL_MAMBA3_SESSION_CREATE, NEURAL_MAMBA3_SESSION_CLOSE
+from core.neural_entry_table import NEURAL_MAMBA3_SESSION_CREATE, NEURAL_MAMBA3_SESSION_CLOSE, NEURAL_MAMBA3_SESSION_CAPS
 from core.state_registry import StateHandle
 
 
@@ -54,15 +54,21 @@ struct Mamba3PrefillHandle(Movable, Writable):
     """The Mamba entry of the session's training image, resolved once by the caller."""
     var handle: Int
     """The session's handle word; 0 once closed."""
+    var caps: Int
+    """The image's capability bits (MAMBA3_CAP_*, fixed per build), read once
+    when the session opens (lane fix-mamba-forward-doors: the forward door
+    read them with a table call per forward)."""
 
     def __init__(out self, entry: EntryRef) raises:
         """Create one session in the image `entry` names (no device work)."""
         self.entry = entry
         self.handle = 0
+        self.caps = 0
         var created = entry_ref_call(entry, NEURAL_MAMBA3_SESSION_CREATE, List[Int](), List[Int](), List[Float64]())
         if created <= 0:
             raise Error("native provider: state admission returned a null handle")
         self.handle = created
+        self.caps = entry_ref_call(entry, NEURAL_MAMBA3_SESSION_CAPS, List[Int](), List[Int](), List[Float64]())
 
     def serves(self, entry: EntryRef) -> Bool:
         """Whether this open session belongs to the image `entry` was resolved

@@ -52,6 +52,7 @@ crosses. Extending a table's layout requires a new V suffix, never a new
 loader. Publication and lookup are small metadata operations with no
 independent numerical work to split.
 """
+from std.sys.compile import is_defined
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall, TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words
@@ -175,6 +176,26 @@ comptime MAMBA3_CAP_REPORTS_OPTIONAL = 2
 """op 6 admits a null report address (IDN_MAMBA3_REPORTS_ON_REQUEST)."""
 comptime MAMBA3_CAP_OWNED_WEIGHTS = 4
 """the owned weight snapshot (NN40_OWNED_WEIGHTS)."""
+comptime MAMBA3_CAP_HELD_FORWARD = 8
+"""ops 6 / 8 take a trailing word 1: reserve, run and release in one call
+(lane fix-mamba-forward-doors; the GPU image unless
+IDN_MAMBA3_FORWARD_DOOR_OLD)."""
+
+#: Lane fix-mamba-forward-doors (2026-11-14): what this switch decides is the
+#: per-forward door of a Mamba-3 block's prefill session
+#: (bindings/neural_prefill_native_door.mojo `_prefill_mamba3_reports`).
+#: Default (A): the session handle caches its image's capability bits when it
+#: opens (no caps table call per forward), and the forward is ONE table call
+#: that reserves, runs and releases the session in the image
+#: (MAMBA3_CAP_HELD_FORWARD; mamba/native_block_dispatch.mojo PREFILL_BUSY).
+#: 0.8.55 reached the same `_m3_prefill_run` with one Python entry call
+#: (`mamba3_prefill_session_forward`, _mamba_impl.py at 0e4de0f46e:1849).
+#: Same session, same weights compare, same body: no bit moves on any vendor.
+#: `-D MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD` keeps a caps call per forward
+#: and the reserve / run / release triple (B arm of the owed A/B,
+#: bench/results/paper_compare/owed-pre0867.json row fix-mamba-forward-doors;
+#: L40S candidate ba08dac006 mamba3-forward 6.62 ms vs 0.8.55 3.95 ms).
+comptime IDN_MAMBA3_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD"]()
 
 
 @fieldwise_init

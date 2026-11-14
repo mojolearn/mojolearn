@@ -72,6 +72,12 @@ def mamba3_prefill_session_ensure(fields: PythonObject, entry: EntryRef) raises 
     return session
 
 
+def mamba3_prefill_session_caps(owner: PythonObject) raises -> Int:
+    """The capability bits the session's image answered when it opened (one
+    native downcast, no table call)."""
+    return owner.downcast_value_ptr[Mamba3PrefillHandle]()[].caps
+
+
 def mamba3_prefill_session_close(owner: PythonObject) raises:
     """Close a block's session owner (None is a no-op). A busy session
     refuses and keeps its handle."""
@@ -103,6 +109,28 @@ def mamba3_prefill_session_run(owner: PythonObject, operation: Int, addresses: L
         _ = entry_ref_call(entry, NEURAL_MAMBA_RELEASE, List[Int](), slot, List[Float64]())
         raise problem
     _ = entry_ref_call(entry, NEURAL_MAMBA_RELEASE, List[Int](), slot, List[Float64]())
+    _ = words^
+    return result
+
+
+def mamba3_prefill_session_run_held(owner: PythonObject, operation: Int, addresses: List[Int],
+    scalars: List[Int]) raises -> Int:
+    """Lane fix-mamba-forward-doors (core/neural_entry_table.mojo
+    IDN_MAMBA3_FORWARD_DOOR_OLD): a session forward (op 6 / 8) as ONE call
+    through the owner's Mamba entry with the GIL released: the trailing word
+    1 asks the image to reserve, run and release in that call
+    (MAMBA3_CAP_HELD_FORWARD; the caller checked the owner's caps). The
+    caller keeps `owner` and every addressed buffer alive through the call."""
+    var held = owner.downcast_value_ptr[Mamba3PrefillHandle]()
+    var entry = held[].entry
+    var words = List[Int](capacity=2 + len(scalars))
+    words.append(held[].word())
+    for i in range(len(scalars)):  # driver-loop: over argument words (fixed per operation, not data); small-loop(session operation scalar words)
+        words.append(scalars[i])
+    words.append(1)
+    var result = 0
+    with GILReleased(Python()):
+        result = entry_ref_call(entry, operation, addresses, words, List[Float64]())
     _ = words^
     return result
 
