@@ -1818,18 +1818,32 @@ def _attention_stage_report(mut mods: NativeModules, fields: PythonObject, shape
     return report
 
 
+def _shape_argument(mut mods: NativeModules, value: PythonObject, context: PythonObject) raises -> _Shape:
+    """A `ByteLanguageModelConfig` or None (the regression fixture's shape)
+    as the admitted native shape: `require_shape(value)` then
+    `state_shape`, the dimension refusals included."""
+    var state = _b(mods).dict()
+    if value is not None:
+        if py_type(value) is not context["byte_lm_config_class"]:
+            raise Error("TypeError: shape must be a ByteLanguageModelConfig")
+        var config = py_fields(value)
+        classical_admit_value(config, context)
+        py_setitem(state, "model_shape", config)
+    return _shape_of(state)
+
+
 def byte_lm_consume(mut mods: NativeModules, trainer: PythonObject, operation: String, args: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     if operation == "parameter_registry":
-        var state = _b(mods).dict()
-        if args[0] is not None:
-            if py_type(args[0]) is not context["byte_lm_config_class"]:
-                raise Error("TypeError: shape must be a ByteLanguageModelConfig")
-            var config = py_fields(args[0])
-            classical_admit_value(config, context)
-            py_setitem(state, "model_shape", config)
-        return _registry(mods, _shape_of(state))
+        return _registry(mods, _shape_argument(mods, args[0], context))
+    if operation == "binding":
+        # `_byte_lm_impl._load(shape)` (tools and tests read the binding):
+        # the process tier, the image's profile, mode and vendor admission and
+        # the runtime-shape profile check, all through `_load_snapshot`; the
+        # Python twin (`_mode`, the profile/vendor/entry probes) is gone
+        # (lane py-lm-neural, 2026-11-14). No trainer, no lock.
+        return _load(mods, _shape_argument(mods, args[0], context), context)
     var fields = py_fields(trainer)
     var lock = fields["_lock"]
     _ = py_call(lock.acquire)
@@ -1915,7 +1929,7 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             return byte_lm_train_step(mods, call[0], call[2], call[3], operation == "train_step").steal_data()
         if operation == "logits" or operation == "next_bytes":
             return byte_lm_logits(mods, call[0], call[2], call[3], operation == "next_bytes").steal_data()
-        if operation == "attention_stage_report" or operation == "parameter_registry" or operation == "run_metadata" or operation == "export_state" or operation == "export_gradients" or operation == "close" or operation == "parameters" or operation == "step" or operation == "data_schedule":
+        if operation == "attention_stage_report" or operation == "parameter_registry" or operation == "binding" or operation == "run_metadata" or operation == "export_state" or operation == "export_gradients" or operation == "close" or operation == "parameters" or operation == "step" or operation == "data_schedule":
             return byte_lm_consume(mods, call[0], operation, call[2], call[3]).steal_data()
         raise Error("RuntimeError: unknown byte LM trainer operation " + operation)
     except error:

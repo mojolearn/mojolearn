@@ -10,15 +10,11 @@ and output.
 
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
-import array as _pyarray
-import os
-
 from .. import _backend
 from .. import _numeric_profile
 from .. import lowbit as _lowbit
 from .._array import Array
-from .._buffer import _native, addr, addr_ro, all_finite, empty
-from .._bufcheck import is_integer, probe
+from .._buffer import addr, addr_ro, empty
 from .config import POSITION_CEILING, HFConfig, plan_for
 from .safetensors import Checkpoint
 
@@ -33,26 +29,13 @@ _PROJECTIONS = {
     "mamba2": ("in_proj.weight", "out_proj.weight"),
 }
 
-def _route(device):
-    if device == "auto":
-        try:
-            vendor = _backend.vendor()
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(f"mojolearn.models.CausalLM: cannot read the selected backend's vendor: {exc}") from exc
-        return "cpu" if vendor in (None, "cpu") else "gpu"
-    if device in ("cpu", "gpu"):
-        return device
-    raise ValueError(f"mojolearn.models.CausalLM: device must be 'auto', 'cpu' or 'gpu', got {device!r}")
-
-
-def _block_classes(route):
-    if route == "gpu":
-        from .._mamba_impl import Mamba1Block, Mamba2Block
-        from .._transformer_impl import TransformerBlock
-        return {"transformer": TransformerBlock, "mamba1": Mamba1Block, "mamba2": Mamba2Block}
-    from ..neural_inference import Mamba1BlockInference, Mamba2BlockInference, TransformerBlockInference
-    return {"transformer": TransformerBlockInference, "mamba1": Mamba1BlockInference,
-            "mamba2": Mamba2BlockInference}
+# The device route ("auto" -> cpu/gpu by vendor), the per-route block classes,
+# the integer-weight refusal and the last-position argmax run in Mojo
+# (`_model_route`, `context["block_classes"]`, the checkpoint reader and the
+# generation entries in bindings/causal_lm_construct_door.mojo and
+# bindings/causal_lm_public_door.mojo); their dead Python twins `_route`,
+# `_block_classes`, `_float_weight` and `_argmax_last` are gone (lane
+# py-lm-neural, 2026-11-14).
 
 
 class _GpuPrimitives:
@@ -135,27 +118,6 @@ class CausalLMState:
 
     def __repr__(self):
         return _NATIVE.causal_state_repr(self)
-
-
-def _float_weight(a, name):
-    pb = probe(a)
-    if is_integer(pb.format):
-        raise TypeError(f"mojolearn.models.CausalLM: tensor {name!r} is an integer tensor ({pb.format}); a weight must be F32, F16 or BF16")
-    return a
-
-
-def _argmax_last(logits, b, l, v):
-    """The argmax of row `b`'s LAST position, ties to the lowest index, as an
-    int32 `(b,)` Array: a sequential scan with a strict `>`
-    (the byte LM's greedy rule). The base binding's `argmax_last_rows_f32`
-    reads position `l - 1` of each row on the device (the `argmax_rows_f32`
-    rule, DEVIATION 2500: strict `>` from index 0, so a NaN never replaces
-    and a NaN at index 0 stays); lane cpu4-python: the host row gather
-    `gather_rows_bytes` is gone."""
-    out = empty((b,), "<i8")
-    if b:
-        _native("argmax_last_rows_f32")(addr_ro(logits, name="logits"), [b, l, v], addr(out, name="next ids"))
-    return out.astype("<i4")
 
 
 class CausalLM:

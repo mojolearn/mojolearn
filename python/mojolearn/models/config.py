@@ -39,7 +39,6 @@ row slice of it (a slice copies bytes, no arithmetic).
 from ..tokenizer import _binding
 
 _NATIVE = _binding()._module
-from .. import _portable_math as math
 import os
 
 __all__ = ["HFConfig", "ModelPlan", "UnsupportedModel", "FAMILIES", "plan_for",
@@ -73,11 +72,6 @@ FIXED_TODAY = {
 
 class UnsupportedModel(ValueError):
     """A config field the blocks cannot honor, refused by name."""
-
-
-def _refuse(model_type, field, value, why):
-    raise UnsupportedModel(
-        f"mojolearn.models: model_type {model_type!r}: {field}={value!r} is not honored: {why}")
 
 
 class HFConfig:
@@ -143,9 +137,11 @@ class ModelPlan:
 # --------------------------------------------------------------- families
 #
 # Each row: `kind`, `tokenizer` (what tokenizer.py can load for it), the
-# checkpoint names, and `plan(cfg)` which reads the fields, refuses by name
-# and returns the option dict. The README beside this file renders the same
-# rows as a table; keep them in step.
+# checkpoint names, and `plan(cfg)`. The field reading, the refusals by name
+# and the option arithmetic run in Mojo (`model_plan_for_binding`,
+# bindings/causal_model_config_door.mojo: `_config_transformer`,
+# `_config_mamba`, `_config_phi3`, the byte-LM rename). The README beside this
+# file renders the same rows as a table; keep them in step.
 
 _LLAMA_LAYER = [
     ("input_layernorm.weight", "model.layers.{i}.input_layernorm.weight", None),
@@ -195,181 +191,6 @@ _MAMBA2_LAYER = [
     ("out_proj.weight", "backbone.layers.{i}.mixer.out_proj.weight", None),
 ]
 
-_LLAMA_TOP = ("model.embed_tokens.weight", "model.norm.weight", "lm_head.weight")
-_MAMBA_TOP = ("backbone.embeddings.weight", "backbone.norm_f.weight", "lm_head.weight")
-
-
-def _int(cfg, mt, field, default=None, required=True):
-    v = cfg.get(field, default)
-    if v is None:
-        if required:
-            _refuse(mt, field, None, "the field is required and the config lacks it")
-        return None
-    if isinstance(v, bool) or not isinstance(v, int):
-        _refuse(mt, field, v, "an integer is required")
-    return v
-
-
-def _float(cfg, mt, field, default):
-    v = cfg.get(field, default)
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        _refuse(mt, field, v, "a number is required")
-    return float(v)
-
-
-def _moe_check(cfg, mt):
-    for field in ("num_local_experts", "num_experts", "num_experts_per_tok", "n_routed_experts"):  # glue: a fixed handful of named config fields
-        v = cfg.get(field)
-        if v not in (None, 0, 1):
-            _refuse(mt, field, v, "mixture of experts: the block has one dense SwiGLU MLP")
-
-
-def _rope_check(cfg, mt):
-    rs = cfg.get("rope_scaling")
-    if rs is not None:
-        _refuse(mt, "rope_scaling", rs,
-                "rope type 'default' is the only one the interface names a value for; "
-                "linear, dynamic, yarn, longrope and llama3 scaling are refused")
-    rt = cfg.get("rope_type", "default")
-    if rt not in (None, "default"):
-        _refuse(mt, "rope_type", rt, "rope type 'default' only")
-
-
-def _act_check(cfg, mt, field="hidden_act"):
-    act = cfg.get(field, "silu")
-    if act not in ("silu", "swish"):
-        _refuse(mt, field, act, "the block's MLP is SwiGLU (silu gate); mlp values beyond 'swiglu' are not in the interface")
-
-
-def _sliding_alternation_check(cfg, mt):
-    if cfg.get("use_sliding_window"):
-        _refuse(mt, "use_sliding_window", True,
-                f"sliding-window-alternating layers (max_window_layers={cfg.get('max_window_layers')!r}): "
-                "the block takes ONE window for every layer")
-    lt = cfg.get("layer_types")
-    if lt is not None and len(set(lt)) > 1:
-        _refuse(mt, "layer_types", lt, "alternating attention kinds: the block takes one window for every layer")
-
-
-def _transformer_common(cfg, mt, *, qkv_bias_default=False, qk_norm=False):
-    """The Llama-shaped fields, refusing by name what the block cannot take."""
-    _moe_check(cfg, mt)
-    _rope_check(cfg, mt)
-    _act_check(cfg, mt)
-    _sliding_alternation_check(cfg, mt)
-    d_model = _int(cfg, mt, "hidden_size")
-    n_heads = _int(cfg, mt, "num_attention_heads")
-    n_kv = _int(cfg, mt, "num_key_value_heads", default=n_heads)
-    head_dim = _int(cfg, mt, "head_dim", default=None, required=False)
-    if head_dim is None:
-        head_dim = d_model // n_heads
-    if n_heads * head_dim != d_model and mt not in ("gemma", "gemma2"):
-        _refuse(mt, "head_dim", head_dim, f"n_heads*head_dim ({n_heads}*{head_dim}) must equal hidden_size {d_model}")
-    if n_heads % n_kv != 0:
-        _refuse(mt, "num_key_value_heads", n_kv, f"num_attention_heads {n_heads} is not a multiple of it")
-    if head_dim % 2 != 0:
-        _refuse(mt, "head_dim", head_dim, "head_dim must be even (the rotary pairs)")
-    inter = _int(cfg, mt, "intermediate_size")
-    n_layers = _int(cfg, mt, "num_hidden_layers")
-    vocab = _int(cfg, mt, "vocab_size")
-    eps = _float(cfg, mt, "rms_norm_eps", 1e-6)
-    theta = _float(cfg, mt, "rope_theta", 10000.0)
-    window = cfg.get("sliding_window")
-    if window is None:
-        window = 0
-    if isinstance(window, bool) or not isinstance(window, int) or window < 0:
-        _refuse(mt, "sliding_window", window, "an integer width or null")
-    attn_bias = bool(cfg.get("attention_bias", qkv_bias_default))
-    mlp_bias = bool(cfg.get("mlp_bias", False))
-    if float(cfg.get("attention_dropout", 0.0) or 0.0) != 0.0:
-        _refuse(mt, "attention_dropout", cfg.get("attention_dropout"), "inference has no dropout and the profile refuses a nonzero value")
-    tie = bool(cfg.get("tie_word_embeddings", False))
-    maxpos = _int(cfg, mt, "max_position_embeddings", default=POSITION_CEILING)
-    options = dict(INTERFACE_DEFAULTS)
-    options.update({
-        "n_kv_heads": n_kv if n_kv != n_heads else None,
-        "head_dim": head_dim if head_dim != d_model // n_heads else None,
-        "window": window,
-        "rope_theta": theta,
-        "norm_eps": eps,
-        "qkv_bias": attn_bias,
-        "o_bias": False,
-        "mlp_bias": mlp_bias,
-        "qk_norm": qk_norm,
-    })
-    layer = list(_LLAMA_LAYER)
-    if attn_bias:
-        layer += _QKV_BIAS_LAYER
-    if qk_norm:
-        layer += _QK_NORM_LAYER
-    return dict(kind="transformer", n_layers=n_layers, d_model=d_model, n_heads=n_heads,
-                n_kv_heads=n_kv, head_dim=head_dim, intermediate=inter, vocab_size=vocab,
-                tie_embeddings=tie, norm_eps=eps, max_position_embeddings=maxpos,
-                block_options=options, block_kwargs={}, layer_map=layer,
-                embed_name=_LLAMA_TOP[0], norm_name=_LLAMA_TOP[1],
-                head_name=None if tie else _LLAMA_TOP[2])
-
-
-def _plan_llama(cfg, mt):
-    return _transformer_common(cfg, mt)
-
-
-def _plan_mistral(cfg, mt):
-    return _transformer_common(cfg, mt)
-
-
-def _plan_qwen2(cfg, mt):
-    # Qwen2 puts a bias on q, k and v and none on o (modeling_qwen2.py);
-    # `attention_bias` is absent from its config, so the default is True.
-    return _transformer_common(cfg, mt, qkv_bias_default=True)
-
-
-def _plan_qwen3(cfg, mt):
-    # Qwen3: per-head RMSNorm on q and k (q_norm.weight, k_norm.weight of
-    # shape (head_dim,)), no attention bias, head_dim explicit.
-    return _transformer_common(cfg, mt, qkv_bias_default=False, qk_norm=True)
-
-
-def _plan_gemma(cfg, mt):
-    act = cfg.get("hidden_activation", cfg.get("hidden_act"))
-    _refuse(mt, "hidden_activation" if "hidden_activation" in cfg else "hidden_act", act,
-            "Gemma's GeGLU (gelu_pytorch_tanh), its (1 + weight) RMSNorm and its sqrt(hidden_size) "
-            "embedding scale are not values the interface names (mlp='swiglu', norm='rmsnorm' only)")
-
-
-def _plan_gemma2(cfg, mt):
-    for field in ("attn_logit_softcapping", "final_logit_softcapping", "query_pre_attn_scalar"):  # glue: a fixed handful of named config fields
-        if cfg.get(field) is not None:
-            _refuse(mt, field, cfg.get(field),
-                    "Gemma 2's logit softcapping, query scaling, pre/post feed-forward norms and "
-                    "alternating sliding window are not honored by the block")
-    return _plan_gemma(cfg, mt)
-
-
-def _plan_phi3(cfg, mt):
-    p = _transformer_common(cfg, mt)
-    if cfg.get("embd_pdrop", 0.0) or cfg.get("resid_pdrop", 0.0):
-        pass  # dropout is a training knob; inference ignores it
-    if cfg.get("original_max_position_embeddings") not in (None, p["max_position_embeddings"]):
-        _refuse(mt, "original_max_position_embeddings", cfg.get("original_max_position_embeddings"),
-                "a longrope-extended context; rope_scaling is refused above and so is its extension")
-    nh, nkv, hd, it = p["n_heads"], p["n_kv_heads"], p["head_dim"], p["intermediate"]
-    q_rows, kv_rows = nh * hd, nkv * hd
-    layer = [
-        ("input_layernorm.weight", "model.layers.{i}.input_layernorm.weight", None),
-        ("post_attention_layernorm.weight", "model.layers.{i}.post_attention_layernorm.weight", None),
-        ("q_proj.weight", "model.layers.{i}.self_attn.qkv_proj.weight", (0, q_rows)),
-        ("k_proj.weight", "model.layers.{i}.self_attn.qkv_proj.weight", (q_rows, q_rows + kv_rows)),
-        ("v_proj.weight", "model.layers.{i}.self_attn.qkv_proj.weight", (q_rows + kv_rows, q_rows + 2 * kv_rows)),
-        ("o_proj.weight", "model.layers.{i}.self_attn.o_proj.weight", None),
-        ("gate_proj.weight", "model.layers.{i}.mlp.gate_up_proj.weight", (0, it)),
-        ("up_proj.weight", "model.layers.{i}.mlp.gate_up_proj.weight", (it, 2 * it)),
-        ("down_proj.weight", "model.layers.{i}.mlp.down_proj.weight", None),
-    ]
-    p["layer_map"] = layer
-    return p
-
-
 #: The byte-LM checkpoint format (`config.json` "format": "mojolearn.byte-lm",
 #: tensors `embed`, `block{i}.*`, `lm_head`): the same Llama layer order and
 #: (out, in) projection layout as `_LLAMA_LAYER`, rotate-half rotary, and NO
@@ -395,104 +216,35 @@ _BYTE_LM_FIXED = {"positional_encoding": "rotary", "rope_pairing": "rotate_half"
                   "tie_word_embeddings": False}
 
 
-def _plan_byte_lm(cfg, mt):
-    """A byte-LM `config.json`: its fields renamed to the Llama ones, the
-    common transformer checks, then the byte-LM tensor names and no final
-    norm."""
-    for field, want in _BYTE_LM_FIXED.items():  # glue: a fixed handful of named config fields
-        if field in cfg and cfg.get(field) != want:
-            _refuse(mt, field, cfg.get(field), f"the byte-LM stack spells {field}={want!r} only")
-    rename = {"hidden_size": "d_model", "num_attention_heads": "n_heads", "num_key_value_heads": "n_kv",
-              "head_dim": "head_dim", "intermediate_size": "intermediate", "num_hidden_layers": "n_layers",
-              "vocab_size": "vocab_size", "rms_norm_eps": "rms_norm_eps", "rope_theta": "rope_theta",
-              "max_position_embeddings": "max_position_embeddings"}
-    hf = {k: cfg.get(v) for k, v in rename.items() if cfg.get(v) is not None}  # glue: a fixed handful of named config fields
-    hf["tie_word_embeddings"] = False
-    p = _transformer_common(HFConfig(hf, cfg.path), mt)
-    p.update(layer_map=list(_BYTE_LM_LAYER), embed_name="embed", norm_name=None, head_name="lm_head")
-    return p
-
-
-def _plan_mamba(cfg, mt):
-    d_model = _int(cfg, mt, "hidden_size")
-    n_layers = _int(cfg, mt, "num_hidden_layers")
-    vocab = _int(cfg, mt, "vocab_size")
-    fixed = {"state_size": 16, "conv_kernel": 4, "expand": 2, "use_bias": False, "use_conv_bias": True}
-    for field, want in fixed.items():  # glue: a fixed handful of named config fields
-        got = cfg.get(field, want)
-        if got != want:
-            _refuse(mt, field, got, f"Mamba1Block fixes it at {want!r} (mamba/IDENTICAL_MAMBA_CONTRACT.md section 3)")
-    rank = cfg.get("time_step_rank", "auto")
-    want_rank = int(math.ceil(d_model / 16.0))
-    if rank not in ("auto", want_rank):
-        _refuse(mt, "time_step_rank", rank, f"Mamba1Block fixes dt_rank at ceil(hidden_size/16) = {want_rank}")
-    eps = _float(cfg, mt, "layer_norm_epsilon", 1e-5)
-    if eps != 1e-5:
-        _refuse(mt, "layer_norm_epsilon", eps, "Mamba1Block fixes rms eps at 1e-5 (0x3727C5AC)")
-    if cfg.get("hidden_act", "silu") != "silu":
-        _refuse(mt, "hidden_act", cfg.get("hidden_act"), "silu only, as the reference asserts")
-    tie = bool(cfg.get("tie_word_embeddings", True))
-    return dict(kind="mamba1", n_layers=n_layers, d_model=d_model, vocab_size=vocab,
-                tie_embeddings=tie, norm_eps=eps, max_position_embeddings=None,
-                block_options={}, block_kwargs={}, layer_map=list(_MAMBA1_LAYER),
-                embed_name=_MAMBA_TOP[0], norm_name=_MAMBA_TOP[1],
-                head_name=None if tie else _MAMBA_TOP[2])
-
-
-def _plan_mamba2(cfg, mt):
-    d_model = _int(cfg, mt, "hidden_size")
-    n_layers = _int(cfg, mt, "num_hidden_layers")
-    vocab = _int(cfg, mt, "vocab_size")
-    fixed = {"state_size": 128, "head_dim": 64, "expand": 2, "n_groups": 1, "chunk_size": 256,
-             "conv_kernel": 4, "use_bias": False, "use_conv_bias": True, "rms_norm": True}
-    for field, want in fixed.items():  # glue: a fixed handful of named config fields
-        got = cfg.get(field, want)
-        if got != want:
-            _refuse(mt, field, got, f"Mamba2Block fixes it at {want!r} (mamba/IDENTICAL_MAMBA2_CONTRACT.md section 3)")
-    if cfg.get("norm_before_gate", False):
-        _refuse(mt, "norm_before_gate", True, "the gated norm is gate-then-norm (DEVIATION 787)")
-    if d_model % 32 != 0:
-        _refuse(mt, "hidden_size", d_model, "Mamba2Block needs a multiple of 32 (headdim 64, expand 2)")
-    nh = cfg.get("num_heads")
-    if nh is not None and nh != 2 * d_model // 64:
-        _refuse(mt, "num_heads", nh, f"expand*hidden_size/head_dim = {2 * d_model // 64} heads is fixed by the profile")
-    eps = _float(cfg, mt, "layer_norm_epsilon", 1e-5)
-    if eps != 1e-5:
-        _refuse(mt, "layer_norm_epsilon", eps, "Mamba2Block fixes rms eps at 1e-5 for both norms")
-    limit = cfg.get("time_step_limit", [0.0, float("inf")])
-    try:
-        lo, hi = float(limit[0]), float(limit[1])
-    except (TypeError, ValueError, IndexError):
-        _refuse(mt, "time_step_limit", limit, "a pair (lo, hi)")
-    tie = bool(cfg.get("tie_word_embeddings", True))
-    return dict(kind="mamba2", n_layers=n_layers, d_model=d_model, vocab_size=vocab,
-                tie_embeddings=tie, norm_eps=eps, max_position_embeddings=None,
-                block_options={}, block_kwargs={"dt_limit": (lo, hi)}, layer_map=list(_MAMBA2_LAYER),
-                embed_name=_MAMBA_TOP[0], norm_name=_MAMBA_TOP[1],
-                head_name=None if tie else _MAMBA_TOP[2])
+def _plan(cfg, mt=None):
+    # Every row's planner: the native one. The Python `_plan_<family>`
+    # bodies (field reads, refusals, head_dim/rank arithmetic) were dead
+    # duplicates of `model_plan_for_binding` and are gone (lane
+    # py-lm-neural, 2026-11-14).
+    return plan_for(cfg)
 
 
 #: model_type -> (plan function, tokenizer family, one-line note). `smollm`
 #: is not a model_type: SmolLM and SmolLM2 ship `model_type: "llama"` and
 #: land on the llama row; the alias is kept so a caller can look it up.
 FAMILIES = {
-    "llama": (_plan_llama, "bytelevel-bpe (Llama 3) or sentencepiece (Llama 2, refused)",
+    "llama": (_plan, "bytelevel-bpe (Llama 3) or sentencepiece (Llama 2, refused)",
               "Llama 2/3, TinyLlama, SmolLM, SmolLM2 (model_type llama)"),
-    "smollm": (_plan_llama, "bytelevel-bpe", "alias of llama; SmolLM ships model_type llama"),
-    "mistral": (_plan_mistral, "sentencepiece (refused) or bytelevel-bpe (v3 tekken)",
+    "smollm": (_plan, "bytelevel-bpe", "alias of llama; SmolLM ships model_type llama"),
+    "mistral": (_plan, "sentencepiece (refused) or bytelevel-bpe (v3 tekken)",
                 "sliding_window -> window"),
-    "qwen2": (_plan_qwen2, "bytelevel-bpe (Qwen 2 pattern)", "qkv_bias True"),
-    "qwen3": (_plan_qwen3, "bytelevel-bpe (Qwen 2 pattern)", "qk_norm True"),
-    "gemma": (_plan_gemma, "sentencepiece (refused)", "REFUSED: GeGLU, (1+w) norm, embedding scale"),
-    "gemma2": (_plan_gemma2, "sentencepiece (refused)", "REFUSED: softcapping and the rest of gemma"),
-    "phi3": (_plan_phi3, "sentencepiece (refused)", "fused qkv_proj / gate_up_proj split by rows"),
-    "mamba": (_plan_mamba, "bytelevel-bpe (GPT-NeoX pattern = GPT-2's)", "profile constants checked"),
-    "mamba2": (_plan_mamba2, "bytelevel-bpe (GPT-NeoX pattern = GPT-2's)", "profile constants checked"),
+    "qwen2": (_plan, "bytelevel-bpe (Qwen 2 pattern)", "qkv_bias True"),
+    "qwen3": (_plan, "bytelevel-bpe (Qwen 2 pattern)", "qk_norm True"),
+    "gemma": (_plan, "sentencepiece (refused)", "REFUSED: GeGLU, (1+w) norm, embedding scale"),
+    "gemma2": (_plan, "sentencepiece (refused)", "REFUSED: softcapping and the rest of gemma"),
+    "phi3": (_plan, "sentencepiece (refused)", "fused qkv_proj / gate_up_proj split by rows"),
+    "mamba": (_plan, "bytelevel-bpe (GPT-NeoX pattern = GPT-2's)", "profile constants checked"),
+    "mamba2": (_plan, "bytelevel-bpe (GPT-NeoX pattern = GPT-2's)", "profile constants checked"),
 }
 
 
 #: The byte-LM format's row (not in FAMILIES: it is keyed by `format`, not `model_type`).
-BYTE_LM_ROW = (_plan_byte_lm, "bytelevel-bpe (GPT-2 pattern)", "byte-LM format: no final norm, untied head")
+BYTE_LM_ROW = (_plan, "bytelevel-bpe (GPT-2 pattern)", "byte-LM format: no final norm, untied head")
 
 
 def plan_for(config):

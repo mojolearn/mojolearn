@@ -14,16 +14,16 @@ written here load there.
 
 State, checkpoint and schedule validation are native; the Python copies
 (`_validate_state`, `_decode_state`, `_schedule`, ...) were deleted
-(pyout-neural-lm, 2026-11-11). The helpers left here (`_array`, `_batch`,
-`_encode_state`, `_canonical`) are read by tests only.
+(pyout-neural-lm, 2026-11-11). The test-only Python twins `_array`, `_batch`,
+`_require_mode`, `_encode_state`, `_encode_array`, `_canonical` and
+`SmallMLPTrainer._binding` are gone too (lane py-lm-neural, 2026-11-14): the
+native owner's admission (`_view`, the batch and shape refusals in
+`small_mlp_native_door.mojo`) is the one refusal path.
 """
-import json
 import os
 
 from . import _backend, _linalg_impl, _training_impl
 from ._array import Array
-from ._buffer import as_f32_c, as_i32_c, all_finite
-from ._bufcheck import is_int32, is_native_f32, le_bytes, probe
 
 _NAMES = ('weight1', 'bias1', 'weight2', 'bias2')
 _SHAPES = ((16, 8), (16,), (3, 16), (3,))
@@ -31,66 +31,6 @@ _TOTAL = 195
 _STATE_SCHEMA = 'mojolearn.small-mlp-trainer.v1'
 _FILE_SCHEMA = 'mojolearn.small-mlp-checkpoint.v1'
 _FILE_LIMIT = 32768
-
-
-def _canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(',', ':'),
-                      ensure_ascii=True, allow_nan=False).encode('ascii')
-
-
-def _array(value, shape, name, dtype='<f4'):
-    """An OWNED, C-contiguous, exactly-shaped copy of `value` as a
-    `mojolearn.Array` (DEVIATION 2424). The dtype is judged from the
-    buffer's format and REFUSED rather than converted, as the NumPy
-    spelling refused a dtype mismatch; `_buffer.as_f32_c` / `as_i32_c`
-    then supply the layout, and a borrowed buffer is copied so that the
-    trainer never aliases caller memory."""
-    kind = 'float32' if dtype == '<f4' else 'int32'
-    try:
-        pb = probe(value)
-    except TypeError:
-        raise TypeError('SmallMLPTrainer ' + name + ' must be a ' + kind
-                        + ' array (a NumPy array, an array.array or a mojolearn Array)') from None
-    ok = is_native_f32(pb.format) if dtype == '<f4' else is_int32(pb.format, pb.itemsize)
-    if not ok:
-        raise TypeError('SmallMLPTrainer ' + name + ' must be a ' + kind
-                        + ' array (a NumPy array, an array.array or a mojolearn Array)')
-    if pb.shape != shape:
-        raise ValueError('SmallMLPTrainer ' + name + ' must have shape ' + repr(shape))
-    convert = as_f32_c if dtype == '<f4' else as_i32_c
-    arr, copied = convert(value, ndim=len(shape), name=name)
-    if not copied:
-        arr = arr.copy()
-    if dtype == '<f4' and not all_finite(arr):
-        raise ValueError('SmallMLPTrainer ' + name + ' must be finite')
-    return arr
-
-
-def _batch(value):
-    try:
-        pb = probe(value)
-    except TypeError:
-        # A nested list of the right shape used to be told its SHAPE was
-        # wrong. The fault is the type: this surface reads float32 buffers
-        # only (the same refusal a float64 array gets from `_array`).
-        raise TypeError('SmallMLPTrainer X must be a float32 array of shape (batch, 8) '
-                        '(a NumPy array, an array.array or a mojolearn Array), got '
-                        + type(value).__name__) from None
-    if pb.ndim != 2 or pb.shape[1] != 8:
-        raise ValueError('SmallMLPTrainer X must have shape (batch, 8)')
-    if not 1 <= pb.shape[0] <= 256:
-        raise ValueError('SmallMLPTrainer batch must be in [1, 256]')
-    return _array(value, pb.shape, 'X')
-
-
-def _require_mode():
-    """The process-selected tier, IDENTICAL or FAST (lane neural, 2026-09-27:
-    FAST runs the same kernels with the pins on the free schedule and
-    promises quality, never bits). Returns it."""
-    mode = _backend.default_mode()
-    if mode not in ('identical', 'fast') or _backend.numeric_mode() != mode:
-        raise RuntimeError('SmallMLPTrainer requires process-selected IDENTICAL or FAST mode; select it before use')
-    return mode
 
 
 class SmallMLPTrainer:
@@ -180,15 +120,6 @@ class SmallMLPTrainer:
         """
         return _NATIVE('owner_train_steps', (self, X, targets, k))
 
-    @staticmethod
-    def _binding():
-        # The selected training binding, for tools and tests that call its
-        # entries directly; the trainer's own methods resolve it natively.
-        mode = _require_mode()
-        if mode == 'identical':
-            _linalg_impl.require_identical()
-        return _training_impl._load(mode)
-
     def predict_logits_sessions(self, inputs):
         """Logits of several independent batches with the current model, concatenated in the
         order given.
@@ -254,28 +185,6 @@ class SmallMLPTrainer:
     def from_checkpoint(cls, path):
         """Restore a trainer from `save_checkpoint` output, after checking its schema, size and hash."""
         return _NATIVE('from_checkpoint', (cls, path))
-
-
-def _encode_array(value):
-    """The on-disk tensor descriptor, BYTE-IDENTICAL to the NumPy spelling
-    (DEVIATION 2427). `np.asarray(value, dtype='<f4', order='C').tobytes()`
-    emitted the C-order LITTLE-ENDIAN bytes whatever the host;
-    `_bufcheck.le_bytes` emits the same bytes (a `byteswap` on a big-endian
-    host, a no-op elsewhere), so `hex`, the canonical JSON around it and
-    the SHA-256 over that JSON are unchanged. `value` is one of this
-    module's own Arrays (`<f4` or `<i4`), which is all the NumPy version
-    ever saw here too."""
-    integer = value.dtype == '<i4'
-    dtype = '<i4' if integer else '<f4'
-    return dict(dtype=dtype, shape=list(value.shape),
-                hex=le_bytes(value, 'i' if integer else 'f').hex())
-
-
-def _encode_state(state):
-    state['weights'] = {name: _encode_array(value) for name, value in state['weights'].items()}  # glue: encodes each named weight
-    for key in ('m', 'v', 'flags'):  # glue: encodes three optimizer arrays
-        state['optimizer'][key] = _encode_array(state['optimizer'][key])
-    return state
 
 
 #: The compiled training entries the native owner calls, resolved once at import.
