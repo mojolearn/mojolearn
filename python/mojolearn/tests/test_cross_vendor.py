@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""mojolearn.cross_vendor on the host: the fold, the framing and the
-coordinator's refusals, with independent test-only socket peers (no GPU)."""
+"""mojolearn.cross_vendor on the host: the framing and the coordinator's
+refusals, with independent test-only socket peers (no GPU). The fold's word
+contracts are checks/native_tests/resample_cross_vendor_fold_*.mojo."""
 import array
 import hashlib
-import math
 import json
 import socket
 import struct
@@ -12,43 +12,6 @@ import threading
 import pytest
 
 from mojolearn import cross_vendor as cv
-
-
-def _f(values):
-    return array.array("f", values).tobytes()
-
-
-def test_fold_is_a_left_fold_with_one_rounding_per_add():
-    # 1 + 2**-24 rounds back to 1 in float32; 2**-24 + 2**-24 does not.
-    a, b, c = _f([1.0]), _f([2.0 ** -24]), _f([2.0 ** -24])
-    assert array.array("f", cv.ordered_fold([a, b, c]))[0] == 1.0
-    assert array.array("f", cv.ordered_fold([b, c, a]))[0] == 1.0 + 2.0 ** -23
-
-
-def test_fold_flushes_subnormals_keeping_sign():
-    sub = 1e-39
-    # ftz(-sub) is -0, and -0 + -0 is -0; (-0) + (+0) would be +0, as on the device.
-    out = array.array("f", cv.ordered_fold([_f([sub, -sub, 3.0]), _f([0.0, -0.0, -3.0])]))
-    assert out[0] == 0.0 and math.copysign(1.0, out[0]) == 1.0
-    assert out[1] == 0.0 and math.copysign(1.0, out[1]) == -1.0
-    assert out[2] == 0.0
-
-
-def test_fold_equals_an_independent_numpy_oracle_bit_for_bit():
-    np = pytest.importorskip("numpy")
-    rng = np.random.default_rng(7)
-    grads = [(rng.standard_normal(4096) * 10.0 ** rng.integers(-40, 3, 4096)).astype(np.float32)
-             for _ in range(5)]
-
-    def ftz(x):
-        b = x.view(np.uint32)
-        sub = ((b & 0x7F800000) == 0) & ((b & 0x007FFFFF) != 0)
-        return np.where(sub, b & np.uint32(0x80000000), b).view(np.float32)
-
-    want = grads[0].copy()
-    for g in grads[1:]:
-        want = ftz(ftz(want) + ftz(g))
-    assert cv.ordered_fold([g.tobytes() for g in grads]) == want.tobytes()
 
 
 def test_frame_round_trip_and_oversize_refusal():
@@ -231,19 +194,6 @@ def test_refuses_shards_not_owned_exactly_once(splits):
 
 
 # ------------------------------------------------------------ the chained fold
-
-def test_ordered_fold_with_a_prefix_equals_the_flat_fold():
-    np = pytest.importorskip("numpy")
-    rng = np.random.default_rng(5)
-    grads = [(rng.standard_normal(512) * 10.0 ** rng.integers(-40, 3, 512)).astype(np.float32).tobytes()
-             for _ in range(6)]
-    flat = cv.ordered_fold(grads)
-    prefix = cv.ordered_fold(grads[:2])
-    assert cv.ordered_fold(grads[2:], prefix=prefix) == flat
-    # and a prefix of one shard is that shard
-    assert cv.ordered_fold(grads[1:], prefix=grads[0]) == flat
-    # the reverse order is a different fold (the check can fail)
-    assert cv.ordered_fold(list(reversed(grads))) != flat
 
 
 def _chained_group(splits, steps=3, drift=None):
