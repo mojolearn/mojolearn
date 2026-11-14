@@ -516,10 +516,16 @@ def iforest_run_binding(
     (`bindings/trees_public_iforest.mojo::_run`) found no `iforest_resident`
     here and the CPU column refit the whole forest on every scoring call.
     Sixteen params is the refit-per-call form, unchanged.
+
+    Lane fix-iforest-double-fit (2026-11-13): EVERY binary takes the
+    seventeen-param form. A refit-per-call binary (`-D
+    MOJOLEARN_IDN_IF_RESIDENT_OFF`) receives it only from `fit` (token 0):
+    that fit's forest stays in the store just long enough for
+    `iforest_forest_export` to read it out, which drops it. Before it that
+    binary fitted twice per `fit` (here, then again inside the export). Its
+    scoring calls still send sixteen params and refit per call.
     """
-    var resident = False
-    comptime if IDN_IF_RESIDENT:
-        resident = len(params) == 17
+    var resident = len(params) == 17
     if len(params) != 16 and not resident:
         raise Error(
             "iforest_run: params must contain 16 values, got " + String(len(params))
@@ -552,39 +558,38 @@ def iforest_run_binding(
     else:
         out_f32_address = _index(out_f32_addr)
     var run = IForestHostRun(List[Float32](), List[Int32](), Float64(-0.5), 0)
-    comptime if IDN_IF_RESIDENT:
-        if resident:
-            # The take and the put run under the GIL; the fit (on a miss) and
-            # the scoring run with it released, on an entry no other thread
-            # can reach while it is out of the store.
-            var token = _index(params[16])
-            var key = IFResidentKey(
-                train_address, n_train, n_features, n_estimators, max_samples_mode,
-                max_samples_int, max_samples_frac, max_depth, max_features_mode,
-                max_features_int, max_features_frac, bootstrap, random_state,
-                contamination_auto, contamination,
-            )
-            var held = if_host_resident_take(token, key)
-            var new_token = 0
-            if len(held) == 0:
-                new_token = if_host_resident_new_token()
-            try:
-                with GILReleased(Python()):
-                    run = iforest_run_host_resident(
-                        held, key, new_token, query_address, n_query, want,
-                    )
-            except e:
-                # Keep a caller-owned forest after a refused query; a new
-                # token has not reached Python yet, so it is not cached.
-                if new_token == 0:
-                    if_host_resident_put(held)
-                raise e
-            var held_token = held[0].token
-            if_host_resident_put(held)
-            iforest_host_resident_outputs_run(
-                run, want, out_i32_address, out_f32_address, n_query, n_features, held_token, ip
-            )
-            return PythonObject(n_query)
+    if resident:
+        # The take and the put run under the GIL; the fit (on a miss) and
+        # the scoring run with it released, on an entry no other thread
+        # can reach while it is out of the store.
+        var token = _index(params[16])
+        var key = IFResidentKey(
+            train_address, n_train, n_features, n_estimators, max_samples_mode,
+            max_samples_int, max_samples_frac, max_depth, max_features_mode,
+            max_features_int, max_features_frac, bootstrap, random_state,
+            contamination_auto, contamination,
+        )
+        var held = if_host_resident_take(token, key)
+        var new_token = 0
+        if len(held) == 0:
+            new_token = if_host_resident_new_token()
+        try:
+            with GILReleased(Python()):
+                run = iforest_run_host_resident(
+                    held, key, new_token, query_address, n_query, want,
+                )
+        except e:
+            # Keep a caller-owned forest after a refused query; a new
+            # token has not reached Python yet, so it is not cached.
+            if new_token == 0:
+                if_host_resident_put(held)
+            raise e
+        var held_token = held[0].token
+        if_host_resident_put(held)
+        iforest_host_resident_outputs_run(
+            run, want, out_i32_address, out_f32_address, n_query, n_features, held_token, ip
+        )
+        return PythonObject(n_query)
     with GILReleased(Python()):
         run = iforest_run_host(
             train_address, query_address, n_train, n_features, n_query, n_estimators,
@@ -607,9 +612,10 @@ def iforest_resident_binding() raises -> PythonObject:
 
 def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
     """Drop the resident host forest `token` names (the estimator was
-    refitted or collected). A token nobody holds is a no-op. Returns 0."""
-    comptime if IDN_IF_RESIDENT:
-        if_host_resident_release(_index(token))
+    refitted or collected). A token nobody holds is a no-op. Returns 0.
+    Every route releases: a refit-per-call binary keeps a forest between
+    `fit`'s `iforest_run` and its export (lane fix-iforest-double-fit)."""
+    if_host_resident_release(_index(token))
     return PythonObject(0)
 
 
