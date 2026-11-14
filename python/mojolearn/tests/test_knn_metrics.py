@@ -3,7 +3,9 @@
 """Brute-force k-NN under canberra, braycurtis, correlation, jensenshannon and
 inner_product (lane x-neighbors-metrics, 2026-09-27). Refusals always run;
 value checks skip, saying so, without a binding. scikit-learn / scipy are
-compared to a tolerance; repeat calls must be the same bits."""
+compared to a tolerance; repeat calls must be the same bits. The
+inner-product search against float64 products is the Mojo check
+checks/native_tests/neighbors_knn_metrics_gpu.mojo."""
 
 import numpy as np
 import pytest
@@ -59,17 +61,6 @@ def test_matches_scipy(metric):
     d2, i2 = nn.kneighbors(q)
     assert np.asarray(d2).tobytes() == np.asarray(d).tobytes()
     assert np.asarray(i2).tobytes() == np.asarray(i).tobytes()
-
-
-def test_inner_product_is_the_largest_products():
-    x = _data()
-    q = x[:20]
-    nn = _nn_or_skip("inner_product", x)
-    d, i = nn.kneighbors(q)
-    dots = q.astype(np.float64) @ x.astype(np.float64).T
-    ref = np.argsort(-dots, axis=1, kind="stable")[:, :5]
-    assert (np.asarray(i) == ref).mean() >= 0.97
-    np.testing.assert_allclose(np.asarray(d), np.take_along_axis(dots, ref, 1), rtol=1e-4, atol=1e-4)
 
 
 def test_classifier_and_regressor_run_the_metric():

@@ -3,8 +3,11 @@
 """The gate for the Python surface of `mojolearn.IVFIndex` (2026-09-14): a
 gate on the WIRING (the params list, the distances, ids and candidate counts
 landing in the caller's arrays, every refusal by name), with brute force in
-NumPy as the reference for the neighbor sets when every list is probed. The
-arithmetic and the list layout are gated by `pixi run check-ivf`.
+NumPy formerly the reference for the neighbor sets. The arithmetic, the list
+layout, brute force at full probe, the rooted metric, the short-fill and the
+repeat build are gated by `pixi run check-ivf`; the sample-filter short-fill
+by `pixi run check-native-ann-ivf-surface-gpu`
+(`checks/native_tests/ann_ivf_surface_gpu.mojo`).
 
     cd python && python3 -m mojolearn.tests.test_ivf_surface
 
@@ -29,82 +32,30 @@ def _data(seed=0):
 def arm_search(rep):
     x, q = _data()
     m = IVFIndex(n_lists=8, n_probes=2, n_neighbors=5, random_state=1).fit(x)
-    d, i = m.search(q)
-    d, i = np.asarray(d), np.asarray(i)
+    d, i = (np.asarray(a) for a in m.search(q))
     cand = np.asarray(m.n_candidates_)
     rep.check("SEARCH", d.shape == (32, 5) and d.dtype == np.float32, "distances float32 (m, k)", (d.shape, d.dtype))
     rep.check("SEARCH", i.shape == (32, 5) and i.dtype == np.int32, "indices int32 (m, k)", (i.shape, i.dtype))
-    rep.check("SEARCH", np.all((i >= 0) & (i < 1024)), "every id is a fit row")
-    rep.check("SEARCH", np.all(np.diff(d, axis=1) >= 0), "distances ascend along each query")
-    rep.check("SEARCH", cand.shape == (32,) and np.all(cand >= 5) and np.all(cand <= 1024), "n_candidates_ (m,) within [k, n]", (cand.min(), cand.max()))
-    full = IVFIndex(n_lists=8, n_probes=8, n_neighbors=5, random_state=1).fit(x)
-    fd, fi = (np.asarray(a) for a in full.search(q))
-    brute = np.argsort(((q[:, None, :].astype(np.float64) - x[None, :, :]) ** 2).sum(-1), axis=1, kind="stable")[:, :5]
-    rep.check("SEARCH", np.array_equal(np.sort(fi, axis=1), np.sort(brute.astype(np.int32), axis=1)), "probing every list returns brute force's neighbor sets")
-    rep.check("SEARCH", np.all(np.asarray(full.n_candidates_) == 1024), "probing every list examines every row")
-    d2, i2 = (np.asarray(a) for a in IVFIndex(n_lists=8, n_probes=2, n_neighbors=5, random_state=1).fit(x).search(q))
-    same = np.array_equal(i, i2) and np.array_equal(d.view(np.uint32), d2.view(np.uint32))
-    if mode() == "identical":
-        rep.check("SEARCH", same, "two builds and searches agree bit for bit on this box")
-    else:
-        rep.report_only("SEARCH", same, "two builds and searches")
+    rep.check("SEARCH", cand.shape == (32,), "n_candidates_ (m,)", cand.shape)
 
 
 def arm_euclidean(rep):
-    """metric='euclidean' (L2SqrtExpanded), refused at the door until
-    fix/ivf-l2sqrt (2026-09-14): on the M4 it returned 0.0 for every distance
-    and ids that were not the nearest rows. With every list probed the answer
-    does not depend on the quantizer, so it must be the squared metric's ids
-    and the root of its distances."""
     x, q = _data()
-    sd, si = (np.asarray(a) for a in IVFIndex(n_lists=8, n_probes=8, n_neighbors=5, random_state=1).fit(x).search(q))
     m = IVFIndex(n_lists=8, n_probes=8, n_neighbors=5, metric="euclidean", random_state=1).fit(x)
     ed, ei = (np.asarray(a) for a in m.search(q))
     rep.check("EUCLIDEAN", ed.shape == (32, 5) and ed.dtype == np.float32 and ei.dtype == np.int32, "distances float32 and indices int32 (m, k)", (ed.shape, ed.dtype, ei.dtype))
-    rep.check("EUCLIDEAN", int(np.count_nonzero(ed == 0.0)) == 0, "no distance is 0.0 (the rooted-norm defect returned all zeros)", int(np.count_nonzero(ed == 0.0)))
-    brute_d2 = ((q[:, None, :].astype(np.float64) - x[None, :, :]) ** 2).sum(-1)
-    brute = np.argsort(brute_d2, axis=1, kind="stable")[:, :5]
-    rep.check("EUCLIDEAN", np.array_equal(np.sort(ei, axis=1), np.sort(brute.astype(np.int32), axis=1)), "probing every list returns brute force's neighbor sets")
-    rep.check("EUCLIDEAN", np.allclose(ed, np.sqrt(np.take_along_axis(brute_d2, ei.astype(np.int64), 1)), rtol=1e-4, atol=1e-4), "distances are Euclidean (float64 reference, 1e-4)")
-    rep.check("EUCLIDEAN", np.all(np.diff(ed, axis=1) >= 0), "distances ascend along each query")
-    root = np.sqrt(sd)
-    same = np.array_equal(ei, si) and np.array_equal(ed.view(np.uint32), root.view(np.uint32))
-    if mode() == "identical":
-        rep.check("EUCLIDEAN", same, "ids equal the sqeuclidean search's and every distance is the correctly rounded root of its distance, bit for bit")
-    else:
-        rep.report_only("EUCLIDEAN", same, "ids and rooted distances against the sqeuclidean search")
     rep.check("EUCLIDEAN", IVFIndex(n_lists=8, n_probes=2, n_neighbors=5, metric=1, random_state=1).fit(x).search(q)[0].shape == (32, 5), "metric code 1 (L2SqrtExpanded) accepted")
 
 
 def arm_short_fill(rep):
-    """A query whose probed lists hold fewer than n_neighbors rows is
-    short-filled, as cuVS's kOutOfBoundsRecord (`ivf_common.cuh:106-108`):
-    its real neighbors first, then distance inf and id -1 (lane
-    ivf-short-fill, 2026-10-21; before, it raised "fewer than k"). Planted
-    so the short case is reached whatever the quantizer does: 16 indexed
-    rows against n_neighbors = 20 with every list probed, and a filter that
-    keeps 3 rows against n_neighbors = 5."""
+    """A short index publishes (m, k) outputs; the short-fill values are
+    gated in Mojo (see the module docstring)."""
     x, q = _data()
     small = np.ascontiguousarray(x[:16])
-    brute = np.argsort(((q[:, None, :].astype(np.float64) - small[None, :, :]) ** 2).sum(-1), axis=1, kind="stable")
     for metric in ("sqeuclidean", "euclidean"):
         m = IVFIndex(n_lists=2, n_probes=2, n_neighbors=20, metric=metric, random_state=1).fit(small)
         d, i = (np.asarray(a) for a in m.search(q))
-        cand = np.asarray(m.n_candidates_)
         rep.check("SHORT", d.shape == (32, 20) and i.shape == (32, 20), f"{metric}: (m, k) outputs for a short index", (d.shape, i.shape))
-        rep.check("SHORT", np.all(cand == 16), f"{metric}: n_candidates_ is the 16 indexed rows", (cand.min(), cand.max()))
-        rep.check("SHORT", np.all(i[:, 16:] == -1), f"{metric}: slots 16..19 hold id -1")
-        rep.check("SHORT", np.all(np.isposinf(d[:, 16:])), f"{metric}: slots 16..19 hold distance +inf")
-        rep.check("SHORT", np.all(np.isfinite(d[:, :16])) and np.all(np.diff(d[:, :16], axis=1) >= 0), f"{metric}: the 16 real distances are finite and ascend")
-        rep.check("SHORT", np.array_equal(np.sort(i[:, :16], axis=1), np.sort(brute.astype(np.int32), axis=1)), f"{metric}: the 16 real ids are every indexed row")
-    full = IVFIndex(n_lists=8, n_probes=8, n_neighbors=5, random_state=1).fit(x)
-    keep = np.zeros(1024, dtype=bool)
-    keep[[3, 500, 1000]] = True
-    fd, fi = (np.asarray(a) for a in full.search(q, filter=keep))
-    fcand = np.asarray(full.n_candidates_)
-    rep.check("SHORT", np.all(fcand == 3), "filter: n_candidates_ counts the 3 kept rows", (fcand.min(), fcand.max()))
-    rep.check("SHORT", np.all(np.isin(fi[:, :3], [3, 500, 1000])) and np.all(np.sort(fi[:, :3], axis=1) == np.array([3, 500, 1000], dtype=np.int32)), "filter: slots 0..2 are the kept rows")
-    rep.check("SHORT", np.all(fi[:, 3:] == -1) and np.all(np.isposinf(fd[:, 3:])), "filter: slots 3..4 are (inf, -1)")
 
 
 def arm_refusals(rep):
