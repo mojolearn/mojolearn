@@ -155,6 +155,8 @@ check-native-svr-native-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJO
 check-native-svr-native-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/svr_native_gpu.mojo"
 check-native-solver-qn-objectives-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/solver_qn_objectives_cpu.mojo"
 check-native-solver-qn-objectives-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/solver_qn_objectives_gpu.mojo"
+check-native-mixture-gmm-sample-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/mixture_gmm_sample_cpu.mojo"
+check-native-mixture-gmm-sample-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/mixture_gmm_sample_gpu.mojo"
 check-native-linalg-numerical-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/linalg_numerical_cpu.mojo"
 check-native-linalg-numerical-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/linalg_numerical_gpu.mojo"
 check-native-linalg-decompositions-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/linalg_decompositions_gpu.mojo"
