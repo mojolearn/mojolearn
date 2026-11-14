@@ -84,6 +84,18 @@ The brief's name form `checks/<family>_<topic>_check.mojo` is replaced by this l
 7. Bits: none change (tests only). Report: branch/head, files deleted or shrunk, checks written, pixi tasks added,
    fixtures stored, helpers removed, every MIXED file whose list changed, units the integrator must build (the check
    modules only; no binding).
+8. After each integration merge the orchestrator (never a lane) compiles and runs the checks with two jobs, because
+   the integration compile (`tools/release.py candidate`) builds the bindings only, never the checks:
+   - CPU checks on the free GitHub runners: `gh workflow run native-checks.yml --ref main -f ref=<integration sha>
+     -f filter='check-native-*-cpu'` (`.github/workflows/native-checks.yml`: ceil(tasks/12) shards, cap 20, one task
+     at a time per runner, 900 s per task; artifact `native-checks-summary` holds SUMMARY.md and REPORT.txt; the run
+     fails when any task failed or never reported).
+   - GPU checks on the rented L40S pod, with the integration sha checked out in `/root/mojolearn-measure`:
+     `tools/nvidia_central.sh submit measure --note native-checks-gpu tools/ops/native_checks_gpu_job.sh`
+     (filter `NC_FILTER`, `%` for `*`; K = cgroup cores / 4 tasks at once; SUMMARY.md states peak RSS per compile and
+     busy cores of total).
+   - `python3 tools/ops/native_checks_report.py report <results dir>` groups the failures by first error; that list is
+     the brief of the one integration compile-fix lane.
 
 
 ## Totals per class
