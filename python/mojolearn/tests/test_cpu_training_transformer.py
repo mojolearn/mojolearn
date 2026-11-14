@@ -3,8 +3,7 @@
 """CPU training for the Transformer block lanes
 (lane/cpu-training-transformer, 2026-09-15): transformer and
 transformer-window. Checked from SOURCE so it runs on a box with nothing
-built, plus runtime checks that run only where the transformer host binding
-is built and the package took the CPU-only path.
+built.
 
 What the source checks hold: the manifest covers both lanes in the
 transformer family, which routes `_mojolearn_transformer` to its own host
@@ -16,29 +15,19 @@ sabotage define reaches the family through the gemm oracle; the CPU identity
 gate workflow triggers on every host module; and the no-CPU-path sentence no
 longer names the Transformer block.
 
-The runtime checks (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded), at the lanes' shape (d_model 32, two heads, one
-kv head, intermediate 64), full causal and with window 8: the stateless
-forward equals the carried-state prefill; a prefill split in two equals the
-whole prefill; a prefill of 16 tokens then one decode step equals the 17th
-row of the 17-token prefill (contract section 7.2's decode == prefill, which
-the host inherits from the one oracle spelling); the ring state holds the
-`min(cached_tokens, window)` newest keys; the backward returns the input and
-nine weight gradients in their shapes and the same bytes twice; a NaN input
-is refused by name. The bit claim against the GPU columns is the CPU identity
-gate's, not this file's.
+The runtime checks (stateless forward == carried prefill, split prefill,
+decode == prefill row, backward repeat, NaN refusal, full causal and window
+8) moved to checks/native_tests/transformer_host_block_cpu_suite.mojo
+(2026-11-14); they call the host binding's typed RUN directly.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_transformer
 """
 
-# Gate-runner scope: host runtime checks require the CPU-only route.
-GATE_BACKENDS = ("cpu",)
 import re
 import sys
 from pathlib import Path
 
-import mojolearn
-from mojolearn import _backend, host_surface
+from mojolearn import host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -126,74 +115,6 @@ def test_workflow_triggers_on_the_host_modules():
 def test_no_cpu_path_sentence_drops_the_transformer():
     sentence = host_surface.no_cpu_path_sentence()
     assert "Transformer" not in sentence, sentence
-
-
-def _built():
-    if _backend._CPU_ONLY is None:
-        print("SKIP: a GPU set loaded; the host route is not taken here")
-        return False
-    if "_mojolearn_transformer_host" not in _backend.host_families_built():
-        print("SKIP: _mojolearn_transformer_host is not built")
-        return False
-    return True
-
-
-def _block(np, window):
-    rng = np.random.default_rng(11)
-    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
-    shapes = {
-        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
-        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
-        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
-        "down_proj.weight": (dm, it)}
-    w = {k: (np.ones(s, np.float32) if k.endswith("layernorm.weight")
-             else (rng.random(s, dtype=np.float32) * np.float32(0.25) - np.float32(0.125)))
-         for k, s in shapes.items()}
-    return mojolearn.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=window)
-
-
-def test_block_forward_and_backward_on_the_host_when_built():
-    if not _built():
-        return
-    import numpy as np
-    rng = np.random.default_rng(5)
-    x = rng.standard_normal((2, 17, 32)).astype(np.float32)
-    g = rng.standard_normal((2, 16, 32)).astype(np.float32)
-    for window in (0, 8):
-        blk = _block(np, window)
-        whole16 = np.asarray(blk.forward(x[:, :16]))
-        st = blk.allocate_state(2, 32)
-        prefill = np.asarray(blk.forward(x[:, :16], st))
-        assert whole16.tobytes() == prefill.tobytes(), f"window {window}: stateless forward != carried prefill"
-        assert st.cached_tokens == 16
-        held = np.asarray(st.keys())
-        assert held.shape == (2, 1, min(16, window) if window else 16, 16), held.shape
-        step = np.asarray(blk.step(x[:, 16:17], st))
-        assert st.cached_tokens == 17
-        whole17 = np.asarray(blk.forward(x))
-        assert step.tobytes() == whole17[:, 16:17].tobytes(), f"window {window}: decode step != prefill row 16"
-        assert whole17[:, :16].tobytes() == whole16.tobytes(), f"window {window}: a later token moved an earlier row"
-        st2 = blk.allocate_state(2, 32)
-        a = np.asarray(blk.forward(np.ascontiguousarray(x[:, :8]), st2))
-        b = np.asarray(blk.forward(np.ascontiguousarray(x[:, 8:16]), st2))
-        assert np.concatenate([a, b], axis=1).tobytes() == whole16.tobytes(), f"window {window}: split prefill moved"
-        grads = blk.backward(x[:, :16], g)
-        again = blk.backward(x[:, :16], g)
-        assert sorted(grads) == sorted(("x",) + mojolearn.TransformerBlock._W_NAMES)
-        assert np.asarray(grads["x"]).shape == (2, 16, 32)
-        for k in blk._W_NAMES:
-            assert np.asarray(grads[k]).shape == tuple(blk._w[blk._W_NAMES.index(k)].shape), k
-        for k in grads:
-            assert np.asarray(grads[k]).tobytes() == np.asarray(again[k]).tobytes(), k
-            assert np.isfinite(np.asarray(grads[k])).all(), k
-        bad = x[:, :16].copy()
-        bad[0, 3, 5] = np.float32(np.nan)
-        try:
-            blk.forward(bad)
-        except Exception as e:  # the oracle's by-name refusal
-            assert "non-finite" in str(e) or "NaN" in str(e) or "nan" in str(e), str(e)
-        else:
-            raise AssertionError("a NaN input was not refused")
 
 
 if __name__ == "__main__":
