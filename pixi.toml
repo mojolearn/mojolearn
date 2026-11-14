@@ -222,6 +222,8 @@ check-native-kde-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . chec
 check-native-kde-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/kde_native_cpu.mojo"
 check-native-kde-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kde_native_gpu.mojo"
 check-native-kde-ownership-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kde_ownership_gpu.mojo"
+check-native-iforest-forest-export-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/iforest_forest_export_gpu.mojo"
+check-native-iforest-forest-export-gpu-resident-off = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_IF_RESIDENT_OFF -I . checks/native_tests/iforest_forest_export_gpu.mojo"
 check-native-pcs-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/pcs_native_cpu.mojo"
 check-native-pcs-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pcs_native_gpu.mojo"
 check-native-kpca-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/kpca_native_cpu.mojo"
