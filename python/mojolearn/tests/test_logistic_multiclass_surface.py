@@ -2,9 +2,9 @@
 """LogisticRegression public packaging, writable state and archive seams.
 
 Original fit workloads remain here to check Python classes, dtypes and shapes.
-Numerical argmax/probability/accuracy oracles and the exact64-row zero-state
-first-maximum tie execute directly through Mojo QN requests in checks/native_tests/logistic_numeric_{cpu,gpu}_suite.mojo. This
-module does not claim numerical or cross-vendor verification by itself.
+Numerical argmax/probability/accuracy oracles and the exact 64-row zero-state
+first-maximum tie execute directly through Mojo QN requests in
+checks/native_tests/logistic_numeric_{cpu,gpu}_suite.mojo. This module does not claim numerical or cross-vendor verification by itself.
 """
 import os
 import sys
@@ -12,7 +12,7 @@ import tempfile
 
 import numpy as np
 
-from mojolearn import Array, linear_model
+from mojolearn import linear_model
 from mojolearn.linear_model import LogisticRegression
 
 
