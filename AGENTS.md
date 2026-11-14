@@ -513,6 +513,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 **PERMANENT RECORD (Andrew, 2026-10-28): `docs/TOMBSTONES.md` entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED to `docs/TOMBSTONES.md`.**
 
+**Protected on disk too (Andrew, 2026-11-14): `experiments/removed/`, `docs/TOMBSTONES.md` and `docs/apple-fast/EXPERIMENTS.md` are never pruned, trimmed, moved out of the repo or excluded from a wheel-size, disk-space or dead-code cleanup, whatever their size; a cleanup lane lists them as kept. A decided A/B whose losing arm (or superseded old path) is still in the code is an owed deletion: the deletion carries the four tombstone parts above.**
+
 Andrew, 2026-10-10: a deleted experiment is documented both inline and centrally. The deletion commit (or its lane) leaves all four:
 
 1. **Inline tombstone** at every deletion site: `# TOMBSTONE: MOJOLEARN_<DEFINE> (<verdict>) deleted <date> by <sha>; code recoverable at <sha>^.` plus a `# Restore:` line naming the patch.
