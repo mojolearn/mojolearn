@@ -220,6 +220,9 @@ def svc_objective_case(driver: LinearSvcDriver, x: List[Float32], yr: List[Float
         correct += hits[i]
     require(wrong == 0, "LinearSVC labels are not the sign of the decision")
     require(Float64(correct) / Float64(n) > 0.9, "LinearSVC accuracy " + String(correct) + "/400 is not above 0.9")
+    # The binary query reads fit.w through its address; Mojo frees a local at its last named use (that
+    # address argument), so without this the labels came from freed coefficients, not the fitted ones.
+    _ = fit^
     _ = codes^
     _ = scores^
     _ = labels^
@@ -263,6 +266,9 @@ def svr_objective_case(driver: LinearSvcDriver, x: List[Float32], yr: List[Float
     host_parallelize(squares, n)
     var r2 = 1.0 - total(residuals) / total(deviations)
     require(r2 > 0.9, "LinearSVR R^2 " + String(r2) + " is not above 0.9")
+    # The decision query reads fit[0] through its address (its last named use): keep the fitted
+    # coefficients alive past it, or the predictions come from freed heap (R^2 -0.68).
+    _ = fit^
     _ = predictions^
     _ = deviations^
     _ = residuals^
