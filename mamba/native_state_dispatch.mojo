@@ -16,10 +16,13 @@ def mamba_state_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64])
     # Lane x5-mamba-on-executor: every family is the block step op on the
     # cached block program (weights kept on the device while their bytes are
     # unchanged), not a per-call body that re-uploaded every weight.
+    # `stateless_forward` (hot-path audit 2026-11-13): only the Mamba-1/2
+    # forward ops read all-zero state addresses as the stateless forward
+    # (fresh, discarded); decode steps and Mamba-3 keep the per-call rule.
     if op < 2:
-        return mamba_block_call_abi(1, a, b, l, dm, 0, 0, Float32(0), Float32(0))
+        return mamba_block_call_abi(1, a, b, l, dm, 0, 0, Float32(0), Float32(0), False, not step)
     if op < 4:
-        return mamba_block_call_abi(2, a, b, l, dm, p[tail], 0, Float32(f[0]), Float32(f[1]))
+        return mamba_block_call_abi(2, a, b, l, dm, p[tail], 0, Float32(f[0]), Float32(f[1]), False, not step)
     if op < 6:
         return mamba_block_call_abi(3, a, b, l, dm, p[tail], p[tail + 1], Float32(0), Float32(0))
     raise Error("Mamba native ABI: unknown operation")

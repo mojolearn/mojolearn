@@ -232,7 +232,7 @@ def _new_stateless(blk: _Block) raises -> List[List[Float32]]:
         a.append(Int(y.unsafe_ptr()))
         if kind == 2:
             a.append(Int(rep.unsafe_ptr()))
-        _ = mamba_block_call_abi(kind, a, blk.b, ls[r], blk.dm, 0, 0, dt_lo, dt_hi)
+        _ = mamba_block_call_abi(kind, a, blk.b, ls[r], blk.dm, 0, 0, dt_lo, dt_hi, False, True)
         out.append(y^)
         if kind == 2:
             out.append(rep^)

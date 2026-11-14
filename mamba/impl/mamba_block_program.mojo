@@ -718,7 +718,8 @@ def _all_zero(addrs: List[Int]) -> Bool:
 
 
 def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int,
-                         dt_lo: Float32, dt_hi: Float32, fresh: Bool = False) raises -> Int:
+                         dt_lo: Float32, dt_hi: Float32, fresh: Bool = False,
+                         stateless_forward: Bool = False) raises -> Int:
     """`mamba_block_call` over the per-call ABI's one address list (the
     order every `mamba{1,2,3}_forward` / `_decode_step` docstring gives):
 
@@ -731,7 +732,11 @@ def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: I
     Returns the post-call buf_len (Mamba-2/3; 0 for Mamba-1). `fresh` runs
     from a zero state and leaves the state slots unread and unwritten (the
     discard-state prefill); so does a call whose state addresses are all 0
-    (the stateless public forward; its carried integers must be 0)."""
+    when `stateless_forward` is set (the stateless public forward; its
+    carried integers must be 0). `stateless_forward` is set by the dispatcher
+    for the Mamba-1/2 FORWARD ops only; every other op and kind keeps the
+    documented per-call rule (a 0 state address keeps that piece of the
+    cached program's device state)."""
     var code = mamba_step_code(kind)
     var nw = 10 if kind == 1 else 9
     var ns = 2 if kind == 1 else (4 if kind == 2 else 10)
@@ -766,7 +771,11 @@ def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: I
         # (one fill) and nothing read back, where the door used to allocate a
         # host zero state per call that this call uploaded and downloaded.
         # The carried integers must be zero then (a fresh sequence).
-        if not discard and _all_zero(state):
+        # Hot-path audit 2026-11-13 (FIX mamba_block_program.mojo:769): the
+        # address-pattern meaning is limited to its one user, the Mamba-1/2
+        # forward ops (`stateless_forward`, mamba/native_state_dispatch.mojo);
+        # decode steps and Mamba-3 keep the old rule.
+        if stateless_forward and (kind == 1 or kind == 2) and not discard and _all_zero(state):
             for i in range(len(words)):  # small-loop(at most two carried integers): refusal, no data
                 if words[i] != 0:
                     raise Error("mamba" + String(kind) + ": a stateless call (every state address 0) starts a"
