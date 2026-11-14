@@ -136,6 +136,14 @@
   "mamba3-forward-zero-fill": {
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
    "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
+  },
+  "rf-device-loop-early-exit": {
+   "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT",
+   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo IDN_RF_DEVICE_LOOP_EARLY_EXIT): B = the device level loop that reads each sampling round's 4-byte retry count back and stops the batch's rounds at the first empty one (one drain per round run); A = the host-queue level loop (default)"
+  },
+  "et-device-loop-early-exit": {
+   "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT",
+   "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo ET_DEVICE_LOOP_EARLY_EXIT): B = the depth-wise device level loop that reads each batch's 4-byte rescue count back and skips an empty DEVIATION 205 rescue; A = the host-queue merged-frontier loop (default)"
   }
  },
  "rows": [
@@ -941,6 +949,30 @@
     "mamba3-forward-zero-fill"
    ],
    "decides": "keep the unfilled outputs (A) unless the zero-filled arrays (B) are at least as fast on the NVIDIA and AMD average; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba3-forward 3.95 -> 6.75 ms; same kernels, digests must not move in either arm"
+  },
+  {
+   "id": "rf-device-loop-early-exit",
+   "source": "fix-rf-et-device-loop-early-exit (the device loop that early-exits like the host queue; restore-rf-device-loop's cause: every sampling round enqueued per batch)",
+   "kind": "ab",
+   "lane": "rf",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "rf-device-loop-early-exit"
+   ],
+   "decides": "promote the early-exit device loop (B) over the host-queue loop (A) only if B is at least as fast on the NVIDIA+AMD average of istella and taxi fit; read with restore-rf-device-loop (plain device loop) in the same build; output hashes 46ef5c27f84cf904 / a660fbfbad84ade8 must not move in any arm"
+  },
+  {
+   "id": "et-device-loop-early-exit",
+   "source": "fix-rf-et-device-loop-early-exit (the device loop that skips an empty rescue like the host queue; restore-et-device-loop's cause: the rescue enqueued every batch)",
+   "kind": "ab",
+   "lane": "et",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "et-device-loop-early-exit"
+   ],
+   "decides": "promote the early-exit device loop (B) over the host-queue loop (A) only if B is at least as fast on the NVIDIA+AMD average of istella and taxi fit; read with restore-et-device-loop (plain device loop) in the same build; ET output hashes must not move in any arm"
   }
  ]
 }
