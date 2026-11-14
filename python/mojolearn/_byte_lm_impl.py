@@ -65,47 +65,25 @@ class _LogitsPool:
     touch), the native call being ~19 ms. A store comes back here when the
     caller drops the Array it was handed, so no two live arrays ever share
     memory; the next call takes it instead of allocating. At most `keep`
-    stores of the current size are held; `close()` empties it."""
-
-    def __init__(self, keep=2):
-        self.keep = keep
-        self.free = []
-
-    def take(self, size):
-        for i in range(len(self.free)):  # glue: walks the small free logits pool
-            if len(self.free[i]) == size:
-                return self.free.pop(i)
-        return None
-
-    def give(self, store):
-        if store is None:
-            return
-        if any(st is store for st in self.free):  # glue: walks the small free logits pool
-            return
-        if len(self.free) >= self.keep:
-            self.free.pop(0)
-        self.free.append(store)
+    stores of the current size are held; `close()` empties it. The pool is
+    native storage: `byte_lm_trainer_native_door.mojo` creates it (`keep`,
+    `free`), takes and gives stores; its Python `take`/`give` twins are gone
+    (lane py-lm-neural, 2026-11-14)."""
 
 
 class _PooledLogits(_Array):
     """An owned logits Array whose storage returns to `_pool` when the
     last reference to the Array goes away. Every value in it is written by
-    the native logits download that produced it."""
+    the native logits download that produced it. Its `__del__` is the
+    native finalizer installed by `_connect_trainer`."""
 
-    def __del__(self):
-        pool = getattr(self, "_pool", None)
-        store = getattr(self, "_store", None)
-        if pool is not None and store is not None:
-            pool.give(store)
+
 from pathlib import Path
-import tempfile
 import threading
 
 from . import _backend
 from ._arrays import _addr, _addr_ro
-from ._buffer import addr, addr_ro, empty, frombytes, full
-from ._bufcheck import flat_view, le_bytes
-from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
+from ._byte_lm_config import ByteLanguageModelConfig, state_shape
 from . import _byte_lm_checkpoint
 from . import _ragged
 
@@ -127,29 +105,6 @@ def _canonical(value):
                       ensure_ascii=True, allow_nan=False).encode('ascii')
 
 
-def _require_schedule_vocabulary(descriptor, shape):
-    """The ONE field of `data_schedule` that is checked (2026-09-18,
-    lane/tokenized-corpus): a schedule that names its vocabulary
-    (`mojolearn.lm_corpus.TokenBatches.data_schedule`) must name one of this
-    model's size, or the ids index rows of a different table. A schedule
-    with no `vocabulary` key (every byte run) is not affected."""
-    v = descriptor.get('vocabulary')
-    if v is None:
-        return
-    if not isinstance(v, dict) or type(v.get('n_vocab')) is not int or type(v.get('sha256')) is not str:
-        raise ValueError("SmallByteLanguageModelTrainer data_schedule['vocabulary'] must carry "
-                         "an int n_vocab and a str sha256 (mojolearn.lm_corpus)")
-    if v['n_vocab'] != shape.vocab_size:
-        raise ValueError(f"vocabulary mismatch: data_schedule names vocabulary {v['sha256']} with n_vocab "
-                         f"{v['n_vocab']}, and this model's vocab_size is {shape.vocab_size}")
-
-
-def _is_bool(value):
-    # `bool` and NumPy's `bool_` (not a `bool` subclass), judged by name so
-    # that numpy need not be importable here.
-    return isinstance(value, bool) or type(value).__name__ == 'bool_'
-
-
 #: The tiers the byte LM ships and the code its binding reads back
 #: (`byte_lm_numeric_mode`). IDENTICAL is the default; FAST (afn-lm,
 #: 2026-10-03) runs the same device step with the pins on the free schedule
@@ -157,57 +112,17 @@ def _is_bool(value):
 _NATIVE_MODE_CODE = {'identical': 1, 'fast': 0}
 
 
-def _mode():
-    """The process-selected tier ('identical' or 'fast'), or raise."""
-    mode = _backend.default_mode()
-    if mode not in _NATIVE_MODE_CODE or _backend.numeric_mode() != mode:
-        raise RuntimeError('SmallByteLanguageModelTrainer requires process-selected IDENTICAL or FAST mode')
-    return mode
-
-
 def _load(shape=None):
-    shape = require_shape(shape)
-    mode = _mode()
-    binding = _backend.binding(_EXTENSION, mode)
-    # On a process that loaded no GPU set, `_backend.binding` serves the
-    # single-device entries from the CPU byte LM binding
-    # (_byte_lm_trainer_host, lane/cpu-training-embedding-ivf, 2026-09-15),
-    # which reads back "cpu"; a box with a GPU never admits that vendor.
-    # A CPU-only install admits only the "cpu" vendor and a GPU install only
-    # the GPU vendors; the install decides, so this module never imports the
-    # CPU trainer adapter (cpu-gpu-cleanup n-pyneural).
-    vendors = ('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal')
-    # The binding declares its own arithmetic suffix (every -D switch tag that
-    # ByteConfig.profile() appends: neural, CE token-tree, GEMM leaf,
-    # attention; training/byte_lm_config.byte_lm_arithmetic_suffix), so an
-    # A/B arm build loads with its arm tags; base PROFILE (shape + version),
-    # numeric mode and vendor still refuse a real mismatch. Before
-    # 2026-10-10 the suffix carried only the neural part and grid arms
-    # attn_softmax / ce_token_fold were refused here (bytelm-profile-harness).
-    # The device image no longer registers `byte_lm_arithmetic_suffix`
-    # (deleted by 1bdaa5e00f / 6890e9658f; the trainer door reads it from the
-    # trainer table's glue entry). The default profile is PROFILE followed by
-    # that same suffix, so the suffix is the profile's tail past PROFILE.
-    profile = str(binding.byte_lm_profile())
-    arithmetic_suffix = profile[len(PROFILE):]
-    if (int(binding.byte_lm_numeric_mode()) != _NATIVE_MODE_CODE[mode]
-            or not profile.startswith(PROFILE)
-            or str(binding.byte_lm_vendor()) not in vendors):
-        raise RuntimeError('Byte-LM requires the exact native profile, the selected IDENTICAL/FAST mode and CUDA/HIP/Metal vendor '
-                           '(or, on a CPU-only install, the CPU byte LM binding)')
-    if not callable(getattr(binding, 'byte_lm_run', None)):
-        raise ImportError('Byte-LM binding is missing byte_lm_run; rebuild bindings/build_byte_lm.sh')
-    if shape.profile != PROFILE:
-        if not callable(getattr(binding, 'byte_lm_run_configured', None)) or not callable(getattr(binding, 'byte_lm_config_profile', None)):
-            raise ImportError('Byte-LM binding lacks runtime shapes; rebuild bindings/build_byte_lm.sh')
-        if str(binding.byte_lm_config_profile(list(shape.native_shape))) != shape.profile + arithmetic_suffix:
-            raise RuntimeError('Byte-LM native runtime shape/profile mismatch')
-    return binding
+    """The byte LM binding of the process tier for `shape` (None: the
+    regression fixture), admitted natively: the profile, mode, vendor and
+    runtime-shape checks run in `byte_lm_trainer_native_door.mojo`
+    (`_load_snapshot`, operation "binding"). Tools and tests read it."""
+    return _LM_TRAINER(None, "binding", (shape,), _LM_TRAINER_CONTEXT)
 
 
 def _runtime_profile(shape, mode=None):
     """Bind shape metadata to the arithmetic of the actual loaded binary."""
-    binding = _backend.binding(_EXTENSION, mode or _mode())
+    binding = _backend.binding(_EXTENSION, mode) if mode else _load()
     # The suffix is the default profile's tail past PROFILE (see `_load`).
     return shape.profile + str(binding.byte_lm_profile())[len(PROFILE):]
 
@@ -216,7 +131,7 @@ def _sha256_hex(data):
     """The SHA-256 of the bytes `data` as 64 hex digits, computed by the Mojo
     SHA-256 (core/sha256.mojo) behind the loaded byte LM binding's
     `sha256_hex`: the same digest as before, over the same bytes."""
-    return str(_backend.binding(_EXTENSION, _mode()).sha256_hex(data))
+    return str(_backend.binding(_EXTENSION, _backend.default_mode()).sha256_hex(data))
 
 
 # The ids admission, the greedy pick, the state and schedule admission and
@@ -531,29 +446,6 @@ class SmallByteLanguageModelTrainer:
             report it.
         """
         return _LM_TRAINER(self, "attention_stage_report", (), _LM_TRAINER_CONTEXT)
-
-    def _export_state_impl(self, release=False):
-        """Lock held, session open. ONE native call
-        (`byte_lm_trainer_export_state`, training/byte_lm_session_ops.mojo
-        `byte_owner_export_state`): the device state is re-scanned,
-        downloaded into fresh owned arrays and checked against the committed
-        step and flags; with `release` the session is closed after it.
-        Returns the state dict holding those arrays."""
-        shape = state_shape(self._state)
-        binding = self._session_binding
-        out_p = empty((shape.n_total,), '<f4')
-        out_m = empty((shape.n_total,), '<f4')
-        out_v = empty((shape.n_total,), '<f4')
-        out_flags = empty((shape.n_tensors,), '<i4')
-        completed = self._state['completed_steps']
-        addresses = [addr_ro(self._state['flags'], name='flags'), addr(out_p, name='out_p'),
-                     addr(out_m, name='out_m'), addr(out_v, name='out_v'), addr(out_flags, name='out_flags')]
-        returned = binding.byte_lm_trainer_export_state(self._native_session, addresses,
-                                                        list(shape.native_shape), completed, bool(release))
-        if _is_bool(returned) or not isinstance(returned, int) or returned != completed:
-            raise RuntimeError('Byte-LM state export returned a different completed step')
-        self._last_export_step = completed
-        return dict(self._state, parameters=out_p, m=out_m, v=out_v, flags=out_flags)
 
     def close(self):
         """Copy the device state to the host and release the device.
