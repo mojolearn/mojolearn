@@ -65,7 +65,7 @@ def _mix(seed: Int, index: Int) -> UInt64:
 
 def uniform(seed: Int, index: Int, lo: Float64, hi: Float64) -> Float32:
     """A float32 in [lo, hi) from the 53 high bits of SplitMix64(seed, index)."""
-    var unit = Float64(_mix(seed, index) >> 11) * (1.0 / 9007199254740992.0)
+    var unit = (_mix(seed, index) >> 11).cast[DType.float64]() * (1.0 / 9007199254740992.0)
     return Float32(lo + (hi - lo) * unit)
 
 
