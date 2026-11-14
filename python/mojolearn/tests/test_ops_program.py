@@ -312,6 +312,11 @@ def test_program_run_direct_route_boundary():
     full = prog.run(X, dynamic_shapes=True)
     assert np.array_equal(_words(full), _words(eager))
     assert np.array_equal(_words(s.run(prog, X)), _words(eager))
+    # an inputs list (only a direct binding call passes one) takes the full
+    # route, which admits it with the same words (hot-path audit 2026-11-13:
+    # the direct route compares against the args tuple's own class)
+    listed = ops._PROGRAM_CALL(prog, "run", ([X], False, False, False))
+    assert np.array_equal(_words(listed), _words(eager))
     # a bare array where the inputs tuple belongs: the full route refuses it
     with pytest.raises(TypeError, match="native list or tuple"):
         ops._PROGRAM_CALL(prog, "run", (X, False, False, False))

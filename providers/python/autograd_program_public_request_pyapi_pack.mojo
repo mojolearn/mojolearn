@@ -37,18 +37,26 @@ from autograd.ops_api import ops_session_registry_token
 # (owed row restore-executor-program-run) runs the full route onto
 # program_execute_run, as before the restore lane. Same replay, same
 # kernels: no bit change.
-def _fixed_run_session[KIND: Int](session: PythonObject, args: PythonObject) raises -> Int:
+# Hot-path audit 2026-11-13 (BLOCK pack:47): the exact-type checks below
+# compare against type objects the caller already holds (`tuple_type` is the
+# class of the exact `args` tuple, `int_type` the class of the exact `_id`
+# integer), so no Python list or tuple is built per run to find them.
+# `Program.run(*arrays)` always passes a tuple; a list (only a direct
+# binding call can pass one) takes the full route, which admits it.
+def _fixed_run_session[KIND: Int](
+    session: PythonObject, args: PythonObject,
+    tuple_type: PythonObject, int_type: PythonObject,
+) raises -> Int:
     """The session handle when this Program.run can go straight to the
     fixed route in this image, else 0."""
     for i in range(1, 4):  # small-loop(3: native execution flags)
         if not program_numeric_scalar(args[i]) or Bool(py=args[i]):
             return 0
-    var arrays_type = py_type(args[0])
-    if arrays_type is not py_type(Python.tuple()) and arrays_type is not py_type(Python.list()):
+    if py_type(args[0]) is not tuple_type:
         return 0
     var session_fields = ops_session_fields(session)
     var sid = session_fields["_id"]
-    if sid is None or py_type(sid) is not py_type(PythonObject(0)):
+    if sid is None or py_type(sid) is not int_type:
         return 0
     var lifetime = session_fields["_lifetime"]
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
@@ -65,17 +73,19 @@ def _fixed_run_session[KIND: Int](session: PythonObject, args: PythonObject) rai
 def ops_program_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     owner: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
-    if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not py_type(Python.tuple()):
+    var tuple_type = py_type(Python.tuple())
+    if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not tuple_type:
         raise Error("TypeError: Program requires an exact operation string and argument tuple")
     var fields = program_owner_fields(owner)
     var pid = fields["_id"]
-    if pid is not None and py_type(pid) is not py_type(PythonObject(0)):
+    var int_type = py_type(PythonObject(0))
+    if pid is not None and py_type(pid) is not int_type:
         raise Error("TypeError: Program handle requires an exact native integer")
     comptime if not PROGRAM_RUN_ENTRY:
         if pid is not None and len(args) == 4 and String(py=operation) == "run":
             var program_id = Int(py=pid)
             var session = fields["_s"]
-            var sid = _fixed_run_session[KIND](session, args)
+            var sid = _fixed_run_session[KIND](session, args, tuple_type, int_type)
             if sid != 0 and program_id >= 1:
                 var answer = _program_run_fixed[E, KIND](sid, program_id, sid, args[0])
                 _ = session  # the Session owner stays pinned through the run
