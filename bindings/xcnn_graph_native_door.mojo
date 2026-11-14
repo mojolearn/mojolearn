@@ -743,7 +743,8 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     else:
         var calls = GraphDoorCalls(entries, context)
         var edges = _edges_run(calls, edge_index, n)
-        g = _graph_pack(calls, graph_views_run(calls, edges.src, edges.dst, n, edges.count))
+        var views = graph_views_run(calls, edges.src, edges.dst, n, edges.count)
+        g = _graph_pack(calls, views)
         py_setitem(fields, "_gcache", Python.tuple(key, g))
     _graph_admit(g, context)
     if _sage_res_form(fields, entries):
