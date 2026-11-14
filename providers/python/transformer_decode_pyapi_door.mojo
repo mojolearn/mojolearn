@@ -9,7 +9,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
 from std.memory import unsafe_memcpy
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains, py_fields
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_address, py_ints
 from bindings.causal_lm_construct_door import _model_shape
 from std.sys.compile import is_defined
@@ -655,6 +655,67 @@ def _transformer_decode_unchanged(hobj: PythonObject) raises -> Bool:
     return content_same(h[].tail_content)
 
 
+def _transformer_decode_admitted(session: PythonObject) raises -> PythonObject:
+    # Default arm (TRANSFORMER_DECODE_PER_TOKEN_ADMISSION off): the session's
+    # handle when a step may skip the per-token admission, else None (the
+    # full path below runs and raises what it raised before). Two words
+    # decide it: the handle holds its registry session (word and lease taken
+    # at init) and the session's `_state` is the state object admitted at
+    # init. The session's exact class was checked by the caller; its
+    # instance dictionary is read natively (`py_fields`, no attribute hook).
+    var fields = py_fields(session)
+    var hobj = py_get(fields, "_handle")
+    if hobj is None:
+        return PythonObject(None)
+    var state = py_get(fields, "_state")
+    var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    if not h[].open or h[].word == 0 or h[].pin == 0 or state is not h[].state:
+        return PythonObject(None)
+    return hobj
+
+
+def _transformer_decode_run_admitted(hobj: PythonObject, input: PythonObject, step: Bool, decode: Bool, context: PythonObject) raises -> PythonObject:
+    # The admitted per-token path (0.8.55 shape, _transformer_impl.py at
+    # 0e4de0f46e:1788-1813): x admitted (the same admit_block_f32 BLOCK_READ
+    # refusals), one y Array, x and y addresses read from the admitted
+    # Arrays (both C-order, held below past the call), cached_tokens read
+    # from and written to the state's fields, one native call on the pinned
+    # session (GIL released): upload, llama_decoder_layer_forward, download,
+    # one wait. Nothing else per token.
+    var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    var width = h[].width
+    var rows = h[].batch
+    var batch = 0
+    var length = 0
+    # A kept map never outlives a GIL window: cleared before this admission.
+    h[].mods.released()
+    var x = _neural_input_rows(h[].mods, input, width, step, context, batch, length)
+    if batch != rows:
+        raise Error("TransformerDecodeSession: input rows differ from the state")
+    var y = generation_array([batch, length, width])
+    var px = Int(py=x._addr)
+    var py = Int(py=y._addr)
+    h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    var live = h[].live_state
+    var int_class = h[].int_class
+    var entry = h[].entry
+    var pin = h[].pin
+    var word = py_get(live, "cached_tokens")
+    var word_class = py_type(word)
+    if Int(word_class._obj_ptr) != int_class:
+        raise Error("TypeError: TransformerState cached_tokens requires an ordinary int")
+    # The resident session refuses a word that differs from its cache.
+    var cached = Int(py=word)
+    var kind = CAUSAL_DECODE_PINNED_RUN if decode else (CAUSAL_DECODE_PINNED_STEP if step else CAUSAL_DECODE_PINNED_FORWARD)
+    cached = _transformer_decode_native_run(entry, kind, px, py, pin, length, cached)
+    py_setitem(live, "cached_tokens", PythonObject(cached))
+    _ = x^
+    _ = word_class^
+    _ = word^
+    _ = hobj
+    return y
+
+
 def transformer_decode_init(session: PythonObject, block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     var values = _transformer_decode_fields(session, context)
@@ -685,6 +746,9 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
     var pieces: List[Int] = [keys.address, vals.address, words[6]]
     var handle = TransformerDecodeHandle(binding, block, state)
     _transformer_decode_keep_entries(handle)
+    var int_class = py_type(PythonObject(0))
+    handle.int_class = Int(int_class._obj_ptr)
+    _ = int_class^
     handle.configuration = _transformer_configuration(fields)
     handle.state_shape = _transformer_decode_shape(slots)
     var cached = Int(py=slots["cached_tokens"])
@@ -766,6 +830,10 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
 def transformer_decode_run(session: PythonObject, input: PythonObject, step: Bool, decode: Bool, context: PythonObject) raises -> PythonObject:
     # `decode` (D2): x is (B, N, d_model) and the N tokens run as N steps in
     # one call; `step` is the one-token case, neither is a forward of L tokens.
+    comptime if not TRANSFORMER_DECODE_PER_TOKEN_ADMISSION and not TRANSFORMER_DECODE_PER_TOKEN_DOOR:
+        var admitted = _transformer_decode_admitted(session)
+        if admitted is not None:
+            return _transformer_decode_run_admitted(admitted, input, step, decode, context)
     var hobj = _transformer_decode_owner(session, context)
     var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     if not h[].open:
