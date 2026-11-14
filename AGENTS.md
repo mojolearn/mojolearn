@@ -8,35 +8,10 @@ imports it and adds only what is specific to Claude sessions.
   campaigns are kept verbatim in [docs/rules/RULES_HISTORY.md](docs/rules/RULES_HISTORY.md); it is history, not rules.
   How this file was consolidated: [docs/rules/RULES_CONSOLIDATION_2026-11-09.md](docs/rules/RULES_CONSOLIDATION_2026-11-09.md).
 
-## The name is Mojolearn, with a capital M (Andrew, 2026-11-02)
+The file is in seven parts: hard rules; the product (what Mojolearn is and never trades away); measurement; releases;
+how we work (lanes, compiles, boxes, logs, experiments); Mojo rules; public docs.
 
-- In prose (docs, docstrings, README, site, paper, emails, release notes, commit messages and replies) write
-  **Mojolearn**: capital M, the rest lower case. Never "mojolearn", "MojoLearn" or "MOJOLEARN" as the name.
-- Code stays lower case: the package, module and command names (`pip install mojolearn`, `import mojolearn`,
-  `python -m mojolearn verify`), paths, URLs and domains (mojolearn.org). Put them in backticks in prose.
-
-## The verify command is protected (Andrew, 2026-11-11)
-
-`python -m mojolearn verify` and everything it needs (the verification modules shipped in the wheel, their fixtures,
-records, ledger and the commands they run) is kept working at all times. Preserving verify trumps every other rule
-in this file: no Python removal, boundary migration, dead-code deletion, wheel slimming, test migration, refactor or
-cleanup may remove, move out of the wheel, weaken or break any part of it. Verification tooling is a testing tool,
-not product execution ("No Python in the runtime"), so its Python is never a violation of that rule. A change that
-touches anything verify imports says so in its report and states how verify was exercised afterwards.
-
-## No refactor adds cost on a hot path (Andrew, 2026-11-11)
-
-A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
-on the count it lowers. It never adds, anywhere a loop or a repeated call can reach: a slot or name lookup that the
-old code resolved once; a lock held where the old code released it (or released where the old code read Python
-objects); a heap allocation, string build or struct copy per call; a copy of a buffer the old path passed by
-pointer; a probe, refusal check or publication done twice; a default-route change; or a second path beside the old
-one. Resolve once at import or construction, call through a pointer, pass buffers by view. Every brief for such a
-change carries this rule and the lane's report lists, per converted site, the loop it sits in and what the old code
-did there. An orchestrator audits every wave against these patterns before the integration compile and fixes what it
-finds in the same round; a wave without that audit does not merge.
-
-## Hard rules (Andrew)
+## 1. Hard rules (Andrew)
 
 Copied verbatim, with their dates, from Andrew's own rules so that every agent has them. They override anything
 weaker elsewhere. On a rented box the core count is the allocation (affinity or cgroup limits), not the host's
@@ -95,7 +70,16 @@ decision is already known elsewhere, list them with their cost, and open work to
 ones. Pricing a removal and not doing it is a defect; each priced removal is implemented or
 retired with a reason within two weeks. Applies to hardware, firmware and software alike.
 
-## Identity and bits
+## 2. The product
+
+### The name is Mojolearn, with a capital M (Andrew, 2026-11-02)
+
+- In prose (docs, docstrings, README, site, paper, emails, release notes, commit messages and replies) write
+  **Mojolearn**: capital M, the rest lower case. Never "mojolearn", "MojoLearn" or "MOJOLEARN" as the name.
+- Code stays lower case: the package, module and command names (`pip install mojolearn`, `import mojolearn`,
+  `python -m mojolearn verify`), paths, URLs and domains (mojolearn.org). Put them in backticks in prose.
+
+### Identity and bits
 
 - **The contract (Andrew, 2026-10-13).** In `identical` mode the same bits come out on Apple, NVIDIA and AMD GPUs
   within one version. Identity is decided by the output hash each run already stores.
@@ -120,7 +104,109 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   mode values. Apple `identical` stays in the three-vendor contract. The
   current `fast` implementation is not a baseline for the cost of identity. The paper covers `identical` only.
 
-## Release order
+### The GPU path
+
+- The GPU path is GPU only and parallel (Andrew, 2026-10-02). No host steps inside a GPU fit, transform or predict,
+  and no serial one-thread, one-block or per-sample default. Never substitute a CPU route for a slow GPU kernel.
+- Host loops on the GPU path: only driver loops over model structure, tagged `# driver-loop: over <what>`; never
+  over rows, elements or a downloaded buffer (`docs/plans/GPU_PATH_HOST_LOOPS.md`, Andrew, 2026-10-17).
+- When a parallel kernel needs a different fold order, change the order on every vendor and in the host column
+  together. Never keep a serial chain to preserve old bits.
+
+### No Python in the runtime
+
+- **The rule (Andrew, 2026-10-06, restated 2026-10-19).** The only job of the Python package is to connect users to
+  the compiled Mojo through PyPI. A public method is one binding call that hands over buffers and returns the
+  result. Validation, fitted-state checks, argument and data preparation, binding selection, computation, training
+  loops, batching, backward, optimizers, workers, synchronization, stopping decisions and output processing run in
+  Mojo, in every mode, on every vendor. No arithmetic on data, no loops or comprehensions over values, no NumPy
+  math in Python, not even for a handful of values. A missing value is added to the Mojo kernel, never patched in
+  Python. A native call surrounded by Python work is an incomplete migration.
+- **No calls back into Python (Andrew, 2026-10-20).** The rule is transitive: no Python functions, methods,
+  callbacks, property or descriptor hooks, input protocols, custom trainers, schedules, batch suppliers or step
+  hooks during a product operation. Holding a PythonObject in a Mojo struct does not compile its methods. Refuse
+  unsupported callback or protocol objects before invoking them, with a clear native alternative.
+- **Exported graph boundary (Andrew, 2026-10-27).** Never execute a user's Python `forward`, exporter or
+  serialization callback inside product execution; the API may require an already exported graph.
+- **Python objects only at the public boundary (Andrew, 2026-11-10).** Python objects, Python library imports and
+  CPython interaction belong only in the actual UNPACK/PACK functions of each public operation. RUN uses typed
+  Mojo values for requests, options, dimensions, model and optimizer state, buffers and results, and native calls
+  between compiled modules. A Mojo wrapper around a PythonObject is not a migration. Preserve the public API and
+  borrowed-buffer lifetimes through explicit native ownership; do not hide Python work in provider directories.
+  Direct C-API calls within UNPACK/PACK may still invoke Python hooks: retain exact-type admission, error
+  propagation and GIL safety, and hoist invariant admission. The 2026-10-28 permission for native C-API calls does
+  not authorize Python objects or Python support inside RUN.
+- **scikit-learn tags (owner, 2026-10-24).** `__sklearn_tags__` and helpers used solely to build its tag metadata
+  may run in Python. Native operations must not call back into tag handling. Audit it separately from runtime
+  violations. No other metadata protocol is exempt.
+- **Python fallbacks for a Mojo or Modular bug are a frozen list (Andrew, 2026-11-09).**
+  `python/mojolearn/_runtime_fallbacks.py` is the COMPLETE list of authorized fallbacks (empty today).
+  Nothing is added without Andrew's explicit word. An agent that believes it has found a Mojo bug stops, writes
+  the smallest reproducer and the ask for Modular, and reports; it does not write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
+  uses an entry is recorded in release evidence and is never called Python-free.
+- **Move native correctness tests to Mojo (Andrew, 2026-11-10).** Kernel, numerical and native state/lifetime tests
+  belong in Mojo. Retain Python tests for the actual Python API boundary and framework interoperability, including
+  buffer admission, exceptions, returned objects and refusal of callbacks. Python test/benchmark controllers and
+  boundary fixtures or independent external oracles are testing tools, never product execution or a fallback.
+  Keep timing boundaries honest. Installing a Python package is not a runtime repair.
+- Preserve supported interfaces through native implementation; do not remove a feature to claim compliance.
+  Measure the gain; do not assume removing Python makes every workload faster.
+- Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`
+  tags, are evidence to review, never exemptions; an empty baseline is not proof. Native execution and device
+  behavior establish compliance; source-graph reachability does not distinguish admission from GPU computation.
+- **The Python source guards are retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard,
+  shell-loop counter, GPU-route source-graph fence, runtime-import counter and public-runtime source-count gate
+  from push and CI. Do not restore them under another name
+  or replace them with source-count gates. They excluded binding dependence or rejected required UNPACK/PACK
+  work, including native host input conversion and reading mutable admitted module metadata.
+  Their counts never proved a Python-free operation. Complete the typed Mojo boundary migration and retain
+  actual runtime correctness checks.
+
+#### Wait for Mojo and Modular
+
+If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support (decided
+2026-10-04; the parked AMD portable prototype is on `lane/amd-portable`). Do not hand-rewrite compiler output, patch
+toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. The authorized narrow
+exceptions are:
+
+- (Owner, 2026-10-25) The native CPython dictionary API for instance-field lookup in `get_params` and public
+  attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
+- (Owner, 2026-11-10) Replace the IPCA tests' nested native buffer list with six named Mojo buffer fields to avoid
+  the confirmed compiler crash. This exception covers test storage only: preserve the numerical implementation,
+  input/reference bytes, assertions, tolerances and kernel calls. Retain the original standalone reproducer and
+  upstream report; it does not authorize other compiler workarounds or Python fallbacks.
+
+#### Framework adapters are the same API in another format (Andrew, 2026-10-24)
+
+The Torch and MAX adapters are front-ends over the same compiled kernels and compute nothing of their own.
+
+- No identity lanes, verifier rows or sabotage arms for an adapter. If an adapter needs a value the kernels do not
+  provide, add it to the Mojo kernel.
+- An adapter is qualified by what is specific to it: its files build in every release leg, survive the wheel
+  audits, and load and run from the INSTALLED wheel on each vendor. That smoke is part of the release gate.
+- Adapter bugs are glue bugs; fix them in the adapter, never by changing kernel bits for one front-end.
+- Whole-model only. The per-operation surfaces removed on 2026-10-24 (`docs/TOMBSTONES.md`) must not come back.
+
+### The verify command is protected (Andrew, 2026-11-11)
+
+`python -m mojolearn verify` and everything it needs (the verification modules shipped in the wheel, their fixtures,
+records, ledger and the commands they run) is kept working at all times. Preserving verify trumps every other rule
+in this file: no Python removal, boundary migration, dead-code deletion, wheel slimming, test migration, refactor or
+cleanup may remove, move out of the wheel, weaken or break any part of it. Verification tooling is a testing tool,
+not product execution ("No Python in the runtime"), so its Python is never a violation of that rule. A change that
+touches anything verify imports says so in its report and states how verify was exercised afterwards.
+
+### No refactor adds cost on a hot path (Andrew, 2026-11-11)
+
+A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
+on the count it lowers. It never adds, anywhere a loop or a repeated call can reach: a slot or name lookup that the
+old code resolved once; a lock held where the old code released it (or released where the old code read Python
+objects); a heap allocation, string build or struct copy per call; a copy of a buffer the old path passed by
+pointer; a probe, refusal check or publication done twice; a default-route change; or a second path beside the old
+one. Resolve once at import or construction, call through a pointer, pass buffers by view. Every brief for such a
+change carries this rule and the lane's report lists, per converted site, the loop it sits in and what the old code
+did there. An orchestrator audits every wave against these patterns before the integration compile and fixes what it
+finds in the same round; a wave without that audit does not merge.
 
 ### A measured winner is never deleted on reasoning (Andrew, 2026-11-09)
 
@@ -138,94 +224,27 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   unchanged. This narrows "remove what a change made unnecessary": unnecessary
   means measured, not argued.
 
-## Fix everything before a release (Andrew, 2026-11-08)
-
-- We fix everything we can before a release. We do not release while there is more work to incorporate: known
-  regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
-- When to measure (Andrew, 2026-11-12): measure BEFORE the release only when the release's purpose is improving
-  speed; then time the measurement build on NVIDIA and AMD against the last release and the paper baseline, fix
-  every regression found, and measure again before freezing. Otherwise measure AFTER the release, on the
-  published PyPI wheel, and those numbers are what the boards, the paper and the site broadcast. A claim about
-  speed is only ever made from a published wheel's measurement.
-- Order: all code in, one compile, (measure, fix, measure again when the release is about speed), freeze, the one
-  cross-vendor verification, publish, then measure the published wheel.
-
-### Fix everything first, then one compile, then one measurement (Andrew, 2026-11-13: "fix fix fix")
-
-- A measurement is taken only when nothing known is left to fix. Before any box is rented or any GitHub build is
-  started for measurement, the orchestrator lists every open fix (FOLLOWUPS, lane reports, audit findings, owed
-  deletions) and either lands it in the same integration branch or writes, beside the list, why it cannot be
-  known without the measurement. A fix that lands within the hour after a measurement starts is evidence the
-  list was not read.
-- Work moves in waves: fix wave (every lane the findings call for, at once) -> one integration branch -> one
-  GitHub build -> one measurement on NVIDIA and AMD together -> read every flag -> the next fix wave. Never a
-  box run for one lane, one row or one family; never a second measurement of the same sha for rows that a later
-  sha changes. Between waves the boxes come down.
-- The only measurement that may run with known fixes outstanding is a discovery screen whose purpose is to find
-  unknown regressions (the full-board run against best-ever), and only when the outstanding fixes do not touch
-  the rows it is for; its result opens the next fix wave, not a release decision.
-- Owed A/B arms are built and timed with the wave's sha, never a sha behind it, unless the switch they decide is
-  untouched by the later sha (say so in the owed row).
-- A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
-  release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
-  measured clean (Andrew, 2026-11-09).
-
-### The pre-0.8.67 measurement campaign is NVIDIA only, small board first (Andrew, 2026-11-14)
-
-- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
-  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
-- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
-  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
-  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
-  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
-  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
-  at least as fast as 0.8.55 with quality equal.
-- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions.
-- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
-  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
-  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
-  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
-  lane at once on the integration branch, and no measurement is repeated for it alone.
-- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
-  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
-  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
-
-### Verify once, before the release, at the very end (Andrew, 2026-11-05)
-
-- Verification happens once, before the release: freeze the source, run one global verify of every lane on every
-  device from the built wheels, see the columns match, publish. Nothing is verified after a release.
-- No same-bits checks during development: no identity (ID) run per lane, per fix or per merge. A plan that would run
-  identity twice for one release is wrong: say so up front and fix the order or the tool.
-- A cross-vendor mismatch found by the verify is a bug to fix in code; then the affected lanes run again.
-- Identity runs once (`REPEATS=1`); a mismatch is never a reason to rerun unchanged code. One identity check per
-  release: the table admit. No release step re-fits or re-diffs identity after it (Andrew, 2026-10-10).
-- No re-verification of green work (Andrew, 2026-11-02): the gates install the exact wheel bytes and run the
-  records; nothing reinstalls those bytes from PyPI to verify again, a ledger waiver never triggers a rerun, and a
-  verdict is reused automatically for the same bytes.
-- Verification uses bounded correctness fixtures and focused installed-wheel, loader, dependency and adapter smokes
-  (2026-10-25). Do not promote a source check or a compile to runtime success, or extend a partial result to
-  untested paths or devices. NVIDIA PTX verification records the actual GPU, driver and the selected PTX route.
-
-### Reuse of old runs is opt-in (was: Reuse good old runs, automatically)
-
-- Reuse of old identity records is opt-in everywhere (Andrew, 2026-11-05, decided 2026-11-09): every release
-  records every lane on every device once, and a reused older record is accepted only when the operator passes the
-  explicit reuse flag (`tools/release.py --reuse-unchanged`). `tools/record_identity_column.sh` must default to a
-  full record with reuse behind a flag.
-- Cross-vendor agreement is always checked in full. A lane whose newest result is bad is fixed in code, then
-  recorded.
-- Andrew says when it is time to release (2026-11-09). No agent starts, schedules or proposes a release
-  date. 0.8.67 is not rushed: the fixes matter most. The Python-at-the-boundary rollout
-  (`docs/plans/PYTHON_AT_THE_BOUNDARY.md`: Python objects only in the unpack and pack files of each
-  public call, Mojo values everywhere else) is part of 0.8.67 and gates it.
-
-## Measurement and fairness
+## 3. Measurement
 
 - Our CPU is never raced or timed (Andrew, 2026-10-02). The CPU is for verification digests, CPU-only installs and
   inference. Race and measure tools default to our GPU arm only.
 - Opponents are scored once, stored, and run only by an explicit opponent job. No opponent re-score.
 - One scored run per arm, one seed (Andrew, 2026-10-03 and 2026-10-14): the harness may take one excluded warmup.
   `AB_MULTI_RUN=1` is the only override. Queue A/B lines with reps 1, rounds 1, pairs 1.
+
+### Times are compared only on the same box (Andrew, 2026-11-14)
+
+- A regression verdict compares two timings taken on the SAME machine in the SAME job: same host (host id, CPU model,
+  NUMA layout, PCIe link) and the same GPU. Times from different hosts are never compared, even when the GPU model is
+  the same: on 2026-11-14 two L40S hosts differed 1.2-2.2x on unchanged code and produced 56 false regression flags.
+- Every paper or full-board job therefore re-times OUR prior wheels (the paper baseline 0.8.55 and the last release,
+  installed from PyPI, our arms only) on the same box in the same job, and the compare's columns are those on-box
+  timings. A stored column from another run is reference only and carries the host it was taken on; it never makes a
+  REGRESSION or FASTER flag. Opponents are still never rerun: their stored cells keep their host and are shown as such.
+- The job records a host probe in `job/box.txt` (host id, CPU model, NUMA nodes, cgroup cores, host memcpy GB/s,
+  host-to-device GB/s pageable and pinned, PCIe generation and width under load) and the compare prints both
+  arms' probes beside the verdict. A verdict without the probe is not a verdict.
+- The measurement box is the NVIDIA L40S (RunPod) until Andrew says otherwise; AMD is the MI300X only.
 
 ### Measurement process (owner, 2026-10-05)
 
@@ -305,90 +324,90 @@ above or below a board row (rows, features, classes, k, vocabulary), or a board 
 stated in a comment. Removing such a rule may change bits: change all columns together. Each removal gets an A/B
 with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
 
-## The GPU path
+### The pre-0.8.67 measurement campaign is NVIDIA only, small board first (Andrew, 2026-11-14)
 
-- The GPU path is GPU only and parallel (Andrew, 2026-10-02). No host steps inside a GPU fit, transform or predict,
-  and no serial one-thread, one-block or per-sample default. Never substitute a CPU route for a slow GPU kernel.
-- Host loops on the GPU path: only driver loops over model structure, tagged `# driver-loop: over <what>`; never
-  over rows, elements or a downloaded buffer (`docs/plans/GPU_PATH_HOST_LOOPS.md`, Andrew, 2026-10-17).
-- When a parallel kernel needs a different fold order, change the order on every vendor and in the host column
-  together. Never keep a serial chain to preserve old bits.
+- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
+  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
+- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
+  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
+  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
+  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
+  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
+  at least as fast as 0.8.55 with quality equal.
+- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions.
+- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
+  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
+  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
+  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
+  lane at once on the integration branch, and no measurement is repeated for it alone.
+- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
+  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
+  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
 
-## No Python in the runtime
+## 4. Releases
 
-- **The rule (Andrew, 2026-10-06, restated 2026-10-19).** The only job of the Python package is to connect users to
-  the compiled Mojo through PyPI. A public method is one binding call that hands over buffers and returns the
-  result. Validation, fitted-state checks, argument and data preparation, binding selection, computation, training
-  loops, batching, backward, optimizers, workers, synchronization, stopping decisions and output processing run in
-  Mojo, in every mode, on every vendor. No arithmetic on data, no loops or comprehensions over values, no NumPy
-  math in Python, not even for a handful of values. A missing value is added to the Mojo kernel, never patched in
-  Python. A native call surrounded by Python work is an incomplete migration.
-- **No calls back into Python (Andrew, 2026-10-20).** The rule is transitive: no Python functions, methods,
-  callbacks, property or descriptor hooks, input protocols, custom trainers, schedules, batch suppliers or step
-  hooks during a product operation. Holding a PythonObject in a Mojo struct does not compile its methods. Refuse
-  unsupported callback or protocol objects before invoking them, with a clear native alternative.
-- **Exported graph boundary (Andrew, 2026-10-27).** Never execute a user's Python `forward`, exporter or
-  serialization callback inside product execution; the API may require an already exported graph.
-- **Python objects only at the public boundary (Andrew, 2026-11-10).** Python objects, Python library imports and
-  CPython interaction belong only in the actual UNPACK/PACK functions of each public operation. RUN uses typed
-  Mojo values for requests, options, dimensions, model and optimizer state, buffers and results, and native calls
-  between compiled modules. A Mojo wrapper around a PythonObject is not a migration. Preserve the public API and
-  borrowed-buffer lifetimes through explicit native ownership; do not hide Python work in provider directories.
-  Direct C-API calls within UNPACK/PACK may still invoke Python hooks: retain exact-type admission, error
-  propagation and GIL safety, and hoist invariant admission. The 2026-10-28 permission for native C-API calls does
-  not authorize Python objects or Python support inside RUN.
-- **scikit-learn tags (owner, 2026-10-24).** `__sklearn_tags__` and helpers used solely to build its tag metadata
-  may run in Python. Native operations must not call back into tag handling. Audit it separately from runtime
-  violations. No other metadata protocol is exempt.
-- **Python fallbacks for a Mojo or Modular bug are a frozen list (Andrew, 2026-11-09).**
-  `python/mojolearn/_runtime_fallbacks.py` is the COMPLETE list of authorized fallbacks (empty today).
-  Nothing is added without Andrew's explicit word. An agent that believes it has found a Mojo bug stops, writes
-  the smallest reproducer and the ask for Modular, and reports; it does not write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
-  uses an entry is recorded in release evidence and is never called Python-free.
-- **Move native correctness tests to Mojo (Andrew, 2026-11-10).** Kernel, numerical and native state/lifetime tests
-  belong in Mojo. Retain Python tests for the actual Python API boundary and framework interoperability, including
-  buffer admission, exceptions, returned objects and refusal of callbacks. Python test/benchmark controllers and
-  boundary fixtures or independent external oracles are testing tools, never product execution or a fallback.
-  Keep timing boundaries honest. Installing a Python package is not a runtime repair.
-- Preserve supported interfaces through native implementation; do not remove a feature to claim compliance.
-  Measure the gain; do not assume removing Python makes every workload faster.
-- Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`
-  tags, are evidence to review, never exemptions; an empty baseline is not proof. Native execution and device
-  behavior establish compliance; source-graph reachability does not distinguish admission from GPU computation.
-- **The Python source guards are retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard,
-  shell-loop counter, GPU-route source-graph fence, runtime-import counter and public-runtime source-count gate
-  from push and CI. Do not restore them under another name
-  or replace them with source-count gates. They excluded binding dependence or rejected required UNPACK/PACK
-  work, including native host input conversion and reading mutable admitted module metadata.
-  Their counts never proved a Python-free operation. Complete the typed Mojo boundary migration and retain
-  actual runtime correctness checks.
+### Fix everything before a release (Andrew, 2026-11-08)
 
-### Wait for Mojo and Modular
+- We fix everything we can before a release. We do not release while there is more work to incorporate: known
+  regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
+- When to measure (Andrew, 2026-11-12): measure BEFORE the release only when the release's purpose is improving
+  speed; then time the measurement build on NVIDIA and AMD against the last release and the paper baseline, fix
+  every regression found, and measure again before freezing. Otherwise measure AFTER the release, on the
+  published PyPI wheel, and those numbers are what the boards, the paper and the site broadcast. A claim about
+  speed is only ever made from a published wheel's measurement.
+- Order: all code in, one compile, (measure, fix, measure again when the release is about speed), freeze, the one
+  cross-vendor verification, publish, then measure the published wheel.
 
-If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support (decided
-2026-10-04; the parked AMD portable prototype is on `lane/amd-portable`). Do not hand-rewrite compiler output, patch
-toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. The authorized narrow
-exceptions are:
+### Fix everything first, then one compile, then one measurement (Andrew, 2026-11-13: "fix fix fix")
 
-- (Owner, 2026-10-25) The native CPython dictionary API for instance-field lookup in `get_params` and public
-  attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
-- (Owner, 2026-11-10) Replace the IPCA tests' nested native buffer list with six named Mojo buffer fields to avoid
-  the confirmed compiler crash. This exception covers test storage only: preserve the numerical implementation,
-  input/reference bytes, assertions, tolerances and kernel calls. Retain the original standalone reproducer and
-  upstream report; it does not authorize other compiler workarounds or Python fallbacks.
+- A measurement is taken only when nothing known is left to fix. Before any box is rented or any GitHub build is
+  started for measurement, the orchestrator lists every open fix (FOLLOWUPS, lane reports, audit findings, owed
+  deletions) and either lands it in the same integration branch or writes, beside the list, why it cannot be
+  known without the measurement. A fix that lands within the hour after a measurement starts is evidence the
+  list was not read.
+- Work moves in waves: fix wave (every lane the findings call for, at once) -> one integration branch -> one
+  GitHub build -> one measurement on NVIDIA and AMD together -> read every flag -> the next fix wave. Never a
+  box run for one lane, one row or one family; never a second measurement of the same sha for rows that a later
+  sha changes. Between waves the boxes come down.
+- The only measurement that may run with known fixes outstanding is a discovery screen whose purpose is to find
+  unknown regressions (the full-board run against best-ever), and only when the outstanding fixes do not touch
+  the rows it is for; its result opens the next fix wave, not a release decision.
+- Owed A/B arms are built and timed with the wave's sha, never a sha behind it, unless the switch they decide is
+  untouched by the later sha (say so in the owed row).
+- A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
+  release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
+  measured clean (Andrew, 2026-11-09).
 
-### Framework adapters are the same API in another format (Andrew, 2026-10-24)
+### Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
-The Torch and MAX adapters are front-ends over the same compiled kernels and compute nothing of their own.
+- Verification happens once, before the release: freeze the source, run one global verify of every lane on every
+  device from the built wheels, see the columns match, publish. Nothing is verified after a release.
+- No same-bits checks during development: no identity (ID) run per lane, per fix or per merge. A plan that would run
+  identity twice for one release is wrong: say so up front and fix the order or the tool.
+- A cross-vendor mismatch found by the verify is a bug to fix in code; then the affected lanes run again.
+- Identity runs once (`REPEATS=1`); a mismatch is never a reason to rerun unchanged code. One identity check per
+  release: the table admit. No release step re-fits or re-diffs identity after it (Andrew, 2026-10-10).
+- No re-verification of green work (Andrew, 2026-11-02): the gates install the exact wheel bytes and run the
+  records; nothing reinstalls those bytes from PyPI to verify again, a ledger waiver never triggers a rerun, and a
+  verdict is reused automatically for the same bytes.
+- Verification uses bounded correctness fixtures and focused installed-wheel, loader, dependency and adapter smokes
+  (2026-10-25). Do not promote a source check or a compile to runtime success, or extend a partial result to
+  untested paths or devices. NVIDIA PTX verification records the actual GPU, driver and the selected PTX route.
 
-- No identity lanes, verifier rows or sabotage arms for an adapter. If an adapter needs a value the kernels do not
-  provide, add it to the Mojo kernel.
-- An adapter is qualified by what is specific to it: its files build in every release leg, survive the wheel
-  audits, and load and run from the INSTALLED wheel on each vendor. That smoke is part of the release gate.
-- Adapter bugs are glue bugs; fix them in the adapter, never by changing kernel bits for one front-end.
-- Whole-model only. The per-operation surfaces removed on 2026-10-24 (`docs/TOMBSTONES.md`) must not come back.
+### Reuse of old runs is opt-in (was: Reuse good old runs, automatically)
 
-## Lanes, compiles and boxes
+- Reuse of old identity records is opt-in everywhere (Andrew, 2026-11-05, decided 2026-11-09): every release
+  records every lane on every device once, and a reused older record is accepted only when the operator passes the
+  explicit reuse flag (`tools/release.py --reuse-unchanged`). `tools/record_identity_column.sh` must default to a
+  full record with reuse behind a flag.
+- Cross-vendor agreement is always checked in full. A lane whose newest result is bad is fixed in code, then
+  recorded.
+- Andrew says when it is time to release (2026-11-09). No agent starts, schedules or proposes a release
+  date. 0.8.67 is not rushed: the fixes matter most. The Python-at-the-boundary rollout
+  (`docs/plans/PYTHON_AT_THE_BOUNDARY.md`: Python objects only in the unpack and pack files of each
+  public call, Mojo values everywhere else) is part of 0.8.67 and gates it.
+
+## 5. How we work
 
 ### Lanes
 
@@ -463,7 +482,23 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
   services are disabled; do not install, restart or replace them. Active build and measurement controllers are not
   watchers.
 
-## Experiments
+### Logs and context
+
+- Save complete build, test and GPU logs to files. Read the exit status and the structured summary first. Never
+  print a whole log, race output, build output or large JSON report into context.
+- Use targeted `rg` (or `grep`) with bounded context and short tails, for example
+  `rg -n -i -m 20 -C 3 --max-columns 240 --max-columns-preview 'error|fail|refused|divergent|summary' run.log` or
+  `tail -n 20 run.log`. Narrow to the relevant files first. Parse large JSON for selected fields.
+- For a build read only its exit code and the first error:
+  `... > build.log 2>&1; echo rc=$?; grep -m 5 -B 2 -A 8 'error' build.log`.
+- For a race directory read the one-line summary (`ALGOS lane=... status=... median_ms=...`), not the race log.
+- A filtered excerpt or a few passing lines never proves the whole run passed: keep the original exit status,
+  expected coverage, failures and skipped or incomplete work, and expand the relevant block when needed.
+- Never read a whole subagent transcript or a `tasks/*.output` file; ask for a concise status or read the artifact.
+- Put long results in a file under `~/mojolearn-evidence/` and report the path plus a few lines. Keep a routine
+  diagnostic reply to about 2,000 tokens.
+
+### Experiments
 
 - Every experiment is a `-D MOJOLEARN_<AREA>_FAST_<NAME>` define, default off, measured by an A/B on the box.
 - A winner (faster, quality equal) becomes the default with a `_OFF` define and a code comment citing the A/B
@@ -474,7 +509,7 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
 - Experiment code may merge to main after compile evidence on one device, with untested targets and measurements
   marked pending and unproven defaults disabled (owner, 2026-10-05).
 
-### Deleting an experiment
+#### Deleting an experiment
 
 **PERMANENT RECORD (Andrew, 2026-10-28): `docs/TOMBSTONES.md` entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED to `docs/TOMBSTONES.md`.**
 
@@ -485,7 +520,7 @@ Andrew, 2026-10-10: a deleted experiment is documented both inline and centrally
 3. **`experiments/removed/<DEFINE>.patch`**: the reverse of the deletion restricted to code files (`git diff <sha> <sha>^ -- <files>`), so `git apply` restores the code. Code that never reached main gets no patch; record the lane branch@sha instead.
 4. **Refusal and records**: a `removed` refusal in the define's family module `core/experiment_guards_<family>.mojo` (`core/six_lane_experiment_guards.mojo` only for guards shared across families; see `docs/build/HOT_GROUPS.md`), the entry moved to `removed` in its `grid_controls/*.json`, and the `docs/apple-fast/EXPERIMENTS.md` row.
 
-## Mojo rules that cost a build round (Andrew, 2026-11-09)
+## 6. Mojo rules that cost a build round (Andrew, 2026-11-09)
 
 Each of these compiled badly or hung during the pre-0.8.67 integration. Follow
 them when writing Mojo; lanes do not compile, so the compiler will not catch
@@ -555,23 +590,7 @@ them for you.
   the supported `upcast_from=Optional(pointer)` constructor and retains the
   borrowed Python reference. Keep the original owner pinned through inspection.
 
-## Logs and context
-
-- Save complete build, test and GPU logs to files. Read the exit status and the structured summary first. Never
-  print a whole log, race output, build output or large JSON report into context.
-- Use targeted `rg` (or `grep`) with bounded context and short tails, for example
-  `rg -n -i -m 20 -C 3 --max-columns 240 --max-columns-preview 'error|fail|refused|divergent|summary' run.log` or
-  `tail -n 20 run.log`. Narrow to the relevant files first. Parse large JSON for selected fields.
-- For a build read only its exit code and the first error:
-  `... > build.log 2>&1; echo rc=$?; grep -m 5 -B 2 -A 8 'error' build.log`.
-- For a race directory read the one-line summary (`ALGOS lane=... status=... median_ms=...`), not the race log.
-- A filtered excerpt or a few passing lines never proves the whole run passed: keep the original exit status,
-  expected coverage, failures and skipped or incomplete work, and expand the relevant block when needed.
-- Never read a whole subagent transcript or a `tasks/*.output` file; ask for a concise status or read the artifact.
-- Put long results in a file under `~/mojolearn-evidence/` and report the path plus a few lines. Keep a routine
-  diagnostic reply to about 2,000 tokens.
-
-## Public docs and docstrings (Andrew, 2026-10-12, additions 2026-10-13)
+## 7. Public docs and docstrings (Andrew, 2026-10-12, additions 2026-10-13)
 
 - Docstrings of public names are user documentation (docs.mojolearn.org): what it does, parameters, returns, a
   short example. No status notes, internal file paths, dates, lane or run names, or all-caps asides. Engineering
