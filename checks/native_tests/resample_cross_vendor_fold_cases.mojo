@@ -55,7 +55,6 @@ def ordered_fold(entry: EntryRef, parts: List[List[Float32]], first: Int, prefix
     for k in range(first, len(parts)):  # driver-loop: over logical shard buffers in immutable order
         require(len(parts[k]) == len(total), "ordered_fold: parts differ in length")
         _ = parallel_fold_pair_f32(entry, Int(total.unsafe_ptr()), Int(parts[k].unsafe_ptr()), len(total))
-        _ = parts  # the shard buffer stays alive through the native fold above
     return total^
 
 
