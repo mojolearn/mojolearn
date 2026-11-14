@@ -62,8 +62,11 @@ def _samba_written_registry(operation: String, values: PythonObject) raises -> I
     `load_weights` write their model's (values[0]) registry. `apply` writes
     the validated state's private parameter copy and `checkpoint_load` builds
     a new model (samba_validate_state copies): no existing registry, so no
-    other copy is stamped. Read at each stamp: a write that replaced `flat`
-    stamps the new address too."""
+    other copy is stamped. Read only on a FAILED write (cold): a completed
+    write stamps its registry itself, from the address it holds
+    (samba_step_native_door `_samba_train_step_admitted`,
+    samba_state_native_door `_samba_publish_checked`,
+    samba_construct_native_pack `samba_load_weights`)."""
     if operation != "model_train_step" and operation != "publish" and operation != "load_weights":
         return 0
     var flat = py_get(samba_fields(values[0]), "flat", PythonObject(None))
@@ -72,10 +75,9 @@ def _samba_written_registry(operation: String, values: PythonObject) raises -> I
     return Int(py=flat._addr)
 
 
-def _samba_stamp_written(operation: String, values: PythonObject) raises:
-    """A write moves the written registry's own epoch (its resident copies
-    reload; another model's copy stays current) and the process epoch (the
-    per-block programs keyed by views into this registry; core/weight_epoch.mojo)."""
+def _samba_stamp_failed(operation: String, values: PythonObject) raises:
+    """A failed write may have changed part of the registry: move its own
+    epoch (its resident copies reload) and the process epoch."""
     registry_epoch_bump(_samba_written_registry(operation, values))
     weight_epoch_bump()
 
@@ -95,8 +97,17 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
                 return PythonObject(None).steal_data()
         samba_admit(operation, values, context)
         writes = _samba_writes_registry(operation)
+        # Hot-path audit 2026-11-13 (BLOCK pack:69/72): the door moves only
+        # the process epoch, one atomic add before and after a write, as
+        # before the per-registry lane (the per-block programs are keyed by
+        # views into the registry and read it). The written registry's own
+        # epoch is stamped by the write itself, after it, from the registry
+        # object the write already holds: no fields / `flat` / `_addr` read
+        # here per call. (A stamp before the write is not needed: the bytes
+        # change only in the write, and a copy keyed before it or during it
+        # is not current after the stamp that follows it.)
         if writes:
-            _samba_stamp_written(operation, values)
+            weight_epoch_bump()
         var result = PythonObject(None)
         if operation == "model_train_step":
             result = samba_train_step(values[0], values[1], values[2], context)
@@ -187,14 +198,14 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         else:
             raise Error("Samba: unknown native state operation")
         if writes:
-            _samba_stamp_written(operation, values)
+            weight_epoch_bump()
         return result.steal_data()
     except error:
         if writes:
             # a failed write may have changed part of the registry
             try:
                 var failed_args = PythonObject(from_borrowed=args_ptr)
-                _samba_stamp_written(String(failed_args[0]), failed_args[1])
+                _samba_stamp_failed(String(failed_args[0]), failed_args[1])
             except:
                 try:
                     weight_epoch_bump()

@@ -4,6 +4,7 @@
 Built-in schedules are native configurations. Python callback schedules are
 refused before execution under the native-only public runtime contract.
 """
+from core.weight_epoch import registry_epoch_bump
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_any
@@ -345,10 +346,15 @@ def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: 
     var owner = lease.value.downcast_value_ptr[OptimizerOwner]()
     var flat = fields["flat"]
     var source = checked["parameters"]
+    var flat_addr = Int(py=flat._addr)
     if flat is not source:
-        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=flat._addr))
+        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=flat_addr)
         var src = Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr))
         unsafe_memcpy(dest=dst, src=src, count=Int(py=flat.nbytes))
+    # The written registry's own epoch (core/weight_epoch.mojo; hot-path
+    # audit 2026-11-13: stamped here from the address this write holds, not
+    # by the public door re-reading `flat` per call)
+    registry_epoch_bump(flat_addr)
     var first = checked["exp_avg"]
     var second = checked["exp_avg_sq"]
     if owner[].control.handle >= 0:

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Samba registry, explicit-weight and seeded constructor ownership."""
+from core.weight_epoch import registry_epoch_bump
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from core.samba_construct_native_impl import samba_fill_ones
@@ -12,7 +13,7 @@ from bindings.generator_state_native_pack import generator_init, generator_valid
 from bindings.samba_state_native_door import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot, samba_entry_key, samba_primitive
 from core.samba_entry_table import samba_ref, SAMBA_TABLE_TRAINING, SAMBA_PRIM_NEURAL_RNG
 from bindings.causal_lm_construct_door import _model_f32, _model_shape
-from bindings.py_balanced import py_call, py_setitem, py_setattr
+from bindings.py_balanced import py_call, py_setitem, py_setattr, py_get
 from bindings.py_model_records import bump_model_generation
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwnerLease
 from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
@@ -42,6 +43,11 @@ def samba_load_weights(model: PythonObject, weights: PythonObject, context: Pyth
         unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=target._addr)),
                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=Int(py=value.nbytes))
         _ = value^
+    # The written registry's own epoch (core/weight_epoch.mojo; hot-path
+    # audit 2026-11-13: stamped by the write, not by the public door)
+    var flat = py_get(fields, "flat", PythonObject(None))
+    if flat is not None:
+        registry_epoch_bump(Int(py=flat._addr))
     return PythonObject(None)
 
 

@@ -97,11 +97,12 @@ struct WeightKey(Copyable, Movable):
 # its weights: two stacks alternating (train one, predict another; the
 # board's warmup model, then the scored one) paid one full upload per model
 # per call. A Samba resident copy is now keyed by (registry address, that
-# registry's stamp): the public door stamps the written registry
-# (bindings/samba_public_native_pack.mojo, the operations of
-# training/samba_public_run.mojo `_samba_writes_registry` that write a model's
-# `flat`), so a write to model A never invalidates model B's copy. The door
-# still moves the process epoch on those writes: the per-block programs
+# registry's stamp): each operation that writes a model's `flat` stamps it
+# after the write from the address it holds (the train step's resident and
+# host routes, publish, load_weights; the public door
+# bindings/samba_public_native_pack.mojo stamps only a FAILED write), so a
+# write to model A never invalidates model B's copy. The door still moves
+# the process epoch on those writes: the per-block programs
 # (mamba/impl/mamba_block_program.mojo, transformer/attn_step_session.mojo)
 # are keyed by views INTO a Samba registry when a stack runs its blocks
 # (bindings/samba_training_native_door.mojo, samba_inference_native_door.mojo)

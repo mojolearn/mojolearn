@@ -4,6 +4,7 @@
 This public execution owner accepts native built-in schedule configurations;
 arbitrary Python callbacks are refused before state mutation.
 """
+from core.weight_epoch import registry_epoch_bump
 from providers.python.samba_execution_pyapi_door import samba_provider_accumulated_gradients
 from providers.python.samba_resident_pyapi_door import samba_resident_provider, samba_resident_native_step
 from providers.python.neural_descriptor_pyapi_door import (
@@ -356,6 +357,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
     var device_parameters = record.control.parameters_device
     var parameter_owner = PythonObject(None)
     var parameter_buffer = fields["flat"]
+    var registry = parameter_buffer  # the model's flat registry this step writes
     if not device_parameters:
         parameter_owner = _samba_parameter_pack(fields, opt, context)
         parameter_buffer = parameter_owner[0]
@@ -408,4 +410,10 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
     _ = parameter_owner^
     _ = parameter_buffer^
     _ = gradient^
+    # The written registry's own epoch (core/weight_epoch.mojo): stamped by
+    # the step from the registry object it already holds (one slot read),
+    # where the public door read the model's fields, `flat` and its address
+    # twice per call (hot-path audit 2026-11-13, BLOCK pack:69/72).
+    registry_epoch_bump(Int(py=registry._addr))
+    _ = registry^
     return _samba_step_finish(fields, opt, info, loss)
