@@ -327,16 +327,8 @@ def _integral_array(a):
                                        int(classes.size), _REDUCE_INTEGRAL))
 
 
-def whole_float_labels(y):
-    """True when `y` is a float buffer whose every value is a finite whole
-    number (class labels scikit-learn's callers pass as floats, such as
-    `[0.0, 1.0, ...]`); both scans are native."""
-    info = describe(y)
-    if info is None or info[0] != "buffer" or info[2] != "float":
-        return False
-    from ._buffer import _materialize
-    a, _ = _materialize(y, "y")  # one admission for both native scans
-    return _finite_array(a) and _integral_array(a)
+# TOMBSTONE: _sk_validate.whole_float_labels (no product caller: bindings/neighbors_knn_native_door.mojo
+# owns it) deleted 2026-11-14 by lane py-admission; the oracle copy is tests/_legacy_neighbors_knn.py.
 
 
 # ------------------------------------------------------------------ X

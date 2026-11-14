@@ -47,8 +47,6 @@ module, and because it depends only on the contract's `addr_ro`.
 
 import ctypes
 from . import _portable_math as math
-import numbers
-import operator
 
 from ._array import Array
 from ._buffer import addr_ro
@@ -277,16 +275,6 @@ def _encode_labels_native(y):
     return values, codes
 
 
-def label_kind(classes):
-    """'int' if every class is an integer (bools excluded), 'float' if
-    every class is a real number, else 'object'."""
-    if all(isinstance(c, numbers.Integral) and not is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return "int"
-    if all(isinstance(c, numbers.Real) and not is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return "float"
-    return "object"
-
-
 def decode_labels(classes, codes):
     """Predicted codes back to labels. Integer classes give an int64
     `Array`, real classes a float64 `Array`; str or bool classes give a
@@ -307,6 +295,12 @@ def decode_labels(classes, codes):
     from ._native_labels_bridge import labels_entry, LABELS_OP_DECODE
     entry, context = labels_entry()
     return entry(LABELS_OP_DECODE, (classes, codes), context)
+
+
+# TOMBSTONE: _labels.label_kind / classes_from_member / threshold_codes (no product caller:
+# bindings/classical_labels_door.mojo labels_label_kind, the forest archive reader and
+# bindings/svc_common_door.mojo own them) deleted 2026-11-14 by lane py-admission; code
+# recoverable at 1fac46234f; the test oracles' copy of label_kind is tests/_former_prep_labels.py.
 
 
 # TOMBSTONE: _labels._decode_list_native / _decode_labels_native (the Python
@@ -354,25 +348,6 @@ class ClassLabels(list):
     __slotnames__ = []
 
 
-def classes_from_member(member):
-    """The inverse of `classes_member`, also reading a 0.6.x file's
-    `classes` member (int, float, bool or `<U` from `np.unique`)."""
-    if isinstance(member, str):
-        return [member]
-    if isinstance(member, (list, tuple)):
-        return [str(v) for v in flatten_labels(list(member))]  # glue: converts a classes_ member of str labels
-    dtype = str(getattr(member, "dtype", ""))
-    kind = dtype.lstrip("<>|=")[:1]
-    values = flatten_labels(member)
-    if kind in ("i", "u"):
-        return [int(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-    if kind == "f":
-        return [float(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-    if kind == "b":
-        return [bool(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-    return [str(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-
-
 def argmax_rows(scores):
     """Row-wise first-max-wins argmax of an `[n_rows, n_cols]` block of
     scores, as an int64 `Array`: the base binding's scan (DEVIATION 2500,
@@ -397,27 +372,6 @@ def argmax_rows(scores):
     store = _output_store("q", n_rows)
     fn(scores._addr, n_rows, n_cols, store.buffer_info()[0])
     return Array._owned(store, (n_rows,), "<i8", "C")
-
-
-def threshold_codes(scores, threshold=0.0, *, strict=True, below=0, above=1):
-    """`above` where a score is > threshold (`strict`) or >= threshold, else
-    `below` (NaN takes `below`), as an int64 `Array`, by the base binding's
-    `threshold_labels_i64` (lane cgr4-py-compute: the predict label maps
-    that were per-row Python comprehensions)."""
-    if not isinstance(scores, Array):
-        from ._buffer import _materialize
-        scores, _ = _materialize(scores, "scores")
-    if scores.dtype not in ("<f4", "<f8"):
-        scores = scores.astype("<f8")
-    scores = scores._as_c()
-    n = scores.size
-    if not n:
-        return Array.from_list([], "<i8")
-    from ._buffer import _native, _output_store
-    store = _output_store("q", n)
-    _native("threshold_labels_i64")(scores._addr, 0 if scores.dtype == "<f4" else 1, n, float(threshold),
-                                    int(bool(strict)), int(below), int(above), store.buffer_info()[0])
-    return Array._owned(store, (n,), "<i8", "C")
 
 
 def unique_inverse(y):

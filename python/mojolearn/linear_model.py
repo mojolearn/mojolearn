@@ -23,10 +23,7 @@ from ._array import Array
 from ._buffer import (
     addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
 )
-from ._labels import (
-    argmax_rows, decode_labels,
-    encode_labels, flatten_labels, sorted_classes, threshold_codes,
-)
+from ._labels import flatten_labels
 from . import _native_archive_bridge, _native_classical_bridge
 from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
 

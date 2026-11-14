@@ -153,7 +153,8 @@ def test_decode_labels_matches_the_gather(classes):
     got = decode_labels(classes, codes)
     expect = [classes[i] for i in ref]
     if isinstance(got, Array):
-        kind = _labels.label_kind(classes)
+        from mojolearn.tests._former_prep_labels import label_kind
+        kind = label_kind(classes)
         assert got.dtype == ("<i8" if kind == "int" else "<f8")
         assert got.tolist() == expect
     else:

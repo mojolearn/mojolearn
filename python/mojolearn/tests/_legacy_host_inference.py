@@ -18,7 +18,8 @@ def decode_labels(classes, codes):
     classes, and int classes whose selected values fit int64)."""
     from mojolearn import _labels
     from mojolearn._array import Array
-    kind = _labels.label_kind(classes)
+    from mojolearn.tests._former_prep_labels import label_kind
+    kind = label_kind(classes)
     fast = _decode_labels_native(classes, codes, kind)
     if fast is not None:
         return fast
