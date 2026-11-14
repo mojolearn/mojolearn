@@ -152,10 +152,9 @@ def nv_fma_rn_ftz_f32(a: Float32, b: Float32, c: Float32) -> Float32:
 # unflagged `fmul`); the on-device gate
 # `neighbors/checks/knn_distance_fma_boundary_check.mojo` compares A and B
 # bitwise over the boundary words and probes that the product is not fused.
-# -0.0 is built from its bit pattern so no literal folding can drop the sign.
+# -0.0 is built from its bit pattern (a local bitcast, folded by LLVM to the
+# constant) so no literal handling can drop the sign.
 comptime IDN_NV_MUL_RN_ASM_OLD = is_defined["MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD"]()
-comptime _NV_NEG_ZERO_F32 = bitcast[DType.float32](UInt32(0x80000000))
-comptime _NV_NEG_ZERO_F64 = bitcast[DType.float64](UInt64(0x8000000000000000))
 
 
 @always_inline
@@ -163,8 +162,9 @@ def nv_mul_rn_kernel_f32(a: Float32, b: Float32) -> Float32:
     """`mul.rn.f32` as `fma.rn.f32(a, b, -0.0)`, schedulable; see above."""
     comptime if IDN_NV_MUL_RN_ASM_OLD:
         return nv_mul_rn_f32(a, b)
+    var neg_zero = bitcast[DType.float32](UInt32(0x80000000))
     return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](
-        a, b, _NV_NEG_ZERO_F32
+        a, b, neg_zero
     )
 
 
@@ -173,8 +173,9 @@ def nv_mul_rn_kernel_f64(a: Float64, b: Float64) -> Float64:
     """`mul.rn.f64` as `fma.rn.f64(a, b, -0.0)`, schedulable; see above."""
     comptime if IDN_NV_MUL_RN_ASM_OLD:
         return nv_mul_rn_f64(a, b)
+    var neg_zero = bitcast[DType.float64](UInt64(0x8000000000000000))
     return llvm_intrinsic["llvm.nvvm.fma.rn.d", Float64, has_side_effect=False](
-        a, b, _NV_NEG_ZERO_F64
+        a, b, neg_zero
     )
 
 
@@ -183,8 +184,9 @@ def nv_flush_by_one_kernel(x: Float32) -> Float32:
     """The hardware flush `mul.rn.ftz.f32 x, 1.0` as `fma.rn.ftz.f32(x, 1.0, -0.0)`, schedulable; see above."""
     comptime if IDN_NV_MUL_RN_ASM_OLD:
         return nv_mul_rn_ftz_f32(x, Float32(1.0))
+    var neg_zero = bitcast[DType.float32](UInt32(0x80000000))
     return llvm_intrinsic["llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False](
-        x, Float32(1.0), _NV_NEG_ZERO_F32
+        x, Float32(1.0), neg_zero
     )
 
 
