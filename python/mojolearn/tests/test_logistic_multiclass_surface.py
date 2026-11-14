@@ -2,8 +2,8 @@
 """LogisticRegression public packaging, writable state and archive seams.
 
 Original fit workloads remain here to check Python classes, dtypes and shapes.
-Numerical argmax/probability/accuracy oracles execute directly through Mojo QN
-requests in checks/native_tests/logistic_numeric_{cpu,gpu}_suite.mojo. This
+Numerical argmax/probability/accuracy oracles and the exact64-row zero-state
+first-maximum tie execute directly through Mojo QN requests in checks/native_tests/logistic_numeric_{cpu,gpu}_suite.mojo. This
 module does not claim numerical or cross-vendor verification by itself.
 """
 import os
@@ -43,19 +43,6 @@ def test_three_class_fit_public_layout():
     assert pred.shape == (600,) and pred.dtype == np.int64
     assert int(m.retcode_) == 0
     return m, X, y
-
-
-def test_tie_rule_first_maximum_wins():
-    X, y = _fixture(n=64)
-    m = LogisticRegression(max_iter=5).fit(X, y)
-    # every logit zero: every row an exact three-way tie
-    m._w = Array.from_list([0.0] * m._w.size, "<f4")
-    scores = np.asarray(m.decision_function(X))
-    assert scores.shape == (64, 3) and not scores.any()
-    pred = np.asarray(m.predict(X))
-    assert np.array_equal(pred, np.zeros(64, dtype=np.int64)), "a tie must go to classes_[0]"
-    proba = np.asarray(m.predict_proba(X))
-    assert np.all(proba == 1.0 / 3.0)
 
 
 def test_three_classes_refuse_l1_by_name():
@@ -121,7 +108,6 @@ def test_string_labels_decode_to_a_list():
 def main(out=sys.stdout):
     arms = [
         test_three_class_fit_public_layout,
-        test_tie_rule_first_maximum_wins,
         test_three_classes_refuse_l1_by_name,
         test_binary_path_keeps_its_shapes,
         test_save_load_round_trip_carries_the_class_count,
@@ -132,7 +118,7 @@ def main(out=sys.stdout):
         out.write(f"  {arm.__name__} OK\n")
     out.write(
         "test_logistic_multiclass_surface: public boundary checks passed on %s.\n"
-        "Original fit layouts, writable zero-state tie handling, named L1\n"
+        "Original fit layouts, named L1\n"
         "refusal, archive class count and label decoding are covered here.\n"
         "Native numerical suites and cross-vendor verification are separate.\n"
         % linear_model._backend.vendor())
