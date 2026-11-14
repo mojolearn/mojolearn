@@ -29,6 +29,7 @@ from bindings.native_array_storage_door import native_array_zeros
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.prep_stateless_native_door import _int_like, _repr, _name
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has
+from bindings.prep_encode_prog_run import enc_ii_rows
 from bindings.prep_encode_native_door import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
@@ -50,9 +51,6 @@ comptime OP_NAN_MASK = 60
 comptime OP_II_SIGMA = 99
 comptime OP_II_POST = 100
 comptime OP_II_ROWABS = 107
-comptime OP_UNIQ_SCAN = 121
-comptime OP_II_RCOUNT = 136
-comptime OP_II_RWRITE = 137
 comptime OP_II_GATHER = 138
 comptime OP_II_SCATTER = 139
 comptime OP_HCAT = 140
@@ -66,7 +64,6 @@ comptime OP_C2_II_RAND = 261
 comptime OP_C2_COLMAX = 262
 
 comptime NONE = -1
-comptime II_CH = 1024
 comptime GOLDEN: UInt64 = 0x9E3779B97F4A7C15
 
 
@@ -383,22 +380,6 @@ def _mask_arr(values: PythonObject, keep: List[Int], missing: PythonObject, cont
 
 
 # ---------------------------------------------------------------- the user-estimator route
-def _ii_rows(mut p: EncProg, mo: Int, n: Int, dk: Int, j: Int, missing: Bool) -> Tuple[Int, Int]:
-    """`_ii_rows`: the ascending rows whose mask word for feature j is (or is
-    not) zero, as int32 words, and their count."""
-    var ch = max(II_CH, (n + II_CH - 1) // II_CH)
-    var nch = (n + ch - 1) // ch
-    var cnt = p.alloc(nch)
-    var off = p.alloc(nch)
-    var tot = p.alloc(1)
-    var rows = p.alloc(n)
-    var flag = 1 if missing else 0
-    _stage(p.prog.program, OP_II_RCOUNT, nch, mo, n, dk, j, flag, ch, cnt)
-    _stage(p.prog.program, OP_UNIQ_SCAN, 1, cnt, nch, off, tot)
-    _stage(p.prog.program, OP_II_RWRITE, nch, mo, n, dk, j, flag, ch, off, rows)
-    return (rows, tot)
-
-
 struct _Take(Movable):
     # `_ii_take`'s (Xo, yo, Xm, missing rows as int32 words, m).
     var xo: PythonObject
@@ -438,7 +419,7 @@ def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl:
         cols.append(0.0)
     var co = p.put_floats(cols, context)
     var jo = p.put_floats(_one(Float64(j)), context)
-    var mis = _ii_rows(p, mo, n, dk, j, True)
+    var mis = enc_ii_rows(p.prog, mo, n, dk, j, True)
     var gm = p.alloc(n * nc)
     if nc > 0:
         _stage(p.prog.program, OP_II_GATHER, n * nc, xo, dk, mis[0], mis[1], co, nc, gm)
@@ -446,7 +427,7 @@ def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl:
     var go = 0
     var gy = 0
     if fit:
-        obs = _ii_rows(p, mo, n, dk, j, False)
+        obs = enc_ii_rows(p.prog, mo, n, dk, j, False)
         go = p.alloc(n * nc)
         gy = p.alloc(n)
         if nc > 0:
