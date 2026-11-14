@@ -545,7 +545,7 @@ struct DKit(Movable):
         old buffers die in stream order behind the launches that read them)."""
         if n <= self.sel_cap and len(self.sel_u32) == 4:
             return
-        var cap = max(n, self.sel_cap, 1)
+        var cap = max(max(n, self.sel_cap), 1)
         self.sel_u32.clear()
         self.sel_i32.clear()
         for _ in range(4):  # driver-loop: over the four uint32 scratch roles
