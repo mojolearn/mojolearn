@@ -35,7 +35,7 @@ from bindings.neural_block_admission_door import neural_block_fields, neural_blo
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter
-from bindings.neural_prefill_native_door import _prefill_mamba3_reports
+from bindings.neural_prefill_native_door import _prefill_mamba3_reports, _m3_output_array
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_handle, neural_descriptor_reserved_execute,
     neural_descriptor_execute, neural_descriptor_reuse,
@@ -813,6 +813,20 @@ def _session_step_call(mut mods: NativeModules, hobj: PythonObject, input_addres
         h[].plan.position += 1
 
 
+def _session_output(kind: Int, dims: List[Int]) raises -> PythonObject:
+    """A session step/decode output array. Mamba-3 (kind 3): y and the four
+    reports are written whole by every arm (device: `MambaBlockProgram.step`
+    / `.decode`, which put every token's slab and download B*N*d_model, then
+    the reports at their full counts; host: the per-call state step per
+    token, every (row, token) copied into y), so they are unfilled unless
+    MAMBA3_FORWARD_ZERO_FILL (bindings/neural_prefill_native_door.mojo;
+    lane fix-mamba3-unfilled-rest). Mamba-1/2 keep zero-filled arrays: their
+    writes were not audited by that lane."""
+    if kind == 3:
+        return _m3_output_array(dims)
+    return generation_array(dims)
+
+
 def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
     var hobj = session._handle
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
@@ -825,12 +839,12 @@ def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: Py
     if Int(py=x.shape[0]) != b:
         raise Error(what + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
     var keep = List[PythonObject]()
-    var y = generation_array([b, 1, h[].plan.d_model])
+    var y = _session_output(kind, [b, 1, h[].plan.d_model])
     # Reports escape in the returned tuple/public h_last_ fields, so each
     # call still owns fresh arrays. Their temporary collection is native.
     var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
     for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
-        reports.append(generation_array(h[].plan.report_dims[i]))
+        reports.append(_session_output(kind, h[].plan.report_dims[i]))
     var input_address = generation_address(x, keep)
     var output_address = generation_address(y, keep)
     var report_addresses = List[Int](capacity=len(reports))
@@ -866,10 +880,10 @@ def mamba_session_decode(mut mods: NativeModules, session: PythonObject, input: 
         raise Error(what + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
     var n = Int(py=x.shape[1])
     var keep = List[PythonObject]()
-    var y = generation_array([b, n, dm])
+    var y = _session_output(kind, [b, n, dm])
     var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
     for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
-        reports.append(generation_array(h[].plan.report_dims[i]))
+        reports.append(_session_output(kind, h[].plan.report_dims[i]))
     var input_address = generation_address(x, keep)
     var output_address = generation_address(y, keep)
     var report_addresses = List[Int](capacity=len(reports))
