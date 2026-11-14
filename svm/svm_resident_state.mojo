@@ -151,7 +151,9 @@ def _svm_resident_decide(
         # A non-finite query makes a NaN decision (DEVIATION 637's refusal):
         # the input is at fault, so the door's refusal wins.
         if qx.flagged(ctx):
-            return (qx.finite_word(), qx.range_word())
+            var flagged = (qx.finite_word(), qx.range_word())
+            resident_query_x_done(store, lease, qx^)
+            return flagged
         raise error^
     var words = (qx.finite_word(), qx.range_word())
     if words[0] == 0 and words[1] == 0:
