@@ -56,6 +56,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.join(HERE, "box_persist_run.sh")
 MAX_EXPIRY_SEC = 7 * 24 * 3600          # SigV4 presigned URLs: 7 days at most
+MAX_PIECES = 100                        # piece objects <base>.00.tgz .. <base>.99.tgz per upload
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 KEY_ROOT = "measurements/box-jobs"
 
@@ -173,6 +174,9 @@ def mint(a, remint=False):
     if previous and previous.get("prefix") not in (None, prefix):
         die("remint: %s holds prefix %s, not %s" % (out, previous.get("prefix"), prefix))
     pieces = pieces_for(a.max_total_gb, a.max_mb)
+    if pieces > MAX_PIECES:
+        die("--max-total-gb %g in --max-mb %g pieces needs %d piece URLs per upload, over %d: raise --max-mb (at most "
+            "5000, one R2 PUT) or lower --max-total-gb" % (a.max_total_gb, a.max_mb, pieces, MAX_PIECES))
     exp_epoch = int(now.timestamp()) + secs
     j = {
         "tag": a.tag, "date": date, "prefix": prefix, "tool": a.tool or "",

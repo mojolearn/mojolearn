@@ -189,6 +189,18 @@ class Base(unittest.TestCase):
     def obj(self, tag, name):
         return self.srv.objects.get("%s/%s" % (self.prefix(tag), name))
 
+    def whole(self, tag, name):
+        """Upload `name` (final.tgz, 00.tgz, ...) as the box streamed it: its pieces <base>.NN.tgz concatenated in
+        order (tools/box_persist_run.sh put_pieces); None when no piece landed."""
+        parts, i = [], 0
+        while True:
+            b = self.obj(tag, box_persist.piece_name(name, i))
+            if b is None:
+                break
+            parts.append(b)
+            i += 1
+        return b"".join(parts) if parts else None
+
     def manifest(self, tag):
         b = self.obj(tag, "manifest.json")
         self.assertIsNotNone(b, "no manifest.json landed")
@@ -223,16 +235,36 @@ class TestSigning(Base):
         with open(p) as fh:
             text = fh.read()
         j = json.loads(text)
-        for k in ("slot.00.put", "slot.02.sha.put", "final.put", "final.get", "manifest.put"):
+        for k in ("slot.00.p00.put", "slot.00.p00.sha.put", "slot.02.sha.put", "final.p00.put", "final.p00.get",
+                  "final.sha.put", "manifest.put"):
             self.assertIn(k, j)
-        self.assertNotIn("slot.03.put", j)
+        self.assertNotIn("slot.03.sha.put", j)
+        # 64 GB in 3800 MB pieces by default: 18 piece URLs per upload, and no single-object URL is minted
+        self.assertEqual(j["pieces"], "18")
+        self.assertIn("final.p17.put", j)
+        self.assertNotIn("final.p18.put", j)
+        self.assertNotIn("final.put", j)
         self.assertEqual(j["every_sec"], "300")
         self.assertEqual(j["excludes"], "big")
-        self.assertIn("/%s/measurements/box-jobs/" % BUCKET, j["final.put"])
+        self.assertIn("/%s/measurements/box-jobs/" % BUCKET, j["final.p00.put"])
+        self.assertIn("/final.00.tgz?", j["final.p00.put"])
         self.assertNotIn(SECRET, text)
         self.assertEqual(len(text.strip().splitlines()), len(j) + 2)     # one key per line (the box reads it with sed)
         self.assertIn("\tm1\t", open(os.path.join(self.w, "home", "index.tsv")).read())
         self.assertNotEqual(self.tool("mint", "--tag", "m1", check=False).returncode, 0, "a reused tag must be refused")
+        # remint keeps the tag, date and prefix, mints more pieces, keeps the old json beside the new one
+        r = self.tool("remint", "--tag", "m1", "--slots", "3", "--max-total-gb", "200")
+        self.assertEqual(r.stdout.strip(), p)
+        j2 = json.load(open(p))
+        self.assertEqual((j2["tag"], j2["date"], j2["prefix"]), (j["tag"], j["date"], j["prefix"]))
+        self.assertEqual(j2["pieces"], str(-(-200 * 1024 // 3800)))
+        self.assertEqual(stat.S_IMODE(os.stat(p).st_mode), 0o600)
+        self.assertTrue([f for f in os.listdir(os.path.dirname(p)) if f.startswith("persist.json.prev-")])
+        self.assertEqual(open(os.path.join(self.w, "home", "index.tsv")).read().count("\tm1\t"), 1)
+        self.assertEqual(self.tool("mint", "--tag", "m1", "--force").returncode, 0, "mint --force is remint")
+        self.assertNotEqual(self.tool("remint", "--tag", "never-minted", check=False).returncode, 0)
+        self.assertNotEqual(self.tool("mint", "--tag", "m3", "--max-mb", "0.05", check=False).returncode, 0,
+                            "over 100 piece URLs per upload is refused")
         self.assertNotEqual(self.tool("mint", "--tag", "m2", "--days", "8", check=False).returncode, 0, "over 7 days")
         self.assertNotEqual(self.tool("mint", "--tag", "bad/tag", check=False).returncode, 0)
 
@@ -244,15 +276,18 @@ class TestRun(Base):
         rc, out, _ = self.runner(js, res, 'echo hello; echo data > "$MOJOLEARN_RESULTS_DIR/out.txt"; exit 3')
         self.assertEqual(rc, 3, "the command's exit status passes through")
         self.assertIn("hello", out, "output still streams to stdout")
-        fin = self.obj(tag, "final.tgz")
+        fin = self.whole(tag, "final.tgz")
         self.assertIsNotNone(fin)
         self.assertEqual(self.obj(tag, "final.tgz.sha256").decode().split()[0], sh256(fin))
+        self.assertEqual(self.obj(tag, "final.00.tgz.sha256").decode().split()[0], sh256(self.obj(tag, "final.00.tgz")))
+        self.assertIsNone(self.obj(tag, "final.tgz"), "no single-object upload: the stream is cut in pieces")
         names = tar_names(fin)
         self.assertIn("out.txt", names)
         self.assertIn("command.log", names)
         m = self.manifest(tag)
         self.assertEqual((m["state"], m["exit"]), ("final", "3"))
         self.assertEqual(m["uploads"][-1]["sha256"], sh256(fin))
+        self.assertEqual([x["name"] for x in m["uploads"][-1]["pieces"]], ["final.00.tgz"])
         log = self.plog(res)
         self.assertIn("UPLOADED name=final.tgz", log)
         self.assertIn("READBACK-OK name=final.tgz", log)
@@ -265,7 +300,7 @@ class TestRun(Base):
         # CPU pod running every test file at once) one upload cycle took about 4 s, so a fixed 5.5 s job saw two.
         flag = os.path.join(self.w, "done.flag")
         p = self.runner(js, res, "while [ ! -e %s ]; do sleep 0.1; done" % flag, wait=False)
-        slot_puts = lambda: sum(1 for x in self.srv.log if x[0] == "PUT" and x[1].endswith(("/00.tgz", "/01.tgz")))
+        slot_puts = lambda: sum(1 for x in self.srv.log if x[0] == "PUT" and x[1].endswith(("/00.00.tgz", "/01.00.tgz")))
         landed = self.wait_for(lambda: slot_puts() >= 3, secs=90)
         open(flag, "w").close()
         p.communicate(timeout=60)
@@ -275,10 +310,10 @@ class TestRun(Base):
         periodic = [u["name"] for u in m["uploads"] if u["label"] == "periodic"]
         self.assertGreaterEqual(len(periodic), 3, m)
         self.assertEqual(periodic[:3], ["00.tgz", "01.tgz", "00.tgz"])
-        self.assertIsNotNone(self.obj(tag, "00.tgz"))
-        self.assertIsNotNone(self.obj(tag, "01.tgz"))
-        self.assertIsNone(self.obj(tag, "02.tgz"))
-        self.assertEqual(self.obj(tag, "01.tgz.sha256").decode().split()[0], sh256(self.obj(tag, "01.tgz")))
+        self.assertIsNotNone(self.whole(tag, "00.tgz"))
+        self.assertIsNotNone(self.whole(tag, "01.tgz"))
+        self.assertIsNone(self.whole(tag, "02.tgz"))
+        self.assertEqual(self.obj(tag, "01.tgz.sha256").decode().split()[0], sh256(self.whole(tag, "01.tgz")))
         self.assertEqual(m["uploads"][-1]["name"], "final.tgz")
 
     def test_exclusions(self):
@@ -293,64 +328,100 @@ class TestRun(Base):
         shutil.copy(js, os.path.join(res, "persist.json"))
         rc, _, _ = self.runner(js, res, "true")
         self.assertEqual(rc, 0)
-        names = [n for n in tar_names(self.obj(tag, "final.tgz")) if n not in ("", ".")]
+        names = [n for n in tar_names(self.whole(tag, "final.tgz")) if n not in ("", ".")]
         for n in names:
             for bad in ("venv", ".pixi", ".whl", ".cache", "scratch", "__pycache__", "persist.json"):
                 self.assertNotIn(bad, n, names)
         for good in ("keep/real.txt", "artifacts/notes.txt", "sub/a.py", "persist.log", "command.log"):
             self.assertIn(good, names)
 
-    def test_size_cap_note(self):
-        tag, js = self.stage(extra=("--max-mb", "0.05"))
+    def test_streamed_in_pieces_one_on_disk(self):
+        # a results dir larger than max_bytes leaves the box WHOLE, streamed in max_bytes pieces with at most one
+        # piece on the box's disk at a time (2026-11-14: the staging tarball of a 27 GB results dir could never be
+        # built on the full 80 GB pod); nothing is left out and no PERSIST_TRUNCATED note is written
+        tag, js = self.stage(extra=("--max-mb", "0.05", "--max-total-gb", "0.001"))
+        res = os.path.join(self.w, "res")
+        os.makedirs(os.path.join(res, "ev"))
+        big = os.urandom(200000)
+        for name in ("ev/a run.tar.gz", "huge.bin"):
+            with open(os.path.join(res, name), "wb") as fh:
+                fh.write(big)
+        with open(os.path.join(res, "BOARD.md"), "w") as fh:
+            fh.write("board")
+        state = os.path.join(self.box, "state", tag)
+        calls, disk = os.path.join(self.w, "tar.calls"), os.path.join(self.w, "disk.lst")
+        shim = os.path.join(self.w, "shim")
+        os.makedirs(shim)
+        with open(os.path.join(shim, "tar"), "w") as fh:
+            fh.write('#!/bin/bash\necho "$*" >> %s\nexec %s "$@"\n' % (calls, shutil.which("tar")))
+        # every PUT records the bytes on the box's state dir at that moment: the piece being sent, nothing more
+        with open(os.path.join(shim, "curl"), "w") as fh:
+            fh.write('#!/bin/bash\nfind %s -type f -exec cat {} + 2>/dev/null | wc -c >> %s\nexec %s "$@"\n'
+                     % (state, disk, shutil.which("curl")))
+        for f in ("tar", "curl"):
+            os.chmod(os.path.join(shim, f), 0o755)
+        self.env["PATH"] = shim + os.pathsep + self.env.get("PATH", os.environ["PATH"])
+        rc, _, _ = self.runner(js, res, "true")
+        self.assertEqual(rc, 0, self.plog(res))
+        fin = self.whole(tag, "final.tgz")
+        with tarfile.open(fileobj=io.BytesIO(fin)) as tf:
+            self.assertEqual(tf.extractfile("./huge.bin").read(), big)
+            self.assertEqual(tf.extractfile("./ev/a run.tar.gz").read(), big)
+        self.assertIn("BOARD.md", tar_names(fin))
+        self.assertNotIn("PERSIST_TRUNCATED.txt", tar_names(fin))
+        self.assertFalse(os.path.exists(os.path.join(res, "PERSIST_TRUNCATED.txt")))
+        m = self.manifest(tag)
+        pieces = m["uploads"][-1]["pieces"]
+        piece_bytes = 12 * 4096                    # 0.05 MiB rounded down to whole 4 KiB blocks
+        self.assertGreaterEqual(len(pieces), 3, m)
+        self.assertEqual([x["name"] for x in pieces], ["final.%02d.tgz" % i for i in range(len(pieces))])
+        self.assertTrue(all(x["bytes"] == piece_bytes for x in pieces[:-1]), pieces)
+        self.assertEqual(sum(x["bytes"] for x in pieces), len(fin))
+        self.assertEqual(m["uploads"][-1]["sha256"], sh256(fin))
+        for x in pieces:
+            self.assertEqual(self.obj(tag, x["name"] + ".sha256").decode().split()[0], x["sha256"])
+            self.assertEqual(sh256(self.obj(tag, x["name"])), x["sha256"])
+        with open(calls) as fh:
+            self.assertEqual(len([ln for ln in fh if "-cf -" in ln]), 1, "one streamed tar per snapshot")
+        with open(disk) as fh:
+            seen = [int(x) for x in fh.read().split()]
+        self.assertTrue(seen)
+        # the piece, its sidecar, the job's small state files: never two pieces, never the whole stream
+        self.assertLess(max(seen), 2 * piece_bytes, seen)
+        self.assertLess(max(seen), len(fin), seen)
+        self.assertFalse(os.path.exists(os.path.join(state, "piece")))
+        self.assertIn("pieces=%d" % len(pieces), self.plog(res))
+
+    def test_over_budget_is_refused_and_kept_active(self):
+        # more pieces than were minted: the upload fails loudly (OVER-BUDGET) and the job stays registered for
+        # --flush-all; a remint with a larger --max-total-gb under the same tag then lands the whole results dir
+        tag, js = self.stage(extra=("--max-mb", "0.05", "--max-total-gb", "0.00004"))
+        with open(js) as fh:
+            self.assertEqual(json.load(fh)["pieces"], "1")
         res = os.path.join(self.w, "res")
         os.makedirs(res)
         with open(os.path.join(res, "huge.bin"), "wb") as fh:
             fh.write(os.urandom(200000))
-        with open(os.path.join(res, "small.txt"), "w") as fh:
-            fh.write("keep me")
         rc, _, _ = self.runner(js, res, "true")
         self.assertEqual(rc, 0)
-        b = self.obj(tag, "final.tgz")
-        names = tar_names(b)
-        self.assertNotIn("huge.bin", names)
-        self.assertIn("small.txt", names)
-        self.assertIn("PERSIST_TRUNCATED.txt", names)
-        with tarfile.open(fileobj=io.BytesIO(b)) as tf:
-            note = tf.extractfile("./PERSIST_TRUNCATED.txt").read().decode()
-        self.assertIn("huge.bin", note)
-        self.assertLessEqual(len(b), int(0.05 * 1024 * 1024))
-
-    def test_size_cap_tars_once(self):
-        # over the cap: the left-out files are chosen from their sizes before tar runs, so tar runs once and the
-        # note lists every left-out file with its size (2026-11-13: a 27 GB full tar first, then a truncated one)
-        tag, js = self.stage(extra=("--max-mb", "0.05"))
-        res = os.path.join(self.w, "res")
-        os.makedirs(os.path.join(res, "ev"))
-        for name in ("ev/a run.tar.gz", "ev/b.tar.gz"):
-            with open(os.path.join(res, name), "wb") as fh:
-                fh.write(os.urandom(30000))
-        with open(os.path.join(res, "BOARD.md"), "w") as fh:
-            fh.write("board")
-        log = os.path.join(self.w, "tar.calls")
-        shim = os.path.join(self.w, "shim")
-        os.makedirs(shim)
-        real = shutil.which("tar")
-        with open(os.path.join(shim, "tar"), "w") as fh:
-            fh.write('#!/bin/bash\necho "$*" >> %s\nexec %s "$@"\n' % (log, real))
-        os.chmod(os.path.join(shim, "tar"), 0o755)
-        self.env["PATH"] = shim + os.pathsep + self.env.get("PATH", os.environ["PATH"])
-        rc, _, _ = self.runner(js, res, "true")
-        self.assertEqual(rc, 0)
-        names = tar_names(self.obj(tag, "final.tgz"))
-        self.assertIn("BOARD.md", names)
-        self.assertNotIn("ev/a run.tar.gz", names)
-        self.assertNotIn("ev/b.tar.gz", names)
-        with open(log) as fh:
-            self.assertEqual(len([ln for ln in fh if "-czf" in ln]), 1, "one tar per snapshot")
-        note = open(os.path.join(res, "PERSIST_TRUNCATED.txt")).read()
-        self.assertIn("30000 ./ev/a run.tar.gz", note)
-        self.assertIn("TRUNCATED limit=", self.plog(res))
-        self.assertFalse(os.path.exists(os.path.join(self.box, "state", tag, "upload.tgz")))
+        log = self.plog(res)
+        self.assertIn("OVER-BUDGET name=final.tgz", log)
+        self.assertIn("KEPT-ACTIVE", log)
+        self.assertNotIn("UPLOADED name=final.tgz", log)
+        self.assertTrue(os.path.exists(os.path.join(self.box, "active", tag + ".env")))
+        r = self.tool("prepare", "--tag", tag, "--force", "--slots", "2", "--days", "1", "--box-root", self.box,
+                      "--max-mb", "0.05", "--max-total-gb", "0.001")
+        inst = subprocess.run(["bash", "-s"], input=r.stdout, capture_output=True, text=True, env=self.env)
+        self.assertEqual(inst.returncode, 0, inst.stderr)
+        r = subprocess.run(["bash", os.path.join(self.box, "bin", "box_persist_run.sh"), "--flush-all", "30"],
+                           env=self.env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with tarfile.open(fileobj=io.BytesIO(self.whole(tag, "final.tgz"))) as tf:
+            self.assertEqual(len(tf.extractfile("./huge.bin").read()), 200000)
+        dest = os.path.join(self.w, "fetched")
+        r = self.tool("fetch", "--tag", tag, "--dest", dest, "--extract")
+        self.assertIn("VERIFIED final.tgz", r.stdout)
+        self.assertEqual(os.path.getsize(os.path.join(dest, "final", "huge.bin")), 200000)
 
     def _signal(self, sig, code):
         tag, js = self.stage()
@@ -361,7 +432,7 @@ class TestRun(Base):
         p.send_signal(sig)
         p.communicate(timeout=60)
         self.assertEqual(p.returncode, code)
-        fin = self.obj(tag, "final.tgz")
+        fin = self.whole(tag, "final.tgz")
         self.assertIsNotNone(fin, "the trap uploads final.tgz")
         self.assertIn("p.txt", tar_names(fin))
         m = self.manifest(tag)
@@ -390,7 +461,7 @@ class TestRun(Base):
         p.communicate(timeout=60)
         self.assertEqual(p.returncode, 143)
         self.assertLess(time.time() - t0, 30, "the final upload did not wait on its own lock")
-        self.assertIsNotNone(self.obj(tag, "final.tgz"), self.plog(res))
+        self.assertIsNotNone(self.whole(tag, "final.tgz"), self.plog(res))
 
     def test_hup_ignored(self):
         tag, js = self.stage()
@@ -400,7 +471,7 @@ class TestRun(Base):
         p.send_signal(signal.SIGHUP)
         p.communicate(timeout=60)
         self.assertEqual(p.returncode, 0, "an ssh drop (HUP) does not stop the job")
-        self.assertIn("s.txt", tar_names(self.obj(tag, "final.tgz")))
+        self.assertIn("s.txt", tar_names(self.whole(tag, "final.tgz")))
 
     def test_flush_all(self):
         tag, js = self.stage()
@@ -413,7 +484,7 @@ class TestRun(Base):
                                env=self.env, capture_output=True, text=True, timeout=60)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("flush-all done", r.stdout)
-            self.assertIn("mid.txt", tar_names(self.obj(tag, "final.tgz")))
+            self.assertIn("mid.txt", tar_names(self.whole(tag, "final.tgz")))
             self.assertEqual(self.manifest(tag)["state"], "flushed")
             self.assertIsNone(p.poll(), "the job keeps running after a flush")
         finally:
@@ -448,8 +519,8 @@ class TestRun(Base):
         res = os.path.join(self.w, "res")
         rc, _, _ = self.runner(js, res, "exit 0")
         self.assertEqual(rc, 0)
-        self.assertIn("REJECTED name=final.tgz http=403", self.plog(res))
-        self.assertIsNone(self.obj(tag, "final.tgz"))
+        self.assertIn("REJECTED name=final.00.tgz http=403", self.plog(res))
+        self.assertIsNone(self.whole(tag, "final.tgz"))
 
     def test_unreachable_endpoint(self):
         self.env["MOJOLEARN_R2_ENDPOINT"] = "http://127.0.0.1:9"
@@ -457,9 +528,9 @@ class TestRun(Base):
         res = os.path.join(self.w, "res")
         rc, _, _ = self.runner(js, res, "exit 5")
         self.assertEqual(rc, 5)
-        self.assertIn("FAILED name=final.tgz http=000", self.plog(res))
-        # the failed upload's staging tarball is deleted (two of them filled an 80 GB pod on 2026-11-13)
-        self.assertFalse(os.path.exists(os.path.join(self.box, "state", tag, "upload.tgz")))
+        self.assertIn("FAILED name=final.00.tgz http=000", self.plog(res))
+        # the failed upload's piece is deleted (staging tarballs filled an 80 GB pod on 2026-11-13)
+        self.assertFalse(os.path.exists(os.path.join(self.box, "state", tag, "piece")))
 
     def test_failed_final_retried_by_flush_all(self):
         tag, js = self.stage()
@@ -473,7 +544,7 @@ class TestRun(Base):
         r = subprocess.run(["bash", os.path.join(self.box, "bin", "box_persist_run.sh"), "--flush-all", "30"],
                            env=self.env, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("l.txt", tar_names(self.obj(tag, "final.tgz")))
+        self.assertIn("l.txt", tar_names(self.whole(tag, "final.tgz")))
         self.assertTrue(self.wait_for(lambda: not os.path.exists(os.path.join(self.box, "active", tag + ".env")), 5),
                         "a flushed job that already ended is unregistered")
 
@@ -483,7 +554,7 @@ class TestRun(Base):
         res = os.path.join(self.w, "res")
         rc, _, _ = self.runner(js, res, "true")
         self.assertEqual(rc, 0)
-        self.assertIsNotNone(self.obj(tag, "final.tgz"), self.plog(res))
+        self.assertIsNotNone(self.whole(tag, "final.tgz"), self.plog(res))
 
 
 class TestFetch(Base):
@@ -502,10 +573,12 @@ class TestFetch(Base):
         r = self.tool("fetch", "--tag", tag, "--list")
         self.assertIn("LANDED final.tgz", r.stdout)
         self.assertNotIn("VERIFIED", r.stdout)
-        self.srv.objects["%s/final.tgz" % self.prefix(tag)] = b"tampered"
+        self.srv.objects["%s/final.00.tgz" % self.prefix(tag)] = b"tampered"
         r = self.tool("fetch", "--tag", tag, "--dest", os.path.join(self.w, "f2"), check=False)
         self.assertEqual(r.returncode, 1)
+        self.assertIn("VERIFY-FAILED final.00.tgz", r.stdout)
         self.assertIn("VERIFY-FAILED final.tgz", r.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.w, "f2", "final.tgz")), "no partial final.tgz is left")
 
     def test_fetch_extract_skips_absolute_symlink(self):
         tag, js = self.stage()
@@ -619,7 +692,7 @@ class TestEntryPoints(Base):
         return tree
 
     def landed_tags(self):
-        return sorted({k.split("/")[3] for k in self.srv.objects if k.endswith("/final.tgz")})
+        return sorted({k.split("/")[3] for k in self.srv.objects if k.endswith("/final.00.tgz")})
 
     def test_do_amd_steward_run(self):
         tree = self.shim()
@@ -635,7 +708,7 @@ class TestEntryPoints(Base):
         tags = self.landed_tags()
         self.assertEqual(len(tags), 1, tags)
         self.assertTrue(tags[0].startswith("stw-"))
-        self.assertIn("x.txt", tar_names(self.obj(tags[0], "final.tgz")))
+        self.assertIn("x.txt", tar_names(self.whole(tags[0], "final.tgz")))
         self.assertTrue(os.path.exists(os.path.join(tree, "out", "x.txt")), "the results dir is relative to the tree")
         self.assertIn("hi", r.stdout)
         r = subprocess.run(["bash", script, "run", "--no-persist", "stw", "out", "true"],
@@ -657,7 +730,7 @@ class TestEntryPoints(Base):
         self.assertEqual(len(tags), 1, (tags, r.stderr[-800:]))
         self.assertTrue(tags[0].startswith("dp-lanex-"))
         self.assertTrue(os.path.exists(os.path.join(tree, "myres", "d.txt")), "a relative --results is in the tree")
-        self.assertIn("d.txt", tar_names(self.obj(tags[0], "final.tgz")))
+        self.assertIn("d.txt", tar_names(self.whole(tags[0], "final.tgz")))
         r = subprocess.run(["bash", script, "run", "lanex", "--no-persist", "true"], env=env, capture_output=True, text=True, timeout=60)
         self.assertNotEqual(r.returncode, 0)
         r = subprocess.run(["bash", script, "run", "lanex", "--no-persist", "true"],
