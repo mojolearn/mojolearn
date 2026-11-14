@@ -289,3 +289,51 @@ def test_program_refusals():
         s.free(w)
         with pytest.raises(Exception, match="freed"):
             prog.run(X)
+
+
+def test_program_run_direct_route_boundary():
+    # Lane fix-executor-session-rows (2026-11-13): Program.run with every flag
+    # off is one binding call to the fixed route; any other call takes the
+    # full route. Both give the eager words, and the full route's refusals
+    # still hold for a closed session, a freed program and a foreign session.
+    from mojolearn import ops
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((257, 7), dtype=np.float32)
+    W = rng.standard_normal((7, 5), dtype=np.float32)
+    s = ops.Session()
+    x, w = s.tensor(X), s.tensor(W)
+    p = s.softmax(s.linear(x, w, activation="relu"))
+    eager = s.numpy(p)
+    prog = s.capture(inputs=[x], outputs=[p])
+    s.reset()
+    direct = prog.run(X)
+    assert direct.shape == eager.shape and direct.dtype == np.float32
+    assert np.array_equal(_words(direct), _words(eager))
+    full = prog.run(X, dynamic_shapes=True)
+    assert np.array_equal(_words(full), _words(eager))
+    assert np.array_equal(_words(s.run(prog, X)), _words(eager))
+    # a bare array where the inputs tuple belongs: the full route refuses it
+    with pytest.raises(TypeError, match="native list or tuple"):
+        ops._PROGRAM_CALL(prog, "run", (X, False, False, False))
+    other = ops.Session()
+    with pytest.raises(Exception, match="another Session|same session|of this session"):
+        other.run(prog, X)
+    other.close()
+    s.close()
+    with pytest.raises(ValueError, match="closed"):
+        prog.run(X)
+
+
+def test_session_read_back_writes_every_element():
+    # Lane fix-executor-session-rows (2026-11-13): numpy() and grad() download
+    # into an uninitialized result array; every element must be written.
+    from mojolearn import ops
+    rng = np.random.default_rng(4)
+    A = rng.standard_normal((513, 129), dtype=np.float32)
+    with ops.Session(record=True) as s:
+        a = s.tensor(A, requires_grad=True)
+        for _ in range(3):  # fresh storage each read
+            assert np.array_equal(_words(s.numpy(a)), _words(A))
+        s.backward(s.sum(a))
+        g = s.grad(a)
+        assert g.shape == A.shape and np.array_equal(g, np.ones_like(A))

@@ -5893,6 +5893,12 @@ def program_quality(data, outs):
     z = np.maximum(x @ w1 + b1, 0.0) @ w2 + b2
     z = np.exp(z - z.max(axis=1, keepdims=True))
     ref64 = z / z.sum(axis=1, keepdims=True)
+    # SCORER GAP (lane fix-executor-session-rows, 2026-11-13): this lane recorded only max_abs_err_vs_fp64,
+    # which the quality policy (tools/board_quality.py) does not declare, so tools/paper_compare.py kept no
+    # metric for the program-run cell (new_quality={}) and judged it INSUFFICIENT. Each arm now also records
+    # max_rel_err_vs_fp64 (max |y - y64| / max |y64|), the declared reference bound the gemm and mlp-predict
+    # lanes already score, from the same untimed float64 forward. Quality is read, never a gate.
+    ref_scale = float(np.abs(ref64).max()) or 1.0
     q = {}
     for arm, o in outs.items():
         y = np.asarray(o["y"], dtype=np.float64)
@@ -5900,6 +5906,7 @@ def program_quality(data, outs):
                "finite": bool(np.isfinite(y).all())}
         if y.shape == ref64.shape:
             row["max_abs_err_vs_fp64"] = float(np.abs(y - ref64).max())
+            row["max_rel_err_vs_fp64"] = row["max_abs_err_vs_fp64"] / ref_scale
         else:
             row["shape_mismatch_vs_fp64"] = "%s vs %s" % (list(y.shape), list(ref64.shape))
         q[arm] = row

@@ -730,7 +730,7 @@
   },
   {
    "id": "restore-executor-program-run",
-   "source": "lane restore-executor-fast-run (fb75472a87 2026-10-20 switched the fixed-shape Program.run off OpsSession.run_program with no A/B; candidate 4c2340386abc NV 1.70 ms vs 1.04 at 0.8.55)",
+   "source": "lane restore-executor-fast-run (fb75472a87 2026-10-20 switched the fixed-shape Program.run off OpsSession.run_program with no A/B; candidate 4c2340386abc NV 1.70 ms vs 1.04 at 0.8.55); extended by lane fix-executor-session-rows (ba08dac006 still 1.46 ms after the restore: A is now also one binding call from Program.run straight to the fixed route, B keeps the full door chain onto program_execute_run)",
    "kind": "ab",
    "lane": "program-run",
    "dataset": "gaussian",
@@ -738,11 +738,11 @@
    "b_arms": [
     "program-run-entry"
    ],
-   "decides": "program_execute_run (B) becomes the one fixed-shape run only if at least as fast as run_program (A) on NVIDIA and AMD; output digests must match between arms (same _program_op replay)"
+   "decides": "program_execute_run (B) becomes the one fixed-shape run only if at least as fast as run_program (A) on NVIDIA and AMD; output digests must match between arms (same _program_op replay); A = direct Program.run door + run_program, B = full public door chain + program_execute_run"
   },
   {
    "id": "restore-executor-session-call",
-   "source": "lane restore-executor-fast-run (d2f14a3de4, ec806eaf6f, 1edde63a6a 2026-10-27 routed every Session call through the provider descriptor with no A/B; ops-session-step NV 2.30 (0.8.55) -> 2.60 ms candidate)",
+   "source": "lane restore-executor-fast-run (d2f14a3de4, ec806eaf6f, 1edde63a6a 2026-10-27 routed every Session call through the provider descriptor with no A/B; ops-session-step NV 2.30 (0.8.55) -> 2.60 ms candidate); extended by lane fix-executor-session-rows (ba08dac006 still 2.53 ms: A also admits the handle once from the resource in hand, skips the public-provider checks on the same-image route and reads numpy/grad into unfilled arrays)",
    "kind": "ab",
    "lane": [
     "ops-session-step",
@@ -753,7 +753,7 @@
    "b_arms": [
     "session-call-descriptor"
    ],
-   "decides": "the descriptor hop for same-image calls (B) returns only if at least as fast as the direct typed call (A) on NVIDIA and AMD; digests must not move"
+   "decides": "the descriptor hop for same-image calls with its second handle admission and zero-filled read-back arrays (B) returns only if at least as fast as the direct typed call (A) on NVIDIA and AMD; digests must not move"
   },
   {
    "id": "rk-iforest-fit-borrow",

@@ -331,6 +331,10 @@ def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
 # restore-executor-program-run, b arm program-run-entry):
 # -D MOJOLEARN_PROGRAM_RUN_ENTRY runs every Program.run on program_execute_run
 # as before (B). dynamic_shapes, optimize and profile keep program_execute_run.
+# Extended by lane fix-executor-session-rows (2026-11-13): the same define
+# also turns off Program.run's direct door to `_program_run_fixed`
+# (autograd_program_public_request_pyapi_pack.mojo), so B is the whole
+# former chain.
 comptime PROGRAM_RUN_ENTRY = is_defined["MOJOLEARN_PROGRAM_RUN_ENTRY"]()
 
 

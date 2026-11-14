@@ -1233,6 +1233,8 @@ def test_neural_program_run_lane_tables_fixtures_and_quality(tmp_path):
     p = (p / p.sum(axis=1, keepdims=True)).astype(np.float32)
     q = bbn.quality("program-run", data, {"ours": {"y": p}, "torch-eager-fp32": {"y": p + np.float32(0.5)}})
     assert q["ours"]["max_abs_err_vs_fp64"] < 1e-6 and q["ours"]["finite"]
+    # the declared reference metric the paper compare keeps (tools/board_quality.py REFERENCE)
+    assert q["ours"]["max_rel_err_vs_fp64"] < 1e-5 and "max_rel_err_vs_fp64" in bbn._load("board_quality").REFERENCE
     t = q["torch-eager-fp32"]
     assert abs(t["max_abs_diff_vs_ours"] - 0.5) < 1e-6 and t["digest_equal_ours"] is False
 
