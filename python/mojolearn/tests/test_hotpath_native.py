@@ -535,10 +535,10 @@ _NATIVE_LABELS = {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32"
 def test_classification_labels_match(name):
     y = _metric_label_inputs()[name]
     # lane migrate-shared-labels: a numeric label vector is encoded by the one
-    # prepare_targets call (it runs encode_labels_<dtype> inside the binding)
-    expect = ("prepare_targets",) if name in ("int64", "strided", "one class", "binary",
-                                                "minus one one", "uint64") else ()
-    ref = _same(lambda: M._classification_encoded(y, "y_true"), expect, group="metrics")
+    # prepare_targets call. Since lane py-admission that call is made inside the
+    # compiled label entry (labels_encode_numeric_op), so no Python-side helper
+    # call is left for the spy to see; the outcome is still compared.
+    ref = _same(lambda: M._classification_encoded(y, "y_true"), (), group="metrics")
     if name in _NATIVE_LABELS and not _EXPECT_SABOTAGE:
         assert isinstance(M._classification_encoded(y, "y_true")[0], M._EncodedLabels), name
         assert ref[0][0] == "ok"

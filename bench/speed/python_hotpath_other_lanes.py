@@ -63,12 +63,6 @@ def _(n, r):
     return lambda: [LM._round_f32(math.sqrt(v)) for v in w.tolist()]
 
 
-@cell("linear_model._check_sample_weight")
-def _(n, r):
-    w = r.random(n, dtype=np.float32)
-    return lambda: LM._check_sample_weight(w, n, "LinearRegression")
-
-
 @cell("linear_model: binary predict codes + decode_labels (LogisticRegression.predict)")
 def _(n, r):
     s = arr(r.standard_normal(n).astype(np.float32)); classes = [0, 1]

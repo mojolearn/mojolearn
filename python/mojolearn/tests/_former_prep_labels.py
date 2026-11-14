@@ -13,10 +13,40 @@ from mojolearn._array import Array
 from mojolearn.tests._array_reference import _native_reduce
 from mojolearn._buffer import as_f32_c, full
 from mojolearn import _labels
-from mojolearn._labels import flatten_labels, sorted_classes, label_kind
+from mojolearn._labels import flatten_labels, sorted_classes, is_bool
 from mojolearn.tests._prep_prog_oracle import (
     _PrepBase, _Prog, _NONE, _CAT_R, _CAT_CH, _mode, _x2d, _codes, _fit_categories, _label_chunk,
     _LABEL_KIND, _LabelBuf, _label_buffer, _class_words, _prep_binding, _optional_prep_entry, _native_helper)
+
+
+_STR_LABELS = []
+
+
+def str_labels(operation, *args):
+    """Frozen copy of the former `_labels.str_labels` (deleted from the package
+    2026-11-14 by lane py-admission): the native str-label encoder, ONE call."""
+    if not _STR_LABELS:
+        from mojolearn.tokenizer import _binding
+        _STR_LABELS.append(_binding()._module.str_labels_native_call)
+    got = _STR_LABELS[0](operation, *args)
+    if got is None:
+        return None
+    if operation == "encode":
+        classes, store = got
+        return classes, Array._owned(store, (len(store),), "<i4", "C")
+    store, missing, count = got
+    return Array._owned(store, (len(store),), "<f4" if args[2] else "<i4", "C"), missing, count
+
+
+def label_kind(classes):
+    """Frozen copy of the former `_labels.label_kind` (deleted from the package
+    2026-11-14 by lane py-admission): 'int' if every class is an integer
+    (bools excluded), 'float' if every class is a real number, else 'object'."""
+    if all(isinstance(c, numbers.Integral) and not is_bool(c) for c in classes):
+        return "int"
+    if all(isinstance(c, numbers.Real) and not is_bool(c) for c in classes):
+        return "float"
+    return "object"
 
 def _block_argmax(pr, arr, widths, drops, check):
     """One code per (row, block): the block_argmax stage over a (n, sum(widths)) input."""
@@ -332,7 +362,7 @@ class LabelEncoder(_PrepBase):
         if not values:
             return Array((0,), "<i4")
         if self._cats is None or _numeric_labels(values) is None:
-            native = _labels.str_labels("lookup", list(self._classes), values, False)
+            native = str_labels("lookup", list(self._classes), values, False)
             if native is not None:
                 codes, missing, count = native
                 if count:
@@ -521,7 +551,7 @@ class LabelBinarizer(_PrepBase):
         n = len(values)
         pr = _Prog()
         if self._cats is None or _numeric_labels(values) is None:
-            native = _labels.str_labels("lookup", list(self._classes), values, True) if values else None
+            native = str_labels("lookup", list(self._classes), values, True) if values else None
             if native is not None:
                 codes = pr.put(native[0])
             else:
@@ -737,7 +767,7 @@ class MultiLabelBinarizer(_PrepBase):
             pr.run(self.numeric_mode_)
             return pr.get_i32(out, (n, K))
         if self._cats is None or _numeric_labels(flat) is None:
-            native = _labels.str_labels("lookup", list(self._classes), flat, True)
+            native = str_labels("lookup", list(self._classes), flat, True)
             if native is not None:
                 codes = pr.put(native[0])
             else:

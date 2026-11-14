@@ -47,8 +47,6 @@ module, and because it depends only on the contract's `addr_ro`.
 
 import ctypes
 from . import _portable_math as math
-import numbers
-import operator
 
 from ._array import Array
 from ._buffer import addr_ro
@@ -109,27 +107,8 @@ def flatten_labels(y):
 # copies live in tests/test_hotpath_native.py.
 
 
-_STR_LABELS = []
-
-
-def str_labels(operation, *args):
-    """The native str-label encoder (bindings/str_labels_native_door.mojo): ONE
-    call over a flat list of label objects. ("encode", labels) gives
-    `(classes, int32 codes Array)`; ("lookup", classes, values, as_float)
-    gives `(codes Array, first missing labels, missing count)`. None when a
-    label is not a str: numbers and mixed lists take `sorted_classes`, whose
-    ORDER RULE refusals they keep."""
-    if not _STR_LABELS:
-        from .tokenizer import _binding
-        _STR_LABELS.append(_binding()._module.str_labels_native_call)
-    got = _STR_LABELS[0](operation, *args)
-    if got is None:
-        return None
-    if operation == "encode":
-        classes, store = got
-        return classes, Array._owned(store, (len(store),), "<i4", "C")
-    store, missing, count = got
-    return Array._owned(store, (len(store),), "<f4" if args[2] else "<i4", "C"), missing, count
+# TOMBSTONE: _labels.str_labels (its one product caller, unique_inverse, is native) deleted
+# 2026-11-14 by lane py-admission; the oracle copy is tests/_former_prep_labels.py.
 
 
 def sorted_classes(labels):
@@ -166,16 +145,6 @@ _NATIVE_ENCODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5}
 #: entry answers through `unique_inverse`.
 _NATIVE_ENCODE_MAX_CLASSES = 4096
 
-#: scikit-learn's own message for an all-zero weight vector; its
-#: check_all_zero_sample_weights_error matches "weight" ... "zero".
-ZERO_WEIGHTS_MSG = "Sample weights must contain at least one non-zero number."
-NEGATIVE_WEIGHTS_MSG = "Negative values in data passed to `sample_weight`"
-#: `prepare_targets`' weight statuses (`PT_W_*`) and scikit-learn's wording.
-_WEIGHT_REFUSALS = {
-    -3: "Input sample_weight contains NaN or infinity.",
-    -4: NEGATIVE_WEIGHTS_MSG,
-    -5: ZERO_WEIGHTS_MSG,
-}
 _ALLOW_NEGATIVE = 1
 _ALLOW_ALL_ZERO = 2
 
@@ -191,37 +160,13 @@ def prepare_targets(labels, weights, n, *, allow_negative=False, allow_all_zero=
     codes)`: the sorted classes as a float64 (float labels) or int64
     (integer and bool labels) `Array`, one int32 code per row; `(None,
     None)` without labels."""
-    from ._buffer import _native, _output_store
-
-    if labels is not None:
-        wide = "<f8" if labels.dtype in ("<f4", "<f8") else "<i8"
-        fmt = "d" if wide == "<f8" else "q"
-        classes_store = _output_store(fmt, n)
-        codes_store = _output_store("i", n)
-        y_addr, y_code = labels._addr, _NATIVE_ENCODE[labels.dtype]
-        classes_addr, codes_addr = classes_store.buffer_info()[0], codes_store.buffer_info()[0]
-    else:
-        y_addr = y_code = classes_addr = codes_addr = 0
-    w_addr, w_code = (0, 0) if weights is None else (weights._addr, _NATIVE_ENCODE[weights.dtype])
+    # Lane py-admission: the stores, dtype codes, weight refusals and the cut
+    # of the class table are bindings/labels_admission_unpack.mojo
+    # `labels_prepare_targets_op`.
+    from ._native_labels_bridge import labels_entry, LABELS_OP_PREPARE_TARGETS
+    entry, context = labels_entry()
     flags = (_ALLOW_NEGATIVE if allow_negative else 0) | (_ALLOW_ALL_ZERO if allow_all_zero else 0)
-    try:
-        k = int(_native("prepare_targets")(y_addr, y_code, n, classes_addr, codes_addr,
-                                           w_addr, w_code, flags))
-    except Exception as exc:  # a Mojo Error crosses as a bare Exception
-        if "NaN label" in str(exc):
-            raise ValueError(str(exc)) from None
-        raise
-    if k < 0:
-        raise ValueError(_WEIGHT_REFUSALS[k])
-    if labels is None:
-        return None, None
-    # the first k slots hold the classes: one memmove into a k-slot store
-    if k < n:
-        cut = _output_store(fmt, k)
-        ctypes.memmove(cut.buffer_info()[0], classes_store.buffer_info()[0], 8 * k)
-        classes_store = cut
-    return (Array._owned(classes_store, (k,), wide, "C"),
-            Array._owned(codes_store, (n,), "<i4", "C"))
+    return entry(LABELS_OP_PREPARE_TARGETS, (labels, weights, int(n), flags), context)
 
 
 def encode_labels(y):
@@ -242,49 +187,11 @@ def encode_labels(y):
 def _encode_labels_native(y):
     """`(classes, codes)` for one numeric label vector through
     `prepare_targets`, or None for what only the label input step reads
-    (lists, str or object buffers, a matrix, an empty vector)."""
-    from ._buffer import Buf, _has_buffer, _materialize, typestr_of
-
-    if isinstance(y, (list, tuple, str, bytes)):
-        return None
-    if not isinstance(y, Array) and not _has_buffer(y):
-        return None
-    bool_source = False
-    if not isinstance(y, Array):
-        try:
-            with Buf(y, name="y") as b:
-                bool_source = typestr_of(b) == "|b1"
-        except (TypeError, ValueError):
-            # an object-dtype buffer ('O': str labels in a NumPy object
-            # array) or a format no Array holds: the label input step reads
-            # it through `tolist()` and names any refusal
-            return None
-    try:
-        arr, _ = _materialize(y, "y")
-    except (TypeError, ValueError):
-        return None  # the label input step names the refusal
-    if arr.dtype not in _NATIVE_ENCODE or arr.size == 0:
-        return None
-    # `flatten_labels` reads the LOGICAL order; storage order equals it only
-    # for a vector (rank 1, or every other axis of length 1).
-    if arr.size != max(arr.shape):  # glue: largest axis of the shape
-        return None
-    classes, codes = prepare_targets(arr, None, int(arr.size))
-    del arr
-    values = classes.tolist()
-    if bool_source:
-        values = list(map(bool, values))  # glue: the k class values
-    return values, codes
-
-
-def label_kind(classes):
-    """'int' if every class is an integer (bools excluded), 'float' if
-    every class is a real number, else 'object'."""
-    if all(isinstance(c, numbers.Integral) and not is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return "int"
-    if all(isinstance(c, numbers.Real) and not is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return "float"
-    return "object"
+    (lists, str or object buffers, a matrix, an empty vector). One native
+    call (bindings/labels_admission_unpack.mojo `labels_encode_numeric_op`)."""
+    from ._native_labels_bridge import labels_entry, LABELS_OP_ENCODE_NUMERIC
+    entry, context = labels_entry()
+    return entry(LABELS_OP_ENCODE_NUMERIC, (y,), context)
 
 
 def decode_labels(classes, codes):
@@ -294,28 +201,24 @@ def decode_labels(classes, codes):
     (DEVIATION 2340: an ndarray of labels used to come back)."""
     # ONE native call (bindings/classical_labels_door.mojo `labels_decode_labels`):
     # the class kind, the gathers and, for str / bool / object classes, one
-    # list filled in C. Codes that are not a 1-D int32 / int64 Array are
-    # first made one by the native Array operations (lane
-    # p2-labels-lists-arrays; the Python map / from_list fallbacks are gone).
-    if not isinstance(codes, Array):
-        codes = (Array.from_list(codes, "<i8") if type(codes) in (list, tuple)
-                 else Array.from_buffer(codes))
-    if codes.ndim != 1:
-        codes = codes.reshape(-1)
-    if codes.dtype not in ("<i4", "<i8"):
-        codes = codes.astype("<i8")
+    # list filled in C. Codes that are not a 1-D int32 / int64 Array are first
+    # made one natively (bindings/labels_admission_unpack.mojo
+    # `labels_decode_any_op`, lane py-admission).
     from ._native_labels_bridge import labels_entry, LABELS_OP_DECODE
     entry, context = labels_entry()
     return entry(LABELS_OP_DECODE, (classes, codes), context)
+
+
+# TOMBSTONE: _labels.label_kind / classes_from_member / threshold_codes (no product caller:
+# bindings/classical_labels_door.mojo labels_label_kind, the forest archive reader and
+# bindings/svc_common_door.mojo own them) deleted 2026-11-14 by lane py-admission; code
+# recoverable at 1fac46234f; the test oracles' copy of label_kind is tests/_former_prep_labels.py.
 
 
 # TOMBSTONE: _labels._decode_list_native / _decode_labels_native (the Python
 # decode seams; every decode is one native call now) deleted 2026-11-09 by lane
 # p2-labels-lists-arrays; the frozen copies the legacy test oracle reads live in
 # tests/_legacy_host_inference.py.
-
-
-_INDEX_DTYPES = ("<i8", "<i4", "<u4", "<u2", "<u1", "<i1")
 
 
 class ClassLabels(list):
@@ -335,17 +238,11 @@ class ClassLabels(list):
         except TypeError:
             if key is None or isinstance(key, (str, bytes, float, tuple, dict)):
                 raise
-        from ._buffer import _materialize
-        codes, _ = _materialize(key, "index")
-        if codes.dtype not in _INDEX_DTYPES:
-            raise TypeError("classes_ takes an integer array as an index, "
-                            f"not an array of {codes.dtype}")
-        if codes.ndim != 1:
-            raise TypeError("classes_ takes a 1-D integer array as an index, "
-                            f"not one of shape {codes.shape}")
-        if codes.dtype not in ("<i8", "<i4"):
-            codes = codes.astype("<i8")
-        return decode_labels(list(self), codes)
+        # the integer array index: its refusals, widening and decode are one
+        # native call (bindings/labels_admission_unpack.mojo `labels_class_index_op`)
+        from ._native_labels_bridge import labels_entry, LABELS_OP_CLASS_INDEX
+        entry, context = labels_entry()
+        return entry(LABELS_OP_CLASS_INDEX, (self, key), context)
 
     # Pickle and copy take object.__reduce_ex__'s C path: NEWOBJ with no
     # arguments, then the list items appended. `__slotnames__` is filled
@@ -354,70 +251,17 @@ class ClassLabels(list):
     __slotnames__ = []
 
 
-def classes_from_member(member):
-    """The inverse of `classes_member`, also reading a 0.6.x file's
-    `classes` member (int, float, bool or `<U` from `np.unique`)."""
-    if isinstance(member, str):
-        return [member]
-    if isinstance(member, (list, tuple)):
-        return [str(v) for v in flatten_labels(list(member))]  # glue: converts a classes_ member of str labels
-    dtype = str(getattr(member, "dtype", ""))
-    kind = dtype.lstrip("<>|=")[:1]
-    values = flatten_labels(member)
-    if kind in ("i", "u"):
-        return [int(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-    if kind == "f":
-        return [float(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-    if kind == "b":
-        return [bool(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-    return [str(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
-
-
 def argmax_rows(scores):
     """Row-wise first-max-wins argmax of an `[n_rows, n_cols]` block of
     scores, as an int64 `Array`: the base binding's scan (DEVIATION 2500,
     strict `>` from column 0, so ties keep the lowest column and a NaN
-    never replaces). Every input takes it: a non-`Array` buffer is wrapped,
-    an F-order block is laid out in C order, and integer scores are widened
-    to float64 (exact below 2**53, so the order and the ties are the same).
-    The per-row Python loop is gone (cpu-gpu-cleanup c-core)."""
-    if not isinstance(scores, Array):
-        from ._buffer import _materialize
-        scores, _ = _materialize(scores, "scores")
-    n_rows, n_cols = scores.shape
-    if not n_rows:
-        return Array.from_list([], "<i8")
-    if not n_cols:
-        raise ValueError("argmax_rows: scores have no columns")
-    if scores.dtype not in ("<f4", "<f8"):
-        scores = scores.astype("<f8")
-    scores = scores._as_c()
-    from ._buffer import _native, _output_store
-    fn = _native("argmax_rows_f32" if scores.dtype == "<f4" else "argmax_rows_f64")
-    store = _output_store("q", n_rows)
-    fn(scores._addr, n_rows, n_cols, store.buffer_info()[0])
-    return Array._owned(store, (n_rows,), "<i8", "C")
-
-
-def threshold_codes(scores, threshold=0.0, *, strict=True, below=0, above=1):
-    """`above` where a score is > threshold (`strict`) or >= threshold, else
-    `below` (NaN takes `below`), as an int64 `Array`, by the base binding's
-    `threshold_labels_i64` (lane cgr4-py-compute: the predict label maps
-    that were per-row Python comprehensions)."""
-    if not isinstance(scores, Array):
-        from ._buffer import _materialize
-        scores, _ = _materialize(scores, "scores")
-    if scores.dtype not in ("<f4", "<f8"):
-        scores = scores.astype("<f8")
-    scores = scores._as_c()
-    n = scores.size
-    if not n:
-        return Array.from_list([], "<i8")
-    from ._buffer import _native, _output_store
-    store = _output_store("q", n)
-    _native("threshold_labels_i64")(scores._addr, 0 if scores.dtype == "<f4" else 1, n, float(threshold),
-                                    int(bool(strict)), int(below), int(above), store.buffer_info()[0])
-    return Array._owned(store, (n,), "<i8", "C")
+    never replaces). Every input takes it: a non-`Array` buffer is read in
+    C order, and integer scores are widened to float64 (exact below 2**53,
+    so the order and the ties are the same). One native call
+    (bindings/labels_admission_unpack.mojo `labels_argmax_op`)."""
+    from ._native_labels_bridge import labels_entry, LABELS_OP_ARGMAX_ROWS
+    entry, context = labels_entry()
+    return entry(LABELS_OP_ARGMAX_ROWS, (scores,), context)
 
 
 def unique_inverse(y):
@@ -425,33 +269,14 @@ def unique_inverse(y):
     the sorted distinct values (float64 for real labels, int64 for integer
     and bool labels) and one int32 code per row, `classes[codes] == y`.
     This is `np.unique(y, return_inverse=True)` computed by ONE call of the
-    shared entry `prepare_targets` (its capped encoder, then the base
-    binding's `unique_inverse`, cpu-gpu-cleanup w2-pyglue, 2026-10-02): on a
-    GPU install a device sort, a flag/scan compaction and a gather
-    (`core/label_encode_device.mojo`); on a CPU-only install the core host
-    binding's twin of the same statements (`core/label_encode.mojo`).
+    shared entry `prepare_targets` (on a GPU install a device sort, a
+    flag/scan compaction and a gather, `core/label_encode_device.mojo`; on a
+    CPU-only install the core host twin, `core/label_encode.mojo`).
     `-0.0` and `0.0` are one class (the first row's spelling kept); a NaN
-    label is refused. str labels have no device sort: they take
-    `sorted_classes` (the ORDER RULE) and `classes` comes back a list."""
-    from ._buffer import _materialize
-
-    try:
-        arr, _ = _materialize(y, "y")
-    except (TypeError, ValueError):
-        arr = None
-    if arr is None or arr.dtype.lstrip("<>|=")[:1] not in ("f", "i", "u", "b"):
-        # str or object labels: no device sort orders text, so these take
-        # the ORDER RULE's own encoding (the label input step)
-        flat = flatten_labels(y)
-        native = str_labels("encode", flat) if type(flat) is list else None
-        if native is not None:
-            return native
-        return _sorted_native(flat)
-    if arr.size == 0:
-        raise ValueError("mojolearn: y is empty")
-    if arr.size != max(arr.shape):  # glue: largest axis of the shape
-        raise ValueError("mojolearn: y must be a vector of labels")
-    if arr.dtype not in _NATIVE_ENCODE:
-        # float16, int16, int8, ...: widened exactly, as the 64-bit sort read them
-        arr = arr.astype("<f8" if arr.dtype.lstrip("<>|=")[:1] == "f" else "<i8")
-    return prepare_targets(arr, None, int(arr.size))
+    label, an empty y and a y that is not a vector are refused. str labels
+    have no device sort: they take the str encoder or the ORDER RULE and
+    `classes` comes back a list. One native call
+    (bindings/labels_admission_unpack.mojo `labels_unique_inverse_op`)."""
+    from ._native_labels_bridge import labels_entry, LABELS_OP_UNIQUE_INVERSE
+    entry, context = labels_entry()
+    return entry(LABELS_OP_UNIQUE_INVERSE, (y,), context)

@@ -3,7 +3,7 @@
 (python/mojolearn/density.py before its methods became one native call each),
 used only as an independent test oracle: `fit(model, X, y, sample_weight)`,
 `scores(model, X, want_total)` (score_samples: False; score: True)."""
-from mojolearn._sample_weight import check_sample_weight
+from mojolearn.tests._legacy_sample_weight import check_sample_weight
 from mojolearn._buffer import addr, addr_ro, all_finite, as_f32_dense_c, empty
 
 

@@ -1,4 +1,11 @@
-"""The one `sample_weight` check every estimator's `fit` shares.
+"""FROZEN ORACLE (test tool): the former `mojolearn._sample_weight.check_sample_weight`.
+
+Deleted from the package 2026-11-14 by lane py-admission: it had no product
+caller; every door admits sample_weight natively
+(bindings/admitted_input_unpack.mojo `admit_weights`, the same wording).
+The legacy oracles below still read it.
+
+The one `sample_weight` check every estimator's `fit` shared.
 
 scikit-learn's `sklearn.utils.validation._check_sample_weight`, with its
 wording (its estimator checks match on it): a scalar becomes a constant
@@ -14,8 +21,8 @@ input is not copied). A caller that writes into the weights must pass
 `copy=True`, so the caller's array is never changed.
 """
 
-from ._buffer import as_f32_c, as_f64_c, full
-from ._labels import NEGATIVE_WEIGHTS_MSG, ZERO_WEIGHTS_MSG, prepare_targets
+from mojolearn._buffer import as_f32_c, as_f64_c, full
+from mojolearn._labels import prepare_targets
 
 
 def check_sample_weight(sample_weight, n_samples, *, dtype="<f4", copy=False,

@@ -18,7 +18,8 @@ def decode_labels(classes, codes):
     classes, and int classes whose selected values fit int64)."""
     from mojolearn import _labels
     from mojolearn._array import Array
-    kind = _labels.label_kind(classes)
+    from mojolearn.tests._former_prep_labels import label_kind
+    kind = label_kind(classes)
     fast = _decode_labels_native(classes, codes, kind)
     if fast is not None:
         return fast
@@ -39,7 +40,7 @@ def kde_fit(model, X, y=None, sample_weight=None):
     """Frozen 32011bb32 public CPU fit, including outer validation/state."""
     from mojolearn import _sk_validate
     from mojolearn._buffer import as_f32_dense_c
-    from mojolearn._sample_weight import check_sample_weight
+    from mojolearn.tests._legacy_sample_weight import check_sample_weight
     state = vars(model)
     check = None
     args, kwargs = (X, y), {"sample_weight": sample_weight}

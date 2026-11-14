@@ -13,6 +13,29 @@ from mojolearn.neighbors import _WEIGHTS_UNIFORM, _XN, _check_metric_input, _res
 
 # The former NearestNeighbors resident-index helpers, kept with the frozen
 # body: the public class reads its holder through the native attribute slot.
+def whole_float_labels(y):
+    """Frozen copy of the former `_sk_validate.whole_float_labels` (deleted from
+    the package 2026-11-14 by lane py-admission): True when `y` is a float
+    buffer whose every value is a finite whole number."""
+    from mojolearn._sk_validate import describe
+    from mojolearn._buffer import _materialize, _native, addr_ro, all_finite
+    from mojolearn._array import _NATIVE_CODE, _REDUCE_INTEGRAL
+    from mojolearn._labels import unique_inverse
+    info = describe(y)
+    if info is None or info[0] != "buffer" or info[2] != "float":
+        return False
+    a, _ = _materialize(y, "y")
+    if a.dtype not in ("<f4", "<f8"):
+        return True
+    if not all_finite(a):
+        return False
+    if a.size == 0 or a.size != max(a.shape):
+        return True
+    classes, _ = unique_inverse(a._as_c().reshape((a.size,)))
+    return bool(_native("reduce_stat")(addr_ro(classes, name="classes"), _NATIVE_CODE[classes.dtype],
+                                       int(classes.size), _REDUCE_INTEGRAL))
+
+
 def _holder(self):
     holder = self.__dict__.get("_resident_holder")
     if holder is None:
@@ -72,7 +95,6 @@ def clf_fit(self, X, y):
         raise ValueError(f"mojolearn: y must be 1-D or 2-D, got {len(shape)}-D")
     if shape[0] != self.n_samples_fit_:
         raise ValueError(f"mojolearn: y has {shape[0]} rows, X has {self.n_samples_fit_}")
-    from mojolearn._sk_validate import whole_float_labels
     self._label_names = None
     if len(shape) == 1 and not _is_integer_labels(y) and not whole_float_labels(y):
         names, codes = encode_labels(y)
