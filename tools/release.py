@@ -3915,6 +3915,14 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if self.assembly_needed() and not self.dry and not self.assembled_ok():
             raise StepFailed("the assembled sets are not there or not this plan's; run linux-assemble")
         sets, proofs, manifests = self.pack_inputs()
+        if not self.dry:
+            # audit.sh runs every wheel through Docker; a down daemon fails the pack after the sets were assembled
+            # (2026-11-14: Docker Desktop was closed, "Cannot connect to the Docker daemon", exit 125, one resume).
+            # Refuse here, before the pack dir is moved aside, so the resume is a restart of this one step.
+            d = subprocess.run(["docker", "info"], capture_output=True, text=True)
+            if d.returncode != 0:
+                raise StepFailed("docker is not running (audit.sh needs it): " + (d.stderr or d.stdout).strip()[:200]
+                                 + "; start Docker Desktop (open -a Docker) and rerun this step")
         src = self.src
         dist = self.rel / "linux"
         if dist.exists() and not self.dry:
