@@ -264,3 +264,29 @@ def cls_prog_release(key: EntryRef, owned: List[Int]) -> String:
         except error:
             failures += ("" if failures.byte_length() == 0 else "; ") + "slot " + String(slot) + ": " + String(error)
     return failures
+
+
+# ---------------------------------------------------------------- typed stage builders
+# Lane door-run-split (2026-11-14): the class-count stages took the door's
+# Python-holding `ClsProg` twice over (bindings/prep_classify_native_door.mojo
+# `_class_counts` and an uncalled copy, bindings/prep_classify_common_door.mojo
+# `p2m_class_counts`); one typed builder on `ClsProgram` replaces both. Same
+# allocations, same stage words: the bits do not move.
+comptime CLS_OP_P2M_CCOUNT = 200
+comptime CLS_OP_P2M_CSCAN = 201
+# `_p2m_chunks`' minimum rows per chunk (_II_CH).
+comptime CLS_II_CH = 1024
+
+
+def cls_class_counts(mut program: ClsProgram, co: Int, n: Int, K: Int) -> Int:
+    """`_p2m_class_rows(pr, co, n, K, rows=False)`: the class counts' (int32
+    words) offset."""
+    var ch = max(CLS_II_CH, (n + CLS_II_CH - 1) // CLS_II_CH, (n * K + 16777215) // 16777216, 1)
+    var nch = max(1, (n + ch - 1) // ch)
+    var cnt = program.alloc(nch * K)
+    var tot = program.alloc(K)
+    var count_words: List[Int] = [co, n, K, ch, cnt]
+    program.stage(CLS_OP_P2M_CCOUNT, nch, count_words)
+    var scan_words: List[Int] = [cnt, nch, K, tot]
+    program.stage(CLS_OP_P2M_CSCAN, K, scan_words)
+    return tot
