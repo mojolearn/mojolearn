@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Correctness sanity of the CNN lane's pooling against a float64 NumPy
-reference of PyTorch's MaxPool2d / AvgPool2d (floor mode), itself checked
-against torch where torch is installed."""
+"""The float64 NumPy reference of PyTorch's MaxPool2d / AvgPool2d (floor and
+ceil mode), checked against torch where torch is installed (ORACLE). The
+layers are held to the same reference natively in
+checks/native_tests/cnn_pool_cpu_suite.mojo (`pixi run check-native-cnn-pool-cpu`)."""
 import numpy as np
 import pytest
 
@@ -66,57 +67,8 @@ AVG_CASES = [((3, 3), (1, 1), (1, 1), True), ((2, 3), (1, 2), (1, 1), False), ((
              ((3, 2), (2, 1), (1, 1), True)]
 
 
-def _x(shape, seed, ties=False):
-    rng = np.random.default_rng(seed)
-    if ties:
-        return rng.integers(0, 3, size=shape).astype(np.float32)
-    return rng.standard_normal(shape).astype(np.float32)
-
-
-@pytest.mark.parametrize("case", MAX_CASES)
-def test_maxpool2d(case):
-    import mojolearn as ml
-    k, s, p, d = case
-    for ties in (False, True):
-        x = _x((2, 3, 6, 7), 0, ties)
-        m = ml.MaxPool2d(k, stride=s, padding=p, dilation=d)
-        out = m.forward(x)
-        g = _x(out.shape, 1)
-        dx = m.backward(g)
-        rout, rdx = ref_maxpool(x, g, k, s, p, d)
-        np.testing.assert_allclose(out, rout, rtol=0, atol=0)
-        np.testing.assert_allclose(dx, rdx, rtol=1e-5, atol=1e-5)
-
-
-@pytest.mark.parametrize("case", AVG_CASES)
-def test_avgpool2d(case):
-    import mojolearn as ml
-    k, s, p, inc = case
-    x = _x((2, 3, 6, 7), 0)
-    m = ml.AvgPool2d(k, stride=s, padding=p, count_include_pad=inc)
-    out = m.forward(x)
-    g = _x(out.shape, 1)
-    dx = m.backward(g)
-    rout, rdx = ref_avgpool(x, g, k, s, p, inc)
-    np.testing.assert_allclose(out, rout, rtol=1e-5, atol=1e-6)
-    np.testing.assert_allclose(dx, rdx, rtol=1e-5, atol=1e-6)
-
-
-def test_pool1d():
-    import mojolearn as ml
-    x = _x((2, 3, 11), 3)
-    m = ml.MaxPool1d(3, stride=2, padding=1)
-    out = m.forward(x)
-    g = _x(out.shape, 4)
-    rout, rdx = ref_maxpool(x[:, :, None, :], g[:, :, None, :], (1, 3), (1, 2), (0, 1), (1, 1))
-    np.testing.assert_allclose(out, rout[:, :, 0, :], atol=0)
-    np.testing.assert_allclose(m.backward(g), rdx[:, :, 0, :], atol=1e-6)
-    a = ml.AvgPool1d(4, stride=2, padding=2, count_include_pad=False)
-    out = a.forward(x)
-    g = _x(out.shape, 5)
-    rout, rdx = ref_avgpool(x[:, :, None, :], g[:, :, None, :], (1, 4), (1, 2), (0, 2), False)
-    np.testing.assert_allclose(out, rout[:, :, 0, :], rtol=1e-5, atol=1e-6)
-    np.testing.assert_allclose(a.backward(g), rdx[:, :, 0, :], rtol=1e-5, atol=1e-6)
+def _x(shape, seed):
+    return np.random.default_rng(seed).standard_normal(shape).astype(np.float32)
 
 
 def test_reference_matches_torch():
@@ -144,25 +96,6 @@ def test_reference_matches_torch():
 
 CEIL_CASES = [((3, 3), (2, 2), (1, 1), True, None), ((2, 3), (2, 2), (0, 1), False, None),
               ((3, 2), (2, 3), (1, 0), True, 5), ((2, 2), (3, 3), (1, 1), False, 3)]
-
-
-@pytest.mark.parametrize("case", CEIL_CASES)
-def test_pool_ceil_and_divisor(case):
-    import mojolearn as ml
-    k, s, p, inc, ovr = case
-    x = _x((2, 3, 6, 7), 0)
-    m = ml.MaxPool2d(k, stride=s, padding=p, ceil_mode=True)
-    out = m.forward(x)
-    g = _x(out.shape, 1)
-    rout, rdx = ref_maxpool(x, g, k, s, p, (1, 1), ceil=True)
-    np.testing.assert_array_equal(out, rout)
-    np.testing.assert_allclose(m.backward(g), rdx, rtol=1e-5, atol=1e-6)
-    a = ml.AvgPool2d(k, stride=s, padding=p, ceil_mode=True, count_include_pad=inc, divisor_override=ovr)
-    out = a.forward(x)
-    g = _x(out.shape, 2)
-    rout, rdx = ref_avgpool(x, g, k, s, p, inc, ceil=True, override=ovr)
-    np.testing.assert_allclose(out, rout, rtol=1e-5, atol=1e-6)
-    np.testing.assert_allclose(a.backward(g), rdx, rtol=1e-5, atol=1e-6)
 
 
 def test_ceil_reference_matches_torch():

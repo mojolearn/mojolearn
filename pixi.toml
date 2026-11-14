@@ -291,6 +291,13 @@ check-native-pca-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_C
 check-native-pca-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_native_gpu.mojo"
 check-native-logistic-label-weights-cpu = "mojo run -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/logistic_label_weights_cpu.mojo"
 check-native-logistic-label-weights-gpu = "mojo run -I . checks/native_tests/logistic_label_weights_gpu.mojo"
+check-native-cnn-conv-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/cnn_conv_cpu.mojo"
+check-native-cnn-pool-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/cnn_pool_cpu.mojo"
+check-native-cnn-batchnorm-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/cnn_batchnorm_cpu.mojo"
+check-native-cnn-blocks-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/cnn_blocks_cpu.mojo"
+check-native-cnn-trainer-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/cnn_trainer_cpu.mojo"
+check-native-mamba3-prefix-step-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/mamba3_prefix_step_cpu.mojo"
+check-native-training-neural-rng-slices-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/training_neural_rng_slices_cpu.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
 check-device-zero-memset = "mojo run -D MOJOLEARN_2560_MEMSET_FILL=1 -I . core/device_zero_check.mojo"
