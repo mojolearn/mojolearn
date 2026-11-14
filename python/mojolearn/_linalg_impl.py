@@ -81,13 +81,7 @@ caller of this function:
   cannot stop you from creating an order dependence afterwards.
 """
 
-import array
-import importlib.machinery
-import importlib.util
-
 from . import _backend
-from ._buffer import addr, addr_ro, as_f32_c, as_i8_c, as_i32_c, as_u16_c, empty
-from ._bufcheck import dtype_name, is_native_f32, probe
 
 #: The profile family and the version, kept apart because the VERSION is the
 #: part the contract makes load-bearing: "a bit-identity claim with no version
@@ -213,76 +207,13 @@ def require_identical():
 #   False        True          OP_NT    a @ b.T      (m, k)    (n, k)
 #   True         False         OP_TN    a.T @ b      (k, m)    (k, n)
 #   True         True          REFUSED  -- see below
-_OPS = {
-    (False, False): OP_NN,
-    (False, True): OP_NT,
-    (True, False): OP_TN,
-}
-
-
-def _operand(x, name):
-    """A float32, C-contiguous, 2-D `Array` over `x`, to keep alive across
-    the call. DEVIATION 2400: the operand is read through the BUFFER
-    PROTOCOL (`_buffer.view`), so a NumPy array, an `array.array('f')`, a
-    `mojolearn.Array` or anything else exporting a float32 buffer is an
-    operand; there is no NumPy on this path.
-
-    **A non-float32 buffer is REFUSED BY NAME, never cast.** `_buffer.as_f32_c`
-    converts float64 silently-but-reported, which is the right trade for an
-    estimator whose answer is approximate anyway. It is the wrong trade here:
-    this module's entire product is the caller's control over which bits go
-    in, and a float64 input downcast on the way through has already lost 29
-    mantissa bits before the profile sees it. The caller does the cast, and
-    then it is in their source where they can see it. So the FORMAT is
-    checked here first and `as_f32_c` is reached only by a float32 buffer,
-    where its one remaining job is the layout.
-
-    Non-contiguous IS accepted with a copy, because reordering float32 values
-    changes no bit. The contract requires contiguity (section 2) and a
-    layout copy supplies it without touching a value; a float32 buffer
-    already in C order is borrowed with no copy at all.
-    """
-    try:
-        pb = probe(x)
-    except TypeError:
-        raise TypeError(
-            f"mojolearn.linalg: {name} is a {type(x).__name__}, which does "
-            "not support the buffer protocol, and only a float32 buffer is "
-            f"in this profile ({PROFILE}; contract section 1 makes FP32 a "
-            "hard requirement). Pass a float32 array -- a NumPy array, an "
-            "array.array('f') or a mojolearn.Array; convert with "
-            f"np.asarray({name}, dtype=np.float32) if that is what you want."
-        ) from None
-    if not is_native_f32(pb.format):
-        raise TypeError(
-            f"mojolearn.linalg: {name} has dtype {dtype_name(x, pb)}, and "
-            f"only float32 is in this profile ({PROFILE}; contract section 1 "
-            "makes FP32 a hard requirement, and section 0.5 excludes FP16, "
-            "BF16, TF32 and float64). Refused rather than cast, because a "
-            "cast from float64 drops mantissa bits you may care about. "
-            f"Convert it yourself with np.asarray({name}, dtype=np.float32) "
-            "if that is what you want."
-        )
-    if pb.ndim != 2:
-        raise ValueError(
-            f"mojolearn.linalg: {name} must be 2-D, got {pb.ndim}-D shape "
-            f"{pb.shape}. A vector product is OP_NT at n == 1 (contract 0.1); "
-            f"pass it as a 2-D array of shape (n, k) or (k, 1)."
-        )
-    if 0 in pb.shape:  # no elements: a zero dimension (rank 2, checked above)
-        raise ValueError(
-            f"mojolearn.linalg: {name} has shape {pb.shape} and no elements. "
-            "Contract section 8 does specify the degenerate shapes (k == 0 "
-            "writes +0.0 into every cell; m == 0 or n == 0 writes nothing), "
-            "but no gate in this tree has run them through the Python "
-            "surface, so they are refused here rather than answered "
-            "unchecked."
-        )
-    # A layout copy at most, never a cast (the format was checked above):
-    # contiguity is a layout and reordering float32 values moves no bit.
-    # Contract section 2 requires it.
-    a, _copied = as_f32_c(x, ndim=2, name=name)
-    return a
+#
+# The operand refusals (float32 only, refused by name and never cast; 2-D;
+# no empty operand; a layout copy at most) are
+# bindings/linalg_ops_lowbit_door.mojo `lin_operand`; the Python `_operand`,
+# `_lowbit_binding`, `_int8_operand` and `_out_or_new` that duplicated
+# `lin_operand`, `lin_lowbit`, `_lin_int8_operand` and `lin_out` are deleted
+# (lane py-classical-linalg, 2026-11-14).
 
 
 # Arithmetic (contract gemm/IDENTICAL_FP32_CONTRACT.md; oracle gemm/host/gemm_oracle.mojo::gemm_oracle):
@@ -370,24 +301,6 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
 # ===========================================================================
 
 
-def _lowbit_binding():
-    b = _load()
-    require_identical()
-    got = getattr(b, "lowbit_profile_version", None)
-    if got is None:
-        raise RuntimeError(
-            "mojolearn.linalg: the loaded linalg extension predates the "
-            "low-bit profiles; rebuild it with bindings/build_linalg.sh"
-        )
-    v = int(got())
-    if v != LOWBIT_PROFILE_VERSION:
-        raise RuntimeError(
-            f"mojolearn.linalg: the loaded extension implements low-bit "
-            f"profile version {v}, this wrapper expects {LOWBIT_PROFILE_VERSION}"
-        )
-    return b
-
-
 # Contract gemm/IDENTICAL_LOWBIT_CONTRACT.md L-2 (from_bf16: L-1; int8: L-3, L-4, L-6; int15: W-1..W-4).
 def to_bf16(x):
     """Convert float32 to bfloat16 bits.
@@ -456,19 +369,6 @@ def matmul_int8(a, b, *, out=None):
     return _NATIVE(None, "family_lin_matmul_int8", (None, a, b, out), _NATIVE_CONTEXT)
 
 
-def _int8_operand(x, name):
-    if isinstance(x, tuple) and len(x) == 2:
-        q, _ = as_i8_c(x[0], ndim=2, name=name + " codes")
-        e, _ = as_i32_c(x[1], ndim=1, name=name + " exponents")
-        if probe(e).shape != (probe(q).shape[0],):
-            raise ValueError(
-                f"mojolearn.linalg.matmul_int8: {name} exponents has shape "
-                f"{probe(e).shape}, want ({probe(q).shape[0]},)"
-            )
-        return q, e
-    return quantize_int8(_operand(x, name))
-
-
 # ===========================================================================
 # THE FIFTEEN-BIT PROFILE (lane/lowbit-int15, 2026-09-29)
 # gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6. An operand is THREE arrays:
@@ -513,19 +413,6 @@ def matmul_int15(a, b, *, out=None):
     identical build.
     """
     return _NATIVE(None, "family_lin_matmul_int15", (None, a, b, out), _NATIVE_CONTEXT)
-
-
-def _out_or_new(out, m, n, who):
-    if out is None:
-        return empty((m, n), "<f4")
-    pb = probe(out)
-    if not is_native_f32(pb.format):
-        raise TypeError(f"mojolearn.linalg.{who}: out must be float32")
-    if pb.shape != (m, n):
-        raise ValueError(f"mojolearn.linalg.{who}: out has shape {pb.shape}, want ({m}, {n})")
-    if not pb.c_contiguous or pb.readonly:
-        raise ValueError(f"mojolearn.linalg.{who}: out must be C-contiguous and writable")
-    return out
 
 
 # ===========================================================================
