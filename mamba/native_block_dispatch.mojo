@@ -159,28 +159,27 @@ def _mamba3_session_operation(op: Int, session: Int, a: List[Int], words: List[I
     if not IDN_MAMBA3_FORWARD_DOOR_OLD and ((op == 6 and len(words) == 5) or (op == 8 and len(words) == 6)):
         if words[len(words) - 1] != 1:
             raise Error("mamba3 prefill: invalid native descriptor arity")
-        var inner = List[Int](capacity=len(words) - 1)
-        for i in range(len(words) - 1):  # small-loop(session handle and shape words)
-            inner.append(words[i])
         _session_reserve(owner)
         var result = 0
         try:
-            result = _mamba3_session_exec(op, owner, a, inner, f)
+            # the trailing held word is not one of the operation's scalars
+            result = _mamba3_session_exec(op, owner, a, words, f, 1)
         except problem:
             _session_release(owner)
             raise problem
         _session_release(owner)
         return result
-    return _mamba3_session_exec(op, owner, a, words, f)
+    return _mamba3_session_exec(op, owner, a, words, f, 0)
 
 
 def _mamba3_session_exec(op: Int, owner: MutPointer[Mamba3PrefillSession, MutUntrackedOrigin], a: List[Int],
-                         words: List[Int], f: List[Float64]) raises -> Int:
-    """A reserved session's operation (every op but reserve and release)."""
+                         words: List[Int], f: List[Float64], tail: Int) raises -> Int:
+    """A reserved session's operation (every op but reserve and release);
+    the last `tail` words are not scalars (the held word)."""
     if not owner[].busy or not owner[].usable:
         raise Error("Mamba block native ABI: execution requires a reserved usable session")
     var p = List[Int](capacity=len(words))
-    for i in range(1, len(words)):  # small-loop(admitted native session scalar span)
+    for i in range(1, len(words) - tail):  # small-loop(admitted native session scalar span)
         p.append(words[i])
     if op == 15:
         comptime if not NN40_OWNED_WEIGHTS:
