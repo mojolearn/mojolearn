@@ -78,7 +78,7 @@ from core.shared_slot import SharedSlot
 from neighbors.neighbors_knn_run import (
     KNN_DIST_LP, KNN_DIST_JS, KNN_CODE_F32, KNN_CODE_F64, KNN_CODE_I64, KNN_REDUCE_MIN, KNN_REDUCE_MAX,
     KNN_REDUCE_INTEGRAL, knn_refuse_rbc_vote, knn_refuse_distance_inner_product, knn_refuse_algorithm,
-    knn_refuse_metric_name, knn_refuse_metric_unimplemented, knn_refuse_metric_unknown, knn_refuse_inert_p,
+    knn_refuse_metric_name, knn_metric_code, knn_metric_resolve, knn_refuse_inert_p,
     knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_metric_reads_host_queries,
     knn_refuse_callable_weights, knn_refuse_weights, knn_weights_code, knn_check_y_rank, knn_check_y_rows,
     knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_labels_already_int32, knn_float_format,
@@ -540,25 +540,23 @@ def _refuse_inert_p(cls_name: String, metric: PythonObject, p: PythonObject) rai
         knn_refuse_inert_p(cls_name, family_repr(metric), family_repr(p))
 
 
-def knn_resolve_metric(cls_name: String, metric: PythonObject, p: PythonObject,
-                       context: PythonObject) raises -> PythonObject:
+def knn_resolve_metric(cls_name: String, metric: PythonObject, p: PythonObject) raises -> PythonObject:
     """`neighbors._resolve_metric(cls_name, metric, p)`: `(metric_value,
     metric_arg)` for the brute-force table, or the same refusal, by name and
     in the same order."""
     var b = _b()
     if not family_is_str(metric):
         knn_refuse_metric_name(cls_name, family_repr(metric))
-    var key = family_call(py_call(b.getattr, metric, PythonObject("lower")))
-    var table = context["host_archive_neighbor_metrics"]
-    var value = 0
-    if py_contains(table, key):
-        value = Int(py=table[key])
-    elif py_contains(context["host_archive_unsupported_metrics"], key):
-        knn_refuse_metric_unimplemented(cls_name, family_repr(metric),
-                                        String(py_call(PythonObject(", ").join, py_call(b.sorted, table))))
-    else:
-        knn_refuse_metric_unknown(cls_name, family_repr(metric),
-                                  String(py_call(PythonObject(", ").join, py_call(b.sorted, table))))
+    # UNPACK: the name as a native string (`metric.lower()`, the Python
+    # method, so a str subclass and non-ASCII case folding read as before);
+    # RUN: the table is typed comparisons (neighbors/neighbors_knn_run.mojo
+    # `knn_metric_code`), the repr is built only on a refusal (lane
+    # py-neighbors 2026-11-14; was the Python dict `_METRIC_TABLE` connected
+    # into the context and a `sorted` join per refusal).
+    var key = String(py=family_call(py_call(b.getattr, metric, PythonObject("lower"))))
+    var value = knn_metric_code(key)
+    if value < 0:
+        value = knn_metric_resolve(cls_name, key, family_repr(metric))
     if value != KNN_DIST_LP:
         _refuse_inert_p(cls_name, metric, p)
     var arg = Float64(2.0)
@@ -606,7 +604,7 @@ def _check_refusals(model: PythonObject, context: PythonObject) raises:
     if _eq(algorithm, PythonObject("rbc")):
         _ = host_archive_rbc_metric_object(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
     elif py_contains(Python.tuple(PythonObject("brute"), PythonObject("auto")), algorithm):
-        _ = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
+        _ = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"))
     else:
         knn_refuse_algorithm(family_repr(algorithm))
     if knn:
@@ -639,7 +637,7 @@ def _dist_params(model: PythonObject, context: PythonObject) raises -> PythonObj
                 and held[1] is metric and held[2] is p and held[3] is weights_value):
             return Python.list(held[4], held[5], held[6])
     var cls_name = _class_name(model)
-    var resolved = knn_resolve_metric(cls_name, metric, p, context)
+    var resolved = knn_resolve_metric(cls_name, metric, p)
     var weights = 0
     if _is_knn(model, context):
         weights = knn_resolve_weights(cls_name, family_field(fields, "weights"))
@@ -716,7 +714,7 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
             knn_host_finite(model, input)
     knn_door_clock_mark("fit_prepare_finite")
     if not rbc:
-        var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
+        var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"))
         _check_metric_input(cls_name, Int(py=resolved[0]), input)
     py_setitem(fields, "_index", idx)
     py_setitem(fields, "n_samples_fit_", PythonObject(input.shape[0]))
@@ -1427,6 +1425,15 @@ def neighbors_knn_operation(model: PythonObject, operation: String, args: Python
         if py_type(classes) is not _b().list:
             raise Error("TypeError: neighbor classes must be the native list fit stored")
         return classes[0]
+    if operation == "family_xn_knn_refusals":
+        # `NearestNeighbors._check_refusals()` (and the k-NN classes' weights
+        # after it): the fit's refusals with no data, one binding call (lane
+        # py-neighbors 2026-11-14; the Python resolution is deleted).
+        _check_refusals(model, context)
+        return PythonObject(None)
+    if operation == "family_xn_knn_dist_params":
+        # `NearestNeighbors._dist_params()`: `[metric, metric_arg, weights]`.
+        return _dist_params(model, context)
     if operation == "family_xn_knn_getstate":
         var fields = _fields(model)
         var state = py_call(native_loaded_module("builtins").dict, fields)
