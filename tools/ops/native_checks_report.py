@@ -110,7 +110,7 @@ def first_error(block: str, rc: int | None) -> str:
     for line in block.splitlines():
         m = _ERROR_LINE.search(line)
         if m:
-            return m.group(0).strip()
+            return line.strip()
     if rc == TIMEOUT_RC:
         return "TIMEOUT (per-task limit)"
     lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
