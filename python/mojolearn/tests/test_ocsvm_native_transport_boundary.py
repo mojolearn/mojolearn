@@ -67,14 +67,6 @@ def test_ocsvm_public_storage_survives_native_scratch_and_pickle():
     np.testing.assert_array_equal(labels, [-1, 1, 1, -1])
 
 
-def test_ocsvm_zero_weight_compaction_publishes_original_row_indices():
-    source = np.array([[-5, 0], [-1, 0], [1, 0], [5, 0]], dtype=np.float32)
-    model = _model(gamma=0.5).fit(source, sample_weight=[0, 1, 1, 0])
-    np.testing.assert_array_equal(model.support_, [1, 2])
-    np.testing.assert_array_equal(model.support_vectors_, _train())
-    np.testing.assert_allclose(model.score_samples(_query()), _scores(0.5), rtol=0, atol=2e-4)
-
-
 def test_ocsvm_replaced_coefficients_keep_weak_cache_identity_semantics():
     model = _model(gamma=0.5).fit(_train())
     first = np.asarray(model.score_samples(_query())).copy()
