@@ -408,6 +408,7 @@ struct DKit(Movable):
     # so MinCovDet's narrow pinvh adds no drain of its own to a C-step
     # whose log determinant already waits there
     var eig_status: List[DeviceBuffer[DType.int32]]
+    var eig_host: List[Int32]
     # the selection scratch (`_sorted_order`, `smallest_dev`): keys, vals,
     # temp keys, temp vals as uint32; counts, flag, scan as int32. Created
     # on the first selection and grown to the largest n, then reused by
@@ -431,6 +432,7 @@ struct DKit(Movable):
         self.svd_host_word = List[Float32](length=1, fill=Float32(0))
         self.svd_pending = False
         self.eig_status = List[DeviceBuffer[DType.int32]]()
+        self.eig_host = List[Int32]()
         self.sel_cap = 0
         self.sel_u32 = List[DeviceBuffer[DType.uint32]]()
         self.sel_i32 = List[DeviceBuffer[DType.int32]]()
@@ -492,10 +494,11 @@ struct DKit(Movable):
                 src_buf=_pool_buf_view(self.svd_word.id, 1),
             )
         var ne = len(self.eig_status)
-        var eig_host = List[Int32](length=max(ne, 1), fill=Int32(0))
+        while len(self.eig_host) < ne:  # driver-loop: grows once to the most solves between two syncs
+            self.eig_host.append(Int32(0))
         for i in range(ne):  # small-loop(eig_status: narrow eigh solves since the last sync, one or two a C-step)
             var st = self.eig_status[i]
-            self.ctx.enqueue_copy(dst_ptr=I32Ptr(unsafe_from_address=Int(eig_host.unsafe_ptr()) + 4 * i), src_buf=st)
+            self.ctx.enqueue_copy(dst_ptr=I32Ptr(unsafe_from_address=Int(self.eig_host.unsafe_ptr()) + 4 * i), src_buf=st)
             _ = st^
         self.ctx.synchronize()
         self.drains += 1
@@ -504,13 +507,12 @@ struct DKit(Movable):
         if ne > 0:
             self.eig_status.clear()
             for i in range(ne):  # small-loop(eig_status: as above)
-                if eig_host[i] != Int32(0):
+                if self.eig_host[i] != Int32(0):
                     raise Error(
-                        "eigh: " + String(Int(eig_host[i])) + " solve(s) did not converge"
+                        "eigh: " + String(Int(self.eig_host[i])) + " solve(s) did not converge"
                         " (a resident narrow solve read at the next sync). An unconverged decomposition"
                         " is not returned as if it were one (DEVIATION 590)."
                     )
-        _ = eig_host^
         if scheck:
             self.svd_pending = False
             if self.svd_host_word[0] != Float32(0):
