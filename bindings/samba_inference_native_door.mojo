@@ -31,7 +31,7 @@ from core.samba_entry_table_programs import (
 )
 from core.samba_program_handle import SambaProgramHandle
 from bindings.neural_block_public_door import neural_training_entries, neural_training_selection, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths
-from bindings.neural_prefill_native_door import _prefill_mamba3
+from bindings.neural_prefill_native_door import _prefill_mamba3, _m3_output_array
 from bindings.causal_lm_public_door import _mutable, _writeback
 from bindings.causal_lm_construct_door import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
@@ -149,9 +149,12 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
             addresses.append(generation_weight_address(weights[i], keep))
     for i in range(len(names)):  # driver-loop: over mutable continuation buffers
         addresses.append(_mutable(slots[names[i]], shapes[i], keep, copies, names[i]))
-    var output = generation_array([b, l, d])
-    var reports = Python.list(generation_array([b, h, 64, 128]), generation_array([b, h, 128]),
-                              generation_array([b, h, 64]), generation_array([b, h, 32]))
+    # y and the four reports are written whole by every route below (the
+    # GPU and owned `mamba_block_call`, the host shells' `_write`): unfilled
+    # unless MAMBA3_FORWARD_ZERO_FILL (bindings/neural_prefill_native_door.mojo).
+    var output = _m3_output_array([b, l, d])
+    var reports = Python.list(_m3_output_array([b, h, 64, 128]), _m3_output_array([b, h, 128]),
+                              _m3_output_array([b, h, 64]), _m3_output_array([b, h, 32]))
     addresses.append(generation_address(output, keep))
     _ = output  # keep the Python object alive through the native call above
     for i in range(4):  # driver-loop: over the four reporting buffers
