@@ -28,6 +28,7 @@ from core.causal_lm_entry_table_sessions import (
     CAUSAL_SESSION_DECODE_EXPORT, CAUSAL_SESSION_DECODE_LOAD, CAUSAL_SESSION_DECODE_CLOSE,
     CAUSAL_SESSION_LM_CREATE, CAUSAL_SESSION_LM_OPEN, CAUSAL_SESSION_LM_OPEN15, CAUSAL_SESSION_LM_RUN,
     CAUSAL_SESSION_LM_FORWARD, CAUSAL_SESSION_LM_CLOSE, CAUSAL_SESSION_PROGRAM_READ, CAUSAL_SESSION_PROGRAM_RELEASE,
+    CAUSAL_SESSION_DECODE_STEP, CAUSAL_SESSION_DECODE_RUN, CAUSAL_SESSION_DECODE_FORWARD,
 )
 from transformer.transformer_binding_impl import TransformerDecodeSession, CausalLMSession
 from transformer.native_decode_dispatch import transformer_decode_operation
@@ -51,6 +52,9 @@ comptime _DECODE_OPEN15 = 4
 comptime _DECODE_EXPORT = 7
 comptime _DECODE_LOAD = 8
 comptime _DECODE_CLOSE = 9
+comptime _DECODE_STEP = 10
+comptime _DECODE_RUN = 11
+comptime _DECODE_FORWARD = 12
 comptime _LM_RESERVE = 25
 comptime _LM_UNRESERVE = 26
 comptime _LM_OPEN = 27
@@ -152,6 +156,18 @@ def causal_session_operation(op: Int, a: List[Int], words: List[Int], f: List[Fl
         if op == CAUSAL_SESSION_DECODE_EXPORT:
             return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_EXPORT, a, scalars)
         return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_LOAD, a, scalars)
+    if op == CAUSAL_SESSION_DECODE_STEP or op == CAUSAL_SESSION_DECODE_RUN or op == CAUSAL_SESSION_DECODE_FORWARD:
+        # Lane fix-transformer-decode-door: the public decode session's
+        # per-token step, resident decode and forward (reserve, run,
+        # unreserve, as the former binding entries' busy protocol).
+        if len(f) != 0:
+            raise Error("causal lm sessions: unexpected floating scalars")
+        var lease = DECODE_SESSIONS.acquire(handle)
+        if op == CAUSAL_SESSION_DECODE_STEP:
+            return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_STEP, a, scalars)
+        if op == CAUSAL_SESSION_DECODE_RUN:
+            return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_RUN, a, scalars)
+        return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_FORWARD, a, scalars)
     if op == CAUSAL_SESSION_DECODE_CLOSE:
         if len(a) != 0 or len(scalars) != 0 or len(f) != 0:
             raise Error("causal lm sessions: invalid close descriptor")

@@ -1280,7 +1280,8 @@ comptime _NP = MutPointer[Float32, MutAnyOrigin]
 
 def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
                  y_out: FP, mut pre: AttnPrefill, forward_only: Bool, norm1_ready: Bool = False,
-                 next_sumsq: Int = 0, next_out: Int = 0, next_w: Int = 0, next_eps: Float32 = 0.0) raises:
+                 next_sumsq: Int = 0, next_out: Int = 0, next_w: Int = 0, next_eps: Float32 = 0.0,
+                 write_word: Bool = True) raises:
     """One run of the attention step. Lane r1 (ATTN_STEP_NEXT_NORM, L > 1
     stages only): `norm1_ready` when the previous layer's run wrote this
     run's norm1 into `pre` (`pre.ahead`; honoured only when `prepare` kept
@@ -1331,8 +1332,23 @@ def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], c
                 String("ops.step.forward"), norm1_ready=n1r, forward_only=forward_only)
         _d2d(ctx, y, pre.stages.value().residual2, n)
         pre.pos0 = pos0
-    var words: List[Int] = [blk.kv.s]
-    _write_words(ex, bufs[3], words)
+    # `write_word` False (lane fix-transformer-decode-door): the caller
+    # writes the position word itself, once, before anything can read it
+    # (`attn_step_word`; the word is read only when an entry is built).
+    if write_word:
+        var words: List[Int] = [blk.kv.s]
+        _write_words(ex, bufs[3], words)
+
+
+def attn_step_word(mut ex: DeviceExec, q: FP, s: Int) raises:
+    """Queue the op's position word at `q` to `s` (lane
+    fix-transformer-decode-door): the deferred write of a caller that ran
+    steps with `write_word=False`. The word is a mirror of the resident
+    entry's position, read only when an entry is built over it
+    (`_AttnBlock`), so writing it once before any such build is the same
+    state as writing it after every step. No wait."""
+    var words: List[Int] = [s]
+    _write_words(ex, q, words)
 
 
 def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
@@ -1400,7 +1416,7 @@ def attn_step_run(
 
 def attn_step_run_kept(
     mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP,
-    mut pre: AttnPrefill, forward_only: Bool,
+    mut pre: AttnPrefill, forward_only: Bool, write_word: Bool = True,
 ) raises:
     """`attn_step_run` with the caller's L > 1 stages (lane x4b): the block
     session keeps them across calls and its backward reads them; the
@@ -1412,7 +1428,7 @@ def attn_step_run_kept(
     if len(bufs) != 4 or len(counts) != 4:
         raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
     try:
-        _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, forward_only)
+        _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, forward_only, write_word=write_word)
     except err:
         pre.clear()
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
@@ -1422,7 +1438,7 @@ def attn_step_run_kept(
 
 def attn_step_run_kept_host(
     mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-    px: Int, py: Int, mut pre: AttnPrefill, forward_only: Bool,
+    px: Int, py: Int, mut pre: AttnPrefill, forward_only: Bool, write_word: Bool = True,
 ) raises:
     """One decode token (L = 1) from and to the caller's host arrays (lane
     fable-perf-neural-0855, 2026-11-13): x at `px` is copied straight into
@@ -1462,8 +1478,11 @@ def attn_step_run_kept_host(
         if n != len(blk.stages.residual2):
             raise Error("ops: attention_step: the L = 1 stages hold a different output length")
         ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=blk.stages.residual2.create_sub_buffer[DType.float32](0, n))
-        var words: List[Int] = [blk.kv.s]
-        _write_words(ex, bufs[3], words)
+        # `write_word` False: the caller (AttnStepArm.run) writes the
+        # position word lazily (`attn_step_word`), not one fill per token.
+        if write_word:
+            var words: List[Int] = [blk.kv.s]
+            _write_words(ex, bufs[3], words)
     except err:
         pre.clear()
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data

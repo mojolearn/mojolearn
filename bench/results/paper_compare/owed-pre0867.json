@@ -107,7 +107,7 @@
   },
   "transformer-decode-per-token-door": {
    "define": "MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR",
-   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_DOOR): B = d37be875fc's per-token door (a (B, 1, d_model) Array view rebuilt per token by _neural_input); A = the (B, d_model) step input admitted as is (_neural_input_rows)"
+   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_DOOR; transformer/attn_step_session.mojo _WORD_EACH_TOKEN): B = the former per-token door: a Python-owned TransformerDecodeSession reached through the binding entries transformer_decode_session_* with py_ints argument lists, the (B, 1, d_model) Array view rebuilt per token by _neural_input, and one position-word fill per token; A = a native registry decode session reached by one native call per step through the CausalLM session table (CAUSAL_SESSION_DECODE_STEP / RUN / FORWARD), the (B, d_model) step input admitted as is (_neural_input_rows), the position word written once before any entry build"
   },
   "cnn-predict-program-copy": {
    "define": "MOJOLEARN_CNN_PREDICT_PROGRAM_COPY",
@@ -850,8 +850,8 @@
    "decides": "keep the direct call path (A) unless lane x5's copy route (B) is at least as fast on NVIDIA and AMD; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba1-forward 3.43 -> 4.08 ms, mamba2-forward 5.57 -> 7.58 ms (mamba3-forward 3.95 -> 6.75 ms runs the Mamba-3 prefill session, not this route); same kernels on the same bytes, digests must not move in either arm"
   },
   {
-   "id": "restore-transformer-decode-door",
-   "source": "restore-neural-call-paths (2026-11-13, history-audit hist-neural rows 4/6/7/9/13, hist-judge candidates 2/4): d37be875fc per-token native door (Array view rebuilt per token)",
+   "id": "wave2-transformer-decode-loop",
+   "source": "restore-neural-call-paths (2026-11-13, history-audit hist-neural rows 4/6/7/9/13, hist-judge candidates 2/4): d37be875fc per-token native door (Array view rebuilt per token); extended by fix-transformer-decode-door (2026-11-13, wave 2; this row was restore-transformer-decode-door): native registry session, no Python call into the GPU binding per token, lazy position word",
    "kind": "ab",
    "lane": [
     "transformer-decode"
@@ -861,7 +861,7 @@
    "b_arms": [
     "transformer-decode-per-token-door"
    ],
-   "decides": "keep the direct step input (A) unless B is at least as fast on NVIDIA and AMD; board on record NV L40S 1105 ms (0.8.55) -> 1455 (0.8.66) -> 1406 (candidate), MI300X 2445 -> 2699 (0.8.66); if A does not recover the ~145 us/token, profile one step on NV (the remaining host work is the kept-entry Python-level call and y allocation); digests must not move"
+   "decides": "keep the native per-token door (A) unless B is at least as fast on NVIDIA and AMD; board on record NV L40S 1105 ms (0.8.55) -> 1455 (0.8.66) -> 1406 (candidate), MI300X 2445 -> 2699 (0.8.66); the decode_n operation (one resident decode call) is timed in the same build on both arms; if A does not recover the ~145 us/token, profile one step on NV (the remaining host work is the door's admission, the y Array allocation and the generation-word checks); digests must not move in either arm (same kernels, same order)"
   },
   {
    "id": "restore-cnn-predict-call",

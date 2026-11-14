@@ -4,7 +4,7 @@
 # stay native. No Python session methods or block hooks are invoked here.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
 from std.memory import unsafe_memcpy
@@ -26,6 +26,14 @@ from transformer.block_options import BlockOptions
 from bindings.py_cpython_table import cpython_table
 from bindings.py_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
 from core.shared_slot import SharedSlot
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from core.causal_lm_entry_table import CausalEntryKey, causal_entry_vendor
+from core.causal_lm_entry_table_sessions import (
+    causal_sessions_ref, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_DECODE_CREATE, CAUSAL_SESSION_DECODE_OPEN,
+    CAUSAL_SESSION_DECODE_OPEN15, CAUSAL_SESSION_DECODE_EXPORT, CAUSAL_SESSION_DECODE_LOAD,
+    CAUSAL_SESSION_DECODE_CLOSE, CAUSAL_SESSION_DECODE_STEP, CAUSAL_SESSION_DECODE_RUN,
+    CAUSAL_SESSION_DECODE_FORWARD,
+)
 
 
 #: Lane restore-neural-call-paths (2026-11-13; AGENTS.md "A measured winner is
@@ -38,9 +46,29 @@ from core.shared_slot import SharedSlot
 #: to 0.8.55, so the door) -> 1406 (candidate 4c2340386abc); MI300X 2445 ->
 #: 2699 at 0.8.66. `-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR` keeps the
 #: door of d37be875fc (B arm of the owed A/B, owed-pre0867.json row
-#: restore-transformer-decode-door): a (B, 1, d_model) Array view rebuilt per
+#: wave2-transformer-decode-loop, formerly restore-transformer-decode-door): a (B, 1, d_model) Array view rebuilt per
 #: token (`_neural_input`). Same bytes at the same address in both arms, so no
 #: output bit moves.
+#:
+#: Lane fix-transformer-decode-door (2026-11-13, owed row
+#: wave2-transformer-decode-loop): the same define now decides the whole
+#: per-token door of the GPU session. Default (A): the session is a native
+#: registry decode session (`transformer/causal_session_entry.mojo`
+#: DECODE_SESSIONS, the CausalLM layer sessions' registry) and every step,
+#: forward, decode, export, load and close is one native call through the
+#: CausalLM session table (`causal_sessions_ref`, resolved once at open; GIL
+#: released; Array envelopes, no heap), with no Python call into
+#: `_mojolearn_transformer` and no Python argument lists per token; the step
+#: op's position word is written lazily (once before any operation that can
+#: rebuild the resident entry, not once per token:
+#: transformer/attn_step_session.mojo `_flush_word`). B
+#: (`-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR`): the former door, a
+#: Python-owned `TransformerDecodeSession` reached through the binding entries
+#: `transformer_decode_session_*` with `py_ints` argument lists, the (B, 1,
+#: d_model) Array view per token and the per-token word fill. Both arms run
+#: `_session_step_run` / `_session_decode_run` / `_session_forward_run` on the
+#: same `AttnStepArm` (same `llama_decoder_layer_forward`, same order, same
+#: stages), so no output bit moves on any vendor.
 comptime TRANSFORMER_DECODE_PER_TOKEN_DOOR = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"]()
 
 
@@ -73,6 +101,12 @@ struct TransformerDecodeHandle(Movable, Writable):
     # The block's option tail is a list the dictionary watcher cannot see
     # edited in place: its item words are checked natively per step.
     var tail_content: ContentRecord
+    # Lane fix-transformer-decode-door (default arm): the CausalLM session
+    # table entry of this binding's image, resolved once at open, and the
+    # registry handle word of the GPU decode session (0: none; the host route
+    # and the per-token-door arm keep 0).
+    var entry: EntryRef
+    var word: Int
 
     def __init__(out self, binding: PythonObject, block: PythonObject, state: PythonObject):
         self.binding = binding
@@ -95,6 +129,19 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.params = List[Int]()
         self.live_state = PythonObject(None)
         self.tail_content = ContentRecord()
+        self.entry = entry_ref_unresolved()
+        self.word = 0
+
+    def __deinit__(deinit self):
+        # A registry session the Python owner never closed (an open that
+        # failed after create, or a dropped owner) is closed here, as the
+        # Python-owned session object released its device state when
+        # collected. A refused close (busy) cannot be reported.
+        if self.word != 0:
+            try:
+                _transformer_decode_native_close(self.entry, self.word)
+            except:
+                pass
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("TransformerDecodeHandle(open=", self.open, ")")
@@ -203,6 +250,55 @@ def _transformer_decode_kept(handle: TransformerDecodeHandle, index: Int) raises
     if entry is None:
         raise Error("NotImplementedError: Transformer decode lacks its connected compiled " + _transformer_decode_entry_names()[index] + " entry")
     return entry
+
+
+def _transformer_decode_native_key(binding: PythonObject) raises -> CausalEntryKey:
+    # The (tier, vendor) key of the connected GPU image: its compiled vendor
+    # and mode words, read once per connected entry pair (N192 cache).
+    var vendor = String()
+    var mode = 0
+    _transformer_decode_words(binding, "transformer", vendor, mode)
+    return CausalEntryKey(mode, causal_entry_vendor(vendor))
+
+
+def _transformer_decode_native_lists(entry: EntryRef, op: Int, a: List[Int], words: List[Int]) raises -> Int:
+    # One session-table call for the admission-time operations (create, open,
+    # export, load): GIL released around the device work, as the former
+    # binding entries released it. The caller pins every address.
+    var floats = List[Float64]()
+    var result = 0
+    with GILReleased(Python()):
+        result = entry_ref_call(entry, op, a, words, floats)
+    return result
+
+
+def _transformer_decode_native_close(entry: EntryRef, word: Int) raises:
+    var words: List[Int] = [word]
+    _ = _transformer_decode_native_lists(entry, CAUSAL_SESSION_DECODE_CLOSE, List[Int](), words)
+
+
+def _transformer_decode_native_run(entry: EntryRef, op: Int, px: Int, py: Int, word: Int, count: Int, cached: Int) raises -> Int:
+    # The per-token call (CAUSAL_SESSION_DECODE_STEP: count 0) and the
+    # N-token / L-token calls (RUN / FORWARD): one indirect call over
+    # envelopes on this frame (no heap, no Python object), GIL released.
+    var a: Array[Int, 2] = [px, py]
+    var f: Array[Float64, 0] = []
+    var result = 0
+    if op == CAUSAL_SESSION_DECODE_STEP:
+        var p: Array[Int, 2] = [word, cached]
+        with GILReleased(Python()):
+            result = entry_ref_call(entry, op, a, p, f)
+        _ = p
+    else:
+        var p: Array[Int, 3] = [word, count, cached]
+        with GILReleased(Python()):
+            result = entry_ref_call(entry, op, a, p, f)
+        _ = p
+    _ = a
+    _ = f
+    return result
+
+
 struct _TransformerDecodeBindings(Defaultable, Movable):
     # Row N192: the last admitted binding resolution. A session open with the
     # same connected binding object and mode reuses the checked entries
@@ -566,13 +662,28 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
         for i in range(len(p)):  # driver-loop: resident shape words omit sequence length
             if i != 1:
                 open_p.append(p[i])
-        handle.device = _transformer_decode_entry(binding, "transformer_decode_session_create")()
         # TOMBSTONE: TransformerDecodeHandle.native_handle (the public decode session's descriptor-provider arm under MOJOLEARN_NEURAL_NATIVE_DISPATCH, SUPERSEDED by the step-op session) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
         # Restore: git apply experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch
         # One device open: a float32 session runs on the attention step op
-        # (`transformer_decode_session_open_step_op`); fixed15_v1 keeps its planes.
-        cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open_step_op"),
-            handle.device, py_ints(a), py_ints(open_p)))
+        # (`_session_open_run`); fixed15_v1 keeps its planes (`_session_open_run_int15`).
+        comptime if TRANSFORMER_DECODE_PER_TOKEN_DOOR:
+            handle.device = _transformer_decode_entry(binding, "transformer_decode_session_create")()
+            cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open_step_op"),
+                handle.device, py_ints(a), py_ints(open_p)))
+        else:
+            # A registry decode session of this binding's image (the CausalLM
+            # layer sessions' registry), the same two opens. A failed open
+            # closes the handle when `handle` is destroyed (its __deinit__).
+            handle.entry = causal_sessions_ref(CAUSAL_SESSIONS_TRANSFORMER, _transformer_decode_native_key(binding))
+            handle.word = _transformer_decode_native_lists(handle.entry, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int]())
+            var open_words: List[Int] = [handle.word]
+            for i in range(len(open_p)):  # driver-loop: resident shape words after the handle
+                open_words.append(open_p[i])
+            cached = _transformer_decode_native_lists(handle.entry,
+                CAUSAL_SESSION_DECODE_OPEN15 if packed else CAUSAL_SESSION_DECODE_OPEN, a, open_words)
+            # The device route's marker (`native` reads it; `device is not
+            # None` selects the device route below): the handle word.
+            handle.device = PythonObject(handle.word)
     else:
         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
@@ -650,7 +761,14 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
     var live = h[].live_state
     var cached = Int(py=live["cached_tokens"]) if kept else Int(py=slots["cached_tokens"])
     h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
-    if h[].device is not None and decode:
+    var native_word = h[].word
+    if native_word != 0:
+        # Default arm: one native call through the session table per step
+        # (or per decode / forward call); no Python call, no Python lists.
+        var entry = h[].entry
+        var op = CAUSAL_SESSION_DECODE_RUN if decode else (CAUSAL_SESSION_DECODE_STEP if step else CAUSAL_SESSION_DECODE_FORWARD)
+        cached = _transformer_decode_native_run(entry, op, px, py, native_word, length, cached)
+    elif h[].device is not None and decode:
         # The provider descriptor wraps the same session object; the decode
         # entry is called on it directly.
         cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_DECODE),
@@ -721,7 +839,14 @@ def transformer_decode_state(session: PythonObject, load: Bool, context: PythonO
     var vals = TransformerDecodeCache(slots["v_cache"], words[6], context)
     var pieces: List[Int] = [keys.address, vals.address, words[6]]
     var cached = Int(py=slots["cached_tokens"])
-    if h[].device is not None:
+    if h[].word != 0:
+        var a: List[Int] = [pieces[0], pieces[1]]
+        var words: List[Int] = [h[].word]
+        if load:
+            words.append(cached)
+        var entry = h[].entry
+        cached = _transformer_decode_native_lists(entry, CAUSAL_SESSION_DECODE_LOAD if load else CAUSAL_SESSION_DECODE_EXPORT, a, words)
+    elif h[].device is not None:
         var a: List[Int] = [pieces[0], pieces[1]]
         var p: List[Int] = [cached] if load else []
         if load:
@@ -760,7 +885,15 @@ def transformer_decode_release(session: PythonObject, context: PythonObject) rai
     var state_fields = neural_record_fields(h[].state, Python.tuple("_resident_session"))
     h[].open = False
     py_setitem(state_fields, "_resident_session", PythonObject(None))
-    if h[].device is not None:
+    if h[].word != 0:
+        var entry = h[].entry
+        var word = h[].word
+        # The word is cleared after the close succeeds; a refused (busy)
+        # close keeps it, so the handle's destruction retries it.
+        _transformer_decode_native_close(entry, word)
+        h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+        h[].word = 0
+    elif h[].device is not None:
         _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
     h[].weights.clear(); h[].optional.clear(); h[].k_cache.clear(); h[].v_cache.clear()
 

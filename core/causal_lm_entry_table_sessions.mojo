@@ -34,7 +34,7 @@ comptime CAUSAL_SESSIONS_TRANSFORMER = 0
 comptime CAUSAL_SESSIONS_MAMBA = 1
 
 comptime CAUSAL_SESSIONS_SCHEMA = "mojolearn.causal.sessions.v1"
-comptime CAUSAL_SESSIONS_OPERATIONS = 14
+comptime CAUSAL_SESSIONS_OPERATIONS = 17
 
 # Operation codes. Words are [handle, scalars...] unless stated.
 comptime CAUSAL_SESSION_DECODE_CREATE = 0     # no words -> handle
@@ -51,6 +51,14 @@ comptime CAUSAL_SESSION_LM_FORWARD = 10       # a: [ids, logits]; words [h, n, l
 comptime CAUSAL_SESSION_LM_CLOSE = 11         # words [h]: close and release the handle
 comptime CAUSAL_SESSION_PROGRAM_READ = 12     # a: read descriptor; words [h or 0, out, capacity, p...]; floats f -> handle
 comptime CAUSAL_SESSION_PROGRAM_RELEASE = 13  # words [h]
+# Lane fix-transformer-decode-door (2026-11-13): the public decode session's
+# per-token step, its resident N-token decode and its L-token forward on a
+# registry decode session, so the public door reaches them natively (no Python
+# call into the GPU binding per token). The position is the caller's belief,
+# refused on a mismatch as the former session entries refused it.
+comptime CAUSAL_SESSION_DECODE_STEP = 14      # a: [x, y] (B * d_model); words [h, cached] -> cached
+comptime CAUSAL_SESSION_DECODE_RUN = 15       # a: [x, y] (B * N * d_model); words [h, N, cached] -> cached
+comptime CAUSAL_SESSION_DECODE_FORWARD = 16   # a: [x, y] (B * L * d_model); words [h, L, cached] -> cached
 
 
 def causal_session_handle_word(handle: StateHandle) raises -> Int:
