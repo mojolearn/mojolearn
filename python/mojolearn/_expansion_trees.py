@@ -36,7 +36,7 @@ from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from ._forest_protocol import forest_estimator
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
-    RandomForestClassifier, RandomForestRegressor, _refuse,
+    RandomForestClassifier, RandomForestRegressor,
     _MODEL_FORMATS as _RF_MODEL_FORMATS, _SAVE_SCHEMA as _RF_SAVE_SCHEMA,
 )
 from . import _native_archive_bridge, _native_trees_bridge
@@ -94,16 +94,9 @@ __all__ = [
 _DT_DEPTH = None
 
 
-def _dt_common(splitter, max_features, max_leaf_nodes):
-    """The random splitter is ExtraTrees' builder (Geurts: one random
-    threshold per candidate feature), fitted as ONE tree without bootstrap;
-    best-first growth (`max_leaf_nodes`) exists on that builder only."""
-    if splitter not in ("best", "random"):
-        raise ValueError(f"splitter must be 'best' or 'random', got {splitter!r}")
-    if splitter == "best" and max_leaf_nodes is not None:
-        _refuse("max_leaf_nodes with splitter='best'", "best-first growth exists on the random"
-                " splitter's builder (extratrees/, DEVIATIONS 466-469); pass splitter='random'.")
-    return None if splitter == "random" else max_leaf_nodes
+# `_dt_common` (the splitter and best-first refusals) is the native owner's
+# `_rf_arguments` (bindings/trees_public_forest_door.mojo), run at fit on
+# the stored parameters; lane py-trees (2026-11-14) deleted its Python copy.
 
 
 # sample_weight goes through the weighted RF fit entry (the weighted
@@ -211,18 +204,9 @@ class DecisionTreeClassifier(RandomForestClassifier):
         inference_engine="auto",
         numeric_mode=None,
     ):
-        rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
-        super().__init__(
-            n_estimators=1, criterion=criterion, max_depth=max_depth,
-            min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
-            max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
-            bootstrap=False, random_state=random_state, class_weight=class_weight,
-            ccp_alpha=ccp_alpha, monotonic_cst=monotonic_cst, n_bins=n_bins,
-            n_streams=1, device=device, inference_engine=inference_engine,
-            numeric_mode=numeric_mode,
-        )
-        self.splitter = splitter
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
@@ -371,19 +355,9 @@ class DecisionTreeRegressor(RandomForestRegressor):
         inference_engine="auto",
         numeric_mode=None,
     ):
-        rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
-        # n_bins=None: the tier's default, resolved at fit (`_dt_tier_bins`)
-        super().__init__(
-            n_estimators=1, criterion=criterion, max_depth=max_depth,
-            min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
-            max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
-            bootstrap=False, random_state=random_state, ccp_alpha=ccp_alpha,
-            monotonic_cst=monotonic_cst, n_bins=128 if n_bins is None else n_bins, n_streams=1,
-            device=device, inference_engine=inference_engine,
-            numeric_mode=numeric_mode,
-        )
-        self.splitter = splitter
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
