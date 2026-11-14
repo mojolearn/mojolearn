@@ -14,8 +14,6 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-from . import _backend
-from ._labels import unique_inverse
 from . import _native_xcnn_bridge
 
 # Package-import connection: the migrated layer methods are ONE call each
@@ -29,43 +27,11 @@ __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d
 _BINDING = "_mojolearn_x_cnn"
 
 
-def _np():
-    from ._optional_numpy import require_numpy
-    np = require_numpy('_expansion_cnn')
-    return np
-
-
-def _f32(x, name):
-    np = _np()
-    a = np.asarray(x)
-    if a.dtype != np.float32:
-        raise TypeError(f"mojolearn: {name} must be float32 (got {a.dtype}); convert it yourself so the "
-                        "bits that ran are bits you made")
-    return np.ascontiguousarray(a)
-
-
 class _Layer:
     """A layer on `_mojolearn_x_cnn` (the GPU binding, or its CPU host twin
     on a CPU-only install / MOJOLEARN_VENDOR=cpu)."""
     numeric_mode = None
 
-    def _binding(self):
-        mode = self.numeric_mode or _backend.default_mode()
-        binding = _backend.binding(_BINDING, mode)
-        if mode == "identical":
-            # API-shell metadata only. The Mojo binding names the arithmetic
-            # version shared by host and all GPUs; preserve it on the model
-            # so normal state persistence cannot silently switch versions.
-            report = getattr(binding, "x_cnn_numerical_profile", None)
-            previous = self.__dict__.get("numerical_profile_")
-            current = str(report()) if report is not None else None
-            if previous is not None and previous != current:
-                raise ValueError("mojolearn: CNN numerical profile differs from this model's recorded "
-                                 "profile; use a matching binding or a fresh model for the new version")
-            if current is not None:
-                self.numerical_profile_ = current
-        self.numeric_mode_ = mode
-        return binding
 
 
 # lane fam-neural (2026-10-04): the binding's `x_cnn_idn_flags` names the
@@ -333,13 +299,6 @@ class Conv2d(_Layer):
     def backward(self, grad_out, x=None):
         return _XCNN(self, "conv_backward", (grad_out, x), _XCNN_CONTEXT)
 
-    def _rows(self, X):
-        X = _f32(X, "X")
-        if X.ndim == 2:
-            if self.input_shape is None:
-                raise ValueError("mojolearn: row input needs input_shape=(C, H, W)")
-            return X.reshape((X.shape[0],) + tuple(self.input_shape))
-        return X
 
     def transform(self, X):
         return _XCNN(self, "conv_transform", (X,), _XCNN_CONTEXT)
@@ -385,12 +344,7 @@ class _Pool2d(_Layer):
         return [n, c, h, w, *self.kernel_size, *self.stride, *self.padding, *self.dilation, 0, 0,
                 1 if self.count_include_pad else 0, 0, 1 if self.ceil_mode else 0, int(self.divisor_override or 0)]
 
-    def _out_shape(self, shape):
-        oh, ow = self._binding().x_cnn_pool_shape(self._params(shape))
-        return (shape[0], shape[1], int(oh), int(ow))
 
-    def _rows(self, X):
-        return Conv2d._rows(self, X)
 
     def transform(self, X):
         return _XCNN(self, "pool_transform", (X,), _XCNN_CONTEXT)
@@ -437,10 +391,6 @@ class AvgPool2d(_Pool2d):
 
     def backward(self, grad_out):
         return _XCNN(self, "pool_backward", (grad_out,), _XCNN_CONTEXT)
-
-
-def _one(v):
-    return int(v if isinstance(v, int) else v[0])
 
 
 class _Pool1dMixin:
@@ -493,40 +443,6 @@ class _Linear(_Layer):
 
 # integ-w3: _adam_hyper / _adam_hyper_block deleted (no caller; they called the binding's
 # x_cnn_adam_hyper_d, which lane x8-cnn-on-executor deleted with the hand epoch).
-
-
-class _Res:
-    """Resident arrays (DEVIATION 5718): handles the binding keeps between
-    its `_r` entries (device addresses on the GPU binding, host allocations on
-    the CPU twin), 4-byte words, zero filled; freed on exit."""
-
-    def __init__(self, binding):
-        self.b, self.handles = binding, []
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        for h in self.handles:  # glue: releases the resident buffer handles
-            self.b.x_cnn_res_free(h)
-        self.handles = []
-
-    def new(self, n):
-        h = self.b.x_cnn_res_alloc(int(n))
-        self.handles.append(h)
-        return h
-
-    def put(self, h, arr):
-        np = _np()
-        arr = np.ascontiguousarray(arr)
-        assert arr.dtype in (np.float32, np.int32)
-        self.b.x_cnn_res_upload(h, arr.ctypes.data, arr.size)
-
-    def get(self, h, shape):
-        np = _np()
-        out = np.empty(shape, np.float32)
-        self.b.x_cnn_res_download(h, out.ctypes.data, out.size)
-        return out
 
 
 # TOMBSTONE: _PREDICT_ROWS, _LEGACY_STEP and _EPOCH_ENTRY (MOJOLEARN_XCNN_PY_STEPS), the measurement arms of the deleted hand CNN epoch, deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
@@ -637,11 +553,6 @@ class BatchNorm2d(_Layer):
     def backward(self, grad_out):
         return _XCNN(self, "bn_backward", (grad_out,), _XCNN_CONTEXT)
 
-    def _rows(self, X):
-        X = _f32(X, "X")
-        if X.ndim == 2 and self.input_shape is not None:
-            return X.reshape((X.shape[0],) + tuple(self.input_shape))
-        return X
 
     def transform(self, X):
         return _XCNN(self, "bn_transform", (X,), _XCNN_CONTEXT)
@@ -753,14 +664,6 @@ class AdaptiveMaxPool2d(_AdaptivePool):
     _max = True
 
 
-def _add(binding, a, b):
-    np = _np()
-    a, b = _f32(a, "a"), _f32(b, "b")
-    out = np.empty_like(a)
-    binding.x_cnn_add(a.ctypes.data, b.ctypes.data, out.ctypes.data, [a.size])
-    return out
-
-
 class BasicBlock(_Layer):
     """torchvision.models.resnet.BasicBlock: conv3x3(stride) -> BN -> ReLU ->
     conv3x3 -> BN, plus the identity (or conv1x1(stride) -> BN when the
@@ -809,99 +712,6 @@ class BasicBlock(_Layer):
 
     def fit(self, X, y=None):
         return _XCNN(self, "block_fit", (), _XCNN_CONTEXT)
-
-
-def _gemm(binding, a, b, m, n, k, op):
-    """C (m x n) = op(A) op(B) on the pinned GEMM (op 0 NN, 1 NT, 2 TN)."""
-    np = _np()
-    out = np.empty((m, n), np.float32)
-    a, b = _f32(a, "a"), _f32(b, "b")   # keep the (possibly copied) operands alive through the call
-    binding.x_cnn_gemm(a.ctypes.data, b.ctypes.data, out.ctypes.data, [m, n, k, op])
-    return out
-
-
-class _Graph:
-    """Two CSR views of one edge list: rows = targets for the forward
-    propagation, rows = sources for its transpose; entries in ascending
-    column order within a row, ties in edge order. `vals_t(v)` carries
-    per-entry values of the forward view onto the transposed one.
-
-    The views are built by the binding (`x_cnn_csr_build`: two stable radix
-    sorts, a gather and a row-pointer kernel on the device; the host twin on
-    a CPU-only install), not by a NumPy sort of the edge list on the host
-    (cpu-gpu-cleanup n-pyneural, 2026-10-02). Integer work: the same words
-    on every backend."""
-
-    def __init__(self, src, dst, n, binding):
-        np = _np()
-        self.n = int(n)
-        self.src, self.dst = np.asarray(src, np.int64), np.asarray(dst, np.int64)
-        self.nnz = len(self.src)
-        s32 = np.ascontiguousarray(self.src, np.int32)
-        d32 = np.ascontiguousarray(self.dst, np.int32)
-        self.csr_f, self.order_f = self._build(binding, d32, s32)
-        self.csr_t, self.order_t = self._build(binding, s32, d32)
-
-    def _build(self, binding, rows, cols):
-        np = _np()
-        csr = np.empty(self.n + 1 + 2 * self.nnz, np.int32)
-        order = np.empty(max(self.nnz, 1), np.int32)
-        binding.x_cnn_csr_build(rows.ctypes.data, cols.ctypes.data, csr.ctypes.data, order.ctypes.data,
-                                [self.n, self.nnz])
-        return csr, order[:self.nnz]
-
-    def vals_t(self, vals_f):
-        np = _np()
-        by_edge = np.empty(self.nnz, np.float32)
-        by_edge[self.order_f] = vals_f
-        return np.ascontiguousarray(by_edge[self.order_t])
-
-    def spmm(self, binding, vals, h, mode, transposed=False):
-        np = _np()
-        h = _f32(h, "h")
-        out = np.empty_like(h)
-        vals = np.ascontiguousarray(vals if vals is not None and len(vals) else np.zeros(1, np.float32), np.float32)
-        csr = self.csr_t if transposed else self.csr_f
-        binding.x_cnn_spmm(vals.ctypes.data, h.ctypes.data, out.ctypes.data, csr.ctypes.data,
-                           [self.n, h.shape[1], self.nnz, mode])
-        return out
-
-
-def _data_addr(a):
-    """The data address of a NumPy array or a tensor (None otherwise)."""
-    try:
-        return a.__array_interface__["data"][0]
-    except (AttributeError, KeyError, TypeError):
-        pass
-    try:
-        return int(a.data_ptr())
-    except (AttributeError, TypeError, RuntimeError):
-        return None
-
-
-class _GraphKey:
-    """lane gap-neural-overhead2 (2026-10-02): an IDENTITY key for a layer's
-    graph: the node count and, for each array, the object itself (held, so
-    its id cannot be reused), its shape, dtype and data address. A forward
-    on the same edge arrays reuses the CSR views, normalized values and
-    their resident copies it built. It replaces lane/cnn-apple2's content
-    key, a blake2b of `tobytes()` copies of edge_index (and the weights) on
-    EVERY forward. Pass new arrays for new edges: an edge array edited in
-    place keeps its key (a PyTorch tensor's in-place edit likewise does not
-    invalidate PyG's cached=True graph)."""
-    __slots__ = ("n", "refs", "sig")
-
-    def __init__(self, n, *arrays):
-        self.n = int(n)
-        self.refs = arrays
-        self.sig = tuple(None if a is None else (tuple(getattr(a, "shape", ())), str(getattr(a, "dtype", "")),
-                                                 _data_addr(a)) for a in arrays)  # glue: address key of the graph input arrays
-
-    def __eq__(self, other):
-        return (isinstance(other, _GraphKey) and self.n == other.n and len(self.refs) == len(other.refs)
-                and all(a is b for a, b in zip(self.refs, other.refs)) and self.sig == other.sig)  # glue: compares the graph key references
-
-    __hash__ = None
 
 
 class GCNConv(_Layer):
@@ -984,7 +794,7 @@ _native_xcnn_bridge.register(
     xcnn_bn_class=BatchNorm2d, xcnn_block_class=BasicBlock,
     xcnn_tensor_class=DeviceTensor, xcnn_dev_class=_Dev, xcnn_maxpool_class=MaxPool2d,
     xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_conv1d_class=Conv1d,
-    xcnn_device_io_off=_DEVICE_IO_OFF, xcnn_graph_class=_Graph, xcnn_graph_key_class=_GraphKey,
+    xcnn_device_io_off=_DEVICE_IO_OFF,
     xcnn_conv2d_class=Conv2d, xcnn_relu_class=_ReLU, xcnn_linear_class=_Linear,
 )
 _native_xcnn_bridge.connect_classifier()
