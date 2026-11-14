@@ -104,6 +104,25 @@ def new_board(gpu=GPU):
     return {"box": {"gpu": {"name": gpu}}, "races": races}
 
 
+HOST = "pod-a/GPU-0000"
+
+
+def with_host(board, host=HOST):
+    """BOARD as the job writes it on a probed box (bench_board --host-probe: box.host_probe)."""
+    b = copy.deepcopy(board)
+    b.setdefault("box", {})["host_probe"] = {"schema": "mojolearn-host-probe/1", "host_id": host}
+    return b
+
+
+def baseline_board(host=HOST):
+    """0.8.55 re-timed on the same box in the same job (board-prior-0.8.55): the paper's our cells, same times."""
+    races = {}
+    for rid, r in paper_board()["races"].items():
+        races[rid] = {"cells": [copy.deepcopy(c) for c in r["cells"] if c["arm"].startswith("ours")],
+                      "infer_cells": [copy.deepcopy(c) for c in r["infer_cells"] if c["arm"].startswith("ours")]}
+    return with_host({"box": {"gpu": {"name": GPU}}, "races": races}, host)
+
+
 class Recipes(unittest.TestCase):
     def setUp(self):
         self.doc = PC.extract_recipes(paper_board(), "nvidia")
@@ -165,7 +184,7 @@ class Compare(unittest.TestCase):
         self.doc = PC.extract_recipes(paper_board(), "nvidia")
 
     def rows(self, board, why=None):
-        res = PC.compare(self.doc, [board], why or {})
+        res = PC.compare(self.doc, [with_host(board)], why or {}, prior_boards=[("0.8.55", baseline_board())])
         return res, {r["key"]: r for r in res["rows"]}
 
     def test_flags(self):
@@ -182,7 +201,8 @@ class Compare(unittest.TestCase):
         self.assertIn("FASTER", inf["flags"])
         ols = rows["classical/ols/taxi/rows=full fit ours"]
         self.assertIn("SAME", ols["flags"])
-        self.assertIn("NOW-LOSES", ols["flags"])          # kernel clock: 40/50 -> 60/50
+        # kernel clock: 40/50 -> 60/50 is shown; the stored opponent ran on the paper's host, so no NOW-LOSES flag
+        self.assertNotIn("NOW-LOSES", ols["flags"])
         self.assertAlmostEqual(ols["best_opponent"]["ratio_new"], 1.2)
         gb = rows["trees/gbdt-depthwise/taxi/rows=full fit ours"]
         self.assertIn("QUALITY-DROP", gb["flags"])
@@ -242,7 +262,8 @@ class Compare(unittest.TestCase):
         self.assertTrue(res["hw_diff"])
         gm = rows["neural/gemm/gaussian/shape=full fit ours"]
         self.assertIn("FASTER", gm["flags"])
-        self.assertIn("NOW-WINS", gm["flags"])
+        self.assertNotIn("NOW-WINS", gm["flags"])           # the stored opponent is another host's: shown only
+        self.assertLess(gm["best_opponent"]["ratio_new"], 1.0)
         self.assertIn("HW-DIFF", gm["flags"])
         pb = rows["trees/gbdt-depthwise/taxi/rows=full fit ours-prebinned"]
         self.assertIn("BROKEN", pb["flags"])
@@ -252,9 +273,12 @@ class Compare(unittest.TestCase):
             rec = os.path.join(td, "recipes.json")
             json.dump(self.doc, open(rec, "w"))
             nb = os.path.join(td, "board.json")
-            json.dump(new_board(), open(nb, "w"))
+            json.dump(with_host(new_board()), open(nb, "w"))
+            bb = os.path.join(td, "board-prior-0.8.55.json")
+            json.dump(baseline_board(), open(bb, "w"))
             md = os.path.join(td, "COMPARE-nvidia.md")
-            self.assertEqual(PC.main(["compare", "--recipes", rec, "--board", nb, "--out-md", md]), 0)
+            self.assertEqual(PC.main(["compare", "--recipes", rec, "--board", nb, "--prior-board", "0.8.55=" + bb,
+                                      "--out-md", md]), 0)
             text = open(md).read()
             self.assertIn("| classical/kmeans/taxi/rows=full fit ours | 100 | 130 | 1.30 |", text)
             summary = open(os.path.join(td, "SUMMARY-nvidia.txt")).read()
@@ -487,8 +511,9 @@ SVC = "classical/svc/taxi/rows=full"
 
 
 def be_new_board(gpu=GPU):
-    """new_board() as a real board writes it (our cells carry mode identical), plus two races outside the recipes."""
-    b = new_board(gpu)
+    """new_board() as a real board writes it (our cells carry mode identical, the box its host probe), plus two
+    races outside the recipes."""
+    b = with_host(new_board(gpu))
     for race in b["races"].values():
         for c in race.get("cells", []) + race.get("infer_cells", []):
             c["mode"] = "identical"
@@ -499,9 +524,10 @@ def be_new_board(gpu=GPU):
     return b
 
 
-def be_entry(ms, params=None, hash_="h-ours", device=GPU, release="0.8.25", date="2026-09-30"):
+def be_entry(ms, params=None, hash_="h-ours", device=GPU, release="0.8.25", date="2026-09-30", host=HOST):
+    """A best-ever entry; HOST: the box it was timed on (the same host as the new board by default)."""
     return {"ms": ms, "params": params, "hash": hash_, "device": device, "release": release, "date": date,
-            "commit": "c0ffee", "params_source": "cell" if params is not None else None}
+            "commit": "c0ffee", "params_source": "cell" if params is not None else None, "host_id": host}
 
 
 def be_doc(vendor="nvidia", **rows):
@@ -530,7 +556,8 @@ class BestEver(unittest.TestCase):
         self.best = be_doc(**{key.replace(" ", "__"): v for key, v in rows.items()})
 
     def run_compare(self, best=True):
-        res = PC.compare(self.doc, [be_new_board()], {}, best_ever=self.best if best else None)
+        res = PC.compare(self.doc, [be_new_board()], {}, prior_boards=[("0.8.55", baseline_board())],
+                         best_ever=self.best if best else None)
         return res, {r["key"]: r for r in res["rows"]}, {r["key"]: r for r in res["extra_rows"]}
 
     def test_flags_on_recipe_rows(self):
@@ -576,7 +603,7 @@ class BestEver(unittest.TestCase):
 
     def test_without_best_ever_nothing_changes(self):
         res, rows, extra = self.run_compare(best=False)
-        base = PC.compare(self.doc, [be_new_board()], {})
+        base = PC.compare(self.doc, [be_new_board()], {}, prior_boards=[("0.8.55", baseline_board())])
         self.assertEqual(extra, {})
         self.assertEqual(res["flag_counts"], base["flag_counts"])
         self.assertNotIn("best_ever_ms", rows[self.keys["km"]])

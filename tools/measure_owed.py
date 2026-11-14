@@ -18,7 +18,8 @@ planned through the board and reported beside the paper compare (lane measure-pr
           not-planned.json      {row id or race: why}: a lane the board no longer has, a B set not staged, ...
           rowmap.json           {row id: [race ids]} for the report
         A race id the paper recipes hold is not planned again for the candidate or the prior arm: the paper board
-        times it for the candidate, and its 0.8.66 number is the paper compare's middle column.
+        times it for the candidate, and the prior release's on-box board (board-prior-<version>/) for the prior.
+        The job times the prior's full-row units in that same board (no second timing of the prior, 2026-11-14).
   plan-check --plan-dir DIR --b-arms a,b --vendor V
         whether DIR's plan was made for these B sets and this vendor (plan.json, written by plan): prints
         OWED-PLAN-CURRENT (rc 0) or OWED-PLAN-STALE <why> (rc 1). The job re-makes a stale plan before its owed
@@ -28,8 +29,10 @@ planned through the board and reported beside the paper compare (lane measure-pr
         the R2 dataset keys (bench/results/dataset_store/manifest.tsv) the paper and owed races read, one
         `<key> TAB <path>` line each, from the board's own data_needs (data_keys): what the stage step stages
         (tools/ops/measure_candidate.py) and what the job checks after its plan.
-  report --owed JSON --plan-dir DIR --results RES [--prior-compare JSON] --vendor V [--out-md --out-json --summary]
-        per owed row and race cell: candidate ms, prior ms (the prior board, or the paper compare's 0.8.66 cell),
+  report --owed JSON --plan-dir DIR --results RES --prior-version V --vendor V [--out-md --out-json --summary]
+        per owed row and race cell: candidate ms, prior ms (the prior release's on-box board board-prior-<version>/
+        for full rows, board-prior-<rows>/ for a neighbouring shape: the same job on the same box; a board of another
+        host refuses, one without a host probe is NOT-COMPARED),
         each B arm's ms, the ratios, and the row's flags: REGRESSION / FASTER / SAME vs the prior, B-FASTER / B-SLOWER
         / B-SAME for an A/B, NOT-RUN with its reason, and the driver rows from drivers.jsonl. Prints one screen.
 
@@ -272,10 +275,14 @@ def cmd_data_keys(a):
 # report
 # ---------------------------------------------------------------------------------------------------------------
 
-def board_dir(results, arm, rows):
-    """Where the job writes the board of one unit (tools/ops/paper_compare_job.sh uses the same names)."""
+def board_dir(results, arm, rows, prior_version=None):
+    """Where the job writes the board of one unit (tools/ops/paper_compare_job.sh uses the same names). The prior
+    arm's full rows are timed in the prior release's own on-box board (board-prior-<version>/, the paper compare's
+    prior column): no second timing of the prior (2026-11-14)."""
     if arm == "candidate" and rows == "full":
         return os.path.join(results, "board")
+    if arm == "prior" and rows == "full" and prior_version:
+        return os.path.join(results, "board-prior-%s" % prior_version)
     return os.path.join(results, "board-%s-%s" % (arm, rows))
 
 
@@ -296,8 +303,9 @@ def cell_ms(cell):
 
 
 def load_board(path):
+    """The board document, or None (not run)."""
     try:
-        return (PC.load_json(path).get("races") or {})
+        return PC.load_json(path)
     except (OSError, ValueError):
         return None
 
@@ -308,16 +316,31 @@ def verdict(ratio, low_flag, high_flag, same_flag):
     return high_flag if ratio > PC.SLOWER else low_flag if ratio < PC.FASTER else same_flag
 
 
-def report(doc, plan_dir, results, prior_rows, vendor):
+def report(doc, plan_dir, results, vendor, prior_version=None):
+    """The owed rows' cells. Every ratio compares two boards of this job that carry the same host id (the box's host
+    probe, AGENTS.md "Times are compared only on the same box"): a board of another host refuses (SystemExit), and a
+    board without a probe gives NOT-COMPARED, never a flag. The prior's numbers come only from its on-box board."""
     rowmap = PC.load_json(os.path.join(plan_dir, "rowmap.json"))
     missing = PC.load_json(os.path.join(plan_dir, "not-planned.json"))
-    boards = {}
+    docs, hosts = {}, {}
 
     def board(arm, rows):
         k = (arm, rows)
-        if k not in boards:
-            boards[k] = load_board(os.path.join(board_dir(results, arm, rows), "board.json")) or {}
-        return boards[k]
+        if k not in docs:
+            docs[k] = load_board(os.path.join(board_dir(results, arm, rows, prior_version), "board.json")) or {}
+        return docs[k].get("races") or {}
+
+    def verified(arm, rows):
+        """Whether ARM's board and the candidate's (same rows) are one box; refuses two hosts."""
+        k = (arm, rows)
+        if k not in hosts:
+            board("candidate", rows), board(arm, rows)
+            if not docs[k].get("races"):
+                hosts[k] = False      # not run: no cell, NOT-RUN on that side
+            else:
+                h, _ = PC.same_box([docs[("candidate", rows)]], [docs[k]], "the %s %s board" % (arm, rows))
+                hosts[k] = h is not None
+        return hosts[k]
 
     out = []
     for row in doc["rows"]:
@@ -341,23 +364,23 @@ def report(doc, plan_dir, results, prior_rows, vendor):
                        "candidate_ms": cell_ms(cell), "candidate_status": PC.short_status(cell.get("status")),
                        "flags": [], "why": "; ".join(why) or None}
                 if row["kind"] == "board":
-                    pc = our_cells(prior_race).get((phase, arm, batch))
-                    pms = cell_ms(pc)
-                    if pms is None and prior_rows and key in prior_rows:
-                        pms = prior_rows[key].get("new_ms") if PC.number(prior_rows[key].get("new_ms")) else None
-                        rec["prior_from"] = "paper compare"
+                    pms = cell_ms(our_cells(prior_race).get((phase, arm, batch)))
                     rec["prior_ms"] = pms
                     r = rec["candidate_ms"] / pms if PC.number(rec["candidate_ms"]) and pms else None
                     rec["ratio_vs_prior"] = r
-                    f = verdict(r, "FASTER", "REGRESSION", "SAME")
-                    rec["flags"].append(f or "NOT-COMPARED")
+                    if r is not None and not verified("prior", rows):
+                        rec["flags"].append("NOT-COMPARED")     # no host probe on one side: shown, no verdict
+                    else:
+                        rec["flags"].append(verdict(r, "FASTER", "REGRESSION", "SAME") or "NOT-COMPARED")
                 for b in b_arms:
                     bc = our_cells(board(b, rows).get(race_id) or {}).get((phase, arm, batch))
                     bms = cell_ms(bc)
                     rec.setdefault("b", {})[b] = bms
                     r = bms / rec["candidate_ms"] if PC.number(bms) and rec["candidate_ms"] else None
                     rec.setdefault("b_ratio", {})[b] = r
-                    rec["flags"].append("%s:%s" % (b, verdict(r, "B-FASTER", "B-SLOWER", "B-SAME") or "B-NOT-RUN"))
+                    v = verdict(r, "B-FASTER", "B-SLOWER", "B-SAME") if r is None or verified(b, rows) else \
+                        "B-NOT-COMPARED"
+                    rec["flags"].append("%s:%s" % (b, v or "B-NOT-RUN"))
                 out.append(rec)
     drivers = []
     path = os.path.join(results, "drivers", "drivers.jsonl")
@@ -379,7 +402,8 @@ def report(doc, plan_dir, results, prior_rows, vendor):
             f = f.split(":")[-1]
             counts[f] = counts.get(f, 0) + 1
     return {"schema": REPORT_SCHEMA, "vendor": vendor, "rows": out, "drivers": drivers, "flag_counts": counts,
-            "not_planned": missing}
+            "not_planned": missing, "prior_version": prior_version,
+            "host_id": PC.candidate_host([d for (a, _), d in docs.items() if a == "candidate" and d])[0]}
 
 
 def render_summary(rep, top=10):
@@ -415,7 +439,7 @@ def render_md(rep):
     for r in rep["rows"]:
         b = ", ".join("%s %s (%s)" % (k, PC.fmt_ms(v), PC.fmt_ratio((r.get("b_ratio") or {}).get(k)))
                       for k, v in sorted((r.get("b") or {}).items())) or "-"
-        note = (r.get("why") or "") + (" prior from the paper compare" if r.get("prior_from") else "")
+        note = r.get("why") or ""
         lines.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
             r["row"], r["key"], PC.fmt_ms(r.get("candidate_ms")), PC.fmt_ms(r.get("prior_ms")),
             PC.fmt_ratio(r.get("ratio_vs_prior")), b, " ".join(r["flags"]), note.replace("|", "/")[:200]))
@@ -430,8 +454,7 @@ def render_md(rep):
 
 def cmd_report(a):
     doc = PC.load_json(a.owed)
-    prior_rows = PC.load_prior(a.prior_compare)[0] if a.prior_compare else None
-    rep = report(doc, a.plan_dir, a.results, prior_rows, a.vendor)
+    rep = report(doc, a.plan_dir, a.results, a.vendor, a.prior_version)
     md = a.out_md or os.path.join(a.results, "OWED-%s.md" % a.vendor)
     js = a.out_json or os.path.join(a.results, "owed-%s.json" % a.vendor)
     sm = a.summary or os.path.join(a.results, "OWED-SUMMARY-%s.txt" % a.vendor)
@@ -466,7 +489,9 @@ def build_parser():
     r.add_argument("--owed", required=True)
     r.add_argument("--plan-dir", required=True)
     r.add_argument("--results", required=True)
-    r.add_argument("--prior-compare", default=None, help="the 0.8.66 compare JSON (prior numbers of paper races)")
+    r.add_argument("--prior-version", default=None,
+                   help="the prior release (PC_PRIOR_VERSION): its full rows are read from board-prior-<version>/, "
+                        "the on-box prior board the paper compare also reads")
     r.add_argument("--vendor", required=True, choices=PC.VENDORS)
     r.add_argument("--out-md", default=None)
     r.add_argument("--out-json", default=None)

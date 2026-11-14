@@ -47,6 +47,11 @@ rented a 2x RTX 6000 Ada when the L40S was out of stock). The paper's NVIDIA dev
 "compare on the same device" (AMD: MI300X). `stage nvidia` reads the pod's `nvidia-smi` names after the sync and
 refuses any other GPU unless --allow-hw-diff (or PC_ALLOW_HW_DIFF=1); then the submit line carries
 PC_ALLOW_HW_DIFF=1, tools/ops/paper_compare_job.sh goes on, and tools/paper_compare.py flags every row HW-DIFF.
+
+Times are compared only on the same box (AGENTS.md, Andrew, 2026-11-14): the submit line carries PC_PRIOR_VERSIONS
+(--prior-versions, default 0.8.55,0.8.66) and PC_PRIOR_VERSION (its last entry); the job installs those releases
+from PyPI and times every paper row for each on the same box in the same job, and the compare's columns are those
+on-box boards. The prior boards double the board time (accepted). Their evidence counts in the disk need too.
 """
 import argparse
 import os
@@ -65,6 +70,8 @@ import paper_compare as PC  # noqa: E402
 import release_gate as RG  # noqa: E402
 
 RELEASE_ROOT = Path.home() / "mojolearn-evidence" / "release"
+#: the paper baseline and the last release: re-timed on the box beside the candidate (paper_compare_job.sh)
+DEFAULT_PRIOR_VERSIONS = "0.8.55,0.8.66"
 #: tools/release.py candidate's work root: a local version (X.Y.Z.devN+<sha12>[.label]) is a candidate build there
 CANDIDATE_ROOT = Path.home() / "mojolearn-evidence" / "release-candidates"
 
@@ -281,7 +288,13 @@ def cmd_stage(a):
         C.build_manifest(bver, vendor, bw, bsha)
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]
         b_lines.append(f"{name} {indir}/b-{name}/{vendor} {bsha}\n")
-    env = {"PC_WHEEL_DIR": f"{indir}/{vendor}", "PC_SOURCE_COMMIT": commit}
+    # OUR prior wheels re-timed on the same box in the same job (AGENTS.md "Times are compared only on the same box",
+    # 2026-11-14): the compare's columns; the job installs them from PyPI. The last one is the prior release.
+    prior_versions = [v for v in a.prior_versions.split(",") if v]
+    if not prior_versions or any(not re.fullmatch(r"[0-9]+(\.[0-9]+)+[.a-z0-9]*", v) for v in prior_versions):
+        raise SystemExit(f"measure-candidate: --prior-versions wants a comma list of releases, not {a.prior_versions!r}")
+    env = {"PC_WHEEL_DIR": f"{indir}/{vendor}", "PC_SOURCE_COMMIT": commit,
+           "PC_PRIOR_VERSIONS": ",".join(prior_versions), "PC_PRIOR_VERSION": prior_versions[-1]}
     allow_hw_diff = a.allow_hw_diff or os.environ.get("PC_ALLOW_HW_DIFF") == "1"
     if vendor == "nvidia" and allow_hw_diff:
         env["PC_ALLOW_HW_DIFF"] = "1"     # the job then runs on another GPU and every row is flagged HW-DIFF
@@ -456,6 +469,9 @@ def main(argv=None):
     s.add_argument("--allow-running", action="store_true",
                    help="NVIDIA: sync the lane's tree even while a job of that lane is queued or running (it then "
                    "reads changed source)")
+    s.add_argument("--prior-versions", default=DEFAULT_PRIOR_VERSIONS,
+                   help="OUR prior releases the job installs from PyPI and times on the same box beside the candidate "
+                        f"(the compare's columns; the last is the prior release); default {DEFAULT_PRIOR_VERSIONS}")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)
