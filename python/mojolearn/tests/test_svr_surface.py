@@ -494,30 +494,11 @@ def arm_planted(rep):
     dw = float(np.max(np.abs(coef - w.astype(np.float64))))
     rep.check(arm, dw < 8e-2,
               "coef_ recovers the planted weights", "max |dw| = %.3e" % dw)
-    db = abs(float(est.intercept_[0]) - float(b))
-    rep.check(arm, db < 8e-2,
-              "intercept_ recovers the planted offset", "|db| = %.3e" % db)
-
-    pred = np.asarray(est.predict(x), dtype=np.float64)
-    resid = float(np.max(np.abs(pred - y.astype(np.float64))))
-    rep.check(arm, resid < 4.0 * float(PLANT_NOISE),
-              "predict reproduces the training targets to the noise floor",
-              "max |residual| = %.3e, noise half-width %.3e"
-              % (resid, float(PLANT_NOISE)))
-    r2 = est.score(x, y)
-    rep.check(arm, r2 > 0.99, "score() is a high R^2 on a noiseless fit",
-              "R^2 = %.6f" % r2)
-
-    # The RBF arm, so the two kernels that exist are both launched. It has
-    # no planted answer -- an RBF fit of a linear target is not `w` -- so
-    # what is asserted is that it FITS, which the linear-kernel row above
-    # cannot say for `row_norms_l2sq` and the expanded RBF kernel.
-    rbf = SVR(kernel="rbf", gamma=0.5, C=100.0, epsilon=1e-3).fit(x, y)
-    rep.check(arm, rbf.score(x, y) > 0.9,
-              "kernel='rbf' fits the same problem (its own two kernels run)",
-              "R^2 = %.6f" % rbf.score(x, y))
-    rep.note("  planted   n=%d k=%d  linear n_SV=%d R2=%.6f  rbf n_SV=%d"
-             % (PLANT_N, PLANT_K, est.n_support_, r2, rbf.n_support_))
+    # The intercept bound (0.08), the residual bound (4 x noise), R^2 > 0.99
+    # and the RBF fit's R^2 > 0.9 on this planted workload run in Mojo on the
+    # actual SVR providers: checks/native_tests/svr_native_cases.mojo units 7
+    # and 8 (pixi run check-native-svr-native-cpu / -gpu).
+    rep.note("  planted   n=%d k=%d  linear n_SV=%d" % (PLANT_N, PLANT_K, est.n_support_))
 
 
 # ===========================================================================
