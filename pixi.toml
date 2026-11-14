@@ -69,6 +69,7 @@ check-native-kmeans-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEAR
 check-native-kmeans-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kmeans_native_gpu.mojo"
 check-native-cluster-kmeans-query-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/cluster_kmeans_query_cpu.mojo"
 check-native-cluster-kmeans-query-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/cluster_kmeans_query_gpu.mojo"
+check-native-neighbors-weighted-largek-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/neighbors_weighted_largek_gpu.mojo"
 check-native-class-weight-plan = "mojo run -I . checks/native_tests/class_weight_plan.mojo"
 check-native-archive-writer = "mojo run -I . checks/native_tests/archive_writer.mojo"
 check-native-rankn-math-cpu = "mojo run -I . checks/native_tests/rankn_math_cpu.mojo"
