@@ -11,7 +11,6 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
-from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.native_caller_frame_pack import native_caller_globals
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute, classical_check_layout
@@ -29,10 +28,16 @@ from bindings.sequential_inputs_door import sequential_input
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
 from providers.python.preprocessing_input_pyapi_door import ScalerInputSnapshot, scaler_operation_input, scaler_snapshot_write_back
-from bindings.scaler_native_door import scaler_fit, _input, _ptr, _copy_row, _bool, scaler_transform_calls, ScalerDoorCalls
+from bindings.scaler_native_door import (
+    scaler_fit, _input, _ptr, _copy_row, _bool, scaler_transform_calls, ScalerDoorCalls, scaler_door_calls,
+    scaler_fit_entries, scaler_fit_input,
+)
+from core.scaler_core import scaler_standard_fit_core, SCALER_SEEN_INT, SCALER_SEEN_FLOAT, SCALER_SEEN_FLOAT_ROW
+from bindings.scaler_lifecycle_run import (
+    ScalerSeenView, ScalerStandardMerged, scaler_seen_of_fit, scaler_standard_merge_run, SCALER_SEEN_SOURCE_SCALAR,
+    SCALER_SEEN_SOURCE_I64, SCALER_SEEN_SOURCE_F32,
+)
 from core.scaler_core import ScalerTransformSpec, scaler_transform_rows, scaler_transform_rows_valid, scaler_transform_core
-from core.preprocessing_program import prep_program_stage as _stage
-from core.scaler_fit_impl import scaler_counts_f32, scaler_counts_i64, scaler_equal_f32, scaler_equal_i64, scaler_counts_f64, scaler_merge_count_only, scaler_narrow_counts
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -73,10 +78,6 @@ def _direct(entries: PythonObject, name: String) raises -> PythonObject:
     if String(getenv("MOJOLEARN_SCALER_DIRECT", "1").strip()) == "0":
         return PythonObject(None)
     return py_get(entries, name)
-
-
-def _run(mut arena: List[Float32], mut program: List[Int32], entries: PythonObject) raises:
-    _ = py_call_typed(entries["x_prep_run"], Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
 
 
 def _features(fields: PythonObject) raises -> Int:
@@ -242,34 +243,45 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     return _write_back(source, values, output, copy, context, snapshot)
 
 
-def _counts(value: PythonObject, d: Int, dest: F32P, context: PythonObject) raises:
+def _seen_view(value: PythonObject, d: Int, context: PythonObject) raises -> ScalerSeenView:
+    """UNPACK the fitted n_samples_seen_ (a native int or float, or a
+    per-feature int64 / float32 row, borrowed) with its refusals."""
     classical_admit_value(value,context)
     var b = native_loaded_module("builtins")
-    if py_type(value) is b.int or py_type(value) is b.float:
-        scaler_counts_f32(0, 0, Float64(py=value), dest, d)
-        return
+    if py_type(value) is b.int:
+        return ScalerSeenView(SCALER_SEEN_SOURCE_SCALAR, Float64(py=value), Int64(py=value), True, 0)
+    if py_type(value) is b.float:
+        return ScalerSeenView(SCALER_SEEN_SOURCE_SCALAR, Float64(py=value), Int64(0), False, 0)
     if not classical_is_array(value, context) or Int(py=value.ndim) != 1 or Int(py=value.size) != d:
         raise Error("StandardScaler n_samples_seen_ must remain a scalar or per-feature count vector")
     var dtype = String(value.dtype)
     if dtype != "<i8" and dtype != "<f4":
         raise Error("StandardScaler n_samples_seen_ must remain int64 counts or float32 weights")
-    scaler_counts_f32(Int(py=classical_address(value)), 1 if dtype == "<i8" else 2, 0, dest, d)
+    var source = SCALER_SEEN_SOURCE_I64 if dtype == "<i8" else SCALER_SEEN_SOURCE_F32
+    return ScalerSeenView(source, 0, Int64(0), False, Int(py=classical_address(value)))
 
 
-def _integer_counts(value: PythonObject, d: Int, dest: I64P, context: PythonObject) raises:
-    var scalar = py_type(value) is native_loaded_module("builtins").int
-    if not scalar and (not classical_is_array(value, context) or String(value.dtype) != "<i8" or Int(py=value.size) != d):
-        raise Error("StandardScaler n_samples_seen_ must remain int64 counts")
-    scaler_counts_i64(0 if scalar else Int(py=classical_address(value)), not scalar, Int64(py=value) if scalar else Int64(0), dest, d)
-
-
-def _publish_counts(source: F32P, d: Int, context: PythonObject) raises -> PythonObject:
-    if scaler_equal_f32(source, d):
-        return PythonObject(Float64(source[0]))
-    return _copy_row(source, d, context)
+def _seen_pack(merged: ScalerStandardMerged, d: Int, context: PythonObject) raises -> PythonObject:
+    """PACK the merged n_samples_seen_: one native number when every feature
+    saw the same count, else the per-feature row."""
+    if merged.seen_kind == SCALER_SEEN_INT:
+        return PythonObject(Int(merged.seen_integer))
+    if merged.seen_kind == SCALER_SEEN_FLOAT:
+        return PythonObject(merged.seen_scalar)
+    if merged.seen_kind == SCALER_SEEN_FLOAT_ROW:
+        return _copy_row(F32P(unsafe_from_address=Int(merged.seen_f32.unsafe_ptr())), d, context)
+    var count = classical_typed(Python.tuple(d), "<i8", context["output_context"])
+    unsafe_memcpy(dest=I64P(unsafe_from_address=Int(py=classical_address(count))),
+                  src=I64P(unsafe_from_address=Int(merged.seen_i64.unsafe_ptr())), count=d)
+    _ = count  # keep the Python object alive through the copy above
+    return count
 
 
 def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK the fitted state and the batch, RUN the typed batch fit and the
+    merge (bindings/scaler_lifecycle_run.mojo; lane py-msel-prep-cnn: the
+    batch was a second Python StandardScaler fitted through the door and the
+    merge program was composed here), PACK the merged fields."""
     var fields = py_fields(model)
     if not _fitted(fields):
         return scaler_fit(model, source, weights, context)
@@ -277,97 +289,70 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     if _bool(fields["with_mean"], context) != _bool(fields["with_mean_"], context) or _bool(fields["with_std"], context) != _bool(fields["with_std_"], context):
         raise Error("StandardScaler partial_fit: with_mean / with_std changed since the first batch")
     var b = native_loaded_module("builtins")
-    var batch = py_call(b.object.__new__, context["scaler_class"])
-    _ = scaler_initialize(batch, Python.tuple(True, fields["with_mean_"], fields["with_std_"], fields["numeric_mode_"]))
-    _ = scaler_fit(batch, source, weights, context)
-    var fresh = py_fields(batch)
+    # The batch fit's own admission, in the order StandardScaler.fit makes it
+    # (copy True, the fitted flags, the fitted mode).
+    var with_mean = _bool(fields["with_mean_"], context)
+    var with_std = _bool(fields["with_std_"], context)
+    var mode = fields["numeric_mode_"]
+    if py_type(mode) is not b.str:
+        raise Error("numeric_mode must be fast, identical or None")
+    mode = py_call(py_call(mode.strip).lower)
+    if String(mode) != "fast" and String(mode) != "identical":
+        raise Error("numeric_mode must be fast, identical or None")
+    if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
+        raise Error("HostStandardScaler runs identical only on the host")
+    var entries = scaler_fit_entries(mode, context)
+    var batch = scaler_fit_input(source, weights, context, PythonObject(None))
+    var calls = scaler_door_calls(entries)
+    var x = batch.x
+    var weight = batch.weight
+    var weighted = batch.weighted
+    var batch_d = batch.d
+    # RUN: the batch fit (the typed core, NaN and weights included).
+    var fit = scaler_standard_fit_core(calls, _ptr(x), batch.n, batch_d, with_mean, with_std,
+                                       Int(py=classical_address(weight)) if weighted else 0)
+    _ = weight^
+    _ = x^
     var d = _features(fields)
-    if _features(fresh) != d:
+    if batch_d != d:
         raise Error("StandardScaler input feature count differs from fit")
+    # UNPACK the fitted state (borrowed rows, alive to the end of the merge).
     var old_seen = fields["n_samples_seen_"]
-    var new_seen = fresh["n_samples_seen_"]
-    var weighted = weights is not None or py_type(old_seen) is b.float
-    if classical_is_array(old_seen, context):
-        weighted = weighted or String(old_seen.dtype) == "<f4"
-    var entries = _entries(fields["numeric_mode_"], context)
-    var arena = List[Float32](length=10*d, fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    _counts(old_seen, d, ap, context)
-    _counts(new_seen, d, ap+d, context)
-    var count = PythonObject(None)
-    if fields["mean_"] is None:
-        # Preserve _per_feature's Float64 addition and _seen's publication
-        # exactly when neither mean nor variance is retained.
-        var wide = List[Float64](length=2*d,fill=0)
-        var wp = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=Int(wide.unsafe_ptr()))
-        var past = Python.tuple(old_seen,new_seen)
-        for k in range(2):  # small-loop(counts: previous and current count storage)
-            var value = past[k]
-            var scalar = py_type(value) is b.int or py_type(value) is b.float
-            scaler_counts_f64(0 if scalar else Int(py=classical_address(value)), 0 if scalar else (1 if String(value.dtype) == "<i8" else 2), Float64(py=value) if scalar else Float64(0), wp+k*d,d)
-            _ = value  # keep the Python object alive through the native call above
-        if scaler_merge_count_only(wp,wp+d,d):
-            count = PythonObject(wp[0]) if weighted else PythonObject(Int(wp[0]))
-        else:
-            count = classical_typed(Python.tuple(d),"<f4" if weighted else "<i8",context["output_context"])
-            scaler_narrow_counts(wp,Int(py=classical_address(count)),weighted,d)
-            _ = count  # keep the Python object alive through the native call above
-        py_setitem(fields,"n_samples_seen_",count)
-        _ = wide^
-        _ = arena^
-        return model
-    else:
-        var old_mean = _statistic(fields["mean_"], d, "mean_", context)
-        var new_mean = _statistic(fresh["mean_"], d, "mean_", context)
-        unsafe_memcpy(dest=ap+2*d, src=_ptr(old_mean), count=d)
-        _ = old_mean  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=ap+3*d, src=_ptr(new_mean), count=d)
-        _ = new_mean  # keep the Python object alive through the native call above
+    var old = _seen_view(old_seen, d, context)
+    var kept = fields["mean_"] is not None
+    var old_mean = PythonObject(None)
+    var old_var = PythonObject(None)
+    var mean_addr = 0
+    var var_addr = 0
+    if kept:
+        old_mean = _statistic(fields["mean_"], d, "mean_", context)
+        mean_addr = Int(py=classical_address(old_mean))
+        if not with_mean and not with_std:
+            # the batch publishes no mean_ to merge with
+            classical_admit_value(PythonObject(None), context)
+            raise Error("StandardScaler mean_ must remain a finite contiguous Float32 feature vector")
         if fields["var_"] is not None:
-            var old_var = _statistic(fields["var_"], d, "var_", context)
-            unsafe_memcpy(dest=ap+4*d, src=_ptr(old_var), count=d)
-            _ = old_var  # keep the Python object alive through the native call above
-            _ = old_var^
-        if fresh["var_"] is not None:
-            var new_var = _statistic(fresh["var_"], d, "var_", context)
-            unsafe_memcpy(dest=ap+5*d, src=_ptr(new_var), count=d)
-            _ = new_var  # keep the Python object alive through the native call above
-            _ = new_var^
-        var program = List[Int32]()
-        _stage(program, 91, d, 0, 2*d, 4*d, d, 3*d, 5*d, d, 1, 6*d, 7*d, 8*d, 1)
-        _stage(program, 102, d, 8*d, 9*d)
-        _run(arena, program, entries)
-        py_setitem(fields, "mean_", _copy_row(ap+7*d, d, context))
-        if _bool(fields["with_std_"], context):
-            py_setitem(fields, "var_", _copy_row(ap+8*d, d, context))
-            py_setitem(fields, "scale_", _copy_row(ap+9*d, d, context))
-        _ = old_mean^
-        _ = new_mean^
-    if weighted:
-        count = _publish_counts(ap+6*d, d, context)
-    else:
-        # Retain the exact original int64 device-count addition, avoiding the
-        # loss of integer precision from the float32 statistics arena.
-        var counts = List[Float32](length=6*d, fill=0)
-        var cp = F32P(unsafe_from_address=Int(counts.unsafe_ptr()))
-        var ip = I64P(unsafe_from_address=Int(cp))
-        _integer_counts(old_seen, d, ip, context)
-        _integer_counts(new_seen, d, ip+d, context)
-        var program = List[Int32]()
-        _stage(program, 269, d, 0, 2*d, 4*d)
-        _run(counts, program, entries)
-        if scaler_equal_i64(ip+2*d, d):
-            count = PythonObject(Int(ip[2*d]))
-        else:
-            count = classical_typed(Python.tuple(d), "<i8", context["output_context"])
-            var dest = I64P(unsafe_from_address=Int(py=classical_address(count)))
-            _ = count  # keep the Python object alive through the native call above
-            unsafe_memcpy(dest=dest, src=ip+2*d, count=d)
-        _ = counts^
-    py_setitem(fields, "n_samples_seen_", count)
-    _ = arena^
+            old_var = _statistic(fields["var_"], d, "var_", context)
+            var_addr = Int(py=classical_address(old_var))
+    var scratch = List[Int64]()
+    var new = scaler_seen_of_fit(fit, scratch, d)
+    var stats = Int(fit.stats.unsafe_ptr())
+    # RUN: the merge.
+    var merged = scaler_standard_merge_run(calls, d, weighted, old, new, kept, mean_addr, stats, var_addr,
+                                           stats + 4 * d if with_std else 0)
+    _ = scratch^
+    _ = fit^
+    _ = old_mean^
+    _ = old_var^
     _ = old_seen^
-    _ = new_seen^
+    # PACK
+    if merged.kept:
+        var ptr = F32P(unsafe_from_address=Int(merged.stats.unsafe_ptr()))
+        py_setitem(fields, "mean_", _copy_row(ptr, d, context))
+        if with_std:
+            py_setitem(fields, "var_", _copy_row(ptr + d, d, context))
+            py_setitem(fields, "scale_", _copy_row(ptr + 2 * d, d, context))
+    py_setitem(fields, "n_samples_seen_", _seen_pack(merged, d, context))
     return model
 
 
