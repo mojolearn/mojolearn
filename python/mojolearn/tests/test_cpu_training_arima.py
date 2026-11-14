@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Workstream E, CPU training for the arima, arima-011 and arima-seasonal-c
 lanes (2026-09-14), checked from SOURCE so it runs on a box with nothing
-built, plus a runtime check that runs only where the arima host binding is
+built, plus a binding probe that runs only where the arima host binding is
 built and the package took the CPU-only path.
 
 What the source checks hold: the manifest declares the arima family, routes
@@ -17,25 +17,22 @@ test_invparams' one-rounding association, the perturbation and the reset by
 copy, the refusals by name); the sabotage define reaches the step and the
 binding reads it back.
 
-The runtime check (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded): the three lane orders fit twice on a small draw
-through the host binding and return the same bytes, `forecast(h)` equals
-`predict(n_obs, n_obs + h)` byte for byte, an in-sample prediction agrees
-with a prediction straddling the end of the series (since 2026-09-15), and a
-second AR coefficient refuses by name. It is a plumbing check. The bit claim
-against the GPU columns is the CPU identity gate's, not this file's.
+The binding probe: the loaded host binding is not a sabotage build. The
+runtime arithmetic check (the three lane orders fit twice through the host fit
+body and return the same bytes, `forecast(h)` equals `predict(n_obs,
+n_obs + h)`, an in-sample prediction agrees with one straddling the end of
+the series, and a second AR coefficient refuses by name) is native:
+checks/native_tests/tsa_training_arima_cpu.mojo.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_arima
 """
 
-# Gate-runner scope: host runtime checks require the CPU-only route.
+# Gate-runner scope: the binding probe requires the CPU-only route.
 GATE_BACKENDS = ("cpu",)
 import re
 import sys
 from pathlib import Path
 
-import mojolearn
-from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -133,50 +130,15 @@ def test_sabotage_define_moves_the_step():
     assert "ARIMA_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("arima"))
 
 
-
-@reference_training()
-def test_arima_fits_on_the_host_when_built():
+def test_host_binding_is_not_a_sabotage_build():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
         return
     if "_mojolearn_arima_host" not in _backend.host_families_built():
         print("SKIP: the arima host binding is not built")
         return
-    import numpy as np
     module = _backend.load_host_module("_mojolearn_arima_host")
     assert not bool(module.arima_host_sabotage()), "a sabotage build loaded outside the gate"
-    rng = np.random.default_rng(0)
-    series = np.cumsum(rng.standard_normal((3, 160)), axis=1).astype(np.float32) * 0.1
-    series += rng.standard_normal((3, 160)).astype(np.float32)
-    kinds = (
-        dict(order=(1, 0, 0)),
-        dict(order=(0, 1, 1)),
-        dict(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c"),
-    )
-    for kw in kinds:
-        outs = []
-        for _ in range(2):
-            m = mojolearn.ARIMA(**kw).fit(series)
-            fc = np.asarray(m.forecast(12))
-            pr = np.asarray(m.predict(m.n_obs_, m.n_obs_ + 12))
-            assert fc.tobytes() == pr.tobytes(), f"{kw}: forecast(h) and predict(n_obs, n_obs + h) differ"
-            outs.append((np.asarray(m.params_).tobytes(), fc.tobytes()))
-        assert outs[0] == outs[1], f"{kw}: two host fits returned different bytes"
-        # In-sample prediction runs on the host since 2026-09-15: the tail of
-        # predict(0, n_obs) is the head of a prediction straddling n_obs,
-        # whose tail is the forecast.
-        ins = np.asarray(m.predict(0, m.n_obs_))
-        st = np.asarray(m.predict(m.n_obs_ - 4, m.n_obs_ + 4))
-        assert st[:, :4].tobytes() == ins[:, -4:].tobytes(), f"{kw}: the straddle's in-sample half moved"
-        assert st[:, 4:].tobytes() == np.asarray(m.forecast(4)).tobytes(), f"{kw}: the straddle's forecast half moved"
-        nan_prefix = kw["order"][1] + kw.get("seasonal_order", (0, 0, 0, 0))[1] * kw.get("seasonal_order", (0, 0, 0, 0))[3]
-        assert np.isnan(ins[:, :nan_prefix]).all() and not np.isnan(ins[:, nan_prefix:]).any(), kw
-    try:
-        mojolearn.ARIMA(order=(2, 0, 0)).fit(series)
-    except Exception as exc:
-        assert "no CPU implementation of ARIMA with p=2" in str(exc), exc
-    else:
-        raise AssertionError("p=2 did not refuse by name")
 
 
 if __name__ == "__main__":
