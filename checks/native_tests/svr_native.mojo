@@ -105,9 +105,10 @@ def fixture(driver: SvrNativeDriver, unit: Int, resident: Bool = False) raises:
         var qp = query.unsafe_ptr()
         # The fitted owner is named after the synchronous join and query.
         var sp = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(fitted.support.unsafe_ptr()))
-        def cross(cell: Int) {imm qp, imm sp, imm count}:
-            qp[cell] = Float32(Int(sp[cell % count]) == cell // count)
-        host_parallelize(cross, n * count)
+        # small-loop: n * count fixture cells (a few hundred); a host_parallelize closure here failed to instantiate
+        # in the GPU column build (parallelize recursed through the device context), so the fixture is filled in order.
+        for cell in range(n * count):
+            qp[cell] = Float32(1.0 if Int(sp[cell % count]) == cell // count else 0.0)
         query_address = Int(qp)
         query_width = count
     var prediction = List[Float32](length=n, fill=-999)
