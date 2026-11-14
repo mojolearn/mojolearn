@@ -2451,6 +2451,13 @@ def flag_recompiles(cells):
     return cells
 
 
+#: a cell's explicit reason for a quality it does not record (bench_board_infer, bench_board_neural); shown with the
+#: cell, never a gate and never a quality failure of the arm
+QUALITY_UNAVAILABLE = "quality_unavailable"
+#: quality keys that are not a score: a cell holding only these recorded no quality
+QUALITY_NON_METRIC = ("scorer", "reference", "rows", QUALITY_UNAVAILABLE)
+
+
 def mark_not_scored(cells):
     """"ok" only if scored (lane harness-evidence, 2026-10-14). A cell timed in every round whose quality scorer
     failed or never ran gets status "not-scored" and `scorer_error`; its times stay exactly as measured. The
@@ -2462,8 +2469,9 @@ def mark_not_scored(cells):
             continue
         q = c.get("quality") or {}
         why = BQ.scorer_failure(q)
-        if why is None and not any(k not in ("scorer", "reference", "rows") for k in q):
-            why = "the race recorded no quality for this arm (its scorer did not run)"
+        if why is None and not any(k not in QUALITY_NON_METRIC for k in q):
+            why = (("quality unavailable: " + str(q[QUALITY_UNAVAILABLE])) if q.get(QUALITY_UNAVAILABLE) else
+                   "the race recorded no quality for this arm (its scorer did not run)")
         if why is not None:
             c.update(status=NOT_SCORED, scorer_error=why[:2000])
     return cells
@@ -2502,11 +2510,20 @@ def measurement_completion(rec):
                     missing.append(key)
             quality = cell.get("quality") or {}
             why = BQ.scorer_failure(quality)
-            if why or cell.get("status") == NOT_SCORED:
-                missing.append("quality scorer: " + str(why or cell.get("scorer_error") or "not scored"))
+            declared = quality.get(QUALITY_UNAVAILABLE)
+            if why:
+                missing.append("quality scorer: " + str(why))
+            elif declared and not any(k not in QUALITY_NON_METRIC for k in quality):
+                # QUALITY-MISSING FIX (2026-11-13): a cell that states why it records no quality (the trees large
+                # batch: training rows) is recorded with its reason, not incomplete; the reason is shown
+                pass
+            elif cell.get("status") == NOT_SCORED:
+                missing.append("quality scorer: " + str(cell.get("scorer_error") or "not scored"))
             elif not any(k not in ("scorer", "reference", "rows") for k in quality):
                 missing.append("quality scores")
             for metric in sorted(metrics):
+                if declared and metric not in quality:
+                    continue    # the cell's own reason covers the metrics it does not record
                 if not finite(BQ.metric_value(cell, quality, metric)):
                     missing.append("quality metric: " + metric)
             if missing:

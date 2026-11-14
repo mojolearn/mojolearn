@@ -30,6 +30,10 @@ import re
 import statistics
 
 TREE_BATCHES = ("test", "large")
+#: a cell's explicit reason for the quality it does not record (shown, never a gate; tools/paper_compare.py)
+UNAVAILABLE = "quality_unavailable"
+LARGE_UNAVAILABLE = ("large batch = training rows (a throughput batch, no held-out labels); "
+                     "quality is the test batch's, same fitted model")
 CLASSICAL_INFER_LANES = ("kmeans", "pca", "ols", "svc")
 CLASSICAL_CALL = {"kmeans": "predict", "pca": "transform", "ols": "predict", "svc": "predict"}
 
@@ -196,6 +200,12 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
                     q["max_abs_diff_vs_ours_identical"] = float(agree.get("max_abs_diff"))
                 except (TypeError, ValueError):
                     pass
+            if batch == "large" and not any(not k.endswith("_matches_fit") for k in q):
+                # QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): the large batch is the first
+                # --infer-large-rows TRAINING rows (bench/speed/forest_speed_arm.py), a throughput batch the driver
+                # scores no held-out metric on; its cell says so instead of an empty quality the completion check
+                # read as "its scorer did not run". The model's quality is the test batch's (same fitted model).
+                q[UNAVAILABLE] = LARGE_UNAVAILABLE
             cell["quality"] = q
             cell["verdict"] = fit_verdict
             fitted = next((c for c in fit_cells if c["arm"] == arm), {})
