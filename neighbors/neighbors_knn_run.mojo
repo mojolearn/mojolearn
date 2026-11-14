@@ -101,14 +101,9 @@ comptime KNN_DIST_CANBERRA = 8
 comptime KNN_DIST_CORRELATION_EXPANDED = 10
 comptime KNN_DIST_BRAY_CURTIS = 14
 #: `sorted(_METRIC_TABLE)` joined by ", ": the refusals' "Implemented:" list.
-comptime KNN_METRIC_NAMES: StaticString = (
-    "braycurtis, canberra, chebyshev, cityblock, correlation, cosine, euclidean, inner_product, "
-    "jensenshannon, l1, l2, linf, lp, manhattan, minkowski, sqeuclidean, taxicab"
-)
+comptime KNN_METRIC_NAMES: StaticString = "braycurtis, canberra, chebyshev, cityblock, correlation, cosine, euclidean, inner_product, jensenshannon, l1, l2, linf, lp, manhattan, minkowski, sqeuclidean, taxicab"
 #: `sorted(_RBC_METRIC_TABLE)` joined by ", ": the ball cover's admitted list.
-comptime KNN_RBC_METRIC_NAMES: StaticString = (
-    "chebyshev, cityblock, euclidean, l1, l2, linf, lp, manhattan, minkowski, taxicab"
-)
+comptime KNN_RBC_METRIC_NAMES: StaticString = "chebyshev, cityblock, euclidean, l1, l2, linf, lp, manhattan, minkowski, taxicab"
 
 
 def knn_metric_code(key: String) -> Int:
