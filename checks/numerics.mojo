@@ -117,6 +117,77 @@ def nv_fma_rn_ftz_f32(a: Float32, b: Float32, c: Float32) -> Float32:
     ](a, b, c)
 
 
+# SCHEDULABLE NVIDIA PRODUCTS (lane fix-nv-mul-rn-via-fma, 2026-11-14, owed
+# row `fix-nv-mul-rn-via-fma`). 0.8.55 (0e4de0f46e) spelled the pinned
+# product and the hardware flush as the LLVM intrinsics
+# `llvm.nvvm.mul.rn.f` / `.d` / `.ftz.f`, which LLVM schedules like any
+# arithmetic. Mojo 1.2 dropped them and 62a6577b39 (2026-11-12) moved every
+# site to the inline asm above, which LLVM cannot schedule, hoist or combine
+# around: one opaque block per cell per feature in the distance tile, per
+# step in the GEMM and attention chains, per `ftz` and per `identical_mul`
+# in every NVIDIA identical kernel. NV-only regression on record (L40S,
+# AMD flat): hdbscan taxi fit 423 (0.8.55) -> 552 ms (4c2340386abc).
+# A (default) spells the same IEEE results with the fma intrinsics that
+# Mojo 1.2 still knows; B = `-D MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD` keeps the
+# asm above. Why the bits are the same, every word:
+#   mul.rn(a, b) == fma.rn(a, b, -0.0): fma forms the EXACT product and
+#     adds -0.0, which leaves every nonzero exact value unchanged, then
+#     rounds once: RN(a*b), the multiply's result, including overflow and
+#     gradual underflow (neither form flushes). An exact zero product keeps
+#     its sign: +0 + -0 = +0 and -0 + -0 = -0 under round-to-nearest (a +0.0
+#     addend would turn -0 into +0, so the addend must be -0.0). Inf stays
+#     inf; 0*inf and NaN inputs give NaN in both (NaN payloads are refused
+#     by the contract, IDENTITY_PATHS row 39).
+#   mul.rn.ftz(x, 1.0) == fma.rn.ftz(x, 1.0, -0.0): a subnormal x is
+#     flushed to its signed zero on input in both, and that zero plus -0.0
+#     keeps the sign as above; a normal x times one is exact, so there is
+#     no rounding at all and the fma.ftz smallest-normal boundary (it flushes
+#     a tiny EXACT result before rounding; see pinned_distance_tile `_rt_step`)
+#     cannot arise: the exact result is x itself, never a tiny inexact value.
+#     Only the by-one form is equivalent; a general `mul.rn.ftz(a, b)` is not
+#     rewritten.
+#   f64: as f32, `fma.rn.d` with a -0.0 addend.
+# The `.rn` intrinsics keep the product out of contraction exactly as
+# 0.8.55's `mul.rn` intrinsics did (LLVM may canonicalize either to the same
+# unflagged `fmul`); the on-device gate
+# `neighbors/checks/knn_distance_fma_boundary_check.mojo` compares A and B
+# bitwise over the boundary words and probes that the product is not fused.
+# -0.0 is built from its bit pattern so no literal folding can drop the sign.
+comptime IDN_NV_MUL_RN_ASM_OLD = is_defined["MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD"]()
+comptime _NV_NEG_ZERO_F32 = bitcast[DType.float32](UInt32(0x80000000))
+comptime _NV_NEG_ZERO_F64 = bitcast[DType.float64](UInt64(0x8000000000000000))
+
+
+@always_inline
+def nv_mul_rn_kernel_f32(a: Float32, b: Float32) -> Float32:
+    """`mul.rn.f32` as `fma.rn.f32(a, b, -0.0)`, schedulable; see above."""
+    comptime if IDN_NV_MUL_RN_ASM_OLD:
+        return nv_mul_rn_f32(a, b)
+    return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](
+        a, b, _NV_NEG_ZERO_F32
+    )
+
+
+@always_inline
+def nv_mul_rn_kernel_f64(a: Float64, b: Float64) -> Float64:
+    """`mul.rn.f64` as `fma.rn.f64(a, b, -0.0)`, schedulable; see above."""
+    comptime if IDN_NV_MUL_RN_ASM_OLD:
+        return nv_mul_rn_f64(a, b)
+    return llvm_intrinsic["llvm.nvvm.fma.rn.d", Float64, has_side_effect=False](
+        a, b, _NV_NEG_ZERO_F64
+    )
+
+
+@always_inline
+def nv_flush_by_one_kernel(x: Float32) -> Float32:
+    """The hardware flush `mul.rn.ftz.f32 x, 1.0` as `fma.rn.ftz.f32(x, 1.0, -0.0)`, schedulable; see above."""
+    comptime if IDN_NV_MUL_RN_ASM_OLD:
+        return nv_mul_rn_ftz_f32(x, Float32(1.0))
+    return llvm_intrinsic["llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False](
+        x, Float32(1.0), _NV_NEG_ZERO_F32
+    )
+
+
 def ftz(x: Float32) -> Float32:
     """IDENTITY_PATHS row 10's construction: the denormal policy.
 
@@ -178,7 +249,9 @@ def ftz(x: Float32) -> Float32:
     # The select keeps the input word for a NaN, so this spelling returns the
     # integer spelling's word for all 2^32 inputs.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_HW_OFF"]() and is_nvidia_gpu():
-        var y = nv_mul_rn_ftz_f32(x, Float32(1.0))
+        # lane fix-nv-mul-rn-via-fma: the same flush as a schedulable fma
+        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_flush_by_one_kernel.
+        var y = nv_flush_by_one_kernel(x)
         return x if y != y else y
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
@@ -235,7 +308,8 @@ def identical_mul64(a: Float64, b: Float64) -> Float64:
 #   AMD GPU: the instruction itself, `v_mul_f32` / `v_mul_f64` as inline asm
 #     on VGPRs. The fence was the first spelling and gfx942 codegen refused it
 #     on a uniform value ("illegal VGPR to SGPR copy", a row-norm kernel).
-#   NVIDIA: PTX `mul.rn` (`nv_mul_rn_f32` / `nv_mul_rn_f64` above). A fenced `fmul`
+#   NVIDIA: PTX `mul.rn`, spelled `fma.rn(a, b, -0.0)` (`nv_mul_rn_kernel_f32` /
+#     `nv_mul_rn_kernel_f64` above; asm `mul.rn` is the B arm). A fenced `fmul`
 #     reaches PTX as a plain `mul.f32`, which ptxas may still fuse with an
 #     `add.f32`; the `.rn` modifier forbids that (PTX ISA, `mul`).
 #   Apple GPU: `llvm.fma(a, b, -0.0)` called WITHOUT fast-math flags; LLVM
@@ -246,7 +320,9 @@ def identical_mul64(a: Float64, b: Float64) -> Float64:
 def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
     """`a*b`, correctly rounded, never fused into a neighbor. See above."""
     comptime if is_nvidia_gpu():
-        return nv_mul_rn_f32(a, b)
+        # lane fix-nv-mul-rn-via-fma: schedulable fma.rn with a -0.0 addend
+        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_mul_rn_kernel_f32.
+        return nv_mul_rn_kernel_f32(a, b)
     elif is_amd_gpu():
         return inlined_assembly[
             "v_mul_f32 $0, $1, $2", Float32, constraints="=v,v,v", has_side_effect=False
@@ -265,7 +341,9 @@ def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
 def pinned_mul_f64(a: Float64, b: Float64) -> Float64:
     """`pinned_mul_f32`'s float64 twin (no Apple GPU arm: Metal has no float64)."""
     comptime if is_nvidia_gpu():
-        return nv_mul_rn_f64(a, b)
+        # lane fix-nv-mul-rn-via-fma: schedulable fma.rn with a -0.0 addend
+        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_mul_rn_kernel_f64.
+        return nv_mul_rn_kernel_f64(a, b)
     elif is_amd_gpu():
         return inlined_assembly[
             "v_mul_f64 $0, $1, $2", Float64, constraints="=v,v,v", has_side_effect=False
