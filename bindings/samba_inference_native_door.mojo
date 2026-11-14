@@ -343,8 +343,16 @@ def _samba_program_reports(fields: PythonObject, config: PythonObject, b: Int, m
             _ = py_call(out.append, PythonObject(None))
             continue
         var h = Int(py=samba_fields(blocks[i])["nheads"])
-        var four = Python.list(generation_array([b, h, 64, 128]), generation_array([b, h, 128]),
-                               generation_array([b, h, 64]), generation_array([b, h, 32]))
+        # Lane fix-wave2-leftovers (fix-mamba3-unfilled-rest leftover): the
+        # four arrays are unfilled unless MAMBA3_FORWARD_ZERO_FILL (the one
+        # Mamba-3 output switch, bindings/neural_prefill_native_door.mojo):
+        # a run that asks for reports clears skip_reports
+        # (training/samba_program_entry.mojo), every Mamba-3 step op copies
+        # its four reports, and enqueue_reports downloads each whole
+        # (block_step_reports_to_host, m3_report_floats = these shapes) or
+        # raises (no resident block), behind the run's one wait.
+        var four = Python.list(_m3_output_array([b, h, 64, 128]), _m3_output_array([b, h, 128]),
+                               _m3_output_array([b, h, 64]), _m3_output_array([b, h, 32]))
         for k in range(4):  # small-loop(the four Mamba-3 reports)
             addresses.append(Int(py=four[k]._addr))
         _ = py_call(out.append, four)
