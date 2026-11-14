@@ -55,6 +55,11 @@ def _close(value: Float32, expected: Float64, rtol: Float64, atol: Float64) -> B
 def classify(ctx: DeviceContext, x: List[Float32], y: List[Int32], query: List[Float32], k: Int,
              weights: Int, mut labels: List[Int32], mut proba: List[Float32], mut uniq: List[Int32]) raises:
     var n_classes: List[Int] = [len(uniq)]
+    # One call does predict OR predict_proba, never both (neighbors/estimator.mojo knn_classifier_predict,
+    # `want_proba`): labels are written only by the predict call, as the Python test's clf.predict and
+    # clf.predict_proba were two calls. A single proba call left labels at their -9 fill.
+    _ = knn_classifier_predict(ctx, _f(x), len(x), _f(query), len(query), 1, k, _i(y), 1, n_classes,
+        _i(labels), _f(proba), _i(uniq), False, weights=weights)
     _ = knn_classifier_predict(ctx, _f(x), len(x), _f(query), len(query), 1, k, _i(y), 1, n_classes,
         _i(labels), _f(proba), _i(uniq), True, weights=weights)
     _ = x

@@ -74,7 +74,9 @@ def fixture(driver: SvrNativeDriver, unit: Int, resident: Bool = False) raises:
     var request = SvrFitRequest(Int(xp), Int(yp), Int(fitted.dual.unsafe_ptr()),
         Int(fitted.support.unsafe_ptr()), Int(fitted.vectors.unsafe_ptr()), Int(fitted.info.unsafe_ptr()),
         Int(bounds.unsafe_ptr()) if unit == 5 else 0, 0 if unit == 9 else n, d,
-        kernel, -1 if planted else 100000, 1000, 2, 0, 0, 0, driver.device() and unit != 11, False, unit == 11,
+        # base_id, base_rows, index_id: no model-selection fold, QueryFold.none() = (-1, 0, -1) as the door
+        # passes it (bindings/svc_kernel_native_door.mojo:1636). (0, 0, 0) named store id 0 as an active fold.
+        kernel, -1 if planted else 100000, 1000, 2, -1, 0, -1, driver.device() and unit != 11, False, unit == 11,
         gamma, c, epsilon, tolerance, coef0)
     if unit == 9:
         var refused = False
@@ -117,7 +119,8 @@ def fixture(driver: SvrNativeDriver, unit: Int, resident: Bool = False) raises:
     var query_request = SvrQueryRequest(query_address,
         Int(fitted.dual.unsafe_ptr()) if count else 0, Int(fitted.vectors.unsafe_ptr()) if count else 0,
         Int(prediction.unsafe_ptr()), Int(status.unsafe_ptr()), n, query_width,
-        -1 if unit == 10 else count, kernel, 2, lease, 0, 0, 0, 0,
+        # lease, slot, then the inactive fold (-1, 0, -1) as above.
+        -1 if unit == 10 else count, kernel, 2, lease, 0, -1, 0, -1,
         1.25 if unit == 6 else fitted.info[0], gamma, 256, coef0)
     try:
         if unit == 10:

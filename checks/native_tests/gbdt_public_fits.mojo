@@ -1013,6 +1013,7 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
             require_fails_with(String(error), "no CPU implementation of", "weighted FeatureFreq")
             refused = True
         require(refused, "a weighted FeatureFreq fit did not refuse on the host binding")
+        _ = y  # read by address by the calls above (its last named use is the refused call's argument)
         _ = sources^
         return
     if case_index == 2:

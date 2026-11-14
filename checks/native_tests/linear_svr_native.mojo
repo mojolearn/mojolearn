@@ -77,8 +77,11 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
         expected_w = 6 * t / 7
         expected_bias = t / 14
         expected_fx = 3 * t * t / 14
-    require(close(Float64(coefficients[0]), expected_w), "SVR fitted coefficient differs from analytic optimum")
-    require(close(moved.objective(), expected_fx), "SVR objective differs from analytic optimum")
+    var found = (": unit " + String(unit) + " coefficients " + String(coefficients[0]) + " " + String(coefficients[1])
+        + " objective " + String(moved.objective()) + " retcode " + String(moved.retcode()) + " iterations "
+        + String(moved.iterations) + "; expected w " + String(expected_w) + " objective " + String(expected_fx))
+    require(close(Float64(coefficients[0]), expected_w), "SVR fitted coefficient differs from analytic optimum" + found)
+    require(close(moved.objective(), expected_fx), "SVR objective differs from analytic optimum" + found)
     require(moved.iterations >= 0 and moved.iterations <= 200, "SVR iteration metadata outside solver bound")
     if intercept:
         require(close(Float64(coefficients[d]), expected_bias), "SVR weighted intercept differs from analytic optimum")
