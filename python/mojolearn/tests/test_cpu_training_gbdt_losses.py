@@ -3,8 +3,7 @@
 """CPU training for the gbdt-parametric-losses, gbdt-exact-mae,
 gbdt-lossguide-newtoncosine, gbdt-multiclass and gbdt-onevsall lanes
 (lane/cpu-training-gbdt-losses, 2026-09-15), checked from SOURCE so it runs
-on a box with nothing built, plus a runtime check that runs only where the
-gbdt host binding is built and the package took the CPU-only path.
+on a box with nothing built.
 
 What the source checks hold: the manifest covers the five lanes in the gbdt
 family and lists both new host modules; the two oracles import no GPU
@@ -17,11 +16,9 @@ the 1e-7 probability clip, the pinned MultiClass class, the Cholesky solve);
 the binding dispatches the new losses, exports the multi-dimensional predict
 and routes the multiclass bootstrap and score noise; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
-The runtime check (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded): small fits of each configuration run twice
-through the host binding and return the same model text and predictions, and
-the multiclass probabilities have the declared widths. A plumbing check; the
-bit claim against the GPU columns is the CPU identity gate's.
+The runtime check (small host fits run twice, the refusals by name) moved to
+the native check `checks/native_tests/gbdt_public_fits_cpu_suite.mojo`
+(`pixi run check-native-gbdt-public-fits-cpu`, lane tmig-trees, 2026-11-14).
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_gbdt_losses
 """
@@ -32,9 +29,7 @@ import re
 import sys
 from pathlib import Path
 
-import mojolearn
-from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
+from mojolearn import host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -149,63 +144,6 @@ def test_binding_dispatches_and_refuses_by_name():
     assert "var lg_boot = ns_stochastic and (" in src
     assert "_refuse(\"bootstrap_type='\" + bootstrap_type + \"' under loss='\" + loss + \"'\")" in src
     assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi or len(flags) != 0:" in src
-
-
-
-@reference_training()
-def test_the_five_configurations_fit_on_the_host_when_built():
-    if _backend._CPU_ONLY is None:
-        print("SKIP: a GPU set loaded; the host route is not taken here")
-        return
-    if "_mojolearn_gbdt_host" not in _backend.host_families_built():
-        print("SKIP: the gbdt host binding is not built")
-        return
-    import numpy as np
-    module = _backend.load_host_module("_mojolearn_gbdt_host")
-    assert not bool(module.gbdt_host_sabotage()), "a sabotage build loaded outside the gate"
-    rng = np.random.default_rng(0)
-    x = rng.standard_normal((600, 6)).astype(np.float32)
-    yc = (x[:, 3] + 0.5 * x[:, 4] > 0).astype(np.int32)
-    yr = (np.abs(x[:, 1] * 2.0) + 1.0).astype(np.float32)
-    y3 = np.digitize(x[:, 2], [-0.5, 0.5]).astype(np.float32)
-
-    def twice(make, target):
-        outs = []
-        for _ in range(2):
-            m = make().fit(x, target)
-            outs.append((m.model_, np.asarray(m.predict(x)).tobytes()))
-        assert outs[0] == outs[1], "two host fits returned different bytes"
-        return m
-
-    for loss, kw in (("Quantile", {}), ("MAPE", {}), ("Poisson", {}), ("Tweedie", dict(loss_variance_power=1.5))):
-        twice(lambda: mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss=loss, **kw), yr)
-    twice(lambda: mojolearn.GradientBoosting(
-        n_estimators=3, max_depth=3, loss="MAE", leaf_estimation_method="Exact",
-        bootstrap_type="Poisson", subsample=0.6), yr)
-    twice(lambda: mojolearn.GradientBoosting(
-        n_estimators=3, max_leaves=8, grow_policy="Lossguide", loss="Logloss",
-        score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
-        min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
-        bootstrap_type="Bernoulli", subsample=0.7, leaf_estimation_method="Gradient",
-        leaf_estimation_iterations=3), yc)
-    mc = twice(lambda: mojolearn.GradientBoosting(
-        n_estimators=3, max_depth=3, loss="MultiClass", class_weights=[1.0, 2.0, 0.5]), y3)
-    assert np.asarray(mc.predict_proba(x)).shape == (600, 3)
-    ova = twice(lambda: mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="MultiClassOneVsAll"), y3)
-    assert np.asarray(ova.predict_proba(x)).shape == (600, 3)
-    # The pointwise losses take the Bayesian bootstrap on a SymmetricTree fit
-    # since 178d71116 (the shared row bootstrap after the full gradients,
-    # `pw_stochastic` in bindings/_mojolearn_gbdt_host.mojo); what the host
-    # still refuses by name is a pointwise loss under a non-symmetric policy.
-    twice(lambda: mojolearn.GradientBoosting(
-        n_estimators=2, max_depth=3, loss="Quantile", bootstrap_type="Bayesian"), yr)
-    try:
-        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Quantile",
-                                   grow_policy="Depthwise").fit(x, yr)
-    except Exception as exc:
-        assert "no CPU implementation of" in str(exc), str(exc)
-    else:
-        raise AssertionError("a Depthwise Quantile fit did not refuse on the host binding")
 
 
 if __name__ == "__main__":

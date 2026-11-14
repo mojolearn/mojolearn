@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Workstream E batch 3, CPU training for the gbdt-symmetric lane
-(2026-09-14), checked from SOURCE so it runs on a box with nothing built,
-plus a runtime check that runs only where the gbdt host binding is built and
-the package took the CPU-only path.
+(2026-09-14), checked from SOURCE so it runs on a box with nothing built.
 
 What the source checks hold: the manifest declares the gbdt family, routes
 `_mojolearn_gbdt`, covers gbdt-symmetric only and names the rest of gradient
@@ -20,11 +18,9 @@ row-count scale limit, the half-byte block partial flush, the Newton epsilon,
 the fused cursor update, the phase B border search's subnormal flush); the sabotage define reaches the leaf walker and
 the binding reads it back.
 
-The runtime check (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded): a small Logloss fit runs twice through the host
-binding and returns the same model text and predictions, and a Lossguide fit
-with the Cosine score refuses by name. It is a plumbing check. The bit claim against the GPU
-columns is the CPU identity gate's, not this file's.
+The runtime check (small host fits run twice, the refusals by name) moved to
+the native check `checks/native_tests/gbdt_public_fits_cpu_suite.mojo`
+(`pixi run check-native-gbdt-public-fits-cpu`, lane tmig-trees, 2026-11-14).
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_e3_gbdt
 """
@@ -35,9 +31,7 @@ import re
 import sys
 from pathlib import Path
 
-import mojolearn
-from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
+from mojolearn import host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -202,57 +196,6 @@ def test_sabotage_define_moves_the_leaf_walker():
     assert "comptime if GBDT_ORACLE_HOST_SABOTAGE:" in text
     assert "lambda_reg = lambda_reg + 1.0" in text
     assert "GBDT_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("gbdt"))
-
-
-
-@reference_training()
-def test_gradient_boosting_fits_on_the_host_when_built():
-    if _backend._CPU_ONLY is None:
-        print("SKIP: a GPU set loaded; the host route is not taken here")
-        return
-    if "_mojolearn_gbdt_host" not in _backend.host_families_built():
-        print("SKIP: the gbdt host binding is not built")
-        return
-    import numpy as np
-    module = _backend.load_host_module("_mojolearn_gbdt_host")
-    assert not bool(module.gbdt_host_sabotage()), "a sabotage build loaded outside the gate"
-    rng = np.random.default_rng(0)
-    x = rng.standard_normal((600, 6)).astype(np.float32)
-    y = (x[:, 3] + 0.5 * x[:, 4] > 0).astype(np.int32)
-    outs = []
-    for _ in range(2):
-        m = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss").fit(x, y)
-        outs.append((m.model_, np.asarray(m.predict(x)).tobytes()))
-    assert outs[0] == outs[1], "two host fits returned different bytes"
-    proba = np.asarray(m.predict_proba(x))
-    assert proba.shape == (600, 2) and float(proba.min()) >= 0.0 and float(proba.max()) <= 1.0
-    # the NaN modes and the classifier adapter's transforms
-    xn = x.copy()
-    xn[::8, 2:4] = np.float32(np.nan)
-    for mode in ("Min", "Max"):
-        a = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss", nan_mode=mode).fit(xn, y)
-        b = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss", nan_mode=mode).fit(xn, y)
-        assert a.model_ == b.model_, f"two host fits under nan_mode={mode} returned different bytes"
-        assert np.asarray(a.predict(xn)).tobytes() == np.asarray(b.predict(xn)).tobytes(), mode
-    clf = mojolearn.GradientBoostingClassifier(n_estimators=3, max_depth=3).fit(x, y)
-    margins = np.asarray(clf.decision_function(x))
-    pp = np.asarray(clf.predict_proba(x))
-    assert pp.shape == (600, 2) and pp.dtype == np.float32
-    labels = np.asarray(clf.predict(x))
-    assert labels.tolist() == [1 if v > 0 else 0 for v in margins.tolist()], "strict raw > 0"
-    try:
-        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="RMSE").fit(xn, x[:, 0])
-    except Exception as exc:
-        assert "no CPU implementation of" in str(exc), str(exc)
-    else:
-        raise AssertionError("an RMSE fit on an X carrying NaN did not refuse on the host binding")
-    try:
-        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss",
-                                   grow_policy="Lossguide", score_function="Cosine").fit(x, y)
-    except Exception as exc:  # the binding's Error crosses as a Python exception
-        assert "no CPU implementation of" in str(exc), str(exc)
-    else:
-        raise AssertionError("a Lossguide Cosine fit did not refuse on the host binding")
 
 
 if __name__ == "__main__":

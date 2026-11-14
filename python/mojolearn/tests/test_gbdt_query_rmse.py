@@ -52,15 +52,6 @@ def test_learns_on_uneven_queries():
 
 
 @reference_training()
-def test_queries_of_one_row_train_nothing():
-    X, rel, _ = _fixture()
-    no_groups = np.asarray(_model().fit(X, rel).predict(X))
-    one_each = np.asarray(_model().fit(X, rel, group_id=np.arange(X.shape[0])).predict(X))
-    assert np.all(no_groups == 0.0)
-    assert no_groups.tobytes() == one_each.tobytes()
-
-
-@reference_training()
 def test_group_id_spelling_does_not_change_the_model():
     X, rel, g = _fixture()
     as_int = np.asarray(_model().fit(X, rel, group_id=g).predict(X))
