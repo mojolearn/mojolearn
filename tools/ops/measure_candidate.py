@@ -36,6 +36,12 @@ Before any copy it also (fix lane tooling-measure-stage, 2026-11-13, after the m
     (<work dir>/source/<commit12>/, written by tools/release.py candidate; --source-tree overrides), since the lean
     tooling worktree has no bench/results/. A file already on the box at its pins is kept, not refetched.
 
+A restage never moves a tree a job is reading (fix lane fix-board-quality-scorers, 2026-11-13: a restage during job
+0001 synced /root/mojolearn-<lane> under it and bench_board stopped with "source changed during measurement").
+`stage nvidia` reads `nvidia_central.sh queue` BEFORE the sync and refuses while any job of --lane is queued,
+starting or running on a pod, unless --allow-running. AMD stages no tree (it checks the droplet's head), so it has
+no such check.
+
 NVIDIA is measured on an L40S only (fix lane tooling-measure-pod-l40s-only, 2026-11-13: `nvidia_central.sh up`
 rented a 2x RTX 6000 Ada when the L40S was out of stock). The paper's NVIDIA device is the L40S and the rule is
 "compare on the same device" (AMD: MI300X). `stage nvidia` reads the pod's `nvidia-smi` names after the sync and
@@ -202,6 +208,10 @@ class StagePlan:
             return None
         return ["bash", self.wrapper, "sync", self.lane, str(self.tree)]
 
+    def queue(self):
+        """Every pod's queued/running jobs (nvidia_central.sh queue); NVIDIA only."""
+        return ["bash", self.wrapper, "queue"]
+
     def ssh_target(self):
         """The wrapper's "<ssh flags> <target>" of the box, for tools/dataset_store.sh stage."""
         if self.vendor == "nvidia":
@@ -287,6 +297,9 @@ def cmd_stage(a):
     stage_ds = ["sh", "tools/dataset_store.sh", "stage", "<" + " ".join(plan.ssh_target()) + ">"] + keys
     if a.dry_run:
         q = lambda argv: " ".join(shlex.quote(str(x)) for x in argv)  # noqa: E731
+        if vendor == "nvidia":
+            print(q(plan.queue()) + f"  # no queued/starting/running job of lane {a.lane}"
+                  + (" (else allowed: --allow-running)" if a.allow_running else ", else refused"))
         if plan.sync():
             print(q(plan.sync()))
         if vendor == "nvidia":
@@ -309,6 +322,8 @@ def cmd_stage(a):
             raise SystemExit(f"measure-candidate: the droplet's {AMD_TREE} is not at {head[:12]}; run "
                              f"`bash tools/do_amd_steward.sh update {head}` first (the branch must be pushed)")
     runner = RG.Runner(a)
+    if vendor == "nvidia":
+        check_queue(runner, plan, a.allow_running)       # before the sync: never move a tree a job is reading
     if plan.sync():
         print("$ " + " ".join(plan.sync()), flush=True)
         runner.must(plan.sync(), "the lane sync", timeout=3600)
@@ -320,6 +335,46 @@ def cmd_stage(a):
     runner.stage(plan)
     print("SUBMIT " + line)
     return 0
+
+
+#: the pod queue's live states (tools/gpu_queue_box.sh queue): a job in one of them reads its lane's tree
+LIVE_JOB_STATES = ("queued", "starting", "running")
+
+
+def lane_jobs(text, lane):
+    """[(pod, id, state, script)] of LANE's live jobs in `nvidia_central.sh queue` output: per pod a "== nvcN: ..."
+    header, then `ID LANE GPUS STATE SUBMITTED STARTED SCRIPT` rows until "-- last finished:"."""
+    jobs, pod, live = [], "?", False
+    for line in (text or "").splitlines():
+        if line.startswith("== "):
+            pod, live = line[3:].split(":", 1)[0].strip(), True
+            continue
+        if line.startswith("-- last finished"):
+            live = False
+            continue
+        parts = line.split()
+        if not live or len(parts) < 4 or not parts[0].isdigit():
+            continue
+        state = parts[3].split("@", 1)[0]
+        if parts[1] == lane and state in LIVE_JOB_STATES:
+            jobs.append((pod, parts[0], state, parts[-1]))
+    return jobs
+
+
+def check_queue(runner, plan, allow_running):
+    """Refuse to sync the lane's tree while a job of that lane is queued, starting or running (--allow-running)."""
+    got = runner.must(plan.queue(), "the pod queue", timeout=600)
+    jobs = lane_jobs(got.stdout or "", plan.lane)
+    if not jobs:
+        print(f"queue: no live job of lane {plan.lane}")
+        return
+    named = ", ".join(f"{pod}-{jid} {state} {script}" for pod, jid, state, script in jobs)
+    msg = (f"measure-candidate: lane {plan.lane} has {len(jobs)} live job(s) on its tree /root/mojolearn-{plan.lane}: "
+           f"{named}; a sync now changes the source under it (bench_board stops: \"source changed during "
+           f"measurement\"). Wait for it, stage under another --lane, or pass --allow-running")
+    if not allow_running:
+        raise SystemExit(msg)
+    print("WARNING " + msg, flush=True)
 
 
 def check_gpu(runner, plan, allow_hw_diff):
@@ -398,6 +453,9 @@ def main(argv=None):
     s.add_argument("--allow-hw-diff", action="store_true",
                    help=f"NVIDIA: go on when the pod's GPU is not an {PAPER_NVIDIA_GPU} (also PC_ALLOW_HW_DIFF=1); "
                    "the job then flags every row HW-DIFF")
+    s.add_argument("--allow-running", action="store_true",
+                   help="NVIDIA: sync the lane's tree even while a job of that lane is queued or running (it then "
+                   "reads changed source)")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)

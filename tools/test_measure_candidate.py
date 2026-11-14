@@ -152,5 +152,55 @@ class GpuCheck(unittest.TestCase):
         self.assertIn("TOKEN=${PC_GPU_TOKEN:-L40S}", job)
 
 
+class QueueCheck(unittest.TestCase):
+    """`stage nvidia` never syncs a tree a job is reading (2026-11-13: a restage during job 0001 made bench_board stop
+    with "source changed during measurement")."""
+
+    QUEUE = ("== nvc1: pod abc, 1 GPU (NVIDIA L40S), $0.86/hr\n"
+             "ID    LANE          GPUS STATE       SUBMITTED            STARTED              SCRIPT\n"
+             "0003  measure       1    queued      2026-11-13T10:00:00Z -                    /root/x/job.sh\n"
+             "0004  other         1    running@0   2026-11-13T10:00:00Z 2026-11-13T10:01:00Z /root/y/job.sh\n"
+             "-- last finished:\n"
+             "0001  measure       1    done 0      2026-11-13T09:00:00Z 2026-11-13T09:30:00Z /root/z/job.sh\n"
+             "slot 0: BUSY other\n")
+
+    class Runner:
+        def __init__(self, out):
+            self.out, self.calls = out, []
+
+        def must(self, argv, what, timeout=None):
+            self.calls.append(argv)
+            return type("Got", (), {"stdout": self.out})()
+
+    def plan(self, lane="measure"):
+        nv = MC.StagePlan.__new__(MC.StagePlan)
+        nv.vendor, nv.lane, nv.wrapper = "nvidia", lane, "tools/nvidia_central.sh"
+        return nv
+
+    def test_lane_jobs_reads_live_rows_only(self):
+        self.assertEqual(MC.lane_jobs(self.QUEUE, "measure"), [("nvc1", "0003", "queued", "/root/x/job.sh")])
+        self.assertEqual(MC.lane_jobs(self.QUEUE, "other"), [("nvc1", "0004", "running", "/root/y/job.sh")])
+        self.assertEqual(MC.lane_jobs(self.QUEUE, "idle"), [])
+        self.assertEqual(MC.lane_jobs("no shared NVIDIA pod is up\n", "measure"), [])
+
+    def test_live_job_refuses_the_sync(self):
+        r = self.Runner(self.QUEUE)
+        with self.assertRaises(SystemExit) as cm:
+            MC.check_queue(r, self.plan(), allow_running=False)
+        self.assertIn("nvc1-0003 queued", str(cm.exception))
+        self.assertIn("--allow-running", str(cm.exception))
+        self.assertEqual(r.calls[0], ["bash", "tools/nvidia_central.sh", "queue"])
+
+    def test_finished_job_or_override_goes_on(self):
+        MC.check_queue(self.Runner(self.QUEUE), self.plan("idle"), allow_running=False)
+        MC.check_queue(self.Runner(self.QUEUE), self.plan(), allow_running=True)
+
+    def test_check_runs_before_the_sync(self):
+        src = (Path(HERE) / "ops" / "measure_candidate.py").read_text()
+        self.assertLess(src.index("check_queue(runner, plan, a.allow_running)"),
+                        src.index('runner.must(plan.sync(), "the lane sync"'))
+        self.assertIn('s.add_argument("--allow-running"', src)
+
+
 if __name__ == "__main__":
     unittest.main()
