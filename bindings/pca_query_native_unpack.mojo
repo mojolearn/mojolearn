@@ -5,7 +5,12 @@ from std.python import Python, PythonObject
 from bindings.device_rows_door import door_rows_refuse, door_is_device_rows
 from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.classical_validate_run import classical_check_width
-from bindings.sequential_arrays_door import sequential_array_uninit, sequential_address
+from bindings.sequential_arrays_door import sequential_address
+from bindings.native_loaded_module_door import NativeModules
+from bindings.py_balanced import py_call
+from core.native_array_layout import NativeArrayLayout
+from providers.python.array_layout_boundary_unpack import native_shape_unpack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.pca_exact_run import pca_refusal
 from bindings.pca_descriptor_boundary_door import pca_fold_connection, pca_run_query
 from x_decomp.pca_descriptor_boundary_run import pca_mode, pca_whiten_capability
@@ -14,6 +19,22 @@ from providers.python.pca_model_pyapi_unpack import pca_query_admitted
 from providers.python.pca_input_pyapi_unpack import pca_state_snapshot
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.decomp_inputs_unpack import decomp_admit
+
+
+def _pca_output(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The query's float32 output from NumPy's own allocation
+    (`ndarray(shape, dtype)`: C order, owned, writable), its words left
+    uninitialised: every route writes all rows x width words before the door
+    returns it, and a refused X discards it. `sequential_array`'s bytearray
+    zero-filled the whole output per call (in 0.8.66 too) only for the
+    download to overwrite it (fix-classical-infer-xq). Kept in this door so
+    no other binding's source closure changes."""
+    var mods = NativeModules()
+    var layout = NativeArrayLayout(native_shape_unpack(shape), Int(py=dtype.itemsize))
+    var packed_shape = native_shape_pack(layout.shape)
+    var result = py_call(context["ndarray"], packed_shape, dtype=dtype)
+    mods.released()
+    return result^
 
 
 def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool,
@@ -69,7 +90,7 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     # before it is returned (a refused X discards it), so the bytearray's
     # zero fill of the whole output (one host pass, in 0.8.66 too) is gone
     # (fix-classical-infer-xq). No later Python wrapper converts its result.
-    var output = sequential_array_uninit(Python.tuple(rows, features if inverse else count), context["float32"], context)
+    var output = _pca_output(Python.tuple(rows, features if inverse else count), context["float32"], context)
     var output_address = Int(py=sequential_address(output))
     var fold = PCAFoldStore()
     if x.store.active():
