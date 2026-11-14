@@ -201,16 +201,20 @@ comptime _M12_HOLD = not IDN_MAMBA12_FORWARD_COPIES_OLD and _MAMBA_X_IN_PLACE
 #: per-call program rewrites the word before any reader,
 #: mamba/impl/mamba_block_program.mojo `zero_state` / `load_state`). Same
 #: kernels, same launch order, same input bytes and the same zeros under
-#: every stage: no output bit moves on any vendor or the host column.
-#: `-D MOJOLEARN_IDN_MAMBA12_HELD_FILLS_OLD` keeps lane
+#: every stage: no output bit moves on any vendor or the host column. The
+#: same switch also decides the stateless forward's door
+#: (bindings/causal_lm_public_door.mojo `causal_mamba_stateless_run`: one
+#: direct call from the neural door with a held table entry).
+#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` keeps lane
 #: fix-mamba12-forward-exec's form (B arm of the owed A/B,
 #: bench/results/paper_compare/owed-pre0867.json row fix-mamba-forward-doors):
 #: separately allocated stages (Mamba-1: one wait when built), one fill per
-#: stage on reuse, the word written after every run. L40S candidate
+#: stage on reuse, the word upload and write on every fresh call, and the
+#: neural door -> causal layer door -> table chain. L40S candidate
 #: ba08dac006 vs 0.8.55: mamba1-forward 3.83 vs 3.43 ms, mamba2-forward
 #: 6.31 vs 5.57 ms (before that lane).
-comptime IDN_MAMBA12_HELD_FILLS_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_HELD_FILLS_OLD"]()
-comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_HELD_FILLS_OLD
+comptime IDN_MAMBA12_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"]()
+comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
 
 
 def m2_report_floats(b: Int, dm: Int) raises -> Int:
@@ -472,7 +476,7 @@ struct _M1Block(Movable):
     #: with the constructor's zeros (`_m1_held_take`), and their float count
     var held: Optional[MambaDeviceStages]
     var held_n: Int
-    #: lane fix-mamba-forward-doors (IDN_MAMBA12_HELD_FILLS_OLD off): the one
+    #: lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the one
     #: arena `held`'s stages are views of (re-zeroed with one fill)
     var held_arena: Optional[MambaArena]
     #: lane x56d: the last RECORDED run (`mamba_step_train_run`): its token
@@ -805,7 +809,7 @@ struct BlockStepScratch(Movable):
     #: (`held`) for the next run of the same shape. Set by the per-call
     #: block programs (mamba/impl/mamba_block_program.mojo).
     var keep_stages: Bool
-    #: lane fix-mamba-forward-doors (IDN_MAMBA12_HELD_FILLS_OLD off): the
+    #: lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the
     #: current run is a fresh (discard-state) per-call forward whose caller
     #: rewrites the carried words before any reader (`zero_state` /
     #: `load_state`, mamba/impl/mamba_block_program.mojo), so a held
@@ -1050,7 +1054,7 @@ def _m1_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, 
     with the constructor's zeros in stream order (no allocation, no wait),
     else a new set (a held set of another shape is parked, not freed, while
     the stream may still read it). Lane fix-mamba-forward-doors
-    (IDN_MAMBA12_HELD_FILLS_OLD off, header): the set is views of one held
+    (IDN_MAMBA12_FORWARD_DOOR_OLD off, header): the set is views of one held
     arena, built with one allocation and one fill and re-zeroed with one
     fill (0.8.55's `_mamba1_run_arena`)."""
     if sc.m1[e].held:

@@ -35,7 +35,7 @@ L2, then L (a new set after the shape change)):
      fix-mamba-forward-doors: `skip_words`, `q_zero`).
 
 Lane fix-mamba-forward-doors (2026-11-14) made the held stage set views of
-one held arena re-zeroed with ONE fill (`-D MOJOLEARN_IDN_MAMBA12_HELD_FILLS_OLD`
+one held arena re-zeroed with ONE fill (`-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD`
 is lane fix-mamba12-forward-exec's per-stage fills): every case above runs
 the held set built, reused, rebuilt for L2 and rebuilt for L again, and must
 still equal the old per-run form bit for bit. Build this suite once per arm.

@@ -117,7 +117,7 @@ struct MambaBlockProgram(Movable):
     #: the weight epoch at the last weight load (lane x45c: the version key)
     var epoch: Int
     #: lane fix-mamba-forward-doors (autograd/block_step_ops.mojo
-    #: IDN_MAMBA12_HELD_FILLS_OLD): the device words tensor is known to hold
+    #: IDN_MAMBA12_FORWARD_DOOR_OLD): the device words tensor is known to hold
     #: zeros (written by the constructor or `zero_state`, and no run or load
     #: wrote it since), so `zero_state` needs no upload of the zero words
     var q_zero: Bool

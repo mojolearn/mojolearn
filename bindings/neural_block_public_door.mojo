@@ -42,7 +42,8 @@ from providers.python.mamba3_prefill_session_pyapi_door import (
 )
 from core.mamba_state_entry_table import Mamba3StateRoute
 from bindings.causal_lm_public_door import _causal_array_guard
-from bindings.causal_lm_public_door import causal_mamba_entry, causal_mamba_stateless_run, IDN_MAMBA12_FORWARD_DOOR_OLD
+from bindings.causal_lm_public_door import causal_mamba_entry, causal_mamba_stateless_run
+from autograd.block_step_ops import IDN_MAMBA12_FORWARD_DOOR_OLD
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,

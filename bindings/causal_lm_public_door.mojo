@@ -37,7 +37,7 @@ from providers.python.generation_metadata_pyapi_door import (
     GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission, _generation_bool,
     _generation_fields,
 )
-from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP, IDN_MAMBA12_FORWARD_COPIES_OLD
+from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP, IDN_MAMBA12_FORWARD_COPIES_OLD, IDN_MAMBA12_FORWARD_DOOR_OLD
 from std.memory import unsafe_memcpy, unsafe_memset_zero
 from bindings.generation_buffers_door import (
     GENERATION_BOUNDARY, generation_array, generation_array_unfilled, generation_address, generation_weight_address, generation_copy, generation_mutable,
@@ -843,10 +843,10 @@ def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> B
 #: fields dict check, the state-namespace and `_resident_session` getattr
 #: probes of a None state, the (tier, vendor) dict reads and table read).
 #: The same addresses and words reach the same table call: no bit moves.
-#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` keeps the four-hop chain (B arm
-#: of the owed A/B, bench/results/paper_compare/owed-pre0867.json row
+#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` (autograd/block_step_ops.mojo,
+#: the one Mamba-1/2 switch of this lane) keeps the four-hop chain (B arm of
+#: the owed A/B, bench/results/paper_compare/owed-pre0867.json row
 #: fix-mamba-forward-doors).
-comptime IDN_MAMBA12_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"]()
 
 
 def causal_mamba_entry(entries: PythonObject) raises -> EntryRef:
