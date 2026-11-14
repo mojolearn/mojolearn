@@ -205,34 +205,32 @@ def _bool(value: PythonObject, context: PythonObject) raises -> Bool:
     return Bool(py=value)
 
 
-def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject) raises -> PythonObject:
-    return scaler_fit(model, source, weight_source, context, PythonObject(None))
+struct ScalerFitInput(Movable):
+    """UNPACK of a fit's X and sample_weight (lane py-msel-prep-cnn: shared
+    by StandardScaler.fit and partial_fit): the X snapshot and its borrowed
+    float32 block, and the Float32 weights (a scalar broadcast to n) or None."""
+
+    var snapshot: PythonObject
+    var x: PythonObject
+    var weight: PythonObject
+    var n: Int
+    var d: Int
+    var weighted: Bool
+
+    def __init__(out self, snapshot: PythonObject, x: PythonObject, weight: PythonObject, n: Int, d: Int,
+                 weighted: Bool):
+        self.snapshot = snapshot
+        self.x = x
+        self.weight = weight
+        self.n = n
+        self.d = d
+        self.weighted = weighted
 
 
-def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject,
-               input_cache: PythonObject) raises -> PythonObject:
-    classical_connect_numpy(context)
+def scaler_fit_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK: the mode's connected preprocessing entries for a fit, with the
+    training-entry and mode-probe refusals."""
     var b = native_loaded_module("builtins")
-    var fields = py_fields(model)
-    _ = _bool(fields["copy"], context)
-    var with_mean = _bool(fields["with_mean"], context)
-    var with_std = _bool(fields["with_std"], context)
-    var mode = fields["numeric_mode"]
-    if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
-        raise Error("numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "fast" and String(mode) != "identical":
-        raise Error("numeric_mode must be fast, identical or None")
-    if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
-        raise Error("HostStandardScaler runs identical only on the host")
-    # Preserve refit's invalidation semantics, including failure after a valid
-    # configuration. Use only the native dict operations, never model hooks.
-    var names = py_call(b.list, fields)
-    for i in range(len(names)):  # driver-loop: over the fitted attribute names being invalidated
-        if String(names[i]).endswith("_"):
-            _ = py_call(fields.pop, names[i])
     var entries = context["scaler_bindings"][mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
@@ -242,12 +240,19 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     # The two mode probes run once per binding (prep_entry_cache).
     if not prep_mode_checked(entries, expected):
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
+    return entries
+
+
+def scaler_fit_input(source: PythonObject, weight_source: PythonObject, context: PythonObject,
+                     input_cache: PythonObject) raises -> ScalerFitInput:
+    """UNPACK: X's snapshot and the admitted weights (refusals in the order
+    the fit made them)."""
+    var b = native_loaded_module("builtins")
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
     var x = captured[].values
     var n = captured[].metadata.source.rows
     var d = captured[].metadata.source.cols
-    var calls = scaler_door_calls(entries)
     var weighted = weight_source is not None
     var weight = PythonObject(None)
     if weighted:
@@ -276,6 +281,45 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
             _ = scalar_weight^
         elif Int(py=weight.size) != n:
             raise Error("sample_weight length differs from X")
+    return ScalerFitInput(snapshot, x, weight, n, d, weighted)
+
+
+def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject) raises -> PythonObject:
+    return scaler_fit(model, source, weight_source, context, PythonObject(None))
+
+
+def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject,
+               input_cache: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    var b = native_loaded_module("builtins")
+    var fields = py_fields(model)
+    _ = _bool(fields["copy"], context)
+    var with_mean = _bool(fields["with_mean"], context)
+    var with_std = _bool(fields["with_std"], context)
+    var mode = fields["numeric_mode"]
+    if mode is None:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(mode) is not b.str:
+        raise Error("numeric_mode must be fast, identical or None")
+    mode = py_call(py_call(mode.strip).lower)
+    if String(mode) != "fast" and String(mode) != "identical":
+        raise Error("numeric_mode must be fast, identical or None")
+    if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
+        raise Error("HostStandardScaler runs identical only on the host")
+    # Preserve refit's invalidation semantics, including failure after a valid
+    # configuration. Use only the native dict operations, never model hooks.
+    var names = py_call(b.list, fields)
+    for i in range(len(names)):  # driver-loop: over the fitted attribute names being invalidated
+        if String(names[i]).endswith("_"):
+            _ = py_call(fields.pop, names[i])
+    var entries = scaler_fit_entries(mode, context)
+    var batch = scaler_fit_input(source, weight_source, context, input_cache)
+    var calls = scaler_door_calls(entries)
+    var x = batch.x
+    var n = batch.n
+    var d = batch.d
+    var weighted = batch.weighted
+    var weight = batch.weight
     # RUN: the typed core (core/scaler_core.mojo) on the borrowed buffers.
     var fit = scaler_standard_fit_core(calls, _ptr(x), n, d, with_mean, with_std,
                                        Int(py=classical_address(weight)) if weighted else 0)
