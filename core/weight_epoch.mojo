@@ -182,10 +182,12 @@ def _next_stamp(slot: UnsafePointer[_RegistryEpochs, MutUntrackedOrigin]) -> Int
     return stamp
 
 
-def registry_word(addr: Int) raises -> Int:
+def registry_word(addr: Int, mut epoch: Int) raises -> Int:
     """The address of the epoch word of the registry at host address `addr`,
-    giving it a slot (and a fresh stamp) when it has none. Resolved once per
-    load by `RegistryKey.take`, never per call."""
+    giving it a slot (and a fresh stamp) when it has none; `epoch` receives
+    the word's value read under the same lock (a slot reused by another
+    thread right after cannot hand this key the new owner's stamp). Resolved
+    once per load by `RegistryKey.take`, never per call."""
     var slot = _REGISTRY.get_or_create_ptr()
     var lock = _lock_word(slot)
     shared_slot_lock(lock)
@@ -203,6 +205,7 @@ def registry_word(addr: Int) raises -> Int:
         slot[].addrs[i] = addr
         Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
     var word = Int(_slot_word(slot, i))
+    epoch = Int(Atomic.load[ordering=Ordering.ACQUIRE](_slot_word(slot, i)))
     shared_slot_unlock(lock)
     return word
 
@@ -213,7 +216,9 @@ def registry_epoch(addr: Int) raises -> Int:
     comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
         return weight_epoch()
     else:
-        return Int(Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=registry_word(addr))))
+        var epoch = 0
+        _ = registry_word(addr, epoch)
+        return epoch
 
 
 def registry_epoch_bump(addr: Int) raises:
@@ -267,8 +272,8 @@ struct RegistryKey(Copyable, Movable):
         comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
             return RegistryKey(addr, weight_epoch(), 0)
         else:
-            var word = registry_word(addr)
-            var epoch = Int(Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=word)))
+            var epoch = 0
+            var word = registry_word(addr, epoch)
             return RegistryKey(addr, epoch, word)
 
     def current(self, addr: Int) raises -> Bool:
