@@ -91,9 +91,9 @@ def tensor[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], values: List[Float32], dims: List[Int], requires_grad: Bool = False
 ) raises -> Int:
     var cols = dims[len(dims) - 1]
-    var total = _count(dims)
-    require(len(values) == total, "fixture extent does not match its shape")
-    var src = CastIn.f32_c(Int(values.unsafe_ptr()), total // cols, cols)
+    var count = _count(dims)
+    require(len(values) == count, "fixture extent does not match its shape")
+    var src = CastIn.f32_c(Int(values.unsafe_ptr()), count // cols, cols)
     return s.upload_nd(src, ShapeN.of(dims), requires_grad)
 
 

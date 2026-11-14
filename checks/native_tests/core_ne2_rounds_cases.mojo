@@ -71,17 +71,17 @@ def same_words(a: List[Float32], b: List[Float32], what: String) raises:
         require(bitcast[DType.uint32](a[i]) == bitcast[DType.uint32](b[i]), what + ": differs at " + String(i))
 
 
-def is_sorted_of(sorted: List[Float32], dist: List[Float32], what: String) raises:
-    """`sorted` is nondecreasing and holds the same words as `dist`."""
-    require(len(sorted) == len(dist), what + ": extent")
-    for i in range(1, len(sorted)):
-        require(sorted[i - 1] <= sorted[i], what + ": not sorted at " + String(i))
-    for i in range(len(sorted)):
-        var w = bitcast[DType.uint32](sorted[i])
+def is_sorted_of(ordered: List[Float32], dist: List[Float32], what: String) raises:
+    """`ordered` is nondecreasing and holds the same words as `dist`."""
+    require(len(ordered) == len(dist), what + ": extent")
+    for i in range(1, len(ordered)):
+        require(ordered[i - 1] <= ordered[i], what + ": not sorted at " + String(i))
+    for i in range(len(ordered)):
+        var w = bitcast[DType.uint32](ordered[i])
         var in_sorted = 0
         var in_dist = 0
-        for j in range(len(sorted)):
-            if bitcast[DType.uint32](sorted[j]) == w:
+        for j in range(len(ordered)):
+            if bitcast[DType.uint32](ordered[j]) == w:
                 in_sorted += 1
             if bitcast[DType.uint32](dist[j]) == w:
                 in_dist += 1
