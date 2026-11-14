@@ -1090,8 +1090,17 @@ def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObj
     var gb = xcnn_host_f32([f], context)
     var dx = xcnn_host_f32([n, d], context)
     var dh = xcnn_host_f32([n, f], context)
-    # the forward's h and output (recorded as the tape's values, never read)
-    var hv = xcnn_host_f32([n, f], context)
+    # The forward's h and output (recorded as the tape's values, never read)
+    # get disjoint halves of ONE host array: the tape's aliasing rule
+    # (autograd/tape.mojo `_refuse_overlap`) refuses a custom_into output that
+    # overlaps a recorded tensor's value storage, and passing the same array
+    # for both refused every host GCN backward ("custom_into: output overlaps
+    # the value storage of a recorded tensor"; since ba9adf41e1, 2026-11-09;
+    # fix-smoke-refusals 2026-11-14). One allocation and one admission per
+    # call, as before; out = h + n * f float32 words.
+    var hv = xcnn_host_f32([2 * n, f], context)
+    var h_addr = xcnn_ptr(hv)
+    var out_addr = h_addr + n * f * 4
     var ones = PythonObject(None)
     var bv = PythonObject(None)
     var b_addr = PythonObject(0)
@@ -1105,7 +1114,7 @@ def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObj
         b_addr = xcnn_addr(bv)
         gb_addr = xcnn_addr(gb)
     var addrs: List[Int] = [
-        xcnn_ptr(g), xcnn_ptr(x), xcnn_ptr(hv), xcnn_ptr(hv), xcnn_ptr(w), xcnn_ptr(gw), xcnn_ptr(dx),
+        xcnn_ptr(g), xcnn_ptr(x), h_addr, out_addr, xcnn_ptr(w), xcnn_ptr(gw), xcnn_ptr(dx),
         xcnn_ptr(dh), xcnn_ptr(vt), xcnn_ptr(graph["csr_t"]), xcnn_word(b_addr), xcnn_word(gb_addr),
         xcnn_word(ones_addr),
     ]
