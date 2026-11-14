@@ -8,7 +8,6 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 """
 import inspect
 
-from ._buffer import all_finite
 
 from . import _native_trees_bridge
 from .ensemble import GradientBoosting
@@ -69,17 +68,10 @@ class _GBDTAdapter(PublicOutputsMixin):
     def _validate_params(self):
         """The parameter checks, run at fit (scikit-learn's convention): the
         learner's constructor refuses what it does not accept."""
-        self._new_learner(self.numeric_mode)
+        return _TREES(self, "trees_public_gbdt_adapter_validate_params", (), _TREES_CONTEXT)
 
     def _new_learner(self, mode):
-        if mode is not None and (not isinstance(mode, str) or
-                mode.strip().lower() not in ('fast', 'identical')):
-            raise ValueError('numeric_mode must be fast, identical or None')
-        if self._loss == 'RMSE' and self.class_weights is not None:
-            raise NotImplementedError('GradientBoostingRegressor does not support class_weights')
-        parameters = self.get_params()
-        parameters['numeric_mode'] = mode
-        return GradientBoosting(loss=self._loss, **parameters)
+        return _TREES(self, "trees_public_gbdt_adapter_new_learner", (mode,), _TREES_CONTEXT)
 
     def get_params(self, deep=True):
         """Return the constructor parameters as a dict."""
@@ -300,18 +292,6 @@ class GradientBoostingRegressor(_GBDTAdapter):
         self
         """
         return _TREES(self, "trees_public_gbdt_adapter_regressor_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
-
-    @staticmethod
-    def _regression_target(target, name):
-        # `target` comes from as_f32_c: an integer or float64 y is cast to
-        # float32 once by the base binding's converters (scikit-learn takes
-        # any numeric y), so the dtype test below only guards the contract.
-        if target.ndim != 1 or target.size == 0:
-            raise ValueError(f'{name} must be nonempty one-dimensional targets')
-        if target.dtype != "<f4":
-            raise TypeError(f'{name} must have dtype float32')
-        if not all_finite(target):
-            raise ValueError(f'{name} must be finite')
 
     def predict(self, X):
         """Return float32 predictions of shape ``(n_samples,)``."""
