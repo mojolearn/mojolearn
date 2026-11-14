@@ -291,8 +291,10 @@ comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCode
 
 def _session_op_code(name: String) raises -> Int:
     var g = _SESSION_OP_CODES.get_or_create_ptr()
-    if name in g[].codes:
-        return g[].codes[name]
+    # One hashed lookup per Session call (was `in` then `[]`: two).
+    var found = g[].codes.find(name)
+    if found:
+        return found.value()
     return 0
 
 
