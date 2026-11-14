@@ -12,50 +12,13 @@ def native(call, *args, **kwargs):
     return audit_native_call(call, *args, **kwargs).assert_native()
 
 
-def test_rms_norm_noncontiguous_view_and_both_derivatives():
-    x = np.arange(24, dtype=np.float32).reshape(2, 4, 3) / 11 - 1
-    w = np.array([.7, -1.1, .4, 1.3], np.float32)
-    seed = np.linspace(-.4, .7, 24, dtype=np.float32).reshape(2, 3, 4)
-    eps = .03
-    with ops.Session(record=True) as s:
-        hx, hw = s.tensor(x, requires_grad=True), s.tensor(w, requires_grad=True)
-        view = s.permute(hx, (0, 2, 1))
-        result = native(s.rms_norm, view, hw, eps)
-        native(s.backward, s.sum(s.mul(result, s.tensor(seed))))
-        z = x.transpose(0, 2, 1).astype(np.float64)
-        inv = 1 / np.sqrt(np.mean(z*z, axis=-1, keepdims=True) + eps)
-        expected = z * inv * w
-        weighted = seed.astype(np.float64) * w
-        dx = weighted * inv - z * inv**3 * np.mean(weighted*z, axis=-1, keepdims=True)
-        dw = np.sum(seed.astype(np.float64) * z * inv, axis=(0, 1))
-        np.testing.assert_allclose(native(s.numpy, result), expected, rtol=3e-6, atol=1e-7)
-        np.testing.assert_allclose(native(s.grad, hx), dx.transpose(0, 2, 1), rtol=4e-6, atol=1e-7)
-        gradient = native(s.grad, hw)
-        assert gradient.shape == (w.size, 1), "Session.tensor imports a 1-D array as a column"
-        np.testing.assert_allclose(gradient, dw[:, None], rtol=4e-6, atol=1e-7)
+# The rms_norm, rotary, projection-vjp and transformer-softmax values,
+# derivatives and reduction contracts are checked natively in
+# checks/native_tests/transformer_ops_program_*.mojo (2026-11-14). The
+# refusal and the captured-program checks below stay at the Python API.
 
 
-def test_rotary_absolute_offset_gradient_and_multiple_heads():
-    x = np.linspace(-1, 1, 48, dtype=np.float32).reshape(2, 3, 8)
-    seed = np.cos(np.arange(48)).astype(np.float32).reshape(x.shape)
-    offset, hd, theta = 7, 4, 4000.
-    angle = np.arange(offset, offset+3)[:, None] / theta ** (np.arange(hd//2)*2./hd)
-    c = np.tile(np.concatenate([np.cos(angle)]*2, axis=-1), (1, 2))[None]
-    si = np.tile(np.concatenate([np.sin(angle)]*2, axis=-1), (1, 2))[None]
-    def rotate(values):
-        z = values.reshape(2, 3, 2, hd)
-        return np.concatenate([-z[..., 2:], z[..., :2]], axis=-1).reshape(x.shape)
-    expected = x*c + rotate(x)*si
-    expected_grad = seed*c - rotate(seed)*si
-    with ops.Session(record=True) as s:
-        h = s.tensor(x, requires_grad=True)
-        y = native(s.rotary, h, hd, offset=offset, theta=theta)
-        native(s.backward, s.sum(s.mul(y, s.tensor(seed))))
-        np.testing.assert_allclose(native(s.numpy, y), expected, rtol=2e-6, atol=2e-6)
-        np.testing.assert_allclose(native(s.grad, h), expected_grad, rtol=2e-6, atol=2e-6)
-
-
-def test_projection_first_vjp_keeps_full_rank_and_parameter_shape():
+def test_projection_first_vjp_refuses_create_graph():
     x = np.arange(24, dtype=np.float32).reshape(2, 3, 4) / 16
     w = np.arange(20, dtype=np.float32).reshape(5, 4) / 32 - .2
     seed = np.linspace(-.3, .7, 30, dtype=np.float32).reshape(2, 3, 5)
@@ -63,11 +26,6 @@ def test_projection_first_vjp_keeps_full_rank_and_parameter_shape():
         hx, hw = s.tensor(x, requires_grad=True), s.tensor(w, requires_grad=True)
         y = native(s._transformer_linear, hx, hw)
         seed_handle = s.tensor(seed)
-        dx_handle, dw_handle = native(s.vjp, y, [hx, hw], seed_handle)
-        dx, dw = native(s.numpy, dx_handle), native(s.numpy, dw_handle)
-        assert dx.shape == x.shape and dw.shape == w.shape
-        np.testing.assert_allclose(dx, seed.astype(np.float64) @ w, rtol=2e-6, atol=2e-7)
-        np.testing.assert_allclose(dw, seed.reshape(-1, 5).astype(np.float64).T @ x.reshape(-1, 4), rtol=2e-6, atol=2e-7)
         # The established recorded-custom-rule contract raises Exception,
         # with a named first-order-only refusal before any backward launch.
         with pytest.raises(Exception, match=r"create_graph cannot differentiate.*tag 210.*first-order rule only") as refusal:
@@ -76,37 +34,18 @@ def test_projection_first_vjp_keeps_full_rank_and_parameter_shape():
 
 
 @pytest.mark.parametrize("columns", [5, 33, 65])
-def test_transformer_softmax_keeps_both_reduction_contracts_and_vjp(columns, tmp_path):
+def test_transformer_softmax_program_run_and_checkpoint_keep_the_serial_contract(columns, tmp_path):
     rng = np.random.default_rng(718 + columns)
     x = rng.normal(0, .7, (2, 3, columns)).astype(np.float32)
-    seed = rng.normal(0, .3, x.shape).astype(np.float32)
-    reference = np.exp(x.astype(np.float64) - x.max(axis=-1, keepdims=True))
-    reference /= reference.sum(axis=-1, keepdims=True)
-    derivative = reference * (seed - (reference * seed).sum(axis=-1, keepdims=True))
-    with ops.Session(record=True) as s:
-        h = s.tensor(x, requires_grad=True)
-        y = native(s._transformer_softmax, h)
-        got = native(s.numpy, y)
-        gradient, = native(s.vjp, y, [h], s.tensor(seed))
-        np.testing.assert_allclose(got, reference, rtol=2e-6, atol=2e-7)
-        np.testing.assert_allclose(native(s.numpy, gradient), derivative, rtol=3e-6, atol=2e-7)
-        # A separate native exp operation establishes the rounded terms;
-        # the test controller computes each documented sum independently.
-        exp = native(s.numpy, s.exp(s.sub(h, s.max(h, axis=-1, keepdims=True))))
-        serial = np.zeros(x.shape[:-1], np.float32)
-        slots = np.zeros((*x.shape[:-1], 32), np.float32)
-        for k in range(columns):
-            serial = np.add(serial, exp[..., k], dtype=np.float32)
-            slots[..., k % 32] = np.add(slots[..., k % 32], exp[..., k], dtype=np.float32)
-        for offset in (16, 8, 4, 2, 1):
-            slots[..., :offset] = np.add(slots[..., :offset], slots[..., offset:2*offset], dtype=np.float32)
-        expected = exp / serial[..., None]
-        ordinary = native(s.numpy, native(s.softmax, h, axis=-1))
-        np.testing.assert_array_equal(got.view(np.uint32), expected.view(np.uint32))
-        np.testing.assert_array_equal(ordinary.view(np.uint32), (exp / slots[..., :1]).view(np.uint32))
-        assert np.any(got.view(np.uint32) != ordinary.view(np.uint32)), "fixture must distinguish the two contracts"
     with ops.Session() as s:
         h = s.tensor(x)
+        # A separate native exp operation establishes the rounded terms;
+        # the test controller computes the serial sum independently.
+        exp = native(s.numpy, s.exp(s.sub(h, s.max(h, axis=-1, keepdims=True))))
+        serial = np.zeros(x.shape[:-1], np.float32)
+        for k in range(columns):
+            serial = np.add(serial, exp[..., k], dtype=np.float32)
+        expected = exp / serial[..., None]
         p = native(s.capture, h, s._transformer_softmax(h))
         np.testing.assert_array_equal(native(p.run, x, optimize=True).view(np.uint32), expected.view(np.uint32))
         checkpoint = tmp_path / "transformer-softmax.mjl"
