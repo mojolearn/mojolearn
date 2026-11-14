@@ -72,6 +72,28 @@ from core.causal_lm_entry_table_sessions import (
 #: stages), so no output bit moves on any vendor.
 comptime TRANSFORMER_DECODE_PER_TOKEN_DOOR = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"]()
 
+#: Lane fix-transformer-decode-step-admission (2026-11-13, owed row
+#: fix-transformer-decode-step-admission; best-ever history audit row 3):
+#: what a GPU step admits per token. Default (A), the 0.8.55 shape
+#: (python/mojolearn/_transformer_impl.py at 0e4de0f46e:1788-1813: one
+#: binding call per token, no per-token admission): when the session's
+#: `_state` is the state object admitted at init and the handle holds its
+#: registry word, a step / decode / forward reads the handle, admits only x,
+#: allocates y, reads and writes `state.cached_tokens` (exact int; the
+#: resident session refuses a word that differs from its cache) and makes one
+#: native call on the pinned session (`_transformer_decode_run_admitted`).
+#: The owner record read, the block/state generation words, the option-tail
+#: content check, the per-token NativeModules, the address re-snapshots of x
+#: and y and the state-word re-stamp are not run per token; the owner and
+#: configuration checks still run at sync / load / close / repr, and a
+#: replaced `_state` takes the full path (refused). B
+#: (`-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION`): the per-token
+#: admission of lanes N177 / fix-transformer-decode-door (owner record,
+#: generation words, tail content, a new NativeModules per token). Same native
+#: call on the same AttnStepArm in both arms: no output bit moves on any vendor.
+#: Board on record NV L40S 1105 ms (0.8.55) -> 1406 (candidate 4c2340386abc).
+comptime TRANSFORMER_DECODE_PER_TOKEN_ADMISSION = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"]()
+
 
 struct TransformerDecodeHandle(Movable, Writable):
     var binding: PythonObject
@@ -114,6 +136,15 @@ struct TransformerDecodeHandle(Movable, Writable):
     # holds this handle, so the lease outlives it). Every step / decode /
     # forward runs on it: no registry lookup per token. 0: none.
     var pin: Int
+    # Lane fix-transformer-decode-step-admission (default arm): the module
+    # admissions of one step's x admission, built once at init and cleared at
+    # the start of every step (never held across a GIL window: the step
+    # releases the GIL only after admission), so a token allocates no map.
+    var mods: NativeModules
+    # The address of the exact `int` class, read once at init: the admitted
+    # step reads `state.cached_tokens` only when it is an exact int (no
+    # conversion hook can run), as the full admission requires.
+    var int_class: Int
 
     def __init__(out self, binding: PythonObject, block: PythonObject, state: PythonObject):
         self.binding = binding
@@ -139,6 +170,8 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.entry = entry_ref_unresolved()
         self.word = 0
         self.pin = 0
+        self.mods = NativeModules()
+        self.int_class = 0
 
     def __deinit__(deinit self):
         # A registry session the Python owner never closed (an open that
