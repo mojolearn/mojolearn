@@ -23,16 +23,9 @@ Behavior to know:
   so a given ``random_state`` gives a reproducible split, but not the same
   rows scikit-learn would pick for that seed.
 """
-import copy
 import numbers
-import os
-import warnings
 from . import _arena_io
 from ._array import Array
-from ._buffer import _materialize, _native, empty
-from ._arrays import _addr, _addr_ro
-from ._labels import is_bool
-from . import _user_objects
 from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding (the native
@@ -70,46 +63,10 @@ __all__ = ['cross_val_score', 'split_descriptor']
 _FOLD_ORDER_SABOTAGE = 'MOJOLEARN_FOLD_ORDER_SABOTAGE'
 
 
-def _sabotage_requested():
-    return (os.environ.get(_FOLD_ORDER_SABOTAGE) == '1'
-            and os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') == '1')
-
-
-#: DEVIATION 3104 (lane/python-hotpath, 2026-09-17). Below this many rows the
-#: Python routines below are the only path; above it the fold bookkeeping
-#: runs in the core helpers of bindings/hotpath_helpers_door.mojo when the binary
-#: has them. Measured on the M4 at 1,000,000 rows, five folds: the ten
-#: `_indices` calls and five overlap tests cost 1867 ms and the default folds
-#: 195 to 416 ms, every one of them integer bookkeeping.
-_NATIVE_MIN_ROWS = 1  # lane cgr4-py-compute: every size takes the core helpers
-
-
-def _native_indices(value, n):
-    """`_indices`' three tests through `check_indices_i64`: 0 accepted, 1 out
-    of range, 2 duplicate, tested in that order as below; None when the
-    helper is not available."""
-    check = _native('check_indices_i64')
-    as_i64 = value if value.dtype == '<i8' else value.astype('<i8')
-    return as_i64, int(check(_addr_ro(as_i64), as_i64.size, int(n)))
-
-
-def _overlap(train, test, n):
-    """Whether two accepted index Arrays share a row."""
-    if not train.size or not test.size or n <= 0:
-        return False
-    return bool(_native('indices_overlap_i64')(_addr_ro(train), train.size, _addr_ro(test), test.size, int(n)))
-
-
-def _indices(value, n, name):
-    value = _materialize(value, name)[0]
-    if value.ndim != 1 or value.dtype[1:2] not in 'iu' or not value.size:
-        raise ValueError(f'{name} must be a nonempty 1-D integer index array')
-    as_i64, status = _native_indices(value, n)
-    if status == 1:
-        raise ValueError(f'{name} contains an out-of-range index')
-    if status == 2:
-        raise ValueError(f'{name} contains duplicate indices')
-    return as_i64
+# The fold helpers (`_folds`, `_indices`, `_overlap`, `_clone`, `_classifier`, the
+# default folds, `_FoldRows`, `_take_rows`) are native only: bindings/msel_cv_door.mojo
+# and bindings/msel_split_door.mojo (their Python copies deleted, lane py-msel-prep-cnn,
+# 2026-11-14; the definition the fold tests hold them to is tests/_fold_reference.py).
 
 
 #: The dtype codes of core/msel_convert.mojo (bindings/hotpath_helpers_door.mojo's HP_*).
@@ -153,165 +110,6 @@ class _Resident:
 
     def __exit__(self, *exc):
         return _RESIDENT_CALL(self, 'msel_resident_exit', exc, _RESIDENT_CONTEXT)
-
-
-def _take_rows(values, indices):
-    """Dense fold rows by one device gather (`_Resident`, used once); a
-    Python list of labels (str or object labels, the G5 input-prep case)
-    is taken by the native user-object reader."""
-    if isinstance(values, list):
-        return _user_objects.take(values, indices)
-    with _Resident() as res:
-        return res.take(values, indices)
-
-
-def _clone(value, *, parameter=False):
-    """Fresh constructor state; never deepcopy an estimator's fitted buffers.
-
-    Reference: sklearn 1.9.1 base.py::_clone_parametrized. External estimators
-    may supply their own clone protocol; built-in estimators need no sklearn.
-    """
-    kind = type(value)
-    if kind is dict:
-        return {key: _clone(item, parameter=True) for key, item in value.items()}  # glue: estimator parameter clone, one entry per parameter
-    if kind in (list, tuple, set, frozenset):
-        return kind(_clone(item, parameter=True) for item in value)  # glue: estimator parameter clone, one entry per parameter
-    if not isinstance(value, type) and hasattr(value, '__sklearn_clone__'):
-        return value.__sklearn_clone__()
-    if isinstance(value, type) or not callable(getattr(value, 'get_params', None)):
-        if parameter:
-            return copy.deepcopy(value)
-        raise TypeError('cross_val_score estimator must implement get_params')
-    parameters = {name: _clone(item, parameter=True)
-                  for name, item in value.get_params(deep=False).items()}  # glue: estimator parameter clone, one entry per parameter
-    result = kind(**parameters)
-    actual = result.get_params(deep=False)
-    if any(actual[name] is not item for name, item in parameters.items()):  # glue: estimator parameter clone, one entry per parameter
-        raise RuntimeError('estimator constructor must retain its parameter objects for cloning')
-    return result
-
-
-def _classifier(estimator):
-    kind = getattr(estimator, '_estimator_type', None)
-    if kind is not None:
-        return kind == 'classifier'
-    # External Pipeline and custom estimators can expose their tag protocol;
-    # calling it is optional interoperability, never a built-in dependency.
-    tags = getattr(estimator, '__sklearn_tags__', None)
-    if callable(tags) and not type(estimator).__module__.startswith('mojolearn'):
-        return tags().estimator_type == 'classifier'
-    return False
-
-
-def _default_fold_arrays(y, n_splits, classifier):
-    """The unshuffled default folds as int64 index Arrays (DEVIATION 3104),
-    computed by the core helpers `fold_ids` and `select_fold_i64` for every
-    label kind and size, the fold-order sabotage control included (lane
-    py-runtime-b). The Python DEFINITION the fold tests and tools hold this
-    to is `mojolearn/tests/_fold_reference.py::default_folds`."""
-    yield from _native_default_folds(y, n_splits, classifier)
-
-
-def _discrete_codes(y):
-    """(classes, int32 codes) when y is discrete as `_default_folds` reads it
-    (every label an integer valued finite number, or not a number), else
-    None. The integral test is `reduce_stat`; the codes are `encode_labels`."""
-    from ._labels import encode_labels
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    try:
-        arr, _ = _materialize(y, 'y')
-    except (TypeError, ValueError):
-        arr = None
-    if arr is not None and arr.dtype in ('<f4', '<f8'):
-        flat = arr.reshape((arr.size,))
-        if flat.size and not bool(_native('reduce_stat')(_addr_ro(flat), _NATIVE_CODE[flat.dtype], flat.size,
-                                                         _REDUCE_INTEGRAL)):
-            return None
-    return encode_labels(y if arr is None else arr.reshape((arr.size,)))
-
-
-def _native_default_folds(y, n_splits, classifier):
-    n = len(y)
-    if is_bool(n_splits) or not isinstance(n_splits, numbers.Integral) or n_splits < 2:
-        raise ValueError('cv must specify at least two folds')
-    if n_splits > n:
-        raise ValueError('cv cannot exceed the number of samples')
-    n_splits = int(n_splits)
-    codes = None
-    classes = ()
-    if classifier:
-        got = _discrete_codes(y)
-        if got is not None:
-            classes, codes = got
-    from ._buffer import _output_store
-    fold_store = _output_store('i', n)
-    fold_counts = _output_store('q', n_splits)
-    class_counts = _output_store('q', max(len(classes), 1))
-    _native('fold_ids')(0 if codes is None else _addr_ro(codes), n, len(classes), n_splits,
-                        class_counts.buffer_info()[0], fold_store.buffer_info()[0],
-                        fold_counts.buffer_info()[0])
-    if codes is not None:
-        counts = [int(class_counts[i]) for i in range(len(classes))]  # glue: k class counts read back for the fold count checks
-        if max(counts) < n_splits:  # glue: k class counts read back for the fold count checks
-            raise ValueError('cv cannot exceed the number of members in every class')
-        if min(counts) < n_splits:  # glue: k class counts read back for the fold count checks
-            warnings.warn('The least populated class has fewer members than cv folds',
-                          UserWarning, stacklevel=4)
-    out = _select_folds(fold_store, fold_counts, n, n_splits)
-    if _sabotage_requested():
-        # THE DORMANT NEGATIVE CONTROL (a verification switch, never set in
-        # production): the row-to-fold assignment rotated by one over the
-        # fold-ordered ascending test rows, so each nonempty fold's smallest
-        # test row moves to the previous nonempty fold (the last fold takes
-        # fold 0's). n_splits row ids are moved in the fold table and the
-        # folds selected again; every fold keeps its size.
-        nonempty = [f for f in range(n_splits) if out[f][1].size]  # glue: nonempty folds (n_splits sized)
-        firsts = [int(out[f][1][0]) for f in nonempty]  # glue: each nonempty fold's smallest test row (n_splits sized)
-        for at, fold in enumerate(nonempty):  # glue: moves one row id per nonempty fold (n_splits sized)
-            fold_store[firsts[(at + 1) % len(nonempty)]] = fold
-        out = _select_folds(fold_store, fold_counts, n, n_splits)
-    return out
-
-
-def _select_folds(fold_store, fold_counts, n, n_splits):
-    """Each fold's (train, test) int64 rows from the int32 fold table, by the
-    core helper `select_fold_i64`."""
-    select = _native('select_fold_i64')
-    out = []
-    for fold in range(n_splits):  # glue: one native fold selection per fold (n_splits sized)
-        size = int(fold_counts[fold])
-        test = empty((size,), '<i8')
-        train = empty((n - size,), '<i8')
-        scratch = empty((n,), '<i8')
-        got = int(select(fold_store.buffer_info()[0], n, fold, _addr(test) if size else _addr(scratch),
-                         _addr(train) if n - size else _addr(scratch)))
-        if got != size:
-            raise RuntimeError('mojolearn: select_fold_i64 disagrees with fold_ids')
-        out.append((train, test))
-    return out
-
-
-def _folds(cv, estimator, X, y, groups):
-    if cv is None or isinstance(cv, numbers.Integral):
-        if groups is not None:
-            # Refused, not warned and ignored (the claim-surface census,
-            # 2026-09-14): the default unshuffled folds never read groups,
-            # and a caller who passed them asked for grouped folds. Pass a
-            # splitter with `.split(X, y, groups)` to get them.
-            raise ValueError(
-                'mojolearn cross_val_score: groups is read only by a splitter '
-                'passed as cv; the default unshuffled folds would ignore it, '
-                'so it is refused (pass cv=<splitter with .split(X, y, groups)>)'
-            )
-        return _default_fold_arrays(y, 5 if cv is None else cv, _classifier(estimator))
-    if callable(getattr(cv, 'split', None)):
-        return cv.split(X, y, groups)
-    if isinstance(cv, str):
-        raise ValueError('cv must be an integer, splitter or iterable of index pairs')
-    try:
-        return iter(cv)
-    except TypeError:
-        raise ValueError('cv must be an integer, splitter or iterable of index pairs') from None
 
 
 #: The descriptor `split_descriptor` returns. Versioned because a reader who
@@ -1264,80 +1062,6 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
 # native cross_val_predict / learning_curve / first-seen codes) were never
 # run; the switch and the routes are deleted and every call takes its
 # definition.
-
-
-class _FoldRows:
-    """Each fold's rows of X (and of y) for the fits that share the folds:
-    the candidates of a search, the values of a validation curve, the
-    permutations of a permutation test, the folds of cross_validate and
-    cross_val_predict. X, y and the fold indices stay resident on the device
-    (`_Resident`) across every fold and every candidate; each `take` is one
-    device gather per piece. A y handed to `take` (a permuted y) is put once
-    and replaces the previous such y on the device. Close it (or use it in a
-    `with` block) to free the device copies.
-
-    device_rows (lane cpu4-misc; decided by the caller): X's fold rows are
-    handed over as `_arena_io.DeviceRows` instead of host Arrays, when X is
-    float32 C-contiguous 2-D. The estimator's arena runner puts X once into
-    its own binding's store (the `resident()` scope opened here, which holds
-    only those bases) and gathers each fold on the device: no per-fold
-    download of X. Every other estimator gets host Arrays as before."""
-
-    def __init__(self, X, y, folds, *, keep_y=True, device_rows=False):
-        self.X, self.y, self.folds = X, y, folds
-        self._res = _Resident()
-        self._extra = None
-        self._dev = (bool(device_rows) and isinstance(X, Array) and X.dtype == '<f4' and X.ndim == 2
-                     and X.size > 0 and X._has_order('C'))
-        self._scope = None
-        if self._dev:
-            # only DeviceRows bases enter this scope (`rows_slot` ignores the
-            # size floor); no other program input is kept across folds
-            self._scope = _arena_io.resident(min_words=1 << 62)
-            self._scope.__enter__()
-
-    def _xrows(self, idx):
-        if not self._dev:
-            return self._rows(self.X, idx)
-        if idx.dtype != '<i8' or not idx._has_order('C'):
-            idx = idx.astype('<i8')._as_c()
-        return _arena_io.DeviceRows(self.X, idx, self._res.take)
-
-    def _rows(self, values, idx):
-        if isinstance(values, list):
-            return _take_rows(values, idx)
-        return self._res.take(values, idx)
-
-    def take(self, i, y=None):
-        """(X_train, y_train, X_test, y_test) of fold i; `y` given here (a
-        permuted y) stands in for the stored one."""
-        train, test = self.folds[i]
-        Xtr, Xte = self._xrows(train), self._xrows(test)
-        if y is None:
-            y = self.y
-        elif y is not self.y and y is not self._extra:
-            if self._extra is not None:
-                self._res.release(self._extra)
-            self._extra = y
-        if y is None:
-            return Xtr, None, Xte, None
-        return Xtr, self._rows(y, train), Xte, self._rows(y, test)
-
-    def close(self):
-        self._extra = None
-        scope, self._scope = self._scope, None
-        try:
-            if scope is not None:
-                scope.__exit__(None, None, None)
-        finally:
-            self._res.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.close()
-        return False
 
 
 # ---------------------------------------------------------------- scorers

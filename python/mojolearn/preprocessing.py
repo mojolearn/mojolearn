@@ -12,10 +12,9 @@ import struct
 from . import _portable_math as math
 import numbers
 from ._array import Array
-from ._buffer import materialize_f32_lists, all_finite, empty, zeros, full, as_f32_c
+from ._buffer import empty, zeros, full
 from ._labels import is_bool
 
-from . import _backend
 from ._arrays import _addr, _addr_ro
 from ._mode import PublicOutputsMixin, sklearn_tags as _sklearn_tags
 
@@ -48,40 +47,7 @@ def _seen(counts, weighted):
 
 
 class _ScalerProtocol(PublicOutputsMixin):
-    @staticmethod
-    def _input(X, allow_nan=False, with_copied=False, scan=True):
-        """A float32 C-contiguous Array of X. `allow_nan`: NaN passes (the
-        reference's `ensure_all_finite='allow-nan'`) and the second value
-        says whether every entry is finite; +-inf is refused by the NaN path's
-        own scan. `with_copied`: also whether that cost a copy (copy=False
-        writes in place only into the caller's own buffer). `scan=False` (a
-        direct entry: lane gap-prep2's fits, lane apple-fast-prep's
-        transform): the finite walk is the device's and the second value is
-        None."""
-        values, copied = materialize_f32_lists(X, "input")
-        if values.dtype != "<f4":
-            raise TypeError('Scaler input must have dtype float32')
-        if values.ndim != 2 or min(values.shape) == 0:  # glue: smallest axis of the shape
-            raise ValueError('Scaler requires a nonempty two-dimensional input')
-        if values.size > 2147483647:
-            raise ValueError('Scaler exceeds the native Int32 indexing bound')
-        # scan=False (a direct fit, lane gap-prep2): the device scans X for
-        # a NaN or an infinity, so `finite` is None (not known here)
-        finite = all_finite(values) if scan or not allow_nan else None
-        if not finite and not allow_nan:
-            raise ValueError('Scaler input must be finite; NaN/inf are unsupported')
-        values, c2 = as_f32_c(values, ndim=values.ndim, name="values")
-        if not allow_nan:
-            return values
-        return (values, finite, copied or c2) if with_copied else (values, finite)
 
-    @staticmethod
-    def _binding(mode):
-        binding = _backend.binding('_mojolearn_preprocessing', mode)
-        expected = {'fast': 0, 'identical': 1}[mode]
-        if binding.preprocessing_numeric_mode() != expected:
-            raise RuntimeError('Scaler native numeric mode disagrees with requested mode')
-        return binding
 
     def fit_transform(self, X, y=None, **fit_params):
         return self.fit(X, y, **fit_params).transform(X)

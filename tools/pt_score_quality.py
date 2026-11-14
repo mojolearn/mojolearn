@@ -248,7 +248,12 @@ def repair_reference(args):
 
 
 def dump(args):
-    from mojolearn._expansion_prep import PowerTransformer, _prep_binding, _ptimpute_flags
+    from mojolearn._expansion_prep import PowerTransformer, _prep_binding, _optional_prep_entry
+
+    def _ptimpute_flags(mode):
+        # the binding word the prep door reads (its Python copy was deleted)
+        fn = _optional_prep_entry(_prep_binding(mode), "x_prep_ptimpute_flags") if mode == "fast" else None
+        return int(fn()) if fn is not None else 0
     binding = _prep_binding("fast")
     assert str(binding.x_prep_vendor()) == "metal" and int(binding.x_prep_numeric_mode()) == 0
     stable_enabled = bool(_ptimpute_flags("fast") & 32)

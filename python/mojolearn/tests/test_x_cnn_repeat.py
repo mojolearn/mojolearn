@@ -88,16 +88,17 @@ def test_resident_entries_repeat_with_saved_arrays():
     """The `_r` entries give the same bits with and without the forward's
     saved arrays."""
     import mojolearn as ml
-    from mojolearn._expansion_cnn import _Res
+    from mojolearn import _backend
     conv = ml.Conv2d(3, 4, 3, padding=1, random_state=3)
     pool = ml.MaxPool2d(2)
-    b = conv._binding()
+    b = _backend.binding("_mojolearn_x_cnn", conv.numeric_mode or _backend.default_mode())
     x = _x((6, 3, 8, 8), 1)
     prm = conv._params(x.shape)
     oh, ow = b.x_cnn_conv_shape(prm)   # zeros padding: the unpadded input shape is the conv's shape
     cshape = (x.shape[0], conv.out_channels, int(oh), int(ow))
     pprm = pool._params(cshape)
-    oshape = pool._out_shape(cshape)
+    poh, pow_ = b.x_cnn_pool_shape(pprm)
+    oshape = (cshape[0], cshape[1], int(poh), int(pow_))
     out = np.empty(oshape, np.float32)
     idx = np.empty(oshape, np.int32)
     g = _x(oshape, 2)
@@ -121,3 +122,35 @@ def test_resident_entries_repeat_with_saved_arrays():
             else:
                 for k in ref:
                     _same(got[k], ref[k])
+
+
+class _Res:
+    """The `_r` entries' resident buffers for this test (the product module's
+    copy had no product caller and was deleted, lane py-msel-prep-cnn):
+    4-byte words, zero filled, freed on exit."""
+
+    def __init__(self, binding):
+        self.b, self.handles = binding, []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        for h in self.handles:
+            self.b.x_cnn_res_free(h)
+        self.handles = []
+
+    def new(self, n):
+        h = self.b.x_cnn_res_alloc(int(n))
+        self.handles.append(h)
+        return h
+
+    def put(self, h, arr):
+        arr = np.ascontiguousarray(arr)
+        assert arr.dtype in (np.float32, np.int32)
+        self.b.x_cnn_res_upload(h, arr.ctypes.data, arr.size)
+
+    def get(self, h, shape):
+        out = np.empty(shape, np.float32)
+        self.b.x_cnn_res_download(h, out.ctypes.data, out.size)
+        return out

@@ -8,7 +8,7 @@ self loops and normalization, and the host or resident propagation, with
 the same entries, argument words and residency bits as the Python bodies.
 The fields the Python `backward` methods read (`_x`, `_g`, `_vals`, `_xs`,
 `_xdev`, `_max_aux`, `_pre`, `_den`, `_nograph`, `_y`, `_ydev`) are written
-under the same names; the graph is the module's `_Graph` record.
+under the same names; the graph is a dict record of its exact host arrays.
 
 Native buffers own allocation, dtype admission and integer edge conversion;
 NumPy supplies exact native ndarray containers for completed results.
@@ -18,7 +18,10 @@ it reads and writes the layers' Python fields, admits and allocates arrays
 and resident handles, and keeps the graph cache. The refusals, shape words,
 host word moves and every native entry call are the RUN half in
 `x_cnn/graph_run.mojo`; the GIL is released around each entry call there,
-where `xcnn_call` released it before the split.
+where `xcnn_call` released it before the split. The graph build (edges, CSR
+views, GCN loops, gather, normalization) and both host-form backwards are
+the typed entries of `x_cnn/graph_layer_run.mojo` (lane py-msel-prep-cnn,
+2026-11-14), called through `GraphDoorCalls`.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -37,17 +40,22 @@ from bindings.py_optional import py_present
 from bindings.xcnn_common_door import (
     xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t,
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
-    xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_slice_f32, xcnn_device_io_off,
+    xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_device_io_off,
     xcnn_dev_fields, xcnn_reshape_t,
+)
+from core.entry_table import EntryRef
+from x_cnn.graph_layer_run import (
+    GraphCalls, GraphEdges, GraphViews, SageBackwardHost, graph_edges_run, graph_views_run, gcn_graph_run,
+    gcn_backward_host_run, sage_backward_host_run,
 )
 from x_cnn.graph_run import (
     graph_run_csr_words, graph_run_check_edge_layout, graph_run_check_cache_dims, graph_run_check_index_layout,
-    graph_run_check_gemm, graph_run_check_graph_x, graph_run_check_x, graph_run_check_edge_weight,
+    graph_run_check_gemm, graph_run_check_graph_x, graph_run_check_x,
     graph_run_check_bias, graph_run_check_gcn_weight, graph_run_check_root_weight, graph_run_check_linear_input,
     graph_run_check_linear_weights, graph_run_check_linear_gradient, graph_run_check_gradient,
     graph_run_check_channels, graph_run_check_features, graph_run_check_aggr, graph_run_aggr_kind,
-    graph_run_sage_res_form, graph_run_gcn_bound, graph_run_fan_in_bound, graph_run_ones, graph_run_slice,
-    graph_run_edges, graph_run_bias_rows, graph_run_csr_build, graph_run_gather, graph_run_vals_t, graph_run_gemm,
+    graph_run_sage_res_form, graph_run_gcn_bound, graph_run_fan_in_bound, graph_run_ones,
+    graph_run_bias_rows, graph_run_csr_build, graph_run_gather, graph_run_vals_t, graph_run_gemm,
     graph_run_spmm, graph_run_add, graph_run_linear_forward, graph_run_linear_forward_m, graph_run_linear_backward,
     graph_run_relu_forward, graph_run_res_free, graph_run_csr_upload, graph_run_download, graph_run_gcn_loops,
     graph_run_gcn_norm, graph_run_gemm_m, graph_run_spmm_m, graph_run_bias_m, graph_run_add_m, graph_run_graph_op,
@@ -58,15 +66,6 @@ from x_cnn.graph_run import (
 def _ones(count: Int, context: PythonObject) raises -> PythonObject:
     var out = xcnn_host_f32([count], context)
     graph_run_ones(Int(py=xcnn_addr(out)), count)
-    _ = out
-    return out
-
-
-def _slice(source: PythonObject, offset: Int, count: Int, integer: Bool, context: PythonObject) raises -> PythonObject:
-    var out = xcnn_host_i32([count], context) if integer else xcnn_host_f32([count], context)
-    if count:
-        graph_run_slice(Int(py=xcnn_addr(out)), Int(py=xcnn_addr(source)), offset, count)
-    _ = source
     _ = out
     return out
 
@@ -151,42 +150,86 @@ def _edge_view(source: PythonObject, context: PythonObject) raises -> PythonObje
                         String(dtype.str), String(dtype.byteorder) != ">")
 
 
-def _edges(ei: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    var e = Int(py=ei[1][1])
-    var src = xcnn_host_i32([e], context)
-    var dst = xcnn_host_i32([e], context)
-    graph_run_edges(Int(py=ei[3]), Int(py=ei[2][0]), Int(py=ei[2][1]), e, Int(py=ei[4]), Int(py=ei[5]),
-                    Bool(py=ei[7]), n, Int(py=xcnn_addr(src)), Int(py=xcnn_addr(dst)))
-    _ = src
-    _ = dst
-    _ = ei
-    return Python.tuple(src, dst)
+struct GraphDoorCalls(GraphCalls, Movable):
+    """The door's `GraphCalls` (x_cnn/graph_layer_run.mojo): published
+    buffers are exact host arrays (the graph cache keeps them), each x_cnn
+    entry called through the operation's resolved table entry with the GIL
+    released, as the door called it."""
+
+    var entry: EntryRef
+    var context: PythonObject
+    var items: List[PythonObject]
+    var addrs: List[Int]
+
+    def __init__(out self, entries: PythonObject, context: PythonObject) raises:
+        self.entry = xcnn_ref(entries)
+        self.context = context
+        self.items = List[PythonObject]()
+        self.addrs = List[Int]()
+
+    def _keep(mut self, array: PythonObject) raises -> Int:
+        self.addrs.append(xcnn_ptr(array))
+        self.items.append(array)
+        return len(self.items) - 1
+
+    def alloc_i32(mut self, count: Int) raises -> Int:
+        return self._keep(xcnn_host_i32([count], self.context))
+
+    def alloc_f32(mut self, count: Int) raises -> Int:
+        return self._keep(xcnn_host_f32([count], self.context))
+
+    def address(self, handle: Int) raises -> Int:
+        return self.addrs[handle]
+
+    def item(self, handle: Int) -> PythonObject:
+        return self.items[handle]
+
+    def csr_build(self, rows: Int, cols: Int, csr: Int, order: Int, n: Int, nnz: Int) raises:
+        with GILReleased(Python()):
+            graph_run_csr_build(self.entry, rows, cols, csr, order, n, nnz)
+
+    def gather(self, values: Int, order: Int, dst: Int, size: Int, n: Int) raises:
+        with GILReleased(Python()):
+            graph_run_gather(self.entry, values, order, dst, size, n)
+
+    def vals_t(self, vals_f: Int, order_f: Int, order_t: Int, dst: Int, nnz: Int) raises:
+        with GILReleased(Python()):
+            graph_run_vals_t(self.entry, vals_f, order_f, order_t, dst, nnz)
+
+    def gcn_loops(self, src: Int, dst: Int, w: Int, src_out: Int, dst_out: Int, w_out: Int, n: Int, edges: Int,
+                  improved: Bool) raises -> Int:
+        var k = 0
+        with GILReleased(Python()):
+            k = graph_run_gcn_loops(self.entry, src, dst, w, src_out, dst_out, w_out, n, edges, improved)
+        return k
+
+    def gcn_norm(self, wf: Int, vals: Int, csr: Int, n: Int, nnz: Int, graph_route: Bool) raises:
+        with GILReleased(Python()):
+            graph_run_gcn_norm(self.entry, wf, vals, csr, n, nnz, graph_route)
+
+    def gcn_backward(self, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, bias: Bool) raises:
+        with GILReleased(Python()):
+            graph_run_gcn_backward(self.entry, addrs, n, d, f, nnz, bias, False, 0, True)
+
+    def sage_backward(self, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, kind: Int, norm: Bool,
+                      root: Bool, project: Bool) raises:
+        with GILReleased(Python()):
+            graph_run_sage_backward(self.entry, addrs, n, d, f, nnz, kind, norm, root, False, True, project)
 
 
-def _csr(entries: PythonObject, rows: PythonObject, cols: PythonObject, n: Int, nnz: Int,
-         context: PythonObject) raises -> PythonObject:
-    var csr = xcnn_host_i32([graph_run_csr_words(n, nnz)], context)
-    var order = xcnn_host_i32([max(nnz, 1)], context)
-    var a_rows = xcnn_ptr(rows)
-    var a_cols = xcnn_ptr(cols)
-    var a_csr = xcnn_ptr(csr)
-    var a_order = xcnn_ptr(order)
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_csr_build(key, a_rows, a_cols, a_csr, a_order, n, nnz)
-    _ = csr
-    _ = order
-    _ = rows
-    _ = cols
-    return Python.tuple(csr, _slice(order, 0, nnz, True, context))
+def _edges_run(mut calls: GraphDoorCalls, ei: PythonObject, n: Int) raises -> GraphEdges:
+    """UNPACK the admitted edge view's words; RUN the int32 conversion
+    (x_cnn/graph_layer_run.mojo `graph_edges_run`)."""
+    var edges = graph_edges_run(calls, Int(py=ei[3]), Int(py=ei[2][0]), Int(py=ei[2][1]), Int(py=ei[1][1]),
+                                Int(py=ei[4]), Int(py=ei[5]), Bool(py=ei[7]), n)
+    _ = ei  # the view's buffer pin stays alive through the conversion
+    return edges
 
 
-def _graph_new(src: PythonObject, dst: PythonObject, n: Int, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nnz = xcnn_size(xcnn_shape(src))
-    var f = _csr(entries, dst, src, n, nnz, context)
-    var t = _csr(entries, src, dst, n, nnz, context)
-    return Python.dict(n=n, nnz=nnz, src=src, dst=dst, csr_f=f[0], order_f=f[1], csr_t=t[0], order_t=t[1])
+def _graph_pack(calls: GraphDoorCalls, v: GraphViews) raises -> PythonObject:
+    """PACK: the cached graph record (the arrays `_graph_admit` checks)."""
+    return Python.dict(n=v.n, nnz=v.nnz, src=calls.item(v.src), dst=calls.item(v.dst), csr_f=calls.item(v.csr_f),
+                       order_f=calls.item(v.order_f), csr_t=calls.item(v.csr_t), order_t=calls.item(v.order_t))
 
 
 def _graph_admit(g: PythonObject, context: PythonObject) raises:
@@ -206,23 +249,6 @@ def _graph_admit(g: PythonObject, context: PythonObject) raises:
         var expected = graph_run_csr_words(n, count) if name.startswith("csr_") else count
         graph_run_check_index_layout(xcnn_shape(array), expected)
         _ = xcnn_addr(array)
-
-
-def _gather(entries: PythonObject, values: PythonObject, order: PythonObject, context: PythonObject) raises -> PythonObject:
-    var n = xcnn_size(xcnn_shape(order))
-    var out = xcnn_host_f32([n], context)
-    var a_values = xcnn_ptr(values)
-    var a_order = xcnn_ptr(order)
-    var a_out = xcnn_ptr(out)
-    var size = xcnn_size(xcnn_shape(values))
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_gather(key, a_values, a_order, a_out, size, n)
-    _ = out
-    _ = values
-    _ = order
-    return out
 
 
 def _vals_t(entries: PythonObject, g: PythonObject, vals_f: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -486,65 +512,21 @@ def _graph_op(entries: PythonObject, a: Int, b: Int, aux: Int, dst: Int, csr: In
 
 def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: PythonObject, edge_weight: PythonObject,
                context: PythonObject) raises -> PythonObject:
-    """`GCNConv._graph(n, edge_index, edge_weight)`: (g, vals)."""
-    var edges = _edges(edge_index, n, context)
-    var src = edges[0]
-    var dst = edges[1]
-    var w = PythonObject(None)
-    if edge_weight is None:
-        w = _ones(len(src), context)
-    else:
-        w = xcnn_slice_f32(edge_weight, 0, xcnn_size(xcnn_shape(edge_weight)), context)
-    graph_run_check_edge_weight(len(w), len(src))
-    if Bool(py=fields["normalize"]) and Bool(py=fields["add_self_loops"]):
-        var s32 = src
-        var d32 = dst
-        var w32 = w
-        var e = len(s32)
-        var t = e + n
-        var so = xcnn_host_i32([t], context)
-        var dso = xcnn_host_i32([t], context)
-        var wo = xcnn_host_f32([t], context)
-        # Every image publishing the V1 table has GCN_LOOPS; the former check of
-        # the Python symbol table for an older binary is gone with the lookup.
-        var a_s = xcnn_ptr(s32)
-        var a_d = xcnn_ptr(d32)
-        var a_w = xcnn_ptr(w32)
-        var a_so = xcnn_ptr(so)
-        var a_dso = xcnn_ptr(dso)
-        var a_wo = xcnn_ptr(wo)
-        var improved = Bool(py=fields["improved"])
-        var key = xcnn_ref(entries)
-        var k = 0
-        var py = Python()
-        with GILReleased(py):
-            k = graph_run_gcn_loops(key, a_s, a_d, a_w, a_so, a_dso, a_wo, n, e, improved)
-        _ = wo  # keep the Python object alive through the native call above
-        _ = dso  # keep the Python object alive through the native call above
-        _ = so  # keep the Python object alive through the native call above
-        _ = w32  # keep the Python object alive through the native call above
-        _ = d32  # keep the Python object alive through the native call above
-        _ = s32  # keep the Python object alive through the native call above
-        src = _slice(so, 0, k + n, True, context)
-        dst = _slice(dso, 0, k + n, True, context)
-        w = _slice(wo, 0, k + n, False, context)
-    var g = _graph_new(src, dst, n, entries, context)
-    var wf = _gather(entries, w, g["order_f"], context)
-    var vals = wf
-    if Bool(py=fields["normalize"]):
-        var nnz = Int(py=g["nnz"])
-        vals = xcnn_host_f32([nnz], context)
-        var graph_route = xcnn_idn(entries, XCNN_F_GRAPH)
-        var a_wf = xcnn_ptr(wf)
-        var a_vals = xcnn_ptr(vals)
-        var a_csr = xcnn_ptr(g["csr_f"])
-        var key = xcnn_ref(entries)
-        var py = Python()
-        with GILReleased(py):
-            graph_run_gcn_norm(key, a_wf, a_vals, a_csr, n, nnz, graph_route)
-        _ = vals  # keep the Python object alive through the native call above
-        _ = wf  # keep the Python object alive through the native call above
-    return Python.tuple(g, vals)
+    """`GCNConv._graph(n, edge_index, edge_weight)`: (g, vals). UNPACK the
+    edge view and the weights' address; RUN x_cnn/graph_layer_run.mojo
+    `gcn_graph_run`; PACK the cached record."""
+    var calls = GraphDoorCalls(entries, context)
+    var edges = _edges_run(calls, edge_index, n)
+    var weight = 0
+    var weight_count = 0
+    if edge_weight is not None:
+        weight_count = xcnn_size(xcnn_shape(edge_weight))
+        weight = xcnn_ptr(edge_weight)
+    var gv = gcn_graph_run(calls, edges, n, weight, weight_count, Bool(py=fields["normalize"]),
+                           Bool(py=fields["add_self_loops"]), Bool(py=fields["improved"]),
+                           xcnn_idn(entries, XCNN_F_GRAPH))
+    _ = edge_weight  # keep the Python object alive through the copy above
+    return Python.tuple(_graph_pack(calls, gv.views), calls.item(gv.vals))
 
 
 def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject, g: PythonObject,
@@ -759,8 +741,10 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     if hit is not None and _keys_equal(hit[0], key):
         g = hit[1]
     else:
-        var edges = _edges(edge_index, n, context)
-        g = _graph_new(edges[0], edges[1], n, entries, context)
+        var calls = GraphDoorCalls(entries, context)
+        var edges = _edges_run(calls, edge_index, n)
+        var views = graph_views_run(calls, edges.src, edges.dst, n, edges.count)
+        g = _graph_pack(calls, views)
         py_setitem(fields, "_gcache", Python.tuple(key, g))
     _graph_admit(g, context)
     if _sage_res_form(fields, entries):
@@ -1074,70 +1058,41 @@ def _gcn_backward(layer: PythonObject, gradient: PythonObject, context: PythonOb
 def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     """The host-form backward (the CPU binding, or a forward kept on the
-    host) as one native call after the transposed values: the tape over
-    host arrays (autograd/rules_graph.mojo `gcn_backward_autograd` on the
-    GPU binding, autograd/rules_graph_host.mojo on the CPU binding)."""
+    host). UNPACK the saved arrays and the fitted weights, RUN
+    x_cnn/graph_layer_run.mojo `gcn_backward_host_run` (the transposed
+    values and the tape: autograd/rules_graph.mojo `gcn_backward_autograd` on
+    the GPU binding, autograd/rules_graph_host.mojo on the CPU binding), PACK
+    the gradients."""
     var n = xcnn_shape(g)[0]
     var d = Int(py=fields["in_channels"])
     var f = Int(py=fields["out_channels"])
     var graph = fields["_g"]
     var bias = Bool(py=fields["bias"])
-    var vt = _vals_t(entries, graph, fields["_vals"], context)
+    var vals = fields["_vals"]
     var x = xcnn_f32(fields["_x"], "x", context)
     var w = _snapshot(fields["weight_"], "weight_", context)
     graph_run_check_gcn_weight(xcnn_shape(w), f, d)
     var gw = xcnn_host_f32([f, d], context)
     var gb = xcnn_host_f32([f], context)
     var dx = xcnn_host_f32([n, d], context)
-    var dh = xcnn_host_f32([n, f], context)
-    # The forward's h and output (recorded as the tape's values, never read)
-    # get disjoint halves of ONE host array: the tape's aliasing rule
-    # (autograd/tape.mojo `_refuse_overlap`) refuses a custom_into output that
-    # overlaps a recorded tensor's value storage, and passing the same array
-    # for both refused every host GCN backward ("custom_into: output overlaps
-    # the value storage of a recorded tensor"; since ba9adf41e1, 2026-11-09;
-    # fix-smoke-refusals 2026-11-14). One allocation and one admission per
-    # call, as before; out = h + n * f float32 words.
-    var hv = xcnn_host_f32([2 * n, f], context)
-    var h_addr = xcnn_ptr(hv)
-    var out_addr = h_addr + n * f * 4
-    var ones = PythonObject(None)
     var bv = PythonObject(None)
-    var b_addr = PythonObject(0)
-    var gb_addr = PythonObject(0)
-    var ones_addr = PythonObject(0)
+    var b_addr = 0
     if bias:
-        ones = _ones(n, context)
-        ones_addr = xcnn_addr(ones)
         bv = _snapshot(fields["bias_"], "bias_", context)
         graph_run_check_bias(Int(py=bv.size), f)
-        b_addr = xcnn_addr(bv)
-        gb_addr = xcnn_addr(gb)
-    var addrs: List[Int] = [
-        xcnn_ptr(g), xcnn_ptr(x), h_addr, out_addr, xcnn_ptr(w), xcnn_ptr(gw), xcnn_ptr(dx),
-        xcnn_ptr(dh), xcnn_ptr(vt), xcnn_ptr(graph["csr_t"]), xcnn_word(b_addr), xcnn_word(gb_addr),
-        xcnn_word(ones_addr),
-    ]
-    var nnz = Int(py=graph["nnz"])
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_gcn_backward(key, addrs, n, d, f, nnz, bias, False, 0, True)
+        b_addr = xcnn_ptr(bv)
+    var calls = GraphDoorCalls(entries, context)
+    gcn_backward_host_run(calls, xcnn_ptr(graph["csr_t"]), xcnn_ptr(graph["order_f"]), xcnn_ptr(graph["order_t"]),
+                          xcnn_ptr(vals), Int(py=graph["nnz"]), n, d, f, xcnn_ptr(g), xcnn_ptr(x), xcnn_ptr(w),
+                          bias, b_addr, xcnn_ptr(gw), xcnn_ptr(gb), xcnn_ptr(dx))
     _ = graph
-    _ = gw
-    _ = gb
-    _ = dx
+    _ = vals
+    _ = x
+    _ = w
+    _ = bv
     _ = g
     py_setitem(fields, "grad_bias_", gb)
     py_setitem(fields, "grad_weight_", gw)
-    _ = vt
-    _ = x
-    _ = w
-    _ = dh
-    _ = hv
-    _ = ones
-    _ = bv
-    _ = g
     return dx
 
 
@@ -1254,8 +1209,10 @@ def _sage_backward(layer: PythonObject, gradient: PythonObject, context: PythonO
 def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """The host-form backward (the CPU binding, project=True, or a forward
-    kept on the host) as one native call: the tape over host arrays
-    (autograd/graph_tape.mojo `sage_cfg`, 33 addresses and 10 integers)."""
+    kept on the host). UNPACK the saved arrays, weights and the gradient
+    outputs; RUN x_cnn/graph_layer_run.mojo `sage_backward_host_run` (the
+    tape over host arrays, autograd/graph_tape.mojo `sage_cfg`, its scratch
+    native); PACK the gradients."""
     var n = xcnn_shape(g)[0]
     var d = Int(py=fields["in_channels"])
     var f = Int(py=fields["out_channels"])
@@ -1278,77 +1235,45 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     keep.append(values)
     var dw = xcnn_host_f32([f, d], context)
     var db = xcnn_host_f32([f], context)
-    var dagg = xcnn_host_f32([n, d], context)
     var dx = xcnn_host_f32([n, d], context)
-    keep.append(dagg)
-    var ones = _ones(max(nnz, 1), context)
-    keep.append(ones)
-    var outv = PythonObject(0)
-    var prev = PythonObject(0)
-    var gpre = PythonObject(0)
-    var den = PythonObject(0)
-    var nograph = PythonObject(0)
+    var y = 0
+    var pre = 0
+    var den = 0
+    var nograph = 0
     if norm:
-        var y = xcnn_f32(fields["_y"], "y", context)
-        var pre = xcnn_f32(fields["_pre"], "pre", context)
-        var gp = xcnn_host_f32([n, f], context)
-        keep.append(y)
-        keep.append(pre)
-        keep.append(gp)
+        var yv = xcnn_f32(fields["_y"], "y", context)
+        var pv = xcnn_f32(fields["_pre"], "pre", context)
+        keep.append(yv)
+        keep.append(pv)
         keep.append(fields["_den"])
         keep.append(fields["_nograph"])
-        outv = xcnn_addr(y)
-        prev = xcnn_addr(pre)
-        gpre = xcnn_addr(gp)
-        den = xcnn_addr(fields["_den"])
-        nograph = xcnn_addr(fields["_nograph"])
-    else:
-        # the layer output (recorded as the tape's value, never read)
-        var ov = xcnn_host_f32([n, f], context)
-        keep.append(ov)
-        outv = xcnn_addr(ov)
-    var maxaux = PythonObject(0)
+        y = xcnn_ptr(yv)
+        pre = xcnn_ptr(pv)
+        den = xcnn_ptr(fields["_den"])
+        nograph = xcnn_ptr(fields["_nograph"])
+    var max_aux = 0
     if kind == 2:
         keep.append(fields["_max_aux"])
-        maxaux = xcnn_addr(fields["_max_aux"])
-    var dsc = PythonObject(0)
-    if kind == 1:
-        var t = xcnn_host_f32([n, d], context)
-        keep.append(t)
-        dsc = xcnn_addr(t)
-    var wr_addr = PythonObject(0)
+        max_aux = xcnn_ptr(fields["_max_aux"])
+    var wr_addr = 0
     var gwr = PythonObject(None)
-    var gwr_addr = PythonObject(0)
-    var gr = PythonObject(0)
-    var dxs = PythonObject(0)
-    var dxp = PythonObject(0)
+    var gwr_addr = 0
     if root:
         var wr = _snapshot(fields["weight_r_"], "weight_r_", context)
         graph_run_check_root_weight(xcnn_shape(wr), f, d)
         keep.append(wr)
-        wr_addr = xcnn_addr(wr)
+        wr_addr = xcnn_ptr(wr)
         gwr = xcnn_host_f32([f, d], context)
-        gwr_addr = xcnn_addr(gwr)
-        var t1 = xcnn_host_f32([n, d], context)
-        var t2 = xcnn_host_f32([n, d], context)
-        var t3 = xcnn_host_f32([n, d], context)
-        keep.append(t1)
-        keep.append(t2)
-        keep.append(t3)
-        gr = xcnn_addr(t1)
-        dxs = xcnn_addr(t2)
-        dxp = xcnn_addr(t3)
-    var s_addr = PythonObject(0)
-    var prep = PythonObject(0)
-    var wp = PythonObject(0)
-    var bp = PythonObject(0)
+        gwr_addr = xcnn_ptr(gwr)
+    var s_addr = 0
+    var relu_addr = 0
+    var wp = 0
+    var bp = 0
     var plin = PythonObject(None)
     var dwp = PythonObject(None)
     var dbp = PythonObject(None)
-    var dwp_addr = PythonObject(0)
-    var dbp_addr = PythonObject(0)
-    var dsp = PythonObject(0)
-    var dpre = PythonObject(0)
+    var dwp_addr = 0
+    var dbp_addr = 0
     if project:
         if py_type(fields["_relu_p"]) is not context["xcnn_relu_class"]:
             raise Error("TypeError: graph projection requires a native ReLU layer")
@@ -1358,39 +1283,25 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
         plin = _linear_fields(fields["lin"], context)
         var pvalues = _linear_weights(plin, context)
         var sv = xcnn_f32(fields["_xs"], "x", context)
-        var pv = xcnn_f32(relu_x, "x", context)
+        var rv = xcnn_f32(relu_x, "x", context)
         dwp = xcnn_host_f32([d, d], context)
         dbp = xcnn_host_f32([d], context)
-        var t4 = xcnn_host_f32([n, d], context)
-        var t5 = xcnn_host_f32([n, d], context)
         keep.append(pvalues)
         keep.append(sv)
-        keep.append(pv)
-        keep.append(t4)
-        keep.append(t5)
-        s_addr = xcnn_addr(sv)
-        prep = xcnn_addr(pv)
-        wp = xcnn_addr(pvalues[0])
-        bp = xcnn_addr(pvalues[1])
-        dwp_addr = xcnn_addr(dwp)
-        dbp_addr = xcnn_addr(dbp)
-        dsp = xcnn_addr(t4)
-        dpre = xcnn_addr(t5)
-    var csr_f = xcnn_addr(graph["csr_f"])
-    var csr_t = xcnn_addr(graph["csr_t"])
-    var addrs: List[Int] = [
-        xcnn_ptr(g), xcnn_ptr(x), xcnn_ptr(agg), xcnn_word(outv), xcnn_ptr(values[0]), xcnn_ptr(values[1]), xcnn_ptr(dw),
-        xcnn_ptr(db), xcnn_ptr(dagg), xcnn_ptr(dx), xcnn_word(dxs), xcnn_ptr(ones), xcnn_word(csr_f), xcnn_ptr(ones),
-        xcnn_word(csr_t), xcnn_word(maxaux), xcnn_word(dsc), xcnn_word(wr_addr), xcnn_word(gwr_addr), xcnn_word(gr),
-        xcnn_word(prev), xcnn_word(gpre), xcnn_word(den),
-        # the host form's ten extra words (autograd/graph_tape.mojo sage_cfg)
-        xcnn_word(s_addr), xcnn_word(prep), xcnn_word(wp), xcnn_word(bp), xcnn_word(dwp_addr), xcnn_word(dbp_addr),
-        xcnn_word(dsp), xcnn_word(dpre), xcnn_word(nograph), xcnn_word(dxp),
-    ]
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_sage_backward(key, addrs, n, d, f, nnz, kind, norm, root, False, True, project)
+        keep.append(rv)
+        s_addr = xcnn_ptr(sv)
+        relu_addr = xcnn_ptr(rv)
+        wp = xcnn_ptr(pvalues[0])
+        bp = xcnn_ptr(pvalues[1])
+        dwp_addr = xcnn_ptr(dwp)
+        dbp_addr = xcnn_ptr(dbp)
+    var io = SageBackwardHost(
+        xcnn_ptr(g), xcnn_ptr(x), xcnn_ptr(agg), xcnn_ptr(values[0]), xcnn_ptr(values[1]), xcnn_ptr(dw),
+        xcnn_ptr(db), xcnn_ptr(dx), y, pre, den, nograph, max_aux, wr_addr, gwr_addr, s_addr, relu_addr, wp, bp,
+        dwp_addr, dbp_addr)
+    var calls = GraphDoorCalls(entries, context)
+    sage_backward_host_run(calls, xcnn_ptr(graph["csr_f"]), xcnn_ptr(graph["csr_t"]), nnz, n, d, f, kind, norm,
+                           root, project, io)
     _ = graph
     _ = values
     _ = dwp

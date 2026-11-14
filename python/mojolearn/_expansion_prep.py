@@ -174,27 +174,8 @@ def _blocked():
     return _switch("MOJOLEARN_XPREP_BLOCKED")
 
 
-#: lane af-ptimpute (2026-10-03): binding -> the bits of `x_prep_ptimpute_flags`
-#: (bindings/_mojolearn_x_prep.mojo, x_prep/fastpt.mojo PTIMPUTE_FLAGS: 1
-#: PT_COLBATCH, 8 SI_ONEPASS, 32 PT_SCORE_STABLE),
-#: probed once per binding; 0 on a build without them (every other tier and
-#: vendor, and the host). The device's own comptime switches do the fusing;
-#: a program only shrinks the arena blocks the device no longer touches.
-_PTIMPUTE_FLAGS = {}
 # TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: +10% vs COLBATCH) deleted 2026-10-09 on lane/owed-deletions-D2: flag bit 2 and
 # _PT_FAST_SPEC; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
-
-
-def _ptimpute_flags(mode):
-    if mode != "fast":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _PTIMPUTE_FLAGS.get(key)
-    if v is None:
-        entry = _optional_prep_entry(binding, "x_prep_ptimpute_flags")
-        v = _PTIMPUTE_FLAGS[key] = int(entry()) if entry is not None else 0
-    return v
 
 
 #: lane/apple-fast-prep2: the QSELECT switch, read once at import (not on a fit path); the
@@ -297,14 +278,7 @@ class _PrepBase(SklearnTagsMixin):
         """
         return self.fit(X, y, **fit_params).transform(X)
 
-    def _check_fitted(self):
-        if not hasattr(self, "n_features_in_"):
-            raise RuntimeError(f"mojolearn: this {type(self).__name__} instance is not fitted yet")
 
-    def _check_width(self, arr):
-        if arr.shape[1] != self.n_features_in_:
-            raise ValueError(f"mojolearn: X has {arr.shape[1]} features, {type(self).__name__} "
-                             f"was fitted with {self.n_features_in_}")
 
 
 # ---------------------------------------------------------------- scalers
@@ -667,20 +641,6 @@ class OneHotEncoder(_PrepBase):
 
 
 # ---------------------------------------------------------------- target encoder
-
-
-_TARGET_SCRATCH = {}
-
-
-def _target_scratch(mode):
-    if mode != "fast":
-        return False
-    binding = _prep_binding(mode)
-    key = id(binding)
-    if key not in _TARGET_SCRATCH:
-        fn = _optional_prep_entry(binding, "x_prep_target_scratch")
-        _TARGET_SCRATCH[key] = bool(fn()) if fn is not None else False
-    return _TARGET_SCRATCH[key]
 
 
 # The fold shuffle draws from random_state by splitmix64 (sklearn draws numpy's).
@@ -1064,50 +1024,11 @@ class _Classifier(_PrepBase):
         raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
 
 
-#: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
-_IDN_INT = {}
-_IDN_NB_ONEPASS, _IDN_NB_CSR, _IDN_NB_CSR_DENSE = 2, 4, 8
-
-
-def _idn_int(mode):
-    """Lane idn-int-prep: the IDENTICAL binding's integer prep switches
-    (bindings/_mojolearn_x_prep.mojo `idn_int_binding`: 1 IDN_LABEL, 2
-    IDN_NB_ONEPASS, 4 IDN_NB_CSR, 8 IDN_NB_CSR_DENSE), 0 on another tier or a
-    build with none."""
-    if mode != "identical":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _IDN_INT.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_idn_int")
-        v = int(fn()) if fn is not None else 0
-        _IDN_INT[key] = v
-    return v
-
-
-#: binding -> its `x_prep_idn_fam` bits (0 when it has none), probed once
-_IDN_FAM = {}
-_IDN_STATS_BLOCKED, _IDN_CLASS_ONEPASS, _IDN_SELECT_BLOCKED, _IDN_PT_BLOCKED = 1, 2, 4, 8
-
-
-def _idn_fam(mode):
-    """Lane fam-prep-metrics: the IDENTICAL binding's family switches
-    (bindings/_mojolearn_x_prep*.mojo `idn_fam_binding`: 1 IDN_STATS_BLOCKED,
-    2 IDN_CLASS_ONEPASS, 4 IDN_SELECT_BLOCKED, 8 IDN_PT_BLOCKED, 16
-    IDN_RR_EIGH: informational), 0 on another tier or a build
-    with none. The device and the host column export the same bits, so both
-    stage the same program."""
-    if mode != "identical":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _IDN_FAM.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_idn_fam")
-        v = int(fn()) if fn is not None else 0
-        _IDN_FAM[key] = v
-    return v
+# `_idn_int`, `_idn_fam`, `_target_scratch`, `_ptimpute_flags` and the
+# `_PrepBase` fitted/width checks: their Python copies are deleted (lane
+# py-msel-prep-cnn, 2026-11-14); the doors read the binding words
+# (bindings/prep_classify_common_door.mojo `idn_int` / `idn_fam`,
+# bindings/prep_encode_native_door.mojo `_target_scratch` / `_check_width`).
 
 
 #: TOMBSTONE: lane fg-knn-nb G5 (MOJOLEARN_XPREP_DEVICE_CODES, `_fit_device_codes`:
@@ -1208,20 +1129,7 @@ class _DiscreteNB(_Classifier):
         idn-int-prep, IDN_NB_CSR, -D MOJOLEARN_IDN_NB_CSR_OFF). False
         everywhere else: FAST off Apple, the host column,
         -D MOJOLEARN_NB_TEXT_CSR_OFF."""
-        if not cls._csr_ok:
-            return False
-        mode = _mode()
-        try:
-            if mode == "identical":
-                # lane idn-int-prep: the IDENTICAL device binding on every
-                # vendor (IDN_NB_CSR; the host column has no CSR entry and
-                # takes the dense block: the same words)
-                return bool(_idn_int(mode) & _IDN_NB_CSR)
-            if mode != "fast":
-                return False
-            return _optional_prep_entry(_prep_binding("fast"), "x_prep_nb_csr_fit") is not None
-        except Exception:
-            return False
+        return _CLS_CALL(cls, "nb_csr_ready", (cls._csr_ok,), _CLS_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)

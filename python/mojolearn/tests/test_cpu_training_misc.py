@@ -327,11 +327,12 @@ def test_fold_gather_matches_python_indexing_when_built():
     if not _cpu_only_with("_mojolearn_core_host"):
         return
     import numpy as np
-    from mojolearn.model_selection import _take_rows
+    from mojolearn.model_selection import _Resident
     from mojolearn._array import Array
     x = np.random.default_rng(1).standard_normal((50, 7)).astype(np.float32)
     idx = Array.from_list([49, 0, 7, 7, 13], "<i8")
-    got = np.asarray(_take_rows(x, idx))
+    with _Resident() as res:
+        got = np.asarray(res.take(x, idx))
     assert got.tobytes() == x[[49, 0, 7, 7, 13]].tobytes()
     gather = _backend.load_host_module("_mojolearn_core_host").gather_rows_bytes
     out = np.zeros((2, 7), dtype=np.float32)
