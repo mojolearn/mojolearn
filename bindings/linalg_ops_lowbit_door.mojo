@@ -380,6 +380,112 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
     return out.keep
 
 
+def _lin_fused_bias(x: PythonObject, n: Int, context: PythonObject) raises -> AdmittedBuf:
+    """The bias operand of `matmul_fused`: `n` float32 values in C order.
+    The former shell reshaped a NumPy bias to (1, n) and refused any other
+    count; the admitted buffer is read as its C-order values, so any rank
+    holding exactly `n` float32 values is the same bias."""
+    var input_pin = AdmittedTypedPin()
+    var input = admitted_typed_once(x, context, input_pin, True)
+    var v = input.copy()
+    if not lin_is_f32(v):
+        raise Error("TypeError: mojolearn.linalg: bias has dtype " + lin_dtype_name(input_pin.keep, v) + ", and "
+                    + "only float32 is in this profile (" + lin_text(context, "PROFILE") + "; contract section 1 "
+                    + "makes FP32 a hard requirement, and section 0.5 excludes FP16, "
+                    + "BF16, TF32 and float64). Refused rather than cast, because a "
+                    + "cast from float64 drops mantissa bits you may care about. "
+                    + "Convert it yourself with np.asarray(bias, dtype=np.float32) "
+                    + "if that is what you want.")
+    if v.count() != n:
+        raise Error("mojolearn.linalg_fast.matmul_fused: bias must hold n=" + String(n) + " values")
+    return admitted_typed_c(input, input_pin^, "<f4", "bias", context)
+
+
+def _lin_matmul_fused(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`linalg_fast.matmul_fused(a, b, *, bias, residual, activation,
+    transpose_a, transpose_b, out)`: args are (binding, a, b, bias, residual,
+    activation, transpose_a, transpose_b, out). The refusals of the former
+    Python shell, in its order and words (lane py-classical-linalg)."""
+    var binding = args[0]
+    _ = lin_mode(binding, context)
+    if lin_attr(binding, "gemm_fused") is None:
+        raise Error("NotImplementedError: mojolearn.linalg_fast.matmul_fused: the loaded linalg binding has no "
+                    + "gemm_fused entry; it is a FAST, Apple-GPU build with "
+                    + "-D MOJOLEARN_AFN_GEMM_EPILOGUE (gemm/afn_apple_fast.mojo). Use "
+                    + "mojolearn.linalg.matmul(..., identical=False) and apply the epilogue "
+                    + "yourself.")
+    var ta = lin_truth(args[6])
+    var tb = lin_truth(args[7])
+    if ta and tb:
+        raise Error("mojolearn.linalg_fast.matmul_fused: transpose_a=True with "
+                    + "transpose_b=True is refused (three operations: NN, NT, TN)")
+    var op = OP_NN if not ta and not tb else (OP_NT if tb else OP_TN)
+    var bias_obj = args[3]
+    var residual_obj = args[4]
+    var activation = args[5]
+    if residual_obj is not None and activation is not None:
+        raise Error("mojolearn.linalg_fast.matmul_fused: residual and activation "
+                    + "cannot be combined; one epilogue per store")
+    var epi = 0
+    if activation is None:
+        if bias_obj is not None or residual_obj is not None:
+            epi = 2 if residual_obj is not None else 1
+    else:
+        var name = String("")
+        if py_type(activation) is py_type(PythonObject("")):
+            name = String(py=activation)
+        if name != "silu" and name != "gelu":
+            raise Error("mojolearn.linalg_fast.matmul_fused: activation must be None, "
+                        + "'silu' or 'gelu', got " + family_repr(activation))
+        epi = 3 if name == "silu" else 4
+    if epi != 0 and bias_obj is None:
+        raise Error("mojolearn.linalg_fast.matmul_fused: every epilogue needs bias")
+    var a = lin_operand(args[1], "a", context, True)
+    var bb = lin_operand(args[2], "b", context, True)
+    var m = a.dim(1) if ta else a.dim(0)
+    var k = a.dim(0) if ta else a.dim(1)
+    var n = bb.dim(0) if tb else bb.dim(1)
+    var kb = bb.dim(1) if tb else bb.dim(0)
+    if k != kb:
+        raise Error("mojolearn.linalg_fast.matmul_fused: contracted extents disagree, "
+                    + "a gives k=" + String(k) + " and b gives k=" + String(kb))
+    var bias = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var residual = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    if epi != 0:
+        bias = _lin_fused_bias(bias_obj, n, context)
+    if epi == 2:
+        residual = lin_operand(residual_obj, "residual", context, True)
+        if residual.dim(0) != m or residual.dim(1) != n:
+            raise Error("mojolearn.linalg_fast.matmul_fused: residual must be (" + String(m) + ", "
+                        + String(n) + ")")
+    var out_obj = args[8]
+    var out: AdmittedBuf
+    if out_obj is None:
+        out = admitted_zeros([m, n], "<f4", context)
+    else:
+        var output_pin = AdmittedTypedPin()
+        var output = admitted_typed_once(out_obj, context, output_pin, True)
+        var v = output.copy()
+        if (not lin_is_f32(v) or len(v.shape) != 2 or v.shape[0] != m or v.shape[1] != n
+                or not v.c_contig or v.readonly):
+            raise Error("mojolearn.linalg_fast.matmul_fused: out must be a writable "
+                        + "C-contiguous float32 (" + String(m) + ", " + String(n) + ") buffer")
+        out = admitted_typed_output(output, output_pin^)
+    # `params` is, in this exact order (mirrored word for word in
+    # `bindings/_mojolearn_linalg.mojo::gemm_fused_binding`): m, n, k, op, epi.
+    _ = lin_call(binding, context, "gemm_fused", PythonObject(out.addr), PythonObject(a.addr), PythonObject(bb.addr),
+                 PythonObject(bias.addr), PythonObject(residual.addr), lin_ints(m, n, k, op, epi))
+    _ = residual  # keep the Python object alive through the native call above
+    _ = bias  # keep the Python object alive through the native call above
+    _ = bb  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = residual^
+    _ = bias^
+    _ = a^
+    _ = bb^
+    return out.keep
+
+
 def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var a = admit_typed(args[1], "<f4", -1, "x", context, True)
     var n = a.count()
@@ -710,6 +816,10 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
         for i in [3, 4, 6]:  # driver-loop: over (transpose and identity controls)
             host_inference_scalar(args[i], context, True)
             py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
+    elif operation == "family_lin_matmul_fused":
+        for i in [6, 7]:  # driver-loop: over (transpose controls)
+            host_inference_scalar(args[i], context, True)
+            py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
     elif operation == "family_lin_matmul_bf16":
         for i in [3, 4]:  # driver-loop: over (transpose controls)
             host_inference_scalar(args[i], context, True)
@@ -732,6 +842,8 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
         return neural_descriptor_info(py_get(lin_state(context), "_native_provider"))
     if operation == "family_lin_matmul":
         return _lin_matmul(args, context)
+    if operation == "family_lin_matmul_fused":
+        return _lin_matmul_fused(args, context)
     if operation == "family_lin_to_bf16":
         return _lin_to_bf16(args, context)
     if operation == "family_lin_from_bf16":
