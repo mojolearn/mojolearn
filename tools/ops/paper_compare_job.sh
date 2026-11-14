@@ -66,7 +66,10 @@
 # Inputs on the box: the datasets under $PC_DATA_ROOT (default /root/datasets/gbm-bench), the list being
 # tools/measure_owed.py data-keys (the board's data_needs over the paper and owed races; checked after the plan,
 # exit 4 when one is missing), staged by tools/ops/measure_candidate.py stage through tools/dataset_store.sh stage.
-# At start the job deletes the box_persist_run.sh staging tarballs of finished jobs. Knobs: PC_GPU_TOKEN (the paper's GPU,
+# At start the job deletes the box_persist_run.sh upload leftovers of finished jobs. A phase that hits a full disk
+# (ENOSPC in a log written during it, or under PC_DISK_MIN_FREE_MB left) stops the job with exit 28, and a smoke,
+# board or owed phase refuses to start (exit 28) when the free disk is below its predicted evidence (disk_gate,
+# printed as a DISK line). Knobs: PC_GPU_TOKEN (the paper's GPU,
 # default L40S / MI300X). NVIDIA refuses another GPU (exit 3) unless PC_ALLOW_HW_DIFF=1; AMD records HW-DIFF and
 # goes on unless PC_REQUIRE_SAME_GPU=1 (exit 3).
 # Tests: tools/test_paper_compare.py (syntax and the argument checks of this script).
@@ -139,21 +142,94 @@ PHASE=start
 P_T0=$(date +%s)
 phase() { PHASE=$1; P_T0=$(date +%s); echo "$1" > "$J/.phase"; say "phase $PHASE start"; }
 phase_end() {   # rc
-    local rc=$1
+    local rc=$1 full
+    full=$(disk_full_in_phase)
+    [ -n "$full" ] && rc=$EXIT_DISK
     printf '%s\t%s\t%s\t%s\n' "$PHASE" "$rc" "$(( $(date +%s) - P_T0 ))" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$J/phases.tsv"
     say "phase $PHASE rc=$rc $(( $(date +%s) - P_T0 )) s"
     [ "$rc" -gt "$WORST" ] && WORST=$rc
+    if [ -n "$full" ]; then
+        # fail soft stops here: the next phase would run into the same full disk (2026-11-14: the owed prior and all
+        # 653 smoke races of the full-board screen failed one after the other on ENOSPC)
+        say "DISK FULL in phase $PHASE: $full; $(free_gb) GB free on $(df -P "$RES" 2> /dev/null | awk 'NR==2 {print $6}'); stopping (exit $EXIT_DISK)"
+        exit "$EXIT_DISK"
+    fi
     return 0
 }
-# busy cores of total every 60 s (job/cores.log) and a BUSY line in job.log every 5 minutes
+# ---- disk (2026-11-14) ---------------------------------------------------------------------------------------------
+EXIT_DISK=28    # ENOSPC: the job stopped on a full disk, or refused to start a phase whose evidence would not fit
+nlines() { local c; c=$(grep -c . "$1" 2> /dev/null); echo "${c:-0}"; }
+free_gb() { df -Pk "$RES" 2> /dev/null | awk 'NR==2 {printf "%.1f", $4 / 1048576}'; }
+# non-empty (the evidence) when this phase hit a full disk: a log written during it that says ENOSPC, or less than
+# PC_DISK_MIN_FREE_MB (512) left at its end
+disk_full_in_phase() {
+    local hit kb
+    # job/.phase is written when the phase starts (phase()): a log modified after it was written during this phase.
+    # job/, command.log and persist.log carry this job's own messages (a DISK FULL line of an earlier submit): not evidence
+    hit=$(find "$RES" -maxdepth 3 -path "$J" -prune -o -type f -name '*.log' ! -name command.log ! -name persist.log \
+        -newer "$J/.phase" -exec grep -l -m 1 -E 'No space left on device|Errno 28|ENOSPC' {} + 2> /dev/null | head -n 3 | tr '\n' ' ')
+    if [ -n "$hit" ]; then echo "ENOSPC in ${hit% }"; return; fi
+    kb=$(df -Pk "$RES" 2> /dev/null | awk 'NR==2 {print $4}')
+    [ -n "$kb" ] && [ "$kb" -lt $(( ${PC_DISK_MIN_FREE_MB:-512} * 1024 )) ] && echo "only $(( kb / 1024 )) MB free at the phase end"
+}
+# refuse to START a phase that writes race evidence when the free disk is below the prediction:
+# races x PC_EVIDENCE_MB_PER_RACE (smoke: PC_SMOKE_EVIDENCE_MB_PER_RACE) + boards x PC_LOADED_MB (the loaded native
+# modules, retained once per board dir: tools/bench_board_evidence.py loaded_module_ref) + PC_DISK_RESERVE_GB.
+# The per-race default is the retained receipts, logs and records (the .so bytes are no longer in each race,
+# 2026-11-14); raise it for a board of large-output races.
+disk_gate() {   # <what> <races> <board processes> <MB per race>
+    local what=$1 races=$2 boards=$3 per=$4 need_mb free_kb
+    need_mb=$(( races * per + boards * ${PC_LOADED_MB:-400} + ${PC_DISK_RESERVE_GB:-5} * 1024 ))
+    free_kb=$(df -Pk "$RES" 2> /dev/null | awk 'NR==2 {print $4}')
+    [ -n "$free_kb" ] || { say "DISK $what: cannot read the free space of $RES; not gated"; return 0; }
+    say "DISK $what: $races races x $per MB + $boards boards x ${PC_LOADED_MB:-400} MB + reserve ${PC_DISK_RESERVE_GB:-5} GB = $need_mb MB needed; $(( free_kb / 1024 )) MB free"
+    if [ $(( free_kb / 1024 )) -lt "$need_mb" ]; then
+        say "DISK $what refused: free space is below the predicted evidence; free disk or lower the estimate (exit $EXIT_DISK)"
+        printf '%s\t%s\t%s\t%s\n' "$what-disk-refused" "$EXIT_DISK" 0 "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$J/phases.tsv"
+        WORST=$EXIT_DISK
+        exit "$EXIT_DISK"
+    fi
+}
+# busy cores of total every 60 s (job/cores.log) and a BUSY line in job.log every 5 minutes.
+# BUSY-NEGATIVE FIX (2026-11-14, L40S pod nvc1: `busy=-18.3 total=128`): the old sampler took (all - idle - iowait)
+# over the /proc/stat deltas and scaled by nproc. iowait is not monotonic (the kernel documents that it can go down),
+# and a container's /proc/stat and nproc describe the host, not the pod. Now: the pod's own CPU time from its cgroup
+# (cgroup v2 cpu.stat usage_usec, else v1 cpuacct.usage), busy = delta CPU time / delta wall time; total = the
+# allocation (cgroup v2 cpu.max quota/period, else nproc, which honours affinity). Without a cgroup counter it falls
+# back to /proc/stat with busy = delta(user+nice+system+irq+softirq+steal) over delta(those + idle + iowait), scaled
+# by the cpu lines /proc/stat lists. A delta that goes backwards (counter reset) is not a sample: it is logged as
+# `busy=NA` and the next sample starts from it; a value outside 0..total is clamped and marked `clamped`.
+alloc_cores() {
+    local q per n
+    n=$(nproc 2> /dev/null || echo 1)
+    if read -r q per < /sys/fs/cgroup/cpu.max 2> /dev/null && [ "$q" != max ] && [ "${per:-0}" -gt 0 ] 2> /dev/null; then
+        q=$(( (q + per - 1) / per ))
+        [ "$q" -ge 1 ] && [ "$q" -lt "$n" ] && n=$q
+    fi
+    echo "$n"
+}
+cpu_sample() {   # "<wall_usec> <cpu_usec> cgroup" or "<total ticks> <busy ticks> <cpus> procstat"
+    local u
+    u=$(awk '$1 == "usage_usec" {print $2}' /sys/fs/cgroup/cpu.stat 2> /dev/null)
+    [ -n "$u" ] || u=$(awk '{printf "%d", $1 / 1000}' /sys/fs/cgroup/cpuacct/cpuacct.usage 2> /dev/null)
+    if [ -n "$u" ]; then echo "$(( $(date +%s%N) / 1000 )) $u cgroup"; return; fi
+    awk '/^cpu / {b=$2+$3+$4+$7+$8+$9; t=b+$5+$6} /^cpu[0-9]/ {c++} END {printf "%.0f %.0f %d procstat\n", t, b, c}' /proc/stat
+}
+busy_line() {   # <allocated cores> <phase> <previous cpu_sample> <current cpu_sample>: one cores.log line
+    echo "$3 $4" | awk -v n="$1" -v t="$(date -u +%H:%M:%S)" -v ph="$2" '
+        { if ($3 == "cgroup" && $6 == "cgroup") { dw = $4 - $1; dc = $5 - $2; ok = (dw > 0 && dc >= 0); b = ok ? dc / dw : 0; src = "cgroup" }
+          else { dt = $5 - $1; db = $6 - $2; ok = (dt > 0 && db >= 0 && db <= dt); b = ok ? db / dt * $7 : 0; src = "procstat" }
+          if (!ok) { printf "%s busy=NA total=%d phase=%s source=%s (counter went backwards; next sample from here)", t, n, ph, src; exit }
+          c = ""; if (b < 0) { b = 0; c = " clamped" } if (b > n) { b = n; c = " clamped" }
+          printf "%s busy=%.1f total=%d phase=%s source=%s%s", t, b, n, ph, src, c }'
+}
 cores_sampler() {
     local n prev cur i=0 line
-    n=$(nproc)
-    prev=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8+$9, $5+$6}' /proc/stat)
+    n=$(alloc_cores)
+    prev=$(cpu_sample)
     while sleep 60; do
-        cur=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8+$9, $5+$6}' /proc/stat)
-        line=$(echo "$prev $cur" | awk -v n="$n" -v t="$(date -u +%H:%M:%S)" -v ph="$(cat "$J/.phase" 2>/dev/null)" \
-            '{dt=$3-$1; di=$4-$2; b=(dt>0)?(dt-di)/dt*n:0; printf "%s busy=%.1f total=%d phase=%s", t, b, n, ph}')
+        cur=$(cpu_sample)
+        line=$(busy_line "$n" "$(cat "$J/.phase" 2>/dev/null)" "$prev" "$cur")
         echo "$line" >> "$J/cores.log"
         i=$(( i + 1 )); [ $(( i % 5 )) -eq 0 ] && say "BUSY $line"
         prev=$cur
@@ -180,7 +256,7 @@ say "paper compare $V $MODE ${PC_SOURCE_COMMIT:-$VER} at $(git rev-parse HEAD 2>
 BOX_V=$(detect_vendor) || { say "neither nvidia-smi nor rocm-smi found"; exit 2; }
 [ "$BOX_V" = "$V" ] || { say "asked for $V; this box is $BOX_V"; exit 3; }
 { uname -a; echo "nproc $(nproc)"; free -g 2> /dev/null || true; df -h /root 2> /dev/null || true; } > "$J/box.txt" 2>&1
-say "BUSY at start: nproc $(nproc), $(awk '/MemAvailable/ {printf "%d GiB available", $2/1048576}' /proc/meminfo 2>/dev/null)"
+say "BUSY at start: nproc $(nproc), allocation $(alloc_cores) cores, $(awk '/MemAvailable/ {printf "%d GiB available", $2/1048576}' /proc/meminfo 2>/dev/null)"
 if [ "$V" = nvidia ]; then
     nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader > "$J/gpu.txt" 2>&1
 else
@@ -204,19 +280,20 @@ if gpu_other; then
     fi
     [ "$V" = amd ] && [ "${PC_REQUIRE_SAME_GPU:-0}" = 1 ] && exit 3
 fi
-# staging tarballs of finished box-persisted jobs (a failed or killed upload left them: 36 GB on the L40S pod,
-# 2026-11-13); this job's own and running jobs' are kept
+# upload leftovers of finished box-persisted jobs: a killed upload leaves its piece (at most max_bytes since
+# 2026-11-14) or, from an older runner, its whole staging tarball (36 GB on the L40S pod, 2026-11-13); this job's
+# own and running jobs' are kept
 prune_persist_staging() {
     local root f tag pid
     root=$(dirname "$(dirname "${MOJOLEARN_PERSIST_RUNNER:-/root/box-persist/bin/x}")")
-    for f in "$root"/state/*/upload.tgz; do
+    for f in "$root"/state/*/upload.tgz "$root"/state/*/readback.tgz "$root"/state/*/piece "$root"/state/*/piece.back; do
         [ -f "$f" ] || continue
         tag=$(basename "$(dirname "$f")")
         [ "$tag" = "${MOJOLEARN_PERSIST_TAG:-}" ] && continue
         pid=$(sed -n 's/^PID=//p' "$root/active/$tag.env" 2> /dev/null | head -1)
         [ -n "$pid" ] && kill -0 "$pid" 2> /dev/null && continue
-        say "pruning $(du -sh "$f" 2> /dev/null | cut -f1) staging tarball of finished job $tag: $f"
-        rm -f "$f" "$(dirname "$f")/upload.sha256"
+        say "pruning $(du -sh "$f" 2> /dev/null | cut -f1) upload leftover of finished job $tag: $f"
+        rm -f "$f" "$(dirname "$f")/upload.sha256" "$f.sha256"
     done
 }
 prune_persist_staging
@@ -359,6 +436,7 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
         phase all-smoke
         NRACE=$(grep -c . "$PA/race-ids-smoke.txt")
         smoke_shards "$NRACE"
+        disk_gate all-smoke "$NRACE" "$S" "${PC_SMOKE_EVIDENCE_MB_PER_RACE:-5}"
         say "full-board smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB)"
         pids=()
         # shellcheck disable=SC2046
@@ -383,6 +461,7 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
     tail -n 1 "$RES/logs/pass-ids-all.log"
     if part all-board; then
         phase all-board
+        disk_gate all-board "$(nlines "$PA/race-ids-pass.txt")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
         if [ -s "$PA/race-ids-pass.txt" ]; then
             # shellcheck disable=SC2046
             $PY tools/bench_board.py "${COMMON_ALL[@]}" $(run_as candidate) --cache "$CACHE_ROOT/c1" \
@@ -502,6 +581,7 @@ if part smoke; then
     # shard count is nproc/2, bounded by host memory (PC_SMOKE_MEM_GB per shard), by GPU memory (PC_SMOKE_GPU_GB per
     # shard's contexts and small buffers) and PC_SMOKE_MAX (16): smoke_shards.
     smoke_shards "$NRACE"
+    disk_gate smoke "$NRACE" "$S" "${PC_SMOKE_EVIDENCE_MB_PER_RACE:-5}"
     say "smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB), one venv"
     pids=()
     # shellcheck disable=SC2046
@@ -543,11 +623,15 @@ board_run() {   # arm, ids file, out dir, extra args...
 }
 if part board; then
     phase board
+    disk_gate board "$(nlines "$PASS_IDS")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
     if [ -s "$PASS_IDS" ]; then board_run candidate "$PASS_IDS" "$RES/board"; rc=$?; else say "no race passed its smoke"; rc=6; fi
     phase_end $rc
 fi
 if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
     phase owed
+    # every owed unit's races (full rows may be fewer after the smoke gate: an upper bound), one board dir per unit
+    disk_gate owed "$(cut -f3 "$RES/plan-owed/units.tsv" | xargs cat 2> /dev/null | grep -c . || true)" \
+        "$(nlines "$RES/plan-owed/units.tsv")" "${PC_EVIDENCE_MB_PER_RACE:-40}"
     rc=0
     while IFS=$'\t' read -r arm rows ids; do
         [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)
