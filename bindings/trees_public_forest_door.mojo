@@ -485,6 +485,58 @@ def forest_refresh(model: PythonObject, kind: String, context: PythonObject) rai
     return fields
 
 
+def forest_validate_stored(model: PythonObject, context: PythonObject) raises:
+    """`ForestProtocol._validate_params()` (lane py-trees, 2026-11-14: the
+    Python method is one call here): the constructor checks on the stored
+    parameters, in the constructor's order (numeric_mode, inference_engine,
+    then `_et_derive` / `_rf_derive`), and the derived state (`device`,
+    `_cfg`, ET's `_criterion_code`) stored; the parameters stay as given.
+    A parameter missing from the instance raises getattr's AttributeError."""
+    var kind = forest_kind(model, context)
+    var cls = py_type(model)
+    var names = cls._parameter_names
+    var fields = py_fields(model)
+    var missing = context["trees_missing"]
+    var params = Python.dict()
+    for i in range(len(names)):  # driver-loop: over the constructor parameter names
+        var value = py_get(fields, names[i], missing)
+        if value is missing:
+            raise Error("AttributeError: '" + String(cls.__name__) + "' object has no attribute '" + String(names[i]) + "'")
+        py_setitem(params, names[i], value)
+    _ = _check_mode(_param(params, "numeric_mode", PythonObject(None)))
+    _ = _check_engine(_param(params, "inference_engine", PythonObject("sequential")))
+    var derived = _et_derive(model, params, kind, context) if _family(kind) == "et" else _rf_derive(model, params, kind, context)
+    _ = py_call(fields.update, derived)
+
+
+def forest_prediction_engine(fields: PythonObject, context: PythonObject) raises -> String:
+    """`ForestProtocol._prediction_engine()`: the engine checked first, then
+    (for `auto` only) the effective mode, in the Python method's order."""
+    var engine = _check_engine(py_get(fields, "inference_engine", PythonObject("sequential")))
+    if engine == "auto":
+        return "parallel_groves" if forest_effective_mode(fields, context) == "fast" else "sequential"
+    return engine
+
+
+def forest_ordered_resident_auto(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> Bool:
+    """`ForestProtocol._ordered_resident_auto()`: the sequential engine on an
+    image whose resident snapshot takes the ordered word
+    (XF_CAP_ORDERED_RESIDENT, the former `forest_ordered_resident` export).
+    A binding that cannot be connected, or publishes no native entry, has no
+    such route (the Python method's ImportError/AttributeError absence)."""
+    if forest_prediction_engine(fields, context) != "sequential":
+        return False
+    var kind = forest_kind(model, context)
+    var mode = forest_effective_mode(fields, context)
+    try:
+        return _ordered_export(trees_table(context, mode, "_mojolearn_trees" if _family(kind) == "et" else "_mojolearn_rf"))
+    except error:
+        var message = String(error)
+        if message.startswith("ImportError") or message.startswith("AttributeError"):
+            return False
+        raise error^
+
+
 def forest_capture_mode(fields: PythonObject, context: PythonObject) raises -> String:
     """`ForestProtocol._capture_fit_mode()`: the requested mode, or the
     process default, stored as `_fit_numeric_mode`."""
