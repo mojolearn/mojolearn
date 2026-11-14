@@ -1146,8 +1146,10 @@ def host_min_owlqn(
 
     var k = 0
     var fx = host_owlqn_objective(f, x, grad, l1, pg_limit)
-    var gnorm = f.grad_norm(grad)
     host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
+    # OWL-QN FIX (2026-11-14), as glm/impl/qn/qn_solvers.mojo min_owlqn: convergence reads the
+    # PSEUDO-gradient's norm; the loss gradient alone is zero where the loss is flat while l1 still pulls.
+    var gnorm = f.grad_norm(pseudo)
     if param.past > 0:
         fx_hist[0] = fx
     if host_check_convergence(param, k, fx, gnorm, fx_hist):
@@ -1171,13 +1173,13 @@ def host_min_owlqn(
         lsret = host_ls_backtrack_projected(
             param, f, fx, x, grad, pseudo, step, drt, xp, l1, pg_limit, n, ls_iters
         )
-        gnorm = f.grad_norm(grad)
+        host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
+        gnorm = f.grad_norm(pseudo)
         var stop = host_update_and_check(
             param, k, lsret, fx, fxp, gnorm, x, xp, grad, gradp, fx_hist, retcode, n
         )
         if stop:
             return HostQNResult(fx, k, retcode)
-        host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
         host_axpy(S[end], Float32(-1.0), xp, x, n)
         host_axpy(Y[end], Float32(-1.0), gradp, grad, n)
         end = host_lbfgs_search_dir(param, n_vec, end, S, Y, pseudo, drt, ys, alpha, n)
