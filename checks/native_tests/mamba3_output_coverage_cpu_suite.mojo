@@ -21,7 +21,7 @@ would cost more in pool startup than it saves. Run in a fresh process.
 from mamba.host.mamba_host_shell_impl import _mamba3_run
 from checks.native_tests.mamba3_output_coverage_cases import (
     require, m3_cov_weights, m3_cov_shape, m3_cov_x, m3_cov_token, m3_cov_zero_state, m3_cov_outputs,
-    m3_cov_addresses, m3_cov_same_bits, m3_cov_filled, M3_COV_POISON, M3_COV_ZERO,
+    m3_cov_addresses, m3_cov_same_bits, M3_COV_POISON, M3_COV_ZERO,
 )
 
 comptime MAMBA3_COVERAGE_CPU_CASES = 2
