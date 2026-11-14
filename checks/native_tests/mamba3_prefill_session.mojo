@@ -65,7 +65,7 @@ def _create() raises -> Int:
     return handle
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var none = List[Int]()
     if unit == 0:
         # CREATE: distinct handles; CLOSE releases both.
@@ -142,7 +142,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(MAMBA3_SESSION_CASES)
     for unit in range(MAMBA3_SESSION_CASES):  # driver-loop: cases share the image's registry, one after another
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
 

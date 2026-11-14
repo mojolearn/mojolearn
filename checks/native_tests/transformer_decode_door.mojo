@@ -167,7 +167,7 @@ def _export(h: Int, cache_n: Int) raises -> List[List[Float32]]:
     return both^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var block = _Block()
     var kc = List[Float32](length=block.cache_n, fill=0)
     var vc = List[Float32](length=block.cache_n, fill=0)
@@ -246,7 +246,7 @@ def _run_gpu(mut report: Report) raises:
     var cases = report.cases(TRANSFORMER_DECODE_DOOR_CASES)
     for unit in range(TRANSFORMER_DECODE_DOOR_CASES):  # driver-loop: device cases share one device context
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
 

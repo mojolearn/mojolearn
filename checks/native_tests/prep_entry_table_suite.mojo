@@ -97,7 +97,7 @@ def _device_refuses(op: Int, na: Int, ni: Int) raises:
     raise Error("the host image ran device operation " + String(op))
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         # An empty program on a one-word arena: nothing runs, the stage count returns.
         var arena: List[Float32] = [7.0]
@@ -134,7 +134,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL prep entry table case", unit, String(problem))

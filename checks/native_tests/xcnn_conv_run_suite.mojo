@@ -35,7 +35,7 @@ def _geom() -> ConvGeom:
     return ConvGeom(1, 3, 3, 1, 1, 1, 1, 1, 1, 4, True)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         conv_run_check_config(4, 8, 2, [3, 3], [1, 1], [1, 1])
         try:
@@ -194,7 +194,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL x_cnn conv run case", unit, String(problem))

@@ -72,7 +72,7 @@ def _args(var strs: List[String], var ints: List[Int], var floats: List[Float64]
     return GbdtFitArgs(1, 2, 3, 4, 5, 6, ints^, floats^, bad^, strs^)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var key = xg_ref(_key())
     if unit == 0:
         require(xg_row_major(key), "row-major capability lost")
@@ -146,7 +146,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL trees gbdt entry case", unit, String(problem))

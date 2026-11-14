@@ -157,7 +157,7 @@ def _ownership(k: Int) raises:
     _ = g^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit < 4:
         _conv2d(unit)
     elif unit == 4:
@@ -174,7 +174,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(CNN_CONV_UNITS)
     def task(unit: Int) {imm cases}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
     report.parallel(task, CNN_CONV_UNITS)

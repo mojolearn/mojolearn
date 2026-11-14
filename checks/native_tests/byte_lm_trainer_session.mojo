@@ -378,7 +378,7 @@ def full_is_lean_plus_export(key: ByteLmEntryKey) raises:
         lean.close()
 
 
-def case(key: ByteLmEntryKey, unit: Int) raises:
+def run_case(key: ByteLmEntryKey, unit: Int) raises:
     if unit < 3:
         var counts: List[Int] = [1, 2, 4]
         steps_equal_single_steps(key, counts[unit])
@@ -404,7 +404,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(BYTE_LM_TRAINER_SESSION_CASES)
     def task(unit: Int) {imm cases}:
         try:
-            case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), unit)
+            run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), unit)
         except error:
             cases.fail(unit, error)
     report.parallel(task, BYTE_LM_TRAINER_SESSION_CASES)
@@ -425,7 +425,7 @@ def _run_gpu(mut report: Report) raises:
     var cases = report.cases(BYTE_LM_TRAINER_SESSION_CASES)
     for unit in range(BYTE_LM_TRAINER_SESSION_CASES):
         try:
-            case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor), unit)
+            run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor), unit)
         except error:
             cases.fail(unit, error)
 

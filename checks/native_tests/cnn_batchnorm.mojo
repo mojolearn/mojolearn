@@ -123,7 +123,7 @@ def _untracked() raises:
     _ = g^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit < 3:
         _batchnorm(unit)
     elif unit == 3:
@@ -138,7 +138,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(CNN_BN_UNITS)
     def task(unit: Int) {imm cases}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
     report.parallel(task, CNN_BN_UNITS)

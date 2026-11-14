@@ -117,7 +117,7 @@ def preconditions_published() raises:
         _refuses(problem, "invalid tier/vendor key")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var none = List[Int]()
     var no_floats = List[Float64]()
     if unit == 0:
@@ -212,7 +212,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL neural entry case", unit, String(problem))

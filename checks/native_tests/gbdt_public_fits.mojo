@@ -908,23 +908,23 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_ordered[I](unit - 14)
 
 
-def host_losses[I: GbdtImage](case: Int) raises:
+def host_losses[I: GbdtImage](case_index: Int) raises:
     """`test_the_five_configurations_fit_on_the_host_when_built`."""
     var reg = GbdtInputs(load_f32("e3-x.f32", 3600), 600, 6, load_f32("e3-yr.f32", 600))
-    if case == 0:
+    if case_index == 0:
         var losses: List[String] = ["Quantile", "MAPE", "Poisson", "Tweedie"]
         for loss in losses:  # small-loop(the four pointwise losses of the original)
             var o = GbdtOpts(loss, 3, 3)
             if loss == "Tweedie":
                 o.loss_variance_power = 1.5
             _ = _twice[I](o, reg, loss)
-    elif case == 1:
+    elif case_index == 1:
         var o = GbdtOpts("MAE", 3, 3)
         o.leaf_method = "Exact"
         o.bootstrap = "Poisson"
         o.subsample = 0.6
         _ = _twice[I](o, reg, "MAE Exact Poisson")
-    elif case == 2:
+    elif case_index == 2:
         var o = GbdtOpts("Logloss", 3)
         o.max_leaves = 8
         o.grow_policy = "Lossguide"
@@ -939,15 +939,15 @@ def host_losses[I: GbdtImage](case: Int) raises:
         o.leaf_method = "Gradient"
         o.leaf_iterations = 3
         _ = _twice[I](o, _e3(), "Lossguide NewtonCosine")
-    elif case <= 4:
-        var loss = String("MultiClass") if case == 3 else String("MultiClassOneVsAll")
+    elif case_index <= 4:
+        var loss = String("MultiClass") if case_index == 3 else String("MultiClassOneVsAll")
         var three = GbdtInputs(load_f32("e3-x.f32", 3600), 600, 6, load_f32("e3-y3.f32", 600))
         var o = GbdtOpts(loss, 3, 3)
-        if case == 3:
+        if case_index == 3:
             o.class_weights = [1.0, 2.0, 0.5]
         var m = _twice[I](o, three, loss)
         require(len(predict_proba(m.text, loss, three.x, 600)) == 600 * 3, "proba shape (600, 3): " + loss)
-    elif case == 5:
+    elif case_index == 5:
         var o = GbdtOpts("Quantile", 2, 3)
         o.bootstrap = "Bayesian"
         _ = _twice[I](o, reg, "Quantile Bayesian")
@@ -966,13 +966,13 @@ def _trees_record(text: String) raises -> Int:
     raise Error("no trees record")
 
 
-def host_ordered[I: GbdtImage](case: Int) raises:
+def host_ordered[I: GbdtImage](case_index: Int) raises:
     """`test_ordered_and_feature_freq_fit_on_the_host_when_built`, its native
     arms (the save/load round trip and the CTR model's predictions, read by
     the host CTR door, stay in Python)."""
     var x = load_f32("od-x.f32", 7200)
     var y = load_f32("od-y.f32", 1200)
-    if case == 0:
+    if case_index == 0:
         # OrderedRMSE(n_estimators=3, max_depth=3), twice; weighted refusal
         var perm = load_u32("od-perm.u32", 1200)
         var texts = List[String]()
@@ -995,7 +995,7 @@ def host_ordered[I: GbdtImage](case: Int) raises:
         return
     var coded = load_f32("od-coded.f32", 7200)
     var yc = load_f32("od-yc.f32", 1200)
-    if case == 1:
+    if case_index == 1:
         # ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7), twice; weighted refusal
         var sources: List[UInt32] = [0, 1]
         var sp = _U32P(unsafe_from_address=Int(sources.unsafe_ptr()))
@@ -1015,7 +1015,7 @@ def host_ordered[I: GbdtImage](case: Int) raises:
         require(refused, "a weighted FeatureFreq fit did not refuse on the host binding")
         _ = sources^
         return
-    if case == 2:
+    if case_index == 2:
         # the pointwise eval arm, and its by-name refusal without weights
         var inp = GbdtInputs(x.copy(), 1200, 6, yc.copy())
         inp.eval_x = load_f32("od-xe.f32", 1800)
@@ -1036,7 +1036,7 @@ def host_ordered[I: GbdtImage](case: Int) raises:
     var inp = GbdtInputs(coded.copy(), 1200, 6, yc.copy())
     var o = GbdtOpts("Logloss", 3, 3)
     o.deterministic()
-    if case == 3:
+    if case_index == 3:
         # the one-hot arm
         o.cat_features = [0]
         o.one_hot_features = [1]
@@ -1050,7 +1050,7 @@ def host_ordered[I: GbdtImage](case: Int) raises:
     require(a.text == b.text, "two CTR host fits returned different bytes")
     inp.eval_x = load_f32("od-exctr.f32", 1800)
     inp.eval_y = load_f32("od-eyctr.f32", 300)
-    if case == 4:
+    if case_index == 4:
         # CTR eval rows leave the learn model unchanged
         o.use_best_model = 0
         var heldout = fit[I](o, inp)

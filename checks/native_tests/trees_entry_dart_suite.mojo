@@ -86,7 +86,7 @@ def preconditions_published() raises:
         _refuses(problem, "unknown operation")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var key = _key()
     if unit == 0:
         # XD_CAPS: the host image keeps no resident forest; the round bit follows DART_HOST.
@@ -205,7 +205,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL trees DART entry case", unit, String(problem))

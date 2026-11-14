@@ -96,7 +96,7 @@ def _released(op: Int, handle: Int) raises:
     _expect(op, List[Int](), [handle], List[Float64](), "state is not fitted or was released")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var none = List[Int]()
     var nof = List[Float64]()
     if unit == 0:
@@ -215,7 +215,7 @@ def _run_gpu(mut report: Report) raises:
     var cases = report.cases(CAUSAL_SESSION_CASES)
     for unit in range(CAUSAL_SESSION_CASES):  # driver-loop: device cases share one device context
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
 

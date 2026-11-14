@@ -30,7 +30,7 @@ def _refuses(problem: Error, text: String) raises:
     require(String(problem) == text, "refusal text: got '" + String(problem) + "', expected '" + text + "'")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         require(xcnn_size([2, 3, 4]) == 24 and xcnn_size(List[Int]()) == 1, "xcnn_size")
         require(xcnn_shape_text([5]) == "(5,)" and xcnn_shape_text([2, 3]) == "(2, 3)", "xcnn_shape_text")
@@ -130,7 +130,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL x_cnn bn run case", unit, String(problem))

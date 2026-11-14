@@ -212,7 +212,7 @@ def _fresh_pass(word: UInt32) raises -> List[List[Float32]]:
     return outputs^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         m3_cov_same_bits(_carried_pass(M3_COV_POISON), _carried_pass(M3_COV_ZERO),
                          "Mamba-3 host carried-state forward + step")
@@ -225,7 +225,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(MAMBA3_COVERAGE_CPU_CASES)
     for unit in range(MAMBA3_COVERAGE_CPU_CASES):  # driver-loop: two millisecond cases, serial by design (module docstring)
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
 

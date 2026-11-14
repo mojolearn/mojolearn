@@ -117,7 +117,7 @@ def preconditions_published() raises:
     _ = out
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = xt_ref(_key())
     if unit == 0:
         var out: List[Int32] = [9, 9, 9, 9]
@@ -534,7 +534,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL trees glue entry case", unit, String(problem))

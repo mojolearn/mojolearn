@@ -182,7 +182,7 @@ def preconditions_published() raises:
     _ = t^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = seq_opt_ref(_key())
     var ex = HostExec()
     var a = Twin()
@@ -264,7 +264,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL sequence optimizer entry case", unit, String(problem))

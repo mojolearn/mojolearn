@@ -155,7 +155,7 @@ def _args(var ints: List[Int], var floats: List[Float64], var bad: List[UInt8], 
     return ForestFitArgs(1, 2, ints^, floats^, bad^, criterion)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var rf = xf_ref(_key(FOREST_TABLE_RF))
     var et = xf_ref(_key(FOREST_TABLE_ET))
     if unit == 0:
@@ -331,7 +331,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL trees forest entry case", unit, String(problem))

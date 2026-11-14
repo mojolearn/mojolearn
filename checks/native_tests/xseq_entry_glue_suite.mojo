@@ -156,7 +156,7 @@ def _theta_constant(mut y: List[Float32], mut forecast: List[Float32], mut info:
     return _glue(XS_THETA, addrs, ints, floats)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         var y = List[Float32](length=8, fill=20.0)
         var forecast = List[Float32](length=3, fill=0.0)
@@ -303,7 +303,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL xseq glue entry case", unit, String(problem))

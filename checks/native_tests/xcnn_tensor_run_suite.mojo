@@ -25,7 +25,7 @@ def _refuses(problem: Error, text: String) raises:
     require(String(problem) == text, "refusal text: got '" + String(problem) + "', expected '" + text + "'")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         xcnn_tensor_run_check_dim(0, False)
         xcnn_tensor_run_check_dim(-1, True)
@@ -66,7 +66,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL x_cnn tensor run case", unit, String(problem))

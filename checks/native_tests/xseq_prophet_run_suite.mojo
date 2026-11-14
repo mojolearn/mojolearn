@@ -28,7 +28,7 @@ def _refuses(problem: Error, text: String) raises:
     require(String(problem) == text, "refusal text: got '" + String(problem) + "', expected '" + text + "'")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         prophet_run_check_days(0)
         try:
@@ -148,7 +148,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL xseq prophet run case", unit, String(problem))

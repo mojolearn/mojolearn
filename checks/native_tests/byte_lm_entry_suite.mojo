@@ -191,7 +191,7 @@ def session_case(op: Int) raises:
         raise Error("unknown byte LM session case")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = byte_lm_glue_ref(_key())
     var trainer = byte_lm_trainer_ref(_key())
     if unit == BG_NUMERIC_MODE:  # host_compat_mode
@@ -256,7 +256,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL byte LM entry case", unit, String(problem))

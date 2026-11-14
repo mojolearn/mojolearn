@@ -376,7 +376,7 @@ def _new_interleaved(blk: _Block) raises -> List[List[Float32]]:
     return out^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit >= 4:
         var code4 = OPS_M1_STEP if unit == 4 else OPS_M2_STEP
         var name4 = String("Mamba-1") if code4 == OPS_M1_STEP else String("Mamba-2")
@@ -398,7 +398,7 @@ def _run_gpu(mut report: Report) raises:
     var cases = report.cases(MAMBA12_FORWARD_EXEC_CASES)
     for unit in range(MAMBA12_FORWARD_EXEC_CASES):  # driver-loop: cases share one device and the program cache (module docstring)
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
     mamba_block_cache_clear()

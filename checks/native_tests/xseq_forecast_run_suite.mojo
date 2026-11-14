@@ -29,7 +29,7 @@ def _refuses(problem: Error, text: String) raises:
     require(String(problem) == text, "refusal text: got '" + String(problem) + "', expected '" + text + "'")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         require(forecast_run_letter("MAN", 1) == "A" and forecast_run_letter("MAN", 2) == "N", "spec letters")
         require(forecast_run_index("NAM", "M") == 2 and forecast_run_index("AM", "A") == 0, "letter index")
@@ -159,7 +159,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL xseq forecast run case", unit, String(problem))

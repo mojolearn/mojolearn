@@ -58,21 +58,21 @@ comptime _REDUCE_MEAN = 0
 
 # ------------------------------------------------------------------ fixtures on disk
 
-def load_f32(case: String, name: String, count: Int) raises -> List[Float32]:
+def load_f32(case_index: String, name: String, count: Int) raises -> List[Float32]:
     var result = List[Float32](length=count, fill=0)
-    with open(_DIR + case + "-" + name + ".f32", "r") as file:
+    with open(_DIR + case_index + "-" + name + ".f32", "r") as file:
         var bytes = file.read_bytes()
-        require(len(bytes) == count * 4, "ops_higher input fixture extent changed: " + case + "-" + name)
+        require(len(bytes) == count * 4, "ops_higher input fixture extent changed: " + case_index + "-" + name)
         unsafe_memcpy(dest=result.unsafe_ptr().bitcast[UInt8](), src=bytes.unsafe_ptr(), count=count * 4)
         _ = bytes^
     return result^
 
 
-def load_f64(case: String, name: String, count: Int) raises -> List[Float64]:
+def load_f64(case_index: String, name: String, count: Int) raises -> List[Float64]:
     var result = List[Float64](length=count, fill=0)
-    with open(_DIR + case + "-" + name + ".f64", "r") as file:
+    with open(_DIR + case_index + "-" + name + ".f64", "r") as file:
         var bytes = file.read_bytes()
-        require(len(bytes) == count * 8, "ops_higher oracle fixture extent changed: " + case + "-" + name)
+        require(len(bytes) == count * 8, "ops_higher oracle fixture extent changed: " + case_index + "-" + name)
         unsafe_memcpy(dest=result.unsafe_ptr().bitcast[UInt8](), src=bytes.unsafe_ptr(), count=count * 8)
         _ = bytes^
     return result^

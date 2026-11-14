@@ -476,7 +476,7 @@ def case_chan_copy_m() raises:
     _refuses_call(XC_CHAN_COPY_M, List[Int](), [0], "the CNN binding has no x_cnn_chan_copy_m")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         case_res_alloc()
         return
@@ -645,7 +645,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL x_cnn entry case", unit, String(problem))

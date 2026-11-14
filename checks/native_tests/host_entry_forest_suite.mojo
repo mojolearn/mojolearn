@@ -166,7 +166,7 @@ def grove_cases() raises:
     _ = f^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = fh_ref(_key())
     if unit == 0:
         var f = Fixture(2)
@@ -276,7 +276,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL host forest entry case", unit, String(problem))

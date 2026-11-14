@@ -51,7 +51,7 @@ def precondition_unpublished() raises:
     raise Error("an unpublished ridge multi table did not refuse")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = ridge_multi_ref(_key())
     if unit == 0:
         var x: List[Float32] = [1.0, 2.0, 3.0, 4.0]
@@ -139,7 +139,7 @@ def run_checks() raises:
         var failed = 0
         for unit in range(RIDGE_MULTI_CASES):  # driver-loop: device cases share one device context
             try:
-                case(unit)
+                run_case(unit)
             except problem:
                 failed += 1
                 print("FAIL ridge multi entry case", unit, String(problem))

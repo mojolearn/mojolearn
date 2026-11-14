@@ -83,7 +83,7 @@ def _fake() -> XseqNeuralEntry:
     return XseqNeuralEntry(fake_entry, 0)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         require(xseq_run_shape_text(List[Int]()) == "()" and xseq_run_shape_text([5]) == "(5,)"
                 and xseq_run_shape_text([2, 3]) == "(2, 3)", "shape text")
@@ -308,7 +308,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL xseq neural run case", unit, String(problem))

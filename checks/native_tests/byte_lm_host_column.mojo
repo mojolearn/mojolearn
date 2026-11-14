@@ -169,7 +169,7 @@ def finite_bits(bits: Int) -> Bool:
     return (UInt32(bits) & UInt32(0x7F800000)) != UInt32(0x7F800000)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var cfg = shape()
     var n = cfg.n_total()
     var zeros = filled(n, Float32(0))
@@ -253,7 +253,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(BYTE_LM_HOST_COLUMN_CASES)
     def task(unit: Int) {imm cases}:
         try:
-            case(unit)
+            run_case(unit)
         except error:
             cases.fail(unit, error)
     report.parallel(task, BYTE_LM_HOST_COLUMN_CASES)

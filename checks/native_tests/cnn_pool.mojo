@@ -211,7 +211,7 @@ def _ceil_case(k: Int, include_pad: Bool, divisor: Int) -> PoolCase:
     return PoolCase(2, 2, 3, 3, 1, 1, 1, 1, include_pad, True, divisor)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var shape: List[Int] = [2, 3, 6, 7]
     if unit < 8:
         var k = unit // 2
@@ -243,7 +243,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(CNN_POOL_UNITS)
     def task(unit: Int) {imm cases}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
     report.parallel(task, CNN_POOL_UNITS)

@@ -428,7 +428,7 @@ def _basic_block(k: Int) raises:
     _ = wd^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         _dropout()
     elif unit == 1:
@@ -445,7 +445,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(CNN_BLOCKS_UNITS)
     def task(unit: Int) {imm cases}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
     report.parallel(task, CNN_BLOCKS_UNITS)

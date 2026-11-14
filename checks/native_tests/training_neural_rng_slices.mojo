@@ -80,7 +80,7 @@ def _dropout() raises:
         require((dx[i] != 0) == (fwd[i] != 0), "the backward did not replay the forward's mask at word " + String(i))
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         _stream(RNG_UNIFORM, -0.5, 1.0, "uniform")
     elif unit == 1:
@@ -93,7 +93,7 @@ def _run_cpu(mut report: Report) raises:
     var cases = report.cases(NEURAL_RNG_UNITS)
     def task(unit: Int) {imm cases}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             cases.fail(unit, problem)
     report.parallel(task, NEURAL_RNG_UNITS)

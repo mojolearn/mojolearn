@@ -32,7 +32,7 @@ def _refuses(problem: Error, text: String) raises:
     require(String(problem) == text, "refusal text: got '" + String(problem) + "', expected '" + text + "'")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         require(graph_run_same_shape([2, 3], [2, 3]) and not graph_run_same_shape([2, 3], [3, 2])
                 and not graph_run_same_shape([2], [2, 1]), "same shape")
@@ -190,7 +190,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL x_cnn graph run case", unit, String(problem))
