@@ -283,6 +283,14 @@ check-native-pca-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_C
 check-native-pca-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_native_gpu.mojo"
 check-native-logistic-label-weights-cpu = "mojo run -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/logistic_label_weights_cpu.mojo"
 check-native-logistic-label-weights-gpu = "mojo run -I . checks/native_tests/logistic_label_weights_gpu.mojo"
+# Lane tmig-lm-1 (2026-11-14): byte LM and embedding tests moved from Python.
+check-native-byte-lm-host-column-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/byte_lm_host_column_cpu.mojo"
+check-native-byte-lm-trainer-session-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/byte_lm_trainer_session_cpu.mojo"
+check-native-byte-lm-trainer-session-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/byte_lm_trainer_session_gpu.mojo"
+check-native-byte-lm-parallel-byte-native-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/byte_lm_parallel_byte_native_gpu.mojo"
+check-native-byte-lm-models-loader-f16-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/byte_lm_models_loader_f16_cpu.mojo"
+check-native-byte-lm-models-loader-f16-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/byte_lm_models_loader_f16_gpu.mojo"
+check-native-embedding-surface-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/embedding_surface_gpu.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
 check-device-zero-memset = "mojo run -D MOJOLEARN_2560_MEMSET_FILL=1 -I . core/device_zero_check.mojo"
