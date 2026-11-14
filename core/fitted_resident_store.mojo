@@ -53,10 +53,19 @@ drops only the store's references. The lock helpers do not raise (lesson 6).
 
 NUMERICS. The device copy is the same bytes the host array holds and the
 kernels read it where they read the per-call upload: no bit changes.
+
+THE HELD QUERY (lane fix-svc-query-resident, 2026-11-14). A live lease also
+holds its model's predict query buffers (`QueryXBuffers`,
+core/query_x_held.mojo): `fitted_query_take` hands them to one call,
+`fitted_query_put` takes them back after the call (kept only while the lease
+is live and their bytes fit the cap), and the lease's close frees them with
+its fitted copies. They are not in the LRU byte count: one per live model,
+bounded by the cap each.
 """
 from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.ctx_key import ctx_cache_key
+from core.query_x_held import QueryXBuffers
 
 # Slots per lease: one per fitted machine of a model. A model with more
 # machines than this keeps the per-call upload for the rest (a key-space
@@ -139,6 +148,8 @@ struct FittedResidentStore(Defaultable, Movable):
     var bytes: Int
     var cap: Int
     var uploads: Int
+    # The held predict query of each live lease (see the module note).
+    var queries: Dict[Int, QueryXBuffers]
     # One lock word (see the module note).
     var lock: List[Int64]
 
@@ -150,6 +161,7 @@ struct FittedResidentStore(Defaultable, Movable):
         self.bytes = 0
         self.cap = 0
         self.uploads = 0
+        self.queries = Dict[Int, QueryXBuffers]()
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
@@ -206,18 +218,62 @@ def _pop_lease_locked(store: _StorePtr, lease: Int) -> List[FittedResidentEntry]
     return popped^
 
 
+def _pop_query_locked(store: _StorePtr, lease: Int) -> Optional[QueryXBuffers]:
+    """`lease`'s held query, out of the store (caller holds the lock)."""
+    if lease not in store[].queries:
+        return Optional[QueryXBuffers]()
+    try:
+        return Optional[QueryXBuffers](store[].queries.pop(lease))
+    except:
+        return Optional[QueryXBuffers]()
+
+
 def fitted_lease_close(store: _StorePtr, lease: Int):
-    """Free every device copy of `lease`; later calls naming it get per-call
-    buffers. Quiet on a lease already closed. Never raises (it runs from a
-    native finalizer)."""
+    """Free every device copy of `lease` and its held query; later calls
+    naming it get per-call buffers. Quiet on a lease already closed. Never
+    raises (it runs from a native finalizer)."""
     if lease <= 0:
         return
     _store_lock(store)
     var popped = _pop_lease_locked(store, lease)
+    var query = _pop_query_locked(store, lease)
     _store_unlock(store)
     # Destroyed outside the lock: a predict still running holds its own
     # handle copies of the context and the buffers.
     _ = popped^
+    _ = query^
+
+
+def fitted_query_take(store: _StorePtr, lease: Int) -> Optional[QueryXBuffers]:
+    """The held query buffers of `lease` for one call (empty when the lease
+    holds none or another call has them). Never raises."""
+    if lease <= 0:
+        return Optional[QueryXBuffers]()
+    _store_lock(store)
+    var taken = _pop_query_locked(store, lease)
+    _store_unlock(store)
+    return taken^
+
+
+def fitted_query_put(store: _StorePtr, lease: Int, var bufs: QueryXBuffers):
+    """Give a call's held query buffers back to `lease`: kept while the
+    lease is live, the slot is empty and their bytes fit the cap; dropped
+    otherwise (outside the lock). Never raises."""
+    var dropped = Optional[QueryXBuffers]()
+    _store_lock(store)
+    var keep = (
+        lease > 0
+        and lease in store[].live
+        and lease not in store[].queries
+        and store[].cap > 0
+        and bufs.capacity * 4 <= store[].cap
+    )
+    if keep:
+        store[].queries[lease] = bufs^
+    else:
+        dropped = Optional[QueryXBuffers](bufs^)
+    _store_unlock(store)
+    _ = dropped^
 
 
 def _upload_all(ctx: DeviceContext, srcs: List[Int], counts: List[Int]) raises -> List[DeviceBuffer[DType.float32]]:
@@ -338,8 +394,8 @@ def fitted_resident_view(store: _StorePtr, ctx: DeviceContext, lease: Int, slot:
 
 
 def fitted_resident_stats(store: _StorePtr) -> List[Int]:
-    """[live leases, kept entries, kept bytes, uploads so far, cap bytes]:
-    a test-only readout."""
+    """[live leases, kept entries, kept bytes, uploads so far, cap bytes,
+    held queries]: a test-only readout."""
     _store_lock(store)
     var out = List[Int]()
     out.append(len(store[].live))
@@ -347,5 +403,6 @@ def fitted_resident_stats(store: _StorePtr) -> List[Int]:
     out.append(store[].bytes)
     out.append(store[].uploads)
     out.append(store[].cap)
+    out.append(len(store[].queries))
     _store_unlock(store)
     return out^

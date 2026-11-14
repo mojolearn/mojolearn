@@ -35,11 +35,23 @@ a flagged X is the input's fault, and the door's refusal wins.
 
 Numerics: none. The same bytes reach the same kernels (a copy or a gather
 of the same words in the same order); the tests are predicates on bits.
+
+HELD (lane fix-svc-query-resident, 2026-11-14; core/query_x_held.mojo). The
+buffers live in a `QueryXBuffers`. A resident model's predict asks
+`resident_query_x(store, ctx, lease, ...)`: with a live lease and host words
+it reuses the lease's held buffers (no device or pinned allocation, no fill
+launch; a prefix view when the call has fewer rows than the largest seen)
+and `resident_query_x_done` gives them back after the call's
+synchronisation. A fold, lease 0, or `-D MOJOLEARN_IDN_QUERY_X_HELD_OFF`
+take the per-call buffers above. Read the words through `finite_word()`
+and `range_word()` (a held word is compared with the call's mark).
 """
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host import DeviceBuffer, DeviceContext
 from core.admitted_finite_status import enqueue_finite_status
-from core.device_zero import enqueue_fill
 from core.msel_device_x import msel_device_x_f32, msel_fold_entry_context
+from core.query_x_held import IDN_QUERY_X_HELD, QueryXBuffers
+from core.ctx_key import ctx_cache_key
+from core.fitted_resident_store import FittedResidentStore, fitted_query_put, fitted_query_take
 
 
 struct QueryFold(ImplicitlyCopyable, Movable):
@@ -76,52 +88,123 @@ def query_context(fold: QueryFold, family: DeviceContext) raises -> DeviceContex
 
 struct DeviceQueryX(Movable):
     """The query X on the device (`x`, rows x cols float32, C order) and its
-    two status words (`words`: 0 finite, 1 index range), see the module
-    note."""
+    buffers (`bufs`: the status pair, 0 finite, 1 index range, and their
+    host copy), see the module note. `x` is `bufs.x` itself or, for held
+    buffers larger than this call, its first rows x cols floats."""
     var x: DeviceBuffer[DType.float32]
-    var status: DeviceBuffer[DType.int32]
-    var words: HostBuffer[DType.int32]
+    var bufs: QueryXBuffers
     var rows: Int
     var cols: Int
 
     def __init__(out self, ctx: DeviceContext, x_addr: Int, rows: Int, cols: Int, fold: QueryFold) raises:
+        """Per-call buffers (the form every fit X and every fold uses)."""
         if rows <= 0 or cols <= 0:
             raise Error("device query X: rows and columns must be positive, got "
                         + String(rows) + " x " + String(cols))
         var n = rows * cols
-        # Built in locals, then moved into the fields (no field is read
-        # before every field is set).
-        var x = ctx.enqueue_create_buffer[DType.float32](n)
-        var status = ctx.enqueue_create_buffer[DType.int32](2)
-        enqueue_fill[DType.int32](ctx, status, Int32(0))
+        # x, status (filled 0) and the pinned pair (core/query_x_held.mojo).
+        var bufs = QueryXBuffers(ctx, n, False)
         if fold.active():
-            msel_device_x_f32(ctx, fold.base_id, fold.base_rows, cols, fold.index_id, rows, x,
-                              status.unsafe_ptr(), 0)
+            msel_device_x_f32(ctx, fold.base_id, fold.base_rows, cols, fold.index_id, rows, bufs.x,
+                              bufs.status.unsafe_ptr(), 0)
         else:
             if x_addr == 0:
                 raise Error("device query X: the query has a null address")
-            ctx.enqueue_copy(dst_buf=x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr))
-            enqueue_finite_status(ctx, x.unsafe_ptr(), n, status.unsafe_ptr(), 0)
+            ctx.enqueue_copy(dst_buf=bufs.x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr))
+            enqueue_finite_status(ctx, bufs.x.unsafe_ptr(), n, bufs.status.unsafe_ptr(), 0)
         # Read back with the entry's result: valid after its next
         # synchronisation (the stream orders this copy before the kernels).
-        var words = ctx.enqueue_create_host_buffer[DType.int32](2)
-        ctx.enqueue_copy(dst_ptr=words.unsafe_ptr(), src_buf=status)
-        self.x = x^
-        self.status = status^
-        self.words = words^
+        ctx.enqueue_copy(dst_ptr=bufs.words.unsafe_ptr(), src_buf=bufs.status)
+        self.x = bufs.x.copy()
+        self.bufs = bufs^
         self.rows = rows
         self.cols = cols
 
+    def __init__(out self, *, var x: DeviceBuffer[DType.float32], var bufs: QueryXBuffers, rows: Int, cols: Int):
+        self.x = x^
+        self.bufs = bufs^
+        self.rows = rows
+        self.cols = cols
+
+    @staticmethod
+    def held(ctx: DeviceContext, x_addr: Int, rows: Int, cols: Int, var prior: Optional[QueryXBuffers]) raises -> DeviceQueryX:
+        """Host words at `x_addr` into held buffers: `prior` (a model's held
+        buffers, when it has some for this context and at least this many
+        floats) or new ones of exactly this call's size (they replace
+        `prior`: grow only). One H2D copy, the status kernel with this
+        call's mark, one D2H copy of the pair; no allocation, no fill."""
+        if rows <= 0 or cols <= 0:
+            raise Error("device query X: rows and columns must be positive, got "
+                        + String(rows) + " x " + String(cols))
+        if x_addr == 0:
+            raise Error("device query X: the query has a null address")
+        var n = rows * cols
+        var device = ctx_cache_key(ctx)
+        var reuse = False
+        if prior:
+            reuse = prior.value().fits(device, n)
+        var bufs: QueryXBuffers
+        if reuse:
+            bufs = prior.take()
+        else:
+            # Another context, or more rows than held: the old buffers go.
+            _ = prior^
+            bufs = QueryXBuffers(ctx, n, True)
+        bufs.next_mark()
+        var x: DeviceBuffer[DType.float32]
+        if n == bufs.capacity:
+            x = bufs.x.copy()
+        else:
+            x = bufs.x.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_buf=x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr))
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n, bufs.status.unsafe_ptr(), 0, bufs.mark)
+        ctx.enqueue_copy(dst_ptr=bufs.words.unsafe_ptr(), src_buf=bufs.status)
+        return DeviceQueryX(x=x^, bufs=bufs^, rows=rows, cols=cols)
+
     def finite_word(self) -> Int32:
         """1 when X held a NaN or an infinity (after a synchronisation)."""
-        return self.words.unsafe_ptr()[0]
+        return self.bufs.finite_word()
 
     def range_word(self) -> Int32:
         """1 when a fold index was out of range (after a synchronisation)."""
-        return self.words.unsafe_ptr()[1]
+        return self.bufs.range_word()
+
+    def words_addr(self) -> Int:
+        """The pinned status pair's host address (per-call buffers: a
+        nonzero word is flagged)."""
+        return Int(self.bufs.words.unsafe_ptr())
 
     def flagged(self, ctx: DeviceContext) raises -> Bool:
         """Synchronise and report a flagged X: an entry's error path asks
         this before it re-raises a kernel's own refusal."""
         ctx.synchronize()
         return self.finite_word() != 0 or self.range_word() != 0
+
+    def release(deinit self) -> QueryXBuffers:
+        """The buffers, for the holder to keep (the x view goes first)."""
+        _ = self.x^
+        return self.bufs^
+
+
+comptime _FittedStorePtr = UnsafePointer[FittedResidentStore, MutAnyOrigin]
+
+
+def resident_query_x(store: _FittedStorePtr, ctx: DeviceContext, lease: Int, x_addr: Int, rows: Int, cols: Int,
+                     fold: QueryFold) raises -> DeviceQueryX:
+    """The query of a resident model's predict: the lease's held buffers
+    for host words under a live lease (IDN_QUERY_X_HELD), else per-call
+    buffers. Pair with `resident_query_x_done` after the call's
+    synchronisation."""
+    comptime if IDN_QUERY_X_HELD:
+        if lease > 0 and not fold.active():
+            return DeviceQueryX.held(ctx, x_addr, rows, cols, fitted_query_take(store, lease))
+    return DeviceQueryX(ctx, x_addr, rows, cols, fold)
+
+
+def resident_query_x_done(store: _FittedStorePtr, lease: Int, var qx: DeviceQueryX):
+    """Give held buffers back to `lease` (after the call's synchronisation,
+    its words read); per-call buffers are freed. Never raises."""
+    if qx.bufs.held():
+        fitted_query_put(store, lease, qx^.release())
+    else:
+        _ = qx^

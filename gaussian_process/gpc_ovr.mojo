@@ -48,7 +48,7 @@ from checks.soft_f64 import SF64_ONE, sf64_sub
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.device_zero import enqueue_fill
-from core.device_query_x import DeviceQueryX, QueryFold, query_context
+from core.device_query_x import QueryFold, query_context, resident_query_x, resident_query_x_done
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.gp_sabotage import GP_SAB_NONE
 from gaussian_process.checks.kernels import (
@@ -511,7 +511,9 @@ def gpc_predict_all_device(
     else:
         dx = _gpc_upload_checked(ctx, xt_addr, n_train, n_features, String("X_train"))
     # TOMBSTONE: _gpc_upload_checked on X_star (synchronising scan, DEVIATION 1768 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
-    var qx = DeviceQueryX(ctx, xs_addr, n_star, n_features, fold)
+    # fix-svc-query-resident: the lease's held query buffers (use_lease 0,
+    # -1 or a fold: per-call; core/query_x_held.mojo IDN_QUERY_X_HELD).
+    var qx = resident_query_x(store, ctx, use_lease, xs_addr, n_star, n_features, fold)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dkc = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n_train, n_star))
@@ -524,7 +526,8 @@ def gpc_predict_all_device(
     # The query's status words were copied before the synchronisation above.
     var words = (qx.finite_word(), qx.range_word())
     _ = dx^
-    _ = qx^
+    # Back to the lease after the synchronisation above (words read).
+    resident_query_x_done(store, use_lease, qx^)
     _ = dls^
     _ = dstack^
 

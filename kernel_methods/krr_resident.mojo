@@ -31,6 +31,13 @@ WHAT DOES NOT CHANGE. The upload is `_upload_ptr`, the pointer route's
 (KRR_IDN_PTR_IN), and the predict is `kernel_ridge_predict_dev`, the body
 `kernel_ridge_predict_ptr_into` runs after its own uploads of the same
 bytes: the same launches in the same order, so the bits are the same.
+
+THE HELD QUERY (lane fix-svc-query-resident, 2026-11-14). A handle also
+holds its predict query buffers (`QueryXBuffers`, core/query_x_held.mojo):
+taken by one predict under the lock, given back after its synchronisation
+(kept while the handle is live and the bytes fit an eighth of the device
+memory, read once), freed with the handle at release. `-D
+MOJOLEARN_IDN_QUERY_X_HELD_OFF` keeps the per-call buffers.
 """
 from std.atomic import Atomic, Ordering
 
@@ -38,6 +45,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.identity_trace import IdentityTrace
 from core.device_query_x import DeviceQueryX, QueryFold
+from core.query_x_held import IDN_QUERY_X_HELD, QueryXBuffers
 from svm.impl.svm_parameter import KernelParams
 from kernel_methods.estimator import (
     _family_ctx,
@@ -85,12 +93,19 @@ struct ResidentKernelRidge(Movable):
 
 struct KernelRidgeResidentRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentKernelRidge]
+    # The held predict query of each live handle (see the module note) and
+    # the byte bound one may keep (an eighth of the device memory, read at
+    # the first give-back; 0 until then).
+    var queries: Dict[Int, QueryXBuffers]
+    var query_cap: Int
     var next_id: Int
     # One lock word: prepare and predict run with the GIL released (see the module note).
     var lock: List[Int64]
 
     def __init__(out self):
         self.entries = Dict[Int, ResidentKernelRidge]()
+        self.queries = Dict[Int, QueryXBuffers]()
+        self.query_cap = 0
         self.next_id = 1
         self.lock = List[Int64](length=1, fill=Int64(0))
 
@@ -178,12 +193,61 @@ def _krr_locked_pop(state: UnsafePointer[KernelRidgeResidentRegistry, MutAnyOrig
         raise error^
 
 
+def _krr_query_take(state: UnsafePointer[KernelRidgeResidentRegistry, MutAnyOrigin],
+                    handle: Int) raises -> Optional[QueryXBuffers]:
+    """The handle's held query buffers for one predict (empty when it holds
+    none or another predict has them)."""
+    var taken = Optional[QueryXBuffers]()
+    _krr_lock(state)
+    if handle in state[].queries:
+        try:
+            taken = Optional[QueryXBuffers](state[].queries.pop(handle))
+        except:
+            pass
+    _krr_unlock(state)
+    return taken^
+
+
+def _krr_query_put(state: UnsafePointer[KernelRidgeResidentRegistry, MutAnyOrigin], ctx: DeviceContext,
+                   handle: Int, var qx: DeviceQueryX) raises:
+    """Give a predict's held query buffers back to the handle (kept while
+    the handle is live, its slot empty and the bytes fit `query_cap`);
+    per-call buffers and refused ones are freed outside the lock."""
+    if not qx.bufs.held():
+        _ = qx^
+        return
+    if state[].query_cap == 0:
+        # Read once per process (the fitted store's rule: an eighth of the
+        # device memory), outside the lock; a racing second read writes the
+        # same value.
+        var mem = ctx.get_memory_info()
+        var cap = Int(mem[1]) // 8
+        state[].query_cap = cap if cap > 0 else 1
+    var bufs = qx^.release()
+    var dropped = Optional[QueryXBuffers]()
+    _krr_lock(state)
+    var keep = (
+        handle in state[].entries
+        and handle not in state[].queries
+        and bufs.capacity * 4 <= state[].query_cap
+    )
+    if keep:
+        state[].queries[handle] = bufs^
+    else:
+        dropped = Optional[QueryXBuffers](bufs^)
+    _krr_unlock(state)
+    _ = dropped^
+
+
 def kernel_ridge_resident_release(handle: Int) raises:
-    """Drop the device copies; a released handle is refused by every later call."""
+    """Drop the device copies and the held query; a released handle is
+    refused by every later call."""
     var state = _krr_registry()
     var released = _krr_locked_pop(state, handle)
+    var query = _krr_query_take(state, handle)
     # Destroyed outside the lock: a predict still running holds its own
     # handle copies of the context and the buffers.
+    _ = query^
     _ = released^
 
 
@@ -236,11 +300,17 @@ def kernel_ridge_predict_resident[out_origin: MutOrigin, //](
             + String(d) + " with " + String(t)
         )
     # TOMBSTONE: _upload_checked on the predict query (synchronising scan, DEVIATION 1686 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
-    var qx = DeviceQueryX(view.ctx, xnew_addr, n_query, d, QueryFold.none())
+    # fix-svc-query-resident: the handle's held query buffers (no device or
+    # pinned allocation, no fill launch per call; core/query_x_held.mojo).
+    var qx: DeviceQueryX
+    comptime if IDN_QUERY_X_HELD:
+        qx = DeviceQueryX.held(view.ctx, xnew_addr, n_query, d, _krr_query_take(state, handle))
+    else:
+        qx = DeviceQueryX(view.ctx, xnew_addr, n_query, d, QueryFold.none())
     # kernel_ridge_predict_dev synchronises before its read-back: the status
     # words copied after the query are valid below.
     kernel_ridge_predict_dev(view.ctx, qx.x, view.x_fit, view.dual, n, d, t, kp, n_query, output, trace)
     var words = (qx.finite_word(), qx.range_word())
-    _ = qx^
+    _krr_query_put(state, view.ctx, handle, qx^)
     _ = view^
     return words

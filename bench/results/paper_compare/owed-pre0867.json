@@ -180,6 +180,10 @@
   "nv-mul-rn-asm": {
    "define": "MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD",
    "status": "define in code (checks/numerics.mojo IDN_NV_MUL_RN_ASM_OLD; nv_mul_rn_kernel_f32/_f64, nv_flush_by_one_kernel; callers checks/numerics.mojo ftz (NVIDIA hardware flush) and pinned_mul_f32/_f64 (every identical_mul/identical_mul64), neighbors/checks/pinned_distance_tile.mojo _rt_step, gemm/checks/gemm_identical.mojo _tuned_step/_fold_flush, transformer/impl/llama/fused_attention.mojo _step/_step_preflushed): B = PTX mul.rn.f32/.f64 and mul.rn.ftz.f32 x,1 as inline asm (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f/.d(a, b, -0.0) and llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0), schedulable like 0.8.55's llvm.nvvm.mul.rn.* intrinsics. Same IEEE word for every input (exact product plus -0.0 rounded once; the by-one product is exact), same fold order; NVIDIA identical column only (AMD is a no-change check)"
+  },
+  "query-x-held-off": {
+   "define": "MOJOLEARN_IDN_QUERY_X_HELD_OFF",
+   "status": "define in code (core/query_x_held.mojo IDN_QUERY_X_HELD): B = every resident kernel predict (SVC, SVR, GPR, GPC, KernelRidge) creating its query x, status pair (plus a fill launch) and pinned pair per call (DeviceQueryX per call, main 5005c07e74's shape); A = the buffers held by the model's lease or handle (high-water rows, grow only, prefix view for fewer rows), status pair filled once and flagged by a per-call mark, one pinned pair for the life of the model (default). Same kernels, same bytes: same bits"
   }
  },
  "rows": [
@@ -1170,6 +1174,23 @@
     "nv-mul-rn-asm"
    ],
    "decides": "keep the schedulable fma.rn spellings (A) unless the asm mul.rn / mul.rn.ftz (B) is at least as fast on NVIDIA; every NVIDIA identical kernel that calls ftz or identical_mul runs it, the lanes listed are the NV-only regressions on record. Digests must not move in either arm (neighbors/checks/knn_distance_fma_boundary_check.mojo and tools/probe_ftz_hw.mojo judge the words). If A does not compile (Mojo 1.2 rejecting llvm.nvvm.fma.rn.d or llvm.nvvm.fma.rn.ftz.f), build with the define on and record the row as not runnable"
+  },
+  {
+   "id": "fix-svc-query-resident",
+   "source": "fix-svc-query-resident (2026-11-14, best-ever history audit wave 2 rows 3-4: classical/svc/istella infer ours Xq 2.23 ms best (0.8.66) vs candidate 2.49-2.88; classical/svc/taxi 5.20 best (0.8.25) vs candidate 5.83-6.11; per-call DeviceQueryX allocations + fill launch + pinned pair since f78c468a5d): the resident predict query is held by the model",
+   "kind": "ab",
+   "lane": [
+    "svc",
+    "gpr",
+    "gpc",
+    "kernel-ridge"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "query-x-held-off"
+   ],
+   "decides": "keep the held query (A, default) unless the per-call buffers (B, -D MOJOLEARN_IDN_QUERY_X_HELD_OFF) are faster on the NVIDIA+AMD average of infer Xq, arm ours, istella and taxi (svc; gpr, gpc and kernel-ridge infer rows of the same build are read for regressions only); same kernels, same bytes: every infer hash must be equal between A and B"
   }
  ]
 }
