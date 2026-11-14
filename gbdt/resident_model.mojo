@@ -121,6 +121,11 @@ from gbdt.gpu_data.kernel.binarize import (
     pack_cindex_words_kernel,
 )
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
+from gbdt.models.add_non_symmetric_tree_doc_parallel import (
+    IDN_NS_RESIDENT_PACK,
+    NsResidentPack,
+    ns_resident_apply,
+)
 from gbdt.models.kernel.resident_ctr import (
     ResidentCtrPlan,
     enqueue_resident_ctr_expand,
@@ -353,6 +358,9 @@ struct ResidentGbdtModel(Movable):
     #: (`gbdt/models/kernel/resident_ctr.mojo`), built on the first predict
     #: of a model that needs it
     var ctr: Optional[ResidentCtrPlan]
+    #: lane fix-gbdt-prebinned-infer (`IDN_NS_RESIDENT_PACK`): a
+    #: Depthwise / Lossguide ensemble packed once, at the first predict
+    var ns_pack: Optional[NsResidentPack]
 
     def __init__(out self, text: String) raises:
         var tm = load_model_text(text)
@@ -547,10 +555,12 @@ struct ResidentGbdtModel(Movable):
         self.d_out_u64 = Optional[DeviceBuffer[DType.uint64]]()
         self.d_out_i64 = Optional[DeviceBuffer[DType.int64]]()
         self.ctr = Optional[ResidentCtrPlan]()
+        self.ns_pack = Optional[NsResidentPack]()
         self.ctx = ctx^
 
     def __deinit__(deinit self):
         # every buffer before the context it was created on (DEVIATION 1946)
+        _ = self.ns_pack^
         _ = self.ctr^
         _ = self.d_out_i64^
         _ = self.d_out_u64^
@@ -665,6 +675,21 @@ struct ResidentGbdtModel(Movable):
         `predict` itself."""
         ref ctx = self.ctx
         if not self.oblivious:
+            comptime if IDN_NS_RESIDENT_PACK:
+                # `predict`'s non-symmetric arm over the held pack: the same
+                # cursor seed, the same kernels in tree order, one drain;
+                # the per-call layout build, node staging, allocations and
+                # uploads are gone (`NsResidentPack`)
+                if not self.ns_pack:
+                    self.ns_pack = NsResidentPack(
+                        ctx, self.layout, self.tm.model.non_symmetric_models
+                    )
+                enqueue_fill(ctx, self.d_cursor.value(), Float32(self.tm.model.bias))
+                ns_resident_apply(
+                    ctx, self.ns_pack.value(), self.d_cindex.value(), n_rows,
+                    self.d_cursor.value(),
+                )
+                return
             predict(
                 self.tm.model, ctx, n_rows, self.tm.fold_counts,
                 self.d_cindex.value(), self.d_cursor.value(),

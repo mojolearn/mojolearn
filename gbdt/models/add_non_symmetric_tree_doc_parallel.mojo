@@ -37,7 +37,7 @@ gates cannot catch the thing drifting, and this file's caller is the
 boosting loop that check does not run. DEVIATION 259.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.sys.compile import is_defined
 from max.gpu import block_idx, block_dim, thread_idx
 from core.forest_experiments import C50_GB_PACKED
@@ -543,6 +543,285 @@ def add_non_symmetric_trees_packed(
     _ = h_shift^
     _ = h_mask^
     _ = h_off^
+
+#: lane fix-gbdt-prebinned-infer (2026-11-13), IDENTICAL, every vendor,
+#: default on: the resident model (`gbdt/resident_model.mojo`) packs a
+#: Depthwise / Lossguide ensemble ONCE, at its first predict, and keeps the
+#: packed node planes, leaf values and the bins buffer on the device.
+#: `add_non_symmetric_trees_packed` above, which every resident predict
+#: called through `predict`, re-ran per call: the layout build, a host pass
+#: over every node of every tree (seven planes plus the leaf values),
+#: sixteen staging and device allocations and eight uploads, and an
+#: `n_rows` bins buffer. Now a call writes the node offsets (`offset *
+#: n_rows`) and the bins buffer only when the row count changes, and
+#: enqueues the SAME two kernels per tree with the SAME arguments in the
+#: SAME tree order, then drains once: each row's cursor takes the same float
+#: adds in the same order, so no bit moves on any column and the host
+#: column is untouched. The refusals are `add_non_symmetric_trees_packed`'s,
+#: sentence for sentence, made at the same first predict.
+#: `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-call pack: the B arm of the
+#: owed A/B (bench/results/paper_compare/owed-pre0867.json row
+#: `fix-gbdt-prebinned-infer`; RUN OWED). The bit vector and C50 arms keep the
+#: per-call pack (they replace the apply this caches).
+comptime IDN_NS_RESIDENT_PACK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and IDN_NS_PREDICT_PACKED
+    and not C50_GB_PACKED
+    and not GBDT_NS_BITVEC
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+struct NsResidentPack(Movable):
+    """`add_non_symmetric_trees_packed`'s packed ensemble, held: the seven
+    node planes and the leaf values on the device, each node's feature word
+    offset (`f.offset`, times `n_rows` per call), and the per-row-count
+    pieces (the uploaded offsets and the bins buffer) of the last call."""
+
+    var n_trees: Int
+    var total_slots: Int
+    var node_at: List[Int]
+    var val_at: List[Int]
+    var nodes_of: List[Int]
+    var dims: List[Int]
+    #: `Int(f.offset)` per node slot; 0 on a constant tree's placeholder
+    var off_unit: List[Int]
+    var h_off: HostBuffer[DType.uint32]
+    var d_off: DeviceBuffer[DType.uint32]
+    var d_mask: DeviceBuffer[DType.uint32]
+    var d_shift: DeviceBuffer[DType.uint32]
+    var d_oh: DeviceBuffer[DType.uint8]
+    var d_bin: DeviceBuffer[DType.uint32]
+    var d_ls: DeviceBuffer[DType.uint32]
+    var d_rs: DeviceBuffer[DType.uint32]
+    var d_vals: DeviceBuffer[DType.float32]
+    #: the row count `d_off` holds offsets for; -1 before the first call
+    var off_rows: Int
+    var bins: Optional[DeviceBuffer[DType.uint32]]
+    var bins_rows: Int
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        layout: CompressedIndexLayout,
+        trees: List[TNonSymmetricTree],
+    ) raises:
+        """The staging of `add_non_symmetric_trees_packed`, statement for
+        statement, without the row count; one drain at the end so the
+        staging buffers can go."""
+        var n_trees = len(trees)
+        var total_slots = 0
+        var total_vals = 0
+        var node_at = List[Int](capacity=n_trees)
+        var val_at = List[Int](capacity=n_trees)
+        var nodes_of = List[Int](capacity=n_trees)
+        var dims = List[Int](capacity=n_trees)
+        for t in range(n_trees):  # small-loop(n_trees: trees): sizes each tree's node and leaf slabs once per model, model parameters
+            ref tree = trees[t]
+            var dim = tree.dim
+            if dim < 1:
+                raise Error("add_non_symmetric_tree_to_cursor: dim " + String(dim))
+            var n_bins = tree.bin_count()
+            if len(tree.leaf_values) != n_bins * dim:
+                raise Error(
+                    "add_non_symmetric_tree_to_cursor: "
+                    + String(len(tree.leaf_values))
+                    + " leaf values for " + String(n_bins) + " bins x "
+                    + String(dim)
+                )
+            var n_nodes = len(tree.model_structure.nodes)
+            if len(tree.model_structure.split_types) != n_nodes:
+                raise Error(
+                    "compute_non_symmetric_bins_for_model: " + String(n_nodes)
+                    + " nodes and "
+                    + String(len(tree.model_structure.split_types))
+                    + " split types"
+                )
+            node_at.append(total_slots)
+            val_at.append(total_vals)
+            nodes_of.append(n_nodes)
+            dims.append(dim)
+            total_slots += n_nodes if n_nodes > 0 else 1
+            total_vals += n_bins * dim
+        var slot_cap = total_slots if total_slots > 0 else 1
+        var val_cap = total_vals if total_vals > 0 else 1
+
+        var off_unit = List[Int](length=slot_cap, fill=0)
+        var h_off = ctx.enqueue_create_host_buffer[DType.uint32](slot_cap)
+        var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](slot_cap)
+        var h_shift = ctx.enqueue_create_host_buffer[DType.uint32](slot_cap)
+        var h_oh = ctx.enqueue_create_host_buffer[DType.uint8](slot_cap)
+        var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](slot_cap)
+        var h_ls = ctx.enqueue_create_host_buffer[DType.uint32](slot_cap)
+        var h_rs = ctx.enqueue_create_host_buffer[DType.uint32](slot_cap)
+        var h_vals = ctx.enqueue_create_host_buffer[DType.float32](val_cap)
+        ctx.synchronize()
+        for i in range(slot_cap):  # small-loop(slot_cap: node slots of the ensemble): the placeholder records, once per model, model parameters
+            h_off.unsafe_ptr().unsafe_store(i, UInt32(0))
+            h_mask.unsafe_ptr().unsafe_store(i, UInt32(0))
+            h_shift.unsafe_ptr().unsafe_store(i, UInt32(0))
+            h_oh.unsafe_ptr().unsafe_store(i, UInt8(0))
+            h_bin.unsafe_ptr().unsafe_store(i, UInt32(0))
+            h_ls.unsafe_ptr().unsafe_store(i, UInt32(1))
+            h_rs.unsafe_ptr().unsafe_store(i, UInt32(1))
+        if total_vals == 0:
+            h_vals.unsafe_ptr().unsafe_store(0, Float32(0.0))
+        for t in range(n_trees):  # small-loop(n_trees: trees): stages each tree's node descriptors and leaf values once per model, model parameters
+            ref tree = trees[t]
+            ref structure = tree.model_structure
+            var base = node_at[t]
+            for i in range(len(structure.nodes)):  # small-loop(structure.nodes: nodes of one tree): stages one tree's node descriptors, model parameters
+                ref n = structure.nodes[i]
+                var fid = Int(n.feature_id)
+                if fid < 0 or fid >= len(layout.features):
+                    raise Error(
+                        "compute_non_symmetric_bins_for_model: node " + String(i)
+                        + " splits on feature " + String(fid) + " of "
+                        + String(len(layout.features))
+                    )
+                ref f = layout.features[fid]
+                var take_bin = Int(structure.split_types[i]) == BIN_SPLIT_TAKE_BIN
+                if take_bin != f.one_hot_feature:
+                    raise Error(
+                        "non-symmetric node " + String(i) + " is a "
+                        + String("TakeBin" if take_bin else "TakeGreater")
+                        + " split on feature " + String(fid)
+                        + ", which the layout says is "
+                        + String("one-hot" if f.one_hot_feature else "ordered")
+                    )
+                off_unit[base + i] = Int(f.offset)
+                h_mask.unsafe_ptr().unsafe_store(base + i, f.mask)
+                h_shift.unsafe_ptr().unsafe_store(base + i, f.shift)
+                h_oh.unsafe_ptr().unsafe_store(
+                    base + i, UInt8(1) if take_bin else UInt8(0)
+                )
+                h_bin.unsafe_ptr().unsafe_store(base + i, UInt32(Int(n.bin)))
+                h_ls.unsafe_ptr().unsafe_store(
+                    base + i, UInt32(Int(n.left_subtree))
+                )
+                h_rs.unsafe_ptr().unsafe_store(
+                    base + i, UInt32(Int(n.right_subtree))
+                )
+            var vbase = val_at[t]
+            for i in range(len(tree.leaf_values)):  # small-loop(leaf_values: leaves of one tree): stages one tree's leaf values, model parameters
+                h_vals.unsafe_ptr().unsafe_store(vbase + i, tree.leaf_values[i])
+
+        var d_off = ctx.enqueue_create_buffer[DType.uint32](slot_cap)
+        var d_mask = ctx.enqueue_create_buffer[DType.uint32](slot_cap)
+        var d_shift = ctx.enqueue_create_buffer[DType.uint32](slot_cap)
+        var d_oh = ctx.enqueue_create_buffer[DType.uint8](slot_cap)
+        var d_bin = ctx.enqueue_create_buffer[DType.uint32](slot_cap)
+        var d_ls = ctx.enqueue_create_buffer[DType.uint32](slot_cap)
+        var d_rs = ctx.enqueue_create_buffer[DType.uint32](slot_cap)
+        var d_vals = ctx.enqueue_create_buffer[DType.float32](val_cap)
+        ctx.enqueue_copy(dst_buf=d_mask, src_ptr=h_mask.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_shift, src_ptr=h_shift.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_oh, src_ptr=h_oh.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_bin, src_ptr=h_bin.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_ls, src_ptr=h_ls.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_rs, src_ptr=h_rs.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
+        ctx.synchronize()
+        # past the drain: the uploads above read the staging buffers
+        _ = h_vals^
+        _ = h_rs^
+        _ = h_ls^
+        _ = h_bin^
+        _ = h_oh^
+        _ = h_shift^
+        _ = h_mask^
+
+        self.n_trees = n_trees
+        self.total_slots = slot_cap
+        self.node_at = node_at^
+        self.val_at = val_at^
+        self.nodes_of = nodes_of^
+        self.dims = dims^
+        self.off_unit = off_unit^
+        self.h_off = h_off^
+        self.d_off = d_off^
+        self.d_mask = d_mask^
+        self.d_shift = d_shift^
+        self.d_oh = d_oh^
+        self.d_bin = d_bin^
+        self.d_ls = d_ls^
+        self.d_rs = d_rs^
+        self.d_vals = d_vals^
+        self.off_rows = -1
+        self.bins = Optional[DeviceBuffer[DType.uint32]]()
+        self.bins_rows = -1
+
+
+def ns_resident_apply(
+    ctx: DeviceContext,
+    mut pack: NsResidentPack,
+    mut cindex: DeviceBuffer[DType.uint32],
+    n_rows: Int,
+    mut cursor: DeviceBuffer[DType.float32],
+) raises:
+    """`add_non_symmetric_trees_packed`'s launches over a held pack
+    (`IDN_NS_RESIDENT_PACK`): the node offsets are rewritten and the bins
+    buffer reallocated only when the row count changes (the previous call's
+    drain has finished the last upload from `h_off`), then the same two
+    kernels per tree, in tree order, and ONE drain."""
+    if pack.n_trees == 0:
+        ctx.synchronize()
+        return
+    if pack.off_rows != n_rows:
+        var ho = pack.h_off.unsafe_ptr()
+        for i in range(pack.total_slots):  # small-loop(total_slots: node slots of the ensemble): the per-row-count word offsets, model parameters
+            ho.unsafe_store(i, UInt32(pack.off_unit[i] * n_rows))
+        ctx.enqueue_copy(dst_buf=pack.d_off, src_ptr=ho)
+        pack.off_rows = n_rows
+    if pack.bins_rows != n_rows:
+        # exact size, no high-water cache: the old buffer goes first
+        pack.bins = None
+        pack.bins = ctx.enqueue_create_buffer[DType.uint32](
+            n_rows if n_rows > 0 else 1
+        )
+        pack.bins_rows = n_rows
+    var bin_blocks = (n_rows + NS_BINS_BLOCK_SIZE - 1) // NS_BINS_BLOCK_SIZE
+    if bin_blocks < 1:
+        bin_blocks = 1
+    var per_block = ABMV_BLOCK * ABMV_ELEMENTS
+    var add_blocks = (n_rows + per_block - 1) // per_block
+    if add_blocks < 1:
+        add_blocks = 1
+    # driver-loop: over the trees of the ensemble (model structure)
+    for t in range(pack.n_trees):
+        var base = pack.node_at[t]
+        var vbase = pack.val_at[t]
+        ctx.enqueue_function[compute_non_symmetric_decision_tree_bins_kernel](
+            pack.d_off.unsafe_ptr() + base,
+            pack.d_mask.unsafe_ptr() + base,
+            pack.d_shift.unsafe_ptr() + base,
+            pack.d_oh.unsafe_ptr() + base,
+            pack.d_bin.unsafe_ptr() + base,
+            pack.d_ls.unsafe_ptr() + base,
+            pack.d_rs.unsafe_ptr() + base,
+            Int32(pack.nodes_of[t]),
+            cindex.unsafe_ptr(),
+            Int32(n_rows),
+            pack.bins.value().unsafe_ptr(),
+            grid_dim=(bin_blocks, 1, 1),
+            block_dim=(NS_BINS_BLOCK_SIZE, 1, 1),
+        )
+        ctx.enqueue_function[add_bin_model_value_kernel](
+            pack.d_vals.unsafe_ptr() + vbase,
+            pack.bins.value().unsafe_ptr(),
+            Int32(n_rows),
+            Int32(pack.dims[t]),
+            Int32(n_rows),
+            cursor.unsafe_ptr(),
+            grid_dim=(add_blocks, 1, 1),
+            block_dim=(ABMV_BLOCK, 1, 1),
+        )
+    ctx.synchronize()
+
 
 # C50 GB non-symmetric inference: exact packed integer records; no compiler
 # struct lowering or unsupported reinterpretation. Same shift/mask and tree fold.

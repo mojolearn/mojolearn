@@ -526,11 +526,25 @@ def find_cell(race, phase, arm, batch):
     return next((c for c in cells if c.get("arm") == arm and (c.get("batch") or None) == (batch or None)), None)
 
 
+#: lane fix-gbdt-prebinned-infer (2026-11-13; PARAMS-DIFF on trees/gbdt-depthwise/istella ours-prebinned, every
+#: cell): the pre-binned `input_binning` record gained "; <n> training rows" on 2026-10-30 (FAIRNESS FIX,
+#: tools/speed_gbdt_arm.py PREBIN_ROWS, read by the LightGBM lossguide mapping) after the 0.8.55 paper record was
+#: taken. The borders, the border count and the bins sha256 (which hashes both binned blocks, so it fixes the row
+#: count too) are unchanged, so the clause is spelling only for this comparison; any other change still differs.
+_PREBIN_ROWS_CLAUSE = re.compile(r"; \d+ training rows(?=;)")
+
+
+def _param_value(key, value):
+    if key == "input_binning" and isinstance(value, str):
+        return _PREBIN_ROWS_CLAUSE.sub("", value)
+    return value
+
+
 def params_diff(old, new):
     if old is None or new is None:
         return []
     keys = sorted(set(old) | set(new))
-    return [k for k in keys if old.get(k) != new.get(k)]
+    return [k for k in keys if _param_value(k, old.get(k)) != _param_value(k, new.get(k))]
 
 
 def same_clock_ms(opp, cell, phase):
