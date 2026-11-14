@@ -80,6 +80,13 @@ def _direct(entries: PythonObject, name: String) raises -> PythonObject:
     return py_get(entries, name)
 
 
+def _run(mut arena: List[Float32], mut program: List[Int32], entries: PythonObject) raises:
+    """The compiled x_prep program entry on an arena (bindings/minmax_native_door.mojo still drives MinMax through it;
+    StandardScaler's fit and partial_fit run the typed ScalerDriverCalls in bindings/scaler_lifecycle_run.mojo).
+    Follow-up: move MinMax onto the typed run and delete this."""
+    _ = py_call_typed(entries["x_prep_run"], Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
+
+
 def _features(fields: PythonObject) raises -> Int:
     var value = fields["n_features_in_"]
     if py_type(value) is not native_loaded_module("builtins").int:
