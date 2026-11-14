@@ -41,14 +41,6 @@ def pattern_name(regex):
     return _NATIVE.tokenizer_public_call('vocab_pattern', (regex,), _TOKENIZER_CONTEXT)
 
 
-def _text_bytes(data):
-    if isinstance(data, str):
-        return data.encode("utf-8")
-    if isinstance(data, (bytes, bytearray, memoryview)):
-        return bytes(data)
-    raise TypeError(f"mojolearn.models.Tokenizer: text must be str or bytes-like, got {type(data).__name__}")
-
-
 def pretokenize(data, pattern):
     """Pre-token boundaries of `data` (bytes) under `pattern` ("gpt2",
     "llama3" or "qwen2"): `m + 1` offsets, first 0 and last `len(data)`.
@@ -105,7 +97,10 @@ class Tokenizer:
         as a list of bytes; the cut before any merge."""
         return _NATIVE.tokenizer_public_call('vocab_pretokenize', (self, data), _TOKENIZER_CONTEXT)
 
-    _bytes = staticmethod(_text_bytes)
+    # The text admission (str -> UTF-8, bytes-like -> bytes, else TypeError)
+    # is the native door's `_bytes` (bindings/tokenizer_public_native_door.mojo);
+    # the unused Python `_text_bytes` / `Tokenizer._bytes` twin is gone (lane
+    # py-lm-neural, 2026-11-14).
 
     def encode_bytes(self, data, *, allow_special=False):
         """The ids of a byte string. Added tokens are recognized only with
