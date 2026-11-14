@@ -198,12 +198,14 @@ def program_run_route_record[KIND: Int](
         resource=Int(resource), sid=sid, pid=pid,
     )
     var routes = _PROGRAM_RUN_ROUTES.get_or_create_ptr()
-    for i in range(len(routes[].entries)):  # small-loop(_ROUTE_CAPACITY: recorded Program routes): replace this Program's stale record
+    var stale = -1
+    for i in range(len(routes[].entries)):  # small-loop(_ROUTE_CAPACITY: recorded Program routes): this Program's stale record
         if routes[].entries[i].program_dict == route.program_dict and routes[].entries[i].kind == KIND:
-            routes[].entries[i] = route^
-            _ = lifetime
-            return
-    if len(routes[].entries) < _ROUTE_CAPACITY:
+            stale = i
+            break
+    if stale >= 0:
+        routes[].entries[stale] = route^
+    elif len(routes[].entries) < _ROUTE_CAPACITY:
         routes[].entries.append(route^)
     else:
         routes[].entries[routes[].next] = route^
