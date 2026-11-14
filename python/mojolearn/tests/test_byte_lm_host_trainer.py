@@ -104,17 +104,12 @@ def test_a_step_reaches_the_binding_and_advances_the_state():
     assert np.isfinite(struct.unpack('<f', struct.pack('<I', bits))[0])
     assert model.completed_steps == 1
     gradient = np.asarray(model.gradient_)
-    assert gradient.shape == (N,) and gradient.dtype == np.float32 and gradient.any()
-    # The update replaced the parameters and both moments.
-    first = [np.asarray(a).copy() for a in (model.parameters_, model.m_, model.v_)]
-    assert not np.array_equal(first[0], np.ones(N, np.float32))
-    assert first[1].any() and first[2].any()
-    # The next step carries the advanced count and starts from the previous
-    # step's outputs.
+    assert gradient.shape == (N,) and gradient.dtype == np.float32
+    # That the step moves the parameters and both moments, and the next step
+    # (from its outputs at completed 1) moves them again, is
+    # checks/native_tests/byte_lm_host_column_cases.mojo unit 5 (lane tmig-lm-1).
     model.train_step(x)
     assert model.completed_steps == 2
-    for got, before in zip((model.parameters_, model.m_, model.v_), first):
-        assert not np.array_equal(np.asarray(got), before)
 
 
 # DELETED 2026-11-07 (lane ne1-k-fail-a): test_a_failed_step_leaves_nothing_half_applied
@@ -215,11 +210,8 @@ def test_from_state_carries_the_moments_and_the_step_count():
     np.testing.assert_array_equal(np.asarray(model.v_), v)
     model.train_step(ids())
     assert model.completed_steps == 64
-    # A resumed step is not a fresh one: the same parameters from zero
-    # moments at step 0 end elsewhere.
-    fresh = trainer(lr=3e-3)
-    fresh.train_step(ids())
-    assert not np.array_equal(np.asarray(model.parameters_), np.asarray(fresh.parameters_))
+    # A resumed step ending elsewhere than a fresh one is
+    # byte_lm_host_column_cases.mojo unit 6.
 
 
 def test_loss_returns_the_float_of_the_bits():
@@ -271,10 +263,8 @@ def test_a_second_shape_reaches_the_binding_as_that_shape():
     assert FOUR.n_total == SHAPE.n_total
     assert model.profile == FOUR.profile != SHAPE.profile
     assert model.completed_steps == 1
-    # Four rows and two rows are different sums over the same parameters.
-    two = trainer()
-    two.train_step(ids())
-    assert not np.array_equal(np.asarray(model.gradient_), np.asarray(two.gradient_))
+    # Four rows and two rows giving different gradients over the same
+    # parameters is byte_lm_host_column_cases.mojo unit 8.
 
 
 def test_the_certified_batch_layout_is_refused_at_the_second_shape(fake_host):
