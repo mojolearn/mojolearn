@@ -43,7 +43,6 @@ from mojolearn.models import (CausalLM, Checkpoint, HFConfig, SafetensorsFile, T
                               UnsupportedModel, plan_for)
 from mojolearn.models import causal_lm as _cl
 from mojolearn.models import tokenizer as _tk
-from mojolearn.models.safetensors import widen_f16
 from mojolearn._causal_lm_fixtures import write_safetensors
 from mojolearn._tokenizer_synthetic import byte_to_char as _byte_to_char
 
@@ -246,20 +245,9 @@ def test_safetensors_reader_dtypes_round_trip_and_widen_exactly():
                 sf.read("nope")
 
 
-def test_f16_widening_is_bit_exact_over_every_half():
-    """All 65536 float16 bit patterns against struct's oracle (finite ones
-    by float32 bytes, NaNs by sign and NaN-ness)."""
-    h = array.array("H", range(65536))
-    got = widen_f16(Array._owned(h, (65536,), "<u2", "C"))
-    g = array.array("I")
-    g.frombytes(got.tobytes())
-    for k in range(65536):
-        (w,) = struct.unpack("<e", struct.pack("<H", k))
-        if w != w:
-            assert (g[k] & 0x7F800000) == 0x7F800000 and (g[k] & 0x007FFFFF) != 0
-            assert (g[k] >> 31) == (k >> 15)
-        else:
-            assert g[k] == struct.unpack("<I", struct.pack("<f", w))[0], k
+# test_f16_widening_is_bit_exact_over_every_half moved to
+# checks/native_tests/byte_lm_models_loader_f16_*.mojo (lane tmig-lm-1): all
+# 65,536 halves through the host and device widening against a value oracle.
 
 
 def test_checkpoint_follows_the_sharded_index():
