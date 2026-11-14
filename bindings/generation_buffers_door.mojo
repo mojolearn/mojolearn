@@ -14,7 +14,7 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_contains
 from bindings.native_array_snapshot_door import native_array_slots, native_array_snapshot
-from bindings.native_array_storage_door import native_array_zeros, native_scratch_bytes, native_scratch_address
+from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_foreign
 from core.weight_epoch import weight_epoch_bump
@@ -148,6 +148,29 @@ def py_ints(values: List[Int]) raises -> PythonObject:
 
 
 def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject:
+    """A ZERO-FILLED C-order Array of `dims` and `code` ("f", "i" or "b"),
+    for a buffer a kernel reads, accumulates into or writes only in part."""
+    return _generation_array(dims, code, False)
+
+
+def generation_array_unfilled(dims: List[Int], code: String = "f") raises -> PythonObject:
+    """`generation_array` over UNINITIALIZED storage, for an output that one
+    native call overwrites element by element before anything reads it (lane
+    fix-mamba3-unfilled-arrays, 2026-11-13: the Mamba-3 forward's y and four
+    reports were zero-filled per call where 0.8.55 left them unfilled).
+    Never use it for a buffer a kernel reads, accumulates into or writes
+    only in part: those keep `generation_array`'s zeros.
+
+    lane fix-output-zero-fill (2026-11-14): the store is an unfilled
+    array.array (`native_array_unfilled`), the same store type and slots as
+    `generation_array`. It was an uninitialized bytearray with `_mv` cast to
+    `code` plus a 16-byte alignment check; the array.array item block is one
+    PyMem_Malloc block, 16-byte aligned like the zero-filled store, so that
+    second Array layout and its check are deleted."""
+    return _generation_array(dims, code, True)
+
+
+def _generation_array(dims: List[Int], code: String, unfilled: Bool) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     if g[].array_cls is None:
         raise Error("RuntimeError: generation requires its import-time Array connection")
@@ -160,7 +183,7 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
         if dims[i] < 0 or (dims[i] != 0 and n > 2147483647 // dims[i]):
             raise Error("generation: invalid shape or signed 32-bit kernel indexing overflow")
         n *= dims[i]
-    var store = native_array_zeros(code, n)
+    var store = native_array_unfilled(code, n) if unfilled else native_array_zeros(code, n)
     var result = py_call(g[].bi.object.__new__, g[].array_cls)
     # Strides computed natively (row-major), then one tuple; each slot is set
     # directly (no intermediate dictionary or key list), in the former order.
@@ -177,81 +200,6 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
     _generation_slot_set(slots, result, "_pin", PythonObject(None))
     _generation_slot_set(slots, result, "_mv", py_call(g[].bi.memoryview, store))
     _generation_slot_set(slots, result, "_addr", store.buffer_info()[0])
-    _generation_slot_set(slots, result, "_readonly", PythonObject(False))
-    _generation_slot_set(slots, result, "shape", shape)
-    _generation_slot_set(slots, result, "dtype", PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
-    _generation_slot_set(slots, result, "ndim", PythonObject(len(dims)))
-    _generation_slot_set(slots, result, "size", PythonObject(n))
-    _generation_slot_set(slots, result, "nbytes", PythonObject(n * itemsize))
-    _generation_slot_set(slots, result, "itemsize", PythonObject(itemsize))
-    _generation_slot_set(slots, result, "order", PythonObject("C"))
-    _generation_slot_set(slots, result, "strides", strides)
-    return result
-
-
-comptime _UNFILLED_ALIGNMENT = 16
-"""The alignment `generation_array_unfilled` guarantees for its storage: the
-same as the zero-filled `array.array` store it replaces (CPython's
-allocators align every block to 16 bytes on 64-bit builds)."""
-
-
-def generation_array_unfilled(dims: List[Int], code: String = "f") raises -> PythonObject:
-    """`generation_array` over UNINITIALIZED storage, for an output that one
-    native call overwrites element by element before anything reads it (lane
-    fix-mamba3-unfilled-arrays, 2026-11-13: the Mamba-3 forward's y and four
-    reports were zero-filled per call where 0.8.55 left them unfilled). The
-    store is an uninitialized bytearray (`native_scratch_bytes`, no fill
-    pass) and `_mv` is its memoryview cast to `code`: the same field shape
-    `Array.from_buffer(bytearray)` produces, which the snapshot admission
-    (bindings/native_array_snapshot_door.mojo) already accepts. The `_mv`
-    export pins the bytearray against resizing for the Array's lifetime.
-    Never use it for a buffer a kernel reads, accumulates into or writes
-    only in part: those keep `generation_array`'s zeros."""
-    var n = 1
-    for i in range(len(dims)):  # small-loop(array shape dimension words)
-        if dims[i] < 0 or (dims[i] != 0 and n > 2147483647 // dims[i]):
-            raise Error("generation: invalid shape or signed 32-bit kernel indexing overflow")
-        n *= dims[i]
-    if n == 0:
-        # Nothing to fill: the zero-length store costs no fill pass.
-        return generation_array(dims, code)
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if g[].array_cls is None:
-        raise Error("RuntimeError: generation requires its import-time Array connection")
-    var slots = _generation_slots()
-    if code != "f" and code != "i" and code != "b":
-        raise Error("generation: unsupported native allocation dtype")
-    var itemsize = 1 if code == "b" else 4
-    var store = native_scratch_bytes(n * itemsize)
-    var address = native_scratch_address(store)
-    # Alignment (lane fix-mamba3-unfilled-rest): the writers of these
-    # outputs (device-to-host enqueue_copy, `unsafe_memcpy`, `copy_f32` and
-    # the host Float32 loads/stores of later readers) need the element's
-    # natural alignment (4 bytes); the zero-filled `array.array` store this
-    # replaces is 16-byte aligned, and so is this one: a fresh bytearray's
-    # data is one CPython allocation (pymalloc or the system malloc, both
-    # 16-byte aligned on every 64-bit target we build) at offset 0. Checked
-    # here once per array, one integer test per allocation, never on a
-    # kernel's path; a failure refuses loudly rather than handing a kernel
-    # a misaligned buffer.
-    if address % _UNFILLED_ALIGNMENT != 0:
-        raise Error("RuntimeError: generation: unfilled output storage is not "
-                    + String(_UNFILLED_ALIGNMENT) + "-byte aligned (address " + String(address) + ")")
-    var view = py_call(py_call(g[].bi.memoryview, store).cast, PythonObject(code))
-    var result = py_call(g[].bi.object.__new__, g[].array_cls)
-    var stride_words = List[Int](length=len(dims), fill=0)
-    var stride = itemsize
-    for i in range(len(dims)):  # small-loop(array shape dimension words)
-        var axis = len(dims) - i - 1
-        stride_words[axis] = stride
-        stride *= dims[axis]
-    var shape = py_call(g[].bi.tuple, py_ints(dims))
-    var strides = py_call(g[].bi.tuple, py_ints(stride_words))
-    _generation_slot_set(slots, result, "_store", store)
-    _generation_slot_set(slots, result, "_base", PythonObject(None))
-    _generation_slot_set(slots, result, "_pin", PythonObject(None))
-    _generation_slot_set(slots, result, "_mv", view)
-    _generation_slot_set(slots, result, "_addr", PythonObject(address))
     _generation_slot_set(slots, result, "_readonly", PythonObject(False))
     _generation_slot_set(slots, result, "shape", shape)
     _generation_slot_set(slots, result, "dtype", PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
@@ -402,7 +350,11 @@ def generation_copy(value: PythonObject) raises -> PythonObject:
     var code = "f" if String(captured.dtype) == "<f4" else "i"
     if String(captured.dtype) != "<f4" and String(captured.dtype) != "<i4":
         raise Error("TypeError: generation state copy requires float32 or int32 storage")
-    var out = generation_array(dims, code)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the one memcpy below
+    # writes all nbytes (was a zero fill it overwrote: 86.7% of the
+    # samba-forward profile, SambaStack.state_dict -> samba_snapshot, the
+    # per-round state receipt outside the clock). One allocation, one copy.
+    var out = generation_array_unfilled(dims, code)
     var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
     var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=captured._addr))
     unsafe_memcpy(dest=dst, src=src, count=Int(py=captured.nbytes))
