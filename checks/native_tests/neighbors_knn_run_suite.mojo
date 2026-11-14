@@ -13,7 +13,7 @@ from neighbors.neighbors_knn_run import (
     knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_metric_reads_host_queries,
     knn_refuse_callable_weights, knn_refuse_weights, knn_weights_code, knn_check_y_rank, knn_check_y_rows,
     knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_float_format, knn_labels_finite,
-    knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
+    KNN_I32_LABEL_RANGE_OLD, knn_labels_already_int32, knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
 )
 
 comptime NEIGHBORS_KNN_RUN_FIXTURES = 22
@@ -179,6 +179,15 @@ def fixture(unit: Int) raises:
             raise Error("accepted")
         except e:
             require(String(e) == "mojolearn: y does not fit int32", "int32 low wording")
+        # wave2-knn-0844-gap: only little-endian int32 labels skip the range
+        # check (none at all in the B arm); every other dtype keeps it.
+        comptime if KNN_I32_LABEL_RANGE_OLD:
+            require(not knn_labels_already_int32("<i4"), "B arm keeps the int32 range check")
+        else:
+            require(knn_labels_already_int32("<i4"), "int32 labels skip the range check")
+        require(not knn_labels_already_int32("<i8") and not knn_labels_already_int32(">i4")
+                and not knn_labels_already_int32("|i1") and not knn_labels_already_int32("<u4")
+                and not knn_labels_already_int32("<f4"), "other label dtypes keep the range check")
     elif unit == 15:
         require(knn_float_format("<f4") and knn_float_format("f") and knn_float_format("=d")
                 and knn_float_format("e") and knn_float_format("@g") and knn_float_format("|f2")
