@@ -259,7 +259,13 @@ struct Resident(Movable):
     def status_completed(mut self) raises -> Int:
         var info = List[Int](length=4, fill=7)
         var a: List[Int] = [Int(info.unsafe_ptr())]
-        require(self.run(OP_STATUS, a, List[Int]()) == 4, "session status count")
+        # Status takes the session and the output only: no plan words and no optimizer scalars
+        # (training/byte_lm_native_dispatch.mojo:153), as the door sends it
+        # (bindings/byte_lm_trainer_native_door.mojo:539); `run` always adds the eight scalars.
+        var entry = self.entry
+        var handle = self.handle.copy()
+        require(byte_lm_resident_run(entry, handle, OP_STATUS, a, List[Int](), List[Float64](), self.words) == 4,
+                "session status count")
         return info[0]
 
     def logits(mut self, ids: List[Int32], batch: Int, length: Int) raises -> List[Float32]:
