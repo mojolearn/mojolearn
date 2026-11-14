@@ -62,9 +62,9 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
     identical_sqrt,
-    nv_fma_rn_f32,
     nv_mul_rn_ftz_f32,
 )
+from checks.nv_fma_rn import nv_fma_rn_kernel
 
 
 comptime PINNED_TILE_TPB = 256
@@ -179,6 +179,8 @@ def _rt_load(x: Float32) -> Float32:
     return ftz(x)
 
 
+# The NVIDIA rounded FMA below is checks/nv_fma_rn.mojo's switched
+# `nv_fma_rn_kernel` (lane fix-hdbscan-nv, MOJOLEARN_IDN_NV_FMA_ASM_OLD).
 @always_inline
 def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """Round the FMA before flushing its output; operands are already flushed.
@@ -192,7 +194,7 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         # Match the corrected GEMM seam: rounding occurs BEFORE the hardware
         # input/output FTZ on multiplication by exactly one. Bare fma.ftz is
         # deliberately excluded because it fails at the minnormal boundary.
-        var rounded = nv_fma_rn_f32(a, b, acc)
+        var rounded = nv_fma_rn_kernel(a, b, acc)
         return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
     var result = ftz(identical_mul_add(a, b, acc))
     comptime if knn_distance_zero_fma_repair_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
@@ -221,7 +223,7 @@ def _rt_step_exact(a: Float32, b: Float32, acc: Float32) -> Float32:
     bits."""
     var r: Float32
     comptime if knn_distance_hardware_flush_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
-        r = nv_fma_rn_f32(a, b, acc)
+        r = nv_fma_rn_kernel(a, b, acc)
     else:
         r = identical_mul_add(a, b, acc)
     comptime if is_defined["MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE"]():

@@ -161,9 +161,9 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
     identical_mul_add_simd,
-    nv_fma_rn_f32,
     nv_mul_rn_ftz_f32,
 )
+from checks.nv_fma_rn import nv_fma_rn_kernel
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
@@ -1368,7 +1368,7 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     rounding at underflow boundaries remains a separate numerical audit.
     """
     comptime if TUNED_HW_FTZ_FMA:
-        var rounded = nv_fma_rn_f32(a, b, acc)
+        var rounded = nv_fma_rn_kernel(a, b, acc)
         return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
     comptime if TUNED_CLASS_FLUSH:
         return _ftz_class(identical_mul_add(a, b, acc))
@@ -1506,7 +1506,7 @@ def _admit_warp_min(v: UInt32) -> UInt32:
 def _admit_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """The contract step on an ADMITTED window: `fma.rn`, the first of
     `_tuned_step`'s two instructions; its flush is proven the identity."""
-    return nv_fma_rn_f32(a, b, acc)
+    return nv_fma_rn_kernel(a, b, acc)
 
 
 @always_inline
