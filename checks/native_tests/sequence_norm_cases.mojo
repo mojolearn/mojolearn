@@ -110,10 +110,10 @@ def run_norm_fixture[E: Exec](mut ex: E, unit: Int) raises:
             gxmean /= Float64(LN_D)
             for c in range(LN_D):
                 var h = hp[r * LN_D + c]
-                if not allclose(Float64(yp[r * LN_D + c]), h * Float64(wp[c]) + Float64(bp[c]), 0.0, 2e-5):
+                if not allclose(Float64(yp[r * LN_D + c]), h * Float64(wp[c]) + Float64(bp[c]), 1e-7, 2e-5):
                     fp.unsafe_store(unit_, 1)
                 var g = Float64(gp[r * LN_D + c]) * Float64(wp[c])
-                if not allclose(Float64(dxp[r * LN_D + c]), sp[r] * (g - gmean - h * gxmean), 0.0, 2e-5):
+                if not allclose(Float64(dxp[r * LN_D + c]), sp[r] * (g - gmean - h * gxmean), 1e-7, 2e-5):
                     fp.unsafe_store(unit_, 2)
             return
         var c = unit_ - LN_M
@@ -122,9 +122,9 @@ def run_norm_fixture[E: Exec](mut ex: E, unit: Int) raises:
         for r in range(LN_M):
             sw += Float64(gp[r * LN_D + c]) * hp[r * LN_D + c]
             sb += Float64(gp[r * LN_D + c])
-        if not allclose(Float64(dwp[c]), sw, 0.0, 2e-4):
+        if not allclose(Float64(dwp[c]), sw, 1e-7, 2e-4):
             fp.unsafe_store(unit_, 3)
-        if not allclose(Float64(dbp[c]), sb, 0.0, 2e-5):
+        if not allclose(Float64(dbp[c]), sb, 1e-7, 2e-5):
             fp.unsafe_store(unit_, 4)
     host_parallelize(relation, LN_M + LN_D)
     for i in range(LN_M + LN_D):

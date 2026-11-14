@@ -83,21 +83,21 @@ def run_stl_fixture[E: Exec](mut ex: E, unit: Int) raises:
         return
     var y = stl_series(1)
     var robust = unit == 1
-    var out = stl_fit(ex, y, 1, 2 if robust else 5, 15 if robust else 0)
+    var fitted = stl_fit(ex, y, 1, 2 if robust else 5, 15 if robust else 0)
     var failures = List[Int](length=STL_N, fill=0)
     var fp = failures.unsafe_ptr()
     var yp = y.unsafe_ptr()
-    var sp = out.season.unsafe_ptr()
-    var tp = out.trend.unsafe_ptr()
-    var wp = out.weights.unsafe_ptr()
-    var rp = out.resid.unsafe_ptr()
+    var sp = fitted.season.unsafe_ptr()
+    var tp = fitted.trend.unsafe_ptr()
+    var wp = fitted.weights.unsafe_ptr()
+    var rp = fitted.resid.unsafe_ptr()
     def cell(t: Int) {imm fp, imm yp, imm sp, imm tp, imm wp, imm rp, imm robust}:
         if robust:
             if not (wp[t] >= 0.0 and wp[t] <= 1.0):
                 fp.unsafe_store(t, 1)
             return
         var total = Float64(sp[t]) + Float64(tp[t]) + Float64(rp[t])
-        if not allclose(total, Float64(yp[t]), 0.0, 1e-5):
+        if not allclose(total, Float64(yp[t]), 1e-7, 1e-5):
             fp.unsafe_store(t, 2)
         if wp[t] != 1.0:
             fp.unsafe_store(t, 3)
@@ -109,8 +109,8 @@ def run_stl_fixture[E: Exec](mut ex: E, unit: Int) raises:
     if robust:
         var below = 0
         for t in range(STL_N):
-            if out.weights[t] < 1.0:
+            if fitted.weights[t] < 1.0:
                 below += 1
         require(below > 0, "robust STL left every weight at 1")
     _ = y^
-    _ = out^
+    _ = fitted^

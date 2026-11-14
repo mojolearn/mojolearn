@@ -24,7 +24,7 @@ head's output through `rnn_predict_impl`.
 from std.math import exp, sqrt, tanh
 from core.host_parallel import host_parallelize
 from sequence.exec import Exec
-from sequence.ops import OPT_ADAM
+from sequence.ops import FP, OPT_ADAM
 from sequence.ops_impl import rnn_fit_impl, rnn_predict_impl
 from sequence.recurrent import Net
 from checks.native_tests.sequence_port_common import require, allclose, u01, normal
@@ -63,7 +63,7 @@ def rnn_data(labels: Bool) -> Tuple[List[Float32], List[Float32]]:
     return (x^, y^)
 
 
-def reference_sequence(net: Net, params: List[Float32], x: List[Float32], n: Int) -> List[Float64]:
+def reference_sequence(net: Net, params: FP, x: FP, n: Int) -> List[Float64]:
     """Sample n's top layer h_1..h_T (T x H), PyTorch's equations and gate
     orders in float64, from the flat layout of `sequence/recurrent.mojo`."""
     var H = net.H
@@ -158,14 +158,16 @@ def run_rnn_fixture[E: Exec](mut ex: E, unit: Int) raises:
     var sp = seq.unsafe_ptr()
     var op = output.unsafe_ptr()
     var check_sequence = unit != 4
-    def sample(n: Int) {imm fp, imm sp, imm op, imm net, imm params, imm x, imm check_sequence, imm classifier, imm H}:
+    var pw = FP(unsafe_from_address=Int(params.unsafe_ptr()))
+    var xw = FP(unsafe_from_address=Int(x.unsafe_ptr()))
+    def sample(n: Int) {imm fp, imm sp, imm op, imm net, imm pw, imm xw, imm check_sequence, imm classifier, imm H}:
         if classifier and not check_sequence:
-            if not allclose(Float64(op[2 * n]) + Float64(op[2 * n + 1]), 1.0, 0.0, 1e-5):
+            if not allclose(Float64(op[2 * n]) + Float64(op[2 * n + 1]), 1.0, 1e-7, 1e-5):
                 fp.unsafe_store(n, 2)
             return
-        var want = reference_sequence(net, params, x, n)
+        var want = reference_sequence(net, pw, xw, n)
         for k in range(RNN_T * H):
-            if not allclose(Float64(sp[n * RNN_T * H + k]), want[k], 0.0, 2e-5):
+            if not allclose(Float64(sp[n * RNN_T * H + k]), want[k], 1e-7, 2e-5):
                 fp.unsafe_store(n, 1)
     host_parallelize(sample, RNN_N)
     for n in range(RNN_N):

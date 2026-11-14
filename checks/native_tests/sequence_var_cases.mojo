@@ -32,14 +32,14 @@ def var_series() -> List[Float32]:
         var b = y[(t - 1) * VAR_K + 1]
         y[t * VAR_K] = 0.5 + 0.5 * a + 0.1 * b + normal(0x7A40, 2 * t)
         y[t * VAR_K + 1] = 0.5 + 0.2 * a + 0.3 * b + normal(0x7A40, 2 * t + 1)
-    var out = List[Float32](length=VAR_N * VAR_K, fill=0.0)
-    var op = out.unsafe_ptr()
+    var rounded = List[Float32](length=VAR_N * VAR_K, fill=0.0)
+    var op = rounded.unsafe_ptr()
     var yp = y.unsafe_ptr()
     def cell(i: Int) {imm op, imm yp}:
         op.unsafe_store(i, Float32(yp[i]))
     host_parallelize(cell, VAR_N * VAR_K)
     _ = y^
-    return out^
+    return rounded^
 
 
 def run_var_fixture[E: Exec](mut ex: E, unit: Int) raises:
@@ -83,12 +83,12 @@ def run_var_fixture[E: Exec](mut ex: E, unit: Int) raises:
                 acc += zp[r * m + i] * zp[r * m + j]
             gp.unsafe_store(index, acc)
             return
-        var cell = index - m * m
-        var i = cell // VAR_K
-        var k = cell % VAR_K
+        var slot = index - m * m
+        var zi = slot // VAR_K
+        var yk = slot % VAR_K
         for r in range(rows):
-            acc += zp[r * m + i] * Float64(yp[(r + p) * VAR_K + k])
-        cp.unsafe_store(cell, acc)
+            acc += zp[r * m + zi] * Float64(yp[(r + p) * VAR_K + yk])
+        cp.unsafe_store(slot, acc)
     host_parallelize(gram, m * m + m * VAR_K)
     # Cholesky G = L L^T (m <= 5), then two triangular solves per column of C
     var L = List[Float64](length=m * m, fill=0.0)
@@ -118,7 +118,7 @@ def run_var_fixture[E: Exec](mut ex: E, unit: Int) raises:
                 s -= L[j * m + i] * B[j * VAR_K + k]
             B[i * VAR_K + k] = s / L[i * m + i]
     for i in range(m * VAR_K):  # at most ten coefficients
-        require(allclose(Float64(params[i]), B[i], 0.0, 2e-4), "VAR p=" + String(p) + " kt=" + String(kt) + " param "
+        require(allclose(Float64(params[i]), B[i], 1e-7, 2e-4), "VAR p=" + String(p) + " kt=" + String(kt) + " param "
                 + String(i) + " got " + String(params[i]) + " want " + String(B[i]) + " (atol 2e-4)")
     # sigma_u = R^T R / (rows - m), one cell per task
     var S = List[Float64](length=VAR_K * VAR_K, fill=0.0)

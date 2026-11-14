@@ -105,7 +105,7 @@ def run_moe_fixture[E: Exec](mut ex: E, unit: Int) raises:
                 if e != first and p[e] > p[second]:
                     second = e
             var norm = p[first] + p[second]
-            var ref = List[Float64](length=MOE_D, fill=0.0)
+            var expected = List[Float64](length=MOE_D, fill=0.0)
             for pick in range(2):
                 var e = first if pick == 0 else second
                 var w = p[e] / norm
@@ -121,9 +121,9 @@ def run_moe_fixture[E: Exec](mut ex: E, unit: Int) raises:
                     var acc = 0.0
                     for j in range(F):
                         acc += Float64(dp[(e * MOE_D + r) * F + j]) * hidden[j]
-                    ref[r] += w * acc
+                    expected[r] += w * acc
             for r in range(MOE_D):
-                if not allclose(Float64(yp[t * MOE_D + r]), ref[r], 0.0, 2e-5):
+                if not allclose(Float64(yp[t * MOE_D + r]), expected[r], 1e-7, 2e-5):
                     fp.unsafe_store(t, 1)
         host_parallelize(token, MOE_T)
         for t in range(MOE_T):

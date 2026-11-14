@@ -46,9 +46,9 @@ comptime SAMBA_SURFACE_FIXTURES = 6
 
 
 def lr(spec: LrSpec, t: Int) raises -> Float32:
-    var out = lr_spec_value(spec, t)
-    require(out.status == 0, "schedule step " + String(t) + " refused with status " + String(out.status))
-    return out.value
+    var result = lr_spec_value(spec, t)
+    require(result.status == 0, "schedule step " + String(t) + " refused with status " + String(result.status))
+    return result.value
 
 
 def schedule_fixture(unit: Int) raises:
@@ -65,13 +65,13 @@ def schedule_fixture(unit: Int) raises:
         require(lr(l, 10) == Float32(1e-4) and lr(l, 11) == lr(l, 10), "linear: reaches min_lr at total and holds")
     else:
         var s = optimizer_warmup_schedule(2, 1e-3, 1e-4, 2, 10, True)
-        # peak / 2 + min / 2 is exact in binary64 (two float32s three binades apart)
+        # peak / 2 + min / 2 is exact in binary64 (two float32s a few binades apart)
         require(lr(s, 6) == Float32(peak / 2.0 + low / 2.0), "cosine: p = 1/2 is the exact midpoint rounded once")
         var worst = 0.0
         for t in range(3, 10):  # seven steps of one schedule
             var p = Float64(t - 2) / 8.0
-            var ref = 1e-4 + (1e-3 - 1e-4) * (1.0 + cos(3.141592653589793 * p)) / 2.0
-            worst = max(worst, abs(Float64(lr(s, t)) - ref) / ref)
+            var reference = 1e-4 + (1e-3 - 1e-4) * (1.0 + cos(3.141592653589793 * p)) / 2.0
+            worst = max(worst, abs(Float64(lr(s, t)) - reference) / reference)
         require(worst < 1e-6, "cosine: worst relative distance " + String(worst) + " from the float64 cos form")
         for t in range(2, 11):
             require(lr(s, t) >= lr(s, t + 1), "cosine: increases after step " + String(t))
@@ -79,10 +79,10 @@ def schedule_fixture(unit: Int) raises:
 
 def draw(n: Int, offset: Int, seed: Int, stream: Int, kind: Int, a: Float32, b: Float32,
          input: List[Float32]) raises -> List[Float32]:
-    var out = List[Float32](length=n, fill=-7.0)
-    require(neural_rng_host_into(Int(out.unsafe_ptr()), Int(input.unsafe_ptr()), n, offset, seed, 0, stream, kind, a, b)
+    var values = List[Float32](length=n, fill=-7.0)
+    require(neural_rng_host_into(Int(values.unsafe_ptr()), Int(input.unsafe_ptr()), n, offset, seed, 0, stream, kind, a, b)
             == n, "neural rng count")
-    return out^
+    return values^
 
 
 def differing(a: List[Float32], b: List[Float32], start: Int, count: Int) -> Int:
