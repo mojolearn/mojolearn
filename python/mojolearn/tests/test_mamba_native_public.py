@@ -84,7 +84,7 @@ def test_mamba3_forward_step_ragged_are_native_and_match_the_retained_driver(mon
     prefix = _native(monkeypatch, block.forward, x[:, :4], state)
     tail = _native(monkeypatch, block.step, x[:, 4], state)
     # forward(prefix) + step == forward(x) bit for bit is native:
-    # checks/native_tests/mamba3_prefix_step_cpu_suite.mojo.
+    # checks/native_tests/mamba3_prefix_step.mojo.
     assert np.asarray(prefix).shape == (2, 4, dm) and np.asarray(tail).shape == (2, 1, dm)
     with pytest.raises(ValueError, match="cannot carry a state"):
         block.forward(x, block.allocate_state(2), lengths=[3, 5])

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Writes the inputs and float64 oracles of checks/native_tests/ops_higher_cases.mojo.
+"""Writes the inputs and float64 oracles of checks/native_tests/ops_higher.mojo.
 
 Moved from python/mojolearn/tests/test_ops_higher.py (2026-11-14): the inputs
 are the same NumPy PCG64 draws (default_rng(5..8)) the Python tests made, and

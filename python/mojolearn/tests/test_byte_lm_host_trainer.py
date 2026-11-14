@@ -107,7 +107,7 @@ def test_a_step_reaches_the_binding_and_advances_the_state():
     assert gradient.shape == (N,) and gradient.dtype == np.float32
     # That the step moves the parameters and both moments, and the next step
     # (from its outputs at completed 1) moves them again, is
-    # checks/native_tests/byte_lm_host_column_cases.mojo unit 5 (lane tmig-lm-1).
+    # checks/native_tests/byte_lm_host_column.mojo unit 5 (lane tmig-lm-1).
     model.train_step(x)
     assert model.completed_steps == 2
 

@@ -9,8 +9,8 @@ capability that neither cuML nor scikit-learn has).
 This controller keeps both models' public array packing, prediction-data
 flags, archive handling, the CPU host binding against the GPU bytes and the
 refusals. The DBSCAN fit/predict corner oracles execute in
-checks/native_tests/dbscan_native_cases.mojo and the agglomerative tree and
-query corner oracles in checks/native_tests/agglo_native_cases.mojo.
+checks/native_tests/dbscan_native.mojo and the agglomerative tree and
+query corner oracles in checks/native_tests/agglo_native.mojo.
 
 When `MOJOLEARN_HOST_DIR` holds `_mojolearn_estimators_host.so` the HOST
 arm loads every saved model through `_classical_host.host_model` and holds
@@ -45,7 +45,7 @@ def arm_dbscan(rep):
     # exact tie to the lowest (distance, core index), far points, rows alone
     # and reversed, duplicated rows, algorithm='rbc', metric='manhattan',
     # uniform weights and an empty core) run natively on this same grid in
-    # checks/native_tests/dbscan_native_cases.mojo (profiles grid_*). This
+    # checks/native_tests/dbscan_native.mojo (profiles grid_*). This
     # arm keeps the public flags, attributes, packing, archive and refusals.
     x = _grid_clusters()
     plain = DBSCAN(eps=1.0, min_samples=4, algorithm="brute").fit(x)

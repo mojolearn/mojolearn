@@ -109,7 +109,7 @@ def preconditions_published() raises:
     _ = out
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = msel_helpers_ref(_key())
     if unit == 0:
         var out: List[Int64] = [0, 0, 0]
@@ -348,7 +348,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL model-selection helper entry case", unit, String(problem))

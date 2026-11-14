@@ -12,7 +12,7 @@ from core.gp_native_api import GPDriver, GPCFitRequest, GPCFitAllRequest, GPCQue
 from core.gp_native_storage import GPKernelStorage, GPCMemberTables
 from checks.native_tests.gp_state_suite import require
 from checks.native_tests.gp_native_data import input_values, input_labels, failures_clear, GP_GUARD, GP_GUARD64
-from checks.native_tests.gp_native_cases import unchanged
+from checks.native_tests.gp_native_data import unchanged
 
 comptime GP_CLASSIFIER_CPU_FIXTURES = 4
 comptime GP_CLASSIFIER_GPU_FIXTURES = 6

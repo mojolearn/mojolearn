@@ -32,7 +32,7 @@ class NeighborsWeightedLargeK(unittest.TestCase):
     def test_k_above_1024_is_refused(self):
         # The vote/selection numerics of this gate (exact-match weight rows,
         # inverse-distance winners, strided rank boundaries) are the Mojo
-        # check checks/native_tests/neighbors_weighted_largek_gpu.mojo
+        # check checks/native_tests/neighbors_weighted_largek.mojo
         # (pixi run check-native-neighbors-weighted-largek-gpu).
         x = (np.arange(1056, dtype=np.int32) // 3).astype(np.float32)[:, None] / 16
         q = np.array([[0], [4]], dtype=np.float32)

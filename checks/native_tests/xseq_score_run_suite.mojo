@@ -34,7 +34,7 @@ def _weights_refusal(shape: List[Int], n: Int, values: List[Float32], text: Stri
     _ = values
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         require(xseq_run_vector_rows([4], "y_true") == 4 and xseq_run_vector_rows([3, 1], "y_pred") == 3, "vector rows")
         try:
@@ -96,7 +96,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL xseq score run case", unit, String(problem))

@@ -67,7 +67,7 @@ run training-build 600 bash bindings/build_training.sh
 run linalg-build 600 bash bindings/build_linalg.sh
 run mlp-surface-and-reference 240 "$PY" -m pytest -q \
     python/mojolearn/tests/test_small_mlp_surface.py
-run mlp-numerical-edges 600 pixi run check-native-training-small-mlp-gpu
+run mlp-numerical-edges 600 pixi run check-native-gpu training_small_mlp
 run mlp-continuous 240 "$PY" tools/small_mlp_training_capture.py capture --out "$OUT/mlp-continuous"
 run mlp-head 120 "$PY" tools/small_mlp_training_capture.py capture --head --out "$OUT/mlp-head"
 run mlp-resume 180 "$PY" tools/small_mlp_training_capture.py capture \

@@ -17,7 +17,7 @@ from std.memory import bitcast
 from autograd.ops_api import OpsSession
 from autograd.rankn import ShapeN
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher_cases import require
+from checks.native_tests.runner import require
 
 
 def _mix(x: UInt64) -> UInt64:

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CNNClassifier learns a separable task through its public fit. The Linear
 layer's forward and backward against float64 are native
-(checks/native_tests/cnn_trainer_cpu_suite.mojo, `pixi run
+(checks/native_tests/cnn_trainer.mojo, `pixi run
 check-native-cnn-trainer-cpu`); the whole trajectory against torch is a
 two-stage check (torch and the bindings live in different interpreters on
 the dev pod)."""

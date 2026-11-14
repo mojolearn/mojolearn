@@ -127,7 +127,7 @@ def _device_refuses(op: Int, na: Int, ni: Int, nf: Int, text: String) raises:
     raise Error("the host image ran device operation " + String(op))
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     comptime HOST_ONLY = "has no device-resident operation"
     if unit == 0:
         var out: List[Float32] = [9.0, 9.0, 9.0, 9.0]
@@ -357,7 +357,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL decomp entry table case", unit, String(problem))

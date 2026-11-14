@@ -18,7 +18,7 @@ forecast host binding is built, `mojolearn.host_model` answers the same bytes
 through it. The bit claim against the GPU columns is the gates', not this
 file's. The warm-up NaNs, the stored level against the smoothing update and
 the in-sample prediction against its inputs are checked natively in
-checks/native_tests/decomp_holtwinters_inference_cpu.mojo.
+checks/native_tests/decomp_holtwinters_inference.mojo.
 
     cd python && python3 -m pytest mojolearn/tests/test_holtwinters_inference.py
 """

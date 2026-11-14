@@ -122,7 +122,7 @@ def preconditions_published() raises:
         _refuses(problem, "invalid tier/vendor key")
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = _key()
     var no_floats = List[Float64]()
     if unit == 0:
@@ -230,7 +230,7 @@ def sessions_table_contract() raises:
     # column: the handle word round trip, the CPU-key refusal (CPU images own
     # no resident session) and an unpublished GPU key's refusal. Its
     # per-operation cases need the GPU images' publications:
-    # checks/native_tests/causal_lm_session_gpu_suite.mojo.
+    # checks/native_tests/causal_lm_session.mojo.
     var word = causal_session_handle_word(StateHandle(5, UInt64(3)))
     var back = causal_session_handle_of(word)
     require(word > 0 and back.index == 5 and back.generation == 3, "session handle word round trip")
@@ -273,7 +273,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL causal lm entry case", unit, String(problem))

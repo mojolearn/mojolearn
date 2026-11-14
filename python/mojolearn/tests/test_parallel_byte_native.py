@@ -121,7 +121,7 @@ def test_cpu_cooperative_session_refusal_preserves_public_contract():
 
 
 # test_gpu_parallel_step_independent_decay_loss_and_complete_replay moved to
-# checks/native_tests/byte_lm_parallel_byte_native_gpu_suite.mojo (lane
+# checks/native_tests/byte_lm_parallel_byte_native.mojo (lane
 # tmig-lm-1): the decay-only step (log(16) losses, decayed parameters, zero
 # moments, flags and gradient) and the single-device replay's bytes.
 

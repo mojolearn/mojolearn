@@ -7,7 +7,7 @@ NumPy formerly the reference for the neighbor sets. The arithmetic, the list
 layout, brute force at full probe, the rooted metric, the short-fill and the
 repeat build are gated by `pixi run check-ivf`; the sample-filter short-fill
 by `pixi run check-native-ann-ivf-surface-gpu`
-(`checks/native_tests/ann_ivf_surface_gpu.mojo`).
+(`checks/native_tests/ann_ivf_surface.mojo`).
 
     cd python && python3 -m mojolearn.tests.test_ivf_surface
 

@@ -219,7 +219,7 @@ def case_score() raises:
     _ = keys^
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         case_gbdt_fit_scalars()
     elif unit == 1:
@@ -243,7 +243,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL trees door RUN case", unit, String(problem))

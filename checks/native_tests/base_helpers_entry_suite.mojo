@@ -99,7 +99,7 @@ def preconditions_published() raises:
     _ = idx
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     var k = base_helpers_ref(_key())
     if unit == 0:
         var ok: List[Int64] = [0, 2, 1]
@@ -209,7 +209,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL base helper entry case", unit, String(problem))

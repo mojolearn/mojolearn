@@ -5,7 +5,7 @@ inner_product (lane x-neighbors-metrics, 2026-09-27). Refusals always run;
 value checks skip, saying so, without a binding. scikit-learn / scipy are
 compared to a tolerance; repeat calls must be the same bits. The
 inner-product search against float64 products is the Mojo check
-checks/native_tests/neighbors_knn_metrics_gpu.mojo."""
+checks/native_tests/neighbors_knn_metrics.mojo."""
 
 import numpy as np
 import pytest

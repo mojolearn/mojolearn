@@ -22,7 +22,7 @@ runtime arithmetic check (the three lane orders fit twice through the host fit
 body and return the same bytes, `forecast(h)` equals `predict(n_obs,
 n_obs + h)`, an in-sample prediction agrees with one straddling the end of
 the series, and a second AR coefficient refuses by name) is native:
-checks/native_tests/tsa_training_arima_cpu.mojo.
+checks/native_tests/tsa_training_arima.mojo.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_arima
 """

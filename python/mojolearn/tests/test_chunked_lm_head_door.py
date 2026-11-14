@@ -21,7 +21,7 @@ RUNTIME CHECKS (run only where the training host binding is built and the
 package took the CPU-only route; they print SKIP and return otherwise): each
 refusal fires by name before any output. The Float64-reference agreement, the
 loss-stage/train-stage agreement and the repeat words moved to the native
-check checks/native_tests/training_chunked_lm_head_door_suite.mojo
+check checks/native_tests/training_chunked_lm_head_door.mojo
 (pixi run check-native-training-chunked-lm-head-door-cpu).
 
     cd python && python3 -m pytest mojolearn/tests/test_chunked_lm_head_door.py -q

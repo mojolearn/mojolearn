@@ -40,7 +40,7 @@ def _same(got: List[Int], expected: List[Int]) -> Bool:
     return True
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         var settings = PoolSettings(2, 3, 2, 1, 1, 0, 1, 1, True, False, 4)
         var words = pool_run_words(settings, [1, 2, 6, 5])
@@ -174,7 +174,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL x_cnn pool run case", unit, String(problem))

@@ -107,7 +107,7 @@ def test_loss_bits_round_trip(real_host):
 
 
 # The threaded and unthreaded paths' equal loss and logits bits moved to
-# checks/native_tests/byte_lm_host_column_cases.mojo units 0-1 (lane tmig-lm-1).
+# checks/native_tests/byte_lm_host_column.mojo units 0-1 (lane tmig-lm-1).
 def test_threaded_flag_is_a_bool(real_host):
     model = host_mod.LanguageModelInference(_zeros(), threaded=True)
     with pytest.raises(TypeError):

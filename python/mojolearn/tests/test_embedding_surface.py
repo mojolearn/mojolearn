@@ -33,7 +33,7 @@ def _data(seed=0):
 
 # The FOLD, PAD/CARRY and PLAN arithmetic (forward = W[ids], the ascending
 # += fold, the +0.0 padding row, carried splits, plan="sort" against
-# plan="scan") moved to checks/native_tests/embedding_surface_gpu_suite.mojo
+# plan="scan") moved to checks/native_tests/embedding_surface.mojo
 # (lane tmig-lm-1). The wiring of those arms stays here.
 def arm_wiring(rep):
     w, ids, dy = _data(1)

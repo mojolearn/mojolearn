@@ -132,7 +132,7 @@ def _linear[family: Int]() raises:
     _ = w
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         _embedding[SAMBA_TABLE_NEURAL_HOST]()
     elif unit == 1:
@@ -191,7 +191,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL samba entry table case", unit, String(problem))

@@ -3,7 +3,7 @@
 """The float64 NumPy reference of PyTorch's MaxPool2d / AvgPool2d (floor and
 ceil mode), checked against torch where torch is installed (ORACLE). The
 layers are held to the same reference natively in
-checks/native_tests/cnn_pool_cpu_suite.mojo (`pixi run check-native-cnn-pool-cpu`)."""
+checks/native_tests/cnn_pool.mojo (`pixi run check-native-cnn-pool-cpu`)."""
 import numpy as np
 import pytest
 

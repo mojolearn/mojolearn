@@ -47,7 +47,7 @@ def _settings() -> CnnClfFitSettings:
     return CnnClfFitSettings(16, 3, True, seed, 1, False, 0.01, 0.9, 0.8, 0.95, 1e-8, 0.001, 0.0)
 
 
-def case(unit: Int) raises:
+def run_case(unit: Int) raises:
     if unit == 0:
         cnnclf_run_check_input_rank(3)
         try:
@@ -177,7 +177,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            case(unit)
+            run_case(unit)
         except problem:
             flags[unit] = 1
             print("FAIL x_cnn classifier run case", unit, String(problem))

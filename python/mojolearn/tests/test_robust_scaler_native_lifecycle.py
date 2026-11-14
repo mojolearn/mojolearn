@@ -2,7 +2,7 @@
 """Public RobustScaler lifecycle; inherited sklearn tags are separate scope.
 
 The fit_transform/transform quantile, NaN and constant-feature contract is
-checked natively in checks/native_tests/prep_robust_scaler_native_lifecycle_suite.mojo.
+checked natively in checks/native_tests/prep_robust_scaler_native_lifecycle.mojo.
 """
 import os
 import subprocess
