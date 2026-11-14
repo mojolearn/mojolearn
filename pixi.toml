@@ -227,6 +227,8 @@ check-native-core-chunked-lm-head-denormals-cpu = "mojo run -D MOJOLEARN_NUMERIC
 check-native-core-chunked-lm-head-denormals-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_chunked_lm_head_denormals_gpu.mojo"
 check-native-core-ne2-rounds-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/core_ne2_rounds_cpu.mojo"
 check-native-core-ne2-rounds-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_ne2_rounds_gpu.mojo"
+check-native-core-safetensors-f16-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/core_safetensors_f16_cpu.mojo"
+check-native-core-safetensors-f16-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_safetensors_f16_gpu.mojo"
 check-native-spectral-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_state.mojo"
 check-native-spectral-resident-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_resident_gpu.mojo"
 check-native-spectral-assignment-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/spectral_assignment_cpu.mojo"

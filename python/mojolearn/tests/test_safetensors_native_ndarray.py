@@ -3,7 +3,6 @@ import numpy as np
 import pytest
 
 from mojolearn import Array
-from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models.safetensors import widen_f16
 
 
@@ -21,19 +20,6 @@ def expected_word(half):
         fraction <<= 1
         exponent -= 1
     return sign | (exponent << 23) | ((fraction & 1023) << 13)
-
-
-@pytest.mark.parametrize('dtype', [np.uint16, np.float16])
-def test_every_half_pattern_preserves_sign_and_nan_payload(dtype):
-    words = np.arange(65536, dtype=np.uint16)
-    bits = words.view(dtype)
-    before = bits.tobytes()
-    result = audit_native_call(widen_f16, bits).assert_native()
-    actual = np.asarray(result)
-    assert actual.shape == bits.shape and actual.dtype == np.float32
-    np.testing.assert_array_equal(actual.view(np.uint32),
-                                  np.array([expected_word(x) for x in words], dtype=np.uint32))
-    assert bits.tobytes() == before
 
 
 @pytest.mark.parametrize('case', ['reverse', 'transpose', 'empty', 'scalar'])
