@@ -20,6 +20,7 @@ batches give the whole batch's bits) are unconditional here: the pixi tasks
 build with `MOJOLEARN_NUMERIC_IDENTICAL=1`.
 """
 from core.kmeans_native_api import KMeansNativeDriver, KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest
+from core.kmeans_native_api import KMEANS_CAPABILITIES, KMEANS_CAP_JOINT
 from checks.numerics import identical_sqrt
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.host_parallel import host_parallelize
@@ -240,7 +241,13 @@ def case_shape(driver: KMeansNativeDriver) raises:
     var labels = _labels(512)
     var fit_cells = _cells(512 * 5)
     var none = List[Float32]()
-    fit(driver, x, 512, 4, 5, _L2, 3, none, centers, labels, fit_cells, True)
+    # The public fit_transform asks the fit for its distances only from a provider with the joint capability
+    # (bindings/kmeans_native_pack.mojo: `joint`); the host provider refuses them, and fit_transform there is the
+    # fit followed by a transform. The check follows the same rule instead of asking the host for a fused output.
+    var joint = (driver.metadata(KMEANS_CAPABILITIES) & KMEANS_CAP_JOINT) != 0
+    fit(driver, x, 512, 4, 5, _L2, 3, none, centers, labels, fit_cells, joint)
+    if not joint:
+        query(driver, Int(x.unsafe_ptr()), centers, Int(fit_cells.unsafe_ptr()), 512, 4, 5, _L2, True)
     var t = _cells(512 * 5)
     query(driver, Int(x.unsafe_ptr()), centers, Int(t.unsafe_ptr()), 512, 4, 5, _L2, True)
     var bad = 0
