@@ -7,11 +7,8 @@ legacy forest archives cannot reconstruct training parameters for cloning.
 """
 import functools
 import inspect
-import weakref
 from types import GetSetDescriptorType
 
-from ._buffer import empty, as_f32_c
-from ._arrays import _addr, _addr_ro
 from . import _native_trees_bridge
 
 # The compiled tree-ensemble owner: `score` predicts and scores in one native
@@ -19,30 +16,9 @@ from . import _native_trees_bridge
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
-_FOREST_ARRAYS = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
-
-
-class _ResidentForest:
-    """Own a device snapshot independently of estimator lifetime or pickling."""
-    def __init__(self, native, arrays, dimensions, mode, ordered=None):
-        self.native = native
-        self.arrays = arrays
-        self.dimensions = dimensions
-        self.mode = mode
-        self.ordered = ordered
-        params = list(dimensions)
-        if ordered is not None:
-            # 1 strict increasing-tree kernel, 0 the 32-grove graph; None
-            # leaves the binary's compiled default.
-            params.append(1 if ordered else 0)
-        self.handle = native.forest_prepare_gpu(
-            *(_addr_ro(a) for a in arrays), params)  # glue: one address per model array (five)
-        self._finalizer = weakref.finalize(self, native.forest_release_gpu, self.handle)
-
-    def matches(self, native, arrays, dimensions, mode, ordered=None):
-        return (native is self.native and dimensions == self.dimensions and mode == self.mode
-                and ordered == self.ordered
-                and all(a is b for a, b in zip(arrays, self.arrays)))  # glue: compares the five model arrays
+# `_ResidentForest` (a Python-owned device snapshot) deleted by lane py-trees
+# (2026-11-14): no product path built one; the forest door keeps snapshots in
+# its native resident table (bindings/py_trees_resident.mojo).
 
 
 def forest_estimator(kind):
@@ -80,7 +56,6 @@ def forest_estimator(kind):
 
         initialize.__signature__ = signature
         cls.__init__ = initialize
-        cls._forest_original_init = original
         cls._parameter_names = tuple(p.name for p in parameters if p.name != "self")  # glue: collects constructor parameter names
         cls._estimator_type = kind
         return cls
@@ -106,119 +81,37 @@ class ForestProtocol:
 
     def _validate_params(self):
         """The constructor checks, run at fit (scikit-learn's convention):
-        refuses a bad parameter with the message the constructor used to
-        raise, and derives the native configuration (`_cfg`) from the
-        stored parameters, which stay as given."""
-        params = {name: getattr(self, name) for name in self._parameter_names}  # glue: reads constructor parameters by name
-        mode = params.get("numeric_mode")
-        if mode is not None and (not isinstance(mode, str) or
-                mode.strip().lower() not in ("fast", "identical")):
-            raise ValueError("numeric_mode must be fast, identical or None")
-        self._validate_inference_engine(params.get("inference_engine", "sequential"))
-        self._forest_validating = True
-        try:
-            type(self)._forest_original_init(self, **params)
-        finally:
-            self.__dict__.pop("_forest_validating", None)
-        for name, value in params.items():  # glue: restores constructor parameters verbatim
-            setattr(self, name, value)
+        refuses a bad parameter with the constructor's message and stores the
+        derived native configuration (`_cfg`); the parameters stay as given."""
+        return _TREES(self, "trees_public_forest_validate_params", (), _TREES_CONTEXT)
 
     def _refresh_config(self):
-        replacement = type(self)(**self.get_params())
-        # Checks first: a refused parameter leaves this instance as it was.
-        replacement._validate_params()
-        # sklearn owns this transient context while Pipeline.fit is active,
-        # and the fit tracker (`_mode._track_fit`) its in-fit count.
-        keep = {k: self.__dict__[k] for k in ("_parent_callback_ctx", "_mojolearn_fitting")  # glue: two bookkeeping attribute names
-                if k in self.__dict__}
-        # Once a new fit begins, old nodes/classes must not survive a failure.
-        self.__dict__.clear()
-        self.__dict__.update(replacement.__dict__)
-        self.__dict__.update(keep)
-
-    @staticmethod
-    def _validated_mode(mode):
-        if mode is None:
-            return None
-        if not isinstance(mode, str) or mode.strip().lower() not in (
-                "fast", "identical"):
-            raise ValueError("numeric_mode must be fast, identical or None")
-        return mode.strip().lower()
+        """The constructor checks on the stored parameters (a refused one
+        leaves the instance as it was), then the state a new constructor plus
+        `_validate_params` would hold; fitted state is dropped."""
+        return _TREES(self, "trees_public_forest_refresh", (), _TREES_CONTEXT)
 
     def _capture_fit_mode(self):
-        from . import _backend
-        requested = self._validated_mode(getattr(self, "numeric_mode", None))
-        self._fit_numeric_mode = self._validated_mode(
-            _backend.default_mode() if requested is None else requested)
+        return _TREES(self, "trees_public_forest_capture_mode", (), _TREES_CONTEXT)
 
     def _effective_mode(self):
-        from . import _backend
-        requested = self._validated_mode(getattr(self, "numeric_mode", None))
-        captured = getattr(self, "_fit_numeric_mode", None)
-        if captured is not None:
-            if requested is not None and requested != captured:
-                raise ValueError(
-                    f"This forest was fitted with numeric_mode={captured!r}; "
-                    "refit or use set_params before changing numeric_mode")
-            return captured
-        # Legacy inference archives have no captured mode. Honor any stored
-        # numeric_mode attribute, otherwise preserve their process default.
-        return requested if requested is not None else _backend.default_mode()
+        return _TREES(self, "trees_public_forest_effective_mode", (), _TREES_CONTEXT)
 
     def _bind(self, name=None):
         from . import _backend
         return _backend.binding(name or self._BINDING, self._effective_mode())
 
-    @staticmethod
-    def _validate_inference_engine(engine):
-        if not isinstance(engine, str) or engine not in ("auto", "sequential", "parallel_groves"):
-            raise ValueError("inference_engine must be 'auto', 'sequential' or 'parallel_groves'")
-        return engine
-
     def _prediction_engine(self):
         """The engine this model PREDICTS AS, which is also what its archive
-        records: 'sequential' or 'parallel_groves'.
-
-        IDENTICAL `auto` is 'sequential' even where a resident snapshot
-        serves it (`_ordered_resident_auto`): that snapshot runs the strict
-        increasing-tree kernel, the sequential route's arithmetic, so the
-        model's bits and its archive are the sequential ones on every
-        vendor and on the CPU. Until 2026-09-22 it answered
-        'parallel_groves', which wrote a groves archive (every RF lane's
-        saved-model hash moved) and, through the compiled default, moved an
-        explicit IDENTICAL `parallel_groves` model off the 32-grove fold it
-        was recorded with."""
-        engine = self._validate_inference_engine(getattr(self, "inference_engine", "sequential"))
-        if engine == "auto":
-            # FAST permits the grove-parallel reduction and benefits from a
-            # persistent device snapshot.
-            if self._effective_mode() == "fast":
-                return "parallel_groves"
-            return "sequential"
-        return engine
+        records: 'sequential' or 'parallel_groves'. IDENTICAL `auto` is
+        'sequential'; FAST `auto` is 'parallel_groves'."""
+        return _TREES(self, "trees_public_forest_prediction_engine", (), _TREES_CONTEXT)
 
     def _ordered_resident_auto(self):
-        """The `sequential` engine on a GPU binding (one with the
-        `forest_ordered_resident` export): predict through a device-resident
-        snapshot prepared with the strict increasing-tree kernel, the
-        sequential route's arithmetic (cpu-gpu-cleanup t-forest: the GPU
-        install no longer walks the trees on host threads). A host binding
-        (CPU-only install) has no such route; its proxy raises ImportError
-        by name for any function it lacks, so a missing export is an absence
-        here and the host walk runs."""
-        if self._prediction_engine() != "sequential":
-            return False
-        return self._ordered_resident_export() is not None
-
-    def _ordered_resident_export(self):
-        """The binding's `forest_ordered_resident`, or None where it has none:
-        an older binary, or a host binding, whose proxy raises ImportError
-        by name (not AttributeError) for an export it lacks."""
-        try:
-            selected = getattr(self._bind(), "forest_ordered_resident", None)
-        except (AttributeError, ImportError):
-            return None
-        return selected if callable(selected) else None
+        """True when the sequential engine predicts through a device-resident
+        snapshot prepared with the strict increasing-tree kernel (an image
+        whose snapshot takes the ordered word); False on a host binding."""
+        return _TREES(self, "trees_public_forest_ordered_resident_auto", (), _TREES_CONTEXT)
 
     def _forest_auxiliary(self, X, *, leaves=False, prefixes=False, prediction=False):
         """T39 buffer/argument plumbing; all walks and reductions are Mojo."""

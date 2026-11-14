@@ -88,10 +88,8 @@ float64 `Array` for numeric labels and a Python list for str labels.
 Nothing in this module imports NumPy.
 """
 
-import numbers
-
 from . import _mojolearn_trees, _native_archive_bridge, _native_trees_bridge
-from ._labels import argmax_rows, decode_labels, is_bool
+from ._labels import argmax_rows, decode_labels
 from ._mode import NumericModeMixin
 from ._forest_protocol import ForestProtocol, forest_estimator
 
@@ -149,57 +147,15 @@ _UNSUPPORTED_CRITERIA = {
 }
 
 
-_NONFINITE_REFUSAL = "X contains NaN or infinity; the forest has no missing-value arm"
-
-
-def _refuse_forest_knobs(n_jobs, verbose):
-    if n_jobs is not None:
-        raise NotImplementedError(
-            "n_jobs is not implemented: there is no CPU thread pool here -- the"
-            " fit runs one host thread driving the GPU (device='gpu')."
-            " Refused by name rather than"
-            " accepted and ignored."
-        )
-    if verbose:
-        raise NotImplementedError(
-            "verbose is not implemented: nothing in the Mojo layer logs per-tree"
-            " progress. Refused by name rather than accepted and ignored."
-        )
-
-
-def _n_samples_bootstrap(n_rows, max_samples):
-    """sklearn's `_get_n_samples_bootstrap` (`ensemble/_bootstrap.py:10-62`,
-    unweighted branch), as the COUNT slot 18 carries: None -> 0 (meaning
-    n_rows), int -> itself, float f -> max(int(f * n_rows), 1). The value
-    check is sklearn's `_parameter_constraints` (`_forest.py:198-202`)."""
-    if max_samples is None:
-        return 0
-    if is_bool(max_samples):
-        raise ValueError("max_samples must be None, an int >= 1 or a float")
-    if isinstance(max_samples, numbers.Integral):
-        if max_samples < 1:
-            raise ValueError(
-                f"max_samples={max_samples} must be >= 1 when an int"
-            )
-        return int(max_samples)
-    f = float(max_samples)
-    if not f > 0.0:
-        raise ValueError(f"max_samples={max_samples} must be > 0 when a float")
-    return max(int(f * n_rows), 1)
-
-
-def _validate_device(device):
-    if not isinstance(device, str) or device != "gpu":
-        raise ValueError(
-            f"Extra Trees training is GPU-only; device must be 'gpu', got {device!r}"
-        )
+# The constructor checks (`_validate_device`, the n_jobs/verbose refusals, the
+# criterion) and the stored `_cfg` are the native owner's `_et_derive`, and
+# the bootstrap count is its `_et_bootstrap_rows` (bindings/
+# trees_public_forest_door.mojo), run at fit on the stored parameters; lane
+# py-trees (2026-11-14) deleted their Python copies here.
 
 
 class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
     _BINDING = "_mojolearn_trees"
-    def __init__(self, device):
-        _validate_device(device)
-        self.device = device
 
     def save(self, path):
         """Write the fitted forest to `path` as an npz file.
@@ -367,35 +323,9 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         device="gpu",
         inference_engine="auto",
     ):
-        super().__init__(device)
-        _refuse_forest_knobs(n_jobs, verbose)
-        if criterion not in _CLASSIFIER_CRITERIA:
-            reason = _UNSUPPORTED_CRITERIA.get(criterion)
-            raise NotImplementedError(
-                f"criterion={criterion!r} is not implemented"
-                + (f" ({reason[1]})" if reason else "")
-                + "; 'gini', 'entropy' and its alias 'log_loss' are."
-            )
-        self.criterion = criterion
-        self._criterion_code = _CLASSIFIER_CRITERIA[criterion]
-        self._cfg = dict(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf,
-            max_features=max_features,
-            max_leaf_nodes=max_leaf_nodes,
-            min_impurity_decrease=min_impurity_decrease,
-            bootstrap=bootstrap,
-            oob_score=oob_score,
-            random_state=random_state,
-            warm_start=warm_start,
-            class_weight=class_weight,
-            ccp_alpha=ccp_alpha,
-            max_samples=max_samples,
-            monotonic_cst=monotonic_cst,
-        )
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the forest.
@@ -574,40 +504,9 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         device="gpu",
         inference_engine="auto",
     ):
-        super().__init__(device)
-        _refuse_forest_knobs(n_jobs, verbose)
-        if criterion not in _REGRESSOR_CRITERIA:
-            reason = _UNSUPPORTED_CRITERIA.get(criterion)
-            raise NotImplementedError(
-                f"criterion={criterion!r} is not implemented"
-                + (f" ({reason[1]})" if reason else "")
-                + "; 'squared_error', 'poisson', 'gamma' and 'inverse_gaussian' are."
-            )
-        self.criterion = criterion
-        self._criterion_code = _REGRESSOR_CRITERIA[criterion]
-        self._cfg = dict(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf,
-            max_features=max_features,
-            max_leaf_nodes=max_leaf_nodes,
-            min_impurity_decrease=min_impurity_decrease,
-            bootstrap=bootstrap,
-            oob_score=oob_score,
-            random_state=random_state,
-            warm_start=warm_start,
-            class_weight=None,
-            ccp_alpha=ccp_alpha,
-            max_samples=max_samples,
-            monotonic_cst=monotonic_cst,
-        )
-        # sklearn's regressor default: all features. A float 1.0 means the
-        # fraction form; estimator.mojo nudges the ratio to the middle of
-        # its truncation bucket either way.
-        if max_features == 1.0 and not isinstance(max_features, int):
-            self._cfg["max_features"] = None
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the forest.

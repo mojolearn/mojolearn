@@ -25,7 +25,6 @@
 # round never reads (the round's own `x_trees_dart_open` holds X and tests
 # it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
-from std.sys.compile import is_defined
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
@@ -58,11 +57,17 @@ from bindings.admitted_input_unpack import (
 from bindings.admitted_input_run import AdmittedXView
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from xtrees.trees_forest_run import ForestFit, trees_check_features
+from xtrees.trees_forest_run import ForestFit, trees_check_features, forest_export_dtype
+from core.forest_fit_request import ForestFitArgs
+from bindings.forest_fit_boundary_unpack import forest_fit_request_py
+from bindings.trees_dart_rounds_run import (
+    DartRoundPlan, dart_round_admit, dart_rounds_run, dart_member_into, DART_M_OFF_N, DART_M_NODES,
+    DART_M_LEAF_N, DART_M_VAL_N, DART_M_COLS, DART_M_TREES, DART_M_OUTPUTS,
+)
 from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
-    boost_count_fraction_ok, boost_count_check, boost_weight_flags_check, boost_dart_cap_check,
+    boost_count_fraction_ok, boost_count_check, boost_weight_flags_check,
 )
 from bindings.trees_public_forest_door import (
     forest_fit,
@@ -74,7 +79,7 @@ from bindings.trees_public_forest_door import (
     forest_capture_mode,
     forest_effective_mode,
     forest_export,
-    forest_fit_dart_member,
+    forest_key,
     forest_kind,
     _check_mode,
     _rf_params,
@@ -102,19 +107,19 @@ from bindings.py_trees_resident import (
 from bindings.py_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from core.trees_entry_table import TreesEntryKey
-from xtrees.dart_abi import XD_CAP_ROUND, XD_CAP_RESIDENT, XD_FOREST_RELEASE
+from xtrees.dart_abi import XD_CAP_RESIDENT, XD_FOREST_RELEASE
 from xtrees.dart_calls import (
-    xd_ref, xd_caps, xd_open, xd_step, xd_add, xd_close, xd_predict, xd_forest_prepare, xd_forest_predict,
+    xd_ref, xd_caps, xd_predict, xd_forest_prepare, xd_forest_predict,
     xd_forest_release,
 )
 from core.entry_table import EntryRef
 from xtrees.glue_calls import (
     xt_ref,
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_accumulate_rows, xt_apply, xt_argmax_rows,
-    xt_bag_rows, xt_class_counts, xt_class_priors, xt_count_equal, xt_count_rows, xt_dart_rescale,
-    xt_dart_thresholds, xt_exact_sum, xt_fill_class_major_f64, xt_gather_f32, xt_gather_i32, xt_iota_i32,
+    xt_class_counts, xt_class_priors, xt_count_equal, xt_count_rows,
+    xt_exact_sum, xt_fill_class_major_f64, xt_gather_f32, xt_gather_i32, xt_iota_i32,
     xt_leaf_numbering, xt_log64, xt_margin2, xt_normalize_rows, xt_onehot_leaves, xt_oob_r2, xt_positive_codes,
-    xt_put_f32, xt_r2_step, xt_remap_cols, xt_samme_step, xt_sample_indices, xt_scale, xt_scale_to_f32,
+    xt_put_f32, xt_r2_step, xt_samme_step, xt_sample_indices, xt_scale, xt_scale_to_f32,
     xt_softmax_rows, xt_stack_w64, xt_transpose_f32, xt_uniform, xt_unseen_rows, xt_weighted_median,
     xt_weighted_sample,
 )
@@ -144,22 +149,8 @@ def _xr(table: PythonObject) raises -> EntryRef:
     return xt_ref(_xk(table))
 
 
-# A/B define (lane loops-trees-ab, 2026-11-11; perf audit 20261111, fix
-# 10203a6430): `-D MOJOLEARN_DART_ROUND_REF_OFF` restores the per-round
-# re-read of the x_trees key inside `_dart_boost` (a Python attribute read,
-# a tuple index, two int conversions and the entry lookup, three times per
-# round and member) as the B arm. Default (undefined): the key resolved once
-# before the boosting loop. Same image, entries and words: no bit change.
-# Verdict pending: docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_DART_ROUND_REF_OFF.
-comptime _DART_ROUND_REF_OFF = is_defined["MOJOLEARN_DART_ROUND_REF_OFF"]()
-
-
-@always_inline
-def _dart_round_glue(glue: EntryRef, xt: PythonObject) raises -> EntryRef:
-    comptime if _DART_ROUND_REF_OFF:
-        return _xr(xt)
-    else:
-        return glue
+# The MOJOLEARN_DART_ROUND_REF_OFF A/B define moved with the round loop to
+# bindings/trees_dart_rounds_run.mojo (lane py-trees, 2026-11-14).
 
 
 def _xk(table: PythonObject) raises -> TreesEntryKey:
@@ -1632,53 +1623,19 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
 
 
 
-def _dart_bag(fields: PythonObject, xt: PythonObject, n: Int, it: Int, mut cache_start: Int, mut cache: PythonObject,
-              context: PythonObject) raises -> PythonObject:
-    """`_DARTBase._bag`: the bagged rows of round `it` (None: every row)."""
-    var freq = Int(py=_int(fields["subsample_freq"]))
-    var frac = Float64(py=_float(fields["subsample"]))
-    if freq <= 0 or not frac < 1.0:
-        return PythonObject(None)
-    var start = it - it % freq
-    if cache is not None and cache_start == start:
-        return cache
-    var out = admitted_vector(max(1, n), "<i4", context)
-    var glue = _xr(xt)
-    var k = xt_bag_rows(glue, trees_address(out), n, _seed(fields["bagging_seed"], context), start, frac)
-    _ = out  # keep the Python object alive through the native call above
-    cache_start = start
-    cache = _copy_i32(out, 0, k, context)
-    return cache
+# Lane py-trees (2026-11-14): the round loop (`_dart_bag`, `_dart_cols`,
+# `_dart_member`, `_dart_member_fit` and the loop body of `_dart_boost`) moved
+# to bindings/trees_dart_rounds_run.mojo (`dart_rounds_run`) on typed values;
+# this door keeps UNPACK (fields, starts, the first member's validated request)
+# and PACK (the `trees_` members and their leaf values).
 
 
-def _dart_cols(fields: PythonObject, xt: PythonObject, d: Int, t: Int, context: PythonObject) raises -> PythonObject:
-    """`_DARTBase._cols`: the sorted feature subset of tree `t` (None: all)."""
-    var frac = Float64(py=_float(fields["colsample_bytree"]))
-    if not frac < 1.0:
-        return PythonObject(None)
-    var cnt = max(Int(py=_int(_F(Float64(d) * frac + 0.5))), min(1, d))
-    if cnt >= d:
-        return PythonObject(None)
-    return _indices(xt, d, cnt, False, _seed(fields["feature_fraction_seed"], context), t, context)
-
-
-def _dart_member(fields: PythonObject, handle: PythonObject, c: Int, n: Int, d: Int, rows: PythonObject,
-                 cols: PythonObject, max_depth: PythonObject, seed: Int, j: Int, memo: PythonObject,
-                 context: PythonObject) raises -> PythonObject:
-    """One DART member: a one-tree RandomForestRegressor fitted by
-    the rf image's native DART member fit (XF_FIT_DART) on the round's device X and class-c
-    target (`RandomForestRegressor._fit_in_dart`).
-
-    The member's settings are the same for every tree of one fit except its
-    random_state, so its constructor checks run once (lane ne2-b-members,
-    N061): the first member is built and validated (`forest_refresh`,
-    `forest_capture_mode`, the criterion check), `memo` (an empty list the
-    fit loop owns) keeps its validated fields, and every later member copies
-    them with its own seed (`_member_like`). Same fields, same values."""
-    if len(memo) > 0:
-        var tree_like = _member_like(context["trees_rf_regressor"], memo[0], _sub_seed(seed, j))
-        return _dart_member_fit(tree_like, py_fields(tree_like), String(py_fields(tree_like)["_fit_numeric_mode"]),
-                                handle, c, n, d, rows, cols, context)
+def _dart_first_member(fields: PythonObject, max_depth: PythonObject, seed: Int,
+                       context: PythonObject) raises -> PythonObject:
+    """`_dart_member`'s first member: a one-tree RandomForestRegressor whose
+    constructor checks run once (`forest_refresh`, `forest_capture_mode`, the
+    criterion check). Every later member holds the same validated fields with
+    its own seed (`_member_like` at PACK). Returns `(member, fields copy)`."""
     var settings = Python.dict()
     py_setitem(settings, "n_estimators", _P(1))
     py_setitem(settings, "bootstrap", PythonObject(False))
@@ -1687,65 +1644,47 @@ def _dart_member(fields: PythonObject, handle: PythonObject, c: Int, n: Int, d: 
     py_setitem(settings, "max_leaves", _int(fields["num_leaves"]))
     py_setitem(settings, "min_samples_leaf", _int(fields["min_child_samples"]))
     py_setitem(settings, "n_bins", _int(fields["max_bin"]))
-    py_setitem(settings, "random_state", _P(_sub_seed(seed, j)))
+    py_setitem(settings, "random_state", _P(_sub_seed(seed, 0)))
     py_setitem(settings, "n_streams", _P(1))
     py_setitem(settings, "numeric_mode", py_get(fields, "numeric_mode"))
     var tree = _new_member(context["trees_rf_regressor"], settings, context)
     var tf = forest_refresh(tree, "rf_regressor", context)
-    var mode = forest_capture_mode(tf, context)
+    _ = forest_capture_mode(tf, context)
     if Int(py=tf["_cfg"]["criterion"]) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
         raise Error("a DART member fits squared_error")
-    _ = py_call(memo.append, py_call(trees_builtins().dict, tf))
-    return _dart_member_fit(tree, tf, mode, handle, c, n, d, rows, cols, context)
-
-
-def _dart_member_fit(tree: PythonObject, tf: PythonObject, mode: String, handle: PythonObject, c: Int, n: Int, d: Int,
-                     rows: PythonObject, cols: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The validated DART member's one-tree fit on the round's device X and
-    class-c target, its arrays stored on the member."""
-    var code = tf["_cfg"]["criterion"]
-    var rf = trees_table(context, mode, "_mojolearn_rf")
-    var m = n if rows is None else len(rows)
-    var dc = d if cols is None else len(cols)
-    var params = _rf_params(tf, "rf_regressor", m, dc, 0, rf, context)
-    # the rf image's native DART member fit (XF_FIT_DART; lane calltable-forest)
-    var result = forest_fit_dart_member(rf, Int(py=_int(handle)), c, 0 if rows is None else trees_address(rows),
-                                        0 if cols is None else trees_address(cols), params, code, context)
-    _ = rows  # the row and column ids are read through their addresses above
-    _ = cols
-    _member_store(tree, result, dc)
-    return tree
+    return Python.tuple(tree, py_call(trees_builtins().dict, tf))
 
 
 def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32: AdmittedXView, K: Int, kind: Int,
                 context: PythonObject) raises -> PythonObject:
-    """`_DARTBase._boost` and its device round (`_boost_loop_device`)."""
-    var b = trees_builtins()
+    """`_DARTBase._boost`: UNPACK into `DartRoundPlan`, the typed round loop
+    (`dart_rounds_run`), then PACK of the members, coefficients and weights."""
     var n = x.rows
     var d = x.cols
     var xt = _xt(fields, context)
     var seed = _seed(fields["random_state"], context)
     var drop_seed = _seed(fields["drop_seed"], context)
     var inits = Python.list()
+    var starts = List[Float64]()
     var glue = _xr(xt)
     if kind == 0 or kind == 1:
         # `_trees_fsum_f32(b, y32) / n`: the exact sum, refused when not finite
-        var out = admitted_vector(1, "<f8", context)
-        var flags = admitted_vector(8, "<i4", context)
-        _ = xt_exact_sum(glue, y32.address, trees_address(out), trees_address(flags), y32.rows, 0)
-        _ = flags  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        if _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0 or _i32_word(flags, 2) != 0:
+        var sum_out = admitted_vector(1, "<f8", context)
+        var sum_flags = admitted_vector(8, "<i4", context)
+        _ = xt_exact_sum(glue, y32.address, trees_address(sum_out), trees_address(sum_flags), y32.rows, 0)
+        _ = sum_flags  # keep the Python object alive through the native call above
+        _ = sum_out  # keep the Python object alive through the native call above
+        if _i32_word(sum_flags, 0) != 0 or _i32_word(sum_flags, 1) != 0 or _i32_word(sum_flags, 2) != 0:
             raise Error("Input y contains NaN or infinity.")
-        var mean = _f64_word(out, 0) / Float64(n)
+        var mean = _f64_word(sum_out, 0) / Float64(n)
         if kind == 0:
-            _ = py_call(inits.append, _F(mean))
+            starts.append(mean)
         else:
             if not (0.0 < mean and mean < 1.0):
                 raise Error("y must hold both classes")
             var log_word: List[Float64] = [0.0]
             _ = xt_log64(glue, Int(log_word.unsafe_ptr()), mean / (1.0 - mean))
-            _ = py_call(inits.append, PythonObject(log_word[0]))
+            starts.append(log_word[0])
             _ = log_word
     else:
         var cnt = admitted_vector(K, "<i4", context)
@@ -1756,7 +1695,9 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32
         _ = priors  # keep the Python object alive through the native call above
         _ = cnt  # keep the Python object alive through the native call above
         for c in range(K):  # driver-loop: over the K class starts
-            _ = py_call(inits.append, _F(_f64_word(priors, c)))
+            starts.append(_f64_word(priors, c))
+    for c in range(len(starts)):  # driver-loop: over the K class starts (PACK)
+        _ = py_call(inits.append, _F(starts[c]))
     py_setitem(fields, "init_score_", inits[0] if K == 1 else inits)
     var lr = Float64(py=_float(fields["learning_rate"]))
     var l1 = Float64(py=_float(fields["reg_alpha"]))
@@ -1775,130 +1716,83 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32
     # TOMBSTONE: A8C_BOOST_HOST_FINITE_SCAN (removed: superseded by the open's device test) deleted 2026-11-09 by aef0ae764d; code recoverable at aef0ae764d^.
     # Restore: git apply experiments/removed/A8C_BOOST_HOST_FINITE_SCAN.patch
     # (the DART door's host finite scan of X; `x_trees_dart_open` tests the X it uploads, xtrees/dart_device.mojo,
-    # the host column in xtrees/dart_host.mojo, and the refusal is mapped to TREES_NONFINITE at the open below)
-    # `_dart_device`: the round's entries and the leaf-value cap.
-    # Resolved once for the whole fit (lane entry-table-zero-alloc): every
-    # round's step and every member's add is one indirect call through it.
+    # the host column in xtrees/dart_host.mojo, and the refusal is mapped to TREES_NONFINITE at the open in
+    # bindings/trees_dart_rounds_run.mojo)
+    # `_dart_device`: the round's entries and the leaf-value cap. Resolved
+    # once for the whole fit (lane entry-table-zero-alloc).
     var dart = xd_ref(_xk(xt))
-    if (xd_caps(dart) & XD_CAP_ROUND) == 0:
-        raise Error("NotImplementedError: mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "
-                    + "MOJOLEARN_*DART_DEVICE_OFF build); the host loop is removed, so the fit is refused by name")
     var n_iters = Int(py=_int(fields["n_estimators"]))
     var node_cap = 2 * Int(py=_int(fields["num_leaves"])) - 1
-    boost_dart_cap_check(n_iters, K, node_cap)
-    var all_cols = _arange(xt, d, context)
-    var inits32_store = py_call(context["array_type"], PythonObject("f"), inits)
-    var inits32 = classical_wrap_array(inits32_store, Python.tuple(len(inits)), "<f4", "C", context)
+    dart_round_admit(dart, n_iters, K, node_cap)
     var skip_thr = _dart_thr(Float64(py=_float(fields["skip_drop"])))
-    var bad = admitted_vector(1, "<i4", context)
-    var weights64 = admitted_vector(n_iters, "<f8", context)
-    var coefs64 = admitted_vector(n_iters * K, "<f8", context)
-    var coef32 = admitted_vector(n_iters * K, "<f4", context)
-    var thr64 = admitted_vector(n_iters, "<i8", context)
-    var flags = admitted_vector(n_iters, "<i4", context)
-    var state = admitted_vector(1, "<f8", context)
     var uniform = 1 if _truthy(fields["uniform_drop"]) else 0
     var xgb = 1 if _truthy(fields["xgboost_dart_mode"]) else 0
     var max_drop = Int(py=_int(fields["max_drop"]))
-    var drop_rate = _float(fields["drop_rate"])
-    var drop_rate_f = Float64(py=drop_rate)
-    var handle_word = 0
-    try:
-        handle_word = xd_open(dart, x.address, y32.address, trees_address(inits32), n, d, K, kind, n_iters,
-                              node_cap)
-    except error:
-        # the open's device test of X (lane a8c), in the forest's one wording
-        if TREES_NONFINITE in String(error):
-            raise Error(TREES_NONFINITE)
-        raise error^
-    _ = inits32  # keep the Python object alive through the native call above
-    # the session handle as the rf member fit (`rf_regressor_fit_dart_export`) still takes it
-    var handle = PythonObject(handle_word)
-    var cache_start = -1
-    var cache = PythonObject(None)
-    var memo = Python.list()
-    try:
-        for it in range(n_iters):  # driver-loop: over the boosting rounds
-            _ = xt_dart_thresholds(_dart_round_glue(glue, xt), trees_address(weights64), trees_address(coefs64), trees_address(coef32),
-                                   trees_address(thr64), trees_address(state), it, K, uniform, max_drop, drop_rate_f)
-            _ = thr64  # keep the Python object alive through the native call above
-            _ = coef32  # keep the Python object alive through the native call above
-            _ = coefs64  # keep the Python object alive through the native call above
-            _ = weights64  # keep the Python object alive through the native call above
-            _ = state  # keep the Python object alive through the native call above
-            _ = xd_step(dart, handle_word, trees_address(coef32), trees_address(thr64), trees_address(flags),
-                        trees_address(bad), it, drop_seed, it, skip_thr)
-            _ = flags  # keep the Python object alive through the native call above
-            _ = thr64  # keep the Python object alive through the native call above
-            _ = coef32  # keep the Python object alive through the native call above
-            _ = bad  # keep the Python object alive through the native call above
-            _ = inits32  # keep the Python object alive through the native call above
-            if _i32_word(bad, 0) != 0:
-                raise Error("RuntimeError: x_trees dart: a tree walk left its tree (child or column out of range)")
-            var rescaled: List[Float64] = [0.0, 0.0, 0.0]
-            _ = xt_dart_rescale(_dart_round_glue(glue, xt), trees_address(weights64), trees_address(coefs64), trees_address(flags),
-                                trees_address(state), Int(rescaled.unsafe_ptr()), it, K, uniform, xgb, lr)
-            _ = state  # keep the Python object alive through the native call above
-            _ = flags  # keep the Python object alive through the native call above
-            _ = coefs64  # keep the Python object alive through the native call above
-            _ = weights64  # keep the Python object alive through the native call above
-            var shrink = rescaled[1]
-            _ = state  # keep the Python object alive through the native call above
-            _ = flags  # keep the Python object alive through the native call above
-            _ = coefs64  # keep the Python object alive through the native call above
-            _ = weights64  # keep the Python object alive through the native call above
-            var factor = rescaled[2]
-            _ = rescaled
-            _ = state  # keep the Python object alive through the native call above
-            _ = flags  # keep the Python object alive through the native call above
-            _ = coefs64  # keep the Python object alive through the native call above
-            _ = weights64  # keep the Python object alive through the native call above
-            var rows = _dart_bag(fields, xt, n, it, cache_start, cache, context)
-            var m = 0 if rows is None else len(rows)
-            for c in range(K):  # driver-loop: over the K member trees of one round
-                var j = it * K + c
-                var cols = _dart_cols(fields, xt, d, j, context)
-                var tree = _dart_member(fields, handle, c, n, d, rows, cols, max_depth, seed, j, memo, context)
-                _ = inits32  # keep the Python object alive through the native call above
-                var tf = py_fields(tree)
-                if cols is not None:
-                    var colid = tf["_colid"]
-                    var cid = _copy_i32(colid, 0, Int(py=colid.size), context)
-                    _ = xt_remap_cols(_dart_round_glue(glue, xt), trees_address(cid), trees_address(cols), Int(py=cid.size), len(cols))
-                    _ = cid  # keep the Python object alive through the native call above
-                    _ = cols  # keep the Python object alive through the native call above
-                    py_setitem(tf, "_colid", cid)
-                var offsets = tf["_offsets"]
-                var lo = _i32_word(offsets, 0)
-                var n_nodes = _i32_word(offsets, 1) - lo
-                var values = admitted_vector(n_nodes, "<f4", context)
-                var add_colid = tf["_colid"]
-                var add_ques = tf["_quesval"]
-                var add_left = tf["_left_child"]
-                var add_rows = rows if rows is not None else all_cols
-                _ = xd_add(dart, handle_word, trees_address(add_colid), trees_address(add_ques),
-                           trees_address(add_left), trees_address(values), trees_address(add_rows), j, c, lo, n_nodes,
-                           shrink, factor, lam, l1, mds, m)
-                _ = add_colid  # keep the Python objects alive through the native call above
-                _ = add_ques
-                _ = add_left
-                _ = add_rows
-                _ = inits32  # keep the Python object alive through the native call above
-                _ = values  # keep the Python object alive through the native call above
-                _ = py_call(trees.append, tree)
-                _ = py_call(tree_values.append, values)
-    finally:
-        _ = xd_close(dart, handle_word, trees_address(bad))
-        _ = bad  # keep the Python object alive through the native call above
-        _ = inits32  # keep the Python object alive through the native call above
-    if _i32_word(bad, 0) != 0:
-        raise Error("RuntimeError: x_trees dart: a tree walk left its tree (child or column out of range)")
+    var drop_rate_f = Float64(py=_float(fields["drop_rate"]))
+    # `_dart_bag` / `_dart_cols`' settings, read once per fit (the door read
+    # them every round and member; the values cannot change inside a fit).
+    var freq = Int(py=_int(fields["subsample_freq"]))
+    var frac = Float64(py=_float(fields["subsample"]))
+    var bag = freq > 0 and frac < 1.0
+    var bag_seed = _seed(fields["bagging_seed"], context) if bag else 0
+    var col_frac = Float64(py=_float(fields["colsample_bytree"]))
+    var col_count = 0
+    var col_seed = 0
+    if col_frac < 1.0:
+        var cnt = max(Int(py=_int(_F(Float64(d) * col_frac + 0.5))), min(1, d))
+        if cnt < d:
+            col_count = cnt
+            col_seed = _seed(fields["feature_fraction_seed"], context)
+    # The first member, validated once, and its fit request (UNPACK); the
+    # rows, columns and seed slots are rewritten per member in RUN.
+    var cls = context["trees_rf_regressor"]
+    var first = PythonObject(None)
+    var first_fields = PythonObject(None)
+    var forest = dart  # replaced below when a member is fitted
+    var request = ForestFitArgs(0, 0, List[Int](), List[Float64](), List[UInt8](), -1)
+    if n_iters * K > 0:
+        var built = _dart_first_member(fields, max_depth, seed, context)
+        first = built[0]
+        first_fields = built[1]
+        var tf = py_fields(first)
+        var rf = trees_table(context, String(tf["_fit_numeric_mode"]), "_mojolearn_rf")
+        forest = forest_key(rf)
+        request = forest_fit_request_py(0, 0, _rf_params(tf, "rf_regressor", n, d, 0, rf, context), tf["_cfg"]["criterion"])
+    var plan = DartRoundPlan(
+        dart=dart, glue_key=_xk(xt), forest=forest, x=x.address, y=y32.address, inits=starts^, n=n, d=d, k=K,
+        kind=kind, n_iters=n_iters, node_cap=node_cap, drop_seed=drop_seed, skip_thr=skip_thr, uniform=uniform,
+        xgb=xgb, max_drop=max_drop, drop_rate=drop_rate_f, lr=lr, lam=lam, l1=l1, mds=mds, bag=bag, bag_freq=freq,
+        bag_frac=frac, bag_seed=bag_seed, col_count=col_count, col_seed=col_seed, seed=seed)
+    var rounds = dart_rounds_run(plan, request^)
+    # PACK: the members in tree order, each with its five model Arrays, its
+    # dimensions and its leaf values (the arrays the round added).
+    for j in range(rounds.count()):  # driver-loop: over the fitted member trees (PACK, once per fit)
+        var tree = first if j == 0 else _member_like(cls, first_fields, _sub_seed(seed, j))
+        var counts: List[Int] = [rounds.word(j, DART_M_OFF_N), rounds.word(j, DART_M_NODES),
+                                 rounds.word(j, DART_M_NODES), rounds.word(j, DART_M_NODES),
+                                 rounds.word(j, DART_M_LEAF_N)]
+        var arrays = Python.list()
+        var dst = List[Int]()
+        for f in range(5):  # driver-loop: over the five model arrays
+            var array = admitted_vector(counts[f], forest_export_dtype(f), context)
+            dst.append(trees_address(array))
+            _ = py_call(arrays.append, array)
+        var values = admitted_vector(rounds.word(j, DART_M_VAL_N), "<f4", context)
+        dst.append(trees_address(values))
+        dart_member_into(rounds, j, dst)
+        _ = arrays  # the Arrays own the addresses written above
+        _ = values
+        _ = py_call(arrays.append, Python.list(PythonObject(rounds.word(j, DART_M_TREES)),
+                                               PythonObject(rounds.word(j, DART_M_OUTPUTS))))
+        _member_store(tree, arrays, rounds.word(j, DART_M_COLS))
+        _ = py_call(trees.append, tree)
+        _ = py_call(tree_values.append, values)
     var coefs = Python.list()
-    for i in range(n_iters * K):  # driver-loop: over the tree coefficients (trees-sized)
-        _ = py_call(coefs.append, _F(_f64_word(coefs64, i)))
+    for i in range(len(rounds.coefs)):  # driver-loop: over the tree coefficients (trees-sized, PACK)
+        _ = py_call(coefs.append, _F(rounds.coefs[i]))
     var weights = Python.list()
-    for i in range(n_iters):  # driver-loop: over the tree weights (rounds-sized)
-        _ = py_call(weights.append, _F(_f64_word(weights64, i)))
+    for i in range(len(rounds.weights)):  # driver-loop: over the tree weights (rounds-sized, PACK)
+        _ = py_call(weights.append, _F(rounds.weights[i]))
     py_setitem(fields, "tree_coefs_", coefs)
     py_setitem(fields, "tree_weights_", weights)
     py_setitem(fields, "_bag_at", PythonObject(None))
