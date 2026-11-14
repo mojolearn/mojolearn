@@ -386,12 +386,13 @@ struct BnReference(Movable):
         self.rv = rv^
 
 
-def ref_bn(n: Int, c: Int, hw: Int, x: List[Float32], gamma: List[Float64], beta: List[Float64],
+def ref_bn(n: Int, c: Int, hw: Int, x: List[Float64], gamma: List[Float64], beta: List[Float64],
            rm: List[Float64], rv: List[Float64], training: Bool, momentum: Float64, eps: Float64,
-           g: List[Float32]) -> BnReference:
+           g: List[Float64]) -> BnReference:
     """`ref_bn` of the Python test: PyTorch's batch_norm over (N, C, HW) in
     float64 (training: batch statistics and the running update with the
-    unbiased variance; eval: the running statistics)."""
+    unbiased variance; eval: the running statistics). x and g are float64
+    (the BasicBlock reference feeds it float64 activations)."""
     var count = n * hw
     var mean = List[Float64](length=c, fill=0.0)
     var var_ = List[Float64](length=c, fill=0.0)
@@ -402,12 +403,12 @@ def ref_bn(n: Int, c: Int, hw: Int, x: List[Float32], gamma: List[Float64], beta
             var s = 0.0
             for i in range(n):  # small-loop(reference images)
                 for k in range(hw):  # small-loop(reference positions)
-                    s += Float64(x[(i * c + ch) * hw + k])
+                    s += x[(i * c + ch) * hw + k]
             var m = s / Float64(count)
             var q = 0.0
             for i in range(n):  # small-loop(reference images)
                 for k in range(hw):  # small-loop(reference positions)
-                    var d = Float64(x[(i * c + ch) * hw + k]) - m
+                    var d = x[(i * c + ch) * hw + k] - m
                     q += d * d
             mean[ch] = m
             var_[ch] = q / Float64(count)
@@ -426,19 +427,19 @@ def ref_bn(n: Int, c: Int, hw: Int, x: List[Float32], gamma: List[Float64], beta
         for i in range(n):  # small-loop(reference images)
             for k in range(hw):  # small-loop(reference positions)
                 var at = (i * c + ch) * hw + k
-                var xhat = (Float64(x[at]) - mean[ch]) * invstd
+                var xhat = (x[at] - mean[ch]) * invstd
                 y[at] = xhat * gamma[ch] + beta[ch]
-                dbeta[ch] += Float64(g[at])
-                dgamma[ch] += Float64(g[at]) * xhat
+                dbeta[ch] += g[at]
+                dgamma[ch] += g[at] * xhat
         for i in range(n):  # small-loop(reference images)
             for k in range(hw):  # small-loop(reference positions)
                 var at = (i * c + ch) * hw + k
                 if training:
-                    var xhat = (Float64(x[at]) - mean[ch]) * invstd
-                    dx[at] = (Float64(g[at]) - dbeta[ch] / Float64(count) - xhat * dgamma[ch] / Float64(count)) * (
+                    var xhat = (x[at] - mean[ch]) * invstd
+                    dx[at] = (g[at] - dbeta[ch] / Float64(count) - xhat * dgamma[ch] / Float64(count)) * (
                         invstd * gamma[ch])
                 else:
-                    dx[at] = Float64(g[at]) * invstd * gamma[ch]
+                    dx[at] = g[at] * invstd * gamma[ch]
     return BnReference(y^, dx^, dgamma^, dbeta^, new_rm^, new_rv^)
 
 

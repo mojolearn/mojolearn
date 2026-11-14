@@ -54,7 +54,7 @@ def _batchnorm(k: Int) raises:
         var g = _data(10 * k + 5 + step, total)
         var y = bn.forward(x, n, hw, True, True, True, 0.2)
         var dx = bn.backward(x, g, n, hw)
-        var want = ref_bn(n, c, hw, x, gamma, beta, rm, rv, True, 0.2, 1e-5, g)
+        var want = ref_bn(n, c, hw, widen(x), gamma, beta, rm, rv, True, 0.2, 1e-5, widen(g))
         var at = what + " step " + String(step)
         check_close(y, want.y, 1e-4, 1e-5, at + " y")
         check_close(dx, want.dx, 1e-4, 1e-4, at + " dx")
@@ -70,8 +70,8 @@ def _batchnorm(k: Int) raises:
     var g = _data(10 * k + 4, total)
     var y = bn.forward(x, n, hw, False, True, True, 0.2)
     var dx = bn.backward(x, g, n, hw)
-    var want = ref_bn(n, c, hw, x, gamma, beta, widen(bn.running_mean()), widen(bn.running_var()), False, 0.2,
-                      1e-5, g)
+    var want = ref_bn(n, c, hw, widen(x), gamma, beta, widen(bn.running_mean()), widen(bn.running_var()),
+                      False, 0.2, 1e-5, widen(g))
     check_close(y, want.y, 1e-4, 1e-5, what + " eval y")
     check_close(dx, want.dx, 1e-4, 1e-5, what + " eval dx")
     _ = x^
@@ -92,7 +92,7 @@ def _cumulative() raises:
         var x = _data(20 + step, n * c * hw)
         var g = _data(30 + step, n * c * hw)
         _ = bn.forward(x, n, hw, True, True, False, 0.0)
-        var want = ref_bn(n, c, hw, x, ones, nulls, rm, rv, True, 1.0 / Float64(step + 1), 1e-5, g)
+        var want = ref_bn(n, c, hw, widen(x), ones, nulls, rm, rv, True, 1.0 / Float64(step + 1), 1e-5, widen(g))
         check_close(bn.running_mean(), want.rm, 1e-5, 1e-6, "momentum None step " + String(step) + " running_mean_")
         check_close(bn.running_var(), want.rv, 1e-5, 1e-6, "momentum None step " + String(step) + " running_var_")
         rm = want.rm.copy()
@@ -113,7 +113,7 @@ def _untracked() raises:
     var g = _data(41, n * c * hw)
     var y = bn.forward(x, n, hw, False, False, True, 0.1)
     var dx = bn.backward(x, g, n, hw)
-    var want = ref_bn(n, c, hw, x, ones, nulls, nulls, ones, True, 0.1, 1e-5, g)
+    var want = ref_bn(n, c, hw, widen(x), ones, nulls, nulls, ones, True, 0.1, 1e-5, widen(g))
     check_close(y, want.y, 1e-4, 1e-5, "untracked eval y")
     check_close(dx, want.dx, 1e-4, 1e-4, "untracked eval dx")
     _ = x^
