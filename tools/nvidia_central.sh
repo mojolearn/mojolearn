@@ -90,6 +90,17 @@ NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_MEASURE_GPU_COUNTS}  # GPUs per pod, tr
 # MOJOLEARN_DEVPOD_GPUS (ignored here before; the orchestrator's L40S-only rent loop set it in vain). Only sm_89 /
 # sm_90 types belong in either: an sm_86 pod (RTX A6000, A40) runs our arm on nothing (2026-09-29).
 NVC_GPUS=${MOJOLEARN_NVC_GPUS:-${MOJOLEARN_DEVPOD_GPUS:-$NVIDIA_MEASURE_GPUS}}
+# ONE GPU PER POD (2026-11-13): at 17:35 ET an inherited multi-GPU count list rented a 4x L40S at $4.36/h for a
+# one-GPU timed board. `up` rents one GPU per pod; another count only with MOJOLEARN_NVC_ALLOW_MULTI_GPU=1.
+# Another GPU type than the paper's L40S only with PC_ALLOW_HW_DIFF=1 (the rows are then flagged HW-DIFF).
+nvc_check_request() {
+    if [ "${MOJOLEARN_NVC_ALLOW_MULTI_GPU:-0}" != 1 ] && [ "$NVC_GPU_COUNTS" != 1 ]; then
+        echo "NVC_GPU_COUNTS='$NVC_GPU_COUNTS' refused: one GPU per pod (MOJOLEARN_NVC_ALLOW_MULTI_GPU=1 to override)"; return 3
+    fi
+    if [ "${PC_ALLOW_HW_DIFF:-0}" != 1 ] && [ "$NVC_GPUS" != "$NVIDIA_MEASURE_GPUS" ]; then
+        echo "GPU list '$NVC_GPUS' refused: the measurement pod is '$NVIDIA_MEASURE_GPUS' only (PC_ALLOW_HW_DIFF=1 to override)"; return 3
+    fi
+}
 NVC_STOCK_WAIT=${NVC_STOCK_WAIT:-5}                   # minutes of out-of-stock retry per multi-GPU count
 NVC_STOCK_WAIT_1=${NVC_STOCK_WAIT_1:-30}              # ... and for the 1-GPU fallback
 NVC_MIN_BALANCE=${NVC_MIN_BALANCE:-10}                # `up` refuses below this RunPod balance (USD)
@@ -315,7 +326,12 @@ up)
     esac
     [ $# -eq 0 ] || die "up [--pods N | N]: unexpected '$*'"
     [[ "$want" =~ ^[1-9]$ ]] && [ "$want" -le $NVC_MAX_PODS ] || die "up [--pods N | N]: N is 1..$NVC_MAX_PODS"
+    _req=$(nvc_check_request) || die "$_req; nothing rented"
+    if [ "${MOJOLEARN_NVC_PRINT_REQUEST:-0}" = 1 ]; then echo "request: counts=$NVC_GPU_COUNTS gpus=$NVC_GPUS"; exit 0; fi
     [ "$NO_API" = 1 ] || load_key || die "no RunPod key (~/.mojolearn_runpod_key, mode 600)"
+    # the account cap before any provider call (tools/rent_guard.sh counts every pod on the shared account, the
+    # Mambik pods included); tools/dev_pod.sh checks it again before each create attempt
+    [ "$NO_API" = 1 ] || bash "$ROOT/tools/rent_guard.sh" --own-cap="$NVC_MAX_PODS" || die "tools/rent_guard.sh refused (above); nothing rented"
     up_lock
     reconcile
     have=$(live_pods | grep -c . || true)

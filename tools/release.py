@@ -5560,6 +5560,28 @@ class Release(release_identity_wheels.IdentityOnWheels):
         lines.append("then boxes-down takes down what this release rented once every box step has settled")
         return lines
 
+    #: the paper's NVIDIA device (tools/runpod_nvidia_sm89.env NVIDIA_MEASURE_GPUS)
+    NVC_MEASURE_GPU = "NVIDIA L40S"
+
+    def nvc_up_env(self, environ=None):
+        """The env for `nvidia_central.sh up`: the GPU list passed through explicitly, one GPU per pod.
+
+        2026-11-13: the gate passed only MOJOLEARN_ORCHESTRATOR, so an inherited MOJOLEARN_NVC_GPUS /
+        MOJOLEARN_DEVPOD_GPUS reached the script unchecked. Anything but the L40S is refused here unless
+        PC_ALLOW_HW_DIFF=1 (then the rows are flagged HW-DIFF); NVC_GPU_COUNTS is always 1.
+        """
+        environ = os.environ if environ is None else environ
+        gpus = environ.get("MOJOLEARN_NVC_GPUS") or environ.get("MOJOLEARN_DEVPOD_GPUS") or self.NVC_MEASURE_GPU
+        allow = environ.get("PC_ALLOW_HW_DIFF") == "1"
+        if gpus != self.NVC_MEASURE_GPU and not allow:
+            raise StepFailed(f"GPU list {gpus!r} refused: the measurement pod is an {self.NVC_MEASURE_GPU} only "
+                             "(PC_ALLOW_HW_DIFF=1 to rent another)")
+        env = dict(MOJOLEARN_ORCHESTRATOR="1", MOJOLEARN_NVC_GPUS=gpus, MOJOLEARN_DEVPOD_GPUS=gpus,
+                   NVC_GPU_COUNTS="1")
+        if allow:
+            env["PC_ALLOW_HW_DIFF"] = "1"
+        return env
+
     def nvidia_box_up(self):
         boxes = self.state.setdefault("boxes", {})
         prev = boxes.get("nvidia") or {}
@@ -5576,7 +5598,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 self.save()
         else:
             before = self.nvc_live()
-            self.must(["bash", self.nvc(), "up", "1"], env=orch, log=logs / "nvidia-up.log",
+            self.must(["bash", self.nvc(), "up", "1"], env=self.nvc_up_env(), log=logs / "nvidia-up.log",
                       what="nvidia_central.sh up 1")
             after = self.nvc_live()
             if not after:

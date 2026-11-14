@@ -357,7 +357,7 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
         cp "$TMPD/create.json" "$_request_evidence/request-$attempt.json" || die "cannot retain request; no create attempted"
         cp "$TMPD/create.json" "$D/create_request.json" || die "cannot retain request; no create attempted"
         # THE ACCOUNT CAP (2026-11-13): tools/rent_guard.sh counts every live pod on the shared account through the
-        # API and refuses at or above MOJOLEARN_RUNPOD_CAP (8); NVIDIA pods also stay under our own
+        # API and refuses at or above MOJOLEARN_RUNPOD_CAP (12; the Mambik pods count); NVIDIA pods also stay under our own
         # MAX_RUNPOD_PODS (mojolearn-*). Checked here, before every attempt, so no caller (tools/nvidia_central.sh
         # up, the AMD RunPod path, a retry an hour later) creates past it. Nothing was created or armed yet.
         _own_cap="--own-cap=$MAX_RUNPOD_PODS"; [ "$4" != 1 ] || _own_cap=""

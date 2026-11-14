@@ -13,8 +13,8 @@ check() {  # <name> <command>
 run() { MOJOLEARN_RENT_GUARD_TEST_PODS="$1" bash "$G" "${@:2}" 2>&1; echo "rc=$?"; }
 
 out=$(run "13 0")
-check "13 live pods (another project's), cap 8: refused with exit 3" "grep -q 'rc=3' <<< \"$out\" && grep -q REFUSED <<< \"$out\""
-out=$(run "8 0")
+check "13 live pods (Mambik counted), cap 12: refused with exit 3" "grep -q 'rc=3' <<< \"$out\" && grep -q REFUSED <<< \"$out\""
+out=$(run "12 0")
 check "exactly at the cap is refused" "grep -q 'rc=3' <<< \"$out\""
 out=$(run "7 0")
 check "under the cap passes" "grep -q 'rc=0' <<< \"$out\" && grep -q ': OK' <<< \"$out\""

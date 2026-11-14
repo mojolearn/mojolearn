@@ -5,7 +5,7 @@
 #
 # Counts the live pods on the RunPod account through the API (the key in ~/.mojolearn_runpod_key, or
 # RUNPOD_API_KEY; query { myself { pods { id name } } }) and exits 0 only when the count is under
-# MOJOLEARN_RUNPOD_CAP (default 8, Andrew's cap; the account is shared with other projects' fleets, so every pod
+# MOJOLEARN_RUNPOD_CAP (default 12, Andrew's cap; Mambik pods count; the account is shared with other projects' fleets, so every pod
 # counts, not only ours). --own-cap N also caps Mojolearn's own pods (named mojolearn-*) below N (tools/dev_pod.sh
 # MAX_RUNPOD_PODS). Exit 3 = refused at or above a cap; exit 2 = the count could not be read (refused too: an
 # unknown count never rents). It prints one line: "rent_guard: <live> live RunPod pods (<own> mojolearn-*), cap
