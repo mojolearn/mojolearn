@@ -246,6 +246,12 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
     var resident = _resident_table(svm)
+    # Lane fix-iforest-double-fit: `fit` keeps its forest on EVERY binary
+    # (the seventeen-param form, token 0), so `iforest_export_forest` right
+    # after reads that forest instead of fitting a second one. A
+    # refit-per-call binary's export drops it again; its scoring calls stay
+    # sixteen-param refits.
+    var keep = resident or fresh
     # Lane restore-iforest-kde (history audit row 4, IDN_IF_SCORES_F64): the
     # device epilogue writes the public float64 scores into this buffer, so
     # the public door's cast pass and its float32 buffer are gone for this
@@ -264,7 +270,7 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     var values = PythonObject(None) if want == _WANT_PREDICT else family_uninit_array(
         Python.tuple(n_query), "<f8" if wide_out else "<f4", context)
     var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
-    var info = admitted_vector(4 if resident else 3, "<f8", context)
+    var info = admitted_vector(4 if keep else 3, "<f8", context)
     var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), n_query,
                          want + _WANT_WIDE_BASE if wide_out else want, context)
     # The held record: (token, the training matrix it was minted for, its
@@ -278,7 +284,7 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
         held = PythonObject(None)
     var held_token = Int(py=held[0]) if held is not None else 0
     var same_train = held is not None and held[1] is train
-    if resident:
+    if keep:
         _ = py_call(params.append, PythonObject(0 if fresh or not same_train else held_token))
     var run = py_get(svm, "iforest_run")
     if run is None:
@@ -297,7 +303,7 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "max_samples_", PythonObject(Int(words[1])))
     _ = info  # keep the Python object alive through the native call above
-    if resident:
+    if keep:
         var token = Int(words[3])
         _ = info  # keep the Python object alive through the native call above
         if token != held_token or not same_train:
@@ -491,9 +497,9 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
         out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, False, context)
         _ = x  # keep the Python object alive through the native call above
         # Lane fix-iforest-save-device-forest: the forest this fit built is
-        # read out now (the resident forest `_run` just kept, no second fit;
-        # a refit-per-call binary fits it once more here, never at save) and
-        # held as `_if_forest`. `save()` and pickle write it, so a caller's
+        # read out now (the forest `_run` just kept, no second fit on any
+        # binary since lane fix-iforest-double-fit; a refit-per-call binary
+        # drops it after the read) and held as `_if_forest`. `save()` and pickle write it, so a caller's
         # in-place edit of a borrowed X after fit, or a resident-store
         # eviction, never changes a saved model. Scores are unchanged: the
         # live estimator scores its resident forest as before.
@@ -653,7 +659,9 @@ def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> 
     var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), 1, _WANT_SCORE_SAMPLES,
                          context)
     var resident = _resident_table(svm)
-    var held = _held(model, svm) if resident else PythonObject(None)
+    # Every binary: on a refit-per-call one the record is the forest `fit`
+    # just kept for this export (lane fix-iforest-double-fit).
+    var held = _held(model, svm)
     var held_token = Int(py=held[0]) if held is not None else 0
     var same = held is not None and held[1] is train
     _ = py_call(params.append, PythonObject(held_token if same else 0))
@@ -681,6 +689,10 @@ def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> 
     _ = info  # keep the Python object alive through the native calls above
     if resident:
         _keep_token(model, svm, held, held_token, train, same, Int(py=written[0]))
+    else:
+        # The copy call dropped the forest from a refit-per-call binary's
+        # store; its record goes too (the release is then a no-op).
+        trees_side_drop(_TOKEN_SLOT, model)
     return Python.tuple(offsets, feature, threshold, left, right)
 
 
