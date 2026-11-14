@@ -120,6 +120,10 @@ def _program_fit[E: Exec & Movable & Deinitable, KIND: Int](
     var curve = List[Float32](length=epochs, fill=Float32(-1))
     _ = program_fit_native[E, KIND](sid, pid, owners^, targets^, _LOSS_MSE, Float32(1.0), opt, params, epochs, batch, False,
                                     UInt64(0), FP(unsafe_from_address=Int(curve.unsafe_ptr())), 0, 0)
+    # The fit writes its loss curve through curve's address; Mojo frees a local at its last named
+    # use (the address argument), so without this the curve lands in freed heap and the next
+    # allocation (partition_open_native in fixture 3) segfaults (rc 139).
+    _ = curve^
     _ = x
     _ = y
 
