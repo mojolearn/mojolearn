@@ -8,7 +8,9 @@ states jointly with alpha, beta and gamma over all `n` points
 "cuml" are cuML's fit, which must stay BIT FOR BIT what 0.8.13 returned.
 
 Source and surface checks run anywhere. Runtime checks skip, by name, when
-nothing in this process fits Holt-Winters. The 0.8.13 digests below were
+nothing in this process fits Holt-Winters. The estimated method's refit
+bits, parameter ranges and clean-series forecast quality are native:
+checks/native_tests/tsa_holtwinters_initialization_cpu.mojo. The 0.8.13 digests below were
 computed from the PyPI 0.8.13 wheel on an Apple M4 under IDENTICAL; the
 heuristic fit is bitwise identical across columns, so they hold on every
 column that fits.
@@ -136,43 +138,6 @@ def test_heuristic_reproduces_0813_bits(key, name):
     m = _fit_or_skip(_series(np, n, b, f), seasonal=seasonal, seasonal_periods=f, start_periods=sp,
                      ts_num=b, initialization_method=name)
     assert _digest(np, m) == DIGESTS_0813[key]
-
-
-@pytest.mark.parametrize("seasonal", ["additive", "multiplicative"])
-def test_estimated_is_the_default_and_refits_to_the_same_bits(seasonal):
-    np = pytest.importorskip("numpy")
-    y = _series(np, 96, 2, 12)
-    a = _fit_or_skip(y, seasonal=seasonal, seasonal_periods=12, ts_num=2)
-    b = _fit_or_skip(y, seasonal=seasonal, seasonal_periods=12, ts_num=2, initialization_method="estimated")
-    h = _fit_or_skip(y, seasonal=seasonal, seasonal_periods=12, ts_num=2, initialization_method="heuristic")
-    assert _digest(np, a) == _digest(np, b)
-    assert _digest(np, a) != _digest(np, h)
-    for m in (a, h):
-        assert np.asarray(m.level_).shape == (2, 96 - 12)
-        assert np.isfinite(np.asarray(m.forecast(12))).all()
-        alpha, beta, gamma = (np.asarray(v) for v in (m.alpha_, m.beta_, m.gamma_))
-        assert ((alpha >= 0) & (alpha <= 1) & (beta >= 0) & (beta <= 1) & (gamma >= 0) & (gamma <= 1)).all()
-    crit = np.asarray(a.criterion_)
-    assert set(crit.tolist()) <= {0, 1, 2}
-
-
-@pytest.mark.parametrize("seasonal", ["additive", "multiplicative"])
-def test_estimated_forecasts_at_least_as_well_on_a_clean_series(seasonal):
-    """A noiseless trend + season: the estimated fit, which scores every
-    point and chooses its initial states, forecasts the continuation at
-    least as well as the heuristic one, and well in absolute terms."""
-    np = pytest.importorskip("numpy")
-    f, n, h = 12, 72, 12
-    t = np.arange(n + h, dtype=np.float64)
-    season = 3.0 * np.sin(2 * np.pi * t / f) + np.cos(4 * np.pi * t / f)
-    level = 40.0 + 0.3 * t
-    y = level + season if seasonal == "additive" else level * (1.0 + 0.05 * season)
-    y = y.astype(np.float32)
-    est = _fit_or_skip(y[:n], seasonal=seasonal, seasonal_periods=f)
-    heu = _fit_or_skip(y[:n], seasonal=seasonal, seasonal_periods=f, initialization_method="heuristic")
-    rmse = lambda m: float(np.sqrt(np.mean((np.asarray(m.forecast(h), np.float64) - y[n:]) ** 2)))
-    assert rmse(est) <= rmse(heu) * 1.001 + 1e-6
-    assert rmse(est) < 0.05 * float(np.std(y))
 
 
 def test_saved_model_keeps_the_method(tmp_path):
