@@ -164,7 +164,7 @@ def _run[E: Exec & Movable & Deinitable](
     return results^
 
 
-def _same_shape_list(a: ShapeN, dims: List[Int]) -> Bool:
+def _same_shape_list(a: ShapeN, dims: List[Int]) raises -> Bool:
     return a.same(ShapeN.of(dims))
 
 
