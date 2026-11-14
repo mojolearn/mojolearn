@@ -11,7 +11,7 @@ import struct
 
 import pytest
 
-from mojolearn import GradientBoostingRegressor, MinMaxScaler, StandardScaler
+from mojolearn import MinMaxScaler, StandardScaler
 from mojolearn._array import Array
 from mojolearn._buffer import as_f32_c, materialize_f32_lists
 
@@ -51,8 +51,6 @@ def test_float64_buffer_keeps_its_dtype():
     assert got.dtype == "<f8"
     with pytest.raises(TypeError, match="float32"):
         StandardScaler._input(Array.from_list(_ROWS, dtype="<f8"))
-    with pytest.raises(TypeError, match="float32"):
-        GradientBoostingRegressor._regression_target(got, "y")
 
 
 @pytest.mark.parametrize("scaler", [StandardScaler, MinMaxScaler])
@@ -63,5 +61,7 @@ def test_scaler_input_accepts_lists(scaler):
 
 
 def test_regressor_target_accepts_lists():
+    # The regressor's own target check is native (trees_gbdt_adapter_lifecycle_door
+    # `classical_check_y`); this checks the list materialization it receives.
     target = materialize_f32_lists(_TARGET, "y")[0]
-    GradientBoostingRegressor._regression_target(target, "y")
+    assert target.dtype == "<f4" and target.ndim == 1 and target.size == len(_TARGET)
