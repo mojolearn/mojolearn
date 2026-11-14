@@ -172,6 +172,10 @@
   "gbdt-prebinned-infer-old": {
    "define": "MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD",
    "status": "define in code (gbdt/models/add_non_symmetric_tree_doc_parallel.mojo IDN_NS_RESIDENT_PACK): B = the resident Depthwise/Lossguide predict re-packing the ensemble every call through doc_parallel_boosting.predict (layout build, node staging, sixteen allocations, eight uploads, bins buffer); A = the pack held from the first predict (NsResidentPack), node offsets and bins buffer rewritten only when the row count changes (default). Same kernels, same arguments, same tree order: same bits"
+  },
+  "knn-door-fit-xn-eager": {
+   "define": "MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER",
+   "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_DOOR_FIT_XN_EAGER, knn_fit_xn_eager; bindings/neighbors_knn_native_door.mojo _neighbors_knn_operation, _knn_xn): B = every KNeighborsClassifier/Regressor fit resolves and admits the x_neighbors binding up front (b412ea02f4's door form); A = only the multi-output label transpose resolves it (0.8.55's neighbors.py form). Same bits"
   }
  },
  "rows": [
@@ -1116,6 +1120,21 @@
     "gbdt-prebinned-infer-old"
    ],
    "decides": "keep the held pack (A, default) unless the per-call pack (B, -D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD) is faster on the NVIDIA+AMD average of infer test and large, arms ours, ours-prebinned (depthwise) and ours, ours-gain0 (lossguide), istella and taxi; same kernels, same arguments, same tree order: every infer hash must be equal between A and B"
+  },
+  {
+   "id": "fix-knn-door-fixed-cost",
+   "source": "fix-knn-door-fixed-cost (2026-11-14; best-ever history audit wave 2 rows 1-2: NV L40S taxi knn-clf 13.74 (0.8.44) / 14.18 (0.8.55) -> 21.49 ms, knn-reg 11.52 (0.8.55) -> 18.68 ms at ba08dac006, a near-fixed +7-9 ms per fit+predict born 0.8.55 -> 0.8.66 in the KNeighbors* door path; mechanism not identified from source, side-by-side step list ~/mojolearn-evidence/briefs-20261113/wave2/fix-knn-door-fixed-cost/PATH.md)",
+   "kind": "ab",
+   "lane": [
+    "knn-clf",
+    "knn-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "knn-door-fit-xn-eager"
+   ],
+   "decides": "keep A (x_neighbors binding resolved only by the multi-output transpose, 0.8.55's form) unless B is at least as fast on NVIDIA (pre-0.8.67 campaign: NVIDIA only). Expected gain is microseconds by reading; the row's main job is attribution: build the same sha a third time with -D MOJOLEARN_KNN_PHASE_TIMERS=1 (door, finalizer and device-request phase lines) and run taxi knn-clf + knn-reg against the 0.8.55 wheel; the door line's segments (public_begin, state_admission, binding_arguments, fit_refusals_release, fit_admit_x, fit_prepare_finite, fit_metric_store, fit_labels_*/fit_targets, public_finish; predict_fold_check, predict_queries, predict_outputs_alloc, predict_resident_handle, predict_classify_call/predict_regress_call, predict_status_report, predict_class_set_*, predict_output_cast) plus the finalizer release_ms say where the +7 ms sits. The timer build is attribution only, never a timing arm. Digests must not move in either arm"
   }
  ]
 }
