@@ -43,7 +43,7 @@ frozen inputs (the same words).
 
 from std.atomic import Atomic
 from max.gpu import block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from autograd.program_loop import LOOP_WORDS, LoopTimers
 from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop
@@ -495,8 +495,49 @@ def gpc_lml_fin_dev_kernel(pdot: _GP, pt2: _GP, nb: Int32, logdet: _GP, dst: _GP
         dst.unsafe_store(0, gpc_lml_fin(pdot, pt2, Int(nb), logdet.unsafe_load(0)))
 
 
+struct GPCHostLoopScratch(Movable):
+    """The per-class vectors of `gpc_newton_host_loop` (f, W, b, K b, c, a,
+    the likelihood fold's partials and scalar, the NaN guard's word, the
+    log-determinant fold's partials, and the two host words of the stop
+    test), allocated ONCE per batch and reused by every class's loop: every
+    class of a batch has the same n. Lane fix-gmm-chol-leftovers
+    (2026-11-13): each class's loop allocated and freed all thirteen. Every
+    vector is written before it is read in each loop (f is zero-filled at
+    the loop's start), so reuse changes no word."""
+    var df: DeviceBuffer[DType.float32]
+    var dw: DeviceBuffer[DType.float32]
+    var dbv: DeviceBuffer[DType.float32]
+    var dkb: DeviceBuffer[DType.float32]
+    var dc: DeviceBuffer[DType.float32]
+    var da: DeviceBuffer[DType.float32]
+    var dpd: DeviceBuffer[DType.float32]
+    var dpt: DeviceBuffer[DType.float32]
+    var dlml: DeviceBuffer[DType.float32]
+    var dnan: DeviceBuffer[DType.int32]
+    var dlparts: DeviceBuffer[DType.float32]
+    var hlml: HostBuffer[DType.float32]
+    var hnan: HostBuffer[DType.int32]
+
+    def __init__(out self, ctx: DeviceContext, n: Int) raises:
+        var nbf = gpc_fold_blocks(n)
+        self.df = ctx.enqueue_create_buffer[DType.float32](n)
+        self.dw = ctx.enqueue_create_buffer[DType.float32](n)
+        self.dbv = ctx.enqueue_create_buffer[DType.float32](n)
+        self.dkb = ctx.enqueue_create_buffer[DType.float32](n)
+        self.dc = ctx.enqueue_create_buffer[DType.float32](n)
+        self.da = ctx.enqueue_create_buffer[DType.float32](n)
+        self.dpd = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
+        self.dpt = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
+        self.dlml = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dnan = ctx.enqueue_create_buffer[DType.int32](1)
+        self.dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+        self.hlml = ctx.enqueue_create_host_buffer[DType.float32](1)
+        self.hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
+
+
 def gpc_newton_host_loop(
     ctx: DeviceContext,
+    mut scratch: GPCHostLoopScratch,
     mut dk: DeviceBuffer[DType.float32],
     mut dy: DeviceBuffer[DType.float32],
     mut db: DeviceBuffer[DType.float32],
@@ -512,24 +553,25 @@ def gpc_newton_host_loop(
     resident targets: the same launches in the same order. On return `db`
     holds the last factor, `dpi` and `dwsr` the last pi and W_sr. `ws` holds
     `chol_workspace_floats(n, chol_nb_for(n, CHOL_NB_PINNED))` floats,
-    `dwork` n + 1. One word pair crosses back per iteration for the stop
-    test: the likelihood and the NaN guard's index."""
-    var df = ctx.enqueue_create_buffer[DType.float32](n)
-    var dw = ctx.enqueue_create_buffer[DType.float32](n)
-    var dbv = ctx.enqueue_create_buffer[DType.float32](n)
-    var dkb = ctx.enqueue_create_buffer[DType.float32](n)
-    var dc = ctx.enqueue_create_buffer[DType.float32](n)
-    var da = ctx.enqueue_create_buffer[DType.float32](n)
+    `dwork` n + 1, `scratch` the loop's vectors at this n (one per batch,
+    `GPCHostLoopScratch`). One word pair crosses back per iteration for the
+    stop test: the likelihood and the NaN guard's index."""
+    # handle copies of the batch's scratch: the same device memory, no
+    # allocation per class (GPCHostLoopScratch)
+    var df = scratch.df.copy()
+    var dw = scratch.dw.copy()
+    var dbv = scratch.dbv.copy()
+    var dkb = scratch.dkb.copy()
+    var dc = scratch.dc.copy()
+    var da = scratch.da.copy()
     var nbf = gpc_fold_blocks(n)
-    var dpd = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
-    var dpt = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
-    var dlml = ctx.enqueue_create_buffer[DType.float32](1)
-    var dnan = ctx.enqueue_create_buffer[DType.int32](1)
-    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+    var dpd = scratch.dpd.copy()
+    var dpt = scratch.dpt.copy()
+    var dlml = scratch.dlml.copy()
+    var dnan = scratch.dnan.copy()
+    var dlparts = scratch.dlparts.copy()
     var diag = dwork.create_sub_buffer[DType.float32](0, n)
     var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
-    var hlml = ctx.enqueue_create_host_buffer[DType.float32](1)
-    var hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
     enqueue_fill(ctx, df, Float32(0.0))
     var trace = IdentityTrace()
     var previous = gpc_neg_inf32()
@@ -581,10 +623,10 @@ def gpc_newton_host_loop(
         ctx.enqueue_function[gpc_lml_fin_dev_kernel](  # small-launch(nbf: fold blocks of the likelihood): one thread combines the partials into one scalar
             _fp(dpd), _fp(dpt), Int32(nbf), _fp(scalar), _fp(dlml), grid_dim=1, block_dim=1
         )
-        ctx.enqueue_copy(dst_ptr=hlml.unsafe_ptr(), src_buf=dlml)
-        ctx.enqueue_copy(dst_ptr=hnan.unsafe_ptr(), src_buf=dnan)
+        ctx.enqueue_copy(dst_ptr=scratch.hlml.unsafe_ptr(), src_buf=dlml)
+        ctx.enqueue_copy(dst_ptr=scratch.hnan.unsafe_ptr(), src_buf=dnan)
         ctx.synchronize()
-        var nan_at = Int(hnan.unsafe_ptr().unsafe_load(0))
+        var nan_at = Int(scratch.hnan.unsafe_ptr().unsafe_load(0))
         if nan_at < n:
             raise Error(
                 "cholesky_solve_host: the right-hand side contains NaN at"
@@ -592,7 +634,7 @@ def gpc_newton_host_loop(
                 + String(nan_at)
                 + "; refused by name (DEVIATION 1638)"
             )
-        var lml = hlml.unsafe_ptr().unsafe_load(0)
+        var lml = scratch.hlml.unsafe_ptr().unsafe_load(0)
         n_iter = it + 1
         nb = run.nb
         if gpc_stop(lml, previous):
@@ -612,8 +654,6 @@ def gpc_newton_host_loop(
     _ = dlml^
     _ = dnan^
     _ = dlparts^
-    _ = hlml^
-    _ = hnan^
     return GPCNewtonRun(previous, n_iter, nb)
 
 
@@ -651,6 +691,8 @@ def gpc_newton_device_batch(
         var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
         var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
         var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+        # the loop's vectors, once per batch (every class has this n)
+        var hscratch = GPCHostLoopScratch(ctx, n)
         var dkh = dk.copy()  # a handle copy: the same device memory
         var dgwh = dgw.copy()
         for c in range(k):  # driver-loop: over the classes (model structure)
@@ -659,11 +701,12 @@ def gpc_newton_device_batch(
             var dpi = dpis[c].copy()
             var dwsr = dwsrs[c].copy()
             runs.append(
-                gpc_newton_host_loop(ctx, dkh, dy, db, ws, dwork, dgwh, dpi, dwsr, n, max_iter_predict)
+                gpc_newton_host_loop(ctx, hscratch, dkh, dy, db, ws, dwork, dgwh, dpi, dwsr, n, max_iter_predict)
             )
         ctx.synchronize()
         _ = ws^
         _ = dwork^
+        _ = hscratch^
         _ = dkh^
         _ = dgwh^
         return runs^
