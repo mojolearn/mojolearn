@@ -137,9 +137,9 @@
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
    "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
   },
-  "pinned-tile-fma-asm": {
-   "define": "MOJOLEARN_IDN_PINNED_TILE_FMA_ASM_OLD",
-   "status": "define in code (neighbors/checks/pinned_distance_tile.mojo IDN_PINNED_TILE_FMA_ASM_OLD, _rt_fma_rn): B = the NVIDIA distance-tile FMA as the inline-asm helper nv_fma_rn_f32 (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f intrinsic (0.8.55's form). Same PTX fma.rn.f32, same bits; NVIDIA identical column only (AMD arm is a no-change check)"
+  "nv-fma-asm": {
+   "define": "MOJOLEARN_IDN_NV_FMA_ASM_OLD",
+   "status": "define in code (checks/nv_fma_rn.mojo IDN_NV_FMA_ASM_OLD, nv_fma_rn_kernel; callers neighbors/checks/pinned_distance_tile.mojo _rt_step/_rt_step_exact, gemm/checks/gemm_identical.mojo _tuned_step/_admit_step, transformer/impl/llama/fused_attention.mojo _step x2): B = the NVIDIA rounded FMA as the inline-asm helper nv_fma_rn_f32 (62a6577b39, candidate 4c2340386abc's shape); A = the llvm.nvvm.fma.rn.f intrinsic (0.8.55's form). Same PTX fma.rn.f32, same fold order, same bits; NVIDIA identical column only (AMD is a no-change check); mul.rn/mul.rn.ftz stay asm in both arms"
   }
  },
  "rows": [
@@ -948,19 +948,32 @@
   },
   {
    "id": "wave2-hdbscan-nv",
-   "source": "fix-hdbscan-nv (2026-11-13; history-audit hist-trees-neighbors-cluster items 6 and 7: HDBSCAN taxi NV 1.30x, kNN clf/reg NV, AMD flat; the fit plumbing has no cost of that size, the NVIDIA-only change on the path is 62a6577b39's asm FMA in the pinned distance tile)",
+   "source": "fix-hdbscan-nv (2026-11-13; history-audit hist-trees-neighbors-cluster items 6 and 7: HDBSCAN taxi NV 1.30x, kNN clf/reg NV, AMD flat; the fit plumbing has no cost of that size, the NVIDIA-only change on the path is 62a6577b39's asm FMA in the pinned distance tile); extended by the orchestrator to every 62a6577b39 fma site: gemm_identical (GEMM-backed classical and neural rows) and fused_attention (LM and transformer rows)",
    "kind": "ab",
    "lane": [
     "hdbscan",
     "knn-clf",
-    "knn-reg"
+    "knn-reg",
+    "knn",
+    "lm-train-step",
+    "lm-forward",
+    "transformer-forward",
+    "transformer-decode",
+    "transformer-infer",
+    "ols",
+    "ridge",
+    "pca",
+    "tsvd",
+    "kernel-ridge",
+    "gpr",
+    "logreg"
    ],
    "dataset": "*",
    "rows": "full",
    "b_arms": [
-    "pinned-tile-fma-asm"
+    "nv-fma-asm"
    ],
-   "decides": "keep the intrinsic FMA (A) unless the asm helper (B) is at least as fast on NVIDIA; on record NV L40S 0.8.55 -> candidate 4c2340386abc: hdbscan taxi 435 -> 552 ms, knn-reg taxi 11.5 -> 18.9 ms, knn-clf taxi 14.2 -> 21.6 ms, istella knn and hdbscan still regressed; digests must not move in either arm. If A does not compile (Mojo 1.2 rejects llvm.nvvm.fma.rn.f as it rejects mul.rn), build with the define on and record the row as not runnable"
+   "decides": "keep the intrinsic FMA (A) unless the asm helper (B) is at least as fast on NVIDIA; on record NV L40S 0.8.55 -> candidate 4c2340386abc: lm-train-step 35.6 ms (0.8.66) -> 48.9 ms, hdbscan taxi 435 -> 552 ms, knn-reg taxi 11.5 -> 18.9 ms, knn-clf taxi 14.2 -> 21.6 ms, istella knn and hdbscan still regressed; digests must not move in either arm. If A does not compile (Mojo 1.2 rejects llvm.nvvm.fma.rn.f as it rejects mul.rn), build with the define on and record the row as not runnable"
   }
  ]
 }

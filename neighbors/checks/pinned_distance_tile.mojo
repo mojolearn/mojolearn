@@ -52,7 +52,6 @@ from core.classical_distance import direct_squared_distance
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for, knn_distance_rows_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
@@ -63,9 +62,9 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
     identical_sqrt,
-    nv_fma_rn_f32,
     nv_mul_rn_ftz_f32,
 )
+from checks.nv_fma_rn import nv_fma_rn_kernel
 
 
 comptime PINNED_TILE_TPB = 256
@@ -180,32 +179,8 @@ def _rt_load(x: Float32) -> Float32:
     return ftz(x)
 
 
-#: lane fix-hdbscan-nv (2026-11-13, owed row `wave2-hdbscan-nv`): the NVIDIA
-#: rounded FMA of the distance tile's inner loop. 62a6577b39 (2026-11-12) moved
-#: it from the `llvm.nvvm.fma.rn.f` intrinsic (0.8.55's form) to the inline-asm
-#: helper `nv_fma_rn_f32`, because Mojo 1.2 dropped `llvm.nvvm.mul.rn.*`; the
-#: fma intrinsic was moved with it for uniformity, not because it was dropped.
-#: An inline-asm block is opaque to LLVM, which may no longer schedule, hoist or
-#: combine the tile's q/yt loads around RT_ROWS * RT_COLS asm calls per feature.
-#: On record (NVIDIA L40S, 0.8.55 -> candidate 4c2340386abc, AMD flat; every
-#: one a pinned-tile user): hdbscan taxi fit 435 -> 552 ms, knn-reg taxi 11.5
-#: -> 18.9 ms, knn-clf taxi 14.2 -> 21.6 ms, istella knn and hdbscan still
-#: regressed. A (default) = the intrinsic again; B =
-#: `-D MOJOLEARN_IDN_PINNED_TILE_FMA_ASM_OLD`, the asm helper. Same PTX
-#: instruction `fma.rn.f32`, same bits; NVIDIA-only (every call sits under
-#: `knn_distance_hardware_flush_for`, the NVIDIA identical column). The
-#: `mul.rn.ftz` flush in `_rt_step` stays asm: that intrinsic is gone.
-comptime IDN_PINNED_TILE_FMA_ASM_OLD = is_defined["MOJOLEARN_IDN_PINNED_TILE_FMA_ASM_OLD"]()
-
-
-@always_inline
-def _rt_fma_rn(a: Float32, b: Float32, acc: Float32) -> Float32:
-    """NVIDIA `fma.rn.f32` (one rounding, never fused or flushed); see above."""
-    comptime if IDN_PINNED_TILE_FMA_ASM_OLD:
-        return nv_fma_rn_f32(a, b, acc)
-    return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
-
-
+# The NVIDIA rounded FMA below is checks/nv_fma_rn.mojo's switched
+# `nv_fma_rn_kernel` (lane fix-hdbscan-nv, MOJOLEARN_IDN_NV_FMA_ASM_OLD).
 @always_inline
 def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """Round the FMA before flushing its output; operands are already flushed.
@@ -219,7 +194,7 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         # Match the corrected GEMM seam: rounding occurs BEFORE the hardware
         # input/output FTZ on multiplication by exactly one. Bare fma.ftz is
         # deliberately excluded because it fails at the minnormal boundary.
-        var rounded = _rt_fma_rn(a, b, acc)
+        var rounded = nv_fma_rn_kernel(a, b, acc)
         return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
     var result = ftz(identical_mul_add(a, b, acc))
     comptime if knn_distance_zero_fma_repair_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
@@ -248,7 +223,7 @@ def _rt_step_exact(a: Float32, b: Float32, acc: Float32) -> Float32:
     bits."""
     var r: Float32
     comptime if knn_distance_hardware_flush_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
-        r = _rt_fma_rn(a, b, acc)
+        r = nv_fma_rn_kernel(a, b, acc)
     else:
         r = identical_mul_add(a, b, acc)
     comptime if is_defined["MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE"]():
