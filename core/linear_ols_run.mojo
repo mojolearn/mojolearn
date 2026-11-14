@@ -9,7 +9,7 @@ from core.linear_tsqr_run import linear_tsqr_solve
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from glm.impl.lm_finish import lm_intercept
-from x_decomp.descriptor_schema import XD_MODE, XD_VENDOR, XD_TSQR_R, XD_OLS_TSQR_R
+from x_decomp.descriptor_schema import XD_MODE, XD_VENDOR, XD_FLAGS, XD_TSQR_R, XD_OLS_TSQR_R
 
 
 def linear_ols_plan(entry: NativeDescriptorCall, rows: Int, cols: Int, estimator: String) raises -> LinearOlsPlan:
@@ -21,6 +21,15 @@ def linear_ols_plan(entry: NativeDescriptorCall, rows: Int, cols: Int, estimator
     var tsqr = cols >= 1 and cols + 1 <= 512 and rows >= cols + 1 and not (flags & LF_HAS_OLS_RESIDENT)
     var mode = native_descriptor_call(entry, LF_MODE, [], [], []) if tsqr else 0
     return LinearOlsPlan(flags, tsqr, mode)
+
+
+def linear_ols_one_entry(plan: LinearOlsPlan, decomp: NativeDescriptorCall, center: Bool, weighted: Bool) raises -> Bool:
+    """True when the fit takes the decomposition entry's one-entry centered
+    TSQR (XD_FLAGS bit 1), which also tests X's words on upload. Probed once
+    per fit; the caller stores it on `plan.one_entry` for `linear_ols_run`."""
+    if not (plan.tsqr and center and not weighted):
+        return False
+    return (native_descriptor_call(decomp, XD_FLAGS, [], [], []) & 1) != 0
 
 
 def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,

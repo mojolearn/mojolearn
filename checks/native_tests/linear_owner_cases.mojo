@@ -13,7 +13,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_fit_types import LinearFitRequest, LinearFitResult, LF_VENDOR, LF_MODE
 from core.linear_fit_run import linear_ridge_run
-from core.linear_ols_run import linear_ols_plan, linear_ols_run
+from core.linear_ols_run import linear_ols_plan, linear_ols_run, linear_ols_one_entry
 from core.linear_boundary_types import LinearPredictRequest
 from core.linear_boundary_run import linear_predict_run
 from core.linear_model_state import LinearModelState
@@ -215,6 +215,7 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
             result = linear_ridge_run(api.fit, api.weighted, request)
         else:
             var plan = linear_ols_plan(api.fit, rows, cols, "LinearRegression")
+            plan.one_entry = linear_ols_one_entry(plan, api.decomp, intercept, weight_mode != 0)
             result = linear_ols_run(api.fit, api.decomp, request, plan, api.vendor)
     except error:
         if ridge or cid != 11 or api.vendor != 0:
