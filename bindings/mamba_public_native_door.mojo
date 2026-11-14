@@ -159,7 +159,7 @@ def mamba_state_init(mut mods: NativeModules, state: PythonObject, kind: String,
 
 
 def _mamba_session_fields(mut mods: NativeModules, session: PythonObject, context: PythonObject,
-                          initialized: Bool = True) raises -> PythonObject:
+                          initialized: Bool = True, admit_members: Bool = True) raises -> PythonObject:
     var classes = context["mamba_session_classes"]
     var cls = py_type(session)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
@@ -175,8 +175,17 @@ def _mamba_session_fields(mut mods: NativeModules, session: PythonObject, contex
         var handle = hobj.downcast_value_ptr[MambaDecodeHandle]()
         if cls is not classes[_kind_name(handle[].plan.kind)]:
             raise Error("TypeError: Mamba session kind differs from its native handle")
-        _ = neural_block_fields(mods, fields["_block"], context)
-        _ = _mamba_state_fields(mods, fields["_state"], _kind_name(handle[].plan.kind), context, False)
+        # lane fix-mamba-forward-per-call (2026-11-14): a token step/decode
+        # (`admit_members=False`) reads neither the block's fields nor the
+        # state's buffers: the open session runs on its own resident weights
+        # and state (admitted at session_init), and the block's report fields
+        # are written through `_fields` below. Re-admitting the block (42-name
+        # record + mode metadata) and the state (MRO walk + 13 names) cost two
+        # admissions per TOKEN. sync/load/close and every other session
+        # operation still admit both.
+        if admit_members:
+            _ = neural_block_fields(mods, fields["_block"], context)
+            _ = _mamba_state_fields(mods, fields["_state"], _kind_name(handle[].plan.kind), context, False)
     return fields
 
 
@@ -767,13 +776,18 @@ def _session_require_open(handle: PythonObject, what: String) raises:
         raise Error(what + ": the session is closed")
 
 
+def _session_what(kind: Int, operation: String) -> String:
+    # The refusal prefix, built only when a token step refuses (lane
+    # fix-mamba-forward-per-call: no string build per token).
+    return _session_name(kind) + operation
+
+
 def _session_step_call(mut mods: NativeModules, hobj: PythonObject, input_address: Int, output_address: Int,
                        report_addresses: List[Int]) raises:
     """One token through the session's arm: x (B, d_model) at `input_address`,
     y (B, d_model) at `output_address`, the reports at `report_addresses`."""
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
     var kind = h[].plan.kind
-    var name = _kind_name(kind)
     var addresses = h[].plan.step_addresses(h[].device is not None, input_address, output_address, report_addresses)
     if h[].device is not None:
         if h[].provider is not None:
@@ -784,6 +798,7 @@ def _session_step_call(mut mods: NativeModules, hobj: PythonObject, input_addres
             if kind != 1:
                 h[].plan.q = updated
         else:
+            var name = _kind_name(kind)
             var updated = py_call(_native_function(mods, h[].binding, name + "_session_step"), h[].device, py_ints(addresses))
             mods.released()
             if kind != 1:
@@ -800,6 +815,7 @@ def _session_step_call(mut mods: NativeModules, hobj: PythonObject, input_addres
             if kind != 1:
                 h[].plan.q = updated
         else:
+            var name = _kind_name(kind)
             var params = py_ints(h[].plan.step_parameters(False))
             if kind == 2:
                 _ = py_call(params.extend, h[].dt_limit)
@@ -831,13 +847,12 @@ def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: Py
     var hobj = session._handle
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
     var kind = h[].plan.kind
-    var name = _kind_name(kind)
-    var what = _session_name(kind) + ".step"
-    _session_require_open(hobj, what)
+    if not h[].plan.open:
+        _session_require_open(hobj, _session_what(kind, ".step"))
     var x = _neural_input(mods, input, h[].plan.d_model, True, context)
     var b = h[].plan.b
     if Int(py=x.shape[0]) != b:
-        raise Error(what + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
+        raise Error(_session_what(kind, ".step") + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
     var keep = List[PythonObject]()
     var y = _session_output(kind, [b, 1, h[].plan.d_model])
     # Reports escape in the returned tuple/public h_last_ fields, so each
@@ -1163,7 +1178,9 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
     elif operation == "set_input_states":
         _ = _mamba_state_fields(mods, values[0], "mamba3", context, False)
     elif operation.startswith("session_") and operation != "session_open" and operation != "session_info":
-        var fields = _mamba_session_fields(mods, values[0], context)
+        var per_token = (operation == "session_step_public" or operation == "session_decode_public"
+                         or operation == "session_step" or operation == "session_decode")
+        var fields = _mamba_session_fields(mods, values[0], context, True, not per_token)
         if operation == "session_state":
             return fields["_state"]
         if operation == "session_enter":
