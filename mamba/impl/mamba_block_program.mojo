@@ -53,7 +53,7 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
     block_buffer_view, block_part_floats, block_offsets, block_guard, mamba_step_train_run, mamba_step_backward,
-    mamba_step_run_host, MAMBA_CALL_PROGRAM, IDN_MAMBA12_FORWARD_COPIES_OLD,
+    mamba_step_run_host, MAMBA_CALL_PROGRAM, IDN_MAMBA12_FORWARD_COPIES_OLD, _M12_HELD_ARENA,
 )
 from core.shared_slot import SharedSlot
 
@@ -116,6 +116,11 @@ struct MambaBlockProgram(Movable):
     var w_addrs: List[Int]
     #: the weight epoch at the last weight load (lane x45c: the version key)
     var epoch: Int
+    #: lane fix-mamba-forward-doors (autograd/block_step_ops.mojo
+    #: IDN_MAMBA12_HELD_FILLS_OLD): the device words tensor is known to hold
+    #: zeros (written by the constructor or `zero_state`, and no run or load
+    #: wrote it since), so `zero_state` needs no upload of the zero words
+    var q_zero: Bool
     #: the device floats this program holds (the cache's byte bound): its
     #: weights, state and words (`base_floats`) plus the Mamba-1/2 stages its
     #: step entries keep (lane fix-mamba12-forward-exec, `_release`)
@@ -158,6 +163,7 @@ struct MambaBlockProgram(Movable):
         if k > 0:
             q = s.upload_block(code, ints, BLOCK_PART_WORDS, List[CastIn](), List[Int](length=k, fill=0))
         self.epoch = epoch
+        self.q_zero = True
         self.floats = (block_part_floats(code, ints, BLOCK_PART_WEIGHTS)
                        + block_part_floats(code, ints, BLOCK_PART_STATE) + k)
         self.base_floats = self.floats
@@ -214,6 +220,7 @@ struct MambaBlockProgram(Movable):
             raise Error("mamba state: this block carries " + String(k) + " integers, got " + String(len(words)))
         if k > 0:
             self.s.load_block(self.q, self.code, self.ints, BLOCK_PART_WORDS, List[CastIn](), words)
+            self.q_zero = False
         var ssizes = block_state_sizes(self.code, self.ints)
         self.s.load_block(self.st, self.code, self.ints, BLOCK_PART_STATE,
                           _pieces(pieces, ssizes, "mamba state", True), List[Int]())
@@ -226,8 +233,17 @@ struct MambaBlockProgram(Movable):
         view.enqueue_fill(Float32(0))
         var k = block_int_words(self.code)
         if k > 0:
+            comptime if _M12_HELD_ARENA:
+                # lane fix-mamba-forward-doors: the device words already hold
+                # zeros (`q_zero`): only the resident entry's host integers
+                # take them, no upload (the per-call fresh forward's word
+                # upload, skipped as the held run skipped its word write)
+                if self.q_zero:
+                    self.s.steps.set_words(Int(self.s.buffer(self.q)), List[Int](length=k, fill=0))
+                    return
             self.s.load_block(self.q, self.code, self.ints, BLOCK_PART_WORDS, List[CastIn](),
                               List[Int](length=k, fill=0))
+            self.q_zero = True
 
     def export_state(mut self, pieces: List[Int]) raises -> List[Int]:
         """The state into the caller's arrays (a 0 address skips that piece)
@@ -322,6 +338,16 @@ struct MambaBlockProgram(Movable):
                 bufs.append(self.s.buffer(self.q))
                 counts.append(block_int_words(self.code))
             mamba_step_run_host(self.s.ex, self.s.steps, self.code, bufs, counts, ints, fs, py)
+        # lane fix-mamba-forward-doors: every run writes the device words
+        # except a held Mamba-2 run of a fresh call (`skip_words`,
+        # autograd/block_step_ops.mojo `_run_m2`), which leaves them as
+        # `zero_state` wrote them
+        var words_kept = False
+        comptime if _M12_HELD_ARENA:
+            words_kept = (self.code == OPS_M2_STEP and l > 1 and self.s.steps.keep_stages
+                          and self.s.steps.skip_words)
+        if not words_kept:
+            self.q_zero = False
         self._reports(reports)
 
     def _reports(mut self, reports: List[Int]) raises:
@@ -570,7 +596,15 @@ def mamba_block_call(
             p[].zero_state()
         else:
             p[].load_state(state, words)
-        p[].run(px, py, l, List[Int]())
+        # lane fix-mamba-forward-doors: a fresh call's words are rewritten by
+        # the next call's zero_state / load_state before any reader, so its
+        # held Mamba-2 run writes none (BlockStepScratch.skip_words)
+        comptime if _M12_HELD_ARENA:
+            p[].s.steps.skip_words = fresh
+        try:
+            p[].run(px, py, l, List[Int]())
+        finally:
+            p[].s.steps.skip_words = False
         if mamba_report_count(code) > 0:
             # The reports of this run, queued on the program's device context
             # behind y (the wait below covers them).
