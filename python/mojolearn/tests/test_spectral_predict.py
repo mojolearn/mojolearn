@@ -7,12 +7,15 @@ scikit-learn has): the Nystrom out-of-sample extension (Bengio et al., NIPS
 
     cd python && python3 -m mojolearn.tests.test_spectral_predict
 
-It gates the WIRING and the RULE on small fixtures: `prediction_data=True`
-moves no fit byte, a query equal to a training row, a far-away query,
-duplicated training rows (k-NN distance ties), float64 queries, rows alone
-and in reversed order against the batch, the precomputed affinity arm, save
-and load, the eigenvalue threshold and every refusal. It REPORTS how often
-`predict(X_train)` equals `labels_`, which the rule does not promise.
+It gates the WIRING on small fixtures: the prediction-data arrays, float64
+queries, save and load, the CPU host binding and every refusal. It REPORTS
+how often `predict(X_train)` equals `labels_`, which the rule does not
+promise. The RULE (`prediction_data=True` moves no fit byte, the eigenvalue
+threshold, a query equal to a training row, far-away queries, duplicated
+training rows, rows alone and in reversed order, the zero-degree precomputed
+row, labels in range and finite embeddings) is the Mojo check
+`checks/native_tests/spectral_prediction_*` (`pixi run
+check-native-spectral-prediction-cpu` / `-gpu`).
 
 When `MOJOLEARN_HOST_DIR` holds `_mojolearn_metrics_host.so` the HOST arm
 loads each saved model through `_classical_host.host_model` and holds the
@@ -29,13 +32,7 @@ import numpy as np
 import mojolearn
 from mojolearn import SpectralClustering
 from mojolearn._array import Array
-from mojolearn.tests._expose_d_harness import Report, bind_or_exit, mode, run
-
-
-def _identical(rep, arm, cond, what):
-    if mode() == "identical":
-        return rep.check(arm, cond, what)
-    return rep.report_only(arm, cond, what)
+from mojolearn.tests._expose_d_harness import Report, bind_or_exit, run
 
 
 def _blobs():
@@ -61,21 +58,15 @@ def arm_nearest_neighbors(rep):
     kw = dict(n_clusters=3, n_neighbors=8, random_state=3)
     plain = SpectralClustering(**kw).fit(x)
     m = SpectralClustering(prediction_data=True, **kw).fit(x)
-    rep.check("NN", np.array_equal(np.asarray(plain.labels_), np.asarray(m.labels_))
-              and np.asarray(plain.embedding_).tobytes() == np.asarray(m.embedding_).tobytes(),
-              "prediction_data=True fits the same labels_ and embedding_ bytes as the default")
     rep.check("NN", getattr(plain, "_pd_eigenvalues", None) is None, "the default fit stores no prediction data")
     ev = np.asarray(m._pd_eigenvalues)
     rep.check("NN", ev.shape == (3,) and np.asarray(m._pd_eigenvectors).shape == (120, 3)
               and np.asarray(m._pd_diag).shape == (120,) and np.asarray(m._pd_centroids).shape == (3, 3),
               "prediction data shapes: eigenvalues (k,), eigenvectors (n, k), diag (n,), centroids (n_clusters, k)")
-    rep.check("NN", bool(np.all(np.abs(1.0 + ev) > 1e-3)), "every 1 + theta clears the DEVIATION 2860 threshold", ev.tolist())
-    rep.check("NN", len(set(np.asarray(m.labels_).tolist())) == 3, "the fixture fits three clusters")
 
     p, emb = (np.asarray(a) for a in m._predict_embedding(x))
     rep.check("NN", p.dtype == np.int32 and p.shape == (120,) and emb.dtype == np.float32 and emb.shape == (120, 3),
               "predict returns int32 (n,), the extended embedding float32 (n, k)")
-    rep.check("NN", bool(np.all(np.isfinite(emb))) and set(p.tolist()) <= {0, 1, 2}, "labels in range, embedding finite")
     agree = float(np.mean(p == np.asarray(m.labels_)))
     rep.report_only("NN", agree == 1.0, f"predict(X_train) == labels_ on {agree:.4f} of the training rows (not promised)")
     gap = float(np.max(np.abs(emb - np.asarray(m.embedding_))))
@@ -83,30 +74,9 @@ def arm_nearest_neighbors(rep):
     rep.check("NN", np.array_equal(np.asarray(m.predict(x)), p), "predict equals _predict_embedding's labels")
 
     one = np.asarray(m.predict(x[5:6]))
-    _identical(rep, "NN", int(one[0]) == int(p[5]), "a query equal to a training row alone gives the batch's label")
     rep.report_only("NN", int(one[0]) == int(m.labels_[5]), "a query equal to training row 5 predicts its fitted label")
-    far = np.asarray([[1.0e4, -1.0e4], [-3.0e4, 2.5e4]], dtype=np.float32)
-    fl, fe = (np.asarray(a) for a in m._predict_embedding(far))
-    rep.check("NN", set(fl.tolist()) <= {0, 1, 2} and bool(np.all(np.isfinite(fe))),
-              "far-away queries get a label in range and a finite embedding", (fl.tolist(), fe.tolist()))
     q64 = x[:9].astype(np.float64)
     rep.check("NN", np.array_equal(np.asarray(m.predict(q64)), p[:9]), "a float64 query returns the float32 query's labels")
-    alone = [int(np.asarray(m.predict(x[i:i + 1]))[0]) for i in range(0, 120, 7)]
-    rev = np.asarray(m.predict(x[::-1].copy()))
-    _identical(rep, "NN", alone == p[::7].tolist() and np.array_equal(rev[::-1], p),
-               "rows alone and reversed query order give the batch's bytes")
-
-    # Duplicated training rows: every query equal to a training row has two
-    # neighbors at distance 0, a k-NN tie the search breaks by index.
-    dup = np.ascontiguousarray(np.concatenate([x, x]).astype(np.float32))
-    dm = SpectralClustering(prediction_data=True, **kw).fit(dup)
-    dp = np.asarray(dm.predict(dup))
-    dalone = [int(np.asarray(dm.predict(dup[i:i + 1]))[0]) for i in (0, 120, 7, 127)]
-    _identical(rep, "NN", dalone == [int(dp[0]), int(dp[120]), int(dp[7]), int(dp[127])],
-               "duplicated rows (distance-0 k-NN ties): rows alone give the batch's labels")
-    rep.check("NN", np.array_equal(dp[:120], dp[120:]), "a row and its duplicate predict the same label")
-    rep.report_only("NN", np.array_equal(dp, np.asarray(dm.labels_)),
-                    f"duplicated rows: predict(X_train) == labels_ on {float(np.mean(dp == np.asarray(dm.labels_))):.4f}")
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "spectral.npz")
@@ -144,22 +114,11 @@ def arm_precomputed(rep):
     x = _blobs()
     A = _affinity(x, x)
     kw = dict(n_clusters=3, affinity="precomputed", random_state=3)
-    plain = SpectralClustering(**kw).fit(A)
     m = SpectralClustering(prediction_data=True, **kw).fit(A)
-    rep.check("PRE", np.array_equal(np.asarray(plain.labels_), np.asarray(m.labels_))
-              and np.asarray(plain.embedding_).tobytes() == np.asarray(m.embedding_).tobytes(),
-              "prediction_data=True fits the same labels_ and embedding_ bytes")
     p = np.asarray(m.predict(A))
     agree = float(np.mean(p == np.asarray(m.labels_)))
-    rep.check("PRE", p.dtype == np.int32 and p.shape == (120,) and set(p.tolist()) <= {0, 1, 2}, "predict on (n_new, n_train)")
+    rep.check("PRE", p.dtype == np.int32 and p.shape == (120,), "predict on (n_new, n_train)")
     rep.report_only("PRE", agree == 1.0, f"predict(A_train) == labels_ on {agree:.4f} of the training rows (not promised)")
-    rows = np.asarray([[1.0e4, 1.0e4], [4.0, 4.0]], dtype=np.float32)
-    Ah = _affinity(rows, x)
-    hl = np.asarray(m.predict(Ah))
-    rep.check("PRE", set(hl.tolist()) <= {0, 1, 2} and float(Ah[0].sum()) == 0.0,
-              "a row with no affinity to any training row (degree 0, the zero-to-one rule) gets a label in range", hl.tolist())
-    alone = [int(np.asarray(m.predict(A[i:i + 1]))[0]) for i in range(0, 120, 11)]
-    _identical(rep, "PRE", alone == p[::11].tolist(), "rows alone give the batch's labels")
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "spectral_pre.npz")
         m.save(path)
