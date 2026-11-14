@@ -85,7 +85,7 @@ is the one-shot form, which is what the gates and the card use.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
 from std.memory import bitcast
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
 from std.sys.compile import is_defined
@@ -751,8 +751,12 @@ def gpr_fit_host(
     var dev_logdet = Float32(0.0)
     var factor_l = List[Float32]()
     var ctrace = IdentityTrace()
-    # `info` gates the ops' solve below (CHOL_OPS_FIT only; one word)
-    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    # `info` gates the ops' solve below: allocated on the ops route only
+    # (CHOL_OPS_FIT; one word). The default route reads potrf_lower's own
+    # info, so no word is allocated there (lane fix-gmm-chol-leftovers:
+    # the word used to be allocated on both routes and never read on the
+    # default one).
+    var dinfo = Optional[DeviceBuffer[DType.int32]]()
     # The factor and its log-determinant. Under -D MOJOLEARN_IDN_CHOL_OPS_FIT
     # the executor's Cholesky ops (lane n8-gp-krr-smo, cholesky/chol_ops.mojo):
     # enqueued read-free, `info` and log|K| home with the factor's own
@@ -763,21 +767,24 @@ def gpr_fit_host(
     # order; the ops route measured AMD gpr 1.14-1.18x slower than 0.8.66
     # on the resident fit (cholesky/chol_ops.mojo CHOL_OPS_FIT).
     comptime if CHOL_OPS_FIT:
-        enqueue_fill(ctx, dinfo, Int32(0))
+        dinfo = Optional(ctx.enqueue_create_buffer[DType.int32](1))
+        var di = dinfo.value().create_sub_buffer[DType.int32](0, 1)
+        enqueue_fill(ctx, di, Int32(0))
         var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
         var dldet = ctx.enqueue_create_buffer[DType.float32](1)
         var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
         var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
         add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
         trace.record_device(ctx, "gp.ridged", dk, n * n)
-        chol_op_factor(ctx, dk, dinfo, n)
-        chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
-        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+        chol_op_factor(ctx, dk, di, n)
+        chol_op_logdet(ctx, dk, di, dldscr, dldet, n)
+        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=di)
         ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
         factor_l = _download(ctx, dk, n * n)
         info = Int(hinfo.unsafe_ptr().unsafe_load(0))
         if info == 0:
             dev_logdet = hld.unsafe_ptr().unsafe_load(0)
+        _ = di^
         _ = dldscr^
         _ = dldet^
         _ = hinfo^
@@ -806,7 +813,9 @@ def gpr_fit_host(
         var dy = _upload(ctx, y)
         var ddual = _upload(ctx, y)
         comptime if CHOL_OPS_FIT:
-            chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
+            var dis = dinfo.value().create_sub_buffer[DType.int32](0, 1)
+            chol_op_cho_solve(ctx, dk, ddual, dis, n, 1)
+            _ = dis^
         else:
             cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
         dual = _download(ctx, ddual, n)
@@ -1833,11 +1842,19 @@ def gpr_sample_y_host(
     # returned. By default the measured 0.8.66 route (lane
     # restore-classical-measured-routes): `potrf_lower` with its info read,
     # refused by name before the draws (cholesky/chol_ops.mojo CHOL_OPS_FIT).
-    var cinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    # The info word and its host copy exist on the ops route only (lane
+    # fix-gmm-chol-leftovers: they used to be allocated on both routes and
+    # never read on the default one, which reads potrf_lower's own info).
+    var cinfo = Optional[DeviceBuffer[DType.int32]]()
+    var hcinfo = Optional[HostBuffer[DType.int32]]()
     comptime if CHOL_OPS_FIT:
-        enqueue_fill(ctx, cinfo, Int32(0))
+        cinfo = Optional(ctx.enqueue_create_buffer[DType.int32](1))
+        hcinfo = Optional(ctx.enqueue_create_host_buffer[DType.int32](1))
+        var ci = cinfo.value().create_sub_buffer[DType.int32](0, 1)
+        enqueue_fill(ctx, ci, Int32(0))
         add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
-        chol_op_factor(ctx, dcov, cinfo, n_star)
+        chol_op_factor(ctx, dcov, ci, n_star)
+        _ = ci^
     else:
         var nb_pin = chol_nb_for(n_star, CHOL_NB_PINNED)
         var cws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n_star, nb_pin))
@@ -1873,12 +1890,11 @@ def gpr_sample_y_host(
     if unnorm:
         # every draw un-normalized as the mean, on the device
         _gp_unnorm(ctx, dyo, dyo, nz, y_std, y_mean, GP_UNNORM_MEAN)
-    var hcinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
     comptime if CHOL_OPS_FIT:
-        ctx.enqueue_copy(dst_ptr=hcinfo.unsafe_ptr(), src_buf=cinfo)
+        ctx.enqueue_copy(dst_ptr=hcinfo.value().unsafe_ptr(), src_buf=cinfo.value())
     var out = _download(ctx, dyo, nz)
     comptime if CHOL_OPS_FIT:
-        gp_sample_y_check_factor(Int(hcinfo.unsafe_ptr().unsafe_load(0)), n_star)
+        gp_sample_y_check_factor(Int(hcinfo.value().unsafe_ptr().unsafe_load(0)), n_star)
     _ = hcinfo^
     _ = cinfo^
     _ = dx^
