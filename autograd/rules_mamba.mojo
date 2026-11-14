@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# Mamba-1 / Mamba-2 block-stack backward on the tape: the GPU binding's only
-# Mamba-1/2 backward. docs/plans/AUTOGRAD_API.md (c) 3. "Hand path" below names
-# the launch walk these rules reproduce, launch for launch; the device copy of
-# that walk is deleted (lane del-mamba, 2026-10-19; docs/TOMBSTONES.md) and the
+# Mamba-1 / Mamba-2 block-stack backward on the tape, and the block step op's
+# VJP. docs/plans/AUTOGRAD_API.md (c) 3. "Hand path" below names the launch walk
+# these rules reproduce, launch for launch; the device copy of that walk was
+# deleted (lane del-mamba, 2026-10-19; docs/TOMBSTONES.md) and is back as the
+# step op's default VJP (`mamba{1,2}_step_backward_hand`, lane
+# restore-mamba-backward-glue, 2026-11-13; see IDN_MAMBA_BACKWARD_GENERIC). The
 # CPU column keeps it as generator input (mamba/host/mamba{1,2}_prefill_chain.mojo).
 #
 # ============================================================ LAUNCH INVENTORY
@@ -177,6 +179,8 @@ from mamba.impl.modules.mamba2 import (
 from autograd.kernels.mamba2 import (
     M2_BWD_TPB,
     Mamba2BackwardTail,
+    mamba2_backward_tail_into,
+    mamba2_backward_input_projection_into,
     mamba2_backward_d_skip_into,
     mamba2_backward_gnorm_into,
     mamba2_backward_silu_gate_into,
@@ -207,6 +211,22 @@ from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
 # NVIDIA and AMD (MAMBA_TAPE_BACKWARD_PASS).
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (the hand Mamba-1/2 backward arm and its MOJOLEARN_AUTOGRAD_MAMBA opt-in spelling; superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+
+# Lane restore-mamba-backward-glue (2026-11-13, history audit MASTER row 9): the hand glue is back as the block step
+# op's VJP (`mamba1_step_backward_hand` / `mamba2_step_backward_hand` below), which is the public
+# `mamba{1,2}_backward` door's and every training program's Mamba-1/2 block backward. It is the 10-19 hand chain
+# (B1-B17 / C1-C8 of the launch inventory above, the same kernels on the same operands in the same order) run over the
+# recorded run's KEPT stages (lane x56d: no forward recompute, weights resident), with no tape graph: no tape storage,
+# no graph nodes, no rule dispatch, and Mamba-1's gradients stored straight into the outer gradient's slots (no copy
+# per weight). Why it is the default: the record above is the only both-vendor timing of the two chains, and the hand
+# chain won it (tape / hand: NV L40S m1 1.05, m2 1.01; AMD MI325X m1 1.03, m2 1.05; deleted by 47582a7fb on reasoning,
+# "one backward path", without a measurement of its replacement). Bits: unchanged (the tape and the hand chain agreed
+# word for word on Apple, NVIDIA and AMD; mamba/checks/mamba_step_backward_glue_check_suite.mojo compares the two arms
+# word for word in one binary). -D MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC (default off) runs the tape graph
+# (`mamba{1,2}_step_backward_tape`, `_m{1,2}_record_backward`) as the B arm of the owed A/B (owed row
+# restore-mamba-backward-glue, b arm mamba-backward-generic). The stack VJPs (`mamba{1,2}_tape_backward_stack`), which
+# only the digest checks call, stay on the tape.
+comptime IDN_MAMBA_BACKWARD_GENERIC = is_defined["MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC"]()
 
 # Tags in a range of their own, clear of LayerNorm (1) and recurrent (16-18).
 comptime M1_NORM = 48
@@ -913,8 +933,155 @@ def mamba1_step_forward(mut S: Mamba1TapeStack, mut state: MambaDeviceState, y_o
 def mamba1_step_backward(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
     """The VJP of the recorded run kept in `S`: d(block output) `d_out`; d_x
     (B * L * d_model) and the ten weight gradients at `at` (the packed
-    layout's offsets, `_m1_weight_sizes` order) of `d_w`. One wait (the
-    tape's storage is released after the copies land)."""
+    layout's offsets, `_m1_weight_sizes` order) of `d_w`. The hand chain
+    by default; the tape graph under IDN_MAMBA_BACKWARD_GENERIC (header)."""
+    comptime if IDN_MAMBA_BACKWARD_GENERIC:
+        mamba1_step_backward_tape(S, d_out, d_x, d_w, at)
+    else:
+        mamba1_step_backward_hand(S, d_out, d_x, d_w, at)
+
+
+def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+    """The 10-19 hand chain (B1-B17, mamba1_prefill_backward at 47582a7fb^
+    minus its forward and uploads) over the recorded run's kept stages:
+    the same kernels on the same operands in the same order as the tape
+    rules, with the intermediates in the stack's scratch (zeroed at the
+    run) and every gradient stored straight into d_x / its `at` slot of
+    d_w (each kernel stores its whole destination). One wait."""
+    var ctx = S.ctx.copy()
+    var dims = S.dims.copy()
+    var b = S.b
+    var l = S.l
+    var m = b * l
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var xr = dims.x_proj_rows()
+    var dres = mamba_zeros(ctx, m * dm)
+    _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
+    _bwd_refuse_upstream(ctx, String("mamba1"), dres, m * dm)
+    ref st = S.stages[0]
+    ref sc = S.scratch[0]
+    ref w = S.w[0]
+    # The hand chain's own buffers that the tape kept in its storage (every
+    # kernel stores its whole destination: no fill is read, so no wait).
+    var dg = mamba_zeros[False](ctx, m * di)
+    var dsk = mamba_zeros[False](ctx, m * di)
+    var ddelta = mamba_zeros[False](ctx, m * di)
+    var dxp = mamba_zeros[False](ctx, m * xr)
+    var dp = mamba_zeros[False](ctx, m * 2 * di)
+    var dnrm = mamba_zeros[False](ctx, m * dm)
+    # The gradient destinations: views of the caller's d_x and of d_w's slots
+    # (`_m1_weight_sizes` order: norm_w, w_in, conv_w, conv_b, w_x, w_dt,
+    # b_dt, a_log, d_skip, w_out).
+    var dx_full = _view(ctx, d_x, m * dm)
+    var dw_norm = _view(ctx, d_w + at[0], dm)
+    var dw_in = _view(ctx, d_w + at[1], 2 * di * dm)
+    var dconv_bias = _view(ctx, d_w + at[3], di)
+    var dw_x = _view(ctx, d_w + at[4], xr * di)
+    var dw_dt = _view(ctx, d_w + at[5], di * dims.dt_rank)
+    var db_dt = _view(ctx, d_w + at[6], di)
+    var da_log = _view(ctx, d_w + at[7], di * D_STATE)
+    var dd_skip = _view(ctx, d_w + at[8], di)
+    var dw_out = _view(ctx, d_w + at[9], dm * di)
+
+    # B1: the output projection's two routings.
+    mamba_backward_proj_a_into(ctx, dg, dres, w.w_out, S.ws, PROJ_OUT, dims, m)
+    mamba_backward_proj_b_into(ctx, dw_out, dres, st.gate_out, S.ws, PROJ_OUT, dims, m)
+    # B2: the gate.
+    mamba_bwd_gate_into(
+        ctx, dsk, sc.dz, sc.du_d, sc.product_d, dg, st.skip_out, st.silu_out,
+        st.in_proj, w.d_skip, m, di,
+    )
+    # B3-B5: reconstruct the forward states, walk the recurrence backward,
+    # contract the channel-shared B/C gradients.
+    selective_scan_checkpoint_fn(
+        ctx, sc.h_ckpt, S.state_in[0].h, st.silu_out, st.softplus_out, st.a_out, st.b_mat, b, l, di,
+    )
+    selective_scan_bwd_scan_into(
+        ctx, sc.dh, sc.du_s, ddelta, sc.scan_w, dsk, st.c_mat, st.b_mat,
+        st.softplus_out, st.a_out, st.silu_out, sc.h_ckpt, b, l, di,
+    )
+    mamba_bwd_dbc_into(ctx, sc.dcm, sc.dbm, dsk, sc.h_ckpt, sc.scan_w, sc.dh, b, l, di)
+    # B6: batch-private dA partials, the pinned batch fold, dA_log.
+    mamba_bwd_da_into(
+        ctx, sc.da, sc.da_partial, sc.dh, st.softplus_out, st.a_out,
+        st.silu_out, st.b_mat, sc.h_ckpt, b, l, di,
+    )
+    mamba_bwd_da_log_into(ctx, da_log, sc.da, st.a_out, di)
+    # B7-B11: softplus derivative, dt projection, dXP, x projection, du join.
+    mamba_bwd_ddtp_into(ctx, sc.ddtp, ddelta, st.dt_proj, w.b_dt, m, di)
+    mamba_backward_proj_a_into(ctx, sc.ddtl, sc.ddtp, w.w_dt, S.ws, PROJ_DT, dims, m)
+    mamba_backward_proj_b_into(ctx, dw_dt, sc.ddtp, st.dt_low, S.ws, PROJ_DT, dims, m)
+    mamba_backward_reduce_into(ctx, db_dt, sc.ddtp, S.ones, S.ws, RED_DT_BIAS, dims, m)
+    mamba_bwd_concat_xp_into(ctx, dxp, sc.ddtl, sc.dbm, sc.dcm, m, dims)
+    mamba_backward_proj_a_into(ctx, sc.du_x, dxp, w.w_x, S.ws, PROJ_X, dims, m)
+    mamba_backward_proj_b_into(ctx, dw_x, dxp, st.silu_out, S.ws, PROJ_X, dims, m)
+    mamba_bwd_du_join_into(ctx, sc.du, sc.dconv, sc.du_d, sc.du_s, sc.du_x, st.conv_out, m, di)
+    # B12-B13: the convolution's input gradient, bias and four tap reductions.
+    mamba_bwd_dhin_into(ctx, sc.dhin, sc.dconv, w.conv_w, b, l, di)
+    mamba_backward_reduce_into(ctx, dconv_bias, sc.dconv, S.ones, S.ws, RED_CONV_BIAS, dims, m)
+    mamba_bwd_conv_tap_product_into(ctx, sc.tp0, sc.dconv, st.in_proj, S.state_in[0].conv_win, b, l, di, 0)
+    mamba_backward_reduce_into(ctx, sc.tg0, sc.tp0, S.ones, S.ws, RED_CONV_W_TAP0, dims, m)
+    mamba_bwd_conv_tap_product_into(ctx, sc.tp1, sc.dconv, st.in_proj, S.state_in[0].conv_win, b, l, di, 1)
+    mamba_backward_reduce_into(ctx, sc.tg1, sc.tp1, S.ones, S.ws, RED_CONV_W_TAP1, dims, m)
+    mamba_bwd_conv_tap_product_into(ctx, sc.tp2, sc.dconv, st.in_proj, S.state_in[0].conv_win, b, l, di, 2)
+    mamba_backward_reduce_into(ctx, sc.tg2, sc.tp2, S.ones, S.ws, RED_CONV_W_TAP2, dims, m)
+    mamba_bwd_conv_tap_product_into(ctx, sc.tp3, sc.dconv, st.in_proj, S.state_in[0].conv_win, b, l, di, 3)
+    mamba_backward_reduce_into(ctx, sc.tg3, sc.tp3, S.ones, S.ws, RED_CONV_W_TAP3, dims, m)
+    # B14-B16: dP = [dhin | dz], the in projection, the norm and residual.
+    mamba_bwd_concat_p_into(ctx, dp, sc.dhin, sc.dz, m, di)
+    mamba_backward_proj_a_into(ctx, dnrm, dp, w.w_in, S.ws, PROJ_IN, dims, m)
+    mamba_backward_proj_b_into(ctx, dw_in, dp, st.norm_out, S.ws, PROJ_IN, dims, m)
+    mamba_bwd_norm_into(
+        ctx, dx_full, sc.drstd, sc.norm_product, dres, dnrm, S.acts[0],
+        st.norm_out, w.norm_w, st.norm_sumsq, m, dm,
+    )
+    mamba_backward_reduce_into(ctx, dw_norm, sc.norm_product, S.ones, S.ws, RED_NORM_W, dims, m)
+    # B17: dD.
+    mamba_backward_reduce_into(ctx, dd_skip, sc.product_d, S.ones, S.ws, RED_D, dims, m)
+    # The [d_inner, D_CONV] layout copy straight into conv_w's slot (in
+    # stream order behind the tap reductions; no wait before it).
+    ctx.enqueue_function[m1_conv_w_interleave_kernel](
+        _kp(d_w + at[2]),
+        _kp(_fp(sc.tg0)),
+        _kp(_fp(sc.tg1)),
+        _kp(_fp(sc.tg2)),
+        _kp(_fp(sc.tg3)),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP0)),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP1)),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP2)),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP3)),
+        Int32(di),
+        grid_dim=((di + _TPB - 1) // _TPB, 1, 1),
+        block_dim=(_TPB, 1, 1),
+    )
+    # The one wait; every buffer a queued launch reads is named after it
+    # (Mojo frees a local at its last named use).
+    ctx.synchronize()
+    _ = dw_out^
+    _ = dd_skip^
+    _ = da_log^
+    _ = db_dt^
+    _ = dw_dt^
+    _ = dw_x^
+    _ = dconv_bias^
+    _ = dw_in^
+    _ = dw_norm^
+    _ = dx_full^
+    _ = dnrm^
+    _ = dp^
+    _ = dxp^
+    _ = ddelta^
+    _ = dsk^
+    _ = dg^
+    _ = dres^
+
+
+def mamba1_step_backward_tape(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+    """IDN_MAMBA_BACKWARD_GENERIC's B arm: the VJP of the recorded run kept
+    in `S` through the tape graph (`_m1_record_backward`), the gradients
+    copied out of the tape's storage. One wait (the tape's storage is
+    released after the copies land)."""
     var ctx = S.ctx.copy()
     var dims = S.dims.copy()
     var m = S.b * S.l
@@ -1434,7 +1601,93 @@ def mamba2_step_backward(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: FP, at
     """The VJP of the recorded run kept in `S` (lane x56d): d(block output)
     `d_out`; d_x and the nine weight gradients at `at` (`_m2_weight_sizes`
     order: norm_w, w_in, conv_w, conv_b, dt_bias, a_log, d_skip, gnorm_w,
-    w_out) of `d_w`. One wait."""
+    w_out) of `d_w`. The hand chain by default; the tape graph under
+    IDN_MAMBA_BACKWARD_GENERIC (header)."""
+    comptime if IDN_MAMBA_BACKWARD_GENERIC:
+        mamba2_step_backward_tape(S, d_out, d_x, d_w, at)
+    else:
+        mamba2_step_backward_hand(S, d_out, d_x, d_w, at)
+
+
+def mamba2_step_backward_hand(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+    """The 10-19 hand chain (C1-C8, mamba2_prefill_backward at 47582a7fb^
+    minus its forward and uploads) over the recorded run's kept stages and
+    the SSD backward state the run added: the same kernels on the same
+    operands in the same order as the tape rules, every result in the hand
+    chain's own fields (S.tail, S.ssd, S.scale, S.disc, S.conv), then each
+    gradient copied into d_x / its `at` slot of d_w. One wait."""
+    var ctx = S.ctx.copy()
+    var dims = S.dims.copy()
+    var b = S.b
+    var l = S.l
+    var m = b * l
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var cd = dims.conv_dim()
+    var nh = dims.nheads
+    var dres = mamba_zeros(ctx, m * dm)
+    _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
+    _bwd_refuse_upstream(ctx, String("mamba2"), dres, m * dm)
+    ref st = S.stages[0]
+    ref w = S.w[0]
+    ref T = S.tail[0]
+    ref ssd = S.ssd[0]
+    ref sr = S.scale[0]
+    ref disc = S.disc[0]
+    ref cv = S.conv[0]
+    # C1-C4: output projection, gated norm, SiLU gate, D skip.
+    mamba2_backward_tail_into(ctx, T, dres, st.gnorm_out, w.w_out, dims, m)
+    mamba2_backward_gnorm_into(ctx, T, st.gnorm_gate, st.gnorm_sumsq, w.gnorm_w, dims, m)
+    mamba2_backward_silu_gate_into(ctx, T, st.skip_out, st.in_proj, dims, m)
+    mamba2_backward_d_skip_into(ctx, T, st.silu_out, w.d_skip, dims, m)
+    # C5: the SSD backward (zero final-state cotangent, S.d_final[0]).
+    mamba2_s18_direct_dpass_into(
+        ctx, ssd, T.d_scan, st.xbc_work, st.pass_states, st.dacs,
+        b, st.t_work, nh, di, cd, st.nc, m2_q_eff(),
+    )
+    mamba2_reverse_chunk_state_into(
+        ctx, ssd, S.d_final[0], st.pass_states, st.dacs, b, nh, st.nc, m2_q_eff(),
+    )
+    mamba2_cstate_ddecay_into(
+        ctx, ssd, st.xd_work, st.xbc_work, b, st.t_work, nh, di, cd, st.nc, m2_q_eff(),
+    )
+    mamba2_reduce_scale_product_into(ctx, sr, ssd, st.dacs, st.decay, b, st.nc, nh, m2_q_eff())
+    mamba2_reverse_cumsum_and_da_into(
+        ctx, disc, sr.d_dacs_total, st.dt_work, st.a_out, b, st.t_work, nh, st.nc, m2_q_eff(),
+    )
+    mamba2_ydiag_xd_and_partial_dt_into(
+        ctx, disc, T.d_scan, st.cb_g, st.seg_l, st.xd_work,
+        st.xbc_work, st.dt_work, st.a_out, st.dtraw_work, w.dt_bias,
+        ssd.d_cstate, st.decay,
+        b, st.t_work, nh, di, cd, st.nc, m2_q_eff(), S.dt_lo, S.dt_hi,
+    )
+    mamba2_postconv_merge_into(ctx, disc, ssd, T.d_x_from_d, b, st.t_work, nh)
+    # C6: the convolution.
+    mamba2_conv_backward_prefill_into(
+        ctx, cv, disc, st.conv_out, st.in_proj, w.conv_w, b, l, di, cd, dims.d_in_proj(), st.q0,
+    )
+    # C7: pack [d_z | d_xbc | d_dt], the in projection's two routings.
+    mamba2_backward_input_projection_into(ctx, T, cv.d_in_xbc, disc.d_dtraw, st.norm_out, w.w_in, dims, m)
+    # C8: the block norm, its weight reduction, the residual join.
+    mamba2_backward_block_norm_into(ctx, T, dres, S.acts[0], st.norm_sumsq, w.norm_w, dims, m)
+    _bwd_put(ctx, d_x, _fp(T.d_block_x), m * dm)
+    _bwd_put(ctx, d_w + at[0], _fp(T.d_block_w), dm)
+    _bwd_put(ctx, d_w + at[1], _fp(T.d_w_in), dims.d_in_proj() * dm)
+    _bwd_put(ctx, d_w + at[2], _fp(cv.d_w), cd * M2_D_CONV)
+    _bwd_put(ctx, d_w + at[3], _fp(cv.d_b), cd)
+    _bwd_put(ctx, d_w + at[4], _fp(disc.d_dt_bias), nh)
+    _bwd_put(ctx, d_w + at[5], _fp(disc.d_a_log), nh)
+    _bwd_put(ctx, d_w + at[6], _fp(T.d_d), nh)
+    _bwd_put(ctx, d_w + at[7], _fp(T.d_gnorm_w), di)
+    _bwd_put(ctx, d_w + at[8], _fp(T.d_w_out), dm * di)
+    # The one wait; dres is read by C1 and C8 (named after the wait).
+    ctx.synchronize()
+    _ = dres^
+
+
+def mamba2_step_backward_tape(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+    """IDN_MAMBA_BACKWARD_GENERIC's B arm: the VJP of the recorded run kept
+    in `S` through the tape graph (`_m2_record_backward`). One wait."""
     var ctx = S.ctx.copy()
     var dims = S.dims.copy()
     var m = S.b * S.l
