@@ -106,13 +106,10 @@ def test_loss_bits_round_trip(real_host):
     assert struct.unpack('<f', struct.pack('<I', bits))[0] == model.loss(batch)
 
 
-def test_threaded_flag_is_a_bool_and_both_paths_agree(real_host):
+# The threaded and unthreaded paths' equal loss and logits bits moved to
+# checks/native_tests/byte_lm_host_column_cases.mojo units 0-1 (lane tmig-lm-1).
+def test_threaded_flag_is_a_bool(real_host):
     model = host_mod.LanguageModelInference(_zeros(), threaded=True)
-    batch = (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
-    assert model.loss_bits(batch) == model.loss_bits(batch, threaded=False)
-    ids = batch[:1, :4]
-    threaded = np.asarray(model.logits(ids))
-    assert threaded.tobytes() == np.asarray(model.logits(ids, threaded=False)).tobytes()
     with pytest.raises(TypeError):
         model.logits(np.zeros((1, 4), np.int32), threaded=1)
     with pytest.raises(TypeError):
@@ -153,9 +150,8 @@ def test_out_of_range_ids_raise_value_error_before_the_binding(real_host):
 def test_thread_count_is_kept_and_refused_out_of_range(real_host):
     model = host_mod.LanguageModelInference(_zeros(), threaded=True, threads=3)
     assert vars(model)['_threads'] == 3
-    batch = (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
-    assert model.loss_bits(batch) == host_mod.LanguageModelInference(_zeros()).loss_bits(batch)
-    assert tuple(model.logits(np.zeros((1, 4), np.int32), threads=2).shape) == (1, 4, 256)
+    # threads=3 against the default loss bits, and the threads=2 logits
+    # count: byte_lm_host_column_cases.mojo unit 2.
     for bad, error in ((0, ValueError), (1025, ValueError), (True, TypeError), ('3', TypeError)):
         with pytest.raises(error):
             host_mod.LanguageModelInference(_zeros(), threads=bad)
@@ -163,20 +159,9 @@ def test_thread_count_is_kept_and_refused_out_of_range(real_host):
             model.logits(np.zeros((1, 4), np.int32), threads=bad)
 
 
-def test_logits_shape_and_greedy_ties_go_low(real_host):
-    # Zero parameters give equal logits everywhere: every tie goes to id 0.
-    model = host_mod.LanguageModelInference(_zeros())
-    out = model.logits(np.zeros((2, 5), np.int32))
-    assert tuple(out.shape) == (2, 5, 256)
-    assert model.next_bytes(np.zeros((2, 5), np.int32)) == [0, 0]
-
-
-def test_unthreaded_next_bytes_uses_full_logits_fallback(real_host):
-    model = host_mod.LanguageModelInference(_zeros())
-    ids = (np.arange(10, dtype=np.int32) * 7 % 256).reshape(2, 5)
-    assert model.next_bytes(ids, threaded=False) == model.next_bytes(ids)
-
-
+# test_logits_shape_and_greedy_ties_go_low and
+# test_unthreaded_next_bytes_uses_full_logits_fallback moved to
+# byte_lm_host_column_cases.mojo units 3-4 (lane tmig-lm-1).
 def test_refusals(real_host):
     model = host_mod.LanguageModelInference(_zeros())
     with pytest.raises(ValueError):
