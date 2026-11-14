@@ -74,6 +74,8 @@ check-native-neighbors-knn-metrics-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICA
 check-native-ann-ivf-surface-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ann_ivf_surface_gpu.mojo"
 check-native-neighbors-nearest-centroid-native-capability-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/neighbors_nearest_centroid_native_capability_cpu.mojo"
 check-native-neighbors-nearest-centroid-native-capability-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/neighbors_nearest_centroid_native_capability_gpu.mojo"
+check-native-neighbors-umap-surface-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/neighbors_umap_surface_cpu.mojo"
+check-native-neighbors-umap-surface-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/neighbors_umap_surface_gpu.mojo"
 check-native-class-weight-plan = "mojo run -I . checks/native_tests/class_weight_plan.mojo"
 check-native-archive-writer = "mojo run -I . checks/native_tests/archive_writer.mojo"
 check-native-rankn-math-cpu = "mojo run -I . checks/native_tests/rankn_math_cpu.mojo"
