@@ -28,6 +28,7 @@ from bindings.cholesky_archive_native_pack import cholesky_archive_pack
 from core.native_archive_cholesky import native_cholesky_archive_plan, native_cholesky_archive_error
 from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_finite_scan import host_finite_status
+from neighbors.neighbors_knn_run import knn_metric_code, knn_rbc_metric_code, knn_rbc_metric_resolve
 from umap.host_archive_native_run import _umap_whole, _umap_real
 
 
@@ -1058,11 +1059,12 @@ def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, path: PythonOb
 
 def host_archive_neighbor_metric(metric: PythonObject, p: Float64, rbc: Bool,
                                   context: PythonObject) raises -> PythonObject:
-    var table = context["host_archive_rbc_metrics" if rbc else "host_archive_neighbor_metrics"]
-    var key = py_call(metric.lower)
-    if not py_contains(table, key):
+    # The tables are typed (neighbors/neighbors_knn_run.mojo, lane
+    # py-neighbors 2026-11-14; were the Python dicts connected into the context).
+    var key = String(py=py_call(metric.lower))
+    var code = knn_rbc_metric_code(key) if rbc else knn_metric_code(key)
+    if code < 0:
         raise Error("saved neighbor metric is unsupported by its search algorithm")
-    var code = Int(py=table[key])
     var arg = Float64(2.0)
     if code == 9:
         if not isfinite(p) or (p < 1.0 if rbc else p < 1.1754943508222875e-38):
@@ -1094,46 +1096,10 @@ def host_archive_rbc_metric_object(cls_name: String, metric: PythonObject, p: Py
     var shown = _archive_builtin_repr(metric)
     if py_type(metric) is not b.str:
         raise Error(head + "metric must be a name, got " + shown)
-    var key = py_call(metric.lower)
-    var name = String(key)
-    var table = context["host_archive_rbc_metrics"]
-    if name == "sqeuclidean":
-        raise Error(head + "metric='sqeuclidean' is REFUSED on the "
-            + "random ball cover. The pruning here IS THE TRIANGLE "
-            + "INEQUALITY on the landmark radii "
-            + "(neighbors/impl/ball_cover/common.mojo, DEVIATION "
-            + "565), and SQUARED Euclidean distance does not satisfy it even "
-            + "though Euclidean distance does: on three collinear points at "
-            + "unit spacing it gives 4 against 1 + 1. A cover built on it "
-            + "would prune away true neighbours silently. Ask for "
-            + "metric='euclidean' and square the returned distances, which "
-            + "is the same answer and is exact.")
-    if name == "cosine":
-        raise Error(head + "metric='cosine' is REFUSED on the "
-            + "random ball cover. The pruning here IS THE TRIANGLE "
-            + "INEQUALITY on the landmark radii, and `1 - cos` does not "
-            + "satisfy it: three unit vectors at 0, 60 and 120 degrees give "
-            + "1.5 against 0.5 + 0.5. It also fails identity of "
-            + "indiscernibles, d(x, 2x) = 0, so a landmark radius stops "
-            + "bounding its ball. A cover built on it would prune away true "
-            + "neighbours silently rather than return them slowly. Use "
-            + "NearestNeighbors with algorithm='brute', which needs no "
-            + "inequality and honors every implemented metric.")
-    if py_contains(context["host_archive_unsupported_metrics"], key):
-        raise Error(head + "metric=" + shown + " is in cuML's "
-            + "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
-            + "(neighbors/NOT_IMPLEMENTED.tsv)")
-    if py_contains(context["host_archive_neighbor_metrics"], key) and not py_contains(table, key):
-        raise Error(head + "metric=" + shown + " is computed by brute "
-            + "force only (NearestNeighbors(algorithm='brute')). The random "
-            + "ball cover's pruning is the triangle inequality on its "
-            + "landmark radii and its kernels carry the Minkowski family; "
-            + "cuML's own VALID_METRICS['rbc'] is {euclidean, haversine, l2}")
-    if not py_contains(table, key):
-        var admitted = py_call(PythonObject(", ").join, py_call(b.sorted, table))
-        raise Error(head + "unknown metric " + shown + ". The random "
-            + "ball cover admits: " + String(admitted))
-    var value = Int(py=table[key])
+    # The table and the name refusals are typed: neighbors/neighbors_knn_run.mojo
+    # `knn_rbc_metric_resolve` (lane py-neighbors 2026-11-14).
+    var name = String(py=py_call(metric.lower))
+    var value = knn_rbc_metric_resolve(cls_name, name, shown)
     var arg = Float64(2.0)
     var shown_p = _archive_builtin_repr(p)
     if value != 9:
