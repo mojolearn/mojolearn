@@ -213,6 +213,35 @@ def test_resident_forward_uploads_unchanged_weights_once():
     assert restored.tobytes() == first.tobytes()
 
 
+def test_resident_forward_two_models_alternating_upload_once_each():
+    # lane fix-samba-weight-epoch-per-model (2026-11-13): each stack's resident
+    # registry is keyed by its own registry's epoch (core/weight_epoch.mojo
+    # RegistryKey), not the process epoch. Two models alternating forwards
+    # upload once each at their first call and never after; a train_step on A
+    # re-uploads A once and leaves B's copy current.
+    a, b = _models(["mamba3", "attention"])
+    ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
+    targets = np.array([[2, 3, 4], [5, 6, 7]], dtype="i4")
+    first_a = np.asarray(a.forward(ids)).copy()
+    if vars(a).get("_samba_forward_route") != "resident":
+        pytest.skip("no resident forward on this build")
+    first_b = np.asarray(b.forward(ids)).copy()
+    ua = vars(a)["_samba_resident_uploads"]
+    ub = vars(b)["_samba_resident_uploads"]
+    for _ in range(3):
+        assert np.asarray(a.forward(ids)).tobytes() == first_a.tobytes()
+        assert np.asarray(b.forward(ids)).tobytes() == first_b.tobytes()
+    assert vars(a)["_samba_resident_uploads"] == ua, "A re-uploaded unchanged weights while B ran"
+    assert vars(b)["_samba_resident_uploads"] == ub, "B re-uploaded unchanged weights while A ran"
+    a.train_step(ids, targets)
+    ua = vars(a)["_samba_resident_uploads"]
+    trained = np.asarray(a.forward(ids)).copy()
+    assert vars(a)["_samba_resident_uploads"] == ua + 1, "A's write did not re-upload A exactly once"
+    assert trained.tobytes() != first_a.tobytes()
+    assert np.asarray(b.forward(ids)).tobytes() == first_b.tobytes()
+    assert vars(b)["_samba_resident_uploads"] == ub, "a write to A re-uploaded B"
+
+
 class _HookedInt(int):
     def __index__(self):  # pragma: no cover - must never run
         raise AssertionError("Python hook ran inside a native Samba forward")
