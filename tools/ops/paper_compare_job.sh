@@ -611,7 +611,10 @@ SJ=()
 for f in "$RES"/smoke-s*-smoke/smoke.json; do [ -f "$f" ] && SJ+=(--smoke-json "$f"); done
 PASS_IDS="$RES/plan/race-ids-pass.txt"
 FULL_ALL="$RES/plan/race-ids-full-all.txt"
-cat "$RES/plan/race-ids-full.txt" "$RES/plan-owed/ids-candidate-full.txt" 2> /dev/null | sort -u > "$FULL_ALL"
+# paper rows first, in recipe order, then the owed full rows not already in it: the timed board runs the list in this
+# order (bench_board select_race_ids keeps it), so a 240-min cap kill loses owed rows, never paper rows (2026-11-14: a
+# sorted union ran 86 algos rows for 2.7 h before the first paper row).
+cat "$RES/plan/race-ids-full.txt" "$RES/plan-owed/ids-candidate-full.txt" 2> /dev/null | awk 'NF && !seen[$0]++' > "$FULL_ALL"
 $PY tools/paper_compare.py pass-ids --full-ids "$FULL_ALL" "${SJ[@]}" --out "$PASS_IDS" > "$RES/logs/pass-ids.log" 2>&1
 tail -n 1 "$RES/logs/pass-ids.log"
 
