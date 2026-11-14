@@ -42,6 +42,7 @@ from providers.python.mamba3_prefill_session_pyapi_door import (
 )
 from core.mamba_state_entry_table import Mamba3StateRoute
 from bindings.causal_lm_public_door import _causal_array_guard
+from bindings.causal_lm_public_door import causal_mamba_entry, causal_mamba_stateless_run, IDN_MAMBA12_FORWARD_DOOR_OLD
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
@@ -82,6 +83,11 @@ struct NativeBlockPlan(Movable, Writable):
     # vendor and Mamba-1 profile are fixed for a plan, so it is decided here
     # once (hot-path audit 2026-11-13: it read two entry words per call).
     var stateless_forward: Bool
+    # Lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD,
+    # bindings/causal_lm_public_door.mojo): the Mamba state entry a stateless
+    # forward calls, resolved at the plan's first stateless forward and held
+    # (word 0 until then).
+    var mamba_entry: EntryRef
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
@@ -97,6 +103,7 @@ struct NativeBlockPlan(Movable, Writable):
         self.packed = owner._head_int15 is not None
         self.layer = layer
         self.stateless_forward = causal_layer_stateless_plan(self.kind, self.entries)
+        self.mamba_entry = entry_ref_unresolved()
         # Immutable schema belongs to the retained execution plan. Live class
         # hooks, scalar values and Array metadata are still admitted each call.
         self.state_scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
@@ -855,6 +862,18 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
         if supplied_state is None and not step:
             ref nplan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
             if nplan.stateless_forward:
+                comptime if not IDN_MAMBA12_FORWARD_DOOR_OLD:
+                    # lane fix-mamba-forward-doors: one direct call with the
+                    # plan's prepared layer and held Mamba entry (the
+                    # causal_layer_run_fields hop is the B arm)
+                    if nplan.layer is not None:
+                        if nplan.mamba_entry.word == 0:
+                            nplan.mamba_entry = causal_mamba_entry(nplan.entries)
+                        var direct = causal_mamba_stateless_run(mods, owner.fields, nplan.mamba_entry, nplan.kind,
+                            nplan.d_model, nplan.layer, x)
+                        if locked:
+                            lock_lease.release()
+                        return direct
                 var fresh_result = _neural_layer_run(mods, owner, x, PythonObject(None), step, True)
                 if locked:
                     lock_lease.release()

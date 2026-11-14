@@ -833,6 +833,78 @@ def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> B
     return True
 
 
+#: Lane fix-mamba-forward-doors (2026-11-14): what this switch decides is the
+#: door a stateless Mamba-1/2 forward (`causal_layer_stateless_plan`) takes
+#: from the neural door to its one table call. Default (A): the neural door
+#: calls `causal_mamba_stateless_run` directly with the plan's prepared layer
+#: and the Mamba table entry the plan resolved once (0.8.55 reached
+#: `_mamba1_run` / `_mamba2_run` with one binding call): no per-call
+#: `causal_layer_run_fields` / `_causal_layer_run_bound` prologue (the
+#: fields dict check, the state-namespace and `_resident_session` getattr
+#: probes of a None state, the (tier, vendor) dict reads and table read).
+#: The same addresses and words reach the same table call: no bit moves.
+#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` keeps the four-hop chain (B arm
+#: of the owed A/B, bench/results/paper_compare/owed-pre0867.json row
+#: fix-mamba-forward-doors).
+comptime IDN_MAMBA12_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"]()
+
+
+def causal_mamba_entry(entries: PythonObject) raises -> EntryRef:
+    """The Mamba state entry (CAUSAL_TABLE_MAMBA) of a block's admitted
+    (tier, vendor) key: resolved once by the caller and held."""
+    return causal_ref[CAUSAL_TABLE_MAMBA](causal_entry_key(entries))
+
+
+def causal_mamba_stateless_run(mut mods: NativeModules, fields: PythonObject, entry: EntryRef, kind: String, d: Int,
+    prepared: PythonObject, x: PythonObject) raises -> PythonObject:
+    """Lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the
+    stateless Mamba-1/2 device forward (`causal_layer_stateless_plan`) as one
+    table call through `entry` (held by the caller's plan) over the prepared
+    layer: x, the weights, zero state addresses (the device program runs
+    from a zero state and reads nothing back), y unfilled (written whole),
+    and for Mamba-2 the h_last report into an unfilled array kept on the
+    block's fields as `h_last_` -- the stateless arms of
+    `_causal_layer_run_bound`, word for word."""
+    _causal_array_guard(mods)
+    var shape = x.shape
+    var b = Int(py=shape[0])
+    var l = Int(py=shape[1])
+    ref layer = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer
+    mods.released()
+    var keep = List[PythonObject]()
+    var y = generation_array_unfilled([b, l, d])
+    var m_addresses = List[Int](capacity=len(layer.weights.addresses) + 7)
+    m_addresses.append(_addr(x, keep))
+    layer.weights.append_resolved(m_addresses, keep)
+    if kind == "mamba1":
+        m_addresses.append(0)
+        m_addresses.append(0)
+        m_addresses.append(_addr(y, keep))
+        var s_params: List[Int] = [b, l, d]
+        _ = _causal_table_call(entry, CAUSAL_MAMBA1_FORWARD, m_addresses, s_params, [])
+        mods.released()
+    elif kind == "mamba2":
+        m_addresses.append(0)
+        m_addresses.append(0)
+        m_addresses.append(0)
+        m_addresses.append(0)
+        m_addresses.append(_addr(y, keep))
+        var s_last = generation_array_unfilled([b, layer.words.heads, 64, 128])
+        m_addresses.append(_addr(s_last, keep))
+        var s_params: List[Int] = [b, l, d, 0]
+        _ = _causal_table_call(entry, CAUSAL_MAMBA2_FORWARD, m_addresses, s_params,
+            [layer.words.dt_low, layer.words.dt_high])
+        mods.released()
+        _ = s_last  # keep the Python object alive through the native call above
+        causal_block_cache_set(mods, fields, "h_last_", s_last)
+    else:
+        raise Error("CausalLM: a stateless layer call is a Mamba-1/2 forward with no state")
+    _ = y  # keep the Python object alive through the native call above
+    _ = prepared  # retain the captured weights until every native read completes
+    _ = keep^
+    return y
+
+
 struct PreparedGenerationLayer(Movable, Writable):
     # Python-held owner of one standalone block's captured layer words and
     # weight views (registered by the tokenizer host binding).
