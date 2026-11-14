@@ -281,6 +281,25 @@ def _csr_ready(kind: String, context: PythonObject) raises -> Bool:
     """`_DiscreteNB._nb_csr_ready` (MultinomialNB, ComplementNB)."""
     if kind != "mnb" and kind != "cnb":
         return False
+    return _csr_route_ready(context)
+
+
+def _nb_csr_ready_op(csr_ok: Bool, context: PythonObject) -> Bool:
+    """The public classmethod `_DiscreteNB._nb_csr_ready` (operation
+    "nb_csr_ready", lane py-msel-prep-cnn: was a Python body over the
+    binding probes): False for a class without `_csr_ok`, and False on any
+    refusal of the probes, as the Python body's `except Exception` gave."""
+    if not csr_ok:
+        return False
+    try:
+        return _csr_route_ready(context)
+    except:
+        return False
+
+
+def _csr_route_ready(context: PythonObject) raises -> Bool:
+    """FAST with the `x_prep_nb_csr_fit` export, or IDENTICAL with the
+    IDN_NB_CSR bit of the device binding."""
     var mode = cls_mode(context)
     if String(mode) == "identical":
         return (idn_int(mode, context) & IDN_NB_CSR) != 0
@@ -1617,6 +1636,9 @@ def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var operation = String(call[1])
         var args = call[2]
         var context = call[3]
+        if operation == "nb_csr_ready":
+            # a class-level probe: `model` is the class, args[0] its `_csr_ok`
+            return PythonObject(_nb_csr_ready_op(Bool(py=args[0]), context)).steal_data()
         classical_connect_numpy(context)
         var public_kind = _public_kind(model, context)
         if public_kind != "":
