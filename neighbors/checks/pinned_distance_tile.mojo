@@ -62,7 +62,7 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
     identical_sqrt,
-    nv_mul_rn_ftz_f32,
+    nv_flush_by_one_kernel,
 )
 from checks.nv_fma_rn import nv_fma_rn_kernel
 
@@ -195,7 +195,9 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         # input/output FTZ on multiplication by exactly one. Bare fma.ftz is
         # deliberately excluded because it fails at the minnormal boundary.
         var rounded = nv_fma_rn_kernel(a, b, acc)
-        return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
+        # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
+        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        return nv_flush_by_one_kernel(rounded)
     var result = ftz(identical_mul_add(a, b, acc))
     comptime if knn_distance_zero_fma_repair_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
         if (bitcast[DType.uint32](result) & 0x7fffffff) == 0:
