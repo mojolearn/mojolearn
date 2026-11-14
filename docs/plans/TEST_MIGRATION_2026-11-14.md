@@ -47,17 +47,20 @@ boundary is left alone and reported.**
 
 ## Model check
 
-`checks/native_tests/spectral_prediction_*` (commit `776be47afa`, ported from `test_spectral_predict.py`):
+`checks/native_tests/spectral_prediction.mojo` (ported from `test_spectral_predict.py`; one file per check since lane
+check-runner, 2026-11-14, which merged the earlier five-file form):
 
-- `spectral_prediction_cases.mojo`: the original fixtures (inputs, options, expected relations) and helpers; no
-  `main()`, importable.
-- `spectral_prediction_cpu_suite.mojo` / `spectral_prediction_gpu_suite.mojo`: `run_checks()`. The CPU suite runs its
-  independent fixtures across host cores with `core.host_parallel.host_parallelize` and a private failure slot per
-  fixture; the GPU suite runs fixtures in order on the device, kernels keep their own parallelism.
-- `spectral_prediction_cpu.mojo` / `spectral_prediction_gpu.mojo`: only `def main() raises: run_checks()` (AGENTS.md:
-  a module with `main()` cannot be imported as a package).
-- pixi tasks `check-native-spectral-prediction-cpu` (`-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1`) and
-  `check-native-spectral-prediction-gpu` (`-D MOJOLEARN_NUMERIC_IDENTICAL=1`).
+- the original fixtures (inputs, options, expected relations) and helpers, then `_run_cpu(mut report)` and
+  `_run_gpu(mut report)`: the host column asks `report.cases(n)` for failure slots and runs its independent fixtures
+  across host cores with `report.parallel(task, n)` (`host_parallelize`; serial only when `register()` names a
+  reason, such as a process-global registry), recording `cases.fail(unit, error)`; the device column runs fixtures
+  in order on the device, kernels keep their own parallelism;
+- `run_cases(column, report)` (`comptime if CPU_COLUMN_BUILD`) and `register() -> Check("spectral_prediction",
+  cpu=True, gpu=True, serial="", run=run_cases)`; the runner (`checks/native_tests/runner.mojo`) provides `require`,
+  the fixture readers and the report line;
+- one import and one append in `checks/native_tests/registry.mojo`. No `main()` and no pixi task per check: the two
+  mains `run_cpu.mojo` / `run_gpu.mojo` run every registered check (`pixi run check-native-cpu [names]`,
+  `pixi run check-native-gpu [names]`), one compile per column.
 
 The brief's name form `checks/<family>_<topic>_check.mojo` is replaced by this live convention under
 `checks/native_tests/` (578 files already there), so the new checks sit beside the earlier ports.
@@ -68,8 +71,8 @@ The brief's name form `checks/<family>_<topic>_check.mojo` is replaced by this l
    compile, no tests, no boxes (AGENTS.md "Lanes"). Load the `mojo-skills:mojo-syntax` skill; follow "Mojo rules that
    cost a build round" exactly.
 2. Read each file of the lane. For MIXED files confirm the native function list in the per-file table.
-3. Write the suite, cases and `main()` wrappers for each check and add the pixi tasks (`check-native-<stem>-cpu`,
-   `-gpu` when the file ran on a device). Independent fixtures run across host cores (`host_parallelize`), never in a
+3. Write each check as one file `checks/native_tests/<stem>.mojo` (see "Model check") and register it in
+   `registry.mojo`; no per-check main or pixi task. Independent fixtures run across host cores (`host_parallelize`), never in a
    serial loop (hard rule "write code to run in parallel"); a GPU suite says in its docstring why its fixtures run in
    order on one device.
 4. Call the family's Mojo entry (table below), never the Python binding. Keep the test's inputs, options, tolerances
@@ -170,7 +173,7 @@ A check calls these Mojo modules directly (the typed driver, entry table or `*_n
 
 ## Per-file plan (NATIVE and MIXED)
 
-Check names follow the live convention under `checks/native_tests/` (see "Model check"): one importable suite `<stem>_suite.mojo` with `run_checks()`, shared cases in `<stem>_cases.mojo` when CPU and GPU share them, and `<stem>_cpu.mojo` / `<stem>_gpu.mojo` holding only `main()`. A lane may fold several files of one family into one suite when they test the same entry; it says so in its report. For MIXED, `Native functions` names the functions that move (heuristic; the lane confirms each by reading it, and a function that turns out to be boundary stays).
+Check names follow the live convention under `checks/native_tests/` (see "Model check"): one file `<stem>.mojo` per check with `run_cases` and `register()`, listed in `registry.mojo`. A lane may fold several files of one family into one suite when they test the same entry; it says so in its report. For MIXED, `Native functions` names the functions that move (heuristic; the lane confirms each by reading it, and a function that turns out to be boundary stays).
 
 | Lane | File | Class | Lines | Native lines | Group | Check (suite) | Fixture | Native functions | Note |
 |---|---|---|---:|---:|---|---|---|---|---|
