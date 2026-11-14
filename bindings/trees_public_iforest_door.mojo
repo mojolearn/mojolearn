@@ -61,6 +61,21 @@ comptime _TOKEN_SLOT = "trees_iforest_resident_v1"
 # resident borrows a float32 C-order X as 0.8.55 did (no copy). Defined: the
 # fit owns a parallel copy of it (0292b73ab3, 2026-11-06). See `_fit`.
 comptime _IF_FIT_OWN_X = is_defined["MOJOLEARN_IDN_IF_FIT_OWN_X"]()
+# Lane forests-regression (2026-11-14): the B arm of the owed fit A/B for
+# the forest read-out at fit end. Default (absent): `fit` is ONE
+# `iforest_run` (the 0.8.55 and ba08dac006 structure: a fresh forest scored
+# on one row, kept resident under its token), and `save()` / pickle read the
+# forest out when they run (`iforest_export_forest`: the resident forest the
+# scores use, no refit while its record lives). Defined: `fit` also reads
+# the forest out at its end and holds it as `_if_forest` (lane
+# fix-iforest-save-device-forest, 7afa55d912 + 3a63179e9a: two more native
+# calls, five pinned host buffers, one more synchronize and the node-array
+# download per fit), and a refit-per-call binary's fit keeps its forest for
+# that read. Record measurement (ms, NVIDIA L40S): ba08dac006 (no read-out)
+# istella fit 197.05, taxi fit 148.83 (0.8.55: 197.15, 149.06);
+# 80a7f8aca3 (read-out at fit) 305.8 and 202.8 on a slower host
+# (9204fff9f8f7); the share of the read-out is what the A/B decides.
+comptime _IF_FIT_EXPORT = is_defined["MOJOLEARN_IDN_IF_FIT_EXPORT"]()
 # Lane restore-iforest-kde (history audit row 4): `want` + 3 asks a binary
 # whose `iforest_scores_f64` is 1 for the float64 scores (bindings/
 # _mojolearn_svm.mojo `_IF_WIDE_ROUTE`).
@@ -246,12 +261,14 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
     var resident = _resident_table(svm)
-    # Lane fix-iforest-double-fit: `fit` keeps its forest on EVERY binary
-    # (the seventeen-param form, token 0), so `iforest_export_forest` right
-    # after reads that forest instead of fitting a second one. A
-    # refit-per-call binary's export drops it again; its scoring calls stay
-    # sixteen-param refits.
-    var keep = resident or fresh
+    # Lane fix-iforest-double-fit: under `-D MOJOLEARN_IDN_IF_FIT_EXPORT`
+    # `fit` keeps its forest on EVERY binary (the seventeen-param form,
+    # token 0), so `iforest_export_forest` right after reads that forest
+    # instead of fitting a second one; a refit-per-call binary's export
+    # drops it again. By default (lane forests-regression) no export runs at
+    # fit, so a refit-per-call binary's fit is the sixteen-param one-shot of
+    # 0.8.55 and its scoring calls stay sixteen-param refits.
+    var keep = resident or (fresh and _IF_FIT_EXPORT)
     # Lane restore-iforest-kde (history audit row 4, IDN_IF_SCORES_F64): the
     # device epilogue writes the public float64 scores into this buffer, so
     # the public door's cast pass and its float32 buffer are gone for this
@@ -496,15 +513,24 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     try:
         out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, False, context)
         _ = x  # keep the Python object alive through the native call above
-        # Lane fix-iforest-save-device-forest: the forest this fit built is
-        # read out now (the forest `_run` just kept, no second fit on any
-        # binary since lane fix-iforest-double-fit; a refit-per-call binary
-        # drops it after the read) and held as `_if_forest`. `save()` and
-        # pickle write it, so a caller's in-place edit of a borrowed X after
-        # fit, or a resident-store
-        # eviction, never changes a saved model. Scores are unchanged: the
-        # live estimator scores its resident forest as before.
-        py_setitem(fields, _FOREST_FIELD, iforest_export_forest(model, context))
+        # Lane fix-iforest-save-device-forest, now the B arm
+        # `-D MOJOLEARN_IDN_IF_FIT_EXPORT` (lane forests-regression): the
+        # forest this fit built is read out now (the forest `_run` just
+        # kept; a refit-per-call binary drops it after the read) and held as
+        # `_if_forest`, so a caller's in-place edit of a borrowed X after fit
+        # never changes a saved model even after a resident-store eviction.
+        # Default: no read-out here; `save()` and pickle read the resident
+        # forest the scores use when they run (`iforest_export_forest`), as
+        # 0.8.55 wrote the model at save time. What the default gives up:
+        # after an eviction (more than IF_RESIDENT_CAP live forests, or a
+        # numeric-mode switch) the export refits from `_x`, which is the
+        # caller's buffer on a resident binary, so an in-place edit of X
+        # after fit reaches the saved model, as it reaches the scores (the
+        # trade restore-iforest-kde recorded for the borrow). A refit-per-call
+        # binary owns its `_x` copy, so its save is unaffected. Scores and
+        # their bits are unchanged either way.
+        comptime if _IF_FIT_EXPORT:
+            py_setitem(fields, _FOREST_FIELD, iforest_export_forest(model, context))
         _ = x  # keep the Python object alive through the native call above
     except error:
         var message = String(error)

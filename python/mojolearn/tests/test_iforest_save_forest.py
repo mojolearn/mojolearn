@@ -119,12 +119,16 @@ def test_host_column_loads_scores_and_resaves_a_saved_forest(tmp_path):
     _assert_same(_scores(host.HostIsolationForest.load(str(again)), query), before)
 
 
-def test_fitted_estimator_holds_its_forest_from_fit():
-    # The forest is read out at fit end, so save and pickle never refit from
-    # the (possibly edited) training matrix.
+def test_fitted_estimator_pickles_its_resident_forest():
+    # `fit` is one native call (no read-out at fit end unless the binary is
+    # built with -D MOJOLEARN_IDN_IF_FIT_EXPORT); pickle reads the forest
+    # the scores use when it runs, and writes it in place of `_x`.
     X, _ = _data()
     model = IsolationForest(n_estimators=4, max_samples=32, random_state=2).fit(X)
-    forest = vars(model)["_if_forest"]
-    assert len(forest) == 5 and np.asarray(forest[0]).shape == (5,)
     state = model.__getstate__()
-    assert "_x" not in state and state["_if_forest"] is forest
+    forest = state["_if_forest"]
+    assert "_x" not in state
+    assert len(forest) == 5 and np.asarray(forest[0]).shape == (5,)
+    # A second read gives the same forest words (no refit between them).
+    again = model.__getstate__()["_if_forest"]
+    _assert_same(tuple(np.asarray(a) for a in again), tuple(np.asarray(a) for a in forest))
