@@ -88,7 +88,8 @@ NV_GPUS="${MOJOLEARN_DEVPOD_GPUS:-NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX
 case "$NV_GPUS" in *H100*|*H200*|*A100*|*B200*)
     [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H100/H200/A100/B200; refused without explicit approval (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
 esac
-# At most this many live RunPod pods on the account, counted from the API at every up.
+# At most this many live mojolearn-* RunPod pods (NVIDIA), and at most MOJOLEARN_RUNPOD_CAP (8) pods on the whole
+# account, counted from the API by tools/rent_guard.sh before every create.
 MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-3}"
 # No lease longer than this many minutes; a lane that needs more extends, visibly.
 MAX_LEASE_MIN="${MOJOLEARN_DEVPOD_MAX_LEASE_MIN:-240}"
@@ -355,6 +356,12 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
         fi
         cp "$TMPD/create.json" "$_request_evidence/request-$attempt.json" || die "cannot retain request; no create attempted"
         cp "$TMPD/create.json" "$D/create_request.json" || die "cannot retain request; no create attempted"
+        # THE ACCOUNT CAP (2026-11-13): tools/rent_guard.sh counts every live pod on the shared account through the
+        # API and refuses at or above MOJOLEARN_RUNPOD_CAP (8); NVIDIA pods also stay under our own
+        # MAX_RUNPOD_PODS (mojolearn-*). Checked here, before every attempt, so no caller (tools/nvidia_central.sh
+        # up, the AMD RunPod path, a retry an hour later) creates past it. Nothing was created or armed yet.
+        _own_cap="--own-cap=$MAX_RUNPOD_PODS"; [ "$4" != 1 ] || _own_cap=""
+        bash "$ROOT/tools/rent_guard.sh" $_own_cap || die "tools/rent_guard.sh refused the create (above); nothing was created"
         arm_mac_deadman $(( READY_TIMEOUT + minutes * 60 + 600 ))
         say "creating $POD_NAME on RunPod API v$RP_API_VERSION (requested types: $2), attempt $attempt. THE BILL STARTS HERE."
         rp_call POST "$RP/pods" "$TMPD/create.json"
@@ -534,11 +541,8 @@ up)
         # never rents its own NVIDIA pod; every lane submits to the shared pods.
         [ "${MOJOLEARN_DEVPOD_VIA_CENTRAL:-0}" = 1 ] || [ "${MOJOLEARN_DEVPOD_OWN_NVIDIA:-0}" = 1 ] \
             || die "lanes do not rent NVIDIA pods: use the shared pods (tools/nvidia_central.sh sync/submit; the pods come up with tools/nvidia_central.sh up). MOJOLEARN_DEVPOD_OWN_NVIDIA=1 only with explicit approval"
-        _live=$(curl -s -m 20 -H "Content-Type: application/json" -H "Authorization: Bearer $(cat "$HOME/.mojolearn_runpod_key" 2>/dev/null)" https://api.runpod.io/graphql \
-            -d '{"query":"query { myself { pods { id name } } }"}' | python3 -c 'import sys,json; print(sum(1 for p in json.load(sys.stdin)["data"]["myself"]["pods"] if str(p.get("name","")).startswith("mojolearn-")))' 2>/dev/null)
-        # The cap counts mojolearn's own pods (named mojolearn-*): the account is shared with other projects' fleets.
-        [ -n "$_live" ] || die "could not count live RunPod pods; refusing to rent (cap $MAX_RUNPOD_PODS)"
-        [ "$_live" -lt "$MAX_RUNPOD_PODS" ] || die "$_live mojolearn RunPod pods are live and the cap is $MAX_RUNPOD_PODS (MOJOLEARN_DEVPOD_MAX_PODS); share a pod or bring one down"
+        # The pod caps (the account's MOJOLEARN_RUNPOD_CAP and our own MAX_RUNPOD_PODS) are checked by
+        # tools/rent_guard.sh in runpod_create, before every create attempt.
     fi
     if [ "$VENDOR" = amd ] && [ -f "$HD/state.env" ] && [ "${MOJOLEARN_DEVPOD_NO_HOST:-0}" != 1 ]; then
         mkdir -p "$HD/slots"

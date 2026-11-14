@@ -67,7 +67,8 @@
 # tools/measure_owed.py data-keys (the board's data_needs over the paper and owed races; checked after the plan,
 # exit 4 when one is missing), staged by tools/ops/measure_candidate.py stage through tools/dataset_store.sh stage.
 # At start the job deletes the box_persist_run.sh staging tarballs of finished jobs. Knobs: PC_GPU_TOKEN (the paper's GPU,
-# default L40S / MI300X), PC_REQUIRE_SAME_GPU=1 (stop on another GPU instead of recording HW-DIFF and going on).
+# default L40S / MI300X). NVIDIA refuses another GPU (exit 3) unless PC_ALLOW_HW_DIFF=1; AMD records HW-DIFF and
+# goes on unless PC_REQUIRE_SAME_GPU=1 (exit 3).
 # Tests: tools/test_paper_compare.py (syntax and the argument checks of this script).
 set -uo pipefail
 
@@ -187,9 +188,21 @@ else
 fi
 NGPU=$(grep -c . "$J/gpu.txt" 2> /dev/null || echo 0)
 [ "$V" = nvidia ] && [ "$NGPU" -gt 1 ] && say "NOTE: $NGPU GPUs; the timed boards use one (serial by nature)"
-if ! grep -q "$TOKEN" "$J/gpu.txt"; then
+# NVIDIA: every GPU must be the paper's (L40S) unless PC_ALLOW_HW_DIFF=1 (2026-11-13: an out-of-stock L40S got a
+# 2x RTX 6000 Ada rented; compare on the same device). AMD: HW-DIFF is recorded and the job goes on unless
+# PC_REQUIRE_SAME_GPU=1 (the MI325X run of 2026-11-13). tools/paper_compare.py flags every row HW-DIFF either way.
+# (nvidia-smi prints one name per GPU, so every line must carry the token; rocm-smi prints headers, so any line)
+gpu_other() {
+    if [ "$V" = nvidia ]; then [ "$NGPU" -eq 0 ] || grep -v -q "$TOKEN" "$J/gpu.txt"
+    else ! grep -q "$TOKEN" "$J/gpu.txt"; fi
+}
+if gpu_other; then
     say "HW-DIFF: the paper ran on $TOKEN; this box: $(head -c 300 "$J/gpu.txt" | tr '\n' ' ')"
-    [ "${PC_REQUIRE_SAME_GPU:-0}" = 1 ] && exit 3
+    if [ "$V" = nvidia ] && [ "${PC_ALLOW_HW_DIFF:-0}" != 1 ]; then
+        say "refused: NVIDIA is measured on an $TOKEN only; PC_ALLOW_HW_DIFF=1 runs it anyway with every row HW-DIFF"
+        exit 3
+    fi
+    [ "$V" = amd ] && [ "${PC_REQUIRE_SAME_GPU:-0}" = 1 ] && exit 3
 fi
 # staging tarballs of finished box-persisted jobs (a failed or killed upload left them: 36 GB on the L40S pod,
 # 2026-11-13); this job's own and running jobs' are kept

@@ -57,7 +57,7 @@ binding.
 import os
 
 from . import _backend, _native_classical_bridge
-from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
+from ._iforest_impl import IsolationForest, _IFOREST_FORMAT, _IFOREST_FORMAT_FOREST
 from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, Cholesky
@@ -1236,6 +1236,8 @@ _FORMATS = {
     _KDE_FORMAT: {"KernelDensity": HostKernelDensity},
     _SVC_FORMAT: {"SVC": HostSVC},
     _IFOREST_FORMAT: {"IsolationForest": HostIsolationForest},
+    # lane fix-iforest-save-device-forest: the saved forest (no training rows)
+    _IFOREST_FORMAT_FOREST: {"IsolationForest": HostIsolationForest},
     _GMM_FORMAT: {"GaussianMixture": HostGaussianMixture},
     _HDBSCAN_FORMAT: {"HDBSCAN": HostHDBSCAN},
     _GP_FORMAT: {"GaussianProcessRegressor": HostGaussianProcessRegressor},
@@ -1418,7 +1420,7 @@ def _connect_host_inference():
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "tsvd_native_api_v1", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
                                                           "logistic_native_api_v1", "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "qn_proba", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
-                            ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run")),
+                            ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run", "iforest_forest_run")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)

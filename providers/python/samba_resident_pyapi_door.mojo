@@ -78,7 +78,8 @@ def samba_resident_native_forward(fields: PythonObject, config: PythonObject, en
     route compiled out: CPU, `fast`, MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or
     MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2). UNPACK/PACK only: one reserved native
     call (op 14 reserve, op 16 forward, op 15 release), the GIL released
-    around op 16."""
+    around op 16; the session's registry upload count it returns is written
+    to `_samba_resident_uploads`."""
     var provider = samba_resident_provider(fields, entries)
     if provider is None:
         return PythonObject(None)
@@ -91,8 +92,14 @@ def samba_resident_native_forward(fields: PythonObject, config: PythonObject, en
     var l = Int(py=shape[1])
     var output = generation_array([b, l, Int(py=config["vocab"])])
     var parameters = fields["flat"]
-    _ = neural_descriptor_reserved_execute(provider, session, handle, 14, 15, 16,
+    # Op 16 returns the session's registry upload count (lane
+    # fix-samba-weight-upload: the forward uploads only when the weight key is
+    # not current; training/samba_resident.mojo samba_resident_forward). PACK
+    # records it on the stack, as the route word beside it, so a boundary
+    # test can prove an unchanged registry is not uploaded again.
+    var uploads = neural_descriptor_reserved_execute(provider, session, handle, 14, 15, 16,
         [Int(py=parameters._addr), Int(py=ids._addr), Int(py=output._addr)], [b, l], [])
+    py_setitem(fields, "_samba_resident_uploads", PythonObject(uploads))
     _ = parameters  # keep the Python objects alive through the native call above
     _ = ids
     _ = session

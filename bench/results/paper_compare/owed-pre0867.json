@@ -67,7 +67,7 @@
   },
   "chol-ops-fit": {
    "define": "MOJOLEARN_IDN_CHOL_OPS_FIT",
-   "status": "define in code (cholesky/chol_ops.mojo CHOL_OPS_FIT): B = the N7/N8 Cholesky ops route for the KernelRidge and GPR resident fits, the GPC Laplace Newton loop (bounded device loop, gaussian_process/gpc_newton.mojo), and the GP estimator's fit / lml+gradient / sample_y and hyperparameter optimizer (device run sequencer); A = potrf_lower + cho_solve (the 0.8.66 routes, restored 2026-11-13 after AMD 1.14-1.25x: KRR/GPR by fable-perf-classical-0855, GPC and the GP estimator/optimizer by restore-classical-measured-routes)"
+   "status": "define in code (cholesky/chol_ops.mojo CHOL_OPS_FIT): B = the N7/N8 Cholesky ops route for the KernelRidge and GPR resident fits, the GPC Laplace Newton loop (bounded device loop, gaussian_process/gpc_newton.mojo), and the GP estimator's fit / lml+gradient / sample_y and hyperparameter optimizer (device run sequencer); A = potrf_lower + cho_solve (the 0.8.66 routes, restored 2026-11-13 after AMD 1.14-1.25x: KRR/GPR by fable-perf-classical-0855, GPC and the GP estimator/optimizer by restore-classical-measured-routes); also (lane fix-chol-ops-remaining-callers, 2026-11-13) the GMM precision Cholesky host-read chain (mixture/checks/mstep.mojo gmm_precision_cholesky, and gmm_precision_enqueue where no one-launch factor applies: gmm_precision_reads_host) and x_decomp's DevExec.chol_inv / DMcd.chol (MinCovDet's Cholesky C-step): A = 0.8.66 potrf_lower + chol_logdet + trsm_lower (restored from 49e8c5b633^), B = the ops (49e8c5b633, 52fb3193be)"
   },
   "program-run-entry": {
    "define": "MOJOLEARN_PROGRAM_RUN_ENTRY",
@@ -132,6 +132,10 @@
   "ols-predict-tiled": {
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
    "status": "define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits"
+  },
+  "mamba3-forward-zero-fill": {
+   "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
+   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
   }
  },
  "rows": [
@@ -863,19 +867,22 @@
   },
   {
    "id": "chol-ops-fit",
-   "source": "restore-classical-measured-routes (2026-11-13; history-audit hist-classical rows 1-5): GPC 24c4eed3a5 + e28e5af236, GP estimator 7ec10acd29, GP optimizer 4da49ab7a0; KRR/GPR afbb2b2769",
+   "source": "restore-classical-measured-routes (2026-11-13; history-audit hist-classical rows 1-5): GPC 24c4eed3a5 + e28e5af236, GP estimator 7ec10acd29, GP optimizer 4da49ab7a0; KRR/GPR afbb2b2769; GMM chain + x_decomp chol_inv 49e8c5b633, 52fb3193be (lane fix-chol-ops-remaining-callers)",
    "kind": "ab",
    "lane": [
     "kernel-ridge",
     "gpr",
-    "gpc"
+    "gpc",
+    "gmm",
+    "min-cov-det",
+    "elliptic-envelope"
    ],
    "dataset": "*",
    "rows": "full",
    "b_arms": [
     "chol-ops-fit"
    ],
-   "decides": "the Cholesky ops (B) become the default only if at least as fast as potrf_lower + cho_solve (A) on the NVIDIA + AMD average with the same words; on record (candidate on the ops vs 0.8.66, MI325X): kernel-ridge 1.21-1.25x, gpr 1.14-1.18x, gpc taxi 959 -> 1160 ms, istella 1442 -> 1728 ms. The GP optimizer, lml+gradient and sample_y follow the same define and are off the board (board GPR uses optimizer=None): a driver timing of gpr with optimizer is owed if B wins"
+   "decides": "the Cholesky ops (B) become the default only if at least as fast as potrf_lower + cho_solve (A) on the NVIDIA + AMD average with the same words; on record (candidate on the ops vs 0.8.66, MI325X): kernel-ridge 1.21-1.25x, gpr 1.14-1.18x, gpc taxi 959 -> 1160 ms, istella 1442 -> 1728 ms. The GP optimizer, lml+gradient and sample_y follow the same define and are off the board (board GPR uses optimizer=None): a driver timing of gpr with optimizer is owed if B wins. gmm: identical fits with d <= 256 take the one-launch IDN factor in both arms, so the arms differ only for d > 256 or under MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF (time one such shape; board gmm is a no-change check). min-cov-det / elliptic-envelope: chol_inv runs only in the Cholesky C-step, so this row is timed with both MOJOLEARN_IDN_MCD_CHOL arms (mcd-chol alone vs mcd-chol + chol-ops-fit)"
   },
   {
    "id": "mcd-chol",
@@ -922,6 +929,18 @@
     "ols-predict-tiled"
    ],
    "decides": "ols infer (predict) taxi and istella on NVIDIA and AMD: the tiled gemv (B) returns as predict's default only if at least as fast as the plain kernel (A) on the vendor average (on record: ols taxi infer 0.8.25 NV 2.68 / AMD 1.51 ms vs candidate 5.52 / 3.02); same bits"
+  },
+  {
+   "id": "restore-mamba3-forward-unfilled",
+   "source": "fix-mamba3-unfilled-arrays (2026-11-13; restore-neural-call-paths doubt: Mamba-3 forward still zero-fills 5 arrays per call in _prefill_mamba3_reports)",
+   "kind": "ab",
+   "lane": "mamba3-forward",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mamba3-forward-zero-fill"
+   ],
+   "decides": "keep the unfilled outputs (A) unless the zero-filled arrays (B) are at least as fast on the NVIDIA and AMD average; board on record NV L40S 0.8.55 -> candidate 4c2340386abc: mamba3-forward 3.95 -> 6.75 ms; same kernels, digests must not move in either arm"
   }
  ]
 }

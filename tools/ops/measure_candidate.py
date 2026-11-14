@@ -35,6 +35,12 @@ Before any copy it also (fix lane tooling-measure-stage, 2026-11-13, after the m
     The pins are the candidate's full source tree's bench/results/dataset_store/manifest.tsv
     (<work dir>/source/<commit12>/, written by tools/release.py candidate; --source-tree overrides), since the lean
     tooling worktree has no bench/results/. A file already on the box at its pins is kept, not refetched.
+
+NVIDIA is measured on an L40S only (fix lane tooling-measure-pod-l40s-only, 2026-11-13: `nvidia_central.sh up`
+rented a 2x RTX 6000 Ada when the L40S was out of stock). The paper's NVIDIA device is the L40S and the rule is
+"compare on the same device" (AMD: MI300X). `stage nvidia` reads the pod's `nvidia-smi` names after the sync and
+refuses any other GPU unless --allow-hw-diff (or PC_ALLOW_HW_DIFF=1); then the submit line carries
+PC_ALLOW_HW_DIFF=1, tools/ops/paper_compare_job.sh goes on, and tools/paper_compare.py flags every row HW-DIFF.
 """
 import argparse
 import os
@@ -78,6 +84,15 @@ OWED_NAME = "owed-pre0867.json"
 #: NVIDIA job wrote 14 GB of board evidence and 12 GB of smoke scratch, and its persist staging held 36 GB more
 MIN_FREE_GB = 40
 HEADROOM_GB = 20
+#: the paper's NVIDIA device (tools/ops/paper_compare_job.sh PC_GPU_TOKEN default); `stage nvidia` refuses others
+PAPER_NVIDIA_GPU = "L40S"
+GPU_SCRIPT = "nvidia-smi --query-gpu=name --format=csv,noheader"
+
+
+def gpu_verdict(text, token=PAPER_NVIDIA_GPU):
+    """(names, ok) from GPU_SCRIPT's output: ok only when at least one GPU is listed and every one is TOKEN."""
+    names = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.startswith(("nvidia-smi", "NVIDIA-SMI"))]
+    return names, bool(names) and all(token in n for n in names)
 
 
 def source_tree(wheel_dir, commit, override=None):
@@ -257,6 +272,9 @@ def cmd_stage(a):
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]
         b_lines.append(f"{name} {indir}/b-{name}/{vendor} {bsha}\n")
     env = {"PC_WHEEL_DIR": f"{indir}/{vendor}", "PC_SOURCE_COMMIT": commit}
+    allow_hw_diff = a.allow_hw_diff or os.environ.get("PC_ALLOW_HW_DIFF") == "1"
+    if vendor == "nvidia" and allow_hw_diff:
+        env["PC_ALLOW_HW_DIFF"] = "1"     # the job then runs on another GPU and every row is flagged HW-DIFF
     if b_lines:
         local = Path(a.state_dir).expanduser() / f"b-arms-{commit[:12]}-{vendor}.txt"
         local.parent.mkdir(parents=True, exist_ok=True)
@@ -271,6 +289,9 @@ def cmd_stage(a):
         q = lambda argv: " ".join(shlex.quote(str(x)) for x in argv)  # noqa: E731
         if plan.sync():
             print(q(plan.sync()))
+        if vendor == "nvidia":
+            print(q(plan.box_sh(GPU_SCRIPT)) + f"  # every name {PAPER_NVIDIA_GPU}"
+                  + (" (else HW-DIFF, allowed)" if allow_hw_diff else ", else refused"))
         print(q(plan.box_sh(disk_script(plan.results_base()))) + f"  # free >= max({a.min_free_gb}, largest results + "
               f"{HEADROOM_GB}) GB")
         print(f"MOJOLEARN_DATASET_MANIFEST={shlex.quote(str(ds_manifest))} " + q(stage_ds))
@@ -292,11 +313,27 @@ def cmd_stage(a):
         print("$ " + " ".join(plan.sync()), flush=True)
         runner.must(plan.sync(), "the lane sync", timeout=3600)
     plan.synced = True
+    if vendor == "nvidia":
+        check_gpu(runner, plan, allow_hw_diff)
     check_disk(a, runner, plan, tag, commit[:12])
     stage_datasets(a, runner, plan, keys, ds_manifest, commit[:12])
     runner.stage(plan)
     print("SUBMIT " + line)
     return 0
+
+
+def check_gpu(runner, plan, allow_hw_diff):
+    got = runner.must(plan.box_sh(GPU_SCRIPT), "the GPU check on the box", timeout=300)
+    names, ok = gpu_verdict(got.stdout or "")
+    print(f"gpu: {', '.join(names) or '(none listed)'}")
+    if ok:
+        return
+    msg = (f"measure-candidate: the pod's GPU is {', '.join(names) or 'unreadable'}, not the paper's "
+           f"{PAPER_NVIDIA_GPU}; timings would not be comparable. Bring up an L40S (tools/nvidia_central.sh up asks "
+           f"for it only) or pass --allow-hw-diff (every row is then flagged HW-DIFF)")
+    if not allow_hw_diff:
+        raise SystemExit(msg)
+    print("WARNING HW-DIFF " + msg, flush=True)
 
 
 def check_disk(a, runner, plan, tag, commit12):
@@ -358,6 +395,9 @@ def main(argv=None):
                    help=f"free disk on /root the job needs at least (default {MIN_FREE_GB}; or the largest earlier "
                    f"results dir + {HEADROOM_GB})")
     s.add_argument("--allow-low-disk", action="store_true", help="warn instead of refusing below the free-disk need")
+    s.add_argument("--allow-hw-diff", action="store_true",
+                   help=f"NVIDIA: go on when the pod's GPU is not an {PAPER_NVIDIA_GPU} (also PC_ALLOW_HW_DIFF=1); "
+                   "the job then flags every row HW-DIFF")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)

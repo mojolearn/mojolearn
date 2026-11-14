@@ -79,7 +79,7 @@ EOF
 chmod 755 "$W/fake_devpod.sh"
 export MOJOLEARN_ORCHESTRATOR=1 PATH="$W/bin:$PATH" MOJOLEARN_DEVPOD_STATE="$W/devpods" MOJOLEARN_NVC_HOME="$W/nvc" MOJOLEARN_NVC_CONF="$W/none.env" \
     MOJOLEARN_NVC_NO_API=1 MOJOLEARN_NVC_DEVPOD="$W/fake_devpod.sh" MOJOLEARN_NVC_WATCH_FAKE_DELETE=1 NVC_WATCH_SECONDS=3 \
-    NVC_STOCK_WAIT=0 NVC_STOCK_WAIT_1=0
+    NVC_STOCK_WAIT=0 NVC_STOCK_WAIT_1=0 NVC_GPU_COUNTS="4 2 1"   # the count walk below; the default is 1 (one L40S)
 N="$ROOT/tools/nvidia_central.sh"
 # the fake S3 every submitted job persists to (the containers reach the Mac at host.docker.internal)
 S3PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1])')

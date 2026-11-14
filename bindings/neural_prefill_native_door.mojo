@@ -4,7 +4,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.os import getenv
-from bindings.generation_buffers_door import generation_initialize_binding, generation_array, py_ints
+from std.sys import is_defined
+from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, py_ints
 from bindings.neural_block_public_door import neural_training_selection, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words
 from core.entry_table import entry_ref_unresolved
 from core.mamba_state_entry_table import Mamba3StateRoute
@@ -71,6 +72,34 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
     return enabled
 
 
+#: lane fix-mamba3-unfilled-arrays (2026-11-13): the Mamba-3 forward's y
+#: [B, L, d_model] and its four reports (h_last [B, H, 64, 128], k_last
+#: [B, H, 128], v_last [B, H, 64], theta_last [B, H, 32]) are allocated
+#: UNFILLED (`generation_array_unfilled`), as 0.8.55 left them: every path
+#: that runs below writes each of them whole before the call returns (the
+#: session forward downloads residual_out n_x and the four reports at their
+#: full counts, mamba/impl/mamba_shell_impl.mojo `_m3_prefill_run`; the
+#: owned forward and `mamba3_forward_fresh` (op 3, block_step_reports_to_host)
+#: and the host shell (mamba/host/mamba_host_shell_impl.mojo `_write`) do the
+#: same), so no output byte moves. Per call this removes five zero-fill
+#: passes over 4 * (B*L*d_model + B*H*(64*128 + 128 + 64 + 32)) bytes; the
+#: five allocations stay (the arrays escape to the caller). Board on record
+#: (NV L40S, 0.8.55 -> candidate 4c2340386abc): mamba3-forward 3.95 -> 6.75
+#: ms. `-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL` keeps the zero-filled arrays
+#: (B arm of the owed A/B, bench/results/paper_compare/owed-pre0867.json row
+#: restore-mamba3-forward-unfilled, b arm mamba3-forward-zero-fill).
+comptime MAMBA3_FORWARD_ZERO_FILL = is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"]()
+
+
+def _m3_output_array(dims: List[Int]) raises -> PythonObject:
+    """A Mamba-3 forward output the native call overwrites whole: unfilled
+    by default, zero-filled under MAMBA3_FORWARD_ZERO_FILL (the B arm)."""
+    comptime if MAMBA3_FORWARD_ZERO_FILL:
+        return generation_array(dims)
+    else:
+        return generation_array_unfilled(dims)
+
+
 def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject,
                             captured_fields: PythonObject, route: Mamba3StateRoute) raises -> PythonObject:
     """The zero-state prefill: `(y, h_last, k_last, v_last, theta_last)`, the
@@ -108,10 +137,10 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     for i in range(4):  # driver-loop: over the four native Mamba3 report buffers
         var report = PythonObject(None)
         if not skip:
-            report = generation_array(report_shapes[i])
+            report = _m3_output_array(report_shapes[i])
         _ = py_call(reports.append, report)
         report_addresses.append(0 if skip else Int(py=report._addr))
-    var out = generation_array([b, l, d])
+    var out = _m3_output_array([b, l, d])
     var params: List[Int] = [b, l, d]
     if session:
         # The block's session: a native registry handle of its training image
