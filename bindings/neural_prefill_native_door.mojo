@@ -97,7 +97,9 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
 #: length-checked counts), the Mamba-3 resident session's step and decode
 #: (y + four reports, bindings/mamba_public_native_door.mojo; decode puts
 #: every token slab t in [0, N) and downloads B*N*d_model, N >= 1) and the
-#: tape prefill's y (below; `_m3_prefill_run` downloads n_x). Inputs whose
+#: tape prefill's y (below; `_m3_prefill_run` downloads n_x), and (lane
+#: fix-wave2-leftovers) the tape backward's dx and nine weight gradients and
+#: the Samba stack program's per-layer Mamba-3 reports. Inputs whose
 #: tails must read zero (the ragged padded copy and its prefix-copied
 #: result) and fresh states keep `generation_array`. The table with bytes
 #: per call: ~/mojolearn-evidence/briefs-20261113/wave2/
@@ -261,13 +263,20 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
         dims.append(Int(py=tape[2][i]))
     var dy = _model_f32(grad_output, "grad_output", context)
     _model_shape(dy, dims, "grad_output")
-    var gradients = Python.list(generation_array(dims))
+    # Lane fix-wave2-leftovers (fix-mamba3-unfilled-rest leftover): dx and
+    # the nine parameter gradients are unfilled unless MAMBA3_FORWARD_ZERO_FILL
+    # (`_m3_output_array`): `_m3_backward_tape_run`
+    # (mamba/impl/mamba_shell_impl.mojo) downloads each whole (dx n_x, every
+    # weight gradient at its full parameter count, the shapes recorded here
+    # from the same weights) before one wait, and a failure raises before
+    # any array is returned.
+    var gradients = Python.list(_m3_output_array(dims))
     var shapes = tape[3]
     for i in range(len(shapes)):  # driver-loop: over immutable parameter gradient shapes
         var shape = List[Int]()
         for axis in range(len(shapes[i])):  # driver-loop: over tensor shape metadata
             shape.append(Int(py=shapes[i][axis]))
-        _ = py_call(gradients.append, generation_array(shape))
+        _ = py_call(gradients.append, _m3_output_array(shape))
     var addresses = Python.list(dy._addr)
     for i in range(len(gradients)):  # driver-loop: over gradient output addresses
         _ = py_call(addresses.append, gradients[i]._addr)

@@ -18,7 +18,7 @@ from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from autograd.rankn import ShapeN
-from providers.python.autograd_program_arrays_pyapi_door import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input, program_native_input, program_admit_value, program_numeric_scalar
+from providers.python.autograd_program_arrays_pyapi_door import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input, program_native_input, program_admit_value, program_numeric_scalar, program_builtin_types
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
@@ -240,7 +240,6 @@ def program_input(value: PythonObject, integer: Bool) raises -> ProgramInput:
     var a = program_native_input(value)
     var values = List[Float64]()
     var ids = List[Int64]()
-    var b = native_loaded_module("builtins")
     if is_ndarray(a):
         var parsed = array_input(a, "numeric program input")
         if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
@@ -256,7 +255,8 @@ def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_
     # The public varargs arrive as an exact tuple; raw packed callers must
     # also use an ordinary container, before length/index protocols are read.
     var cls = py_type(arrays)
-    if cls is not py_type(Python.tuple()) and cls is not py_type(Python.list()):
+    var types = program_builtin_types()  # lane fix-wave2-leftovers: no throwaway tuple/list per call
+    if cls is not types[].tuple_type and cls is not types[].list_type:
         raise Error("TypeError: program inputs require a native tuple or list")
     var count = len(arrays)
     if count != p.n_in:

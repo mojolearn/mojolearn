@@ -415,6 +415,48 @@ struct Mamba1TapeScratch(Movable):
         self.du_x = mamba_zeros(ctx, m * di)
 
 
+struct Mamba1HandBuffers(Movable):
+    """Lane fix-wave2-leftovers (audit NOTE rules_mamba.mojo:959,967): the
+    Mamba-1 hand chain's own six intermediates, held by the step op's
+    resident entry (`_M1Block.hand`, autograd/block_step_ops.mojo) across
+    training steps and rebuilt only when the recorded run's (B, L) changes;
+    before, every backward call allocated and filled them. Every kernel
+    stores its whole destination (no fill is read), so a reused set gives
+    the same bits."""
+    var b: Int
+    var l: Int
+    var dg: DeviceBuffer[DType.float32]
+    var dsk: DeviceBuffer[DType.float32]
+    var ddelta: DeviceBuffer[DType.float32]
+    var dxp: DeviceBuffer[DType.float32]
+    var dp: DeviceBuffer[DType.float32]
+    var dnrm: DeviceBuffer[DType.float32]
+
+    def __init__(out self, ctx: DeviceContext, b: Int, l: Int, dims: MambaDims) raises:
+        var m = b * l
+        var di = dims.d_inner
+        self.b = b
+        self.l = l
+        self.dg = mamba_zeros[False](ctx, m * di)
+        self.dsk = mamba_zeros[False](ctx, m * di)
+        self.ddelta = mamba_zeros[False](ctx, m * di)
+        self.dxp = mamba_zeros[False](ctx, m * dims.x_proj_rows())
+        self.dp = mamba_zeros[False](ctx, m * 2 * di)
+        self.dnrm = mamba_zeros[False](ctx, m * dims.d_model)
+
+
+def mamba1_hand_buffers_for(ctx: DeviceContext, mut hand: List[Mamba1HandBuffers], b: Int, l: Int,
+                            dims: MambaDims) raises:
+    """`hand[0]` sized for (b, l): kept when it already is, else replaced
+    (the one held set; a training loop keeps one shape)."""
+    if len(hand) == 1 and hand[0].b == b and hand[0].l == l:
+        return
+    # A replaced set may still be read by queued launches of the last
+    # backward, which ended with a wait, so nothing queued reads it now.
+    hand.clear()
+    hand.append(Mamba1HandBuffers(ctx, b, l, dims))
+
+
 struct Mamba1TapeStack(Movable):
     """Everything a Mamba-1 stack's forward recorded, per block, plus the
     shared backward workspaces. acts[0] is the stack input, acts[k + 1] a
@@ -930,18 +972,23 @@ def mamba1_step_forward(mut S: Mamba1TapeStack, mut state: MambaDeviceState, y_o
     _bwd_put(S.ctx, y_out, _fp(S.stages[0].residual_out), n)
 
 
-def mamba1_step_backward(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+def mamba1_step_backward(
+    mut S: Mamba1TapeStack, mut hand: List[Mamba1HandBuffers], d_out: FP, d_x: FP, d_w: FP, at: List[Int],
+) raises:
     """The VJP of the recorded run kept in `S`: d(block output) `d_out`; d_x
     (B * L * d_model) and the ten weight gradients at `at` (the packed
     layout's offsets, `_m1_weight_sizes` order) of `d_w`. The hand chain
-    by default; the tape graph under IDN_MAMBA_BACKWARD_GENERIC (header)."""
+    by default (its six intermediates in `hand`, the caller's held set);
+    the tape graph under IDN_MAMBA_BACKWARD_GENERIC (header)."""
     comptime if IDN_MAMBA_BACKWARD_GENERIC:
         mamba1_step_backward_tape(S, d_out, d_x, d_w, at)
     else:
-        mamba1_step_backward_hand(S, d_out, d_x, d_w, at)
+        mamba1_step_backward_hand(S, hand, d_out, d_x, d_w, at)
 
 
-def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+def mamba1_step_backward_hand(
+    mut S: Mamba1TapeStack, mut hand: List[Mamba1HandBuffers], d_out: FP, d_x: FP, d_w: FP, at: List[Int],
+) raises:
     """The 10-19 hand chain (B1-B17, mamba1_prefill_backward at 47582a7fb^
     minus its forward and uploads) over the recorded run's kept stages:
     the same kernels on the same operands in the same order as the tape
@@ -956,20 +1003,24 @@ def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: F
     var dm = dims.d_model
     var di = dims.d_inner
     var xr = dims.x_proj_rows()
-    var dres = mamba_zeros(ctx, m * dm)
-    _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
+    # Lane fix-wave2-leftovers (audit NOTE rules_mamba.mojo:959): d_out is
+    # read in place (B1, B16 and the refusal only read it; was a zero-filled
+    # allocation with a wait plus a device copy per call). When the caller
+    # made d_out and d_x one buffer, B16 would write it while reading it, so
+    # that case keeps the private copy.
+    var dres = _view(ctx, d_out, m * dm)
+    if Int(d_out) == Int(d_x):
+        dres = mamba_zeros(ctx, m * dm)
+        _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
     _bwd_refuse_upstream(ctx, String("mamba1"), dres, m * dm)
     ref st = S.stages[0]
     ref sc = S.scratch[0]
     ref w = S.w[0]
-    # The hand chain's own buffers that the tape kept in its storage (every
-    # kernel stores its whole destination: no fill is read, so no wait).
-    var dg = mamba_zeros[False](ctx, m * di)
-    var dsk = mamba_zeros[False](ctx, m * di)
-    var ddelta = mamba_zeros[False](ctx, m * di)
-    var dxp = mamba_zeros[False](ctx, m * xr)
-    var dp = mamba_zeros[False](ctx, m * 2 * di)
-    var dnrm = mamba_zeros[False](ctx, m * dm)
+    # The hand chain's own buffers that the tape kept in its storage, held
+    # by the caller across steps (Mamba1HandBuffers; every kernel stores its
+    # whole destination: no fill is read).
+    mamba1_hand_buffers_for(ctx, hand, b, l, dims)
+    ref hb = hand[0]
     # The gradient destinations: views of the caller's d_x and of d_w's slots
     # (`_m1_weight_sizes` order: norm_w, w_in, conv_w, conv_b, w_x, w_dt,
     # b_dt, a_log, d_skip, w_out).
@@ -985,11 +1036,11 @@ def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: F
     var dw_out = _view(ctx, d_w + at[9], dm * di)
 
     # B1: the output projection's two routings.
-    mamba_backward_proj_a_into(ctx, dg, dres, w.w_out, S.ws, PROJ_OUT, dims, m)
+    mamba_backward_proj_a_into(ctx, hb.dg, dres, w.w_out, S.ws, PROJ_OUT, dims, m)
     mamba_backward_proj_b_into(ctx, dw_out, dres, st.gate_out, S.ws, PROJ_OUT, dims, m)
     # B2: the gate.
     mamba_bwd_gate_into(
-        ctx, dsk, sc.dz, sc.du_d, sc.product_d, dg, st.skip_out, st.silu_out,
+        ctx, hb.dsk, sc.dz, sc.du_d, sc.product_d, hb.dg, st.skip_out, st.silu_out,
         st.in_proj, w.d_skip, m, di,
     )
     # B3-B5: reconstruct the forward states, walk the recurrence backward,
@@ -998,10 +1049,10 @@ def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: F
         ctx, sc.h_ckpt, S.state_in[0].h, st.silu_out, st.softplus_out, st.a_out, st.b_mat, b, l, di,
     )
     selective_scan_bwd_scan_into(
-        ctx, sc.dh, sc.du_s, ddelta, sc.scan_w, dsk, st.c_mat, st.b_mat,
+        ctx, sc.dh, sc.du_s, hb.ddelta, sc.scan_w, hb.dsk, st.c_mat, st.b_mat,
         st.softplus_out, st.a_out, st.silu_out, sc.h_ckpt, b, l, di,
     )
-    mamba_bwd_dbc_into(ctx, sc.dcm, sc.dbm, dsk, sc.h_ckpt, sc.scan_w, sc.dh, b, l, di)
+    mamba_bwd_dbc_into(ctx, sc.dcm, sc.dbm, hb.dsk, sc.h_ckpt, sc.scan_w, sc.dh, b, l, di)
     # B6: batch-private dA partials, the pinned batch fold, dA_log.
     mamba_bwd_da_into(
         ctx, sc.da, sc.da_partial, sc.dh, st.softplus_out, st.a_out,
@@ -1009,13 +1060,13 @@ def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: F
     )
     mamba_bwd_da_log_into(ctx, da_log, sc.da, st.a_out, di)
     # B7-B11: softplus derivative, dt projection, dXP, x projection, du join.
-    mamba_bwd_ddtp_into(ctx, sc.ddtp, ddelta, st.dt_proj, w.b_dt, m, di)
+    mamba_bwd_ddtp_into(ctx, sc.ddtp, hb.ddelta, st.dt_proj, w.b_dt, m, di)
     mamba_backward_proj_a_into(ctx, sc.ddtl, sc.ddtp, w.w_dt, S.ws, PROJ_DT, dims, m)
     mamba_backward_proj_b_into(ctx, dw_dt, sc.ddtp, st.dt_low, S.ws, PROJ_DT, dims, m)
     mamba_backward_reduce_into(ctx, db_dt, sc.ddtp, S.ones, S.ws, RED_DT_BIAS, dims, m)
-    mamba_bwd_concat_xp_into(ctx, dxp, sc.ddtl, sc.dbm, sc.dcm, m, dims)
-    mamba_backward_proj_a_into(ctx, sc.du_x, dxp, w.w_x, S.ws, PROJ_X, dims, m)
-    mamba_backward_proj_b_into(ctx, dw_x, dxp, st.silu_out, S.ws, PROJ_X, dims, m)
+    mamba_bwd_concat_xp_into(ctx, hb.dxp, sc.ddtl, sc.dbm, sc.dcm, m, dims)
+    mamba_backward_proj_a_into(ctx, sc.du_x, hb.dxp, w.w_x, S.ws, PROJ_X, dims, m)
+    mamba_backward_proj_b_into(ctx, dw_x, hb.dxp, st.silu_out, S.ws, PROJ_X, dims, m)
     mamba_bwd_du_join_into(ctx, sc.du, sc.dconv, sc.du_d, sc.du_s, sc.du_x, st.conv_out, m, di)
     # B12-B13: the convolution's input gradient, bias and four tap reductions.
     mamba_bwd_dhin_into(ctx, sc.dhin, sc.dconv, w.conv_w, b, l, di)
@@ -1029,11 +1080,11 @@ def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: F
     mamba_bwd_conv_tap_product_into(ctx, sc.tp3, sc.dconv, st.in_proj, S.state_in[0].conv_win, b, l, di, 3)
     mamba_backward_reduce_into(ctx, sc.tg3, sc.tp3, S.ones, S.ws, RED_CONV_W_TAP3, dims, m)
     # B14-B16: dP = [dhin | dz], the in projection, the norm and residual.
-    mamba_bwd_concat_p_into(ctx, dp, sc.dhin, sc.dz, m, di)
-    mamba_backward_proj_a_into(ctx, dnrm, dp, w.w_in, S.ws, PROJ_IN, dims, m)
-    mamba_backward_proj_b_into(ctx, dw_in, dp, st.norm_out, S.ws, PROJ_IN, dims, m)
+    mamba_bwd_concat_p_into(ctx, hb.dp, sc.dhin, sc.dz, m, di)
+    mamba_backward_proj_a_into(ctx, hb.dnrm, hb.dp, w.w_in, S.ws, PROJ_IN, dims, m)
+    mamba_backward_proj_b_into(ctx, dw_in, hb.dp, st.norm_out, S.ws, PROJ_IN, dims, m)
     mamba_bwd_norm_into(
-        ctx, dx_full, sc.drstd, sc.norm_product, dres, dnrm, S.acts[0],
+        ctx, dx_full, sc.drstd, sc.norm_product, dres, hb.dnrm, S.acts[0],
         st.norm_out, w.norm_w, st.norm_sumsq, m, dm,
     )
     mamba_backward_reduce_into(ctx, dw_norm, sc.norm_product, S.ones, S.ws, RED_NORM_W, dims, m)
@@ -1068,12 +1119,6 @@ def mamba1_step_backward_hand(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: F
     _ = dw_in^
     _ = dw_norm^
     _ = dx_full^
-    _ = dnrm^
-    _ = dp^
-    _ = dxp^
-    _ = ddelta^
-    _ = dsk^
-    _ = dg^
     _ = dres^
 
 
@@ -1625,8 +1670,11 @@ def mamba2_step_backward_hand(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: F
     var di = dims.d_inner
     var cd = dims.conv_dim()
     var nh = dims.nheads
-    var dres = mamba_zeros(ctx, m * dm)
-    _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
+    # Lane fix-wave2-leftovers (audit NOTE rules_mamba.mojo:1628): d_out is
+    # read in place by the refusal, C1 and C8 (was a zero-filled allocation
+    # with a wait plus a device copy per call). d_x is written only by the
+    # _bwd_put after C8 in stream order, so a caller's d_out == d_x is safe.
+    var dres = _view(ctx, d_out, m * dm)
     _bwd_refuse_upstream(ctx, String("mamba2"), dres, m * dm)
     ref st = S.stages[0]
     ref w = S.w[0]

@@ -65,5 +65,9 @@ def test_resident_logits_unfilled_store_holds_only_downloaded_bytes():
     del first, held, got
     again = model.logits(ids)
     assert type(again._store) is bytearray
+    # a reused store comes back with the "f" view it was first wrapped with
+    # (the pool keeps the view, lane fix-wave2-leftovers)
+    assert again._mv.format == 'f' and again._mv.obj is again._store
+    assert ctx["byte_lm_view_type"] is memoryview
     assert np.asarray(again).tobytes() == want
     model.close()

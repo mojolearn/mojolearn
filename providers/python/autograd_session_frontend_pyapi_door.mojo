@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
-from providers.python.autograd_program_arrays_pyapi_door import initialize_program_arrays, program_admission_context, program_numeric_scalar
+from providers.python.autograd_program_arrays_pyapi_door import initialize_program_arrays, program_admission_context, program_numeric_scalar, program_builtin_types
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_connect, neural_descriptor_entry, neural_descriptor_matches,
     neural_descriptor_execute, neural_descriptor_adopt, NeuralDescriptorProvider,
@@ -41,7 +41,9 @@ def ops_session_fields(session: PythonObject) raises -> PythonObject:
                 raise Error("TypeError: Session owner has a replaced Python attribute hook or storage descriptor")
         class_admit(mods, _SESSION_LAYOUT_SLOT, cls, PythonObject(Int(layout._obj_ptr)))
     var fields = py_fields(session)
-    if py_type(fields) is not py_type(Python.dict()):
+    # lane fix-wave2-leftovers: the dict type connected once (was a new
+    # dict built per Session operation to read its type)
+    if py_type(fields) is not program_builtin_types()[].dict_type:
         raise Error("TypeError: Session requires a native instance dictionary")
     if not dict_keys_admitted(fields):
         _session_string_keys(fields)

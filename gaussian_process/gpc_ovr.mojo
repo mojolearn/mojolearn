@@ -345,6 +345,10 @@ def gpc_fit_all_device(
     # allocated and freed its own (an n^2 factor per class per group). Each
     # group ends on a synchronize after its copy-out, and every buffer is
     # written before it is read within a group, so reuse changes no word.
+    # No B arm (waiver, lane fix-wave2-leftovers answering hot-path audit FIX gpc_ovr.mojo:348, 2026-11-14):
+    # waste removal only, same kernels, same words, no route change, so per the wave rule "no define unless a
+    # route changes" the old per-group allocations are not kept behind a switch; their code is recoverable at
+    # 10acbae8b5 (main before wave 2).
     var gmax = min(group, n_fits)
     var pool_y = List[DeviceBuffer[DType.float32]](capacity=gmax)
     var pool_b = List[DeviceBuffer[DType.float32]](capacity=gmax)

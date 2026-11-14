@@ -101,6 +101,10 @@ def _export_part(
     moves. The used-node counts (`prefix`) are the fit's host words
     (`tree_n_nodes_host`), data dependent, so the caller still sizes the
     destination from `if_forest_sizes` first (no device read for that)."""
+    # No B arm (waiver, lane fix-wave2-leftovers answering hot-path audit FIX forest_io.mojo:106, 2026-11-14):
+    # waste removal only, same kernels, same words, no route change, so per the wave rule "no define unless a
+    # route changes" the old per-array (five synchronizes) allocations are not kept behind a switch; their code
+    # is recoverable at 10acbae8b5 (main before wave 2).
     if count <= 0:
         return
     var h_off = ctx.enqueue_create_host_buffer[DType.int32](len(tree_offsets))

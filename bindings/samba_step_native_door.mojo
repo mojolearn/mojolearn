@@ -413,7 +413,9 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
     # The written registry's own epoch (core/weight_epoch.mojo): stamped by
     # the step from the registry object it already holds (one slot read),
     # where the public door read the model's fields, `flat` and its address
-    # twice per call (hot-path audit 2026-11-13, BLOCK pack:69/72).
-    registry_epoch_bump(Int(py=registry._addr))
+    # twice per call (hot-path audit 2026-11-13, BLOCK pack:69/72). Lane
+    # fix-wave2-leftovers: the address comes from the optimizer's native
+    # owner, which read it once for this registry (no `_addr` read per step).
+    registry_epoch_bump(record.registry_address(registry))
     _ = registry^
     return _samba_step_finish(fields, opt, info, loss)

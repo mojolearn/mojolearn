@@ -847,29 +847,40 @@ struct MambaDeviceStages(Movable):
 
     def rezero(mut self) raises:
         """Lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
-        every stage back to the zeros its constructor filled, on the buffers
-        already held (no allocation, no wait). Fills only, in stream order
-        ahead of the next forward's launches. Not for a guarded (poison)
-        build, whose fills cover a body view."""
-        self.norm_sumsq.enqueue_fill(Float32(0.0))
-        self.norm_out.enqueue_fill(Float32(0.0))
-        self.in_proj.enqueue_fill(Float32(0.0))
-        self.a_out.enqueue_fill(Float32(0.0))
-        self.conv_out.enqueue_fill(Float32(0.0))
-        self.silu_out.enqueue_fill(Float32(0.0))
-        self.conv_win.enqueue_fill(Float32(0.0))
-        self.x_proj.enqueue_fill(Float32(0.0))
-        self.dt_proj.enqueue_fill(Float32(0.0))
-        self.softplus_out.enqueue_fill(Float32(0.0))
-        self.scan_y.enqueue_fill(Float32(0.0))
-        self.scan_h.enqueue_fill(Float32(0.0))
-        self.skip_out.enqueue_fill(Float32(0.0))
-        self.gate_out.enqueue_fill(Float32(0.0))
-        self.out_proj.enqueue_fill(Float32(0.0))
-        self.residual_out.enqueue_fill(Float32(0.0))
-        self.dt_low.enqueue_fill(Float32(0.0))
-        self.b_mat.enqueue_fill(Float32(0.0))
-        self.c_mat.enqueue_fill(Float32(0.0))
+        the held stages made ready for the next forward on the buffers
+        already held (no allocation, no wait). Not for a guarded (poison)
+        build, whose fills cover a body view.
+
+        Lane fix-wave2-leftovers (audit NOTE block_step_ops.mojo:1012): a
+        stage is refilled only where some route of `mamba_block_forward`
+        leaves it partly or wholly unwritten. Every other stage is written
+        whole by every route, so its zeros were overwritten before any read
+        (same bits):
+          norm_sumsq [M], norm_out [M,dm]: mamba_rms_norm, one thread per row
+            (plain) or lane/tree/out launches over m and m*dm (RMS_TREE);
+          in_proj [M,2di]: afn_proj_gemm_into or mamba_proj_gemm, C stored
+            whole (no accumulate);
+          a_out [di,N]: a_from_a_log (di*N threads) or afn_m1_split_a's
+            n_a tail;
+          conv_out, silu_out [M,di]: every conv arm (fn, cell, nn35 pair,
+            afn token) stores both per (b, token, d); conv_win [B,di,4]: the
+            window kernel stores all D_CONV slots per (b, d), the afn token
+            kernel stores slots j >= 0 per token plus the p < 0 slots at
+            token 0;
+          x_proj [M,xr], dt_proj [M,di]: mamba_proj_gemm;
+          dt_low, b_mat, c_mat: split_x_proj (per row, all xr columns) or
+            afn_m1_split_a (per element of m*xr);
+          softplus_out, gate_out [M,di]: elementwise over m*di;
+          scan_y, skip_out [M,di]: selective_scan_fn, every arm over all
+            (b, d) channels and all L tokens;
+          scan_h: a whole-buffer copy of state.h;
+          residual_out [M,dm]: residual_add_kernel over m*dm, or the fused
+            out_proj seeded by a whole copy of x.
+        KEPT: out_proj under AFN_MAMBA_PROJ_ROUTE, where the fused
+        out_proj+residual launch (trace off) never writes it; the tape still
+        names it as the PROJ_OUT value."""
+        comptime if AFN_MAMBA_PROJ_ROUTE:
+            self.out_proj.enqueue_fill(Float32(0.0))
 
     def __init__(
         out self,

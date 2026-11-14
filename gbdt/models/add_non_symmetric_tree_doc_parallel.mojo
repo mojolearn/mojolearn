@@ -602,6 +602,7 @@ struct NsResidentPack(Movable):
     #: the row count `d_off` holds offsets for; -1 before the first call
     var off_rows: Int
     var bins: Optional[DeviceBuffer[DType.uint32]]
+    #: the bins buffer's capacity in rows (its high-water row count); -1 before the first call
     var bins_rows: Int
 
     def __init__(
@@ -764,9 +765,10 @@ def ns_resident_apply(
     mut cursor: DeviceBuffer[DType.float32],
 ) raises:
     """`add_non_symmetric_trees_packed`'s launches over a held pack
-    (`IDN_NS_RESIDENT_PACK`): the node offsets are rewritten and the bins
-    buffer reallocated only when the row count changes (the previous call's
-    drain has finished the last upload from `h_off`), then the same two
+    (`IDN_NS_RESIDENT_PACK`): the node offsets are rewritten only when the
+    row count changes (the previous call's
+    drain has finished the last upload from `h_off`) and the bins buffer
+    grown only past its high-water capacity, then the same two
     kernels per tree, in tree order, and ONE drain."""
     if pack.n_trees == 0:
         ctx.synchronize()
@@ -777,13 +779,18 @@ def ns_resident_apply(
             ho.unsafe_store(i, UInt32(pack.off_unit[i] * n_rows))
         ctx.enqueue_copy(dst_buf=pack.d_off, src_ptr=ho)
         pack.off_rows = n_rows
-    if pack.bins_rows != n_rows:
-        # exact size, no high-water cache: the old buffer goes first
+    # Lane fix-wave2-leftovers (audit NOTE ns_resident_apply): the bins
+    # buffer keeps its high-water capacity; it is replaced only when a call
+    # has more rows than it holds (was: on every row-count change, so
+    # alternating batch sizes reallocated per call). Both kernels take
+    # n_rows and touch bins[0:n_rows] only, so the tail past n_rows is never
+    # read (same bits). The previous call's drain ended every read of the
+    # old buffer.
+    var need = n_rows if n_rows > 0 else 1
+    if pack.bins_rows < need:
         pack.bins = None
-        pack.bins = ctx.enqueue_create_buffer[DType.uint32](
-            n_rows if n_rows > 0 else 1
-        )
-        pack.bins_rows = n_rows
+        pack.bins = ctx.enqueue_create_buffer[DType.uint32](need)
+        pack.bins_rows = need
     var bin_blocks = (n_rows + NS_BINS_BLOCK_SIZE - 1) // NS_BINS_BLOCK_SIZE
     if bin_blocks < 1:
         bin_blocks = 1
