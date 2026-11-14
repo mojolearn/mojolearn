@@ -16,12 +16,13 @@ from mamba.impl.mamba_shell_impl import (
     _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY, NN40_OWNED_WEIGHTS,
     _m3_install_weights_run, _m3_export_weights_run, _mamba3_run_owned,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.state_registry import StateRegistry
 from core.neural_entry_table import (
     NEURAL_MAMBA_OPERATIONS, NEURAL_MAMBA3_SESSION_CREATE, NEURAL_MAMBA3_SESSION_INFO,
     NEURAL_MAMBA3_SESSION_CAPS, NEURAL_MAMBA3_SESSION_CLOSE,
     MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL, MAMBA3_CAP_OWNED_WEIGHTS,
+    MAMBA3_CAP_HELD_FORWARD, IDN_MAMBA3_FORWARD_DOOR_OLD,
 )
 from core.mamba3_prefill_session import mamba3_prefill_session_word, mamba3_prefill_session_of
 
@@ -43,6 +44,53 @@ comptime PREFILL_SESSIONS = StateRegistry[Mamba3PrefillSession,
     ("MojolearnMamba3PrefillSessionsIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMamba3PrefillSessionsFastV1")]
 
 
+#: Lane fix-mamba-forward-doors (2026-11-14): the session forward (op 6) and
+#: the owned forward (op 8) take one optional trailing word 1, "held": the
+#: call reserves the session, runs and releases it in ONE table call (the
+#: door's former reserve / run / release, three table calls and three
+#: registry leases per forward, bindings/neural_prefill_native_door.mojo).
+#: Every busy transition of a prefill session (reserve, release, close's
+#: busy check and the held call) takes this one lock word, because the held
+#: call runs with the GIL released while a reserve runs with it held.
+struct _PrefillBusy(Defaultable, Movable):
+    var lock: List[Int64]
+
+    def __init__(out self):
+        self.lock = List[Int64](length=1, fill=Int64(0))
+
+
+comptime PREFILL_BUSY = SharedSlot[_PrefillBusy,
+    ("MojolearnMamba3PrefillBusyIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMamba3PrefillBusyFastV1")]
+
+
+def _busy_word() raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    var slot = PREFILL_BUSY.get_or_create_ptr()
+    return rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
+
+
+def _session_reserve(owner: MutPointer[Mamba3PrefillSession, MutUntrackedOrigin]) raises:
+    """The image's busy/usable admission (op 0), under the busy lock."""
+    var word = _busy_word()
+    shared_slot_lock(word)
+    var busy = owner[].busy
+    var usable = owner[].usable
+    if not busy and usable:
+        owner[].busy = True
+    shared_slot_unlock(word)
+    if busy:
+        raise Error("mamba3 prefill session: busy")
+    if not usable:
+        raise Error("mamba3 prefill session: lost after a failed call")
+
+
+def _session_release(owner: MutPointer[Mamba3PrefillSession, MutUntrackedOrigin]) raises:
+    """Op 1, under the busy lock."""
+    var word = _busy_word()
+    shared_slot_lock(word)
+    owner[].busy = False
+    shared_slot_unlock(word)
+
+
 def mamba3_prefill_image_caps() -> Int:
     """The image's fixed capability bits (NEURAL_MAMBA3_SESSION_CAPS): the
     build condition under which the image registered its former session
@@ -54,6 +102,8 @@ def mamba3_prefill_image_caps() -> Int:
         caps |= MAMBA3_CAP_REPORTS_OPTIONAL
     comptime if NN40_OWNED_WEIGHTS:
         caps |= MAMBA3_CAP_OWNED_WEIGHTS
+    comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
+        caps |= MAMBA3_CAP_HELD_FORWARD
     return caps
 
 
@@ -61,10 +111,15 @@ def _mamba3_session_close(word: Int) raises -> Int:
     var handle = mamba3_prefill_session_of(word)
     var lease = PREFILL_SESSIONS.acquire(handle)
     var closing = MutPointer[Mamba3PrefillSession, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=lease[])))
-    if closing[].busy:
+    var busy_word = _busy_word()
+    shared_slot_lock(busy_word)
+    var busy = closing[].busy
+    if not busy:
+        closing[].usable = False
+    shared_slot_unlock(busy_word)
+    if busy:
         _ = lease
         raise Error("mamba3 prefill session: busy")
-    closing[].usable = False
     closing[].release()
     _ = lease
     PREFILL_SESSIONS.release(handle)
@@ -92,19 +147,39 @@ def _mamba3_session_operation(op: Int, session: Int, a: List[Int], words: List[I
     # the lease through this call.
     var owner = MutPointer[Mamba3PrefillSession, MutUntrackedOrigin](unsafe_from_address=session)
     if op == 0:
-        if owner[].busy:
-            raise Error("mamba3 prefill session: busy")
-        if not owner[].usable:
-            raise Error("mamba3 prefill session: lost after a failed call")
-        owner[].busy = True
+        _session_reserve(owner)
         return 0
     if op == 1:
-        owner[].busy = False
+        _session_release(owner)
         return 0
+    # lane fix-mamba-forward-doors: a held forward (op 6 / 8 with the trailing
+    # word 1, PREFILL_BUSY above) reserves, runs and releases here. A failed
+    # run leaves the session as the reserved form did: usable False and
+    # released by the run's own handler, busy cleared.
+    if not IDN_MAMBA3_FORWARD_DOOR_OLD and ((op == 6 and len(words) == 5) or (op == 8 and len(words) == 6)):
+        if words[len(words) - 1] != 1:
+            raise Error("mamba3 prefill: invalid native descriptor arity")
+        _session_reserve(owner)
+        var result = 0
+        try:
+            # the trailing held word is not one of the operation's scalars
+            result = _mamba3_session_exec(op, owner, a, words, f, 1)
+        except problem:
+            _session_release(owner)
+            raise problem
+        _session_release(owner)
+        return result
+    return _mamba3_session_exec(op, owner, a, words, f, 0)
+
+
+def _mamba3_session_exec(op: Int, owner: MutPointer[Mamba3PrefillSession, MutUntrackedOrigin], a: List[Int],
+                         words: List[Int], f: List[Float64], tail: Int) raises -> Int:
+    """A reserved session's operation (every op but reserve and release);
+    the last `tail` words are not scalars (the held word)."""
     if not owner[].busy or not owner[].usable:
         raise Error("Mamba block native ABI: execution requires a reserved usable session")
     var p = List[Int](capacity=len(words))
-    for i in range(1, len(words)):  # small-loop(admitted native session scalar span)
+    for i in range(1, len(words) - tail):  # small-loop(admitted native session scalar span)
         p.append(words[i])
     if op == 15:
         comptime if not NN40_OWNED_WEIGHTS:

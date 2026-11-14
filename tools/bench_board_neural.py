@@ -5495,8 +5495,20 @@ def worker(args):
                         device_memory = {"error": "memory pass failed: %r" % (exc,)}
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(outputs, runner) if r > 0 else None
+                # lane fix-mamba-forward-doors (2026-11-14): the Mamba-3 prefill
+                # session's counters after the round, read OUTSIDE the clock
+                # (weight_uploads, weight_recopies, weight_reuses, ...,
+                # stages_held): settles whether the session, its weights and
+                # its stages are held across forwards (one upload, then reuses).
+                session_counters = None
+                if args.lane == "mamba3-forward" and args.arm == "ours" and hasattr(runner, "block"):
+                    try:
+                        session_counters = runner.block.session_info()
+                    except Exception as exc:  # noqa: BLE001  (a counter read never breaks a timing; recorded)
+                        session_counters = {"error": "session_info failed: %r" % (exc,)}
                 round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
                     "extra": extra, "device_memory": device_memory,
+                    "mamba3_session_info": session_counters,
                     "state_receipt": state_receipt, "compiles": compiles_now,
                     "neural_ab": _neural_ab_receipt(runner, ab_config, executed=True),
                     "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
@@ -6370,6 +6382,10 @@ def race(args):
             if msg.get("device_memory") is not None:
                 result["arms"][arm].setdefault("device_memory", []).append(dict(msg["device_memory"], round=r,
                                                                                warmup=r == 0))
+            if isinstance(msg.get("mamba3_session_info"), dict):
+                # lane fix-mamba-forward-doors: the session counters after each round
+                result["arms"][arm].setdefault("mamba3_session_info", []).append(
+                    dict(msg["mamba3_session_info"], round=r, warmup=r == 0))
             print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, arm, r, msg["ms"], msg["digest"]), flush=True)
     outs = {}

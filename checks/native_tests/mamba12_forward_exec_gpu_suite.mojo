@@ -26,7 +26,19 @@ L2, then L (a new set after the shape change)):
   1  Mamba-1 carried-state forward (`mamba_block_call`, the state carried
      across the runs) vs the old form carrying the same state;
   2  Mamba-2 stateless forward (y and the h_last report);
-  3  Mamba-2 carried-state forward (y, h_last, the state and buf_len).
+  3  Mamba-2 carried-state forward (y, h_last, the state and buf_len);
+  4  Mamba-1 stateless and carried-state calls interleaved on the one cached
+     program (fresh L, carried L, fresh L, carried L2, fresh L) vs the old
+     form (a zero state per fresh run; the carried runs chain their state);
+  5  the same interleaving for Mamba-2: a fresh run after a carried one must
+     see buf_len 0 although the held fresh runs write no words (lane
+     fix-mamba-forward-doors: `skip_words`, `q_zero`).
+
+Lane fix-mamba-forward-doors (2026-11-14) made the held stage set views of
+one held arena re-zeroed with ONE fill (`-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD`
+is lane fix-mamba12-forward-exec's per-stage fills): every case above runs
+the held set built, reused, rebuilt for L2 and rebuilt for L again, and must
+still equal the old per-run form bit for bit. Build this suite once per arm.
 
 The new form's outputs are prefilled with 0xFF words (an unwritten byte
 shows as a difference), the old form's with zeros. Every y, report, state
@@ -44,7 +56,7 @@ from mamba.impl.mamba_block_program import (
 from mamba.checks.mamba_fixture import corpus_case, corpus_case_weights, corpus_case_x
 from mamba.checks.mamba2_fixture import m2_corpus_case, m2_case_weights, m2_case_x
 
-comptime MAMBA12_FORWARD_EXEC_CASES = 4
+comptime MAMBA12_FORWARD_EXEC_CASES = 6
 comptime M12_M1_CASE = 1
 comptime M12_M2_CASE = 1
 comptime M12_POISON: UInt32 = 0xFFFFFFFF
@@ -266,7 +278,111 @@ def _new_carried(blk: _Block) raises -> List[List[Float32]]:
     return out^
 
 
+def _interleaved_plan(blk: _Block) -> List[Int]:
+    """(fresh, L) pairs of the interleaved sequence, flattened: 1 = fresh."""
+    var out: List[Int] = [1, blk.l, 0, blk.l, 1, blk.l, 0, blk.l2, 1, blk.l]
+    return out^
+
+
+def _old_interleaved(blk: _Block) raises -> List[List[Float32]]:
+    """The old form of the interleaved sequence: a fresh run from a zero
+    state, the carried runs chaining their own state (keep_stages cleared,
+    host state loaded and read back every run, zero-filled outputs)."""
+    var prog = MambaBlockProgram(blk.code, blk.b, blk.dm, blk.fs, _addresses(blk.weights))
+    prog.s.steps.keep_stages = False
+    var out = List[List[Float32]]()
+    var carried = _zero_state(blk.code, blk.b, blk.dm)
+    var carried_words = List[Int]() if blk.code == OPS_M1_STEP else List[Int](length=1, fill=0)
+    var plan = _interleaved_plan(blk)
+    try:
+        for r in range(len(plan) // 2):  # driver-loop: over the interleaved runs (the carried ones chain their state)
+            var fresh = plan[2 * r] == 1
+            var l = plan[2 * r + 1]
+            var state = _zero_state(blk.code, blk.b, blk.dm) if fresh else carried.copy()
+            var words = (List[Int]() if blk.code == OPS_M1_STEP else List[Int](length=1, fill=0)) if fresh else carried_words.copy()
+            prog.load_state(_addresses(state), words)
+            var y = _filled(blk.b * l * blk.dm, M12_ZERO)
+            var rep = _filled(max(blk.reports(), 1), M12_ZERO)
+            var reports = List[Int]()
+            if blk.code == OPS_M2_STEP:
+                reports.append(Int(rep.unsafe_ptr()))
+            prog.run(blk.x_of(l), Int(y.unsafe_ptr()), l, reports)
+            prog.finish_with_state(_addresses(state))
+            var after = prog.words()
+            out.append(y^)
+            if blk.code == OPS_M2_STEP:
+                out.append(rep^)
+            if not fresh:
+                for k in range(len(state)):  # small-loop(two or four state pieces)
+                    out.append(state[k].copy())
+                for k in range(len(after)):  # small-loop(at most one carried integer)
+                    out.append(List[Float32](length=1, fill=Float32(after[k])))
+                carried = state^
+                carried_words = after^
+    finally:
+        prog.close()
+    _ = carried^  # the program read and wrote the state by address
+    return out^
+
+
+def _new_interleaved(blk: _Block) raises -> List[List[Float32]]:
+    """The interleaved sequence on the cached per-call program: fresh runs
+    through the stateless ABI (every state address 0), carried runs through
+    `mamba_block_call` on the caller's state; outputs prefilled with 0xFF."""
+    var kind = 1 if blk.code == OPS_M1_STEP else 2
+    var ns = len(_zero_state(blk.code, blk.b, blk.dm))
+    var dt_lo = blk.fs[0] if kind == 2 else Float32(0)
+    var dt_hi = blk.fs[1] if kind == 2 else Float32(0)
+    var waddr = _addresses(blk.weights)
+    var state = _zero_state(blk.code, blk.b, blk.dm)
+    var words = List[Int]() if blk.code == OPS_M1_STEP else List[Int](length=1, fill=0)
+    var out = List[List[Float32]]()
+    var plan = _interleaved_plan(blk)
+    for r in range(len(plan) // 2):  # driver-loop: over the interleaved runs (the carried ones chain their state)
+        var fresh = plan[2 * r] == 1
+        var l = plan[2 * r + 1]
+        var y = _filled(blk.b * l * blk.dm, M12_POISON)
+        var rep = _filled(max(blk.reports(), 1), M12_POISON)
+        if fresh:
+            var a = List[Int]()
+            a.append(blk.x_of(l))
+            for i in range(len(waddr)):  # small-loop(nine or ten weight addresses)
+                a.append(waddr[i])
+            for _ in range(ns):  # small-loop(two or four state addresses, all 0: the stateless call)
+                a.append(0)
+            a.append(Int(y.unsafe_ptr()))
+            if kind == 2:
+                a.append(Int(rep.unsafe_ptr()))
+            var q = mamba_block_call_abi(kind, a, blk.b, l, blk.dm, 0, 0, dt_lo, dt_hi, False, True)
+            _ = q
+            out.append(y^)
+            if kind == 2:
+                out.append(rep^)
+        else:
+            var reports = List[Int]()
+            if blk.code == OPS_M2_STEP:
+                reports.append(Int(rep.unsafe_ptr()))
+            words = mamba_block_call(blk.code, waddr, _addresses(state), words, blk.x_of(l), Int(y.unsafe_ptr()),
+                                     reports, blk.b, l, blk.dm, blk.fs, False)
+            out.append(y^)
+            if blk.code == OPS_M2_STEP:
+                out.append(rep^)
+            for k in range(len(state)):  # small-loop(two or four state pieces)
+                out.append(state[k].copy())
+            for k in range(len(words)):  # small-loop(at most one carried integer)
+                out.append(List[Float32](length=1, fill=Float32(words[k])))
+    _ = state^  # the calls read and wrote the state by address
+    return out^
+
+
 def case(unit: Int) raises:
+    if unit >= 4:
+        var code4 = OPS_M1_STEP if unit == 4 else OPS_M2_STEP
+        var name4 = String("Mamba-1") if code4 == OPS_M1_STEP else String("Mamba-2")
+        var blk4 = _Block(code4)
+        _same(_new_interleaved(blk4), _old_interleaved(blk4), name4 + " interleaved stateless/carried forward")
+        _ = blk4^  # the programs read the weights and x by address
+        return
     var code = OPS_M1_STEP if unit < 2 else OPS_M2_STEP
     var name = String("Mamba-1") if code == OPS_M1_STEP else String("Mamba-2")
     var blk = _Block(code)

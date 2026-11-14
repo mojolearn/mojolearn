@@ -245,6 +245,29 @@ def test_mamba3_session_info_counts_weight_uploads():
     assert block.session_info()["weight_reuses"] == info["weight_reuses"] + 1
 
 
+def test_mamba3_forward_holds_one_session_across_calls():
+    # Lane fix-mamba-forward-doors (2026-11-14): a block's stateless forwards
+    # run on ONE prefill session held by the block: the weights are uploaded
+    # once and reused, the stages stay held, the session object is the same
+    # after every call, and the output bytes do not move between calls.
+    from mojolearn import _backend
+    if _backend.vendor() == "cpu":
+        pytest.skip("Mamba3 prefill-session counters need a GPU binding; the CPU host forward holds no session")
+    block, x = _mamba3()
+    first = np.asarray(block.forward(x)).copy()
+    session = vars(block).get("_prefill_session")
+    assert session is not None
+    for _ in range(3):
+        y = np.asarray(block.forward(x))
+        assert y.tobytes() == first.tobytes()
+        assert vars(block).get("_prefill_session") is session
+    info = block.session_info()
+    assert info["weight_uploads"] == 1
+    assert info["weight_recopies"] == 0
+    assert info["weight_reuses"] >= 3
+    assert info["stages_held"] == 1
+
+
 def test_mamba3_owned_weights_round_trip():
     block, x = _mamba3()
     want = np.asarray(block.forward(x)).copy()

@@ -188,6 +188,14 @@
   "knn-door-fit-xn-eager": {
    "define": "MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER",
    "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_DOOR_FIT_XN_EAGER, knn_fit_xn_eager; bindings/neighbors_knn_native_door.mojo _neighbors_knn_operation, _knn_xn): B = every KNeighborsClassifier/Regressor fit resolves and admits the x_neighbors binding up front (b412ea02f4's door form); A = only the multi-output label transpose resolves it (0.8.55's neighbors.py form). Same bits"
+  },
+  "mamba12-forward-door-old": {
+   "define": "MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD",
+   "status": "define in code (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_DOOR_OLD; mamba/impl/mamba_block_program.mojo zero_state/run/mamba_block_call, bindings/causal_lm_public_door.mojo causal_mamba_stateless_run, bindings/neural_block_public_door.mojo _neural_plain): B = lane fix-mamba12-forward-exec's held Mamba-1/2 stages (19 / 28 separately allocated buffers, Mamba-1 with one wait when built, one fill per stage per reuse), the buf_len word uploaded and written on every fresh Mamba-2 call, and the stateless forward through neural door -> causal_layer_run_fields -> _causal_layer_run_bound -> table; A = 0.8.55's arena form (_mamba1_run_arena / _mamba2_run_arena at 0e4de0f46e:422 / :1018): the held set as views of one held arena (one allocation and one fill when built, ONE fill per reuse), no word traffic on a fresh call while the device words are known zero, and one direct call from the neural door with the plan's prepared layer and a held Mamba entry. Same kernels, same launch order, same bits"
+  },
+  "mamba3-forward-door-old": {
+   "define": "MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD",
+   "status": "define in code (core/neural_entry_table.mojo IDN_MAMBA3_FORWARD_DOOR_OLD; bindings/neural_prefill_native_door.mojo _prefill_mamba3_reports, providers/python/mamba3_prefill_session_pyapi_door.mojo, core/mamba3_prefill_session.mojo, mamba/native_block_dispatch.mojo): B = a caps table call per forward and the session's reserve / run / release as three table calls (three registry leases); A = the caps read once when the block's session opens and the forward as ONE table call that reserves, runs and releases in the image under one busy lock (MAMBA3_CAP_HELD_FORWARD). Same session, same weight compare, same _m3_prefill_run body, same bits"
   }
  },
  "rows": [
@@ -1210,6 +1218,23 @@
     "knn-door-fit-xn-eager"
    ],
    "decides": "keep A (x_neighbors binding resolved only by the multi-output transpose, 0.8.55's form) unless B is at least as fast on NVIDIA (pre-0.8.67 campaign: NVIDIA only). Expected gain is microseconds by reading; the row's main job is attribution: build the same sha a third time with -D MOJOLEARN_KNN_PHASE_TIMERS=1 (door, finalizer and device-request phase lines) and run taxi knn-clf + knn-reg against the 0.8.55 wheel; the door line's segments (public_begin, state_admission, binding_arguments, fit_refusals_release, fit_admit_x, fit_prepare_finite, fit_metric_store, fit_labels_*/fit_targets, public_finish; predict_fold_check, predict_queries, predict_outputs_alloc, predict_resident_handle, predict_classify_call/predict_regress_call, predict_status_report, predict_class_set_*, predict_output_cast) plus the finalizer release_ms say where the +7 ms sits. The timer build is attribution only, never a timing arm. Digests must not move in either arm"
+  },
+  {
+   "id": "fix-mamba-forward-doors",
+   "source": "fix-mamba-forward-doors (2026-11-14; best-ever history audit wave 2, neural-mamba rows 1-3: L40S candidate ba08dac006 mamba1-forward 3.83, mamba2-forward 6.31, mamba3-forward 6.62 ms vs best-ever 0.8.55 3.43 / 5.57 / 3.95 ms)",
+   "kind": "ab",
+   "lane": [
+    "mamba1-forward",
+    "mamba2-forward",
+    "mamba3-forward"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mamba12-forward-door-old",
+    "mamba3-forward-door-old"
+   ],
+   "decides": "keep the restored arena / direct door (A) unless mamba12-forward-door-old (mamba1-forward, mamba2-forward) or mamba3-forward-door-old (mamba3-forward) is at least as fast on the NVIDIA L40S; also read arms.ours.mamba3_session_info from the mamba3-forward row (weight_uploads must stay 1 and stages_held 1 across rounds; if not, the session is rebuilt per call and that is the next fix); same kernels, digests must not move in either arm"
   }
  ]
 }
