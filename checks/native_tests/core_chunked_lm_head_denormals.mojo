@@ -104,6 +104,10 @@ def _train[C: ChunkedHeadCalls](
     var denom = List[Float32](length=rows, fill=0)
     C.train(_addr(r.loss), _addr(row_max), _addr(denom), _addr(r.d_hidden), _addr(r.d_weight),
             _addr(hidden), _addr(weight), Int(targets.unsafe_ptr()), rows, vocab, width)
+    # The call writes through the addresses of row_max and denom; Mojo frees a local at its last
+    # named use (the `_addr` argument), so without these the writes land in freed heap (rc 139).
+    _ = row_max^
+    _ = denom^
     return r^
 
 
@@ -144,6 +148,12 @@ def run_chunked_denormal_fixture[C: ChunkedHeadCalls](fixture_id: Int) raises:
     var denom = List[Float32](length=rows, fill=0)
     C.loss(_addr(alone), _addr(row_max), _addr(denom), _addr(hidden), _addr(weight), Int(targets.unsafe_ptr()),
            rows, vocab, width)
+    # Keep every buffer the loss call reads or writes through an address alive past the call.
+    _ = row_max^
+    _ = denom^
+    _ = hidden^
+    _ = weight^
+    _ = targets^
     require(bitcast[DType.uint32](alone[0]) == bitcast[DType.uint32](actual.loss[0]),
             "the loss-only call differs from the training call's loss")
     _same_words(actual.loss, expected.loss, "loss")
