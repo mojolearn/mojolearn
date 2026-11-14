@@ -15,6 +15,16 @@
 #                                                         -> float32 row weights or None
 #   LABELS_OP_FLATTEN          (y,)                       -> flat list of the label objects
 #   LABELS_OP_SORTED           (labels,)                  -> (classes, int32 codes)
+#   LABELS_OP_PREPARE_TARGETS  (labels, weights, n, flags) -> (classes, int32 codes) Arrays
+#                                                             or (None, None)
+#   LABELS_OP_ENCODE_NUMERIC   (y,)                       -> (classes, int32 codes) or None
+#   LABELS_OP_UNIQUE_INVERSE   (y,)                       -> (classes, int32 codes)
+#   LABELS_OP_ARGMAX_ROWS      (scores,)                  -> int64 codes
+#   LABELS_OP_CLASS_INDEX      (classes, key)             -> labels
+#   ADMISSION_OP_CHECK_X       (X, est, shape, complex, scan) -> None (or the refusal)
+#   ADMISSION_OP_CHECK_Y       (y, est, flags, x_rows, y_rows) -> None (or the refusal)
+#   (operations 7-13: bindings/labels_admission_unpack.mojo, lane py-admission:
+#   the refusals and scans _labels and _sk_validate made in Python)
 #
 # `kind` of ENCODE is LABELS_KIND_ORDER_RULE (0): the classes under the ORDER
 # RULE of python/mojolearn/_labels.py (Python label objects, sorted) and one
@@ -37,6 +47,9 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import (
     classical_encode_labels, classical_decode_labels, classical_union_encode, classical_score_from_codes,
     labels_class_weight_rows, ClassicalLabels, _flatten_labels, _sorted_classes)
+from bindings.labels_admission_unpack import (
+    labels_prepare_targets_op, labels_encode_numeric_op, labels_unique_inverse_op, labels_argmax_op,
+    labels_class_index_op, admission_check_x_op, admission_check_y_op)
 
 comptime LABELS_OP_ENCODE = 0
 comptime LABELS_OP_UNION_ENCODE = 1
@@ -45,6 +58,13 @@ comptime LABELS_OP_DECODE = 3
 comptime LABELS_OP_CLASS_WEIGHT_ROWS = 4
 comptime LABELS_OP_FLATTEN = 5
 comptime LABELS_OP_SORTED = 6
+comptime LABELS_OP_PREPARE_TARGETS = 7
+comptime LABELS_OP_ENCODE_NUMERIC = 8
+comptime LABELS_OP_UNIQUE_INVERSE = 9
+comptime LABELS_OP_ARGMAX_ROWS = 10
+comptime LABELS_OP_CLASS_INDEX = 11
+comptime ADMISSION_OP_CHECK_X = 12
+comptime ADMISSION_OP_CHECK_Y = 13
 
 comptime LABELS_KIND_ORDER_RULE = 0
 
@@ -75,6 +95,22 @@ def _labels_operation(op: Int, args: PythonObject, context: PythonObject) raises
         # `_labels.sorted_classes`: the ORDER RULE over a list of label objects.
         var ordered = _sorted_classes(args[0], context)
         return Python.tuple(ordered.classes, ordered.codes)
+    if op == LABELS_OP_PREPARE_TARGETS:
+        return labels_prepare_targets_op(args[0], args[1], Int(py=args[2]), Int(py=args[3]), context)
+    if op == LABELS_OP_ENCODE_NUMERIC:
+        return labels_encode_numeric_op(args[0], context)
+    if op == LABELS_OP_UNIQUE_INVERSE:
+        return labels_unique_inverse_op(args[0], context)
+    if op == LABELS_OP_ARGMAX_ROWS:
+        return labels_argmax_op(args[0], context)
+    if op == LABELS_OP_CLASS_INDEX:
+        return labels_class_index_op(args[0], args[1], context)
+    if op == ADMISSION_OP_CHECK_X:
+        admission_check_x_op(args[0], String(args[1]), args[2], Bool(py=args[3]), Bool(py=args[4]), context)
+        return PythonObject(None)
+    if op == ADMISSION_OP_CHECK_Y:
+        admission_check_y_op(args[0], String(args[1]), Int(py=args[2]), Int(py=args[3]), Int(py=args[4]), context)
+        return PythonObject(None)
     raise Error("TypeError: mojolearn: unknown label operation")
 
 
