@@ -2,7 +2,7 @@
 # Fixed-cost attribution of small paper rows (screening, not a measurement; AGENTS.md "Candidate evaluation": component
 # screening). For each race id in PF_RACES (comma list) it re-runs the race's recorded command from PF_SRC/board/board.json
 # (the paper board that already timed it) with --rounds PF_ROUNDS (default 100) under py-spy's native sampler
-# (`py-spy record --native`), so the Mojo binding frames of the public call are attributed by sample count, then writes
+# (`py-spy record --native --subprocesses`: the race driver runs each arm in its own interpreter), so the Mojo binding frames of the public call are attributed by sample count, then writes
 # per race: <id>.collapsed (raw stacks), <id>.summary.txt (tools/ops/profile_fixed_cost_summary.py: frames under the
 # public call by self and inclusive samples). cProfile (Python frames only) is the fallback when py-spy cannot ptrace.
 # Serial by nature: one profiled process at a time on the one GPU, so the sampled process is the only GPU user
@@ -42,7 +42,7 @@ PYEOF
 ) || { say "$rid: $cmd"; continue; }
     mkdir -p "$RES/raw" "$RES/work"
     say "race $rid"; t0=$(date +%s)
-    if [ -n "${PYSPY:-}" ] && "$PYSPY" record --native --rate "$RATE" --format raw -o "$RES/$name.collapsed" -- bash -c "$cmd" > "$RES/$name.log" 2>&1; then
+    if [ -n "${PYSPY:-}" ] && "$PYSPY" record --native --subprocesses --rate "$RATE" --format raw -o "$RES/$name.collapsed" -- bash -c "$cmd" > "$RES/$name.log" 2>&1; then
         mode=py-spy
     else
         say "py-spy failed (tail: $(tail -n 2 "$RES/$name.log" | tr '\n' ' ' | cut -c1-200)); cProfile fallback"
