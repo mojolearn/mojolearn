@@ -4,7 +4,6 @@ Each probe returns None when the environment can run the test, else the exact
 reason it cannot. Standard library only at import time.
 """
 import functools
-import importlib
 import os
 import subprocess
 import sys
@@ -66,14 +65,3 @@ ENVIRONMENT = {
     "needs_numpy_free_python": _numpy_free_python,
     "needs_installed_package": _installed_package,
 }
-
-
-
-def identity_harness_or_skip():
-    """Import `mojolearn._identity_break` for a module that needs it at import
-    time, or skip the whole module with the reason (a module-level import
-    error would be a collection error, not a skip)."""
-    reason = _identity_harness()
-    if reason is not None:
-        pytest.skip(f"needs_identity_harness: {reason}", allow_module_level=True)
-    return importlib.import_module("mojolearn._identity_break")
