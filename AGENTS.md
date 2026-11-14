@@ -170,6 +170,26 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
   measured clean (Andrew, 2026-11-09).
 
+### The pre-0.8.67 measurement campaign is NVIDIA only, small board first (Andrew, 2026-11-14)
+
+- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
+  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
+- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
+  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
+  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
+  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
+  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
+  at least as fast as 0.8.55 with quality equal.
+- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions.
+- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
+  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
+  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
+  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
+  lane at once on the integration branch, and no measurement is repeated for it alone.
+- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
+  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
+  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
+
 ### Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
 - Verification happens once, before the release: freeze the source, run one global verify of every lane on every
