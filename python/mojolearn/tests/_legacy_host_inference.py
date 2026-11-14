@@ -39,7 +39,7 @@ def kde_fit(model, X, y=None, sample_weight=None):
     """Frozen 32011bb32 public CPU fit, including outer validation/state."""
     from mojolearn import _sk_validate
     from mojolearn._buffer import as_f32_dense_c
-    from mojolearn._sample_weight import check_sample_weight
+    from mojolearn.tests._legacy_sample_weight import check_sample_weight
     state = vars(model)
     check = None
     args, kwargs = (X, y), {"sample_weight": sample_weight}

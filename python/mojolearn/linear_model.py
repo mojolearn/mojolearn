@@ -29,7 +29,6 @@ from ._labels import (
 )
 from . import _native_archive_bridge, _native_classical_bridge
 from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
-from ._sample_weight import check_sample_weight
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
 #: `save` writes exactly what `predict` reads, raw bytes and exact dtypes,
@@ -264,21 +263,9 @@ def _center(b, x, mu32):
     return out
 
 
-def _check_sample_weight(sample_weight, n_rows, estimator):
-    """Validate `sample_weight` and return it as a C-order float32 Array,
-    or None when there are no weights.
-
-    cuML validates nothing here: `olsFit` takes a raw pointer and trusts it.
-    These checks are input validation (scikit-learn's `_check_sample_weight`
-    and its wording, `_sample_weight.check_sample_weight`): a length mismatch
-    would read past the end of the array on the device, a negative weight
-    makes `sqrt(w)` a NaN that silently poisons the whole fit, non-finite
-    weights likewise, and an all-zero vector leaves nothing to fit.
-    `estimator` is kept for the callers' signature.
-    """
-    if sample_weight is None:
-        return None
-    return check_sample_weight(sample_weight, n_rows)
+# TOMBSTONE: linear_model._check_sample_weight and the module _sample_weight (no product caller:
+# every door admits sample_weight natively, bindings/admitted_input_unpack.mojo admit_weights)
+# deleted 2026-11-14 by lane py-admission; the frozen oracle is tests/_legacy_sample_weight.py.
 
 
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
