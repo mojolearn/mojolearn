@@ -1229,6 +1229,13 @@ comptime LG_EXACT_ID = (
 #: planes x cells per leaf) a batched IDENTICAL Lossguide fit may address.
 #: Int32 offsets index the histogram and fixed-point accumulator planes.
 comptime LG_EXACT_ID_MAX_CELLS = 2147483647
+#: lane gbdt-per-node-regression (2026-11-14), `-D MOJOLEARN_IDN_GBDT_STEP_OLD`
+#: (default OFF, every vendor and the host build): the A/B arm that restores
+#: the Lossguide tree pool at `1 << max_depth` leaf slots (see `pool_slots` in
+#: `fit_non_symmetric_tree`). Default: the pool holds the fit's leaf capacity.
+#: Bits: none (the same slots are written and read). NOT MEASURED; the arm is
+#: owed one NVIDIA + AMD A/B on gbdt-lossguide istella/taxi; the loser goes.
+comptime GBDT_STEP_OLD = is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"]()
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
@@ -1902,9 +1909,6 @@ def fit_non_symmetric_tree[
     var stat_count = 1 + approx_dim
     var max_leaves = options.max_leaves
     var max_depth = options.max_depth
-    # The symmetric pool's leaf key is what `TTreeWorkspace` stores, `1 <<
-    # max_depth`'s slots; historically compared with `max_leaves`.
-    var ws_leaves_key = max_leaves
     # LG_EXACT_BATCH: `max_leaves` below is the leaf CAPACITY (slots); the
     # policy reads `options.max_leaves`. `lg_room_bound` says the capacity
     # is below what `max_depth` allows, so a round must leave room for the
@@ -1915,10 +1919,6 @@ def fit_non_symmetric_tree[
             var depth_leaves = options.max_leaves
             if max_depth < 30:
                 depth_leaves = 1 << max_depth
-                # the pool is keyed on the slots it holds, so a Lossguide
-                # fit whose max_leaves is not 1 << max_depth keeps its pool
-                # from tree to tree
-                ws_leaves_key = depth_leaves
             if depth_leaves > options.max_leaves:
                 max_leaves = 2 * options.max_leaves
                 if max_leaves >= depth_leaves:
@@ -1973,8 +1973,24 @@ def fit_non_symmetric_tree[
             if not lg_gate_ok:
                 lg_exact = False
                 max_leaves = options.max_leaves
-                ws_leaves_key = options.max_leaves
                 lg_room_bound = False
+    # gbdt-per-node-regression (2026-11-14): THE TREE POOL'S LEAF SLOTS.
+    # Depthwise addresses every slot of `1 << max_depth` (unchanged).
+    # Lossguide addresses slot ids below its leaf capacity `max_leaves`
+    # only (the exact batch's doubled capacity, or the user's budget), so
+    # the pool holds exactly that many. Before, the pool was `1 << max_depth`
+    # slots whatever the policy: the board's Lossguide lanes run max_depth 16
+    # (tools/speed_gbdt_arm.py LOSSGUIDE_MAX_DEPTH, the 2026-10-13 fairness
+    # fix), so a 256-leaf fit held 65,536 histogram slots (512 used) and
+    # `enqueue_fill` zeroed all of them, histogram and accumulator planes,
+    # once per tree. No bits change: the same slots are written and read.
+    # `-D MOJOLEARN_IDN_GBDT_STEP_OLD` restores the depth-sized pool (A/B arm).
+    var pool_slots = max_leaves
+    if not lossguide:
+        pool_slots = 1 << max_depth
+    comptime if GBDT_STEP_OLD:
+        if lossguide and max_depth < 30:
+            pool_slots = 1 << max_depth
     # DEVIATION 2007a: the SM count is read off the symmetric pool below
     # (one `ctx.get_attribute` per WORKSPACE build, not per tree -- the
     # query is 1.26 ms/call on Metal, the price note in
@@ -2004,7 +2020,7 @@ def fit_non_symmetric_tree[
         len(ws) == 0
         or ws[0].n_rows_key != n_rows
         or ws[0].stat_count_key != stat_count
-        or ws[0].max_leaves_key != ws_leaves_key
+        or ws[0].max_leaves_key != pool_slots
         or ws[0].n_features_key != len(fold_counts)
         or ws[0].hist_cells_per_leaf_key != hist_cells_per_leaf
         or ws[0].acc_live_key != _ACC_LIVE
@@ -2013,7 +2029,7 @@ def fit_non_symmetric_tree[
         ws.append(
             TTreeWorkspace(
                 ctx, layout, blocks, n_rows, stat_count, max_depth,
-                _ACC_LIVE,
+                _ACC_LIVE, leaf_slots=pool_slots,
             )
         )
     # DEVIATION 2007a: no override, so the pool's cached machine constant.
