@@ -575,11 +575,11 @@ def svm_resident_lease_binding() raises -> PythonObject:
 
 
 def svm_resident_stats_binding() raises -> PythonObject:
-    """`(live leases, kept entries, kept bytes, uploads, cap bytes)` of this
-    binding's store: a test-only readout."""
+    """`(live leases, kept entries, kept bytes, uploads, cap bytes, held
+    queries)` of this binding's store: a test-only readout."""
     var words = svm_resident_stats_words()
     return Python.tuple(PythonObject(words[0]), PythonObject(words[1]), PythonObject(words[2]),
-                        PythonObject(words[3]), PythonObject(words[4]))
+                        PythonObject(words[3]), PythonObject(words[4]), PythonObject(words[5]))
 
 
 def _svm_query_fold(params: PythonObject, at: Int) raises -> QueryFold:
