@@ -3,6 +3,7 @@
 # kernels, operation order, modes, and copy semantics remain unchanged.
 from std.memory import unsafe_memcpy
 from std.os import getenv
+from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
