@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import mojolearn as ml
-from mojolearn import _buffer
+
 from mojolearn import _expansion_cluster as cluster
 from mojolearn._array import Array
 
@@ -21,7 +21,7 @@ def data():
 def capture_paths():
     """Exercise every Array flattening path, retain exact returned bits."""
     x=data();out={}
-    def keep(name,a):out[name]=dict(shape=a.shape,dtype=a.dtype,bytes=_buffer.flat_bytes(a).hex())
+    def keep(name,a):out[name]=dict(shape=a.shape,dtype=a.dtype,bytes=a.tobytes().hex())
     fit=ml.MiniBatchKMeans(2,init=[[0.,0.],[4.,4.]],n_init=1,max_iter=2,batch_size=4,random_state=0).fit(x)
     keep('minibatch-fit',fit.cluster_centers_)
     fit.partial_fit(x);keep('minibatch-after-fit',fit.cluster_centers_)
@@ -51,9 +51,9 @@ class ArrayBufferCompatibility(unittest.TestCase):
     def test_typed_bytes(self):
         # Preserve signed-zero/subnormal storage and signed integer tree nodes.
         values=Array._from_flat([-0.,2**-149],(1,2),'<f4')
-        self.assertEqual(_buffer.flat_bytes(values).hex(),'0000008001000000')
+        self.assertEqual(values.tobytes().hex(),'0000008001000000')
         nodes=Array._from_flat([-1,0,2],(1,3),'<i4')
-        self.assertEqual(list(_buffer.flat_bytes(nodes).cast('i')),[-1,0,2])
+        self.assertEqual(list(memoryview(nodes.tobytes()).cast('i')),[-1,0,2])
 
 
 if __name__=='__main__':unittest.main()

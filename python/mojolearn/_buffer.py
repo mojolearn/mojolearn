@@ -369,19 +369,8 @@ def addr_ro(obj, *, name):
         return b.addr
 
 
-def flat_bytes(obj, *, name="array"):
-    """A flat read-only `'B'` memoryview over any array the package hands
-    out. `Array` cannot export the buffer protocol on Python 3.10 and 3.11
-    (DEVIATION 2305; `memoryview(a)` raises TypeError there), so it is read
-    at its address; everything else goes through `memoryview`. The caller
-    keeps `obj` alive while the view is in use. The live worker's fold
-    export and the cross-vendor state hash crashed on a Python 3.11 box
-    through exactly this on 2026-09-23."""
-    if isinstance(obj, Array):
-        return memory_at(obj._addr, obj.nbytes, writable=False)
-    with Buf(obj, writable=False, name=name):
-        pass
-    return memoryview(obj).cast("B")
+# TOMBSTONE: _buffer.flat_bytes (no product caller; tests read Array.tobytes) deleted 2026-11-14 by lane
+# py-admission; code recoverable at 1fac46234f.
 
 
 # ------------------------------------------------------------ conversion
@@ -847,19 +836,8 @@ def as_f32_colmajor(obj, *, name):
     return _as_typed(obj, "<f4", "F", 2, name)
 
 
-def as_f32_forest_layout(obj, *, name):
-    """`(array, row_major)` for a forest fit (DEVIATION 2637).
-
-    A 2-D float32 C-order input comes back AS IS, a zero-copy borrow with
-    `row_major` True, so the native fit transposes it straight into its
-    pinned stage across the host pool. Every other input takes
-    `as_f32_colmajor` exactly as before, with `row_major` False. Either way
-    the native side stages the same column-major bytes."""
-    a, _ = _materialize(obj, name)
-    if (a.ndim == 2 and a.dtype == "<f4" and a.size
-            and a.order == "C" and not a._has_order("F")):
-        return a, True
-    return as_f32_colmajor(a, name=name)[0], False
+# TOMBSTONE: _buffer.as_f32_forest_layout (no caller; bindings/trees_public_inputs_door.mojo owns the
+# forest layout) deleted 2026-11-14 by lane py-admission; code recoverable at 1fac46234f.
 
 
 def as_i32_c(obj, *, ndim=1, name):
