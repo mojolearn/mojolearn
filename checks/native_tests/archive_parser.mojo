@@ -120,6 +120,7 @@ def _unicode(unit: Int) raises:
         var text = spellings[unit - 2]
         var bytes = text.as_bytes()
         var decoded = archive_decode_literal(ArchiveSpan(Int(bytes.unsafe_ptr()), len(bytes)), 12)
+        _ = text^  # the call read text's bytes by address; freed at its last named use otherwise
         if unit < 8:
             _require(archive_text_equal(decoded.points, "<f4") and decoded.warning_at == -1, "native literal scalar decoding")
         elif unit == 8:
