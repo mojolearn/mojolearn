@@ -270,8 +270,10 @@ if [ "$MODE" = candidate ]; then
 else
     add_arm candidate --mojolearn-version "$VER"     # the published version under test (the "new" column)
 fi
+# >>> b-arms (tools/test_measure_owed.py runs this block on a fake PC_B_ARMS file)
 B_NAMES=()
 if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
+    [ -s "$PC_B_ARMS" ] || say "PC_B_ARMS=$PC_B_ARMS: no such file on the box (or empty); no B arm runs"
     while read -r name dir commit; do
         [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ] && continue
         [[ "$name" =~ ^[a-z0-9][a-z0-9.-]*$ ]] && [[ "${commit:-}" =~ ^[0-9a-f]{40}$ ]] || { say "bad PC_B_ARMS line: $name"; continue; }
@@ -283,6 +285,7 @@ if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
     done < "$PC_B_ARMS"
 fi
 B_CSV=$(IFS=,; echo "${B_NAMES[*]:-}")
+# <<< b-arms
 
 run_as() {   # arm: the board args that run on that arm's installed venv (no install)
     echo --python-env "${ARM_PY[$1]}" --skip-install --wheel-manifest "${ARM_MAN[$1]}" --mojolearn-version "$(arm_version "$1")"
@@ -408,17 +411,36 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
 fi
 
 # ---- plan (CPU, seconds) -----------------------------------------------------------------------------------------
+owed_plan() {   # the owed rows' plan for this job's B sets (plan-owed/plan.json records them)
+    $PY tools/measure_owed.py plan --owed "$OWED_FILE" --paper-recipes "$RECIPES" --planner tools/bench_board.py \
+        --vendor "$V" --b-arms "$B_CSV" --out-dir "$RES/plan-owed" > "$RES/logs/owed-plan.log" 2>&1
+    local r=$?; tail -n 2 "$RES/logs/owed-plan.log"; return $r
+}
 if part plan; then
     phase plan
     $PY tools/paper_compare.py ids --recipes "$RECIPES" --planner tools/bench_board.py --out-dir "$RES/plan" \
         > "$RES/logs/ids.log" 2>&1
     rc=$?; tail -n 3 "$RES/logs/ids.log"
     if [ "$OWED" = 1 ]; then
-        $PY tools/measure_owed.py plan --owed "$OWED_FILE" --paper-recipes "$RECIPES" --planner tools/bench_board.py \
-            --vendor "$V" --b-arms "$B_CSV" --out-dir "$RES/plan-owed" > "$RES/logs/owed-plan.log" 2>&1
-        r=$?; tail -n 2 "$RES/logs/owed-plan.log"; [ $r -gt $rc ] && rc=$r
+        owed_plan; r=$?; [ $r -gt $rc ] && rc=$r
     fi
     phase_end $rc
+elif [ "$OWED" = 1 ]; then
+    # OWED-PLAN STALE FIX (2026-11-13, job 0003 of ba08dac006 on the L40S): a split submit without the plan part
+    # reused plan-owed/ from job 0001, made without PC_B_ARMS (b_arms=-): its units.tsv had no B unit, so
+    # PC_OWED_ARMS=candidate,<b names> ran no B arm although all five B sets were installed. A plan made for other
+    # B sets (or before plan.json existed) is re-made here (CPU, seconds); the candidate's ids do not change.
+    chk=$($PY tools/measure_owed.py plan-check --plan-dir "$RES/plan-owed" --b-arms "$B_CSV" --vendor "$V" 2>&1)
+    if [ $? -ne 0 ]; then
+        say "owed plan re-made: $chk"
+        owed_plan || say "the owed plan failed (logs/owed-plan.log)"
+    fi
+fi
+if [ "$OWED" = 1 ] && [ -n "${PC_OWED_ARMS:-}" ] && [ -s "$RES/plan-owed/units.tsv" ]; then
+    for want in ${PC_OWED_ARMS//,/ }; do      # a named arm with no unit runs nothing: say so, never silently
+        cut -f1 "$RES/plan-owed/units.tsv" | grep -qx -- "$want" \
+            || say "PC_OWED_ARMS names $want: no owed unit for it in plan-owed/units.tsv (B sets planned: ${B_CSV:--})"
+    done
 fi
 [ -s "$RES/plan/race-ids-full.txt" ] || { say "no paper plan in $RES/plan (run part plan)"; exit 5; }
 # every dataset the races read, from the board's own data_needs over the paper and owed races (tools/measure_owed.py

@@ -19,6 +19,11 @@ planned through the board and reported beside the paper compare (lane measure-pr
           rowmap.json           {row id: [race ids]} for the report
         A race id the paper recipes hold is not planned again for the candidate or the prior arm: the paper board
         times it for the candidate, and its 0.8.66 number is the paper compare's middle column.
+  plan-check --plan-dir DIR --b-arms a,b --vendor V
+        whether DIR's plan was made for these B sets and this vendor (plan.json, written by plan): prints
+        OWED-PLAN-CURRENT (rc 0) or OWED-PLAN-STALE <why> (rc 1). The job re-makes a stale plan before its owed
+        phase: job 0003 of ba08dac006 (L40S, 2026-11-13) ran without the plan part, reused the plan job 0001 made
+        without PC_B_ARMS (b_arms=-), and PC_OWED_ARMS=candidate,<b names> ran no B arm though all five were installed.
   data-keys --owed JSON --paper-recipes JSON --planner tools/bench_board.py --vendor V --data-root DIR
         the R2 dataset keys (bench/results/dataset_store/manifest.tsv) the paper and owed races read, one
         `<key> TAB <path>` line each, from the board's own data_needs (data_keys): what the stage step stages
@@ -221,10 +226,43 @@ def cmd_plan(a):
     for name, obj in (("drivers.json", drivers), ("not-planned.json", missing), ("rowmap.json", rowmap)):
         with open(os.path.join(a.out_dir, name), "w") as fh:
             json.dump(obj, fh, indent=1, sort_keys=True)
+    with open(os.path.join(a.out_dir, PLAN_META), "w") as fh:
+        json.dump({"vendor": a.vendor, "b_arms": b_present}, fh, indent=1, sort_keys=True)
     print("OWED-PLAN vendor=%s rows=%d units=%d races=%d smoke=%d drivers=%d not_planned=%d b_arms=%s"
           % (a.vendor, len(doc["rows"]), len(units), sum(len(v) for v in units.values()), len(smoke),
              len(drivers), len(missing), ",".join(b_present) or "-"))
     return 0
+
+
+#: what a plan was made for (cmd_plan writes it; plan_stale reads it)
+PLAN_META = "plan.json"
+
+
+def plan_stale(plan_dir, b_arms, vendor):
+    """None when PLAN_DIR's plan was made for these B sets (a comma list, order free) and VENDOR; else why not."""
+    want = sorted(b for b in (b_arms or "").split(",") if b)
+    if not os.path.isfile(os.path.join(plan_dir, "units.tsv")):
+        return "no plan (units.tsv missing)"
+    try:
+        with open(os.path.join(plan_dir, PLAN_META)) as fh:
+            meta = json.load(fh)
+    except (OSError, ValueError):
+        if not want:
+            return None     # a plan from before plan.json was made without B sets, as this job wants
+        return "the plan records no B sets (no %s: made before 2026-11-13); this job has b_arms=%s" % (
+            PLAN_META, ",".join(want))
+    have = sorted(meta.get("b_arms") or [])
+    if meta.get("vendor") != vendor:
+        return "the plan is for vendor %s, this job is %s" % (meta.get("vendor"), vendor)
+    if have != want:
+        return "the plan has b_arms=%s, this job has b_arms=%s" % (",".join(have) or "-", ",".join(want) or "-")
+    return None
+
+
+def cmd_plan_check(a):
+    why = plan_stale(a.plan_dir, a.b_arms, a.vendor)
+    print("OWED-PLAN-STALE " + why if why else "OWED-PLAN-CURRENT b_arms=%s" % (a.b_arms or "-"))
+    return 1 if why else 0
 
 
 def cmd_data_keys(a):
@@ -412,6 +450,10 @@ def build_parser():
     pl.add_argument("--vendor", required=True, choices=PC.VENDORS)
     pl.add_argument("--b-arms", default="", help="comma list of the B wheel sets staged on this box")
     pl.add_argument("--out-dir", required=True)
+    c = sub.add_parser("plan-check", help="whether a plan dir was made for these B sets and vendor")
+    c.add_argument("--plan-dir", required=True)
+    c.add_argument("--b-arms", default="")
+    c.add_argument("--vendor", required=True, choices=PC.VENDORS)
     d = sub.add_parser("data-keys", help="the R2 dataset keys the paper and owed races read, with their paths")
     d.add_argument("--owed", default=None, help="the owed file (omitted: the paper races only)")
     d.add_argument("--paper-recipes", required=True)
@@ -432,7 +474,8 @@ def build_parser():
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
-    return {"plan": cmd_plan, "data-keys": cmd_data_keys, "report": cmd_report}[a.cmd](a)
+    return {"plan": cmd_plan, "plan-check": cmd_plan_check, "data-keys": cmd_data_keys,
+            "report": cmd_report}[a.cmd](a)
 
 
 if __name__ == "__main__":

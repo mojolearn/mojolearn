@@ -55,6 +55,87 @@ class Plan(unittest.TestCase):
         self.assertIn("algos", bargs[bargs.index("--families") + 1])
 
 
+class OwedBArms(unittest.TestCase):
+    """2026-11-13, job 0003 of ba08dac006 (L40S): PC_B_ARMS named five installed B sets, but the job ran without the
+    plan part and reused a plan made without them (OWED-PLAN b_arms=-), so PC_OWED_ARMS=candidate,<b names> ran no B
+    arm. The job now reads the B file the same way, and re-makes a plan whose plan.json names other B sets."""
+    JOB = os.path.join(HERE, "ops", "paper_compare_job.sh")
+    NAMES = ["arima-async-all", "autograd-optim", "byte-lm-generic", "byte-lm-program-step", "chol-ops-fit"]
+
+    def b_block(self):
+        with open(self.JOB) as fh:
+            text = fh.read()
+        return text[text.index("# >>> b-arms"):text.index("# <<< b-arms")]
+
+    def test_job_reads_a_fake_b_arms_file(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            lines = ["# staged by measure_candidate"]
+            for i, name in enumerate(self.NAMES):
+                d = os.path.join(td, "b-" + name, "nvidia")
+                os.makedirs(d)
+                for dist in ("core", "nvidia"):
+                    open(os.path.join(d, "mojolearn_%s-0.8.67.dev0+b%d-py3-none-any.whl" % (dist, i)), "w").close()
+                lines.append("%s %s %s" % (name, d, ("%x" % (i + 10)) * 40))
+            lines.append("BadName /x " + "a" * 40)
+            bfile = os.path.join(td, "b-arms-nvidia.txt")
+            with open(bfile, "w") as fh:
+                fh.write("\n".join(lines) + "\n")
+            script = ("say() { echo \"SAY $*\"; }\nadd_arm() { echo \"ARM $1 $2 $3\"; }\n" + self.b_block()
+                      + "\necho \"B_CSV=$B_CSV\"\n")
+            env = dict(os.environ, OWED="1", V="nvidia", PC_B_ARMS=bfile)
+            p = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("B_CSV=" + ",".join(self.NAMES), p.stdout)
+            self.assertIn("ARM arima-async-all --mojolearn-version 0.8.67.dev0+b0", p.stdout)
+            self.assertIn("SAY bad PC_B_ARMS line: BadName", p.stdout)
+            env["PC_B_ARMS"] = os.path.join(td, "missing.txt")
+            p = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
+            self.assertIn("no such file on the box", p.stdout)
+            self.assertIn("B_CSV=\n", p.stdout)
+
+    def test_plan_records_its_b_arms_and_a_stale_plan_is_named(self):
+        with tempfile.TemporaryDirectory() as td:
+            owed, paper = os.path.join(td, "owed.json"), os.path.join(td, "paper.json")
+            with open(owed, "w") as fh:
+                json.dump(OWED, fh)
+            with open(paper, "w") as fh:
+                json.dump(PAPER, fh)
+            out = os.path.join(td, "plan-owed")
+            real = MO.load_planner
+            MO.load_planner = lambda path: fake_planner()
+            try:
+                self.assertEqual(MO.main(["plan", "--owed", owed, "--paper-recipes", paper, "--planner", "x",
+                                          "--vendor", "nvidia", "--out-dir", out]), 0)
+                # the plan job 0001 made: no B sets
+                why = MO.plan_stale(out, "b1", "nvidia")
+                self.assertIn("b_arms=-", why)
+                self.assertEqual(MO.main(["plan-check", "--plan-dir", out, "--b-arms", "b1", "--vendor", "nvidia"]), 1)
+                self.assertIsNone(MO.plan_stale(out, "", "nvidia"))
+                # the re-made plan has a B unit, which PC_OWED_ARMS=candidate,b1 then runs
+                MO.main(["plan", "--owed", owed, "--paper-recipes", paper, "--planner", "x", "--vendor", "nvidia",
+                         "--b-arms", "b1", "--out-dir", out])
+            finally:
+                MO.load_planner = real
+            self.assertIsNone(MO.plan_stale(out, "b1", "nvidia"))
+            self.assertEqual(MO.main(["plan-check", "--plan-dir", out, "--b-arms", "b1", "--vendor", "nvidia"]), 0)
+            self.assertIn("vendor nvidia", MO.plan_stale(out, "b1", "amd"))
+            with open(os.path.join(out, "units.tsv")) as fh:
+                self.assertIn("b1", [ln.split("\t")[0] for ln in fh])
+            # a plan from before plan.json: current for a job without B sets, stale for one with them
+            os.remove(os.path.join(out, MO.PLAN_META))
+            self.assertIsNone(MO.plan_stale(out, "", "nvidia"))
+            self.assertIn("no plan.json", MO.plan_stale(out, "b1", "nvidia"))
+            self.assertIn("units.tsv missing", MO.plan_stale(os.path.join(td, "none"), "", "nvidia"))
+
+    def test_job_rechecks_the_plan_without_the_plan_part(self):
+        with open(self.JOB) as fh:
+            text = fh.read()
+        self.assertIn('measure_owed.py plan-check --plan-dir "$RES/plan-owed" --b-arms "$B_CSV"', text)
+        self.assertLess(text.index("plan-check"), text.index('FULL_ALL="$RES/plan/race-ids-full-all.txt"'))
+        self.assertIn("PC_OWED_ARMS names $want: no owed unit", text)
+
+
 class DataKeys(unittest.TestCase):
     def test_keys_come_from_the_boards_data_needs(self):
         # the stage step and the job read the dataset list from the board's data_needs over the paper and owed races
