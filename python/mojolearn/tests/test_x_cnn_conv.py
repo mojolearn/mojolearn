@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Correctness sanity of the CNN lane's convolutions against a float64 NumPy
-reference of PyTorch's nn.Conv2d / nn.Conv1d semantics (tolerance, not
-identity; identity is tools/algos_lane_check.sh x-cnn-conv2d,x-cnn-conv1d).
-The reference functions here are also checked against torch itself where
-torch is installed (`test_reference_matches_torch`)."""
+"""The float64 NumPy reference of PyTorch's nn.Conv2d / nn.Conv1d semantics,
+checked against torch itself where torch is installed (ORACLE). The layers
+are held to the same reference natively in
+checks/native_tests/cnn_conv_cpu_suite.mojo (`pixi run check-native-cnn-conv-cpu`)."""
 import numpy as np
 import pytest
 
@@ -66,43 +65,6 @@ def _case_arrays(cs, seed):
     w = (rng.standard_normal((cs["oc"], cs["c"]) + cs["k"]) * 0.3).astype(np.float32)
     b = rng.standard_normal(cs["oc"]).astype(np.float32) if cs["bias"] else None
     return x, w, b
-
-
-@pytest.mark.parametrize("cs", CASES2D)
-def test_conv2d_forward_backward(cs):
-    import mojolearn as ml
-    x, w, b = _case_arrays(cs, 0)
-    conv = ml.Conv2d(cs["c"], cs["oc"], cs["k"], stride=cs["s"], padding=cs["p"], dilation=cs["d"],
-                     bias=cs["bias"]).set_weights(w, b)
-    out = conv.forward(x)
-    ref, _, _ = ref_conv2d(x, w, b, cs["s"], cs["p"], cs["d"])
-    np.testing.assert_allclose(out, ref, rtol=1e-5, atol=1e-5)
-    g = np.random.default_rng(1).standard_normal(out.shape).astype(np.float32)
-    dx = conv.backward(g)
-    rdx, rdw, rdb = ref_conv2d_backward(x, w, g, cs["s"], cs["p"], cs["d"])
-    np.testing.assert_allclose(dx, rdx, rtol=1e-5, atol=1e-5)
-    np.testing.assert_allclose(conv.grad_weight_, rdw, rtol=1e-5, atol=1e-5)
-    if cs["bias"]:
-        np.testing.assert_allclose(conv.grad_bias_, rdb, rtol=1e-5, atol=1e-5)
-
-
-def test_conv1d_forward_backward():
-    import mojolearn as ml
-    rng = np.random.default_rng(2)
-    x = rng.standard_normal((3, 2, 11)).astype(np.float32)
-    w = rng.standard_normal((4, 2, 3)).astype(np.float32)
-    b = rng.standard_normal(4).astype(np.float32)
-    conv = ml.Conv1d(2, 4, 3, stride=2, padding=2, dilation=2).set_weights(w, b)
-    out = conv.forward(x)
-    ref, _, _ = ref_conv2d(x[:, :, None, :], w[:, :, None, :], b, (1, 2), (0, 2), (1, 2))
-    np.testing.assert_allclose(out, ref[:, :, 0, :], rtol=1e-5, atol=1e-5)
-    g = rng.standard_normal(out.shape).astype(np.float32)
-    dx = conv.backward(g)
-    rdx, rdw, rdb = ref_conv2d_backward(x[:, :, None, :], w[:, :, None, :], g[:, :, None, :],
-                                        (1, 2), (0, 2), (1, 2))
-    np.testing.assert_allclose(dx, rdx[:, :, 0, :], rtol=1e-5, atol=1e-5)
-    np.testing.assert_allclose(conv.grad_weight_, rdw[:, :, 0, :], rtol=1e-5, atol=1e-5)
-    np.testing.assert_allclose(conv.grad_bias_, rdb, rtol=1e-5, atol=1e-5)
 
 
 def test_reference_matches_torch():
@@ -179,24 +141,6 @@ def _pads(cs):
         return (0, 0, 0, 0)
     ph, pw = cs["padding"]
     return (ph, ph, pw, pw)
-
-
-@pytest.mark.parametrize("cs", OPTION_CASES)
-def test_conv2d_options(cs):
-    import mojolearn as ml
-    rng = np.random.default_rng(7)
-    x = rng.standard_normal((2, cs["c"], 7, 8)).astype(np.float32)
-    conv = ml.Conv2d(cs["c"], cs["oc"], cs["k"], stride=cs["s"], padding=cs["padding"], dilation=cs["d"],
-                     groups=cs["groups"], padding_mode=cs["mode"], random_state=3)
-    out = conv.forward(x)
-    g = rng.standard_normal(out.shape).astype(np.float32)
-    dx = conv.backward(g)
-    rout, rdx, rdw, rdb = ref_conv_options(x, conv.weight_, conv.bias_, cs["s"], _pads(cs), cs["d"], cs["groups"],
-                                           cs["mode"], g)
-    np.testing.assert_allclose(out, rout, rtol=1e-5, atol=1e-5)
-    np.testing.assert_allclose(dx, rdx, rtol=1e-5, atol=1e-5)
-    np.testing.assert_allclose(conv.grad_weight_, rdw, rtol=1e-5, atol=1e-5)
-    np.testing.assert_allclose(conv.grad_bias_, rdb, rtol=1e-5, atol=1e-5)
 
 
 def test_option_reference_matches_torch():
