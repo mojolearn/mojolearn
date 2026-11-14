@@ -2458,6 +2458,21 @@ QUALITY_UNAVAILABLE = "quality_unavailable"
 QUALITY_NON_METRIC = ("scorer", "reference", "rows", QUALITY_UNAVAILABLE)
 
 
+#: inference batches the scorer is defined not to score, per family: the trees `large` batch is the first
+#: --infer-large-rows TRAINING rows (bench/speed/forest_speed_arm.py), a throughput batch; only `test` is scored, and
+#: the 0.8.55 record is "not-scored" too. The completion check never asks these for quality (records written before
+#: bench_board_infer stated quality_unavailable included).
+UNSCORED_INFER_BATCHES = {"trees": ("large",)}
+
+
+def unscored_by_design(rec, phase, cell):
+    """The reason a cell has no quality by design (no scorer is defined for it), else None."""
+    if phase == "infer" and cell.get("batch") in UNSCORED_INFER_BATCHES.get(rec.get("family"), ()):
+        return "%s infer batch %s: training rows, no scorer by design (the test batch is scored)" % (
+            rec.get("family"), cell.get("batch"))
+    return None
+
+
 def mark_not_scored(cells):
     """"ok" only if scored (lane harness-evidence, 2026-10-14). A cell timed in every round whose quality scorer
     failed or never ran gets status "not-scored" and `scorer_error`; its times stay exactly as measured. The
@@ -2510,7 +2525,7 @@ def measurement_completion(rec):
                     missing.append(key)
             quality = cell.get("quality") or {}
             why = BQ.scorer_failure(quality)
-            declared = quality.get(QUALITY_UNAVAILABLE)
+            declared = quality.get(QUALITY_UNAVAILABLE) or unscored_by_design(rec, phase, cell)
             if why:
                 missing.append("quality scorer: " + str(why))
             elif declared and not any(k not in QUALITY_NON_METRIC for k in quality):

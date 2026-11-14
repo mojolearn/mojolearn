@@ -83,3 +83,19 @@ def test_a_cell_that_states_why_it_has_no_quality_is_recorded_not_incomplete():
     report = B.measurement_completion(rec)
     assert report["status"] == "incomplete"
     assert any("its scorer did not run" in m for m in report["issues"][0]["missing"])
+
+
+def test_trees_large_batch_needs_no_quality_by_design_but_a_scored_batch_does():
+    # coordinator 2026-11-13 (lane fix-gbdt-prebinned-infer): MEASUREMENT_INCOMPLETE fired on
+    # trees/gbdt-depthwise infer batch=large; that batch is training rows and is never scored (0.8.55: not-scored)
+    def rec(family, batch):
+        test = dict(result()["cells"][0], batch="test", quality=dict(auc=.6, logloss=.5))
+        other = dict(result()["cells"][0], batch=batch, quality={}, status=B.NOT_SCORED,
+                     scorer_error="the race recorded no quality for this arm (its scorer did not run)")
+        return dict(family=family, lane="gbdt-depthwise", cells=[], infer_cells=[test, other])
+    assert B.measurement_completion(rec("trees", "large"))["status"] == "recorded"   # an old record, no reason key
+    report = B.measurement_completion(rec("trees", "test2"))      # a batch a scorer should have scored
+    assert report["status"] == "incomplete"
+    assert any(m.startswith("quality scorer") for m in report["issues"][0]["missing"])
+    assert B.measurement_completion(rec("classical", "large"))["status"] == "incomplete"
+    assert B.unscored_by_design({"family": "trees"}, "fit", {"batch": "large"}) is None
