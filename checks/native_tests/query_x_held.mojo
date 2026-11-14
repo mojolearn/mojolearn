@@ -18,7 +18,7 @@ This is the completion test of the lane: the SVC / SVR / GP / KernelRidge
 resident predicts call exactly these functions. GPU columns only; the test
 owns its context and its store."""
 from std.math import nan
-from std.memory import bitcast
+from std.memory import bitcast, UnsafePointer
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_query_x import DeviceQueryX, QueryFold, resident_query_x, resident_query_x_done
@@ -152,29 +152,18 @@ def _lease_holds(ctx: DeviceContext) raises:
     var x = _words(rows * cols, 6)
     var q = resident_query_x(store, ctx, lease, Int(x.unsafe_ptr()), rows, cols, QueryFold.none())
     ctx.synchronize()
+    # The lifetime checker refuses a `q^` inside a `comptime if` whose other arm also consumes `q` ("used later"):
+    # consume it once, outside the branches, and keep each arm's tail in its own function.
+    var addr = Int(q.bufs.x.unsafe_ptr())
     comptime if IDN_QUERY_X_HELD:
         _require(q.bufs.held(), "a live lease's predict uses held buffers")
-        var addr = Int(q.bufs.x.unsafe_ptr())
         _require(not fitted_query_take(store, lease), "a second take while a call holds them finds none")
-        resident_query_x_done(store, lease, q^)
-        _require(fitted_resident_stats(store)[5] == 1, "the lease keeps its query after the call")
-        var q2 = resident_query_x(store, ctx, lease, Int(x.unsafe_ptr()), rows, cols, QueryFold.none())
-        ctx.synchronize()
-        _require(Int(q2.bufs.x.unsafe_ptr()) == addr, "the next call reuses the lease's buffers")
-        _require(fitted_resident_stats(store)[5] == 0, "taken while the call runs")
-        _same_words(_download(ctx, q2.x, rows * cols), x, rows * cols, "the reused buffers hold this call's words")
-        resident_query_x_done(store, lease, q2^)
-        _require(fitted_resident_stats(store)[5] == 1, "given back again")
-        fitted_lease_close(store, lease)
-        _require(fitted_resident_stats(store)[5] == 0, "the lease's close frees its query")
-        # A give-back after the close is dropped.
-        var q3 = DeviceQueryX.held(ctx, Int(x.unsafe_ptr()), rows, cols, Optional[QueryXBuffers]())
-        ctx.synchronize()
-        fitted_query_put(store, lease, q3^.release())
-        _require(fitted_resident_stats(store)[5] == 0, "a closed lease keeps nothing")
     else:
         _require(not q.bufs.held(), "the B arm uses per-call buffers")
-        resident_query_x_done(store, lease, q^)
+    resident_query_x_done(store, lease, q^)
+    comptime if IDN_QUERY_X_HELD:
+        _lease_holds_held_tail(store, ctx, lease, x, rows, cols, addr)
+    else:
         _require(fitted_resident_stats(store)[5] == 0, "the B arm holds nothing")
         fitted_lease_close(store, lease)
     # A fold or lease 0 always takes per-call buffers.
@@ -186,6 +175,25 @@ def _lease_holds(ctx: DeviceContext) raises:
     _ = len(fitted)
     print("PASS query_x_held lease holds")
 
+
+
+def _lease_holds_held_tail(store: UnsafePointer[FittedResidentStore, MutAnyOrigin], ctx: DeviceContext, lease: Int, x: List[Float32], rows: Int, cols: Int,
+                           addr: Int) raises:
+    _require(fitted_resident_stats(store)[5] == 1, "the lease keeps its query after the call")
+    var q2 = resident_query_x(store, ctx, lease, Int(x.unsafe_ptr()), rows, cols, QueryFold.none())
+    ctx.synchronize()
+    _require(Int(q2.bufs.x.unsafe_ptr()) == addr, "the next call reuses the lease's buffers")
+    _require(fitted_resident_stats(store)[5] == 0, "taken while the call runs")
+    _same_words(_download(ctx, q2.x, rows * cols), x, rows * cols, "the reused buffers hold this call's words")
+    resident_query_x_done(store, lease, q2^)
+    _require(fitted_resident_stats(store)[5] == 1, "given back again")
+    fitted_lease_close(store, lease)
+    _require(fitted_resident_stats(store)[5] == 0, "the lease's close frees its query")
+    # A give-back after the close is dropped.
+    var q3 = DeviceQueryX.held(ctx, Int(x.unsafe_ptr()), rows, cols, Optional[QueryXBuffers]())
+    ctx.synchronize()
+    fitted_query_put(store, lease, q3^.release())
+    _require(fitted_resident_stats(store)[5] == 0, "a closed lease keeps nothing")
 
 def _run_gpu(mut report: Report) raises:
     comptime assert TARGET_COLUMN != COLUMN_CPU
