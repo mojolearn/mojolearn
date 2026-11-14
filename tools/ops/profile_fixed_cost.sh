@@ -18,7 +18,12 @@ import json,sys; b=json.load(open(sys.argv[1]))["races"]; print(next(iter(b.valu
 PYEOF
 )
 say() { echo "[$(date +%H:%M:%S) profile-fixed-cost] $*"; }
-say "python $PY rounds=$ROUNDS rate=$RATE races=${PF_RACES:?PF_RACES}"
+# the race drivers import the INSTALLED wheel only with the board's child environment (tools/bench_board.py child_env);
+# without it `import mojolearn` resolves the source tree and refuses ("no identical binary exists under .../python/mojolearn")
+export MOJOLEARN_BENCH_INSTALLED=1 PYTHONUNBUFFERED=1 MOJOLEARN_BOARD_VENDOR=${PF_VENDOR:-nvidia} MOJOLEARN_NUMERIC_MODE=identical
+export GBM_BENCH_DATA=${PF_DATA_ROOT:-/root/datasets/gbm-bench} MOJOLEARN_REPO_COMMIT=${PF_SOURCE_COMMIT:-unknown}
+[ -x /usr/local/cuda/bin/ptxas ] && export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}
+say "python $PY rounds=$ROUNDS rate=$RATE data=$GBM_BENCH_DATA races=${PF_RACES:?PF_RACES}"
 "$PY" -m pip install -q py-spy 2>&1 | tail -n 1; PYSPY=$(dirname "$PY")/py-spy; [ -x "$PYSPY" ] || PYSPY=$(command -v py-spy || true)
 say "py-spy: ${PYSPY:-none}"
 IFS=',' read -r -a IDS <<< "$PF_RACES"
