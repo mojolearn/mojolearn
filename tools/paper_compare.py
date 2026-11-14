@@ -564,7 +564,7 @@ def compare_one(rec, races, not_run_why, hw_diff):
     new_t = timed(new_status, cell.get("median_ms"))
     row.update(new_ms=cell.get("median_ms") if new_t else None, new_status=new_status,
                new_quality=shown_quality(cell.get("quality")))
-    missing = quality_missing(old["quality"], cell.get("quality"))
+    missing = quality_missing(old["quality"], cell.get("quality")) if new_t else []   # untimed: BROKEN says it
     if missing:
         # QUALITY-MISSING (2026-11-13): the 0.8.55 record holds a judged metric the new cell lacks; the row cannot be
         # judged on it. Shown with the cell's own reason when it gave one; never a gate.

@@ -196,6 +196,41 @@ class Compare(unittest.TestCase):
         self.assertFalse(res["hw_diff"])
         self.assertEqual(res["new_versions"], ["0.8.66"])
 
+    def test_quality_missing_is_flagged_with_the_cells_reason_and_shown(self):
+        # QUALITY-MISSING (2026-11-13, candidate ba08dac006 L40S): mamba*-forward lost rel_fro_vs_torch_eager_fp32
+        # (the torch reference did not run in the ours-only venv) and the compare showed new_quality={}
+        board = new_board()
+        board["races"]["neural/gemm/gaussian/shape=full"] = {
+            "cells": [new_cell("ours", 45.0, {"max_abs_diff_vs_host": 0.0, "host_reference_passed": True,
+                                              "quality_unavailable": "torch eager fp32 reference did not run: "
+                                                                     "No module named 'torch'"}, lane="gemm")]}
+        res, rows = self.rows(board)
+        gm = rows["neural/gemm/gaussian/shape=full fit ours"]
+        self.assertIn("QUALITY-MISSING", gm["flags"])
+        self.assertIn("SAME", gm["flags"])                     # shown beside the time, never a gate
+        self.assertEqual(gm["quality_missing"], ["max_rel_err_vs_fp64"])
+        self.assertIn("No module named 'torch'", gm["quality_unavailable"])
+        # every recorded number is shown, not only the judged ones (was {} for the host-reference lanes)
+        self.assertEqual(gm["new_quality"]["max_abs_diff_vs_host"], 0.0)
+        self.assertNotIn("host_reference_passed", gm["new_quality"])
+        self.assertIn("quality_unavailable", gm["new_quality"])
+        self.assertIn("QUALITY-MISSING (1)", PC.render_summary(res))
+        md = PC.render_md(res)
+        self.assertIn("quality missing: max_rel_err_vs_fp64", md)
+        # a row with the same judged keys is not flagged; an untimed row is BROKEN, not QUALITY-MISSING
+        self.assertNotIn("QUALITY-MISSING", rows["trees/gbdt-depthwise/taxi/rows=full fit ours"]["flags"])
+        board["races"]["neural/gemm/gaussian/shape=full"]["cells"][0].update(median_ms=None, status="FAILED(rc=1)")
+        res, rows = self.rows(board)
+        self.assertNotIn("QUALITY-MISSING", rows["neural/gemm/gaussian/shape=full fit ours"]["flags"])
+
+    def test_quality_missing_without_a_reason_says_so(self):
+        board = new_board()
+        board["races"]["neural/gemm/gaussian/shape=full"] = {"cells": [new_cell("ours", 45.0, {}, lane="gemm")]}
+        _, rows = self.rows(board)
+        gm = rows["neural/gemm/gaussian/shape=full fit ours"]
+        self.assertEqual(gm["quality_missing"], ["max_rel_err_vs_fp64"])
+        self.assertIn("recorded no reason", gm["quality_unavailable"])
+
     def test_broken_now_wins_and_hw_diff(self):
         board = new_board(gpu="NVIDIA GeForce RTX 4090")
         board["races"]["neural/gemm/gaussian/shape=full"] = {
