@@ -3,6 +3,9 @@
 
 These are test controllers, not product runtime. Multi-device qualification
 requires MOJOLEARN_DISTRIBUTED_PROGRAM_DEVICES to name distinct physical GPUs.
+The single-device column-partition SGD and residency, pipeline forward and
+dense gradient, shared-parameter alias and Adam-moment migration checks run
+natively in checks/native_tests/core_partitioned_program_*.mojo.
 """
 import os
 import numpy as np
@@ -48,59 +51,6 @@ def _same(a, b):
     for key in ("parameters", "first_moments", "second_moments"):
         for left, right in zip(a[key], b[key], strict=True):
             np.testing.assert_array_equal(left.view(np.uint32), right.view(np.uint32))
-
-
-def test_column_partition_independent_sgd_and_residency():
-    # Four output columns: d MSE/dw_j = -4/4 = -1 at w=0, X=1,y=2.
-    x = np.ones((5, 1), np.float32)
-    y = np.full((5, 4), 2, np.float32)
-    devices = _devices()
-    with ops.Session(numeric_mode="identical") as s:
-        p = _linear(s)
-        opt = s.optimizer("sgd", lr=.125)
-        with p.partition(devices, stages=max(2, len(devices)), tensor_shards=2,
-                         microbatches=3, optimizer=opt) as d:
-            loss = audit_native_call(d.fit, x, targets=y, epochs=1, batch_size=5,
-                                     shuffle=False).assert_native()
-            state = audit_native_call(d.state).assert_native()
-            assert len(state["parameters"]) == 2
-            for weight in state["parameters"]:
-                np.testing.assert_allclose(weight, .125, rtol=0, atol=2e-8)
-            np.testing.assert_array_equal(loss, [4])
-            np.testing.assert_allclose(audit_native_call(d.run, x).assert_native(), .125,
-                                       rtol=0, atol=2e-8)
-            r = d.residency()
-            assert r["partitioned_products"] == 1
-            assert sum(r["parameter_elements_per_rank"]) == 4
-            assert len(r["parameter_owner_devices"]) == 2
-            if len(devices) > 1:
-                assert len(set(r["parameter_owner_devices"])) == 2
-                assert max(r["parameter_elements_per_rank"]) < 4
-
-
-def test_pipeline_forward_independent_numpy_and_dense_parameter_gradient():
-    x = np.array([[.5, -.25], [.125, .75], [-.5, 1]], np.float32)
-    w = np.arange(8, dtype=np.float32).reshape(2, 4) / 32
-    b = np.full((1, 4), .125, np.float32)
-    v = np.arange(8, dtype=np.float32).reshape(4, 2) / 64
-    y = np.full((3, 2), .25, np.float32)
-    h = np.tanh(x @ w + b)
-    pred = h @ v
-    grad_out = np.float32(2 / pred.size) * (pred - y)
-    gv = h.T @ grad_out
-    gh = (grad_out @ v.T) * (1 - h*h)
-    gw = x.T @ gh
-    gb = gh.sum(axis=0, keepdims=True)
-    with ops.Session(numeric_mode="identical") as s:
-        p = _network(s)
-        opt = s.optimizer("sgd", lr=.0625)
-        with p.partition(_devices(), stages=max(2, len(_devices())), tensor_shards=1,
-                         microbatches=1, optimizer=opt) as d:
-            np.testing.assert_allclose(d.run(x), pred, rtol=2e-6, atol=2e-7)
-            d.fit(x, targets=y, epochs=1, batch_size=3, shuffle=False)
-            expected = [w-.0625*gw, b-.0625*gb, v-.0625*gv]
-            for actual, want in zip(d.state()["parameters"], expected, strict=True):
-                np.testing.assert_allclose(actual, want, rtol=2e-6, atol=2e-7)
 
 
 def test_complete_partition_checkpoint_and_single_device_resume(tmp_path):
@@ -152,41 +102,6 @@ def test_physical_pipeline_events_and_unique_weight_owners():
                         if a["device"] != b["device"] and a["microbatch"] != b["microbatch"]
                         and max(a["start_ns"], b["start_ns"]) < min(a["end_ns"], b["end_ns"])]
             assert overlaps, "no observed overlap of native operations on distinct physical devices"
-
-
-def test_shared_parameter_alias_gradient_is_not_lost():
-    # Shared weights stay one whole owner. y=2*x*w, MSE to2 at w=0:
-    # gradient=-8; SGD(lr=1/16) updates w to .5.
-    x = np.ones((4, 1), np.float32)
-    y = np.full((4, 1), 2, np.float32)
-    with ops.Session(numeric_mode="identical") as s:
-        a = s.tensor(np.zeros((3, 1), np.float32))
-        w = s.tensor(np.zeros((1, 1), np.float32))
-        h = s.matmul(a, w)
-        p = s.capture([a], [s.add(h, h)])
-        opt = s.optimizer("sgd", lr=.0625)
-        with p.partition(_devices(), stages=max(2, len(_devices())), tensor_shards=2,
-                         microbatches=2, optimizer=opt) as d:
-            d.fit(x, targets=y, epochs=1, batch_size=4, shuffle=False)
-            np.testing.assert_array_equal(d.state()["parameters"][0], [[.5]])
-            np.testing.assert_array_equal(d.run(x), np.ones((4, 1), np.float32))
-
-
-def test_source_adam_moments_are_column_partitioned_before_resume():
-    x = np.ones((8, 1), np.float32)
-    y = np.full((8, 4), 2, np.float32)
-    with ops.Session(numeric_mode="identical") as s:
-        p = _linear(s)
-        opt = s.optimizer("adam", lr=.01)
-        p.fit(x, targets=y, optimizer=opt, epochs=3, batch_size=4, shuffle=False)
-        with p.partition((0,), stages=2, tensor_shards=2, microbatches=1, optimizer=opt) as d:
-            st = d.state()
-            assert (st["epoch"], st["step"]) == (3, 6)
-            assert any(np.any(a != 0) for a in st["first_moments"])
-            d.fit(x, targets=y, epochs=1, batch_size=4, shuffle=False)
-            actual = np.concatenate(d.state()["parameters"], axis=1)
-        p.fit(x, targets=y, optimizer=opt, epochs=1, batch_size=4, shuffle=False)
-        np.testing.assert_array_equal(actual.view(np.uint32), s.numpy(p.params[0]).view(np.uint32))
 
 
 def test_partition_constructor_admission_and_checkpoint_integrity(tmp_path):
