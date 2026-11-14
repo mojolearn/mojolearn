@@ -19,6 +19,7 @@ writing the same card.
 One fixture on the one physical device; the build and search keep their own
 kernel parallelism.
 """
+from std.memory import bitcast
 from std.math import cos, log, sqrt
 from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
@@ -64,7 +65,7 @@ def short_filled(distances: List[Float32], indices: List[UInt32], n_candidates: 
         if seen != 7:
             wrong += 1
         for s in range(3, k):
-            if indices[qi * k + s] != UInt32(0xFFFFFFFF) or distances[qi * k + s].to_bits() != inf_bits:
+            if indices[qi * k + s] != UInt32(0xFFFFFFFF) or bitcast[DType.uint32](distances[qi * k + s]) != inf_bits:
                 wrong += 1
     require(wrong == 0, column + ": " + String(wrong)
         + " filter short-fill claims fail (3 candidates, the kept rows first, then (+inf, -1))")
