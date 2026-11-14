@@ -394,12 +394,17 @@ def pca_transform_host(
     # stream orders the copies before the kernels (no sync in between).
     enqueue_finite_status(ctx, x.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n_rows * n_features, status.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
     pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
-    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    # fix-classical-infer-xq: the status word lands in plain host memory, as
+    # the projection does just below (no pinned host buffer allocated and
+    # freed per call; 0.8.66 had none). Both copies sit right before the one
+    # synchronisation, so the pageable copy waits for nothing extra.
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(word.unsafe_ptr()))
+    ctx.enqueue_copy(dst_ptr=word_ptr, src_buf=status)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()
-    var result = word.unsafe_ptr()[0]
-    _ = word^
+    var result = word[0]
+    _ = word^  # alive past the synchronisation the copy above writes it by
     _ = status^
     return result
 
