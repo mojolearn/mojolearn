@@ -285,6 +285,9 @@ def _transpose[C: ConvertCalls](index: Int) raises:
     for i in range(n):
         require(bitcast[DType.uint32](back[i]) == bitcast[DType.uint32](x[i]),
                 "transpose back " + String(rows) + "x" + String(cols) + " at " + String(i))
+    # dst is read through its address by the back transpose; Mojo frees a local at its last named
+    # use (the `_addr32(dst)` argument), so without this the call read freed heap (word 0 wrong).
+    _ = dst^
 
 
 def _edges_alone[C: ConvertCalls]() raises:
@@ -297,6 +300,9 @@ def _edges_alone[C: ConvertCalls]() raises:
         var d2: List[Float32] = [0.0]
         C.cast(_addr64(src), _addr32(d1), 1)
         C.cast_colmajor(_addr64(src), _addr32(d2), 1, 1)
+        # src is read through its address by both calls: keep it alive past the second one
+        # (freed at its last named use, the colmajor call read freed heap).
+        _ = src^
         require_word(d1[0], v, "edge value alone, flat")
         require_word(d2[0], v, "edge value alone, colmajor")
 
@@ -311,6 +317,7 @@ def _ties[C: ConvertCalls]() raises:
         var src: List[Float64] = [v]
         var dst: List[Float32] = [0.0]
         C.cast(_addr64(src), _addr32(dst), 1)
+        _ = src^  # read through its address by the call above
         var got = bitcast[DType.uint32](dst[0])
         var even = rne_word(v, True)
         var away = rne_word(v, False)
