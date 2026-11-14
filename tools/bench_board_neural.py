@@ -3400,6 +3400,15 @@ def _torch_device():
                        "(never a CPU fallback)")
 
 
+def _reference_on_cpu():
+    """True only in the untimed quality-reference worker (QUALITY_REFERENCE_ENV) whose torch sees no GPU."""
+    if os.environ.get(QUALITY_REFERENCE_ENV) != "1":
+        return False
+    import torch
+    mps = getattr(torch.backends, "mps", None)
+    return not (torch.cuda.is_available() or (mps is not None and mps.is_available()))
+
+
 def _cpu_name():
     try:
         if sys.platform == "darwin":
@@ -3436,8 +3445,14 @@ class TorchArm:
         twin = _load("torch_lm_step_opponent")
         self.twin = twin
         col = INT8_COLUMNS.get(setting.replace("-", "_")) or twin.COLUMNS[setting.replace("-", "_")]
-        if where == "cpu":
+        if where == "cpu" or _reference_on_cpu():
+            # QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): the untimed eager FP32 quality
+            # reference (torch_reference_outputs, QUALITY_REFERENCE_ENV) runs in the board's CPU-torch
+            # reference venv (bench_board --fixtures-venv) when the ours-only measurement venv has no torch;
+            # there it runs on the CPU. It is never timed and never an arm or an opponent; a timed GPU arm
+            # still refuses a box without a GPU (_torch_device).
             import torch
+            where = "cpu"
             dev, kind, name, sync = torch.device("cpu"), "cpu", _cpu_name(), (lambda: None)
         else:
             torch, dev, kind, name, sync = _torch_device()
@@ -5636,8 +5651,12 @@ def torch_reference_outputs(args, lane, shape, data_path, tag):
     w = None
     try:
         ctd = _load("classical_two_datasets")
-        cmd = shlex.split(args.theirs_python) + [os.path.abspath(__file__), "worker", "--arm", arm,
-                                                 "--lane", lane, "--shape", shape, "--data", data_path]
+        # QUALITY-MISSING FIX (2026-11-13): the reference's own interpreter (--reference-python: the board's
+        # CPU-torch reference venv), else the opponents' one; an ours-only venv has no torch
+        python = getattr(args, "reference_python", None) or args.theirs_python
+        receipt["python"] = python
+        cmd = shlex.split(python) + [os.path.abspath(__file__), "worker", "--arm", arm,
+                                     "--lane", lane, "--shape", shape, "--data", data_path]
         env = _worker_env(arm)
         env[QUALITY_REFERENCE_ENV] = "1"
         w = ctd.start_worker(arm, cmd, env,
@@ -5667,6 +5686,25 @@ def torch_reference_outputs(args, lane, shape, data_path, tag):
                 w.close()
             except Exception:  # noqa: BLE001
                 pass
+
+
+def mark_reference_unavailable(result, outs):
+    """QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): when the untimed torch reference did not run
+    (no torch in the reference interpreter, a refused twin), every arm it should have scored says so in its own
+    quality cell (`quality_unavailable`), never a silent absence of rel_fro_vs_torch_eager_fp32. The other
+    metrics (the own-host reference) stay as scored; this is shown, never a gate or an arm failure."""
+    receipt = result.get("torch_quality_reference") or {}
+    if receipt.get("status") == "ok" or not receipt:
+        return result
+    why = "torch eager fp32 reference (rel_fro_vs_torch_eager_fp32) did not run: %s" % (
+        receipt.get("error") or receipt.get("status") or "unknown")
+    q = result.setdefault("quality", {})
+    for arm in outs:
+        if arm in OUR_ARMS:
+            cell = q.setdefault(arm, {})
+            if isinstance(cell, dict):
+                cell["quality_unavailable"] = why[:600]
+    return result
 
 
 SCORER_REFUSED = "quality scorer unavailable: "
@@ -6382,6 +6420,7 @@ def race(args):
             result["quality"] = quality(lane, data, scored, shape=args.shape)
             if scored is not outs:
                 result["quality"].pop(TORCH_REFERENCE_ARM, None)    # the reference is not a raced arm
+            mark_reference_unavailable(result, outs)
         if operation == "mamba_forward_vjp":
             result["experimental_quality"] = {
                 "forward": "ordinary host forward comparator only",
@@ -6472,6 +6511,9 @@ def build_parser():
     r.add_argument("--work", required=True)
     r.add_argument("--ours-python", default=sys.executable)
     r.add_argument("--theirs-python", default=sys.executable)
+    r.add_argument("--reference-python", default=None,
+                   help="the interpreter of the untimed torch quality reference (TORCH_REFERENCE_LANES); "
+                        "default --theirs-python. It may be a CPU-torch venv: the reference then runs on the CPU")
     r.add_argument("--ready-seconds", type=int, default=1800)
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
