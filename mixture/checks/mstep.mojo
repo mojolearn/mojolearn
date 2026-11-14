@@ -1782,22 +1782,50 @@ def gmm_mstep_gemm_workspace_floats(n: Int, d: Int, ncomp: Int) -> Int:
 # m3-linalg-and-housekeeping when the chain moved onto the Cholesky ops (no workspace); code recoverable at 0ce88411d3.
 
 
+def gmm_chol_ws_offset(d: Int) -> Int:
+    """Where the factor's own workspace starts in `dwork`: past the three
+    fixed regions, rounded up to 64 floats (256 bytes)."""
+    var base = 2 * d * d + d + 1
+    return ((base + 63) // 64) * 64
+
+
+def gmm_chol_ws_floats(d: Int) -> Int:
+    """Floats of the factor's own workspace region in `dwork`: by default
+    `potrf_lower`'s workspace at the pinned width
+    (`chol_workspace_floats(d, CHOL_NB_PINNED)`); under
+    -D MOJOLEARN_IDN_CHOL_OPS_FIT the logdet op's scratch plus its one
+    output float."""
+    comptime if CHOL_OPS_FIT:
+        return max(chol_op_logdet_scratch_floats(d), 1) + 1
+    else:
+        return max(chol_workspace_floats(d, CHOL_NB_PINNED), 1)
+
+
 def gmm_chol_dwork_floats(d: Int) -> Int:
-    """Floats `gmm_precision_cholesky` needs for its own three scratch
-    regions, laid out in `dwork`:
+    """Floats `gmm_precision_cholesky` needs for its scratch, laid out in
+    `dwork`:
 
         [0, d*d)                   the identity, then `L^{-1}` over it
         [d*d, d*d + d + 1)         `chol_logdet`'s diagonal plus its scalar
         [d*d + d + 1, 2*d*d + d + 1)
                                    the working copy the factorization
                                    overwrites in place
+        [gmm_chol_ws_offset(d), + gmm_chol_ws_floats(d))
+                                   the factor's own workspace
 
     The working copy exists because `potrf_lower` factors IN PLACE and
     `covariances_` is an OUTPUT of the fit that a caller reads. Factoring the
     covariance itself would leave the estimator returning a triangular factor
     where scikit-learn returns a covariance.
+
+    The workspace region is the WORKSPACE LEASE (lane
+    fix-gmm-chol-leftovers, 2026-11-13): the fit sizes `dwork` once
+    (`GmmCholScratch.chain_dwork`, the estimator's sabotage `dwork`) and
+    every EM iteration's chain reuses it. Before, the chain allocated and
+    freed `potrf_lower`'s workspace (an n^2-scale buffer at d > 256) on
+    every call, i.e. once per EM iteration. Same kernels, same fold order.
     """
-    return 2 * d * d + d + 1
+    return gmm_chol_ws_offset(d) + gmm_chol_ws_floats(d)
 
 
 # ===========================================================================
@@ -1925,15 +1953,20 @@ def gmm_precision_cholesky(
     # potrf_lower's arithmetic at the pinned width (the same words); the
     # A/B checks it.
     var quiet = IdentityTrace.disabled()
-    var cws = ctx.enqueue_create_buffer[DType.float32](
-        1 if CHOL_OPS_FIT else max(chol_workspace_floats(d, CHOL_NB_PINNED), 1)
-    )
+    # The factor's workspace is a region of the caller's `dwork`, sized once
+    # per fit (gmm_chol_dwork_floats; lane fix-gmm-chol-leftovers): no
+    # per-call allocation of potrf_lower's workspace. Under
+    # -D MOJOLEARN_IDN_CHOL_OPS_FIT the same region holds the logdet op's
+    # scratch and its output float.
+    var ws_off = gmm_chol_ws_offset(d)
+    var ws_len = gmm_chol_ws_floats(d)
+    var cws = dwork.create_sub_buffer[DType.float32](ws_off, ws_len)
+    # (dscr and dld are read only on the ops route, where ws_len >= 2 and
+    # they are disjoint; on the default route they are unused views)
+    var dscr = dwork.create_sub_buffer[DType.float32](ws_off, max(ws_len - 1, 1))
+    var dld = dwork.create_sub_buffer[DType.float32](ws_off + ws_len - 1, 1)
     var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
     var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var dscr = ctx.enqueue_create_buffer[DType.float32](
-        chol_op_logdet_scratch_floats(d) if CHOL_OPS_FIT else 1
-    )
-    var dld = ctx.enqueue_create_buffer[DType.float32](1)
     var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
 
     var grid_dd = (dd + elem_tpb - 1) // elem_tpb

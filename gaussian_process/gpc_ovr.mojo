@@ -339,6 +339,25 @@ def gpc_fit_all_device(
     # (n^2 floats), so a group holds as many classes as GPC_OVR_BATCH_BYTES
     # of factors allows (a memory bound, the same rule at every n and k).
     var group = max(1, GPC_OVR_BATCH_BYTES // max(1, n * n * 4))
+    # Lane fix-gmm-chol-leftovers (2026-11-13): the group's buffers (targets,
+    # B factors, pi, W_sr, the one-class words) are allocated ONCE per fit,
+    # sized for the largest group, and every group reuses them; each group
+    # allocated and freed its own (an n^2 factor per class per group). Each
+    # group ends on a synchronize after its copy-out, and every buffer is
+    # written before it is read within a group, so reuse changes no word.
+    var gmax = min(group, n_fits)
+    var pool_y = List[DeviceBuffer[DType.float32]](capacity=gmax)
+    var pool_b = List[DeviceBuffer[DType.float32]](capacity=gmax)
+    var pool_pi = List[DeviceBuffer[DType.float32]](capacity=gmax)
+    var pool_wsr = List[DeviceBuffer[DType.float32]](capacity=gmax)
+    for _c in range(gmax):  # driver-loop: over the largest group's classes (model structure)
+        pool_y.append(ctx.enqueue_create_buffer[DType.float32](n))
+        pool_b.append(ctx.enqueue_create_buffer[DType.float32](n * n))
+        pool_pi.append(ctx.enqueue_create_buffer[DType.float32](n))
+        pool_wsr.append(ctx.enqueue_create_buffer[DType.float32](n))
+    var dseen = ctx.enqueue_create_buffer[DType.int32](2 * max(gmax, 1))
+    var dbad = ctx.enqueue_create_buffer[DType.int32](1)
+    var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
     var j0 = 0
     while j0 < n_fits:  # driver-loop: over groups of one-vs-rest classes, sized by device memory
         var g = min(group, n_fits - j0)
@@ -346,21 +365,18 @@ def gpc_fit_all_device(
         var dbs = List[DeviceBuffer[DType.float32]](capacity=g)
         var dpis = List[DeviceBuffer[DType.float32]](capacity=g)
         var dwsrs = List[DeviceBuffer[DType.float32]](capacity=g)
-        var dseen = ctx.enqueue_create_buffer[DType.int32](2 * g)
-        var dbad = ctx.enqueue_create_buffer[DType.int32](1)
-        var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
         enqueue_fill(ctx, dseen, Int32(n))
         for c in range(g):  # driver-loop: over the group's classes (model structure)
-            var dy = ctx.enqueue_create_buffer[DType.float32](n)
+            var dy = pool_y[c].copy()  # a handle copy: the fit's buffer
             ctx.enqueue_function[gpc_targets_kernel](
                 _ip(dcodes), _fp(dy), _ip(dseen) + 2 * c, Int32(class_ks[j0 + c]), Int32(n),
                 grid_dim=_blocks(n), block_dim=GPC_STEP_TPB,
             )
             ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=y_addrs[j0 + c]), src_buf=dy)
             dys.append(dy^)
-            dbs.append(ctx.enqueue_create_buffer[DType.float32](n * n))
-            dpis.append(ctx.enqueue_create_buffer[DType.float32](n))
-            dwsrs.append(ctx.enqueue_create_buffer[DType.float32](n))
+            dbs.append(pool_b[c].copy())
+            dpis.append(pool_pi[c].copy())
+            dwsrs.append(pool_wsr[c].copy())
         ctx.enqueue_function[gpc_one_class_kernel](  # small-launch(g: the group's classes): one thread finds the first one-class column
             _ip(dseen), Int32(g), Int32(n), _ip(dbad), grid_dim=1, block_dim=1,
         )
@@ -391,11 +407,15 @@ def gpc_fit_all_device(
         _ = dbs^
         _ = dpis^
         _ = dwsrs^
-        _ = dseen^
-        _ = dbad^
-        _ = hbad^
         j0 += g
     ctx.synchronize()
+    _ = pool_y^
+    _ = pool_b^
+    _ = pool_pi^
+    _ = pool_wsr^
+    _ = dseen^
+    _ = dbad^
+    _ = hbad^
     _ = dk^
     _ = dcodes^
     _ = dgw^
