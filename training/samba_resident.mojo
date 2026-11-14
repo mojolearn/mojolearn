@@ -70,7 +70,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
-from core.weight_epoch import WeightKey
+from core.weight_epoch import RegistryKey
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.contract import OP_NT
@@ -434,14 +434,16 @@ struct SambaResidentSession(Movable, Writable):
     var busy: Bool
     # ---- lane fix-samba-weight-upload (2026-11-13): the stateless forward
     #: uploads the registry only when `param` does not hold the bytes at the
-    #: caller's address: keyed by that address and the process weight epoch
-    #: (core/weight_epoch.mojo, as SambaStackProgram.refresh_weights). Every
-    #: operation that writes the registry bumps the epoch
+    #: caller's address: keyed by that address and THAT registry's epoch
+    #: (core/weight_epoch.mojo `RegistryKey`, lane
+    #: fix-samba-weight-epoch-per-model: another model's write leaves it
+    #: current; as SambaStackProgram.refresh_weights). Every operation that
+    #: writes the registry stamps it
     #: (bindings/samba_public_native_pack.mojo, training/samba_public_run.mojo
     #: `_samba_writes_registry`) and the public views are read-only, so an
     #: unchanged key means unchanged bytes: no pass over the weights. Empty
     #: (never current) at open and while a step rewrites `param`.
-    var wkey: WeightKey
+    var wkey: RegistryKey
     #: registry uploads (host -> `param`) this session has made, open included;
     #: returned by the forward (descriptor op 16) as the session's report
     var param_uploads: Int
@@ -506,7 +508,7 @@ struct SambaResidentSession(Movable, Writable):
         self.param_uploads = 1
         # Empty key: open scans only the attention views (their constructor),
         # so the first forward still uploads and admits the whole registry.
-        self.wkey = WeightKey()
+        self.wkey = RegistryKey()
         # ---- placeholders for the shape-keyed workspaces (rebuilt on first use)
         self.b = 0
         self.l = 0
@@ -1035,13 +1037,13 @@ def samba_resident_forward(
     # upload (a bump in between only costs one more upload); the key is set
     # only after the admission passed, so a refused registry is uploaded and
     # refused again at the next call.
-    var addrs: List[Int] = [Int(param_ptr)]
-    var fresh = s.wkey.current(addrs)
+    var addr = Int(param_ptr)
+    var fresh = s.wkey.current(addr)
     if fresh:
         _upload_tokens(s, ids_ptr)
     else:
-        var key = WeightKey.take(addrs)
-        s.wkey = WeightKey()
+        var key = RegistryKey.take(addr)
+        s.wkey = RegistryKey()
         s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
         s.param_uploads += 1
         _upload_tokens(s, ids_ptr)
@@ -1139,7 +1141,7 @@ def samba_resident_train_step(
     # ---- transport in: the registry, the ids, the targets. The step
     # rewrites `param`; the forward's key is current again only after its
     # own upload (the dispatcher bumps the epoch around every step).
-    s.wkey = WeightKey()
+    s.wkey = RegistryKey()
     s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
     s.param_uploads += 1
     _upload_tokens(s, ids_ptr)
@@ -1267,7 +1269,7 @@ def samba_resident_accumulated_step(
     var v = s.vocab
     # The step rewrites `param`: the forward's weight key is cleared first
     # (lane fix-samba-weight-upload; see samba_resident_train_step).
-    s.wkey = WeightKey()
+    s.wkey = RegistryKey()
     s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
     s.param_uploads += 1
     _admit_registry(s)

@@ -148,6 +148,10 @@
   "lm-forward-zero-fill": {
    "define": "MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL",
    "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_ZERO_FILL, _pooled_logits): B = a fresh resident logits store made as array.array('f', bytes(count * 4)) (zero-filled bytes, then a copy into the array; 0.8.66 / candidate shape); A = an unfilled bytearray store (native_scratch_bytes, _wrap_pooled_unfilled), every byte written by the one logits download. Same bits"
+  },
+  "samba-weight-epoch-global": {
+   "define": "MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL",
+   "status": "define in code (core/weight_epoch.mojo SAMBA_WEIGHT_EPOCH_GLOBAL, read by registry_epoch / registry_epoch_bump): B = the Samba resident registry copies (samba_resident_forward, SambaStackProgram.refresh_weights) keyed by the process weight epoch, so any model's weight write re-uploads every stack's registry; A = keyed per registry (RegistryKey: the written registry's own stamp)"
   }
  },
  "rows": [
@@ -1009,6 +1013,18 @@
     "lm-forward-zero-fill"
    ],
    "decides": "keep the unfilled pooled logits store (A) unless the zero-filled array.array store (B) is at least as fast on the NVIDIA and AMD average; same kernels, digests must not move in either arm"
+  },
+  {
+   "b_arms": [
+    "samba-weight-epoch-global"
+   ],
+   "dataset": "*",
+   "decides": "keep the per-registry key (A) unless the process-wide key (B) is at least as fast on the NVIDIA and AMD average; same kernels and the same bytes uploaded when an upload happens, so digests must not move in either arm; A differs from B only where another model (or another family's weight door) writes weights between two forwards of a stack (the harness's warmup model, train one / predict another): read the stack's _samba_resident_uploads to prove the upload count",
+   "id": "fix-samba-weight-epoch-per-model",
+   "kind": "ab",
+   "lane": "samba-forward",
+   "rows": "full",
+   "source": "fix-samba-weight-epoch-per-model (2026-11-13; fix-samba-weight-upload 6baf0f6292 doubt: the weight epoch was process-wide, so one model's write re-uploaded every other stack's ~22 MB registry once per interleaved call)"
   }
  ]
 }

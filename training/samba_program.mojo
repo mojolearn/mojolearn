@@ -50,9 +50,10 @@ decode session stay here.
 
 Weights: the caller's flat registry is the truth (`SambaStack.parameters()`
 are read-only views of it since lane x56d: callers cannot edit it in place,
-the native operations that write it move the weight epoch). The program keeps a `WeightKey` (lane x45c,
-core/weight_epoch.mojo): the registry address and the weight epoch at its
-load. The per-call doors call `refresh_weights`, which reloads only when the
+the native operations that write it move the weight epoch). The program keeps a `RegistryKey` (lane x45c, per registry since lane
+fix-samba-weight-epoch-per-model; core/weight_epoch.mojo): the registry
+address and that registry's epoch at its load (another model's write leaves
+it current). The per-call doors call `refresh_weights`, which reloads only when the
 key is not current (integ-w4: formerly `load_weights` on every call, the
 whole registry up per call and per step token). A reload is one
 host-to-device copy of the registry, ONE device scan of it (the resident
@@ -92,7 +93,7 @@ from training.samba_resident import (
     samba_registry_layout,
 )
 from transformer.impl.llama.modeling_llama import LlamaDims, llama_rms_norm
-from core.weight_epoch import WeightKey
+from core.weight_epoch import RegistryKey
 
 
 #: The program runs block step ops, which are device only: a host build
@@ -148,7 +149,7 @@ struct SambaStackProgram(Movable, Writable):
     var usable: Bool
     #: integ-w4 (lane x45c's recipe): the registry address and the weight
     #: epoch of the loaded copy; `refresh_weights` reloads only when stale.
-    var wkey: WeightKey
+    var wkey: RegistryKey
 
     def __init__(
         out self,
@@ -177,7 +178,7 @@ struct SambaStackProgram(Movable, Writable):
             raise Error("mojolearn samba program: batch_size and max_tokens must be positive")
         # The epoch is read BEFORE the registry upload below (a bump in
         # between only costs one reload).
-        var wkey = WeightKey.take([Int(param_ptr)])
+        var wkey = RegistryKey.take(Int(param_ptr))
         var has_attn = False
         for i in range(len(kinds)):  # small-loop(kinds: one code per layer): layer kinds, not data
             if kinds[i] == SAMBA_LAYER_ATTENTION:
@@ -339,11 +340,11 @@ struct SambaStackProgram(Movable, Writable):
     def refresh_weights(mut self, param_ptr: MutPointer[Float32, MutUntrackedOrigin]) raises:
         """`load_weights` only when the loaded copy is not the registry at
         `param_ptr` at the current weight epoch (no pass over the weights)."""
-        var addrs: List[Int] = [Int(param_ptr)]
-        if self.wkey.current(addrs):
+        var addr = Int(param_ptr)
+        if self.wkey.current(addr):
             return
-        var key = WeightKey.take(addrs)
-        self.wkey = WeightKey()
+        var key = RegistryKey.take(addr)
+        self.wkey = RegistryKey()
         self.load_weights(param_ptr)
         self.wkey = key^
 

@@ -13,6 +13,10 @@ def _samba_writes_registry(operation: String) -> Bool:
     family, decided 2026-11-09): the registry and the public parameter views
     are read-only to callers (bindings/samba_state_native.mojo `samba_view`),
     so no write outside these operations can leave a resident copy stale:
-    the bump-only key no longer has a hole."""
+    the bump-only key no longer has a hole. Lane fix-samba-weight-epoch-per-model
+    (2026-11-13): the door stamps the WRITTEN model registry's own epoch
+    (core/weight_epoch.mojo `registry_epoch_bump`; a Samba resident copy is
+    keyed by it) and moves the process epoch (the block programs keyed by
+    views into the registry)."""
     return (operation == "model_train_step" or operation == "apply" or operation == "publish"
             or operation == "checkpoint_load" or operation == "load_weights")
