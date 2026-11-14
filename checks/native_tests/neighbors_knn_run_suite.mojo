@@ -14,9 +14,11 @@ from neighbors.neighbors_knn_run import (
     knn_refuse_callable_weights, knn_refuse_weights, knn_weights_code, knn_check_y_rank, knn_check_y_rows,
     knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_float_format, knn_labels_finite,
     KNN_I32_LABEL_RANGE_OLD, knn_labels_already_int32, knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
+    KNN_DOOR_FIT_XN_EAGER, knn_fit_xn_eager, KNN_DOOR_TIMERS, knn_door_clock_open, knn_door_clock_mark,
+    knn_door_clock_close,
 )
 
-comptime NEIGHBORS_KNN_RUN_FIXTURES = 22
+comptime NEIGHBORS_KNN_RUN_FIXTURES = 23
 
 
 def require(ok: Bool, message: String) raises:
@@ -231,6 +233,22 @@ def fixture(unit: Int) raises:
             require(String(e) == "mojolearn: X has 3 features, index has 4", "width wording")
     elif unit == 20:
         require(knn_proba_rows(12, 3) == 4 and knn_proba_rows(10, 5) == 2, "proba rows")
+    elif unit == 22:
+        # fix-knn-door-fixed-cost: the default fit leaves the x_neighbors
+        # binding to the multi-output transpose (0.8.55's form); the B arm
+        # resolves it before every fit. The door clock is callable in either
+        # build: empty bodies without -D MOJOLEARN_KNN_PHASE_TIMERS, one
+        # printed line with it.
+        comptime if KNN_DOOR_FIT_XN_EAGER:
+            require(knn_fit_xn_eager(), "B arm resolves x_neighbors before the fit")
+        else:
+            require(not knn_fit_xn_eager(), "default resolves x_neighbors only in the transpose")
+        knn_door_clock_open("neighbors_knn_run_suite")
+        knn_door_clock_mark("fixture")
+        knn_door_clock_close()
+        comptime if KNN_DOOR_TIMERS:
+            knn_door_clock_open("neighbors_knn_run_suite_reopen")
+            knn_door_clock_close()
     else:
         # two outputs (2 and 3 classes) over two queries: the second block
         # starts at word 2 * 2
