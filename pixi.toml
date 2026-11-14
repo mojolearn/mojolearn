@@ -1530,6 +1530,9 @@ check-mamba-decode = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 check-mamba-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_check.mojo"
+# lane fix-mamba3-unfilled-rest: every Mamba-3 output the doors allocate unfilled is written whole (0xFF vs zero-filled outputs, bit for bit)
+check-native-mamba3-output-coverage-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/mamba3_output_coverage_cpu.mojo"
+check-native-mamba3-output-coverage-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/mamba3_output_coverage_gpu.mojo"
 # the tape-assembled Mamba-1/2 backward (autograd/rules_mamba.mojo) against the stored Apple/NVIDIA/AMD digests (mamba/checks/mamba_tape_backward_digests.tsv) and, for Mamba-1, the host oracle word for word
 check-mamba-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_tape_backward_check.mojo"
 # the Samba resident train step on one tape (autograd/rules_samba.mojo, each Mamba-3 layer as its stage rules, autograd/rules_mamba3.mojo) against the stored digests (training/checks/samba_tape_step_digests.tsv), every gradient and updated parameter word

@@ -135,7 +135,7 @@
   },
   "mamba3-forward-zero-fill": {
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
-   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = the forward's y and four reports zero-filled per call (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
+   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = every Mamba-3 output a native call writes whole zero-filled per call (the forward's y and four reports; since fix-mamba3-unfilled-rest also _m3_state_call's y and reports in bindings/samba_inference_native_door.mojo, the kind-3 session step/decode outputs via _session_output in bindings/mamba_public_native_door.mojo, and the tape prefill y) (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
   },
   "knn-i32-label-range-old": {
    "define": "MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD",

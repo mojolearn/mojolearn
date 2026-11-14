@@ -189,6 +189,12 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
     return result
 
 
+comptime _UNFILLED_ALIGNMENT = 16
+"""The alignment `generation_array_unfilled` guarantees for its storage: the
+same as the zero-filled `array.array` store it replaces (CPython's
+allocators align every block to 16 bytes on 64-bit builds)."""
+
+
 def generation_array_unfilled(dims: List[Int], code: String = "f") raises -> PythonObject:
     """`generation_array` over UNINITIALIZED storage, for an output that one
     native call overwrites element by element before anything reads it (lane
@@ -218,6 +224,19 @@ def generation_array_unfilled(dims: List[Int], code: String = "f") raises -> Pyt
     var itemsize = 1 if code == "b" else 4
     var store = native_scratch_bytes(n * itemsize)
     var address = native_scratch_address(store)
+    # Alignment (lane fix-mamba3-unfilled-rest): the writers of these
+    # outputs (device-to-host enqueue_copy, `unsafe_memcpy`, `copy_f32` and
+    # the host Float32 loads/stores of later readers) need the element's
+    # natural alignment (4 bytes); the zero-filled `array.array` store this
+    # replaces is 16-byte aligned, and so is this one: a fresh bytearray's
+    # data is one CPython allocation (pymalloc or the system malloc, both
+    # 16-byte aligned on every 64-bit target we build) at offset 0. Checked
+    # here once per array, one integer test per allocation, never on a
+    # kernel's path; a failure refuses loudly rather than handing a kernel
+    # a misaligned buffer.
+    if address % _UNFILLED_ALIGNMENT != 0:
+        raise Error("RuntimeError: generation: unfilled output storage is not "
+                    + String(_UNFILLED_ALIGNMENT) + "-byte aligned (address " + String(address) + ")")
     var view = py_call(py_call(g[].bi.memoryview, store).cast, PythonObject(code))
     var result = py_call(g[].bi.object.__new__, g[].array_cls)
     var stride_words = List[Int](length=len(dims), fill=0)

@@ -88,12 +88,27 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
 #: ms. `-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL` keeps the zero-filled arrays
 #: (B arm of the owed A/B, bench/results/paper_compare/owed-pre0867.json row
 #: restore-mamba3-forward-unfilled, b arm mamba3-forward-zero-fill).
+#: lane fix-mamba3-unfilled-rest (2026-11-13): the same switch decides every
+#: other Mamba-3 output a native call writes whole, one decision: the
+#: carried-state forward and decode step (y + four reports,
+#: bindings/samba_inference_native_door.mojo `_m3_state_call`: the GPU
+#: `mamba_block_call` enqueues y at n = B*L*d_model and the reports at
+#: `m3_report_floats`, the host shells `_write` a[20..24] at full,
+#: length-checked counts), the Mamba-3 resident session's step and decode
+#: (y + four reports, bindings/mamba_public_native_door.mojo; decode puts
+#: every token slab t in [0, N) and downloads B*N*d_model, N >= 1) and the
+#: tape prefill's y (below; `_m3_prefill_run` downloads n_x). Inputs whose
+#: tails must read zero (the ragged padded copy and its prefix-copied
+#: result) and fresh states keep `generation_array`. The table with bytes
+#: per call: ~/mojolearn-evidence/briefs-20261113/wave2/
+#: fix-mamba3-unfilled-rest/fill_table.md.
 comptime MAMBA3_FORWARD_ZERO_FILL = is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"]()
 
 
 def _m3_output_array(dims: List[Int]) raises -> PythonObject:
-    """A Mamba-3 forward output the native call overwrites whole: unfilled
-    by default, zero-filled under MAMBA3_FORWARD_ZERO_FILL (the B arm)."""
+    """A Mamba-3 output (forward, carried-state forward, step, session
+    step/decode, tape prefill) the native call overwrites whole: unfilled by
+    default, zero-filled under MAMBA3_FORWARD_ZERO_FILL (the B arm)."""
     comptime if MAMBA3_FORWARD_ZERO_FILL:
         return generation_array(dims)
     else:
@@ -211,7 +226,8 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=x.shape[2])
-    var out = generation_array([b, l, d])
+    # Written whole by the tape forward (`_m3_prefill_run` downloads n_x).
+    var out = _m3_output_array([b, l, d])
     var addresses = Python.list(x._addr)
     var weights = fields["_w"]
     var shapes = bi.list()
