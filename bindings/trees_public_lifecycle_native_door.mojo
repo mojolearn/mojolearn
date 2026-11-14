@@ -20,6 +20,10 @@ from bindings.metrics_native_support_door import metric_warn
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside as _outside, estimator_feature_check as _feature_check
 from bindings.sequential_inputs_door import sequential_input
 from bindings.trees_public_forest_door import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
+from bindings.trees_public_forest_door import (
+    forest_refresh, forest_validate_stored, forest_capture_mode, forest_effective_mode, forest_prediction_engine,
+    forest_ordered_resident_auto,
+)
 from bindings.trees_public_score_door import forest_score_public
 from bindings.trees_public_inputs_door import trees_address, trees_cast
 from bindings.admitted_input_unpack import admitted_array
@@ -65,6 +69,24 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         return forest_shape(model, operation, context)
     if operation == "trees_public_forest_set_params":
         return _set_params(model, args[0], context)
+    # The ForestProtocol parameter and mode methods, one call each (lane
+    # py-trees, 2026-11-14: their Python bodies moved here). None of them
+    # admits X or touches fitted state beyond what the method did.
+    if operation == "trees_public_forest_refresh":
+        _ = forest_refresh(model, forest_kind(model, context), context)
+        return PythonObject(None)
+    if operation == "trees_public_forest_validate_params":
+        forest_validate_stored(model, context)
+        return PythonObject(None)
+    if operation == "trees_public_forest_capture_mode":
+        _ = forest_capture_mode(py_fields(model), context)
+        return PythonObject(None)
+    if operation == "trees_public_forest_effective_mode":
+        return PythonObject(forest_effective_mode(py_fields(model), context))
+    if operation == "trees_public_forest_prediction_engine":
+        return PythonObject(forest_prediction_engine(py_fields(model), context))
+    if operation == "trees_public_forest_ordered_resident_auto":
+        return PythonObject(forest_ordered_resident_auto(model, py_fields(model), context))
     if operation == "trees_public_forest_apply" or operation == "trees_public_forest_predict_with_leaves" or operation == "trees_public_forest_staged_predict" or operation == "trees_public_forest_auxiliary":
         var method = String(operation[byte=String("trees_public_forest_").byte_length():])
         # Retained e087692fd public baseline: these auxiliary APIs return
