@@ -1169,9 +1169,9 @@ def admitted_typed_c(view: TensorView, var input: AdmittedTypedPin, typestr: Str
             swap(held_pin, input.pin)
             return AdmittedBuf(input.keep, view.addr, view.shape.copy(), held_pin^, input.owner)
         return _typed_borrow_array(view, input^, typestr, context)
-    # Every cell is written by the conversion; Array stores have no
-    # uninitialised constructor, so the destination is the zeroed Array.
-    var result = admitted_zeros(view.shape, typestr, context)
+    # Every cell is written by the conversion, so the destination is
+    # unfilled (lane fix-output-zero-fill (2026-11-14); was the zeroed Array).
+    var result = admitted_unfilled(view.shape, typestr, context)
     admitted_typed_convert(view, typestr, result.addr, name)
     _ = input^
     return result^
