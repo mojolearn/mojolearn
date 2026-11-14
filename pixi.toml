@@ -186,6 +186,7 @@ check-native-spectral-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLE
 check-native-spectral-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_native_gpu.mojo"
 check-native-spectral-prediction-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/spectral_prediction_cpu.mojo"
 check-native-spectral-prediction-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_prediction_gpu.mojo"
+check-native-training-chunked-lm-head-door-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/training_chunked_lm_head_door_cpu.mojo"
 check-native-spectral-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_state.mojo"
 check-native-spectral-resident-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_resident_gpu.mojo"
 check-native-spectral-assignment-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/spectral_assignment_cpu.mojo"
