@@ -23,6 +23,15 @@ def linear_ols_plan(entry: NativeDescriptorCall, rows: Int, cols: Int, estimator
     return LinearOlsPlan(flags, tsqr, mode)
 
 
+def linear_ols_one_entry(plan: LinearOlsPlan, decomp: NativeDescriptorCall, center: Bool, weighted: Bool) raises -> Bool:
+    """True when the fit takes the decomposition entry's one-entry centered
+    TSQR (XD_FLAGS bit 1), which also tests X's words on upload. Probed once
+    per fit; the caller stores it on `plan.one_entry` for `linear_ols_run`."""
+    if not (plan.tsqr and center and not weighted):
+        return False
+    return (native_descriptor_call(decomp, XD_FLAGS, [], [], []) & 1) != 0
+
+
 def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
     request: LinearFitRequest, plan: LinearOlsPlan, vendor: Int) raises -> LinearFitResult:
     var rows = request.rows
@@ -46,7 +55,7 @@ def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
             if native_descriptor_call(decomp, XD_MODE, [], [], []) != plan.numeric_mode:
                 raise Error("RuntimeError: TSQR numeric mode differs from selected execution")
         if not done and plan.tsqr and center and not weighted:
-            if native_descriptor_call(decomp, XD_FLAGS, [], [], []) & 1:
+            if plan.one_entry:
                 var ra = List[Float32](length=(cols + 1) * (cols + 1), fill=0.0)
                 try:
                     _ = native_descriptor_call(decomp, XD_OLS_TSQR_R,

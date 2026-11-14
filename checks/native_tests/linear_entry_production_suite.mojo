@@ -44,7 +44,7 @@ def missing_before_publication() raises:
         var lease = LINEAR_STATES.acquire(handle)
         var refused = False
         try:
-            linear_lease_predict(LinearEntryKey(GLOBAL_NUMERIC_MODE, 0), lease,
+            _ = linear_lease_predict(LinearEntryKey(GLOBAL_NUMERIC_MODE, 0), lease,
                 Int(source.unsafe_ptr()), Int(destination.unsafe_ptr()), 1, 3, False, String("Ridge"))
         except problem:
             require(String(problem).find("not published") >= 0, "wrong missing production table refusal")
@@ -74,7 +74,7 @@ def fixture(wide: Bool) raises:
         var original = LINEAR_STATES.acquire(handle)
         LINEAR_STATES.replace(handle, model_state(Int(replacement.unsafe_ptr())))
         var current = LINEAR_STATES.acquire(handle)
-        linear_lease_predict(key, current, Int(source.unsafe_ptr()), destination, 2, 3, wide, String("Ridge"))
+        _ = linear_lease_predict(key, current, Int(source.unsafe_ptr()), destination, 2, 3, wide, String("Ridge"))
         require((wider[0] == 20.25 and wider[1] == 2.25) if wide else
             (narrow[0] == Float32(20.25) and narrow[1] == Float32(2.25)),
             "production handle/table prediction did not use replacement coefficients")
@@ -82,7 +82,7 @@ def fixture(wide: Bool) raises:
         released = True
         # Releasing/refitting the registry entry must not change an acquired
         # old snapshot; the original buffer is still explicitly pinned here.
-        linear_lease_predict(key, original, Int(source.unsafe_ptr()), destination, 2, 3, wide, String("Ridge"))
+        _ = linear_lease_predict(key, original, Int(source.unsafe_ptr()), destination, 2, 3, wide, String("Ridge"))
         require((wider[0] == 3.25 and wider[1] == 1.25) if wide else
             (narrow[0] == Float32(3.25) and narrow[1] == Float32(1.25)),
             "production lease lost its original prediction after refit/release")

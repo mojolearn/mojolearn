@@ -28,8 +28,8 @@ kernel it mirrors and keeps its statements in its order:
                            does (`git grep 537_GEMM_IDENT_SWAP` finds only
                            bench/speed/gemm_speed_main.mojo's opt-in).
   `host_gemm_nt`           the kernel's grid, every cell in row-major order.
-  `host_ols_predict`       `ols_predict_host`, `glm/estimator.mojo:192-231`:
-                           the gemv, then `_add_scalar_kernel` (`:53-74`)
+  `host_ols_predict`       `ols_predict_device`, `core/p3_linear_impl.mojo`:
+                           the gemv, then the epilogue's intercept add
                            only when the intercept is not exactly 0.0.
   `host_qn_decision`       `linear_fwd` at C == 1, `glm/impl/qn/glm_base.mojo:
                            198-244`: the gemv over the first D entries of W,
@@ -228,10 +228,10 @@ def host_ols_predict(
     x: List[Float32], coef: List[Float32], n_rows: Int, n_features: Int,
     intercept: Float32,
 ) -> List[Float32]:
-    """`ols_predict_host` (`glm/estimator.mojo:192-231`): `gemv_n`, then
-    `_add_scalar_kernel` (`:53-74`, `dst[i] = ftz(ftz(dst[i]) + ftz(value))`)
-    only `if intercept != Float32(0.0)`, the host compare that file audits
-    under DEVIATION 527."""
+    """`ols_predict_device` (`core/p3_linear_impl.mojo`): the gemv, then the
+    epilogue's `dst[i] = ftz(ftz(dst[i]) + ftz(value))` only
+    `if intercept != Float32(0.0)`, the host compare audited under
+    DEVIATION 527."""
     var out = List[Float32](length=n_rows, fill=Float32(0.0))
     host_ols_predict_into(
         host_list_ptr(x), host_list_ptr(coef), host_list_ptr(out), n_rows,

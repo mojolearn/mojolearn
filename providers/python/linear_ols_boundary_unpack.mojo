@@ -13,12 +13,12 @@ from bindings.sequential_description_unpack import sequential_fields
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, LinearFitRequest, LinearFitResult, LinearOlsPlan
 from core.admitted_refusals import admitted_finite_refuse
 from core.host_finite_scan import host_all_finite_f32
-from core.linear_ols_run import linear_ols_plan, linear_ols_run
+from core.linear_ols_run import linear_ols_plan, linear_ols_run, linear_ols_one_entry
 from core.native_descriptor_call import native_descriptor_call
 from providers.python.linear_state_boundary_door import linear_state_publish
 from providers.python.linear_entry_boundary_door import linear_entry_connection
 from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_DECOMP, linear_table_entry
-from x_decomp.descriptor_schema import XD_ABI_NAME, XD_FLAGS, XD_OPERATION_COUNT, xd_vendor_code
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, xd_vendor_code
 
 
 def classical_ols_fit(model: PythonObject, args: PythonObject,
@@ -68,10 +68,11 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     if entry_tests_x:
         try:
             with GILReleased(py):
-                entry_tests_x = (native_descriptor_call(decomp_entry, XD_FLAGS, [], [], []) & 1) != 0
+                entry_tests_x = linear_ols_one_entry(plan, decomp_entry, intercept, False)
         finally:
             _ = entries
             _ = decomp_pins
+    plan.one_entry = entry_tests_x
     if not admitted_x.finite and not entry_tests_x:
         # parallel: finiteness scan across host cores (core/host_finite_scan.mojo)
         if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=admitted_x.address), rows * cols):

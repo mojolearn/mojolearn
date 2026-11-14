@@ -1,36 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The existing narrow and wide prediction kernels behind one typed request."""
+"""The narrow and wide prediction (core/p3_linear_impl.mojo
+`ols_predict_device`, one synchronize) behind one typed request."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.hostptr import f32_ptr, f64_ptr
+from core.hostptr import f32_ptr
 from core.linear_boundary_types import LINEAR_PREDICT_ABI, LinearPredictRequest, linear_predict_request_from_spans
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.neural_context import process_ctx
-from core.p3_linear_impl import ols_predict_wide_device
+from core.p3_linear_impl import ols_predict_device
 from core.shared_slot import SharedSlot
-from glm.estimator import ols_predict_host
 
 comptime _CONTEXT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
 
 
-def linear_predict_device(request: LinearPredictRequest) raises:
+def linear_predict_device(request: LinearPredictRequest) raises -> Int:
+    """The request's predictions; 1 when `request.test_x` and X holds a NaN
+    or an infinity (tested on the device at the call's one drain), else 0."""
     var ctx = process_ctx[_CONTEXT]()
-    var intercept = Float32(request.intercept)
-    if request.wide:
-        ols_predict_wide_device(ctx, f32_ptr(request.x), f32_ptr(request.coef),
-            f64_ptr(request.dst), request.rows, request.cols, intercept)
-    else:
-        ols_predict_host(ctx, f32_ptr(request.x), f32_ptr(request.coef),
-            f32_ptr(request.dst), request.rows, request.cols, intercept)
-        ctx.synchronize()
+    return ols_predict_device(ctx, f32_ptr(request.x), f32_ptr(request.coef), request.dst,
+        request.rows, request.cols, Float32(request.intercept), request.wide, request.test_x)
 
 
 def linear_predict_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
         var request = linear_predict_request_from_spans(operation, aa, na, pp, np, ff, nf, result)
-        linear_predict_device(request)
-        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = 0
+        var status = linear_predict_device(request)
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = status
         return 0
     except problem:
         native_descriptor_report(problem, context, sink)

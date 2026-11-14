@@ -1000,7 +1000,7 @@ def ols_predict_binding(
     var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
         _index(params[0]), _index(params[1]), Float64(py=params[2]), False)
     with GILReleased(Python()):
-        linear_predict_host(request)
+        _ = linear_predict_host(request)
     return PythonObject(0)
 
 
@@ -1016,7 +1016,7 @@ def ols_predict_wide_binding(
     var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
         _index(params[0]), _index(params[1]), Float64(py=params[2]), True)
     with GILReleased(Python()):
-        linear_predict_host(request)
+        _ = linear_predict_host(request)
     return PythonObject(0)
 
 

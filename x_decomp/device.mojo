@@ -178,6 +178,7 @@ from x_decomp.jacobi_par import (
     pj_transpose_kernel,
     sym_from_triangle_kernel,
 )
+from core.step_phase import step_count_d2h, step_count_sync
 from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
 from x_decomp.eigh_ops import eigh_op_dense
@@ -3113,20 +3114,17 @@ struct DevExec(Exec):
         return executed
 
     @staticmethod
-    def ols_finite_status_check(
-        ctx: DeviceContext, dstat: DeviceBuffer[DType.int32], mut hstat: HostBuffer[DType.int32]
-    ) raises:
-        """`ols_tsqr_factor`'s two finite status words (X at 0, y at 1)
-        copied down and read at one drain; a nonzero word raises the entry's
-        non-finite refusal, which the door maps to scikit-learn's wording
-        (bindings/admitted_input_run.mojo admitted_finite_entry_refuse)."""
-        ctx.enqueue_copy(dst_ptr=hstat.unsafe_ptr(), src_buf=dstat)
-        ctx.synchronize()
-        var x_bad = hstat.unsafe_ptr().unsafe_load(0) != Int32(0)
-        var y_bad = hstat.unsafe_ptr().unsafe_load(1) != Int32(0)
-        if x_bad:
+    def ols_finite_status_check(words: List[Int32]) raises:
+        """`ols_tsqr_factor`'s two finite status words (X at 0, y at 1), already
+        on the host: copied down with the means before the factor, landed by
+        the factor's own drain (lane ols-regression, 2026-11-14: no second
+        copy, no second synchronize, no per-call pinned buffer). A nonzero
+        word raises the entry's non-finite refusal, which the door maps to
+        scikit-learn's wording (bindings/admitted_input_run.mojo
+        admitted_finite_entry_refuse)."""
+        if words[0] != Int32(0):
             raise Error("mojolearn: X contains NaN or infinity")
-        if y_bad:
+        if words[1] != Int32(0):
             raise Error("mojolearn: y contains NaN or infinity")
 
     @staticmethod
@@ -4094,7 +4092,9 @@ struct DevExec(Exec):
         enqueue_fill(ctx, dstat, Int32(0))
         enqueue_finite_status(ctx, ta.unsafe_ptr(), m * d, dstat.unsafe_ptr(), 0)
         enqueue_finite_status(ctx, tb.unsafe_ptr(), m, dstat.unsafe_ptr(), 1)
-        var hstat = ctx.enqueue_create_host_buffer[DType.int32](2)
+        # The words come down with the means below (pageable host words; the
+        # factor's final synchronize lands them): no pinned buffer per call.
+        var hstat = List[Int32](length=2, fill=0)
         var d_sx = ctx.enqueue_create_buffer[DType.uint64](d)
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
         col_sums_pair_buf(ctx, ta, tb, d_sx, d_sy, m, d)
@@ -4106,8 +4106,18 @@ struct DevExec(Exec):
         # the fit's outputs: mu (float32) and the y mean (binary64 bits)
         ctx.enqueue_copy(dst_ptr=mu, src_buf=d_mx)
         ctx.enqueue_copy(dst_ptr=ymean, src_buf=d_m64.create_sub_buffer[DType.uint64](d, 1))
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(hstat.unsafe_ptr())),
+                         src_buf=dstat)
+        # This entry's own copies down and waits, counted under
+        # -D MOJOLEARN_STEP_PHASE_TIMERS (core/step_phase.mojo; nothing
+        # otherwise; checks/ols_call_cost_check.mojo). The factor's own
+        # waits (col_sums_buf, ts_factor_finish) are not counted here.
+        step_count_d2h()
+        step_count_d2h()
+        step_count_d2h()
         comptime if TARGET_COLUMN == COLUMN_APPLE:
             ctx.synchronize()
+            step_count_sync()
         try:
             ts_factor_dispatch(plan, ctx, da, m, n, r, False)
         except factor_error:
@@ -4118,10 +4128,15 @@ struct DevExec(Exec):
             # the admission message first on every column (Apple, NVIDIA,
             # AMD; lane ols-finite-refusal-apple, 2026-11-13). Only the
             # refusal path pays this read; a finite fit reads the words once
-            # below, as before.
-            DevExec.ols_finite_status_check(ctx, dstat, hstat)
+            # below, as before. The refusal path drains again before it reads
+            # them: a factor error raised before the factor's own drain.
+            ctx.synchronize()
+            step_count_sync()
+            DevExec.ols_finite_status_check(hstat)
             raise factor_error^
-        DevExec.ols_finite_status_check(ctx, dstat, hstat)
+        # ts_factor_dispatch's last step synchronizes (R into the host r),
+        # so the status words copied above have landed.
+        DevExec.ols_finite_status_check(hstat)
         _ = hstat^
         _ = dstat^
         _ = ta^

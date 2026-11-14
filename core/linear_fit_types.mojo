@@ -97,8 +97,13 @@ struct LinearOlsPlan(Copyable, Movable):
     var flags: Int
     var tsqr: Bool
     var numeric_mode: Int
+    # The decomposition entry's one-entry centered TSQR (XD_FLAGS bit 1),
+    # probed ONCE by the door for an unweighted fit with an intercept and
+    # read here (lane ols-regression: linear_ols_run probed it a second time).
+    var one_entry: Bool
 
     def __init__(out self, flags: Int, tsqr: Bool, numeric_mode: Int):
         self.flags = flags
         self.tsqr = tsqr
         self.numeric_mode = numeric_mode
+        self.one_entry = False
