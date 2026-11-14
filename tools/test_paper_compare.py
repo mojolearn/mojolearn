@@ -411,7 +411,7 @@ class BestEver(unittest.TestCase):
         self.assertTrue(ols["best_ever_hash_differs"])
         self.assertNotIn("BEST-EVER-REGRESSION", ols["flags"])
         gb = rows[self.keys["gb"]]
-        self.assertIn("BEST-EVER-REGRESSION-UNCHECKED", gb["flags"])
+        self.assertIn("BEST-EVER-SUSPECT", gb["flags"])  # its best lacks params (board_best_ever.suspect_reason)
         rf = rows[self.keys["rf"]]
         self.assertFalse({"BEST-EVER-REGRESSION", "PARAMS-DIFFER", "BEST-EVER-REGRESSION-UNCHECKED"} & set(rf["flags"]))
         self.assertAlmostEqual(rf["ratio_vs_best_ever"], 500.0 / 600.0)

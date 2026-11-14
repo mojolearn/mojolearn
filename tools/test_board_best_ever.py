@@ -98,7 +98,7 @@ class Extraction(unittest.TestCase):
     def test_params_differ_and_hash_differ(self):
         db = self.rows[DB + " fit ours"]
         self.assertEqual(db["params_differ"], ["eps"])
-        self.assertEqual(db["flags"], ["PARAMS-DIFFER"])         # the audit's dbscan "loss" was a params change
+        self.assertEqual(db["flags"], ["PARAMS-DIFFER", "SUSPECT"])  # 13 s vs 900 s: also below 5% of the median; the audit's dbscan "loss" was a params change
         km = self.rows[KM + " fit ours"]
         self.assertTrue(km["hash_differs"])
         self.assertEqual(km["params_differ"], [])

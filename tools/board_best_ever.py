@@ -278,6 +278,24 @@ def _entry(r):
                                   "params", "params_source", "device")}
 
 
+SUSPECT_FRACTION = 0.05
+
+
+def suspect_reason(best, timeline):
+    """Why a best-ever time is implausible, or None (2026-11-13: 0.8.25 bests such as a 0.164 ms radius-neighbors
+    fit). A best below 5% of the median of the row's other recorded times, or one whose record lacks its
+    params, is SUSPECT: kept and shown, never dropped, never called a regression baseline."""
+    if not isinstance(best.get("params"), dict):
+        return "record lacks params"
+    others = sorted(r["ms"] for r in timeline if r is not best and number(r.get("ms")))
+    if others:
+        n = len(others)
+        median = others[n // 2] if n % 2 else (others[n // 2 - 1] + others[n // 2]) / 2
+        if best["ms"] < SUSPECT_FRACTION * median:
+            return "best %.4g ms is below 5%% of the median %.4g ms of the other times" % (best["ms"], median)
+    return None
+
+
 def summarize(records, vendor):
     """{race key: row} of one vendor: best, best per device, latest, flags, timeline."""
     by_key = {}
@@ -309,6 +327,9 @@ def summarize(records, vendor):
             flags.append("PARAMS-DIFFER")
         elif not isinstance(best.get("params"), dict) or cur_p is None:
             flags.append("PARAMS-UNKNOWN")
+        suspect = suspect_reason(best, timeline)
+        if suspect:
+            flags.append("SUSPECT")
         ratio = latest["ms"] / best["ms"]
         if ratio > SLOWER and "PARAMS-DIFFER" not in flags:
             flags.append("LATEST>BEST")
@@ -316,7 +337,7 @@ def summarize(records, vendor):
         rows[key] = {"key": key, "race_id": first.get("race_id"), "family": first.get("family"),
                      "lane": first.get("lane"), "dataset": first.get("dataset"), "phase": first.get("phase"),
                      "arm": first.get("arm"), "batch": first.get("batch"),
-                     "best": _entry(best), "best_by_device": per_device, "latest": _entry(latest),
+                     "best": dict(_entry(best), suspect=suspect), "best_by_device": per_device, "latest": _entry(latest),
                      "latest_over_best": ratio, "params_differ": pdiff, "hash_differs": hdiff, "flags": flags,
                      "timeline": [_entry(r) for r in timeline]}
     return rows

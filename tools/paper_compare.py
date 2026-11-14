@@ -58,6 +58,7 @@ date and release, and new / best-ever:
                  were not recorded (boards before the parameter read-back)
   PARAMS-DIFFER  the best-ever cell's parameters (a shared key) or output hash differ from the new cell's: a slower
                  time may be a parameter or algorithm change, not a regression
+  BEST-EVER-SUSPECT  new / best ever > 1.10 but the best ever is implausible (board_best_ever.suspect_reason)
   BEST-EVER-HW-DIFF  the best ever was measured on another device than the new board's
 Every our-arm cell of the new boards outside the recipes (a full-board screen, tools/ops/paper_compare_job.sh
 board-all) gets an extra row in its own table with the same best-ever column; the recipe rows and their flags are
@@ -664,6 +665,10 @@ def attach_best_ever(row, new_rec, best_rows):
     device = (new_rec or {}).get("device")
     best = (b.get("best_by_device") or {}).get(device) if device else None
     best = best or b["best"]
+    timeline = b.get("timeline") or []
+    suspect = (b["best"].get("suspect") if best is b["best"] else None) \
+        or BE.suspect_reason(best, [t for t in timeline if t.get("ms") != best.get("ms")] + [best])
+    row["best_ever_suspect"] = suspect
     row.update(best_ever_ms=best["ms"], best_ever_date=best.get("date"), best_ever_release=best.get("release"),
                best_ever_commit=best.get("commit"), best_ever_device=best.get("device"),
                best_ever_hash=best.get("hash"))
@@ -679,7 +684,10 @@ def attach_best_ever(row, new_rec, best_rows):
     elif ratio is not None and ratio > SLOWER:
         known = (isinstance(best.get("params"), dict) and isinstance(new_rec.get("params"), dict)
                  and best.get("hash") and new_rec.get("hash"))
-        row["flags"].append("BEST-EVER-REGRESSION" if known else "BEST-EVER-REGRESSION-UNCHECKED")
+        if suspect:
+            row["flags"].append("BEST-EVER-SUSPECT")
+        else:
+            row["flags"].append("BEST-EVER-REGRESSION" if known else "BEST-EVER-REGRESSION-UNCHECKED")
     if device and best.get("device") and best["device"] != device:
         row["flags"].append("BEST-EVER-HW-DIFF")
     return row
