@@ -29,6 +29,7 @@ from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_execute,
 )
 from providers.python.autograd_session_frontend_pyapi_door import ops_session_fields
+from providers.python.autograd_program_arrays_pyapi_door import program_builtin_types
 from providers.python.autograd_ops_frontend_pyapi_door import ops_session_call_admitted_py
 
 from providers.python.autograd_session_public_request_pyapi_unpack import (
@@ -42,7 +43,12 @@ comptime SESSION_CALL_DESCRIPTOR = is_defined["MOJOLEARN_SESSION_CALL_DESCRIPTOR
 def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
-    if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not py_type(Python.tuple()):
+    # Lane fix-program-run-per-call (2026-11-14): the exact builtin types
+    # connected once at Session setup (was a throwaway str, tuple and int
+    # built per Session operation to read their types; about 25 operations
+    # per ops-session-step round).
+    var types = program_builtin_types()
+    if py_type(operation) is not types[].str_type or py_type(args) is not types[].tuple_type:
         raise Error("TypeError: Session requires an exact operation string and argument tuple")
     var fields = ops_session_fields(session)
     var lifetime = fields["_lifetime"]
@@ -60,7 +66,7 @@ def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             # compare and module identity check run only on that route.
             var sid = fields["_id"]
             if sid is not None:
-                if py_type(sid) is not py_type(PythonObject(0)):
+                if py_type(sid) is not types[].int_type:
                     raise Error("TypeError: Session handle must be a native integer")
                 var admitted_id = resource[].handle
                 if admitted_id == 0 or admitted_id != Int(py=sid):
