@@ -28,48 +28,64 @@ board. This tool:
         arms), in the same files as ids plus races.json (family/lane/dataset per race, for measure_owed data-keys).
   pass-ids --full-ids FILE --smoke-json SMOKE.json... --out FILE
         the full-size ids of the planned races whose smoke passed (smoke-failed.json beside --out lists the rest).
-  compare  --recipes JSON --board BOARD.json... [--out-md MD] [--out-json JSON] [--summary TXT]
-        0.8.55 against the new board, per recipe: ms both, ratio, quality both, the flags below, and the ratio
-        against the paper's stored opponent before and after. Prints a one-screen summary.
+  compare  --recipes JSON --board BOARD.json... [--prior-board VERSION=BOARD.json ...] [--reference-compare JSON]
+           [--best-ever [FILE]] [--out-md MD] [--out-json JSON] [--summary TXT]
+        the new board against OUR prior wheels re-timed in the same job on the same box, per recipe: ms of each,
+        ratios, quality, the flags below, and the stored columns (the paper record, a stored compare, the stored
+        opponents, the best ever) as reference only. Prints a one-screen summary with both arms' host probes.
+
+SAME BOX ONLY (AGENTS.md "Times are compared only on the same box", Andrew, 2026-11-14; the 2026-11-14 compare of
+80a7f8aca3 on L40S host 9204fff9f8f7 against stored numbers from host 1e08d01c3d48 raised 56 false REGRESSION flags
+on code that had not changed). Every board carries the box's host probe (tools/ops/host_probe.py through
+bench_board --host-probe: box.host_probe and each race's host.host_id). A time flag is derived only from two cells
+whose boards carry the same host id. A --prior-board from another host REFUSES the compare (exit non-zero); a board
+without a probe gives no verdict (NOT-COMPARED). The stored paper record (old_ms in the recipes: ref_ms here), a
+stored compare JSON (--reference-compare: ref_prior_ms), the paper's opponent cells and the best-ever file are
+shown with their host and never make a flag.
 
 FLAGS (per recipe; a recipe can carry several)
-  REGRESSION     new / old median_ms > 1.10 (slower)          FASTER   new / old < 0.90
+  REGRESSION     new / baseline median_ms > 1.10 (slower)     FASTER   new / baseline < 0.90
   SAME           0.90 <= ratio <= 1.10
-  FIXED          0.8.55 had no time (refused, failed) and the new release has one
-  BROKEN         0.8.55 had a time and the new release has none (its status is shown)
-  STILL-FAILING  neither release has a time
+                 (baseline = the --prior-board of the paper's version, 0.8.55, re-timed on this box)
+  FIXED          the baseline cell has no time (refused, failed) and the new board has one
+  BROKEN         the baseline has a time and the new board has none (its status is shown)
+  STILL-FAILING  neither has a time
+  BASELINE-NOT-RUN  the baseline board has no cell for the race (its smoke failed, it does not plan it, the job did
+                 not reach it): NOT-RUN for that column, never a regression
+  NOT-COMPARED   no on-box baseline (no --prior-board of the paper's version, or no host probe on either side)
   NOT-RUN        no new cell: the board no longer plans the race, its smoke failed, or the job did not reach it
-  QUALITY-DROP   tools/board_quality.compare(new, old) FAILs on a one-sided score or a reference bound: the new
-                 release is worse than 0.8.55 beyond the board's declared margin (the quality-parity policy)
+  QUALITY-DROP   tools/board_quality.compare(new, paper record) FAILs on a one-sided score or a reference bound:
+                 worse than 0.8.55 beyond the board's declared margin (the quality-parity policy)
   QUALITY-CHANGE the same policy FAILs on a symmetric metric (no better side)
   QUALITY-MISSING the 0.8.55 record holds a judged quality metric the new cell lacks (quality_missing lists them,
                  quality_unavailable the cell's own reason); the row cannot be judged on it. Shown, never a gate
-  NOW-WINS       slower than the paper's fastest stored opponent in 0.8.55, at least as fast now
-  NOW-LOSES      the reverse
+  NOW-WINS / NOW-LOSES  vs the paper's fastest stored opponent: only when the stored opponents ran on this box's
+                 host (never, for the paper's boards; the ratio is shown)
   PARAMS-DIFF    the explicit parameters our arm read back differ from the paper's
-  HW-DIFF        the new board's GPU is not the paper's GPU (timings are then not comparable)
-With --prior-compare (the 0.8.66 compare JSON on main; a third, middle column):
+  HW-DIFF        the new board's GPU is not the paper's GPU
+With more --prior-board versions (default job: 0.8.55 and 0.8.66), each gets a column (ms, new / prior); the last
+one is the prior release:
   REGRESSION-VS-PRIOR / FASTER-VS-PRIOR   new / prior median ms above 1.10 / below 0.90
-  RECOVERED      the prior was a REGRESSION vs 0.8.55 and the new board is SAME or FASTER vs 0.8.55
-  STILL-REGRESSED the prior was a REGRESSION vs 0.8.55 and the new board still is
+  RECOVERED      the prior was > 1.10 x the on-box baseline and the new board is SAME or FASTER vs that baseline
+  STILL-REGRESSED the prior was > 1.10 x the on-box baseline and the new board still is
 With --best-ever [FILE] (default bench/results/board_best_ever/<vendor>.json, tools/board_best_ever.py mine): a
-"best ever (NV)" / "(AMD)" column, our best time ever on that race key (the same device when it has one), with its
-date and release, and new / best-ever:
+"best ever (NV)" / "(AMD)" reference column, our best time ever on that race key, with its date, release and host,
+and new / best-ever. Its time flags need the same host id on the best-ever cell (records mined before 2026-11-14
+carry none, so they are shown and never flagged):
   BEST-EVER-REGRESSION  new / best ever > 1.10 with the same explicit parameters and the same output hash
-  BEST-EVER-REGRESSION-UNCHECKED  new / best ever > 1.10, nothing differs, but the params or the hash of one side
-                 were not recorded (boards before the parameter read-back)
-  PARAMS-DIFFER  the best-ever cell's parameters (a shared key) or output hash differ from the new cell's: a slower
-                 time may be a parameter or algorithm change, not a regression
-  BEST-EVER-SUSPECT  new / best ever > 1.10 but the best ever is below 5% of the row's median time (board_best_ever.suspect_reason)
+  BEST-EVER-REGRESSION-UNCHECKED  the same, but the params or the hash of one side were not recorded
+  BEST-EVER-SUSPECT  new / best ever > 1.10 but the best ever is below 5% of the row's median time
+  PARAMS-DIFFER  the best-ever cell's parameters (a shared key) or output hash differ from the new cell's (not a time)
   BEST-EVER-HW-DIFF  the best ever was measured on another device than the new board's
 Every our-arm cell of the new boards outside the recipes (a full-board screen, tools/ops/paper_compare_job.sh
-board-all) gets an extra row in its own table with the same best-ever column; the recipe rows and their flags are
-unchanged.
+board-all) gets an extra row in its own table with the on-box prior columns (REGRESSION / FASTER vs the baseline,
+REGRESSION-VS-PRIOR) and the best-ever reference.
 A board made from candidate wheels (bench_board --candidate-wheel; box.mojolearn.wheel.source = candidate) is
 labelled "candidate <sha12> (<version>)" everywhere, with its source commit and wheel sha256s, never as a release.
 
 The new numbers come from tools/ops/paper_compare_job.sh, which runs these recipes through tools/bench_board.py
-(our arms only) from the published wheels. Tests: tools/test_paper_compare.py.
+(our arms only) for the candidate and for each prior wheel from PyPI (PC_PRIOR_VERSIONS) on the same box in the same
+job. Tests: tools/test_paper_compare.py, tools/test_paper_compare_same_box.py.
 """
 import argparse
 import gzip
@@ -218,6 +234,85 @@ def gpu_name(board):
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# the box a time was taken on (AGENTS.md "Times are compared only on the same box", Andrew, 2026-11-14)
+# ---------------------------------------------------------------------------------------------------------------
+
+def board_probe(board):
+    """The tools/ops/host_probe.py document a board recorded (bench_board --host-probe), or None."""
+    p = (board.get("box") or {}).get("host_probe")
+    return p if isinstance(p, dict) else None
+
+
+def board_host_ids(board):
+    """Every host id a board carries: its box probe's and each race's host.host_id (bench_board race_host)."""
+    ids = set()
+    p = board_probe(board)
+    if p and p.get("host_id"):
+        ids.add(p["host_id"])
+    for race in (board.get("races") or {}).values():
+        h = (race.get("host") or {}).get("host_id") if isinstance(race, dict) else None
+        if h:
+            ids.add(h)
+    return ids
+
+
+def host_label(board):
+    """The host a stored board ran on, for a reference column: its probe's host id, else its hostname."""
+    p = board_probe(board)
+    if p and p.get("host_id"):
+        return p["host_id"]
+    return ((board.get("box") or {}).get("host") or {}).get("hostname")
+
+
+def candidate_host(cand_boards):
+    """(host id, None) of the candidate boards, or (None, why) without a probe. Two hosts refuse (SystemExit)."""
+    cand = set().union(*[board_host_ids(b) for b in cand_boards]) if cand_boards else set()
+    if len(cand) > 1:
+        raise SystemExit("paper_compare: REFUSED: the candidate boards ran on %d hosts (%s); times are compared only "
+                         "on the same box" % (len(cand), ", ".join(sorted(cand))))
+    return (next(iter(cand)), None) if cand else (None, "the candidate board carries no host probe")
+
+
+def same_box(cand_boards, other_boards, what):
+    """(host id, None) when the candidate boards and OTHER_BOARDS carry one host id; (None, why) when either side
+    has none (no probe: the column is shown and makes no flag). Two host ids refuse (SystemExit): a compare across
+    hosts is never a verdict (2026-11-14: 56 false REGRESSION flags from two L40S hosts)."""
+    host, why = candidate_host(cand_boards)
+    other = set().union(*[board_host_ids(b) for b in other_boards]) if other_boards else set()
+    if host and other and other != {host}:
+        raise SystemExit("paper_compare: REFUSED: %s ran on host %s, the candidate on %s; times are compared only on "
+                         "the same box (AGENTS.md)" % (what, ", ".join(sorted(other)), host))
+    if not host:
+        return None, why
+    if not other:
+        return None, "%s carries no host probe" % what
+    return host, None
+
+
+def probe_line(probe):
+    """One line of a host probe for the summary (both arms' probes are printed beside the verdict)."""
+    if not probe:
+        return "no host probe"
+    pcie = probe.get("pcie") or {}
+    link = ("gen%s x%s%s" % (pcie.get("gen"), pcie.get("width"), "" if pcie.get("read_during_copy") else " (idle)")
+            if pcie.get("gen") is not None else "pcie ?")
+    g = lambda k: "-" if probe.get(k) is None else probe.get(k)  # noqa: E731
+    return ("host %s; cpu %s; numa %s; cores %s (cgroup %s); memcpy %s GB/s; h2d pageable %s / pinned %s GB/s; %s; "
+            "gpu %s driver %s" % (g("host_id"), g("cpu_model"), g("numa_nodes"), g("affinity_cores") if probe.get(
+                "affinity_cores") is not None else g("nproc"), g("cgroup_cores"), g("memcpy_gbps"),
+                g("h2d_pageable_gbps"), g("h2d_pinned_gbps"), link, (probe.get("gpu") or {}).get("name"),
+                (probe.get("gpu") or {}).get("driver")))
+
+
+def parse_prior_board(text):
+    """'<version>=<board.json>' (compare --prior-board) -> (version, path)."""
+    v, sep, path = text.partition("=")
+    if not sep or not v or not path:
+        raise SystemExit("paper_compare: --prior-board wants <version>=<board.json>, not %r" % text)
+    return v, path
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # recipes
 # ---------------------------------------------------------------------------------------------------------------
 
@@ -306,6 +401,8 @@ def extract_recipes(board, vendor, source_path=None, version=PAPER_VERSION):
             "board": source_path,
             "sha256": sha256_file(source_path) if source_path and os.path.isfile(source_path) else None,
             "gpu": gpu_name(board),
+            # the stored column's host (reference only: never a flag against a time from another host)
+            "host": host_label(board),
             "created": board.get("created"), "updated": board.get("updated"),
             "note": "the paper's merged board (anonymized copy; library name restored in params and calls)",
         },
@@ -574,15 +671,29 @@ def same_clock_ms(opp, cell, phase):
     return None       # MIXED clocks: the paper shows no ratio; neither do we
 
 
-def compare_one(rec, races, not_run_why, hw_diff):
+def compare_one(rec, races, not_run_why, hw_diff, base=None, same_host_opponents=False):
+    """One recipe row. BASE: the on-box baseline (the paper's version re-timed in the same job on the same box):
+    {"races": {...}, "label": v}, or None. Every time flag (REGRESSION, FASTER, SAME, FIXED, BROKEN,
+    STILL-FAILING) comes from BASE only; the stored paper record is the reference column (ref_ms, with its host) and
+    never makes a flag (AGENTS.md "Times are compared only on the same box", 2026-11-14). Without BASE the row is
+    NOT-COMPARED. Quality and parameters are still judged against the paper record (they are not times).
+    SAME_HOST_OPPONENTS: the stored opponents were timed on this box (NOW-WINS / NOW-LOSES may then be derived)."""
     old = rec["v0855"]
     race = races.get(rec["race_id"])
     cell = find_cell(race, rec["phase"], rec["arm"], rec["batch"]) if race else None
-    old_t = timed(old["status"], old["median_ms"])
+    ref_t = timed(old["status"], old["median_ms"])
     row = {"key": rec["key"], "race_id": rec["race_id"], "family": rec["family"], "lane": rec["lane"],
            "dataset": rec["dataset"], "phase": rec["phase"], "arm": rec["arm"], "batch": rec["batch"],
-           "old_ms": old["median_ms"] if old_t else None, "old_status": old["status"],
+           "ref_ms": old["median_ms"] if ref_t else None, "ref_status": old["status"],
+           "old_ms": None, "old_status": "no on-box baseline" if base is None else "not run on this box",
            "old_quality": shown_quality(old["quality"]), "flags": []}
+    if base is not None:
+        brace = (base.get("races") or {}).get(rec["race_id"])
+        bcell = find_cell(brace, rec["phase"], rec["arm"], rec["batch"]) if brace else None
+        if bcell is not None:
+            row["old_status"] = short_status(bcell.get("status"))
+            if timed(row["old_status"], bcell.get("median_ms")):
+                row["old_ms"] = bcell.get("median_ms")
     if cell is None:
         row.update(new_ms=None, new_status="missing", ratio=None, new_quality={},
                    why=not_run_why.get(rec["race_id"]) or ("race not in the new board" if race is None
@@ -602,13 +713,21 @@ def compare_one(rec, races, not_run_why, hw_diff):
         row["quality_missing"] = missing
         row["quality_unavailable"] = (str((cell.get("quality") or {}).get(UNAVAILABLE) or "")[:600]
                                       or "the new cell recorded no reason (its scorer did not record it)")
-    if old_t and new_t:
+    row["ratio"] = None
+    row["ratio_vs_ref"] = row["new_ms"] / row["ref_ms"] if new_t and row["ref_ms"] else None   # shown, never a flag
+    old_t = row["old_ms"] is not None
+    if base is None:
+        row["flags"].append("NOT-COMPARED")
+    elif old_t and new_t:
         row["ratio"] = row["new_ms"] / row["old_ms"] if row["old_ms"] else None
         r = row["ratio"]
         row["flags"].append("REGRESSION" if r is not None and r > SLOWER else
                             "FASTER" if r is not None and r < FASTER else "SAME")
+    elif row["old_status"] == "not run on this box":
+        # the prior wheel has no cell for this row (its smoke failed, it refused at plan, the job did not reach it):
+        # NOT-RUN for that column, never a regression (brief same-box-compare, 2026-11-14)
+        row["flags"].append("BASELINE-NOT-RUN")
     else:
-        row["ratio"] = None
         row["flags"].append("FIXED" if new_t else "BROKEN" if old_t else "STILL-FAILING")
     # quality: the new release judged against 0.8.55 under the board's own policy (new = "ours")
     q = BQ.compare({"arm": rec["arm"], "lane": rec["lane"], "quality": cell.get("quality") or {},
@@ -623,7 +742,8 @@ def compare_one(rec, races, not_run_why, hw_diff):
         row["flags"].append("QUALITY-DROP")
     elif bad:
         row["flags"].append("QUALITY-CHANGE")
-    # opponents: the paper's stored numbers, our new time on the same clock
+    # opponents: the paper's stored numbers (their host is the paper board's), our new time on the same clock. The
+    # ratio is shown; NOW-WINS / NOW-LOSES only when the stored opponent ran on this box (never across hosts).
     opps = []
     for o in rec["opponents"]:
         mine = same_clock_ms(o, cell, rec["phase"]) if new_t else None
@@ -635,7 +755,7 @@ def compare_one(rec, races, not_run_why, hw_diff):
     if best:
         b = min(best, key=lambda o: o["opponent_ms"])
         row["best_opponent"] = b
-        if number(b.get("ratio_new")):
+        if number(b.get("ratio_new")) and same_host_opponents:
             if b["ratio"] > 1.0 >= b["ratio_new"]:
                 row["flags"].append("NOW-WINS")
             elif b["ratio"] <= 1.0 < b["ratio_new"]:
@@ -677,28 +797,40 @@ def new_label(candidate, versions):
     return ",".join(versions) or "?"
 
 
-def attach_prior(row, prior):
-    """The middle column (the previous release, e.g. 0.8.66, from its compare JSON on main): its ms and flags,
-    the new / prior ratio and the flags vs the prior:
+def attach_prior_board(row, version, races, flagged):
+    """One on-box prior column (a prior release re-timed in the same job on the same box): row["priors"][version]
+    = {ms, status, ratio new/prior}. FLAGGED (the last release, PC_PRIOR_VERSION, on a verified same box) adds:
       REGRESSION-VS-PRIOR new / prior > 1.10      FASTER-VS-PRIOR new / prior < 0.90
-      RECOVERED           the prior was a REGRESSION vs 0.8.55; new is SAME or FASTER vs 0.8.55
-      STILL-REGRESSED     the prior was a REGRESSION vs 0.8.55 and new still is"""
-    p = prior.get(row["key"]) if prior else None
-    row["prior_ms"] = p.get("new_ms") if p and number(p.get("new_ms")) else None
-    row["prior_flags"] = list(p.get("flags") or []) if p else []
-    row["prior_status"] = p.get("new_status") if p else "not in the prior compare"
-    r = (row["new_ms"] / row["prior_ms"]) if number(row.get("new_ms")) and row["prior_ms"] else None
-    row["ratio_vs_prior"] = r
+      RECOVERED           the prior was > 1.10 x the on-box baseline; new is SAME or FASTER vs that baseline
+      STILL-REGRESSED     the prior was > 1.10 x the on-box baseline and new still is
+    A prior without a cell (its smoke failed, it refused, the job did not reach it) is NOT-RUN in its column."""
+    c = find_cell((races or {}).get(row["race_id"]), row["phase"], row["arm"], row["batch"]) \
+        if (races or {}).get(row["race_id"]) else None
+    status = short_status(c.get("status")) if c else "NOT-RUN on this box"
+    ms = c.get("median_ms") if c and timed(status, c.get("median_ms")) else None
+    r = (row["new_ms"] / ms) if number(row.get("new_ms")) and ms else None
+    row.setdefault("priors", {})[version] = {"ms": ms, "status": status, "ratio": r}
+    if not flagged:
+        return row
+    row["prior_ms"], row["prior_status"], row["ratio_vs_prior"] = ms, status, r
     if r is not None:
         if r > SLOWER:
             row["flags"].append("REGRESSION-VS-PRIOR")
         elif r < FASTER:
             row["flags"].append("FASTER-VS-PRIOR")
-    if "REGRESSION" in row["prior_flags"]:
+    if ms and number(row.get("old_ms")) and ms / row["old_ms"] > SLOWER:
         if "SAME" in row["flags"] or "FASTER" in row["flags"]:
             row["flags"].append("RECOVERED")
         elif "REGRESSION" in row["flags"]:
             row["flags"].append("STILL-REGRESSED")
+    return row
+
+
+def attach_reference(row, ref):
+    """A stored compare's new column (another run, another host): shown as reference only, never a flag."""
+    p = ref.get(row["key"]) if ref else None
+    row["ref_prior_ms"] = p.get("new_ms") if p and number(p.get("new_ms")) else None
+    row["ref_prior_status"] = p.get("new_status") if p else "not in the reference compare"
     return row
 
 
@@ -716,12 +848,14 @@ def new_cell_records(boards, vendor):
     return out
 
 
-def attach_best_ever(row, new_rec, best_rows):
-    """The best-ever column of one row (module docstring). NEW_REC: the new cell's record or None."""
+def attach_best_ever(row, new_rec, best_rows, host=None):
+    """The best-ever column of one row (module docstring). NEW_REC: the new cell's record or None. HOST: the new
+    board's host id. The best ever is a stored time of another run: its ratio is shown, and the time flags
+    (BEST-EVER-REGRESSION, -UNCHECKED, -SUSPECT) are derived only when it carries the same host id (2026-11-14)."""
     b = (best_rows or {}).get(row["key"])
     row.update(best_ever_ms=None, best_ever_date=None, best_ever_release=None, best_ever_commit=None,
-               best_ever_device=None, best_ever_hash=None, ratio_vs_best_ever=None, best_ever_params_differ=[],
-               best_ever_hash_differs=False)
+               best_ever_device=None, best_ever_hash=None, best_ever_host=None, ratio_vs_best_ever=None,
+               best_ever_params_differ=[], best_ever_hash_differs=False)
     if not b:
         return row
     device = (new_rec or {}).get("device")
@@ -733,7 +867,7 @@ def attach_best_ever(row, new_rec, best_rows):
     row["best_ever_suspect"] = suspect
     row.update(best_ever_ms=best["ms"], best_ever_date=best.get("date"), best_ever_release=best.get("release"),
                best_ever_commit=best.get("commit"), best_ever_device=best.get("device"),
-               best_ever_hash=best.get("hash"))
+               best_ever_hash=best.get("hash"), best_ever_host=best.get("host_id"))
     if not new_rec or not number(row.get("new_ms")):
         return row
     pd = BE.params_differ(best.get("params"), new_rec.get("params"))
@@ -743,7 +877,7 @@ def attach_best_ever(row, new_rec, best_rows):
     row["ratio_vs_best_ever"] = ratio
     if pd or hd:
         row["flags"].append("PARAMS-DIFFER")
-    elif ratio is not None and ratio > SLOWER:
+    elif ratio is not None and ratio > SLOWER and host and best.get("host_id") == host:
         known = (isinstance(best.get("params"), dict) and isinstance(new_rec.get("params"), dict)
                  and best.get("hash") and new_rec.get("hash"))
         if suspect:
@@ -762,16 +896,37 @@ def extra_row(rec):
             "new_ms": rec["ms"], "new_hash": rec.get("hash"), "new_device": rec.get("device"), "flags": []}
 
 
-def compare(doc, boards, not_run_why=None, prior=None, prior_label=None, best_ever=None):
-    """PRIOR: {recipe key: row} of the previous release's compare JSON (the middle column), or None.
+def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, reference_label=None,
+            best_ever=None):
+    """PRIOR_BOARDS: [(version, board doc)] of OUR prior wheels re-timed in the same job on the same box
+    (tools/ops/paper_compare_job.sh board-prior-<version>/): the one whose version is the paper's is the baseline
+    (old_ms, the REGRESSION / FASTER / FIXED / BROKEN flags), the last other one the flagged prior column
+    (REGRESSION-VS-PRIOR, RECOVERED, STILL-REGRESSED). A prior board from another host refuses (SystemExit).
+    REFERENCE: {recipe key: row} of a stored compare JSON (another run): a reference column, never a flag.
     BEST_EVER: a tools/board_best_ever.py document of the compare's vendor (the best-ever column), or None."""
     races, gpus, versions = merge_boards(boards)
     candidate = board_candidate(boards)
     paper_gpu = doc["source"].get("gpu")
     hw_diff = bool(gpus) and paper_gpu is not None and any(g != paper_gpu for g in gpus)
-    rows = [compare_one(rec, races, not_run_why or {}, hw_diff) for rec in doc["recipes"]]
-    if prior is not None:
-        rows = [attach_prior(r, prior) for r in rows]
+    host, why_no_host = candidate_host(boards)
+    priors = []
+    for version, pb in prior_boards or []:
+        h, why = same_box(boards, [pb], "the %s prior board" % version)    # refuses two hosts
+        priors.append({"version": version, "races": pb.get("races") or {}, "host_id": h, "why_not": why,
+                       "probe": board_probe(pb), "versions": merge_boards([pb])[2]})
+    base = next((p for p in priors if p["version"] == doc["paper_version"]), None)
+    others = [p for p in priors if p is not base]
+    flagged = others[-1] if others else None
+    verified = lambda p: p is not None and p["host_id"] is not None  # noqa: E731
+    stored_host = doc["source"].get("host")
+    same_host_opps = bool(host and stored_host and stored_host == host)
+    rows = [compare_one(rec, races, not_run_why or {}, hw_diff,
+                        {"races": base["races"]} if verified(base) else None, same_host_opps)
+            for rec in doc["recipes"]]
+    for p in others:
+        rows = [attach_prior_board(r, p["version"], p["races"], p is flagged and verified(p)) for r in rows]
+    if reference is not None:
+        rows = [attach_reference(r, reference) for r in rows]
     extra, extra_counts, be_label = [], {}, None
     if best_ever is not None:
         if best_ever.get("vendor") != doc["vendor"]:
@@ -780,10 +935,12 @@ def compare(doc, boards, not_run_why=None, prior=None, prior_label=None, best_ev
         be_label = "best ever (%s)" % VENDOR_TAG.get(doc["vendor"], doc["vendor"])
         new_recs = new_cell_records(boards, doc["vendor"])
         best_rows = best_ever.get("rows") or {}
-        rows = [attach_best_ever(r, new_recs.get(r["key"]), best_rows) for r in rows]
+        rows = [attach_best_ever(r, new_recs.get(r["key"]), best_rows, host) for r in rows]
         recipe_keys = {r["key"] for r in doc["recipes"]}
-        extra = [attach_best_ever(extra_row(rec), rec, best_rows)
+        extra = [attach_best_ever(extra_row(rec), rec, best_rows, host)
                  for k, rec in sorted(new_recs.items()) if k not in recipe_keys]
+        if others or base:
+            extra = [attach_extra_priors(r, base, others, flagged, verified) for r in extra]
         for r in extra:
             for f in r["flags"]:
                 extra_counts[f] = extra_counts.get(f, 0) + 1
@@ -791,24 +948,55 @@ def compare(doc, boards, not_run_why=None, prior=None, prior_label=None, best_ev
     for r in rows:
         for f in r["flags"]:
             counts[f] = counts.get(f, 0) + 1
+    if verified(base):
+        basis = "same box %s: %s re-timed in this job" % (host, base["version"])
+    elif base is not None:
+        basis = "no verdict: %s" % base["why_not"]
+    else:
+        basis = "no verdict: no on-box %s board (--prior-board %s=...)" % (doc["paper_version"], doc["paper_version"])
     return {"schema": COMPARE_SCHEMA, "vendor": doc["vendor"], "paper_version": doc["paper_version"],
             "new_versions": versions, "new_label": new_label(candidate, versions), "candidate": candidate,
-            "prior_label": prior_label if prior is not None else None,
+            "host_id": host, "host_probe": next((board_probe(b) for b in boards if board_probe(b)), None),
+            "host_missing": why_no_host, "verdict_basis": basis,
+            "baseline_label": ("%s (this box)" % base["version"]) if base else None,
+            "prior_label": flagged["version"] if flagged else None,
+            "prior_columns": [{"version": p["version"], "host_id": p["host_id"], "probe": p["probe"],
+                               "why_not": p["why_not"], "board_versions": p["versions"]} for p in priors],
+            "reference_label": reference_label if reference is not None else None,
+            "stored_host": stored_host,
             "paper_gpu": paper_gpu, "new_gpus": gpus, "hw_diff": hw_diff,
             "thresholds": doc.get("thresholds"), "recipes": len(rows), "flag_counts": counts, "rows": rows,
             "best_ever_label": be_label, "best_ever_source": (best_ever or {}).get("mined_at_head"),
             "extra_rows": extra, "extra_flag_counts": extra_counts}
 
 
-def load_prior(path):
-    """(rows by key, label) of a previous compare JSON (bench/results/paper_compare/compare-<vendor>.json)."""
+def attach_extra_priors(row, base, others, flagged, verified):
+    """The on-box prior columns of a full-board row outside the recipes: new / <version> per prior, and REGRESSION /
+    FASTER vs the on-box baseline and the flagged prior when their host is verified (the same rule as a recipe)."""
+    for p in ([base] if base else []) + others:
+        attach_prior_board(row, p["version"], p["races"], False)
+    if verified(base):
+        r = row["priors"][base["version"]]["ratio"]
+        if r is not None:
+            row["flags"].append("REGRESSION" if r > SLOWER else "FASTER" if r < FASTER else "SAME")
+    if verified(flagged):
+        r = row["priors"][flagged["version"]]["ratio"]
+        if r is not None and r > SLOWER:
+            row["flags"].append("REGRESSION-VS-PRIOR")
+        elif r is not None and r < FASTER:
+            row["flags"].append("FASTER-VS-PRIOR")
+    return row
+
+
+def load_reference(path):
+    """(rows by key, label) of a stored compare JSON (bench/results/paper_compare/compare-<vendor>.json): a reference
+    column only. The label names the run and its host ("host not recorded" for a compare made before 2026-11-14)."""
     doc = load_json(path)
     if doc.get("schema") != COMPARE_SCHEMA:
         raise SystemExit("paper_compare: %s is not a %s document" % (path, COMPARE_SCHEMA))
-    if doc.get("candidate"):
-        raise SystemExit("paper_compare: the prior column must be a published release, not %s"
-                         % doc.get("new_label"))
-    return {r["key"]: r for r in doc.get("rows") or []}, ",".join(doc.get("new_versions") or []) or "prior"
+    label = doc.get("new_label") or ",".join(doc.get("new_versions") or []) or "reference"
+    return ({r["key"]: r for r in doc.get("rows") or []},
+            "%s stored (host %s)" % (label, doc.get("host_id") or "not recorded"))
 
 
 def fmt_ms(v):
@@ -832,10 +1020,17 @@ def fmt_q(q):
     return text or "-"
 
 
+def other_prior_versions(res):
+    """The on-box prior columns besides the baseline, in order."""
+    base = (res.get("baseline_label") or "").split(" ")[0]
+    return [p["version"] for p in res.get("prior_columns") or [] if p["version"] != base]
+
+
 def render_md(res):
     v, new = res["vendor"], res.get("new_label") or ", ".join(res["new_versions"]) or "?"
-    pl = res.get("prior_label")
-    lines = ["# Paper measurements: %s%s against %s on %s" % (res["paper_version"], ", " + pl if pl else "", new, v),
+    pv = other_prior_versions(res)
+    base = res.get("baseline_label") or "%s (no on-box board)" % res["paper_version"]
+    lines = ["# Paper measurements: %s%s against %s on %s" % (base, "".join(", %s (this box)" % x for x in pv), new, v),
              ""]
     cand = res.get("candidate")
     if cand:
@@ -843,27 +1038,45 @@ def render_md(res):
             cand.get("source_commit"), cand.get("version"),
             ", ".join("%s sha256 %s" % (w.get("file"), w.get("sha256")) for _, w in sorted(cand["wheels"].items()))))
         lines.append("")
+    lines.append("**Verdict basis**: %s. Times are compared only on the same box (AGENTS.md); every stored column "
+                 "below is reference only and makes no flag." % res.get("verdict_basis"))
+    lines.append("")
+    lines.append("- candidate box: %s" % probe_line(res.get("host_probe")))
+    for p in res.get("prior_columns") or []:
+        lines.append("- %s box: %s%s" % (p["version"], probe_line(p.get("probe")),
+                                         " (%s)" % p["why_not"] if p.get("why_not") else ""))
+    lines.append("- stored %s column: the paper board, host %s" % (res["paper_version"],
+                                                                   res.get("stored_host") or "not recorded"))
+    if res.get("reference_label"):
+        lines.append("- stored reference column: %s" % res["reference_label"])
+    lines.append("")
     lines.append("Paper GPU: %s. New GPU: %s.%s" % (res["paper_gpu"], ", ".join(res["new_gpus"]) or "?",
                  " **Different hardware: timings are not comparable.**" if res["hw_diff"] else ""))
     t = res.get("thresholds") or {}
-    lines.append("Ratio = new / %s median ms; REGRESSION above %s, FASTER below %s; quality judged by %s. "
-                 "Opponents are the paper's stored cells (never rerun); 'vs opp' is ours over the paper's fastest "
-                 "paired opponent on that comparison's clock." % (res["paper_version"],
-                 t.get("regression_ratio_above"), t.get("faster_ratio_below"), t.get("quality_policy")))
+    lines.append("Ratio = new / %s median ms on this box; REGRESSION above %s, FASTER below %s; quality judged by %s "
+                 "against the paper record. Opponents are the paper's stored cells (never rerun, host %s); 'vs opp' is "
+                 "ours over the paper's fastest paired opponent on that comparison's clock, shown, never a flag across "
+                 "hosts." % (base, t.get("regression_ratio_above"), t.get("faster_ratio_below"),
+                             t.get("quality_policy"), res.get("stored_host") or "not recorded"))
     lines.append("")
     lines.append("Flags: " + ", ".join("%s %d" % kv for kv in sorted(res["flag_counts"].items())))
     lines.append("")
-    pcols = "%s ms | new/%s | " % (pl, pl) if pl else ""
+    pcols = "".join("%s ms | new/%s | " % (x, x) for x in pv)
     bl = res.get("best_ever_label")
     bcols = "%s ms | best-ever date, release | new/best | " % bl if bl else ""
-    lines.append("| recipe | %s ms | %snew ms | ratio | %sflags | quality %s | quality new | q | best opponent "
-                 "(ms) | vs opp %s | vs opp new | note |" % (res["paper_version"], pcols, bcols, res["paper_version"],
-                                                             res["paper_version"]))
-    lines.append("|---|---:|%s---:|---:|%s---|---|---|---|---|---:|---:|---|" % ("---:|---:|" if pl else "",
-                                                                             "---:|---|---:|" if bl else ""))
+    rl = res.get("reference_label")
+    rcols = "reference ms | " if rl else ""
+    lines.append("| recipe | %s ms | %snew ms | ratio | %sflags | stored %s ms | %squality %s | quality new | q | "
+                 "best opponent (ms) | vs opp %s | vs opp new | note |" % (base, pcols, bcols, res["paper_version"],
+                                                                         rcols, res["paper_version"],
+                                                                         res["paper_version"]))
+    lines.append("|---|---:|%s---:|---:|%s---|---:|%s---|---|---|---|---:|---:|---|" % (
+        "---:|---:|" * len(pv), "---:|---|---:|" if bl else "", "---:|" if rl else ""))
     for r in res["rows"]:
-        pvals = ("%s | %s | " % (fmt_ms(r.get("prior_ms")), fmt_ratio(r.get("ratio_vs_prior")))) if pl else ""
+        pvals = "".join("%s | %s | " % (fmt_ms(((r.get("priors") or {}).get(x) or {}).get("ms")),
+                                        fmt_ratio(((r.get("priors") or {}).get(x) or {}).get("ratio"))) for x in pv)
         bvals = best_ever_cells(r) if bl else ""
+        rvals = "%s | " % fmt_ms(r.get("ref_prior_ms")) if rl else ""
         b = r.get("best_opponent") or {}
         note = []
         if r.get("why"):
@@ -871,7 +1084,13 @@ def render_md(res):
         if r.get("new_status") not in (None, "ok", "missing") and r.get("new_ms") is None:
             note.append("new: " + r["new_status"][:120])
         if r.get("old_ms") is None and r.get("old_status") != "ok":
-            note.append("old: " + str(r["old_status"])[:120])
+            note.append("this box %s: %s" % (res["paper_version"], str(r["old_status"])[:120]))
+        for x in pv:
+            st = ((r.get("priors") or {}).get(x) or {}).get("status")
+            if st and st != "ok" and ((r.get("priors") or {}).get(x) or {}).get("ms") is None:
+                note.append("this box %s: %s" % (x, st[:120]))
+        if r.get("ref_ms") is None and r.get("ref_status") != "ok":
+            note.append("stored: " + str(r["ref_status"])[:120])
         if r.get("quality_failures"):
             note.append("quality: " + "; ".join(r["quality_failures"])[:200])
         if r.get("quality_missing"):
@@ -882,22 +1101,25 @@ def render_md(res):
         if r.get("best_ever_params_differ") or r.get("best_ever_hash_differs"):
             note.append("vs best ever: " + ",".join(r.get("best_ever_params_differ", [])[:6] +
                                                     (["hash"] if r.get("best_ever_hash_differs") else [])))
-        lines.append("| %s | %s | %s%s | %s | %s%s | %s | %s | %s | %s | %s | %s | %s |" % (
+        lines.append("| %s | %s | %s%s | %s | %s%s | %s | %s%s | %s | %s | %s | %s | %s | %s |" % (
             r["key"], fmt_ms(r.get("old_ms")), pvals, fmt_ms(r.get("new_ms")), fmt_ratio(r.get("ratio")), bvals,
-            " ".join(r["flags"]), fmt_q(r.get("old_quality")), fmt_q(r.get("new_quality")),
-            r.get("quality_verdict", "-"),
+            " ".join(r["flags"]), fmt_ms(r.get("ref_ms")), rvals, fmt_q(r.get("old_quality")),
+            fmt_q(r.get("new_quality")), r.get("quality_verdict", "-"),
             "%s (%s)" % (b.get("arm"), fmt_ms(b.get("opponent_ms"))) if b else "-",
             fmt_ratio(b.get("ratio")), fmt_ratio(b.get("ratio_new")), "; ".join(note).replace("|", "/")))
     lines.append("")
     if bl:
         ex = res.get("extra_rows") or []
-        lines.append("## Rows outside the paper's recipes: %d (new against %s)" % (len(ex), bl))
+        allp = [p["version"] for p in res.get("prior_columns") or []]
+        lines.append("## Rows outside the paper's recipes: %d (new against %s)" % (
+            len(ex), ", ".join(["%s (this box)" % x for x in allp] + [bl + " (reference)"])))
         lines.append("")
         if res.get("extra_flag_counts"):
             lines.append("Flags: " + ", ".join("%s %d" % kv for kv in sorted(res["extra_flag_counts"].items())))
             lines.append("")
-        lines.append("| race | new ms | %s ms | best-ever date, release | new/best | flags | note |" % bl)
-        lines.append("|---|---:|---:|---|---:|---|---|")
+        xcols = "".join("%s ms | new/%s | " % (x, x) for x in allp)
+        lines.append("| race | new ms | %s%s ms | best-ever date, release | new/best | flags | note |" % (xcols, bl))
+        lines.append("|---|---:|%s---:|---|---:|---|---|" % ("---:|---:|" * len(allp)))
         for r in ex:
             note = ""
             if r.get("best_ever_params_differ") or r.get("best_ever_hash_differs"):
@@ -905,8 +1127,11 @@ def render_md(res):
                                                    (["hash"] if r.get("best_ever_hash_differs") else []))
             elif r.get("best_ever_ms") is None:
                 note = "no earlier measurement"
-            lines.append("| %s | %s | %s%s | %s |" % (r["key"], fmt_ms(r.get("new_ms")), best_ever_cells(r),
-                                                       " ".join(r["flags"]), note.replace("|", "/")))
+            xvals = "".join("%s | %s | " % (fmt_ms(((r.get("priors") or {}).get(x) or {}).get("ms")),
+                                            fmt_ratio(((r.get("priors") or {}).get(x) or {}).get("ratio")))
+                            for x in allp)
+            lines.append("| %s | %s | %s%s%s | %s |" % (r["key"], fmt_ms(r.get("new_ms")), xvals, best_ever_cells(r),
+                                                         " ".join(r["flags"]), note.replace("|", "/")))
         lines.append("")
     return "\n".join(lines)
 
@@ -925,6 +1150,15 @@ def render_summary(res, top=8):
         res["vendor"], res["paper_version"], (res["prior_label"] + "->") if res.get("prior_label") else "",
         label.replace(" ", "_"), res["recipes"],
         res["paper_gpu"], ",".join(res["new_gpus"]) or "?", " HW-DIFF" if res["hw_diff"] else "")]
+    # the verdict is printed with BOTH arms' probes beside it: a verdict without the probe is not a verdict (AGENTS.md)
+    out.append("verdict: " + str(res.get("verdict_basis")))
+    out.append("  probe candidate: " + probe_line(res.get("host_probe")))
+    for p in res.get("prior_columns") or []:
+        out.append("  probe %s: %s%s" % (p["version"], probe_line(p.get("probe")),
+                                         " [%s]" % p["why_not"] if p.get("why_not") else ""))
+    out.append("  stored %s (reference, no flags): host %s%s" % (
+        res["paper_version"], res.get("stored_host") or "not recorded",
+        "; %s" % res["reference_label"] if res.get("reference_label") else ""))
     out.append("flags: " + " ".join("%s=%d" % kv for kv in sorted(res["flag_counts"].items())))
     timed_rows = [r for r in rows if number(r.get("ratio"))]
     if timed_rows:
@@ -963,7 +1197,8 @@ def render_summary(res, top=8):
                 out += ["  %.2fx %s (best %s ms %s %s -> %s ms)" % (
                     r["ratio_vs_best_ever"], r["key"], fmt_ms(r["best_ever_ms"]), r.get("best_ever_release"),
                     r.get("best_ever_date"), fmt_ms(r["new_ms"])) for r in hit[:top]]
-    for flag in ("RECOVERED", "STILL-REGRESSED", "FIXED", "BROKEN", "QUALITY-DROP", "QUALITY-CHANGE",
+    for flag in ("RECOVERED", "STILL-REGRESSED", "FIXED", "BROKEN", "BASELINE-NOT-RUN", "NOT-COMPARED",
+                 "QUALITY-DROP", "QUALITY-CHANGE",
                  "QUALITY-MISSING", "NOW-WINS",
                  "NOW-LOSES", "PARAMS-DIFF", "NOT-RUN", "BEST-EVER-REGRESSION-UNCHECKED", "PARAMS-DIFFER"):
         hit = [r for r in rows if flag in r["flags"]]
@@ -987,16 +1222,23 @@ def cmd_compare(args):
             why.update({k: v for k, v in load_json(p).items() if isinstance(v, str)})
         except (OSError, ValueError):
             pass
-    prior, plabel = (None, None)
-    if args.prior_compare:
-        prior, plabel = load_prior(args.prior_compare)
-        if args.prior_label:
-            plabel = args.prior_label
+    priors = []
+    for spec in args.prior_board or []:
+        version, path = parse_prior_board(spec)
+        try:
+            priors.append((version, load_json(path)))
+        except (OSError, ValueError) as exc:
+            # a prior that never ran (its install or every smoke failed) is a missing column, not a crash
+            print("PAPER-COMPARE unreadable prior board %s: %s (column NOT-RUN)" % (path, exc), file=sys.stderr)
+            priors.append((version, {"races": {}}))
+    ref, rlabel = (None, None)
+    if args.reference_compare:
+        ref, rlabel = load_reference(args.reference_compare)
     best = None
     if args.best_ever:
         best = BE.load(os.path.join(REPO, "bench", "results", "board_best_ever", "%s.json" % doc["vendor"])
                        if args.best_ever == "auto" else args.best_ever)
-    res = compare(doc, boards, why, prior, plabel, best)
+    res = compare(doc, boards, why, priors, ref, rlabel, best)
     v = doc["vendor"]
     md = args.out_md or os.path.join(OUT_DIR, "COMPARE-%s.md" % v)
     js = args.out_json or os.path.join(os.path.dirname(os.path.abspath(md)), "compare-%s.json" % v)
@@ -1034,10 +1276,14 @@ def build_parser():
     c.add_argument("--board", action="append", default=[], required=True)
     c.add_argument("--not-run", action="append", default=[],
                    help="json {race id: why} (not-planned.json, smoke-failed.json) for NOT-RUN rows")
-    c.add_argument("--prior-compare", default=None,
-                   help="the previous release's compare JSON (bench/results/paper_compare/compare-<vendor>.json, "
-                        "0.8.66): the middle column, REGRESSION-VS-PRIOR / RECOVERED / STILL-REGRESSED")
-    c.add_argument("--prior-label", default=None, help="the middle column's name (default its new_versions)")
+    c.add_argument("--prior-board", action="append", default=[], metavar="VERSION=BOARD.json",
+                   help="OUR prior wheel of VERSION re-timed in the same job on the same box (board-prior-<v>/"
+                        "board.json); repeat. The paper's version is the baseline (REGRESSION / FASTER / FIXED / "
+                        "BROKEN), the last other one the prior column (REGRESSION-VS-PRIOR, RECOVERED, "
+                        "STILL-REGRESSED). A board from another host refuses")
+    c.add_argument("--reference-compare", default=None,
+                   help="a stored compare JSON of another run (bench/results/paper_compare/compare-<vendor>.json): "
+                        "a reference column with its host, never a flag")
     c.add_argument("--best-ever", nargs="?", const="auto", default=None, metavar="FILE",
                    help="the best-ever column (tools/board_best_ever.py mine; no FILE: "
                         "bench/results/board_best_ever/<vendor>.json): BEST-EVER-REGRESSION, PARAMS-DIFFER, and a "

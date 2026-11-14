@@ -130,6 +130,7 @@ def cell_records(board, blob_vendor_hint=""):
         races = {r.get("id"): r for r in races if isinstance(r, dict)}
     when = board.get("updated") or board.get("created")
     box_version = ((board.get("box") or {}).get("mojolearn") or {}).get("version")
+    box_host_id = (((board.get("box") or {}).get("host_probe") or {}).get("host_id"))
     out = []
     for rid, race in races.items():
         if not rid or not isinstance(race, dict):
@@ -147,13 +148,16 @@ def cell_records(board, blob_vendor_hint=""):
                 if vendor not in VENDORS:
                     continue
                 params, psrc = params_of(race, c)
+                # the box the time was taken on (bench_board race_host / box.host_probe, 2026-11-14): paper_compare
+                # derives a best-ever time flag only against a cell of the same host id
+                host_id = (race.get("host") or {}).get("host_id") or box_host_id
                 version = c.get("version") or c.get("library_version") or box_version
                 out.append({"key": race_key(rid, phase, c.get("arm"), c.get("batch")), "race_id": rid,
                             "family": race.get("family"), "lane": race.get("lane"), "dataset": race.get("dataset"),
                             "phase": phase, "arm": c.get("arm"), "batch": c.get("batch"), "vendor": vendor,
                             "device": device, "ms": float(ms), "hash": c.get("hash"), "params": params,
                             "params_source": psrc, "version": version, "release": release_of(version),
-                            "board_updated": when})
+                            "board_updated": when, "host_id": host_id})
     return out
 
 
@@ -275,7 +279,7 @@ def mine(repo, jobs=None, rev_args=("--all", "--reflog")):
 
 def _entry(r):
     return {k: r.get(k) for k in ("ms", "date", "commit_date", "release", "version", "commit", "path", "hash",
-                                  "params", "params_source", "device")}
+                                  "params", "params_source", "device", "host_id")}
 
 
 SUSPECT_FRACTION = 0.05
