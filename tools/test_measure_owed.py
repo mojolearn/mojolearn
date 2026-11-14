@@ -188,6 +188,58 @@ class Report(unittest.TestCase):
             self.assertIn("b2:B-NOT-RUN", by["r-ab"]["flags"])
 
 
+class AtomicResults(unittest.TestCase):
+    """2026-11-14, L40S pod nvc1: the owed report died on `JSONDecodeError: line 1 column 87`, a results line cut
+    short while the disk was full. Results are written whole or not at all, and a cut driver line is reported."""
+
+    def test_write_atomic_keeps_the_old_file_on_a_failed_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "sub", "compare.json")
+            PC.write_atomic(p, PC.json_text({"a": 1}))
+            self.assertEqual(json.load(open(p)), {"a": 1})
+
+            class Full(Exception):
+                pass
+
+            real = os.fsync
+
+            def no_space(fd):
+                raise Full("[Errno 28] No space left on device")
+            os.fsync = no_space
+            try:
+                with self.assertRaises(Full):
+                    PC.write_atomic(p, PC.json_text({"a": 2, "long": "x" * 10000}))
+            finally:
+                os.fsync = real
+            self.assertEqual(json.load(open(p)), {"a": 1}, "the old file is untouched")
+            self.assertEqual(sorted(os.listdir(os.path.dirname(p))), ["compare.json"], "no temp file is left")
+
+    def test_report_reads_a_cut_driver_line_as_unreadable(self):
+        with tempfile.TemporaryDirectory() as d:
+            plan_dir, res = os.path.join(d, "plan"), os.path.join(d, "res")
+            os.makedirs(plan_dir)
+            os.makedirs(os.path.join(res, "drivers"))
+            PC.write_atomic(os.path.join(plan_dir, "rowmap.json"), PC.json_text({}))
+            PC.write_atomic(os.path.join(plan_dir, "not-planned.json"), PC.json_text({}))
+            good = json.dumps({"row": "r-drv", "arm": "candidate", "case": "c1", "ms": 1.5, "status": "ok"})
+            with open(os.path.join(res, "drivers", "drivers.jsonl"), "w") as fh:
+                fh.write(good + "\n" + good[:40] + "\n")
+            doc = dict(OWED, rows=[r for r in OWED["rows"] if r["id"] == "r-drv"])
+            rep = MO.report(doc, plan_dir, res, None, "nvidia")
+            self.assertEqual(rep["drivers"][0]["ms"], 1.5)
+            self.assertEqual(rep["drivers"][1]["status"], "UNREADABLE")
+            self.assertEqual(rep["drivers"][1]["line"], 2)
+            self.assertIn("UNREADABLE", MO.render_summary(rep))
+            self.assertIn("UNREADABLE", MO.render_md(rep))
+
+    def test_report_files_are_written_atomically(self):
+        import inspect
+        for fn in (MO.cmd_report, MO.cmd_plan):
+            src = inspect.getsource(fn)
+            self.assertIn("write_atomic", src)
+            self.assertNotIn('open(path, "w")', src)
+
+
 class PriorColumn(unittest.TestCase):
     def test_recovered_and_regression_vs_prior(self):
         row = {"key": "k", "new_ms": 10.0, "flags": ["SAME"]}

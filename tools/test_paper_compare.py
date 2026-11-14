@@ -9,6 +9,7 @@ import copy
 import gzip
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -387,6 +388,94 @@ class JobScript(unittest.TestCase):
         self.assertNotIn("for f in taxi/taxi_speed.npz", text)
         self.assertIn('rm -rf "${d}work" "${d}evidence"', text)
         self.assertIn("prune_persist_staging", text)
+
+    def functions(self, *names):
+        """The named shell functions of the job script, as text to source (each runs on its own, no job)."""
+        with open(self.JOB) as fh:
+            text = fh.read()
+        out = []
+        for name in names:
+            start = text.index("\n%s() {" % name) + 1
+            first = text[start:text.index("\n", start)]
+            if first.rstrip().endswith("}"):          # a one-line function
+                out.append(first + "\n")
+                continue
+            end = text.index("\n}\n", start) + 3
+            out.append(text[start:end])
+        return "".join(out)
+
+    def sh(self, body, env=None):
+        e = dict(os.environ, **(env or {}))
+        return subprocess.run(["bash", "-c", body], env=e, capture_output=True, text=True, timeout=60)
+
+    def test_busy_cores_never_negative(self):
+        # 2026-11-14, L40S pod nvc1: `busy=-18.3 total=128` from /proc/stat deltas (iowait goes backwards; the
+        # container's /proc/stat is the host's). The pod's cgroup CPU time over wall time, clamped to the allocation.
+        f = self.functions("busy_line")
+        line = lambda prev, cur, n=32: self.sh(f + 'busy_line %d board "%s" "%s"' % (n, prev, cur)).stdout
+        # cgroup: 60 s of wall, 1200 s of CPU = 20 busy cores
+        self.assertRegex(line("1000000 5000000 cgroup", "61000000 1205000000 cgroup"),
+                         r"busy=20\.0 total=32 phase=board source=cgroup$")
+        # more CPU than the allocation (a burst over the quota period): clamped, and marked so
+        self.assertIn("busy=32.0 total=32", line("0 0 cgroup", "60000000 3000000000 cgroup"))
+        self.assertIn("clamped", line("0 0 cgroup", "60000000 3000000000 cgroup"))
+        # a counter that went backwards is no sample: NA, never a negative number
+        out = line("0 9000000 cgroup", "60000000 1000 cgroup")
+        self.assertIn("busy=NA", out)
+        self.assertNotIn("busy=-", out)
+        # /proc/stat fallback: busy ticks over all ticks, scaled by the cpus listed, clamped to the allocation
+        self.assertIn("busy=16.0 total=32", line("1000 200 64 procstat", "2000 450 64 procstat"))
+        self.assertIn("busy=32.0 total=32", line("1000 200 128 procstat", "2000 700 128 procstat"))
+        self.assertIn("busy=NA", line("1000 900 128 procstat", "2000 100 128 procstat"))
+        with open(self.JOB) as fh:
+            text = fh.read()
+        self.assertIn("cpu.stat", text)
+        self.assertIn("busy_line", text[text.index("cores_sampler() {"):])
+
+    def test_disk_gate_refuses_and_prints_the_numbers(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        os.makedirs(os.path.join(d, "job"))
+        f = self.functions("say", "nlines", "disk_gate")
+        base = 'RES=%s; J=$RES/job; EXIT_DISK=28; WORST=0; ' % d
+        ok = self.sh(base + f + "disk_gate board 10 1 1; echo PASSED", env={"PC_DISK_RESERVE_GB": "0", "PC_LOADED_MB": "1"})
+        self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+        self.assertIn("DISK board: 10 races x 1 MB + 1 boards x 1 MB + reserve 0 GB = 11 MB needed", ok.stdout)
+        self.assertIn("PASSED", ok.stdout)
+        no = self.sh(base + f + "disk_gate board 1000000000 1 40; echo NOT-REACHED")
+        self.assertEqual(no.returncode, 28)
+        self.assertIn("DISK board refused", no.stdout)
+        self.assertNotIn("NOT-REACHED", no.stdout)
+        with open(os.path.join(d, "job", "phases.tsv")) as fh:
+            self.assertTrue(fh.read().startswith("board-disk-refused\t28\t"))
+
+    def test_enospc_stops_the_job_with_exit_28(self):
+        # a fail-soft phase that hit ENOSPC must not run the next phase into the same wall (owed prior 0009 and
+        # all 653 smoke races of screen 0010 failed one after the other, 2026-11-14)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        os.makedirs(os.path.join(d, "job"))
+        os.makedirs(os.path.join(d, "logs"))
+        f = self.functions("say", "phase", "phase_end", "nlines", "free_gb", "disk_full_in_phase")
+        base = 'RES=%s; J=$RES/job; EXIT_DISK=28; WORST=0; ' % d
+        # an old ENOSPC line in the job's own log and a log untouched since before the phase are not this phase's
+        with open(os.path.join(d, "job", "job.log"), "w") as fh:
+            fh.write("DISK FULL in phase board: ENOSPC\n")
+        old = os.path.join(d, "logs", "old.log")
+        with open(old, "w") as fh:
+            fh.write("OSError: [Errno 28] No space left on device\n")
+        os.utime(old, (1, 1))
+        clean = self.sh(base + f + "phase owed; phase_end 1; echo NEXT-PHASE")
+        self.assertEqual(clean.returncode, 0, clean.stdout + clean.stderr)
+        self.assertIn("NEXT-PHASE", clean.stdout)
+        full = self.sh(base + f + "phase smoke; echo 'OSError: [Errno 28] No space left on device' > $RES/logs/smoke-s1.log; "
+                       "phase_end 1; echo NEXT-PHASE")
+        self.assertEqual(full.returncode, 28, full.stdout + full.stderr)
+        self.assertIn("DISK FULL in phase smoke: ENOSPC in", full.stdout)
+        self.assertIn("smoke-s1.log", full.stdout)
+        self.assertNotIn("NEXT-PHASE", full.stdout)
+        with open(os.path.join(d, "job", "phases.tsv")) as fh:
+            self.assertIn("smoke\t28\t", fh.read())
 
 
 # ---------------------------------------------------------------------------------------------------------------

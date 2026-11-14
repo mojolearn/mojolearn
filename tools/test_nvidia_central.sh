@@ -138,9 +138,9 @@ $N cancel lane-a $id2 > /dev/null
 waitfor 30 "$N status $id1 2>/dev/null | grep -q '^job 0001: done'"
 check "status: the 2-GPU job done, saw CUDA 0,1" "$N status $id1 | grep -q '^job 0001: done' && $N log $id1 | grep -q 'gpus=0,1 job=0001'"
 check "the cancelled job is cancelled" "$N status $id2 | grep -q 'cancelled'"
-fin1=$(ls "$W"/s3/measurements/box-jobs/*/nvc-lane-a-*/final.tgz 2>/dev/null | head -1)
-check "submit persisted the job: final.tgz in the fake R2 with the job's output" "[ -n \"$fin1\" ] && tar -xzOf \"$fin1\" ./command.log | grep -q 'gpus=0,1 job=0001'"
-check "the final.tgz sha256 sidecar matches" "[ -n \"$fin1\" ] && [ \"\$(cut -c1-64 \"$fin1.sha256\")\" = \"\$(shasum -a 256 \"$fin1\" | cut -c1-64)\" ]"
+fin1=$(ls "$W"/s3/measurements/box-jobs/*/nvc-lane-a-*/final.00.tgz 2>/dev/null | head -1)
+check "submit persisted the job: final.00.tgz (one streamed piece) in the fake R2 with the job's output" "[ -n \"$fin1\" ] && tar -xzOf \"$fin1\" ./command.log | grep -q 'gpus=0,1 job=0001'"
+check "the final.00.tgz sha256 sidecar matches" "[ -n \"$fin1\" ] && [ \"\$(cut -c1-64 \"$fin1.sha256\")\" = \"\$(shasum -a 256 \"$fin1\" | cut -c1-64)\" ]"
 check "submit --no-persist refuses without MOJOLEARN_ALLOW_UNPERSISTED=1" "! $N submit lane-a --no-persist /root/ev-lane-a/gate.sh 2>/dev/null && grep -q REFUSED $W/persist/unpersisted.log"
 check "submit refuses a script that is not on the box" "! $N submit lane-a /root/ev-lane-a/nope.sh 2>/dev/null"
 check "run takes a free slot and sees one GPU" "[ \"\$($N run lane-b 'echo \$CUDA_VISIBLE_DEVICES' 2>/dev/null)\" = 0 ]"
@@ -156,7 +156,7 @@ check "down refuses while a job runs" "! $N down $pa 2>/dev/null && [ -f $W/devp
 waitfor 30 "$N status $idl 2>/dev/null | grep -q ': running'"   # a job cancelled while queued never runs
 $N cancel lane-a $idl > /dev/null
 waitfor 90 "$N status $idl 2>/dev/null | grep -q cancelled"
-check "a cancelled job still uploads its final.tgz (the TERM trap)" "[ \$(ls $W/s3/measurements/box-jobs/*/nvc-lane-a-*/final.tgz 2>/dev/null | wc -l) -ge 2 ]"
+check "a cancelled job still uploads its final.tgz (the TERM trap)" "[ \$(ls $W/s3/measurements/box-jobs/*/nvc-lane-a-*/final.00.tgz 2>/dev/null | wc -l) -ge 2 ]"
 
 echo "== the Mac watcher deletes a pod that stops answering"
 wb=$(cat "$W/devpods/$pb/deadman.pid"); cb=$( [ $pb = nvc1 ] && echo $C1 || echo $C2 )

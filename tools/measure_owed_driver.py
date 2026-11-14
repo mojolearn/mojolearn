@@ -222,11 +222,17 @@ def main(argv=None):
     except Exception as exc:  # noqa: BLE001 -- the driver's setup refused: one REFUSED line
         results = [(row["driver"], None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400]))]
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+    # one append of whole lines (2026-11-14: a line cut by a full disk crashed the owed report; the report now also
+    # reads such a line as UNREADABLE)
+    body = "".join(json.dumps(dict(base, case=case, ms=ms, status=why or "ok"), sort_keys=True) + "\n"
+                   for case, ms, why in results)
     with open(a.out, "a") as fh:
-        for case, ms, why in results:
-            fh.write(json.dumps(dict(base, case=case, ms=ms, status=why or "ok"), sort_keys=True) + "\n")
-            print("OWED-DRIVER row=%s arm=%s case=%s ms=%s status=%s"
-                  % (a.row, a.arm, case, "%.3f" % ms if ms is not None else "-", why or "ok"))
+        fh.write(body)
+        fh.flush()
+        os.fsync(fh.fileno())
+    for case, ms, why in results:
+        print("OWED-DRIVER row=%s arm=%s case=%s ms=%s status=%s"
+              % (a.row, a.arm, case, "%.3f" % ms if ms is not None else "-", why or "ok"))
     return 0
 
 

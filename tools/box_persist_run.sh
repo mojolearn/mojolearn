@@ -4,9 +4,12 @@
 #
 #   box_persist_run.sh <persist.json> <results-dir> -- <command...>
 #       runs the command (stdout+stderr also tee'd to <results-dir>/command.log), and every every_sec seconds
-#       tars <results-dir> and PUTs it to the next of the job's slots (a ring: 00.tgz, 01.tgz, ...) with a
+#       streams a tarball of <results-dir> to the next of the job's slots (a ring: 00.tgz, 01.tgz, ...) with a
 #       sha256 sidecar and a manifest.json. On ANY exit (normal, TERM, INT, the EXIT trap) it uploads
-#       final.tgz. HUP and PIPE are ignored, so an ssh session that dies under `dev_pod.sh run` or
+#       final.tgz. Every upload is streamed `tar | gzip` cut into pieces of max_bytes (final.00.tgz,
+#       final.01.tgz, ...; ring: 00.00.tgz, ...), each with a sha256 sidecar, at most one piece on the box's disk at
+#       a time; <name>.sha256 holds the whole stream's sha256 and the manifest lists the pieces in order
+#       (tools/box_persist.py fetch concatenates them back into <name>). HUP and PIPE are ignored, so an ssh session that dies under `dev_pod.sh run` or
 #       `do_amd_steward.sh run` leaves the job running and persisting. Exit status: the command's.
 #   box_persist_run.sh --flush-all [seconds]
 #       THE DEAD-MAN HOOK: uploads final.tgz for every active job on this box, bounded by <seconds> (default
@@ -22,15 +25,16 @@
 # <persist.json> is minted on the Mac by tools/box_persist.py (`mint`/`prepare`) and reaches the box on ssh
 # stdin as a 0600 file. It holds presigned PUT/GET URLs for this job's keys only, which expire (at most 7
 # days); no credential ever reaches the box. It is a flat JSON object, one "key": "value" pair per line, so
-# this script reads it with sed: needs bash, curl, tar, gzip, sha256sum or shasum. Nothing else.
+# this script reads it with sed: needs bash, curl, tar, gzip (pigz when present), dd, mkfifo, sha256sum or shasum.
 #
 # Every upload writes one status line to <results-dir>/persist.log:
 #   UPLOADED name=00.tgz seq=3 label=periodic bytes=.. sha256=..   FAILED name=.. http=..   REJECTED (403: expired
 #   or wrong key)   EXPIRED (URLs past their expiry: nothing more is sent)   READBACK-OK|READBACK-MISMATCH
 # Excluded from every tarball: venv, venv-*, .venv, .pixi, *.whl, .cache, __pycache__, .mojo_cache,
-# node_modules, *.persist.json, persist.json, plus the json's "excludes". When the files' sizes (read before any tar)
-# exceed max_bytes, the one tarball leaves out the largest files, and PERSIST_TRUNCATED.txt in the results dir names
-# what was left out. A staging tarball that failed to build or upload is deleted (it filled a pod on 2026-11-13).
+# node_modules, *.persist.json, persist.json, plus the json's "excludes". Nothing else is left out: the json's
+# `pieces` (minted from --max-total-gb) bounds one upload; a results dir that needs more pieces logs OVER-BUDGET
+# and that upload fails (re-mint with `box_persist.py remint --tag <tag> --max-total-gb N`). No whole tarball is
+# ever staged on the box (2026-11-14: a 27 GB staging tarball could never leave the full 80 GB L40S pod).
 #
 # Box state: <root>/active/<tag>.env (one per running job; what --flush-all walks), <root>/state/<tag>/ (upload
 # counter, entries, lock). <root> is $BOX_PERSIST_ROOT, else the parent of this script's bin/ directory, else
@@ -55,6 +59,20 @@ plog() { echo "$(now_utc) $*" >> "$RES/persist.log" 2> /dev/null; }
 say() { echo "box_persist: $*" >&2 2> /dev/null; }
 die() { echo "box_persist: $*" >&2; exit 2; }
 
+# what `box_persist.py remint` may change under a running job (same tag and prefix): re-read before every upload
+load_limits() {
+    EXP=$(jget expires_epoch); EXPU=$(jget expires_utc); MAXB=$(jget max_bytes); READBACK=$(jget readback)
+    PIECES=$(jget pieces)
+    case "$EXP" in ''|*[!0-9]*) EXP=0 ;; esac
+    case "$MAXB" in ''|*[!0-9]*) MAXB=4000000000 ;; esac
+    case "$PIECES" in ''|*[!0-9]*) PIECES=1 ;; esac; [ "$PIECES" -ge 1 ] || PIECES=1
+    # one piece = BCOUNT blocks of BS bytes, at most max_bytes (dd iflag=fullblock reads exactly that much)
+    if [ "$MAXB" -ge 1048576 ]; then BS=1048576; else BS=4096; fi
+    BCOUNT=$(( MAXB / BS )); [ "$BCOUNT" -ge 1 ] || BCOUNT=1
+    PIECE_BYTES=$(( BS * BCOUNT ))
+    READBACK=${READBACK:-final}
+}
+
 # the flat json: "key": "value" on its own line (tools/box_persist.py writes every value as a string)
 jget() {
     local k=${1//./\\.}
@@ -64,14 +82,11 @@ jget() {
 load_job() {  # JSON RES set
     [ -r "$JSON" ] || die "no persist json $JSON"
     TAG=$(jget tag); PREFIX=$(jget prefix); SLOTS=$(jget slots); EVERY=$(jget every_sec)
-    EXP=$(jget expires_epoch); EXPU=$(jget expires_utc); MAXB=$(jget max_bytes); READBACK=$(jget readback)
     EXTRA_EXCL=$(jget excludes)
     case "$TAG" in ''|*[!A-Za-z0-9._-]*) die "persist json $JSON has no valid tag" ;; esac
     case "$SLOTS" in ''|*[!0-9]*) SLOTS=1 ;; esac; [ "$SLOTS" -ge 1 ] || SLOTS=1
     case "$EVERY" in ''|*[!0-9]*) EVERY=900 ;; esac; [ "$EVERY" -ge 1 ] || EVERY=900
-    case "$EXP" in ''|*[!0-9]*) EXP=0 ;; esac
-    case "$MAXB" in ''|*[!0-9]*) MAXB=4000000000 ;; esac
-    READBACK=${READBACK:-final}
+    load_limits
     ST="$ROOT/state/$TAG"
     ( umask 077; mkdir -p "$ST" "$ROOT/active" ) || die "cannot create $ST"
 }
@@ -107,88 +122,92 @@ http() {  # METHOD URL FILE MAXSEC
     printf '%s' "${c:-000}"
 }
 
-tar_results() {  # <out> [exclude-file]: rc 0 or 1 (GNU: files changed while read) is a tarball
-    local ex=() p jb rc
+gz_stream() {  # gzip stdin to stdout on every core when pigz is there (HARD RULE: rented cores are all used)
+    if command -v pigz > /dev/null 2>&1; then pigz -c; else gzip -c; fi
+}
+sha_stdin() { if command -v sha256sum > /dev/null 2>&1; then sha256sum | cut -c1-64; else shasum -a 256 | cut -c1-64; fi; }
+
+tar_stream() {  # the results dir as one tar on stdout; rc 0 or 1 (GNU: files changed while read) is a tarball
+    local ex=() p jb
     for p in $DEFAULT_EXCLUDES $EXTRA_EXCL; do ex+=("--exclude=$p"); done
     jb=$(basename "$JSON"); ex+=("--exclude=$jb")
-    [ -z "${2:-}" ] || ex+=(-X "$2")
-    tar -czf "$1" "${ex[@]}" -C "$RES" . 2>> "$ST/tar.err"; rc=$?
-    [ $rc -le 1 ] && [ -s "$1" ]
+    tar -cf - "${ex[@]}" -C "$RES" . 2>> "$ST/tar.err"
 }
 
-# every file the tarball would hold, one "<bytes> ./<path>" line each, from ONE find pass that prunes what
-# tar_results excludes (a pattern with a slash is matched against the path, as tar does)
-size_list() {
-    local p first=1 pr=()
-    for p in $DEFAULT_EXCLUDES $EXTRA_EXCL "$(basename "$JSON")"; do
-        [ $first = 1 ] || pr+=(-o)
-        case "$p" in */*) pr+=(-path "*/$p") ;; *) pr+=(-name "$p") ;; esac
-        first=0
+# reads the gzip stream on stdin and PUTs it in pieces of at most max_bytes: <base>.00.tgz, <base>.01.tgz, ... each
+# with a sha256 sidecar. At most ONE piece is on the box's disk at a time: dd reads exactly one piece (fullblock)
+# while tar waits on the pipe (2026-11-14: the whole-results staging tarball could never leave a nearly full pod).
+# Each piece also goes to fd 7, the whole stream's sha256. Writes "name:sha:bytes" lines to $ST/pieces.lst.
+# rc 0 done, 1 an upload failed, 3 the stream needs more than the minted `pieces`.
+put_pieces() {  # <base> <url key prefix> <max secs> <readback 0|1>
+    local base=$1 kp=$2 maxs=$3 rb=$4 i=0 pc="$ST/piece" pn name sha bytes c
+    while :; do
+        rm -f "$pc" "$pc.sha256"
+        if [ "$i" -ge "$PIECES" ]; then
+            dd bs=1 count=1 of="$pc" 2> /dev/null
+            if [ -s "$pc" ]; then rm -f "$pc"; plog "OVER-BUDGET name=$base.tgz the results need more than pieces=$PIECES x max_bytes=$MAXB (mint with a larger --max-total-gb)"; return 3; fi
+            rm -f "$pc"; return 0
+        fi
+        dd bs="$BS" count="$BCOUNT" iflag=fullblock of="$pc" 2>> "$ST/dd.err" || { plog "PIECE-FAILED name=$base (see $ST/dd.err)"; rm -f "$pc"; return 1; }
+        bytes=$(fsize "$pc")
+        if [ "$bytes" -eq 0 ]; then rm -f "$pc"; [ "$i" -gt 0 ] && return 0; plog "PIECE-FAILED name=$base empty stream"; return 1; fi
+        cat "$pc" >&7
+        pn=$(printf '%02d' "$i"); name="$base.$pn.tgz"
+        sha=$(sum256 "$pc")
+        printf '%s  %s\n' "$sha" "$name" > "$pc.sha256"
+        c=$(http PUT "$(jget "$kp.p$pn.put")" "$pc" "$maxs")
+        case "$c" in
+            2*) ;;
+            403) plog "REJECTED name=$name http=403 (the URL expired or is not signed for this key)"; rm -f "$pc" "$pc.sha256"; return 1 ;;
+            *) plog "FAILED name=$name http=$c bytes=$bytes"; rm -f "$pc" "$pc.sha256"; return 1 ;;
+        esac
+        c=$(http PUT "$(jget "$kp.p$pn.sha.put")" "$pc.sha256" 120)
+        case "$c" in 2*) ;; *) plog "FAILED name=$name.sha256 http=$c" ;; esac
+        if [ "$rb" = 1 ]; then
+            rm -f "$pc.back"
+            c=$(http GET "$(jget "$kp.p$pn.get")" "$pc.back" "$maxs")
+            if [ "${c#2}" != "$c" ] && [ -f "$pc.back" ] && [ "$(sum256 "$pc.back")" = "$sha" ]; then plog "READBACK-OK name=$name"
+            else plog "READBACK-MISMATCH name=$name http=$c"; echo "$name" >> "$ST/readback.bad"; fi
+            rm -f "$pc.back"
+        fi
+        echo "$name:$sha:$bytes" >> "$ST/pieces.lst"
+        rm -f "$pc" "$pc.sha256"
+        i=$((i + 1))
+        [ "$bytes" -ge "$PIECE_BYTES" ] || return 0
     done
-    if find "$RES" -maxdepth 0 -printf '' > /dev/null 2>&1; then
-        ( cd "$RES" && find . \( "${pr[@]}" \) -prune -o -type f -printf '%s %p\n' ) 2> /dev/null
-    else   # BSD find (the Mac tests): wc -c in batches; drop its "total" lines (every real path starts with ./)
-        ( cd "$RES" && find . \( "${pr[@]}" \) -prune -o -type f -exec wc -c {} + ) 2> /dev/null \
-            | awk '!(NF == 2 && $2 == "total") { sub(/^ */, ""); print }'
-    fi
-}
-
-# the tarball within max_bytes, tarred ONCE: the decision is made from the files' sizes before any tar runs (the
-# 2026-11-13 NVIDIA job tarred 27 GB in full and then again truncated, on a nearly full disk, and both failed).
-# Uncompressed sizes bound the tarball from above, so: all files if they fit; else without files over max/8; else
-# without files over 1 MiB; else the logs only. A tarball that still comes out over max_bytes (tar headers on very
-# many small files) drops to the next level. A failed staging tarball is deleted at once.
-build_tarball() {  # <out>
-    local out=$1 total kept lim b
-    rm -f "$out"
-    size_list > "$ST/sizes.lst"
-    total=$(awk '{ s += $1 } END { printf "%d", s }' "$ST/sizes.lst")
-    if [ "$total" -le "$MAXB" ]; then
-        rm -f "$RES/PERSIST_TRUNCATED.txt"
-        tar_results "$out" || { rm -f "$out"; plog "TAR-FAILED (see $ST/tar.err)"; return 1; }
-        b=$(fsize "$out"); [ "$b" -gt "$MAXB" ] || return 0
-        rm -f "$out"
-    fi
-    for lim in $(( MAXB / 8 )) 1048576; do
-        kept=$(awk -v l="$lim" '$1 <= l { s += $1 } END { printf "%d", s }' "$ST/sizes.lst")
-        [ "$kept" -le "$MAXB" ] || continue
-        awk -v l="$lim" '$1 > l { sub(/^[0-9]+ /, ""); print }' "$ST/sizes.lst" > "$ST/big.lst"
-        {
-            echo "box_persist: the results held $total bytes before compression, over max_bytes=$MAXB; files over $lim bytes were left out:"
-            awk -v l="$lim" '$1 > l' "$ST/sizes.lst"
-        } > "$RES/PERSIST_TRUNCATED.txt"
-        tar_results "$out" "$ST/big.lst" || { rm -f "$out"; plog "TAR-FAILED (see $ST/tar.err)"; return 1; }
-        b=$(fsize "$out"); [ "$b" -gt "$MAXB" ] || { plog "TRUNCATED limit=$lim omitted=$(grep -c . "$ST/big.lst")"; return 0; }
-        rm -f "$out"
-    done
-    echo "box_persist: even without files over 1 MiB the results did not fit max_bytes=$MAXB ($total bytes before compression); only the logs were uploaded" > "$RES/PERSIST_TRUNCATED.txt"
-    awk '$1 > 1048576' "$ST/sizes.lst" >> "$RES/PERSIST_TRUNCATED.txt"
-    tar -czf "$out" -C "$RES" PERSIST_TRUNCATED.txt $( cd "$RES" && ls persist.log command.log 2> /dev/null ) 2>> "$ST/tar.err" \
-        || { rm -f "$out"; plog "TAR-FAILED (see $ST/tar.err)"; return 1; }
-    plog "TRUNCATED to logs only"
 }
 
 write_manifest() {  # <state> <exit> <why>
-    local first=1 seq name sha bytes utc label
+    local first=1 seq name sha bytes utc label pieces pf p pn ps pb
     {
         printf '{\n  "tag": "%s",\n  "prefix": "%s",\n  "host": "%s",\n  "updated_utc": "%s",\n' \
             "$TAG" "$PREFIX" "$(hostname 2> /dev/null | tr -dc 'A-Za-z0-9._-')" "$(now_utc)"
         printf '  "state": "%s",\n  "exit": "%s",\n  "why": "%s",\n  "uploads": [' "$1" "$2" "$(printf '%s' "$3" | tr -dc 'A-Za-z0-9=._ -')"
-        while IFS='|' read -r seq name sha bytes utc label; do
+        while IFS='|' read -r seq name sha bytes utc label pieces; do
             [ -n "$seq" ] || continue
             [ $first = 1 ] || printf ','
-            printf '\n    {"seq": %s, "name": "%s", "sha256": "%s", "bytes": %s, "utc": "%s", "label": "%s"}' \
+            printf '\n    {"seq": %s, "name": "%s", "sha256": "%s", "bytes": %s, "utc": "%s", "label": "%s", "pieces": [' \
                 "$seq" "$name" "$sha" "$bytes" "$utc" "$label"
+            pf=1
+            for p in $(printf '%s' "${pieces:-}" | tr ',' ' '); do
+                pn=${p%%:*}; ps=${p#*:}; pb=${ps#*:}; ps=${ps%%:*}
+                [ $pf = 1 ] || printf ', '
+                printf '{"name": "%s", "sha256": "%s", "bytes": %s}' "$pn" "$ps" "$pb"
+                pf=0
+            done
+            printf ']}'
             first=0
         done < "$ST/entries"
         printf '\n  ]\n}\n'
     } > "$ST/manifest.json"
 }
 
-# one upload: label periodic|hard -> the next ring slot; final|flush -> final.tgz
+# one upload: label periodic|hard -> the next ring slot (NN.tgz); final|flush -> final.tgz. Either is streamed in
+# pieces (put_pieces); the manifest lists the pieces and the whole stream's sha256, which also goes to <name>.sha256.
 snapshot() {  # <label> [exit] [why]
-    local label=$1 rcv=${2:-} why=${3:-} seq pseq slot name pk sk gk tgz side c c2 sha bytes back state maxs ring
+    local label=$1 rcv=${2:-} why=${3:-} seq pseq slot name base kp sk maxs ring rb side state hp fifo pst sha bytes pieces n c
     command -v curl > /dev/null 2>&1 || { plog "PERSIST-DISABLED no curl on this box"; return 1; }
+    [ -r "$JSON" ] && load_limits
     if expired; then
         [ -e "$ST/expired_logged" ] || { plog "EXPIRED the job's upload URLs expired at $EXPU; nothing more is sent"; : > "$ST/expired_logged"; }
         return 2
@@ -198,39 +217,44 @@ snapshot() {  # <label> [exit] [why]
     seq=$(( $(cat "$ST/seq" 2> /dev/null || echo 0) + 1 ))
     if [ "$ring" = 1 ]; then
         pseq=$(cat "$ST/pseq" 2> /dev/null || echo 0)
-        slot=$(printf '%02d' $(( pseq % SLOTS ))); name=$slot.tgz
-        pk=slot.$slot.put; sk=slot.$slot.sha.put; gk=slot.$slot.get; maxs=$PUT_MAX
+        slot=$(printf '%02d' $(( pseq % SLOTS ))); base=$slot
+        kp=slot.$slot; sk=slot.$slot.sha.put; maxs=$PUT_MAX
     else
-        name=final.tgz; pk=final.put; sk=final.sha.put; gk=final.get; maxs=$FINAL_PUT_MAX
+        base=final; kp=final; sk=final.sha.put; maxs=$FINAL_PUT_MAX
     fi
-    tgz="$ST/upload.tgz"; side="$ST/upload.sha256"; rm -f "$tgz"
-    build_tarball "$tgz" || { rm -f "$tgz"; unlock; return 1; }
-    sha=$(sum256 "$tgz"); bytes=$(fsize "$tgz")
+    name=$base.tgz
+    rb=0; if [ "$READBACK" = all ] || { [ "$READBACK" = final ] && [ "$label" != periodic ]; }; then rb=1; fi
+    side="$ST/upload.sha256"; fifo="$ST/whole.fifo"
+    rm -f "$side" "$fifo" "$ST/whole.sha" "$ST/readback.bad"; : > "$ST/pieces.lst"
+    mkfifo "$fifo" || { plog "FAILED name=$name (mkfifo $fifo)"; unlock; return 1; }
+    sha_stdin < "$fifo" > "$ST/whole.sha" &
+    hp=$!
+    exec 7> "$fifo"
+    tar_stream 7>&- | gz_stream 7>&- | put_pieces "$base" "$kp" "$maxs" "$rb"
+    pst=("${PIPESTATUS[@]}")
+    exec 7>&-
+    wait "$hp" 2> /dev/null
+    rm -f "$fifo" "$ST/piece" "$ST/piece.sha256"
+    if [ "${pst[2]}" != 0 ]; then unlock; return 1; fi
+    if [ "${pst[0]}" -gt 1 ] || [ "${pst[1]}" != 0 ]; then plog "TAR-FAILED name=$name tar=${pst[0]} gzip=${pst[1]} (see $ST/tar.err)"; unlock; return 1; fi
+    sha=$(cat "$ST/whole.sha" 2> /dev/null); bytes=$(awk -F: '{ s += $3 } END { printf "%d", s }' "$ST/pieces.lst")
+    pieces=$(paste -sd, "$ST/pieces.lst"); n=$(grep -c . "$ST/pieces.lst")
     printf '%s  %s\n' "$sha" "$name" > "$side"
-    c=$(http PUT "$(jget "$pk")" "$tgz" "$maxs")
-    case "$c" in
-        2*) ;;
-        403) plog "REJECTED name=$name http=403 (the URL expired or is not signed for this key)"; rm -f "$tgz" "$side"; unlock; return 1 ;;
-        *) plog "FAILED name=$name http=$c bytes=$bytes"; rm -f "$tgz" "$side"; unlock; return 1 ;;
-    esac
-    c2=$(http PUT "$(jget "$sk")" "$side" 120)
-    case "$c2" in 2*) ;; *) plog "FAILED name=$name.sha256 http=$c2" ;; esac
-    if [ "$READBACK" = all ] || { [ "$READBACK" = final ] && [ "$label" != periodic ]; }; then
-        back="$ST/readback.tgz"; rm -f "$back"
-        c=$(http GET "$(jget "$gk")" "$back" "$maxs")
-        if [ "${c#2}" != "$c" ] && [ -f "$back" ] && [ "$(sum256 "$back")" = "$sha" ]; then plog "READBACK-OK name=$name"
-        else plog "READBACK-MISMATCH name=$name http=$c"; fi
-        rm -f "$back"
+    c=$(http PUT "$(jget "$sk")" "$side" 120)
+    case "$c" in 2*) ;; *) plog "FAILED name=$name.sha256 http=$c" ;; esac
+    if [ "$rb" = 1 ]; then
+        if [ -s "$ST/readback.bad" ]; then plog "READBACK-MISMATCH name=$name pieces=$(paste -sd, "$ST/readback.bad")"
+        else plog "READBACK-OK name=$name pieces=$n"; fi
     fi
-    echo "$seq|$name|$sha|$bytes|$(now_utc)|$label" >> "$ST/entries"
+    echo "$seq|$name|$sha|$bytes|$(now_utc)|$label|$pieces" >> "$ST/entries"
     echo "$seq" > "$ST/seq"
     [ "$ring" != 1 ] || echo $(( pseq + 1 )) > "$ST/pseq"
     case "$label" in periodic|hard) state=running ;; flush) state=flushed ;; *) state=final ;; esac
     write_manifest "$state" "$rcv" "$why"
     c=$(http PUT "$(jget manifest.put)" "$ST/manifest.json" 120)
     case "$c" in 2*) ;; *) plog "FAILED name=manifest.json http=$c" ;; esac
-    plog "UPLOADED name=$name seq=$seq label=$label bytes=$bytes sha256=$sha"
-    rm -f "$tgz" "$side"
+    plog "UPLOADED name=$name seq=$seq label=$label bytes=$bytes sha256=$sha pieces=$n"
+    rm -f "$side"
     unlock
     return 0
 }
@@ -342,6 +366,6 @@ case "${1:-}" in
     --snapshot)
         shift; JSON="${1:?--snapshot <json> <results> [label]}"; RES="${2:?results dir}"; label=${3:-flush}
         load_job; snapshot "$label" "" "$label"; exit $? ;;
-    ''|-h|--help) sed -n 2,36p "$0"; exit 2 ;;
+    ''|-h|--help) sed -n 2,41p "$0"; exit 2 ;;
     *) run_job "$@" ;;
 esac

@@ -72,19 +72,47 @@ def write(path, value):
     tmp.replace(path)
 
 
+def _primary_rank(name):
+    # The scored/ receipt is the one stored copy; any byte-identical member
+    # (the driver's run/work/<lane>-<ds>-<arm>.npz) becomes a hard link to it.
+    return (0 if name.startswith("scored/") else 1, name)
+
+
 def archive(path, members):
-    """Deterministic archive; names are controlled, never command strings."""
+    """Deterministic archive; names are controlled, never command strings.
+
+    Byte-identical members are stored once: the first copy (scored/ first) as a
+    regular file, every other as a tar hard link to it. `tarfile.extractfile`
+    and `tar x` both resolve the link, so every member name still reads back
+    its bytes (2026-11-14: the receipt was stored twice per race and filled
+    the L40S pod).
+    """
     # Full factor arrays make maximum gzip compression spend minutes on
     # retention after subsecond GPU calls. Fast compression preserves all
     # bytes and deterministic archives; it is outside every scored clock.
+    primary, links = {}, []
+    for name in sorted(members, key=_primary_rank):
+        key = digest(members[name])
+        if key in primary and len(members[name]) > 0:
+            links.append((name, primary[key]))
+        else:
+            primary.setdefault(key, name)
+    stored = sorted(set(members) - {name for name, _ in links})
     with open(path, "wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb",
                                               compresslevel=1, mtime=0) as zipped:
         with tarfile.open(fileobj=zipped, mode="w") as out:
-            for name, data in sorted(members.items()):
+            for name in stored:
+                data = members[name]
                 info = tarfile.TarInfo(name)
                 info.size = len(data)
                 info.mode = 0o644
                 out.addfile(info, io.BytesIO(data))
+            for name, target in sorted(links):
+                info = tarfile.TarInfo(name)
+                info.type = tarfile.LNKTYPE
+                info.linkname = target
+                info.mode = 0o644
+                out.addfile(info)
     return dict(sha256=file_hash(path), bytes=Path(path).stat().st_size,
                 local_path=str(Path(path).resolve()), status="local")
 
@@ -542,6 +570,41 @@ def scored_state_refs(rec, directory, members):
     return refs, missing
 
 
+class LoadedBytesMissing(ValueError):
+    """A worker's loaded module is gone or its bytes differ from the recorded hash."""
+
+
+def loaded_module_ref(ctx, filename, sha):
+    """Retain one loaded native module once per results dir; return its archive ref.
+
+    The archive is evidence/loaded/<sha256>.tar.gz holding `<sha256>/<name>`,
+    deterministic (gzip mtime 0), so its R2 key is content-addressed and a
+    second run of the same wheel finds it already present. A module that is gone
+    or whose bytes no longer match the worker's hash raises LoadedBytesMissing.
+    """
+    cache = ctx.setdefault("loaded_modules", {})
+    p = Path(filename)
+    if not p.is_file():
+        raise LoadedBytesMissing(filename)
+    st = p.stat()
+    # Re-hash a module only when its path, size or mtime is new to this run.
+    signature = (str(p.resolve()), st.st_size, st.st_mtime_ns)
+    entry = cache.get(sha)
+    if entry is None or signature not in entry["seen"]:
+        if file_hash(p) != sha:
+            raise LoadedBytesMissing(filename)
+    if entry is None:
+        target = Path(ctx["out"]) / "evidence" / "loaded" / (sha + ".tar.gz")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        ref = archive(target, {sha + "/" + p.name: p.read_bytes()})
+        ref.update(module_sha256=sha, module_bytes=st.st_size, module_name=p.name)
+        entry = cache[sha] = dict(ref=ref, seen=set())
+    entry["seen"].add(signature)
+    if ctx.get("evidence_r2", True) and entry["ref"].get("status") != "verified":
+        entry["ref"] = upload(entry["ref"])
+    return entry["ref"]
+
+
 def seal(ctx, directory, recipe, rec):
     """Capture measured records and logs, then attach the durable refs per arm."""
     directory = Path(directory)
@@ -577,14 +640,33 @@ def seal(ctx, directory, recipe, rec):
                 members["run/" + rec[field]] = p.read_bytes()
             else:
                 missing.append(field)
-    # Retain actual loaded product code/binary bytes, not only their hashes.
+    # Retain actual loaded product code/binary bytes, not only their hashes:
+    # once per results dir (evidence/loaded/<sha256>.tar.gz, uploaded once),
+    # never inside the per-race archive, which records path, sha256, bytes and
+    # the shared archive ref in loaded.json (2026-11-14: about 150 MB of .so
+    # bytes per race filled the 80 GB L40S pod after 179 races).
+    loaded, loaded_refs, loaded_error = [], {}, None
     for worker in workers:
         for filename, sha in worker.get("loaded_mojolearn_files", {}).items():
-            p = Path(filename)
-            if p.is_file() and file_hash(p) == sha:
-                members["loaded/" + sha + "/" + p.name] = p.read_bytes()
-            else:
+            try:
+                shared = loaded_module_ref(ctx, filename, sha)
+            except LoadedBytesMissing:
                 missing.append("loaded bytes: " + filename)
+                continue
+            except (OSError, ValueError, SystemExit):
+                # Bytes are archived locally; only the transfer failed. The ref
+                # stays in upload.json so `sync` retries it, never a rerun.
+                loaded_error = "R2 retention failed; retry sync without rerunning the measurement"
+                shared = ((ctx.get("loaded_modules") or {}).get(sha) or {}).get("ref")
+                if not shared:
+                    missing.append("loaded bytes: " + filename)
+                    continue
+            loaded_refs["loaded:" + sha] = shared
+            loaded.append(dict(path=filename, name=Path(filename).name, sha256=sha,
+                               bytes=shared.get("module_bytes"), archive=public_ref(shared),
+                               member=sha + "/" + Path(filename).name))
+    members["loaded.json"] = encoded(dict(artifact_identity=ctx.get("artifact_identity"),
+                                          modules=sorted(loaded, key=lambda m: (m["sha256"], m["path"]))))
     if changed:
         missing.append("source changed during run")
     before = (rec.get("preflight") or {}).get("arms") or {}
@@ -612,14 +694,19 @@ def seal(ctx, directory, recipe, rec):
         elif any(params.get(k) != before[arm].get(k) for k in ("params", "raw_params", "implementation")):
             missing.append("effective parameters/implementation changed after preflight: " + arm)
     ref = archive(directory / "run.tar.gz", members)
-    write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref))
-    error = None
+    write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref, **loaded_refs))
+    error = loaded_error
     if ctx.get("evidence_r2", True):
         try:
             ref = upload(ref)
         except (OSError, ValueError, SystemExit) as exc:
             error = "R2 retention failed; retry sync without rerunning the measurement"
-    write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref))
+    write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref, **loaded_refs))
+    # The scored/ bytes now live in run.tar.gz (written and hashed above); the
+    # loose copies beside it were a second on-disk copy of every receipt.
+    for p in sorted((directory / "scored").rglob("*.npz")) if (directory / "scored").is_dir() else ():
+        if str(p.relative_to(directory)) in members:
+            p.unlink()
     for phase, field in (("fit", "cells"), ("infer", "infer_cells")):
         for cell in rec.get(field) or []:
             if cell.get("stored") or cell.get("arm") in rec.get("stored_arms", []):
@@ -799,12 +886,19 @@ def sync(board_path):
     """Retry retention only; never launch a measurement or replace timing data."""
     path = Path(board_path)
     board = json.loads(path.read_text())
+    synced = {}
     for rr in board.get("races", {}).values():
         if not rr.get("evidence_directory"):
             continue
         state_path = path.parent / rr["evidence_directory"] / "upload.json"
         state = json.loads(state_path.read_text())
-        state = {k: upload(v) if v.get("status") != "verified" else v for k, v in state.items()}
+        # The shared loaded-module archive is listed in every race's upload.json;
+        # transfer each distinct object once per sync.
+        for k, v in state.items():
+            if v.get("status") != "verified":
+                if v.get("sha256") not in synced:
+                    synced[v.get("sha256")] = upload(v)
+                state[k] = dict(synced[v.get("sha256")], local_path=v.get("local_path"))
         write(state_path, state)
         receipt_path = state_path.with_name("receipt-upload.json")
         if receipt_path.exists():

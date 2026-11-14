@@ -7,10 +7,11 @@ PUT and GET URLs for one job's keys only and hands them to the box as a 0600 jso
 the job under tools/box_persist_run.sh, which uploads a tarball of the results directory every few minutes and
 on any exit. The URLs expire (at most 7 days, the SigV4 limit).
 
-  box_persist.py mint --tag TAG [--slots N] [--every-min M] [--days D] [--max-mb MB] [--readback final|all|none]
-                      [--exclude PATTERN]... [--out PATH] [--tool NAME]
+  box_persist.py mint --tag TAG [--slots N] [--every-min M] [--days D] [--max-mb MB] [--max-total-gb GB]
+                      [--readback final|all|none] [--exclude PATTERN]... [--out PATH] [--tool NAME] [--force]
         writes the job's persist json (0600) to ~/mojolearn-evidence/box-persist/<tag>/persist.json and prints
-        its path. Keys: measurements/box-jobs/<YYYY-MM-DD>/<tag>/{00..N-1}.tgz(.sha256), final.tgz(.sha256),
+        its path. Keys: measurements/box-jobs/<YYYY-MM-DD>/<tag>/{00..N-1}.tgz.sha256, final.tgz.sha256, the
+        pieces <base>.{00..P-1}.tgz(.sha256) of each (P = ceil(GB*1024/MB), default 64 GB in 3800 MB pieces),
         manifest.json.
   box_persist.py prepare <mint options> [--box-root /root/box-persist]
         mint, then print a bash installer for the box on stdout: it writes box_persist_run.sh to
@@ -19,7 +20,13 @@ on any exit. The URLs expire (at most 7 days, the SigV4 limit).
   box_persist.py fetch --tag TAG [--date YYYY-MM-DD] [--dest DIR] [--all|--list] [--extract]
         reads the job's manifest.json from R2 and every sha256 sidecar, prints what landed (LANDED name sha
         bytes), downloads final.tgz (else the newest slot; --all: every object) and verifies each against its
-        sidecar (VERIFIED / VERIFY-FAILED, exit 1 on any failure). --list downloads nothing.
+        sidecar (VERIFIED / VERIFY-FAILED, exit 1 on any failure). --list downloads nothing. An upload streamed
+        in pieces (final.00.tgz, final.01.tgz, ...) is downloaded piece by piece, each verified, and concatenated
+        in order back into final.tgz.
+  box_persist.py remint --tag TAG <mint options>
+        re-mints the URLs of an existing job under the SAME tag, date and prefix (more pieces, a later expiry); the
+        old json is kept as persist.json.prev-<utc>. `mint --force` does the same. Stage it on the box with
+        `prepare --force` (the running job re-reads pieces and expiry before every upload).
   box_persist.py opt-out --tool NAME --detail TEXT
         the explicit --no-persist path of the box entry points: always logged to
         ~/mojolearn-evidence/box-persist/unpersisted.log; exit 0 only with MOJOLEARN_ALLOW_UNPERSISTED=1.
@@ -36,6 +43,7 @@ import datetime
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import secrets
@@ -48,6 +56,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.join(HERE, "box_persist_run.sh")
 MAX_EXPIRY_SEC = 7 * 24 * 3600          # SigV4 presigned URLs: 7 days at most
+MAX_PIECES = 100                        # piece objects <base>.00.tgz .. <base>.99.tgz per upload
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 KEY_ROOT = "measurements/box-jobs"
 
@@ -125,7 +134,17 @@ def prefix_for(date, tag):
     return "%s/%s/%s" % (KEY_ROOT, date, tag)
 
 
-def mint(a):
+def pieces_for(max_total_gb, max_mb):
+    """Piece URLs per upload: enough for a results dir of max_total_gb in pieces of max_mb."""
+    return max(1, int(math.ceil(max_total_gb * 1024.0 / max_mb)))
+
+
+def piece_name(name, i):
+    """final.tgz -> final.00.tgz; 00.tgz -> 00.00.tgz (the R2 object of piece i of upload `name`)."""
+    return "%s.%02d.tgz" % (name[:-len(".tgz")], i)
+
+
+def mint(a, remint=False):
     if not TAG_RE.match(a.tag):
         die("tag must match %s" % TAG_RE.pattern)
     if not 1 <= a.slots <= 99:
@@ -134,11 +153,30 @@ def mint(a):
         die("--every-min must be > 0")
     if not 0 < a.days <= 7:
         die("--days must be in (0, 7]: a presigned URL lives 7 days at most")
+    if a.max_mb <= 0 or a.max_total_gb <= 0:
+        die("--max-mb and --max-total-gb must be > 0")
+    out = a.out or os.path.join(home(), a.tag, "persist.json")
+    previous = None
+    if os.path.exists(out):
+        if not (remint or a.force):
+            die("%s exists: tags are one per job (box_persist.py new-tag), or `remint --tag %s` to re-mint the "
+                "same job's URLs under the same tag and prefix" % (out, a.tag))
+        with open(out) as fh:
+            previous = json.load(fh)
+    elif remint:
+        die("remint: no persist json %s for tag %s (mint it first)" % (out, a.tag))
     s = Signer()
     secs = int(a.days * 86400)
     now = s.now
-    date = now.strftime("%Y-%m-%d")
+    # a re-mint keeps the job's tag, date and prefix: the box keeps writing under the same R2 keys
+    date = (previous or {}).get("date") or now.strftime("%Y-%m-%d")
     prefix = prefix_for(date, a.tag)
+    if previous and previous.get("prefix") not in (None, prefix):
+        die("remint: %s holds prefix %s, not %s" % (out, previous.get("prefix"), prefix))
+    pieces = pieces_for(a.max_total_gb, a.max_mb)
+    if pieces > MAX_PIECES:
+        die("--max-total-gb %g in --max-mb %g pieces needs %d piece URLs per upload, over %d: raise --max-mb (at most "
+            "5000, one R2 PUT) or lower --max-total-gb" % (a.max_total_gb, a.max_mb, pieces, MAX_PIECES))
     exp_epoch = int(now.timestamp()) + secs
     j = {
         "tag": a.tag, "date": date, "prefix": prefix, "tool": a.tool or "",
@@ -147,31 +185,43 @@ def mint(a):
         "expires_utc": datetime.datetime.fromtimestamp(exp_epoch, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "every_sec": str(int(round(a.every_min * 60))) if a.every_sec is None else str(a.every_sec),
         "slots": str(a.slots), "max_bytes": str(int(a.max_mb * 1024 * 1024)), "readback": a.readback,
+        "pieces": str(pieces), "max_total_gb": "%g" % a.max_total_gb,
         "excludes": " ".join(a.exclude or []),
     }
+    if previous:
+        j["reminted_utc"] = j["created_utc"]
+        j["created_utc"] = previous.get("created_utc", j["created_utc"])
     for p in a.exclude or []:
         if '"' in p or "\\" in p or "\n" in p:
             die("an --exclude pattern may not hold quotes, backslashes or newlines")
+    # every upload is streamed in pieces (tools/box_persist_run.sh put_pieces): per upload, `pieces` piece objects
+    # <base>.NN.tgz (PUT, GET for the read-back, PUT of its sidecar) and the whole stream's <name>.sha256
     objs = [("slot.%02d" % i, "%02d.tgz" % i) for i in range(a.slots)] + [("final", "final.tgz")]
     for name, obj in objs:
         key = "%s/%s" % (prefix, obj)
-        j[name + ".put"] = s.url("PUT", key, secs)
-        j[name + ".get"] = s.url("GET", key, secs)
         j[name + ".sha.put"] = s.url("PUT", key + ".sha256", secs)
-        j[name + ".sha.get"] = s.url("GET", key + ".sha256", secs)
+        for i in range(pieces):
+            pkey = "%s/%s" % (prefix, piece_name(obj, i))
+            j["%s.p%02d.put" % (name, i)] = s.url("PUT", pkey, secs)
+            j["%s.p%02d.get" % (name, i)] = s.url("GET", pkey, secs)
+            j["%s.p%02d.sha.put" % (name, i)] = s.url("PUT", pkey + ".sha256", secs)
     j["manifest.put"] = s.url("PUT", prefix + "/manifest.json", secs)
-    j["manifest.get"] = s.url("GET", prefix + "/manifest.json", secs)
     for k, v in j.items():   # the box reads this file with sed: one "key": "value" per line, no quotes in values
         if '"' in v or "\n" in v or "\\" in v:
             die("value of %s cannot go in a flat json" % k)
-    out = a.out or os.path.join(home(), a.tag, "persist.json")
-    if os.path.exists(out):
-        die("%s exists: tags are one per job (box_persist.py new-tag)" % out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    if previous:
+        # keep the replaced json beside it; write the new one atomically (temp file + rename)
+        os.replace(out, "%s.prev-%s" % (out, now.strftime("%Y%m%dT%H%M%SZ")))
+    tmp = out + ".tmp"
+    if os.path.exists(tmp):
+        os.unlink(tmp)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write(flat_json(j))
-    index_row(a.tag, date, prefix, a.slots, j["every_sec"], j["expires_utc"], a.tool or "")
+    os.replace(tmp, out)
+    if not previous:
+        index_row(a.tag, date, prefix, a.slots, j["every_sec"], j["expires_utc"], a.tool or "")
     return out, j
 
 
@@ -320,6 +370,53 @@ def extract_tolerant(path, dest):
     return skipped
 
 
+def download(s, prefix, n, sha, pieces, p):
+    """Bring upload `n` home to p: (http code, sha256 of p, pieces). Uploads since 2026-11-14 are streamed pieces
+    (<base>.NN.tgz, tools/box_persist_run.sh put_pieces): each piece is verified against its manifest sha256
+    (else its own sidecar) and appended in order; p's sha256 is the whole stream's. An older single-object upload
+    (`n` itself) is taken when the manifest lists no pieces and the object exists."""
+    if not pieces:
+        code, got = http_get(s.url("GET", "%s/%s" % (prefix, n), 3600), p, 3600)
+        if code == 200:
+            return code, got, 0
+    part, tmp = p + ".part", p + ".piece"
+    h, i, code = hashlib.sha256(), 0, 404
+    with open(part, "wb") as out:
+        while True:
+            if pieces:
+                if i >= len(pieces):
+                    break
+                pn, psha = pieces[i]["name"], pieces[i]["sha256"]
+            else:
+                # no manifest: probe the sidecars in order; stop where the whole stream's sha256 is reached
+                pn = piece_name(n, i)
+                c, body = http_get(s.url("GET", "%s/%s.sha256" % (prefix, pn), 3600), None, 60)
+                if c != 200:
+                    break
+                psha = body.decode().split()[0]
+            code, got = http_get(s.url("GET", "%s/%s" % (prefix, pn), 3600), tmp, 3600)
+            if code != 200 or got != psha:
+                print("VERIFY-FAILED %s http=%s sha256=%s want=%s" % (pn, code, got, psha))
+                out.close()
+                for f in (tmp, part):
+                    if os.path.exists(f):
+                        os.unlink(f)
+                return code if code != 200 else 0, got, i
+            with open(tmp, "rb") as fh:
+                for b in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(b)
+                    out.write(b)
+            os.unlink(tmp)
+            i += 1
+            if not pieces and h.copy().hexdigest() == sha:
+                break
+    if i == 0:
+        os.unlink(part)
+        return code, None, 0
+    os.replace(part, p)
+    return 200, h.hexdigest(), i
+
+
 def fetch(a):
     if not TAG_RE.match(a.tag):
         die("bad tag")
@@ -375,11 +472,11 @@ def fetch(a):
         fin = [x for x in landed if x[0] == "final.tgz"]
         want = fin or [max(landed, key=lambda x: x[2].get("seq", -1))]
     bad = 0
-    for n, sha, _ in want:
+    for n, sha, u in want:
         p = os.path.join(dest, n)
-        code, got = http_get(s.url("GET", "%s/%s" % (prefix, n), 3600), p, 3600)
+        code, got, npieces = download(s, prefix, n, sha, u.get("pieces"), p)
         if code == 200 and got == sha:
-            print("VERIFIED %s -> %s" % (n, p))
+            print("VERIFIED %s -> %s (pieces=%d)" % (n, p, npieces))
             if a.extract:
                 x = os.path.join(dest, n[:-4])
                 skipped = extract_tolerant(p, x)
@@ -421,12 +518,16 @@ def main(argv=None):
         p.add_argument("--every-min", type=float, default=15.0)
         p.add_argument("--every-sec", type=int, default=None, help=argparse.SUPPRESS)   # tests
         p.add_argument("--days", type=float, default=3.0)
-        p.add_argument("--max-mb", type=float, default=3800.0)   # one R2 PUT takes 5 GB at most
+        p.add_argument("--max-mb", type=float, default=3800.0)   # one piece; one R2 PUT takes 5 GB at most
+        # the largest results dir one upload may stream: sets how many piece URLs are minted per upload
+        p.add_argument("--max-total-gb", type=float, default=64.0)
+        p.add_argument("--force", action="store_true", help="re-mint an existing tag (same as remint)")
         p.add_argument("--readback", choices=("final", "all", "none"), default="final")
         p.add_argument("--exclude", action="append")
         p.add_argument("--out")
         p.add_argument("--tool")
     mint_args(sub.add_parser("mint"))
+    mint_args(sub.add_parser("remint"))
     pp = sub.add_parser("prepare")
     mint_args(pp)
     pp.add_argument("--box-root", default="/root/box-persist")
@@ -444,8 +545,8 @@ def main(argv=None):
     t = sub.add_parser("new-tag")
     t.add_argument("prefix")
     a = ap.parse_args(argv)
-    if a.cmd == "mint":
-        out, _ = mint(a)
+    if a.cmd in ("mint", "remint"):
+        out, _ = mint(a, remint=a.cmd == "remint")
         print(out)
         return 0
     if a.cmd == "prepare":
