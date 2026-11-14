@@ -37,10 +37,10 @@ comptime MAMBA3_COVERAGE_GPU_CASES = 3
 
 def _report_addresses(outputs: List[List[Float32]]) -> List[Int]:
     """The four report addresses (outputs[1:5])."""
-    var all = m3_cov_addresses(outputs)
+    var addresses = m3_cov_addresses(outputs)
     var out = List[Int](capacity=4)
     for i in range(1, 5):  # small-loop(the four Mamba-3 reports)
-        out.append(all[i])
+        out.append(addresses[i])
     return out^
 
 
