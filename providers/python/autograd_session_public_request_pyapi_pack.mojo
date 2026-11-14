@@ -29,7 +29,7 @@ from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_execute,
 )
 from providers.python.autograd_session_frontend_pyapi_door import ops_session_fields
-from providers.python.autograd_ops_frontend_pyapi_door import ops_session_call_fields_py
+from providers.python.autograd_ops_frontend_pyapi_door import ops_session_call_admitted_py
 
 from providers.python.autograd_session_public_request_pyapi_unpack import (
     NativeSessionPublicRequest,
@@ -45,26 +45,39 @@ def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not py_type(Python.tuple()):
         raise Error("TypeError: Session requires an exact operation string and argument tuple")
     var fields = ops_session_fields(session)
-    var provider = fields["_public_provider"]
-    var public_owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var lifetime = fields["_lifetime"]
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
-    var model_owner = resource[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    if public_owner[].record[0].name != SESSION_PUBLIC_ABI_NAME or public_owner[].module is not model_owner[].module:
-        raise Error("TypeError: Session public provider differs from its native registry owner")
     comptime if not SESSION_CALL_DESCRIPTOR:
         # The same admission `session_public_native_v1` applies on entry:
         # the scope words name this registry image and this executor kind.
         if (len(resource[].context) == 2 and resource[].context[0] == ops_session_registry_token()
                 and resource[].context[1] == KIND):
-            var answer = ops_session_call_fields_py[E, KIND](session, operation, args, fields)
+            # Lane fix-executor-session-rows (2026-11-13): the handle
+            # admission of `ops_session_call_fields_py`, read from the
+            # resource already in hand (one downcast per call, not two),
+            # and no public-provider read: the descriptor below is the only
+            # user of `_public_provider`, so its downcasts, ABI-name string
+            # compare and module identity check run only on that route.
+            var sid = fields["_id"]
+            if sid is not None:
+                if py_type(sid) is not py_type(PythonObject(0)):
+                    raise Error("TypeError: Session handle must be a native integer")
+                var admitted_id = resource[].handle
+                if admitted_id == 0 or admitted_id != Int(py=sid):
+                    raise Error("TypeError: Session handle differs from its native registry owner")
+            var answer = ops_session_call_admitted_py[E, KIND](session, operation, args, fields)
             _ = lifetime  # the resource owner stays pinned through the call
-            _ = provider
             return answer
+    var provider = fields["_public_provider"]
+    var public_owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    var model_owner = resource[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    if public_owner[].record[0].name != SESSION_PUBLIC_ABI_NAME or public_owner[].module is not model_owner[].module:
+        raise Error("TypeError: Session public provider differs from its native registry owner")
     # Stable native storage across the synchronous image boundary; each field
     # keeps its original owner alive until the completed result is returned.
     var requests = List[NativeSessionPublicRequest]()
     requests.append(NativeSessionPublicRequest(session, fields, operation, args))
     var addresses: List[Int] = [Int(MutPointer(to=requests[0]))]
     _ = neural_descriptor_execute(provider, 0, addresses, resource[].context, List[Float64](), False)
+    _ = lifetime
     return requests[0].result
