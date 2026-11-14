@@ -132,31 +132,15 @@ def arm_provenance(rep):
 
 
 def arm_schedule(rep):
-    from fractions import Fraction
-    from mojolearn.tests import _lr_reference
+    # The schedule values (warmup end, exact-rational warmup and midpoint,
+    # min_lr hold, the float64 cos comparison, monotonicity, the one-based
+    # status) are checked natively in
+    # checks/native_tests/sequence_samba_surface_cpu.mojo. The refusal by
+    # name, the pins and the config round trip are public surface.
     arm = "SCHEDULE"
     c = T.ConstantLR(1e-3, warmup_steps=4)
-    rep.check(arm, c.lr_at(4) == float(np.float32(1e-3)), "constant reaches peak at warmup end")
-    rep.check(arm, c.lr_at(1) == _lr_reference._f32_round(Fraction(c.peak_lr) / 4),
-              "constant warmup step 1 is peak/4 (exact rational, rounded once)")
-    rep.check(arm, c.lr_at(100) == c.lr_at(4), "constant after warmup is flat")
     rep.raises(arm, ValueError, "ONE-BASED", "step 0 is refused by name", c.lr_at, 0)
-    lin = T.WarmupLinearLR(1e-3, 2, 10, 1e-4)
-    rep.check(arm, lin.lr_at(10) == float(np.float32(1e-4)) and lin.lr_at(11) == lin.lr_at(10),
-              "linear reaches min_lr at total_steps and holds")
     cos = T.WarmupCosineLR(1e-3, 2, 10, 1e-4)
-    mid_exact = _lr_reference._f32_round(Fraction(cos.peak_lr) / 2 + Fraction(cos.min_lr) / 2)
-    rep.check(arm, cos.lr_at(6) == mid_exact, "cosine at p = 1/2 rounds the exact midpoint")
-    # Float64 sanity against math.cos, a REPORT: the exact value differs from
-    # the libm spelling by at most one float32 ulp, never asserted bitwise.
-    worst = 0.0
-    for t in range(3, 10):
-        p = (t - 2) / 8.0
-        ref = 1e-4 + (1e-3 - 1e-4) * (1 + math.cos(math.pi * p)) / 2
-        worst = max(worst, abs(cos.lr_at(t) - ref) / ref)
-    rep.check(arm, worst < 1e-6, "cosine within 1e-6 relative of a float64 math.cos reference (worst %.2e)" % worst)
-    mono = all(cos.lr_at(t) >= cos.lr_at(t + 1) for t in range(2, 11))
-    rep.check(arm, mono, "cosine is non-increasing after warmup")
     for name, pin in SCHEDULE_PINS.items():
         cls = {"constant": T.ConstantLR, "linear": T.WarmupLinearLR,
                "cosine": T.WarmupCosineLR}[name]
@@ -229,68 +213,27 @@ def arm_accumulation(rep):
 
 
 def arm_rng(rep):
+    # The stream's values (uniform range, determinism, stream and slice
+    # equality, normal statistics, dropout keep fraction, forward/backward
+    # masks and scales, replay and microbatch offsets, the p = 1 refusal) are
+    # checked natively in checks/native_tests/sequence_samba_surface_cpu.mojo
+    # through the training host image's entry. The Generator's public
+    # surface stays here.
     arm = "RNG"
     g = T.Generator(12345)
     u = g.uniform((1000,))
-    # `Array.dtype` is the STRING '<f4', so `u.dtype == np.float32` was always
-    # False and this check could never pass once the RNG returned an Array --
-    # not a bad draw, a type mismatch. The reductions are fine (Array carries
-    # min/max); only the dtype comparison needed numpy's own answer.
-    rep.check(arm, np.asarray(u).dtype == np.float32 and u.min() >= 0.0 and u.max() < 1.0,
-              "uniform in [0, 1)")
+    rep.check(arm, np.asarray(u).dtype == np.float32, "uniform returns float32")
     g2 = T.Generator(12345)
     rep.bits_equal(arm, g2.uniform((1000,)), u, "same seed, same counter, same bits")
     rep.check(arm, not np.array_equal(g.uniform((1000,)), u), "the next stream differs")
-    binding = T._load()
-    whole = T._rng_call(binding, T._RNG_UNIFORM, 1000, 0, 12345, 0, 0.0, 1.0)
-    part = T._rng_call(binding, T._RNG_UNIFORM, 300, 700, 12345, 0, 0.0, 1.0)
-    rep.bits_equal(arm, part, whole[700:], "a slice at offset 700 equals the whole stream's elements 700..")
-    nrm = T.Generator(7).normal((20000,), 0.0, 1.0)
-    # `Array` carries sum/max/min/ravel/astype/reshape but NOT the statistical
-    # reductions `mean` and `std`, so these raised AttributeError once the RNG
-    # returned an Array. This is a VALUE check on a sample, not a bitwise one,
-    # so numpy is where it belongs; converting once keeps it to one pass.
-    nrm_np = np.asarray(nrm)
-    rep.check(arm, abs(float(nrm_np.mean())) < 0.03 and abs(float(nrm_np.std()) - 1.0) < 0.03,
-              "normal(0, 1) sample mean/std within 0.03 (mean %.4f std %.4f)"
-              % (nrm_np.mean(), nrm_np.std()))
-    rep.check(arm, np.isfinite(nrm).all(), "normal draws are finite")
     ku = T.Generator(3).kaiming_uniform((64, 32), fan_in=32)
     rep.check(arm, float(np.abs(ku).max()) <= 1.0 / math.sqrt(32.0) and ku.shape == (64, 32),
               "kaiming_uniform bound is 1/sqrt(fan_in)")
     x = hashed((4, 256), 21)
     gd = T.Generator(99)
     y, key = gd.dropout(x, 0.25)
-    kept = y != 0.0
-    # Two Array gaps meet here. `kept` is an Array (an Array comparison), and
-    # Array has no `mean`; separately, Array REFUSES a boolean-mask index
-    # (`_array.py:588`: "indices are ints, slices or tuples of them"), which
-    # numpy allows, so `y[kept]` below needs both sides in numpy. Converting
-    # once here serves the fraction and both masked comparisons. A keep
-    # FRACTION is a value, not bits, so np.asarray is the right conversion;
-    # `kept.astype` further down is untouched because Array does carry astype.
-    # `.astype(bool)` IS LOAD-BEARING. `y != 0.0` on an Array yields uint8
-    # (0/1), not bool, so a bare np.asarray gives an INTEGER index array and
-    # `y_np[kept_np]` becomes fancy-indexing that selects rows 0 and 1 over
-    # and over instead of masking. That silently passed 51412 of 262144 wrong
-    # cells to the bitwise comparison before this cast was added.
-    kept_np = np.asarray(kept).astype(bool)
-    y_np = np.asarray(y)
-    frac = float(kept_np.mean())
-    rep.check(arm, 0.65 < frac < 0.85, "dropout p=0.25 keeps about 75%% (kept %.3f)" % frac)
-    scale = np.float32(1.0 / (1.0 - np.float32(0.25)))
-    rep.bits_equal(arm, y_np[kept_np], (x * scale).astype(np.float32)[kept_np],
-                   "kept cells are x * scale bitwise")
-    dy = hashed((4, 256), 22)
-    dx = gd.dropout_backward(dy, key)
-    rep.bits_equal(arm, dx != 0.0, kept.astype(np.float32), "backward mask equals forward mask")
-    rep.bits_equal(arm, np.asarray(dx)[kept_np], (dy * scale).astype(np.float32)[kept_np],
-                   "backward is dy * scale on kept cells")
-    g3 = T.Generator(99)
-    y2, _ = g3.dropout(x, 0.25)
+    y2, _ = T.Generator(99).dropout(x, 0.25)
     rep.bits_equal(arm, y2, y, "dropout replays from the same seed and counter")
-    half, _ = T.Generator(99).dropout(x[2:], 0.25, offset=2 * 256)
-    rep.bits_equal(arm, half, y[2:], "a microbatch at its token offset draws the unsplit coins")
     st = gd.state_dict()
     rep.check(arm, st == {"seed": 99, "counter": 1}, "state_dict is {seed, counter}")
     rep.raises(arm, ValueError, "[0, 1)", "dropout p=1 refused", gd.dropout, x, 1.0)
