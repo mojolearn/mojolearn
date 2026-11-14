@@ -40,9 +40,9 @@ def fixture(driver: SvrNativeDriver, unit: Int, resident: Bool = False) raises:
     var n = 150 if planted else 2
     var d = 5 if planted else 2
     var kernel = 2 if unit == 8 else (unit if unit < 5 else 0)
-    var gamma = Float64(1 if kernel == 1 else 0.5)
-    var coef0 = Float64(0.5 if kernel == 1 else 0)
-    var c = Float64(100 if planted else (0.5 if unit == 4 else 2))
+    var gamma = Float64(1.0 if kernel == 1 else 0.5)
+    var coef0 = Float64(0.5 if kernel == 1 else 0.0)
+    var c = Float64(100.0 if planted else (0.5 if unit == 4 else 2.0))
     var epsilon = Float64(0.001 if planted else 0.1)
     var tolerance = Float64(0.001 if unit == 8 else (0.0001 if planted else 0.000001))
     var source = List[Float32](length=n * d, fill=0)

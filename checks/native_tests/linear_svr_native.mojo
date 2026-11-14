@@ -45,8 +45,8 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
     var original_info = Int(plan.info.unsafe_ptr())
     var moved = plan^
     require(Int(moved.info.unsafe_ptr()) == original_info, "single-target metadata move copied storage")
-    var l1 = Float64(0.5 if unit == 3 else 0)
-    var l2 = Float64(0 if unit == 3 else (2 if unit == 2 else 0.5))
+    var l1 = Float64(0.5 if unit == 3 else 0.0)
+    var l2 = Float64(0.0 if unit == 3 else (2.0 if unit == 2 else 0.5))
     var epsilon = Float64(-0.1 if unit == 5 else 0.1)
     var request = QnFitRequest(Int(xp), Int(yp), Int(coefficients.unsafe_ptr()), 0,
         Int(sp) if unit == 4 else 0, 0, n, d, 1, 200, 50, 5, intercept, unit == 0,

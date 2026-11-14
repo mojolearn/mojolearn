@@ -137,7 +137,7 @@ def fixture(driver: XnDriver, resident_driver: OcResidentDriver, unit: Int, resi
         var variance = oc_variance(driver, Int(xp), n * d)
         gamma = Float64(Float32(1 / (Float64(d) * variance) if variance != 0 else 1))
     var degree = 3 if original else 2
-    var coef0 = Float64(0.5 if unit == 2 else 0)
+    var coef0 = Float64(0.5 if unit == 2 else 0.0)
     var nu = Float64(0.3 if original else 0.5)
     var tolerance = Float64(0.00001 if unit == 8 else (0.001 if original else 0.000001))
     var gram = OcMatrix(0, 0)
@@ -232,7 +232,7 @@ def fixture(driver: XnDriver, resident_driver: OcResidentDriver, unit: Int, resi
                 qp[row * d] = Float32(0.2 if row == 0 else (1.2 if row == 1 else (1 if row == 2 else -0.2)))
                 qp[row * d + 1] = Float32(0.2 if row == 0 else (1 if row == 2 else 0))
             else:
-                qp[row * d] = Float32(-2 if row == 0 else (-0.5 if row == 1 else (0.5 if row == 2 else 2)))
+                qp[row * d] = Float32(-2.0 if row == 0 else (-0.5 if row == 1 else (0.5 if row == 2 else 2.0)))
         host_parallelize(fill_query, nq)
     var cross = oc_take_cols(driver, Int(qp), nq, n, Int(mp), ns) if kernel == 4 else oc_kernel(
         driver, Int(qp), supports.address(), nq, ns, d, kernel, degree, gamma, coef0)
