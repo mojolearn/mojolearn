@@ -228,6 +228,7 @@ check-native-iforest-forest-export-gpu-resident-off = "mojo run -D MOJOLEARN_NUM
 check-native-gbdt-resident-ns = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gbdt_resident_ns_predict_gpu.mojo"
 check-native-gbdt-resident-ns-old = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD -I . checks/native_tests/gbdt_resident_ns_predict_gpu.mojo"
 check-native-rf-device-loop-early-exit-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1 -I . checks/native_tests/rf_device_loop_early_exit_gpu.mojo"
+check-native-et-device-loop-early-exit-gpu = "bash checks/native_tests/et_device_loop_early_exit_gpu.sh"
 check-native-pcs-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/pcs_native_cpu.mojo"
 check-native-pcs-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pcs_native_gpu.mojo"
 check-native-kpca-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/kpca_native_cpu.mojo"
