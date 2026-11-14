@@ -811,9 +811,14 @@ def _knn_xn(model: PythonObject, args: PythonObject, context: PythonObject) rais
     never reads it. Under the B arm (-D MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER,
     neighbors/neighbors_knn_run.mojo knn_fit_xn_eager) the operation already
     resolved it before the fit and `args[0]` is that admitted binding."""
+    # Locals, never a subscript in return position (AGENTS.md, the 2026-11-12
+    # tail-call rule for borrowed PythonObject arguments).
     if knn_fit_xn_eager():
-        return args[0]
-    return xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)[0]
+        var held = args[0]
+        return held
+    var admitted = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
+    var selected = admitted[0]
+    return selected
 
 
 def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
