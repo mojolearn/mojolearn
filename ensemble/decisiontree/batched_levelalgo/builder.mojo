@@ -1529,6 +1529,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # the device / pinned views of that word
     var loop_round: Int
     var loop_hdr_fresh: Bool
+    # CHECK HOOK: True makes `begin_tree` take the host queue even when a
+    # device-loop form is compiled in, so one binary can grow the same tree
+    # both ways (`checks/native_tests/rf_device_loop_early_exit_gpu_suite`).
+    # Product code never sets it.
+    var force_host_queue: Bool
     var loop_next_d: DeviceBuffer[DType.int32]
     var loop_next_h: HostBuffer[DType.int32]
     # Tree op TREE_OP_FOREST_FINISH (lane t1b-tree-leaf-and-node-ops,
@@ -1824,6 +1829,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.loop_active = False
         self.loop_round = 0
         self.loop_hdr_fresh = False
+        self.force_host_queue = False
         self.tree_tag = -1
         self.pending_nodes = 0
         self.pending_out = 0
@@ -4098,6 +4104,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 self.loop_cap > 0
                 and ts.queue.has_work()
                 and not instr.trace.enabled
+                and not self.force_host_queue
             ):
                 self.loop_active = True
                 self.loop_batch = 0
