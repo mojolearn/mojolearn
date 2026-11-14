@@ -76,7 +76,8 @@ def test_a_cell_that_states_why_it_has_no_quality_is_recorded_not_incomplete():
     assert test["status"] == "ok"
     report = B.measurement_completion(rec)
     assert report["status"] == "recorded", report
-    # an empty quality with no reason is still reported
+    # an empty quality with no reason is still reported where a scorer is defined (not the trees large batch)
+    rec["family"] = "classical"
     large.update(quality={}, status="ok")
     large.pop("scorer_error")
     B.mark_not_scored(rec["infer_cells"])
