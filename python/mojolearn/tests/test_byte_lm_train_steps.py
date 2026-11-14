@@ -29,46 +29,11 @@ def _batches(shape, n_steps, seed=1):
     return rng.integers(0, shape.vocab_size, (n_steps, shape.batch, shape.length + 1), dtype=np.int32)
 
 
-def _bits(values):
-    return np.asarray(values, dtype=np.float32).view(np.uint32)
-
-
-def _state_bytes(trainer):
-    state = trainer.export_state()
-    return [np.asarray(state[key]).tobytes() for key in ("parameters", "m", "v", "flags")]
-
-
-@pytest.mark.parametrize("n_steps", [1, 2, 4])
-def test_train_steps_equals_single_steps(n_steps):
-    shape, many = _trainer()
-    _, single = _trainer()
-    ids = _batches(shape, n_steps)
-    result = many.train_steps(ids)
-    losses = [single.train_step(np.ascontiguousarray(ids[k]))["loss"] for k in range(n_steps)]
-    assert tuple(result["losses"].shape) == (n_steps,)
-    assert np.array_equal(_bits(result["losses"]), _bits(losses))
-    assert _bits([result["loss"]])[0] == _bits([losses[-1]])[0]
-    assert result["completed_steps"] == n_steps == result["step"] == result["next_batch_index"]
-    assert _state_bytes(many) == _state_bytes(single)
-
-
-def test_train_steps_on_an_open_session_runs_the_multi_step_operation():
-    # The first call opens the session; the second runs every step in the
-    # multi-step native operation. Both trainers end on the same bits.
-    shape, many = _trainer()
-    _, single = _trainer()
-    first = _batches(shape, 1, seed=2)
-    rest = _batches(shape, 3, seed=3)
-    many.train_step(np.ascontiguousarray(first[0]))
-    single.train_step(np.ascontiguousarray(first[0]))
-    result = many.train_steps(rest)
-    losses = [single.train_step(np.ascontiguousarray(rest[k]))["loss"] for k in range(3)]
-    assert np.array_equal(_bits(result["losses"]), _bits(losses))
-    assert result["completed_steps"] == 4
-    assert _state_bytes(many) == _state_bytes(single)
-    # The gradient of the last step stays exportable, as after train_step.
-    assert np.array_equal(np.asarray(many.export_gradients()["flat_gradients"]),
-                          np.asarray(single.export_gradients()["flat_gradients"]))
+# test_train_steps_equals_single_steps and
+# test_train_steps_on_an_open_session_runs_the_multi_step_operation moved to
+# checks/native_tests/byte_lm_trainer_session_cases.mojo units 0-3 (lane
+# tmig-lm-1): the loss words, completed counts, state and gradient bytes of
+# k steps in one call against k single steps, through the session entry.
 
 
 def test_train_steps_refuses_a_wrong_shape_and_out_of_vocabulary_ids():

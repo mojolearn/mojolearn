@@ -4,7 +4,6 @@
 Input/checkpoint construction and NumPy oracles are test-controller work.
 Physical multi-device evidence requires explicit installed GPU device IDs.
 """
-import math
 import os
 
 import numpy as np
@@ -13,9 +12,6 @@ import pytest
 from mojolearn import ByteLanguageModelConfig, ParallelByteLanguageModelTrainer
 from mojolearn import _backend, _byte_lm_impl
 from mojolearn._verify_native_runtime import audit_native_call
-
-
-FIELDS = ('parameters', 'm', 'v', 'flags')
 
 
 def state_fixture():
@@ -124,48 +120,10 @@ def test_cpu_cooperative_session_refusal_preserves_public_contract():
         audit_native_call(owner.close).assert_native()
 
 
-def test_gpu_parallel_step_independent_decay_loss_and_complete_replay():
-    if _backend.vendor() == 'cpu':
-        pytest.skip('native cooperative byte-LM session requires a GPU')
-    devices = tuple(map(int, os.environ.get('MOJOLEARN_PARALLEL_BYTE_DEVICES', '0').split(',')))
-    state, shape = state_fixture()
-    shards = [np.arange(5, dtype=np.int32).reshape(1, 5) for _ in range(3)]
-    owner = construct(state, devices=devices, logical_shards=3)
-    replay = None
-    try:
-        result = audit_native_call(owner.train_step, shards).assert_native()
-        np.testing.assert_allclose(result['losses'], [math.log(shape.vocab_size)] * 3,
-                                   rtol=0, atol=2e-6)
-        assert result['completed_steps'] == 1
-        exported = audit_native_call(owner.state_dict).assert_native()
-        expected = state['parameters'] * np.float32(1 - .125 * .25)
-        np.testing.assert_array_equal(np.asarray(exported['parameters']), expected)
-        for key in ('m', 'v', 'flags'):
-            np.testing.assert_array_equal(np.asarray(exported[key]), state[key])
-        gradient = audit_native_call(owner.export_gradients).assert_native()
-        np.testing.assert_array_equal(np.asarray(gradient), np.zeros(shape.n_total, np.float32))
-        into = {k: np.empty_like(state[k]) for k in FIELDS}
-        assert audit_native_call(owner.export_raw, into=into).assert_native() is into
-        for key in FIELDS:
-            np.testing.assert_array_equal(into[key], np.asarray(exported[key]))
-        ownership = audit_native_call(owner.optimizer_ownership).assert_native()
-        assert len(ownership) == len(devices)
-        assert sum(row['count'] for row in ownership) == shape.n_total
-        checkpoint = audit_native_call(owner.checkpoint).assert_native()
-        replay = audit_native_call(ParallelByteLanguageModelTrainer.from_checkpoint,
-                                   checkpoint, devices=(devices[0],)).assert_native()
-        audit_native_call(owner.train_step, shards).assert_native()
-        audit_native_call(replay.train_step, shards).assert_native()
-        a = audit_native_call(owner.state_dict).assert_native()
-        b = audit_native_call(replay.state_dict).assert_native()
-        for key in FIELDS:
-            assert np.asarray(a[key]).tobytes() == np.asarray(b[key]).tobytes()
-        for key in ('completed_steps', 'next_batch_index', 'config', 'data_schedule'):
-            assert a[key] == b[key]
-    finally:
-        audit_native_call(owner.close).assert_native()
-        if replay is not None:
-            audit_native_call(replay.close).assert_native()
+# test_gpu_parallel_step_independent_decay_loss_and_complete_replay moved to
+# checks/native_tests/byte_lm_parallel_byte_native_gpu_suite.mojo (lane
+# tmig-lm-1): the decay-only step (log(16) losses, decayed parameters, zero
+# moments, flags and gradient) and the single-device replay's bytes.
 
 
 @pytest.mark.parametrize("mode", ["fast", "identical"])

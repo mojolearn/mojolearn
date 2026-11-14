@@ -68,7 +68,10 @@ def test_logits_shape_dtype_and_finiteness(resident):
     model.close()
 
 
-@pytest.mark.parametrize('resident', [False, True])
+# The resident arm (state, step and ids unchanged by logits and next bytes)
+# moved to checks/native_tests/byte_lm_trainer_session_cases.mojo unit 5
+# (lane tmig-lm-1); the stateless arm reads the Python-held state and stays.
+@pytest.mark.parametrize('resident', [False])
 def test_logits_change_no_state_and_do_not_advance_the_step(resident):
     model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
     model.train_step(step_ids())
