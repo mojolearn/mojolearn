@@ -14,10 +14,26 @@ struct OptimizerOwner(Movable, Writable):
     # This is solely the compiled image/capsule lifetime pin. RUN never reads
     # it; the actual driver, resident handle and decisions are native fields.
     var provider: PythonObject
+    # Lane fix-wave2-leftovers (Samba train step, fix-audit leftover): the
+    # model registry (`flat`) a Samba step writes, held so its object
+    # identity is a stable key, and its host address, read once (the first
+    # step over that registry) instead of one `_addr` read per step.
+    var registry: PythonObject
+    var registry_addr: Int
 
     def __init__(out self, identity: Int, kind: Int, pristine: Bool):
         self.control = OptimizerOwnerControl(identity, kind, pristine)
         self.provider = PythonObject(None)
+        self.registry = PythonObject(None)
+        self.registry_addr = 0
+
+    def registry_address(mut self, registry: PythonObject) raises -> Int:
+        """The host address of `registry` (a Samba model's flat registry),
+        read from Python only when this owner has not seen that object."""
+        if self.registry_addr == 0 or Int(self.registry._obj_ptr) != Int(registry._obj_ptr):
+            self.registry_addr = Int(py=registry._addr)
+            self.registry = registry
+        return self.registry_addr
 
     def close(mut self) raises:
         var request = self.control.close_request()
@@ -52,6 +68,7 @@ struct OptimizerOwner(Movable, Writable):
         except:
             pass  # same best-effort resource cleanup during interpreter exit
         _ = self.provider
+        _ = self.registry
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("OptimizerOwner(", self.control.name(), ")")
