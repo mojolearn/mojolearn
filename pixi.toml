@@ -122,6 +122,7 @@ check-native-optimizer-maximize-gpu = "mojo run -I . checks/native_tests/optimiz
 check-native-lr-schedule = "mojo run -I . checks/native_tests/lr_schedule_check.mojo"
 check-native-holtwinters-state-cpu = "mojo run -I . checks/native_tests/holtwinters_state_cpu.mojo"
 check-native-holtwinters-state-gpu = "mojo run -I . checks/native_tests/holtwinters_state_gpu.mojo"
+check-native-decomp-holtwinters-inference-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/decomp_holtwinters_inference_cpu.mojo"
 check-native-optimizer-descriptor-cpu = "mojo run -I . checks/native_tests/optimizer_descriptor_cpu.mojo"
 check-native-optimizer-descriptor-gpu = "mojo run -I . checks/native_tests/optimizer_descriptor_gpu.mojo"
 check-native-optimizer-device-cpu = "mojo run -I . checks/native_tests/optimizer_device_cpu.mojo"

@@ -12,14 +12,13 @@ class is registered for the new format.
 Runtime checks, skipped (and said to be) when nothing in this process fits
 Holt-Winters: a fit through whatever binding this install has (a GPU set, or
 the reference tsa host binding inside the internal reference context) saves
-and loads to the same bytes and the same answers; `predict(0, n)` is NaN
-before `2 * seasonal_periods` and finite after; a prediction straddling `n`
-is the in-sample tail then the forecast head; the level the fit stored agrees,
-within float32 rounding, with the smoothing update applied to the in-sample
-prediction's inputs, which pins the time index of those inputs; and, when the
+and loads to the same bytes and the same answers; a public prediction
+straddling `n` is the in-sample tail then the forecast head; and, when the
 forecast host binding is built, `mojolearn.host_model` answers the same bytes
 through it. The bit claim against the GPU columns is the gates', not this
-file's.
+file's. The warm-up NaNs, the stored level against the smoothing update and
+the in-sample prediction against its inputs are checked natively in
+checks/native_tests/decomp_holtwinters_inference_cpu.mojo.
 
     cd python && python3 -m pytest mojolearn/tests/test_holtwinters_inference.py
 """
@@ -149,30 +148,11 @@ def test_saved_model_forecasts_and_predicts(tmp_path, seasonal):
 
     ins = np.asarray(m.predict(0, n))
     assert ins.shape == (n, b)
-    assert np.isnan(ins[:2 * f]).all() and not np.isnan(ins[2 * f:]).any()
     straddle = np.asarray(m.predict(n - 8, n + 8))
     assert straddle[:8].tobytes() == ins[-8:].tobytes()
     assert straddle[8:].tobytes() == np.asarray(m.forecast(8)).tobytes()
     assert np.asarray(m.predict(n, n + 8)).tobytes() == np.asarray(m.forecast(8)).tobytes()
     assert np.asarray(m.predict(0, n, index=1)).tobytes() == np.ascontiguousarray(ins[:, 1]).tobytes()
-
-    # The in-sample prediction's inputs at time t are level[t - f - 1],
-    # trend[t - f - 1] and season[t - 2f]; the smoothing update from them and
-    # y[t] must land, within rounding, on the stored level[t - f].
-    level, trend, season = (np.asarray(a, dtype=np.float64) for a in (m.level_, m.trend_, m.season_))
-    alpha = np.asarray(m.alpha_, dtype=np.float64)
-    for t in range(2 * f, n):
-        i = t - f
-        lt = level[:, i - 1] + trend[:, i - 1]
-        stmp = season[:, i - f]
-        if seasonal == "additive":
-            want = alpha * (y[:, t] - stmp) + (1 - alpha) * lt
-            pred = lt + stmp
-        else:
-            want = alpha * (y[:, t] / stmp) + (1 - alpha) * lt
-            pred = lt * stmp
-        np.testing.assert_allclose(level[:, i], want, rtol=2e-4, atol=2e-4)
-        np.testing.assert_allclose(ins[t], pred, rtol=1e-5, atol=1e-5)
 
     with pytest.raises(ValueError, match="start < end"):
         m.predict(5, 5)
