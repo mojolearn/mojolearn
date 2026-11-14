@@ -11,7 +11,7 @@ from std.memory import bitcast
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.metrics_exp_common_run import MX_NONE
 
-# The fold's words per problem (`_FoldCurve._words`: s, F, T, k, a, b, u, v, c and one spare).
+# The fold's words per problem (`_FoldCurve._words`: s as two words, F, T, k, a, b, u, v, c).
 comptime CURVE_CF_OUT = 10
 # `curve_fold`'s rows per chunk.
 comptime CURVE_CF_CHUNK = 1024
