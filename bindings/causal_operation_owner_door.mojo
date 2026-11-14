@@ -382,7 +382,14 @@ def _causal_runtime_word(mut mods: NativeModules, fields: PythonObject, live: Py
     # The full capture's per-name copy and normalization of one runtime word.
     if py_contains(live, name):
         py_setitem(fields, name, live[name])
-        if name != "_resident_sessions":
+        # `_resident_sessions` and `_decode_program` hold the model's native
+        # session owner (core/causal_session_handles.mojo CausalSessionHandles,
+        # None before the first generation): retained, never scanned as plain
+        # metadata. 2026-11-14: the second generate() of a model was refused
+        # ("neural metadata requires native scalar/container values") because
+        # the first had cached its decode program here (L40S smoke,
+        # causal-lm-generate 162m).
+        if name != "_resident_sessions" and name != "_decode_program":
             neural_plain_value(mods, fields[name], 0, context)
             py_setitem(fields, name, _causal_native_plain(mods, fields[name], context))
     else:

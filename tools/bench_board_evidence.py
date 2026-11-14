@@ -549,7 +549,16 @@ def scored_state_refs(rec, directory, members):
                     raise ValueError(receipt["retention_error"])
                 if receipt.get("output_status") != "ok":
                     raise ValueError("scored output unavailable")
-                row["output"] = retained(receipt.get("retained_output"), receipt.get("output_sha256"))
+                omitted = receipt.get("retained_output") or {}
+                if omitted.get("omitted"):
+                    # Over MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES (bench_board_state.scored_receipt): the
+                    # output's canonical hash is recorded, its bytes are not. An explicit coverage gap of
+                    # this receipt, never "incomplete scored-byte retention" (2026-11-14: the 512 MiB
+                    # cholesky output stopped the whole L40S board at race 13 with a KeyError 'path').
+                    row["output"] = dict(status="omitted", reason=omitted.get("reason"), bytes=omitted.get("bytes"),
+                                         limit=omitted.get("limit"), canonical_sha256=receipt.get("output_sha256"))
+                else:
+                    row["output"] = retained(omitted, receipt.get("output_sha256"))
             except (ValueError, TypeError, OSError, KeyError, zipfile.BadZipFile, EOFError) as exc:
                 failures.append("scored output %d: %s" % (index, exc))
             model = receipt.get("model") or {}
@@ -776,7 +785,7 @@ def seal(ctx, directory, recipe, rec):
                 status = "verified" if ref.get("status") == "verified" else "local"
                 for row in rows:
                     for value in (row.get("output"), row["model"].get("retained")):
-                        if value:
+                        if value and value.get("status") != "omitted":
                             value["status"] = status
                 record["scored_state"] = dict(receipts=rows, comparison="not compared",
                     phase=phase, batch=cell.get("batch") if phase == "infer" else None,
@@ -784,7 +793,7 @@ def seal(ctx, directory, recipe, rec):
                            else "each captured scored call"),
                     cross_vendor_promise=cell.get("mode") == "identical",
                     eligibility="cross-vendor output comparison requires identical mode, same numerical source, inputs, initial state and settings")
-                if rows and rows[-1].get("output"):
+                if rows and rows[-1].get("output") and rows[-1]["output"].get("status") != "omitted":
                     record["retained_outputs"] = dict(rows[-1]["output"],
                         output_sha256=rows[-1]["output"]["canonical_sha256"])
             record["id"] = digest(encoded(record))

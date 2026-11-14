@@ -205,13 +205,19 @@ alloc_cores() {
     if read -r q per < /sys/fs/cgroup/cpu.max 2> /dev/null && [ "$q" != max ] && [ "${per:-0}" -gt 0 ] 2> /dev/null; then
         q=$(( (q + per - 1) / per ))
         [ "$q" -ge 1 ] && [ "$q" -lt "$n" ] && n=$q
+    elif read -r q < /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2> /dev/null && read -r per < /sys/fs/cgroup/cpu/cpu.cfs_period_us 2> /dev/null \
+            && [ "$q" -gt 0 ] 2> /dev/null && [ "${per:-0}" -gt 0 ] 2> /dev/null; then
+        q=$(( (q + per - 1) / per ))     # cgroup v1 (the RunPod L40S pods)
+        [ "$q" -ge 1 ] && [ "$q" -lt "$n" ] && n=$q
     fi
     echo "$n"
 }
 cpu_sample() {   # "<wall_usec> <cpu_usec> cgroup" or "<total ticks> <busy ticks> <cpus> procstat"
     local u
     u=$(awk '$1 == "usage_usec" {print $2}' /sys/fs/cgroup/cpu.stat 2> /dev/null)
-    [ -n "$u" ] || u=$(awk '{printf "%d", $1 / 1000}' /sys/fs/cgroup/cpuacct/cpuacct.usage 2> /dev/null)
+    # %.0f, not %d: mawk's %d is 32-bit, so cpuacct.usage (ns since the container started) / 1000 stuck at
+    # 2147483647 after about 36 CPU-minutes and every later sample read busy=0.0 (L40S nvc1, 2026-11-14).
+    [ -n "$u" ] || u=$(awk '{printf "%.0f", $1 / 1000}' /sys/fs/cgroup/cpuacct/cpuacct.usage 2> /dev/null)
     if [ -n "$u" ]; then echo "$(( $(date +%s%N) / 1000 )) $u cgroup"; return; fi
     awk '/^cpu / {b=$2+$3+$4+$7+$8+$9; t=b+$5+$6} /^cpu[0-9]/ {c++} END {printf "%.0f %.0f %d procstat\n", t, b, c}' /proc/stat
 }
