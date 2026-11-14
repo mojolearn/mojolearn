@@ -17,6 +17,8 @@ next case runs. Drivers (the row's "driver" field):
   mlp_fit       MLPClassifier.fit on a non-board shape
   kde_widths    KernelDensity fit + score_samples on synthetic rows at each width the row names (the KDE_QTILE
                 cost rule's neighbouring and wide non-board shapes)
+  mamba_backward  Mamba1Block.backward and Mamba2Block.backward (the zero-state block VJP, one public call) on
+                synthetic weights at the row's (batch, length, d_model); an arm may be a B wheel set the row names
 
 Runs nothing at import; standard library + numpy + pandas + mojolearn in the arm's venv only (it never imports the
 repo's tools). Serial by nature: the cases are timed calls on one GPU and must not share it.
@@ -148,8 +150,43 @@ def case_kde_widths(row, arm_cases):
     return out
 
 
+def case_mamba_backward(row, arm_cases):
+    """The public Mamba-1 / Mamba-2 block backward (the block step op's VJP) on synthetic float32 weights in the
+    blocks' documented shapes, x and dy of shape (batch, length, d_model)."""
+    import numpy as np
+    ml = _ml()
+    sh = row["shape"]
+    b, l, dm = int(sh["batch"]), int(sh["length"]), int(sh["d_model"])
+    rng = np.random.default_rng(0)
+
+    def w(*shape):
+        return (rng.standard_normal(shape) * 0.05).astype(np.float32)
+
+    x = (rng.standard_normal((b, l, dm)) * 0.5).astype(np.float32)
+    dy = (rng.standard_normal((b, l, dm)) * 0.5).astype(np.float32)
+    out = []
+    di, r = 2 * dm, -(-dm // 16)
+    m1 = {"norm.weight": np.ones((dm,), np.float32), "in_proj.weight": w(2 * di, dm),
+          "conv1d.weight": w(di, 1, 4), "conv1d.bias": w(di), "x_proj.weight": w(r + 32, di),
+          "dt_proj.weight": w(di, r), "dt_proj.bias": w(di),
+          "A_log": np.log(np.tile(np.arange(1, 17, dtype=np.float32), (di, 1))), "D": np.ones((di,), np.float32),
+          "out_proj.weight": w(dm, di)}
+    block1 = ml.Mamba1Block(m1, numeric_mode="identical")
+    ms, why = timed(lambda: block1.backward(x, dy))
+    out.append(("Mamba1Block.backward b=%d l=%d d_model=%d" % (b, l, dm), ms, why))
+    nh, cd = di // 64, di + 256
+    m2 = {"block_norm.weight": np.ones((dm,), np.float32), "in_proj.weight": w(2 * di + 256 + nh, dm),
+          "conv1d.weight": w(cd, 1, 4), "conv1d.bias": w(cd), "dt_bias": w(nh),
+          "A_log": np.log(np.arange(1, nh + 1, dtype=np.float32)), "D": np.ones((nh,), np.float32),
+          "norm.weight": np.ones((di,), np.float32), "out_proj.weight": w(dm, di)}
+    block2 = ml.Mamba2Block(m2, numeric_mode="identical")
+    ms, why = timed(lambda: block2.backward(x, dy))
+    out.append(("Mamba2Block.backward b=%d l=%d d_model=%d" % (b, l, dm), ms, why))
+    return out
+
+
 DRIVERS = {"while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
-           "kde_widths": case_kde_widths}
+           "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward}
 
 
 def arm_cases(row, arm):

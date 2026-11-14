@@ -546,7 +546,9 @@ if [ "$OWED" = 1 ] && part drivers && [ -s "$RES/plan-owed/drivers.json" ]; then
     mkdir -p "$RES/drivers"
     rc=0
     for row in $($PY -c 'import json,sys; print(" ".join(r["id"] for r in json.load(open(sys.argv[1]))))' "$RES/plan-owed/drivers.json"); do
-        for arm in candidate prior; do
+        # a driver row's B arms (its "arms" names a staged B set, e.g. restore-mamba-backward-glue's
+        # mamba-backward-generic) run on that set's venv; measure_owed_driver.py skips an arm the row does not name
+        for arm in candidate prior ${B_NAMES[@]+"${B_NAMES[@]}"}; do
             [ -x "${ARM_PY[$arm]:-/nonexistent}" ] || continue
             "${ARM_PY[$arm]}" tools/measure_owed_driver.py --owed "$OWED_FILE" --row "$row" --arm "$arm" \
                 --out "$RES/drivers/drivers.jsonl" >> "$RES/logs/drivers.log" 2>&1
