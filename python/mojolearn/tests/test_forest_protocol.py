@@ -155,3 +155,22 @@ def test_custom_constructor_does_not_silently_drop_parameters():
     # parameters are refused, never dropped.
     with pytest.raises(TypeError, match="custom constructor|requires an exact connected class"):
         clone(CustomForest(custom=9))
+
+
+@pytest.mark.parametrize('cls', CLASSES)
+def test_validate_params_is_the_native_constructor_check(cls):
+    # `_validate_params` is one native call (trees_public_forest_door
+    # `forest_validate_stored`): the constructor's refusals at fit time, the
+    # derived `_cfg` stored, the parameters kept as given.
+    model = cls(max_depth=3, n_jobs=None)
+    model._validate_params()
+    assert model.max_depth == 3 and 'max_depth' in model._cfg
+    model.__dict__.update(n_jobs=2)
+    with pytest.raises(NotImplementedError, match='n_jobs'):
+        model._validate_params()
+    model.__dict__.update(n_jobs=None, inference_engine='typo')
+    with pytest.raises(ValueError, match='inference_engine'):
+        model._validate_params()
+    model.__dict__.update(inference_engine='auto')
+    assert model._prediction_engine() in ('sequential', 'parallel_groves')
+    assert isinstance(model._ordered_resident_auto(), bool)
