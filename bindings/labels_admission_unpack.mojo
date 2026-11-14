@@ -58,9 +58,122 @@ from bindings.labels_descriptor_boundary_door import (
 )
 from core.admitted_f32_plan import admitted_x_shape_refuse, admitted_target_present
 from core.admitted_refusals import admitted_finite_wording
+from core.hotpath_impl import HpStat
 from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from bindings.py_balanced import py_get
+from bindings.classical_arrays_door import classical_wrap_array
+from bindings.native_array_storage_door import native_array_from_values
+from bindings.classical_labels_door import labels_real_type
+from bindings.label_input_sources_unpack import (
+    labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL,
+)
 
 comptime _LA_I64P = MutPointer[Int64, MutUntrackedOrigin]
+
+#: Exception types the Python label shells raised before lane py-admission,
+#: kept: a base-binding helper's own refusal crossed as a bare `Exception`
+#: (its direct call through `_buffer._native`), a dtype missing from
+#: `_NATIVE_ENCODE` as a `KeyError`. bindings/labels_native_entry_pack.mojo
+#: raises these two prefixes as those types; every other door is untouched.
+comptime LABELS_BARE_EXCEPTION_KIND = "LabelsBareException"
+comptime LABELS_BARE_EXCEPTION = "LabelsBareException:"
+comptime LABELS_KEY_ERROR_KIND = "LabelsKeyError"
+comptime LABELS_KEY_ERROR = "LabelsKeyError:"
+
+
+def _la_helper_error(var error: Error) -> Error:
+    """A base-binding helper's refusal with the type the shell raised: a
+    NaN label as a ValueError, a missing binding as its ImportError, any
+    other as the bare Exception the direct call raised."""
+    var message = String(error)
+    if "NaN label" in message:
+        if message.startswith("ValueError: "):
+            return error^
+        return Error("ValueError: " + message)
+    if message.startswith("ImportError:") or message.startswith(LABELS_BARE_EXCEPTION):
+        return error^
+    return Error(LABELS_BARE_EXCEPTION + " " + message)
+
+
+def _la_int_width(typestr: String) -> Int:
+    """The item width of an integer typestr (any width NumPy hands over), 0
+    for any other dtype."""
+    if typestr == "<i1" or typestr == "<u1":
+        return 1
+    if typestr == "<i2" or typestr == "<u2":
+        return 2
+    if typestr == "<i4" or typestr == "<u4":
+        return 4
+    if typestr == "<i8" or typestr == "<u8":
+        return 8
+    return 0
+
+
+def _la_widen_ints(src: Int, typestr: String, dst: Int, count: Int) raises:
+    """`count` integers of `typestr` (int8 / uint8 / int16 / uint16 / int32 /
+    uint32 / int64 / uint64) at `src` as int64 words at `dst`: the exact
+    values `Array.astype("<i8")` gave, in element ranges across the host's
+    cores. A uint64 value above int64's range is refused (OverflowError)."""
+    var width = _la_int_width(typestr)
+    if width == 0:
+        raise Error("TypeError: mojolearn: " + typestr + " is not an integer dtype")
+    if count <= 0:
+        return
+    var signed = typestr.startswith("<i")
+    var tasks = host_predict_task_count_work(count, count)
+    var chunk = host_predict_chunk(count, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+
+    def _range(t: Int) {imm src, imm dst, imm count, imm chunk, imm width, imm signed, imm flag_ptr}:
+        var lo = t * chunk
+        if lo >= count:
+            return
+        var hi = min(lo + chunk, count)
+        var out = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst)
+        for i in range(lo, hi):
+            if width == 1:
+                if signed:
+                    out[i] = MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i).cast[DType.int64]()
+                else:
+                    out[i] = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i).cast[DType.int64]()
+            elif width == 2:
+                if signed:
+                    out[i] = MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i).cast[DType.int64]()
+                else:
+                    out[i] = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i).cast[DType.int64]()
+            elif width == 4:
+                if signed:
+                    out[i] = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i).cast[DType.int64]()
+                else:
+                    out[i] = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i).cast[DType.int64]()
+            elif signed:
+                out[i] = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i)
+            else:
+                var v = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=src).unsafe_load(i)
+                if v > UInt64(9223372036854775807):
+                    flag_ptr.unsafe_store(t, UInt8(1))
+                out[i] = v.cast[DType.int64]()
+
+    host_parallelize(_range, tasks)
+    var fits = True
+    for t in range(tasks):  # driver-loop: over the widening tasks' flags (at most one per core)
+        if flags[t] != UInt8(0):
+            fits = False
+    _ = flags^
+    if not fits:
+        raise Error("OverflowError: mojolearn: a uint64 label does not fit int64")
+
+
+def _la_to_i64(src: Int, typestr: String, dst: Int, count: Int, context: PythonObject) raises:
+    """Any integer or float words as int64 (floats by the native cast,
+    `Array.astype("<i8")`'s rule)."""
+    if _la_int_width(typestr) > 0:
+        _la_widen_ints(src, typestr, dst, count)
+    else:
+        labels_cast(src, typestr, dst, "<i8", count, context)
 
 #: `prepare_targets`' weight statuses (`PT_W_*`) and scikit-learn's wording.
 comptime LABELS_WEIGHT_NONFINITE = "Input sample_weight contains NaN or infinity."
@@ -99,7 +212,7 @@ def labels_prepare_arrays(keep: PythonObject, y_addr: Int, typestr: String, n: I
     if labelled:
         y_code = _encode_code(typestr)
         if y_code < 0:
-            raise Error("TypeError: mojolearn: labels of dtype " + typestr + " have no native encoder")
+            raise Error(LABELS_KEY_ERROR + " " + typestr)
         classes_store = admitted_vector(n, wide, context)
         codes = admitted_vector(n, "<i4", context)
         classes_addr = labels_address(classes_store)
@@ -108,10 +221,7 @@ def labels_prepare_arrays(keep: PythonObject, y_addr: Int, typestr: String, n: I
     try:
         k = labels_prepare_targets(context, y_addr, y_code, n, classes_addr, codes_addr, w_addr, w_code, flags)
     except error:
-        var message = String(error)
-        if "NaN label" in message and not message.startswith("ValueError: "):
-            raise Error("ValueError: " + message)
-        raise error^
+        raise _la_helper_error(error^)
     _ = keep  # the labels' owner, alive through the native call above
     if k == -3:
         raise Error(LABELS_WEIGHT_NONFINITE)
@@ -150,9 +260,10 @@ def labels_prepare_targets_op(labels: PythonObject, weights: PythonObject, n: In
     var w_addr = 0
     var w_code = 0
     if weights is not None:
-        w_code = _encode_code(String(weights.dtype))
-        if w_code != 0 and w_code != 1:
-            raise Error("TypeError: mojolearn: sample_weight must be a float32 or float64 Array")
+        var w_dtype = String(weights.dtype)
+        w_code = _encode_code(w_dtype)
+        if w_code < 0:
+            raise Error(LABELS_KEY_ERROR + " " + w_dtype)
         w_addr = labels_address(weights)
     var result = labels_prepare_arrays(labels, y_addr, typestr, n, w_addr, w_code, flags, context)
     _ = weights  # alive through the native call above
@@ -180,6 +291,9 @@ def labels_unique_inverse_op(y: PythonObject, context: PythonObject) raises -> P
     labels) and one int32 code per row; for str and object labels the str
     encoder's or the ORDER RULE's classes (a list) and codes. Refuses an
     empty y, a y that is not a vector and a NaN label."""
+    var objects = _la_object_numeric(y, context)
+    if objects:
+        return _la_unique_numeric(objects.value(), objects.value(), context)
     var view = PythonObject(None)
     var typestr = String("")
     var numeric = False
@@ -200,6 +314,14 @@ def labels_unique_inverse_op(y: PythonObject, context: PythonObject) raises -> P
             return Python.tuple(named.classes, named.codes)
         var ordered = _sorted_classes(flat, context)
         return Python.tuple(ordered.classes, ordered.codes)
+    return _la_unique_numeric(view, view, context)
+
+
+def _la_unique_numeric(view: PythonObject, owner: PythonObject, context: PythonObject) raises -> PythonObject:
+    """unique_inverse's numeric arm over a C-ordered numeric view (or
+    Array) `view`: refusals, the exact widening of a dtype the encoder has
+    no arm for, one prepare_targets call."""
+    var typestr = admitted_dtype(view, context)
     var n = Int(py=view.size)
     if n == 0:
         raise Error("mojolearn: y is empty")
@@ -215,14 +337,57 @@ def labels_unique_inverse_op(y: PythonObject, context: PythonObject) raises -> P
         # float16, int16, int8, ...: widened exactly, as the 64-bit sort read them
         var target = String("<f8") if String(typestr[byte=1]) == "f" else String("<i8")
         keep = admitted_vector(n, target, context)
-        labels_cast(address, typestr, labels_address(keep), target, n, context)
+        if target == "<i8":
+            _la_widen_ints(address, typestr, labels_address(keep), n)
+        else:
+            labels_cast(address, typestr, labels_address(keep), target, n, context)
         _ = view
         typestr = target
         address = labels_address(keep)
     var result = labels_prepare_arrays(keep, address, typestr, n, 0, 0, 0, context)
     _ = keep
     _ = view
+    _ = owner
     return result
+
+
+def _la_object_numeric(y: PythonObject, context: PythonObject) raises -> Optional[PythonObject]:
+    """An object-dtype ndarray whose every leaf is a real number, as the
+    Array `_buffer._materialize` made of it (scikit-learn's check_array
+    reads such arrays as numbers): int64 when every leaf is exactly an int
+    or bool, float64 when a float is among them or any leaf is another real
+    scalar (a NumPy scalar). None for any other input, and for an object
+    array holding str or other objects (the label input step reads it)."""
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is None or py_type(y) is not ndarray:
+        return None
+    if String(y.dtype.kind) != "O":
+        return None
+    var b = labels_builtins()
+    var flat = _flatten_labels(y, context)
+    var n = len(flat)
+    var any_float = False
+    var real_other = False
+    var kind = labels_list_scalar_kind(flat)
+    if kind == LABELS_LIST_FLOAT:
+        any_float = True
+    elif kind != LABELS_LIST_INT and kind != LABELS_LIST_BOOL:
+        for i in range(n):  # cpu-route: the leaf types of a user object array, the explicit input step
+            var t = py_type(flat[i])
+            if t is b.float:
+                any_float = True
+            elif t is b.int or t is b.bool:
+                continue
+            elif labels_real_type(t, context):
+                real_other = True
+            else:
+                return None
+    var wide = any_float or real_other
+    var store = native_array_from_values(String("d" if wide else "q"), flat)
+    var shape = py_call(b.tuple, y.shape)
+    var array = classical_wrap_array(store, shape, "<f8" if wide else "<i8", "C", context)
+    _ = flat
+    return array
 
 
 def labels_argmax_op(scores: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -249,11 +414,21 @@ def labels_argmax_op(scores: PythonObject, context: PythonObject) raises -> Pyth
     var address = Int(py=classical_address(view))
     if typestr != "<f4" and typestr != "<f8":
         keep = admitted_vector(rows * cols, "<f8", context)
-        labels_cast(address, typestr, labels_address(keep), "<f8", rows * cols, context)
+        if _la_int_width(typestr) > 0:
+            # any integer width: exact int64 first, then the native float64 cast
+            var exact = admitted_vector(rows * cols, "<i8", context)
+            _la_widen_ints(address, typestr, labels_address(exact), rows * cols)
+            labels_cast(labels_address(exact), "<i8", labels_address(keep), "<f8", rows * cols, context)
+            _ = exact
+        else:
+            labels_cast(address, typestr, labels_address(keep), "<f8", rows * cols, context)
         _ = view
         typestr = "<f8"
         address = labels_address(keep)
-    labels_argmax_run(context, typestr == "<f8", address, rows, cols, labels_address(out))
+    try:
+        labels_argmax_run(context, typestr == "<f8", address, rows, cols, labels_address(out))
+    except error:
+        raise _la_helper_error(error^)
     _ = keep
     _ = view
     return out
@@ -281,7 +456,7 @@ def labels_class_index_op(classes: PythonObject, key: PythonObject, context: Pyt
         # one int64 Array the decode reads (a NumPy view, or a narrower dtype)
         var n = Int(py=view.size)
         codes = admitted_vector(n, "<i8", context)
-        labels_cast(Int(py=classical_address(view)), typestr, labels_address(codes), "<i8", n, context)
+        _la_to_i64(Int(py=classical_address(view)), typestr, labels_address(codes), n, context)
     var listed = py_call(b.list, classes)
     var result = classical_decode_labels(listed, codes, context)
     _ = codes
@@ -306,7 +481,7 @@ def labels_decode_any_op(classes: PythonObject, codes: PythonObject, context: Py
     var typestr = admitted_dtype(view, context)
     var n = Int(py=view.size)
     var wide = admitted_vector(n, "<i8", context)
-    labels_cast(Int(py=classical_address(view)), typestr, labels_address(wide), "<i8", n, context)
+    _la_to_i64(Int(py=classical_address(view)), typestr, labels_address(wide), n, context)
     _ = view
     var result = classical_decode_labels(classes, wide, context)
     _ = wide
@@ -348,8 +523,12 @@ def _admission_integral(view: PythonObject, typestr: String, context: PythonObje
         return True
     # Every value integral exactly when every distinct value is (the
     # Python step reduced the classes of unique_inverse): one reduction.
-    var stat = labels_reduce_stat(context, Int(py=classical_address(view)), _native_code(typestr), n,
+    var stat = HpStat(0, 0, 0.0, 0, 0, 0)
+    try:
+        stat = labels_reduce_stat(context, Int(py=classical_address(view)), _native_code(typestr), n,
                                   _LA_REDUCE_INTEGRAL)
+    except error:
+        raise _la_helper_error(error^)
     _ = view
     return stat.i != 0
 

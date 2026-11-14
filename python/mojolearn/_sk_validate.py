@@ -366,6 +366,10 @@ def _check_X(est, X, fitting=True):
     # The refusals (complex, rank, no samples, no features) and the finiteness
     # scan, in scikit-learn's words: one native call
     # (bindings/labels_admission_unpack.mojo `admission_check_x_op`).
+    # Hot path (AGENTS.md "No refactor adds cost on a hot path"): this is ONE
+    # native call per public call (fit, predict, transform, score, ...) and
+    # nothing per row; the scan inside it is the one host finiteness pass
+    # the Python step already made (`_all_finite`), split across the cores.
     entry, context = _admission()
     entry(_OP_CHECK_X, (X, name, shape, complex_x, scan), context)
     return info
@@ -434,6 +438,8 @@ def _check_y(est, y, x_rows=-1):
     # NaN or infinity in a float y, a continuous y for a classifier and the
     # lengths, in scikit-learn's words: one native call
     # (bindings/labels_admission_unpack.mojo `admission_check_y_op`).
+    # Hot path: ONE native call per fit and nothing per row (the y scans the
+    # Python step already made, plus the lengths compare).
     flags = ADMISSION_Y_SCAN if container in ("buffer", "list") and vkind == "float" else 0
     if kind == "classifier":
         flags |= ADMISSION_Y_CLASSIFIER

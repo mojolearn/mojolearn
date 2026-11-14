@@ -43,11 +43,14 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type
 from bindings.classical_error_boundary_pack import classical_python_error
+from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import (
     classical_encode_labels, classical_decode_labels, classical_union_encode, classical_score_from_codes,
     labels_class_weight_rows, ClassicalLabels, _flatten_labels, _sorted_classes)
 from bindings.labels_admission_unpack import (
+    LABELS_BARE_EXCEPTION, LABELS_KEY_ERROR, LABELS_BARE_EXCEPTION_KIND, LABELS_KEY_ERROR_KIND,
     labels_prepare_targets_op, labels_encode_numeric_op, labels_unique_inverse_op, labels_argmax_op,
     labels_class_index_op, labels_decode_any_op, admission_check_x_op, admission_check_y_op)
 
@@ -128,4 +131,14 @@ def labels_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var result = _labels_operation(Int(py=call[0]), call[1], context)
         return result.steal_data()
     except error:
+        # The exception types the Python label shells raised before lane
+        # py-admission: a base-binding helper's own refusal crossed as a bare
+        # Exception, an unknown dtype code as a KeyError. Local prefixes, so no
+        # other door's wording changes type.
+        if String(error).startswith(LABELS_BARE_EXCEPTION):
+            return raise_python_exception(error_without_class(error, LABELS_BARE_EXCEPTION_KIND),
+                                          ExceptionType("PyExc_Exception"))
+        if String(error).startswith(LABELS_KEY_ERROR):
+            return raise_python_exception(error_without_class(error, LABELS_KEY_ERROR_KIND),
+                                          ExceptionType("PyExc_KeyError"))
         return classical_python_error(error^, args_ptr)
