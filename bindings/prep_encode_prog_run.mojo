@@ -13,6 +13,7 @@ The run is the x_prep owner's typed run (bindings/x_prep_native_owner_run.mojo
 `xprep_execute`) on `stage_words()`. No Python import
 (tools/python_free_dirs.sh)."""
 from bindings.x_prep_native_owner_run import XprepInput
+from core.preprocessing_program import prep_program_stage
 
 # `_Prog.output`: below this many words the output is plain arena words.
 comptime OUT_MIN_WORDS = 134217728
@@ -140,3 +141,77 @@ struct EncProgram(Movable):
                 elif word >= SCRATCH_BASE and word < SCRATCH_BASE + SCRATCH_SPAN:
                     program[i * ENC_STAGE_WORDS + k] = Int32(host + word - SCRATCH_BASE)
         return program^
+
+
+# ---------------------------------------------------------------- typed stage builders
+# Lane door-run-split (2026-11-14): the RUN-shaped stage builders that sat in
+# the doors taking the Python-holding `EncProg` (bindings/prep_encode_native_door.mojo
+# `_sel`, `_bad_rows_stages`; bindings/prep_iterimp_native_door.mojo `_ii_rows`;
+# bindings/prep_labels_native_door.mojo `_label_load`'s stage) take the typed
+# program here; each door passes `p.prog`. Same allocations in the same order,
+# same stage words: the bits do not move.
+# x_prep stage codes (_expansion_prep._OPS).
+comptime ENC_OP_LAB_LOAD = 119
+comptime ENC_OP_UNIQ_SCAN = 121
+comptime ENC_OP_II_RCOUNT = 136
+comptime ENC_OP_II_RWRITE = 137
+comptime ENC_OP_SEL_COUNT = 206
+comptime ENC_OP_SEL_SCAN = 207
+comptime ENC_OP_SEL_WRITE = 208
+comptime ENC_OP_ROWFLAG = 210
+# `_p2m_chunks`' minimum rows per chunk (the door's SEL_CHUNKS).
+comptime ENC_SEL_CHUNKS = 1024
+# `_ii_rows`' minimum rows per chunk (iterimp's II_CH).
+comptime ENC_II_CH = 1024
+
+
+def enc_sel_chunks(n: Int) -> Tuple[Int, Int]:
+    # `_p2m_chunks(n)`: (rows a chunk, chunks).
+    var ch = max(ENC_SEL_CHUNKS, (n + ENC_SEL_CHUNKS - 1) // ENC_SEL_CHUNKS, (n + 16777215) // 16777216, 1)
+    return (ch, max(1, (n + ch - 1) // ch))
+
+
+def enc_sel(mut prog: EncProgram, xo: Int, n: Int, d: Int, mode: Int, dst: Int) -> Int:
+    """`_p2m_sel`: per column of the (n, d) block at xo, the selected rows
+    (mode 0: the non-NaN words; 1: the positive rows' indices) ascending at
+    dst + j*n. Returns the offset of the d int32 counts."""
+    var chunks = enc_sel_chunks(n)
+    var ch = chunks[0]
+    var nch = chunks[1]
+    var cnt = prog.alloc(d * nch)
+    var tot = prog.alloc(d)
+    prep_program_stage(prog.program, ENC_OP_SEL_COUNT, d * nch, xo, n, d, ch, nch, mode, cnt)
+    prep_program_stage(prog.program, ENC_OP_SEL_SCAN, d, cnt, nch, tot)
+    prep_program_stage(prog.program, ENC_OP_SEL_WRITE, d * nch, xo, n, d, ch, nch, mode, cnt, dst)
+    return tot
+
+
+def enc_bad_rows_stages(mut prog: EncProgram, codes: Int, n: Int, d: Int, bad: Int, strict: Int) -> Tuple[Int, Int]:
+    # `_bad_rows_stages`: (ROWS, TOT) of the rows holding a `bad` code (in a
+    # column whose `strict` word is nonzero, when given).
+    var flags = prog.alloc(n)
+    var rows = prog.alloc(n)
+    prep_program_stage(prog.program, ENC_OP_ROWFLAG, n, codes, n, d, bad, strict, flags)
+    return (rows, enc_sel(prog, flags, n, 1, 1, rows))
+
+
+def enc_ii_rows(mut prog: EncProgram, mo: Int, n: Int, dk: Int, j: Int, missing: Bool) -> Tuple[Int, Int]:
+    """`_ii_rows`: the ascending rows whose mask word for feature j is (or is
+    not) zero, as int32 words, and their count."""
+    var ch = max(ENC_II_CH, (n + ENC_II_CH - 1) // ENC_II_CH)
+    var nch = (n + ch - 1) // ch
+    var cnt = prog.alloc(nch)
+    var off = prog.alloc(nch)
+    var tot = prog.alloc(1)
+    var rows = prog.alloc(n)
+    var flag = 1 if missing else 0
+    prep_program_stage(prog.program, ENC_OP_II_RCOUNT, nch, mo, n, dk, j, flag, ch, cnt)
+    prep_program_stage(prog.program, ENC_OP_UNIQ_SCAN, 1, cnt, nch, off, tot)
+    prep_program_stage(prog.program, ENC_OP_II_RWRITE, nch, mo, n, dk, j, flag, ch, off, rows)
+    return (rows, tot)
+
+
+def enc_label_load(mut prog: EncProgram, n: Int, words: Int, kind: Int, x: Int):
+    # `_label_load`'s stage: the float32 word of each of the n labels at
+    # `words` (raw words of dtype `kind`) into x (NaN when float32 cannot hold it).
+    prep_program_stage(prog.program, ENC_OP_LAB_LOAD, n, words, kind, x)
