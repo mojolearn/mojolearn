@@ -321,6 +321,11 @@ struct GenerationOperationSnapshot(Copyable, Movable):
     # entry (a device Transformer). round2-fixes-2: the layer run read the
     # entry key and resolved the table per layer per step (perf audit 3).
     var layer_entry: Optional[EntryRef]
+    # The vendor word of `layer_entry`'s key (0 = the host image), read with
+    # it in `bind_layer_entry`; -1 until bound. A Mamba layer run decides its
+    # unfilled device outputs from it (hot-path audit 2026-11-13: the layer
+    # run read `entry_vendor` from the entry dict per layer per call).
+    var layer_vendor: Int
 
     def __init__(out self, model: PythonObject, entries: PythonObject, blocks: List[PythonObject]) raises:
         self.model = model
@@ -338,17 +343,20 @@ struct GenerationOperationSnapshot(Copyable, Movable):
         for i in range(len(blocks)):  # driver-loop: capture stable layer metadata once per operation
             self.layers.append(GenerationLayerSnapshot(blocks[i], self.kind, self.planes))
         self.layer_entry = None
+        self.layer_vendor = -1
 
     def bind_layer_entry(mut self) raises:
         """Resolve `layer_entry` once, for a snapshot that runs its layers
         (bindings/causal_lm_public.mojo `_run_snapshot`); the engine
         admission never runs them and never resolves it."""
         if self.kind != "transformer":
-            self.layer_entry = causal_ref[CAUSAL_TABLE_MAMBA](
-                CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"])))
+            var key = CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"]))
+            self.layer_vendor = key.vendor
+            self.layer_entry = causal_ref[CAUSAL_TABLE_MAMBA](key)
         elif Bool(py=self.entries["cpu"]):
-            self.layer_entry = causal_ref[CAUSAL_TABLE_BLOCK](
-                CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"])))
+            var key = CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"]))
+            self.layer_vendor = key.vendor
+            self.layer_entry = causal_ref[CAUSAL_TABLE_BLOCK](key)
 
 
 # This admission is an operation-state consumer of the common descriptor and

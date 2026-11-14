@@ -24,7 +24,7 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct_door import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
-from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
+from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless_plan, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
@@ -77,6 +77,11 @@ struct NativeBlockPlan(Movable, Writable):
     # plan construction (lane entry-table-zero-alloc): every forward is one
     # indirect call through it.
     var forward_entry: EntryRef
+    # Whether a forward with no state runs stateless (lane
+    # fix-mamba12-forward-exec, `causal_layer_stateless_plan`): kind, entry
+    # vendor and Mamba-1 profile are fixed for a plan, so it is decided here
+    # once (hot-path audit 2026-11-13: it read two entry words per call).
+    var stateless_forward: Bool
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
@@ -91,6 +96,7 @@ struct NativeBlockPlan(Movable, Writable):
         self.numeric_profile = owner.numeric_profile
         self.packed = owner._head_int15 is not None
         self.layer = layer
+        self.stateless_forward = causal_layer_stateless_plan(self.kind, self.entries)
         # Immutable schema belongs to the retained execution plan. Live class
         # hooks, scalar values and Array metadata are still admitted each call.
         self.state_scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
@@ -844,10 +850,11 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                 return y
         # lane fix-mamba12-forward-exec: a Mamba-1/2 device forward with no
         # state runs stateless (no host zero state allocated, uploaded and
-        # read back per call; `causal_layer_stateless`)
-        if supplied_state is None:
+        # read back per call; decided once per plan:
+        # `NativeBlockPlan.stateless_forward`)
+        if supplied_state is None and not step:
             ref nplan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
-            if causal_layer_stateless(nplan.kind, nplan.entries, step):
+            if nplan.stateless_forward:
                 var fresh_result = _neural_layer_run(mods, owner, x, PythonObject(None), step, True)
                 if locked:
                     lock_lease.release()
