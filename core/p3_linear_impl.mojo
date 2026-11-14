@@ -32,6 +32,9 @@ from checks.numerics import ftz
 from checks.soft_f64 import sf64_from_f32
 from core.admitted_finite_status import enqueue_finite_status
 from core.gemm import gemv_n_ols_predict
+from core.step_phase import (
+    step_count_launch, step_count_sync, step_count_h2d, step_count_d2h, step_count_device_alloc,
+)
 
 comptime _EPI_TPB = 256
 
@@ -97,13 +100,21 @@ def ols_predict_device(
     # The widened words; a one-word placeholder on the narrow path (the
     # epilogue does not write it there).
     var w = ctx.enqueue_create_buffer[DType.uint64](rows if wide else 1)
+    # The step_count_* lines count this call's own sites under
+    # -D MOJOLEARN_STEP_PHASE_TIMERS (core/step_phase.mojo; nothing otherwise):
+    # checks/ols_call_cost_check.mojo asserts them.
+    comptime for _ in range(5):  # the five buffers created above
+        step_count_device_alloc()
     if n_rows * n_features > 0:
         ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        step_count_h2d()
     if n_features > 0:
         ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
+        step_count_h2d()
     # No synchronize here: the gemv is ordered after the copies on this
     # stream (0.8.55's ols_predict_host waited for the upload first).
     gemv_n_ols_predict(ctx, z, x, coef, n_rows, n_features)
+    step_count_launch()
     # The same host compare of a caller-supplied constant as before
     # (DEVIATION 527): `x + 0.0` is skipped exactly as there.
     var add = intercept != Float32(0.0)
@@ -113,18 +124,23 @@ def ols_predict_device(
             Int32(1 if add else 0), Int32(1 if wide else 0),
             grid_dim=((n_rows + 1 + _EPI_TPB - 1) // _EPI_TPB, 1, 1), block_dim=(_EPI_TPB, 1, 1),
         )
+        step_count_launch()
     if test:
         enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, status.unsafe_ptr(), 0)
+        step_count_launch()
     var word = List[Int32](length=1, fill=0)
     if n_rows > 0:
         if wide:
             ctx.enqueue_copy(dst_ptr=MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=out_addr), src_buf=w)
         else:
             ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr), src_buf=z)
+        step_count_d2h()
     if test:
         ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(word.unsafe_ptr())),
                          src_buf=status)
+        step_count_d2h()
     ctx.synchronize()
+    step_count_sync()
     var bad = 1 if test and word[0] != Int32(0) else 0
     _ = x^
     _ = coef^
