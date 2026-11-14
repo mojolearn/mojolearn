@@ -182,19 +182,30 @@ def _quickselect(mut keys: List[UInt64], k: Int) -> UInt64:
 
 struct Est(Copyable, Movable):
     """One C-step's answer: (location, covariance, log det, support rows,
-    distances)."""
+    distances). `owed`: the final distances are not computed yet
+    (`Mcd.finish` runs them from P, the precision the loop last used
+    (L^{-1} when `p_chol`), or from pinvh(cov) when P is empty)."""
     var loc: Mat
     var cov: Mat
     var det: Float64
     var sel: List[Int]
     var dist: Mat
+    var P: Mat
+    var p_chol: Bool
+    var owed: Bool
 
-    def __init__(out self, var loc: Mat, var cov: Mat, det: Float64, var sel: List[Int], var dist: Mat):
+    def __init__(
+        out self, var loc: Mat, var cov: Mat, det: Float64, var sel: List[Int], var dist: Mat, var P: Mat,
+        p_chol: Bool, owed: Bool,
+    ):
         self.loc = loc^
         self.cov = cov^
         self.det = det
         self.sel = sel^
         self.dist = dist^
+        self.P = P^
+        self.p_chol = p_chol
+        self.owed = owed
 
 
 struct Chol(Movable):
@@ -326,11 +337,28 @@ struct Mcd[E: Exec]:
             return self.mahal_chol(X, loc, f.li)
         return self.mahal(X, loc, self.pinvh(cov))
 
+    def finish(self, X: Mat, mut e: Est) raises:
+        """A C-step's final distances, owed since `c_step` (lane
+        mcd-per-step-cost, 2026-11-14; x_decomp/kit_device.mojo
+        `DMcd.finish` is the GPU twin): the same calls on the same operands
+        as before, run only for a candidate whose distances are read."""
+        if not e.owed:
+            return
+        if e.P.r == 0:
+            e.dist = self.mahal(X, e.loc, self.pinvh(e.cov))
+        elif e.p_chol:
+            e.dist = self.mahal_chol(X, e.loc, e.P)
+        else:
+            e.dist = self.mahal(X, e.loc, e.P)
+        e.P = Mat(0, 0)
+        e.owed = False
+
     def c_step_chol(
-        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat, want_dist: Bool
+        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat
     ) raises -> Est:
         """`c_step` with the Cholesky's log determinant and distances
-        (IDN_MCD_CHOL): the same control flow, statement for statement."""
+        (IDN_MCD_CHOL): the same control flow, statement for statement; the
+        final distances owed (`finish`)."""
         var iters = n_iter
         var dist = Mat(0, 0)
         var sel: List[Int]
@@ -344,11 +372,11 @@ struct Mcd[E: Exec]:
         var cov = self.emp_cov_at(Xs, loc)
         var f = self.chol(cov)
         var det = f.det
+        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
         var P = Mat(0, 0)
         var p_chol = False
         var has_p = False
         if det == _neg_inf():
-            P = self.pinvh(cov)
             has_p = True
         var prev_det = _pos_inf()
         var have_prev = False
@@ -378,14 +406,8 @@ struct Mcd[E: Exec]:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
-        var final = Mat(0, 0)
-        if want_dist:
-            if p_chol:
-                final = self.mahal_chol(X, loc, P)
-            else:
-                final = self.mahal(X, loc, P)
-        return Est(loc^, cov^, det, sel^, final^)
+            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, Mat(0, 0), False, False)
+        return Est(loc^, cov^, det, sel^, Mat(0, 0), P^, p_chol, True)
 
     # ---- randomness
     def perm(mut self, n: Int) raises -> List[Int]:
@@ -400,10 +422,14 @@ struct Mcd[E: Exec]:
 
     # ---- the C-step
     def c_step(
-        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat, want_dist: Bool
+        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat
     ) raises -> Est:
+        """One C-step search from a random subset or an initial estimate;
+        the final distances owed to `finish` (lane mcd-per-step-cost: a -inf
+        start's pinvh(cov) and the final distances were computed for every
+        candidate and read for the kept one only)."""
         comptime if IDN_MCD_CHOL:
-            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0, want_dist)
+            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0)
         var iters = n_iter
         var dist = Mat(0, 0)
         var sel: List[Int]
@@ -417,10 +443,10 @@ struct Mcd[E: Exec]:
         var loc = self.colmean(Xs)
         var cov = self.emp_cov_at(Xs, loc)
         var det = self.fast_logdet(cov)
+        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
         var P = Mat(0, 0)
         var has_p = False
         if det == _neg_inf():
-            P = self.pinvh(cov)
             has_p = True
         var prev_det = _pos_inf()
         var have_prev = False
@@ -451,26 +477,31 @@ struct Mcd[E: Exec]:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
-        var final = Mat(0, 0)
-        if want_dist:
-            final = self.mahal(X, loc, P)
-        return Est(loc^, cov^, det, sel^, final^)
+            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, Mat(0, 0), False, False)
+        return Est(loc^, cov^, det, sel^, Mat(0, 0), P^, False, True)
 
     def select_random(mut self, X: Mat, h: Int, trials: Int, keep: Int, n_iter: Int, want_dist: Bool) raises -> List[Est]:
         var est = List[Est]()
         var none = Mat(0, 0)
         for _ in range(trials):
-            est.append(self.c_step(X, h, n_iter, False, none, none, want_dist))
-        return Self._top(est, keep)
+            est.append(self.c_step(X, h, n_iter, False, none, none))
+        return self._kept(X, est, keep, want_dist)
 
     def select_init(
         mut self, X: Mat, h: Int, inits: List[Est], keep: Int, n_iter: Int, want_dist: Bool
     ) raises -> List[Est]:
         var est = List[Est]()
         for t in range(len(inits)):
-            est.append(self.c_step(X, h, n_iter, True, inits[t].loc, inits[t].cov, want_dist))
-        return Self._top(est, keep)
+            est.append(self.c_step(X, h, n_iter, True, inits[t].loc, inits[t].cov))
+        return self._kept(X, est, keep, want_dist)
+
+    def _kept(self, X: Mat, est: List[Est], keep: Int, want_dist: Bool) raises -> List[Est]:
+        """`_top`, then the kept candidates' final distances when read."""
+        var out = Self._top(est, keep)
+        if want_dist:
+            for a in range(len(out)):
+                self.finish(X, out[a])
+        return out^
 
     @staticmethod
     def _top(est: List[Est], keep: Int) raises -> List[Est]:
