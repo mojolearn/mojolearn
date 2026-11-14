@@ -32,7 +32,7 @@ def test_native_request_retains_fields_and_routes_through_session_owner():
     assert 'Python.tuple(owner, snapshot, fields, operation, args)' in source
     assert 'ops_session_public_call_py[E, KIND](' in source
     assert all(word not in source for word in ('PyObject_Call', 'PyCFunction', '._session_native', '._execute_native'))
-    dispatcher = (PROVIDERS / 'autograd_program_public_dispatch_pyapi.mojo').read_text()
+    dispatcher = (PROVIDERS / 'autograd_program_public_dispatch_pyapi_pack.mojo').read_text()
     assert 'ops_program_save_fields_py[E, KIND](fields, state,' in dispatcher
     assert 'py_setitem(output_fields, "loss_curve_"' in dispatcher
     assert 'fields["_s"] is not session' in dispatcher
