@@ -35,6 +35,11 @@ from core.neural_entry_neural_host import publish_neural_block_neural_host
 from transformer.host.neural_entry_host import publish_neural_transformer_host
 from mamba.host.neural_entry_host import publish_neural_mamba_host
 from sequence.small_mlp_entry_host import publish_neural_small_mlp_host
+# The two embedding images publish from their PUBLISH modules: their entries
+# release the GIL around the host kernels, so the publication cannot move to a
+# Python-free module without moving that release to the caller. A native suite
+# may import a PUBLISH module for this, never a door, unpack, pack or py_*
+# module (tools/python_free_dirs.sh, fourth check).
 from bindings._mojolearn_embedding_host import publish_neural_embedding_host
 from bindings._mojolearn_embedding_infer_host import publish_neural_embedding_infer_host
 
