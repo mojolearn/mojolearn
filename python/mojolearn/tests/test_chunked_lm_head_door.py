@@ -18,13 +18,11 @@ public name is in `training.__all__`; the laneless declaration names what the
 missing identity lane owes.
 
 RUNTIME CHECKS (run only where the training host binding is built and the
-package took the CPU-only route; they print SKIP and return otherwise): the
-loss agrees with a float64 reference within float32 rounding on a vocabulary
-that crosses the 256 chunk and ends in a one-token tail; the loss is the same
-bits with and without the gradients (the loss stage is the forward the train
-stage runs first); two calls are the same bytes; the gradients agree with the
-float64 reference; each refusal fires by name before any output. The bit
-claim against a GPU column is the identity lane's, which is owed.
+package took the CPU-only route; they print SKIP and return otherwise): each
+refusal fires by name before any output. The Float64-reference agreement, the
+loss-stage/train-stage agreement and the repeat words moved to the native
+check checks/native_tests/training_chunked_lm_head_door_suite.mojo
+(pixi run check-native-training-chunked-lm-head-door-cpu).
 
     cd python && python3 -m pytest mojolearn/tests/test_chunked_lm_head_door.py -q
 """
@@ -128,52 +126,6 @@ def _inputs(rows=5, vocab=513, width=8):
     # one target in each chunk and one on the one-token tail
     t = np.array([0, 255, 256, 511, 512][:rows], dtype=np.int64)
     return h, w, t
-
-
-def _reference(h, w, t):
-    import numpy as np
-    h64, w64 = h.astype(np.float64), w.astype(np.float64)
-    logits = h64 @ w64.T
-    shift = logits - logits.max(axis=1, keepdims=True)
-    p = np.exp(shift)
-    p /= p.sum(axis=1, keepdims=True)
-    rows = h.shape[0]
-    loss = -np.mean(np.log(p[np.arange(rows), t]))
-    dlogit = p.copy()
-    dlogit[np.arange(rows), t] -= 1.0
-    dlogit /= rows
-    return loss, dlogit @ w64, dlogit.T @ h64
-
-
-def test_loss_and_gradients_match_a_float64_reference_when_built():
-    if not _cpu_only_with_training_host():
-        return
-    import numpy as np
-    from mojolearn import training
-    h, w, t = _inputs()
-    loss = training.chunked_lm_head_loss(h, w, t)
-    loss2, dh, dw = training.chunked_lm_head_loss(h, w, t, return_grad=True)
-    ref_loss, ref_dh, ref_dw = _reference(h, w, t)
-    assert isinstance(loss, float)
-    np.testing.assert_allclose(loss, ref_loss, rtol=2e-5)
-    assert np.float32(loss).tobytes() == np.float32(loss2).tobytes(), \
-        "the loss stage and the train stage disagree on the loss"
-    assert np.asarray(dh).shape == h.shape and np.asarray(dw).shape == w.shape
-    np.testing.assert_allclose(np.asarray(dh), ref_dh, rtol=1e-4, atol=1e-6)
-    np.testing.assert_allclose(np.asarray(dw), ref_dw, rtol=1e-4, atol=1e-6)
-
-
-def test_two_calls_are_the_same_bytes_when_built():
-    if not _cpu_only_with_training_host():
-        return
-    import numpy as np
-    from mojolearn import training
-    h, w, t = _inputs()
-    a = training.chunked_lm_head_loss(h, w, t, return_grad=True)
-    b = training.chunked_lm_head_loss(h, w, t, return_grad=True)
-    assert np.float32(a[0]).tobytes() == np.float32(b[0]).tobytes()
-    assert np.asarray(a[1]).tobytes() == np.asarray(b[1]).tobytes()
-    assert np.asarray(a[2]).tobytes() == np.asarray(b[2]).tobytes()
 
 
 def test_refusals_fire_by_name_when_built():
