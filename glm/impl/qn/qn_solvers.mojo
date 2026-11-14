@@ -433,12 +433,17 @@ def min_owlqn(
     # OWL-QN: `f_wrap`, not `f`. The value carries the l1 term; `grad` comes
     # back as the gradient of the LOSS ONLY (`:321-323`).
     fx = owlqn_objective(ctx, f, x, grad, l1_penalty, pg_limit, scalar)
-    var gnorm = f.grad_norm(ctx, grad)
     trace.record_scalar_f32("qn.init.loss", fx)
     trace.record_device[DType.float32](ctx, "qn.init.grad", grad, n)
     # OWL-QN: build the pseudo-gradient without overwriting `grad`, which is
     # what `S`/`Y` are built from (`:325-327`).
     update_pseudo(ctx, x, grad, l1_penalty, pg_limit, pseudo, n)
+    # OWL-QN FIX (2026-11-14, lane native-checks-fix-1): convergence is judged on the norm of the
+    # PSEUDO-gradient, the l1 objective's (sub)gradient. The loss gradient alone vanishes wherever the
+    # loss is flat (squared hinge at margin 1, an SVR point inside the epsilon tube) although the l1
+    # term still pulls, so the solver stopped after one step at w = 1 (objective 0.5, optimum 0.4375:
+    # checks/native_tests/linear_svc_native.mojo case 3, linear_svr_native.mojo case 3, both columns).
+    var gnorm = f.grad_norm(ctx, pseudo)
     trace.record_device[DType.float32](ctx, "qn.init.pseudo", pseudo, n)
     if param.past > 0:
         fx_hist[0] = fx
@@ -493,7 +498,10 @@ def min_owlqn(
                 read_scalars(ctx, scalar, stage, 4)
             end = lbfgs_search_dir_resolve(param, n_vec, end, ys, stage)
             dir_pending = False
-        gnorm = f.grad_norm(ctx, grad)
+        # OWL-QN: the pseudo-gradient at the new point (`:380`), built before the convergence test,
+        # which reads its norm (OWL-QN FIX above); the later recomputation it replaces is removed.
+        update_pseudo(ctx, x, grad, l1_penalty, pg_limit, pseudo, n)
+        gnorm = f.grad_norm(ctx, pseudo)
 
         var stop = update_and_check(
             ctx, param, k, lsret, fx, fxp, gnorm, x, xp, grad, gradp,
@@ -514,9 +522,6 @@ def min_owlqn(
             _ = stage.unsafe_ptr()
             _release_owlqn(S, Y, xp, grad, gradp, drt, pseudo, scalar)
             return retcode
-
-        # OWL-QN: recompute the pseudo-gradient at the new point (`:380`).
-        update_pseudo(ctx, x, grad, l1_penalty, pg_limit, pseudo, n)
 
         # Update s and y: s_{k+1} = x_{k+1} - x_k, y_{k+1} = g_{k+1} - g_k.
         # NOTE `grad`, not `pseudo`: the quasi-Newton model is built from the
