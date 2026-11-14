@@ -2,6 +2,7 @@
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
+from std.sys import is_defined
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_contains
 from providers.python.autograd_python_errors_pyapi_pack import graph_int
@@ -13,7 +14,7 @@ from autograd.optimizer_requests import (
 )
 from providers.python.autograd_program_pyapi_door import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py, fit_stop_options
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
-from providers.python.autograd_program_arrays_pyapi_door import output_array, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
+from providers.python.autograd_program_arrays_pyapi_door import output_array, output_array_unfilled, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
 from providers.python.autograd_pyapi_door import program_info, ops_profile_reset_py, ops_profile_report_py
 from providers.python.autograd_model_checkpoint_pyapi_unpack import ops_load_program_py
 from providers.python.autograd_model_checkpoint_pyapi_pack import ops_save_state_py, ops_load_state_py
@@ -125,6 +126,13 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 
 
 
+# The restore lane's B-arm switch (owed row restore-executor-session-call),
+# extended here: under -D MOJOLEARN_SESSION_CALL_DESCRIPTOR a session
+# read-back also keeps its former zero-filled result array. Same download
+# and same values either way: no bit change.
+comptime SESSION_CALL_DESCRIPTOR = is_defined["MOJOLEARN_SESSION_CALL_DESCRIPTOR"]()
+
+
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
     # Retained native initializer entry shared by ImportedProgram construction.
     program_initialize_owner(out, session, info)
@@ -139,8 +147,9 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
 def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject, fields: PythonObject,
 ) raises -> PythonObject:
-    var name = String(operation)
-    var op = _session_op_code(name)
+    # The descriptor route's entry (`session_public_native_v1`) and the
+    # retained `ops_session_call_py`: admit the public handle against the
+    # native registry owner, then run the operation.
     var resource_scope: List[Int] = [ops_session_registry_token(), KIND]
     if not _nil(fields["_id"]):
         if py_type(fields["_id"]) is not py_type(PythonObject(0)):
@@ -148,6 +157,24 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         var admitted_id = neural_descriptor_resource_handle(fields["_lifetime"], resource_scope)
         if admitted_id == 0 or admitted_id != Int(py=fields["_id"]):
             raise Error("TypeError: Session handle differs from its native registry owner")
+    return ops_session_call_admitted_py[E, KIND](session, operation, args, fields)
+
+
+# Lane fix-executor-session-rows (2026-11-13): the operation body, for a
+# caller that has already admitted `fields["_id"]` against this image's
+# registry owner. The same-image public door
+# (`autograd_session_public_request_pyapi_pack.mojo`) admits it from the
+# resource it already holds, so a Session call no longer reads `_lifetime`,
+# builds the scope list and walks the resource words a second time per op
+# (about 30 calls per ops-session-step round). Under
+# -D MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm, owed row
+# restore-executor-session-call) every call enters through
+# `ops_session_call_fields_py` above, exactly as before.
+def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
+    session: PythonObject, operation: PythonObject, args: PythonObject, fields: PythonObject,
+) raises -> PythonObject:
+    var name = String(operation)
+    var op = _session_op_code(name)
     if op == _SOP_PROGRAM_PUBLIC:
         return ops_program_public_execute_py[E, KIND](session, fields, args)
     if op == _SOP_PROGRAM_INIT:
@@ -165,6 +192,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         return PythonObject(None)
     if op == _SOP_CLOSE or op == _SOP_EXIT:
         if not _nil(fields["_id"]):
+            var resource_scope: List[Int] = [ops_session_registry_token(), KIND]
             neural_descriptor_resource_close(fields["_lifetime"], resource_scope)
             py_setitem(fields, "_id", PythonObject(None))
         return PythonObject(False) if op == _SOP_EXIT else PythonObject(None)
@@ -255,13 +283,31 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         return _tuple_ints(dims)
     if op == _SOP_NUMPY or op == _SOP_GRAD:
         var handle = _int(args[0], "handle", 1)
-        var out = output_array(s[].shape_nd(handle))
-        var dst = FP(unsafe_from_address=Int(py=out.__array_interface__["data"][0]))
-        if op == _SOP_NUMPY:
-            s[].download(handle, dst)
+        comptime if SESSION_CALL_DESCRIPTOR:
+            # B arm (owed row restore-executor-session-call): a zero-filled
+            # bytearray and the address read from `__array_interface__`.
+            var out = output_array(s[].shape_nd(handle))
+            var dst = FP(unsafe_from_address=Int(py=out.__array_interface__["data"][0]))
+            if op == _SOP_NUMPY:
+                s[].download(handle, dst)
+            else:
+                s[].gradient_into(handle, dst)
+            return out
         else:
-            s[].gradient_into(handle, dst)
-        return out
+            # Lane fix-executor-session-rows (2026-11-13): the download writes
+            # every element (rows x cols floats of this tensor), so the result
+            # is made over UNINITIALIZED storage with its address in hand, as
+            # 0.8.55's `np.empty` + `ops_download` and as Program.run's fixed
+            # route (no zero fill of a bytearray, no `__array_interface__` dict
+            # per read-back; ops-session-step reads eight arrays per round).
+            var made = output_array_unfilled(s[].shape_nd(handle))
+            var array = made[0]
+            var dst = FP(unsafe_from_address=made[1])
+            if op == _SOP_NUMPY:
+                s[].download(handle, dst)
+            else:
+                s[].gradient_into(handle, dst)
+            return array
     if op == _SOP_SCALAR:
         return PythonObject(Float64(s[].scalar(_int(args[0], "handle", 1))))
     if op == _SOP_CAPTURE:
