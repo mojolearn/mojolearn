@@ -2,6 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Is NVIDIA's `mul.rn.ftz.f32 x, 1.0` the word `ftz(x)` returns, for EVERY x?
 
+lane fix-nv-mul-rn-via-fma (2026-11-14): the same question for the spelling
+the kernels now use, `fma.rn.ftz.f32 x, 1.0, -0.0`
+(`checks.numerics.nv_flush_by_one_kernel`); a word counts as differing when
+either spelling differs from the integer one.
+
 lane/neural-net-experiment (2026-09-30, the S16 pass). `checks.numerics.ftz`
 spells the denormal policy on the NVIDIA column as that one instruction
 (the GEMM seam's spelling since DEVIATION 2706) where it used to be the
@@ -22,7 +27,7 @@ On a non-NVIDIA device it prints SKIP (both lanes are the integer spelling).
 from max.gpu.host import DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from checks.numerics import nv_mul_rn_ftz_f32
+from checks.numerics import nv_flush_by_one_kernel, nv_mul_rn_ftz_f32
 from std.sys.info import is_nvidia_gpu
 
 comptime THREADS = 1 << 20
@@ -53,9 +58,13 @@ def probe_kernel(
         var x = bitcast[DType.float32](w)
         var soft = bitcast[DType.uint32](_ftz_int(x))
         var hard = soft
+        var sched = soft
         comptime if is_nvidia_gpu():
             hard = bitcast[DType.uint32](nv_mul_rn_ftz_f32(x, Float32(1.0)))
-        if hard != soft:
+            # lane fix-nv-mul-rn-via-fma: the schedulable spelling the kernels
+            # now use, `fma.rn.ftz.f32 x, 1.0, -0.0`, judged on the same words.
+            sched = bitcast[DType.uint32](nv_flush_by_one_kernel(x))
+        if hard != soft or sched != soft:
             if (w & UInt32(0x7F800000)) == UInt32(0x7F800000) and (w & UInt32(0x007FFFFF)) != UInt32(0):
                 nan += Int32(1)
             else:
@@ -94,7 +103,7 @@ def main() raises:
     if "NVIDIA" not in dev and "nvidia" not in dev:
         print("PROBE_FTZ_HW SKIP: device", dev, "is not NVIDIA; both lanes ran the integer spelling")
     elif plain == 0:
-        print("PROBE_FTZ_HW PASS on", dev, ": mul.rn.ftz by one returns ftz's word for every non-NaN float32")
+        print("PROBE_FTZ_HW PASS on", dev, ": mul.rn.ftz by one and fma.rn.ftz (x, 1, -0) return ftz's word for every non-NaN float32")
     else:
         print("PROBE_FTZ_HW FAIL on", dev, ":", plain, "non-NaN words differ; build with -D MOJOLEARN_FTZ_HW_OFF=1")
         raise Error("ftz hardware probe: mismatches")
