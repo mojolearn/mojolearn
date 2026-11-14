@@ -5802,9 +5802,12 @@ struct EtDeviceLoop(Movable):
     var hdr: DeviceBuffer[DType.int32]
     var h_hdr: HostBuffer[DType.int32]
     #: `ET_DEVICE_LOOP_EARLY_EXIT`: the device view of `ETL_H_NSUB` and its
-    #: pinned 4-byte landing word (`read_nsub`)
-    var nsub_d: DeviceBuffer[DType.int32]
-    var h_nsub: HostBuffer[DType.int32]
+    #: pinned 4-byte landing word (`read_nsub`). Empty (no view, no pinned
+    #: allocation) unless the define is on: the default route allocates
+    #: exactly what it did before the early-exit lane (hot-path audit
+    #: 2026-11-13, BLOCK builder.mojo:5875).
+    var nsub_d: Optional[DeviceBuffer[DType.int32]]
+    var h_nsub: Optional[HostBuffer[DType.int32]]
     var queue: DeviceBuffer[DType.int32]
     var g_nodes: DeviceBuffer[DType.uint8]
     var g_meta: DeviceBuffer[DType.int32]
@@ -5871,8 +5874,13 @@ struct EtDeviceLoop(Movable):
         self.f_cap = f_cap
         self.hdr = ctx.enqueue_create_buffer[DType.int32](ETL_HDR_WORDS)
         self.h_hdr = ctx.enqueue_create_host_buffer[DType.int32](ETL_HDR_WORDS)
-        self.nsub_d = self.hdr.create_sub_buffer[DType.int32](ETL_H_NSUB, 1)
-        self.h_nsub = ctx.enqueue_create_host_buffer[DType.int32](1)
+        self.nsub_d = Optional[DeviceBuffer[DType.int32]]()
+        self.h_nsub = Optional[HostBuffer[DType.int32]]()
+        comptime if ET_DEVICE_LOOP_EARLY_EXIT:
+            self.nsub_d = self.hdr.create_sub_buffer[DType.int32](
+                ETL_H_NSUB, 1
+            )
+            self.h_nsub = ctx.enqueue_create_host_buffer[DType.int32](1)
         self.queue = ctx.enqueue_create_buffer[DType.int32](cap0 * ETL_Q_INTS)
         self.g_nodes = ctx.enqueue_create_buffer[DType.uint8](
             cap0 * size_of[SparseTreeNode[DType.float32]]()
@@ -5931,9 +5939,16 @@ struct EtDeviceLoop(Movable):
         (`ETL_H_NSUB`, written by `etl_retry_kernel`), read back as ONE
         4-byte word after a synchronize. Not a header drain: the retired
         buffers stay alive until the next `drain`."""
-        ctx.enqueue_copy(dst_buf=self.h_nsub, src_buf=self.nsub_d)
+        if not self.h_nsub or not self.nsub_d:
+            raise Error(
+                "EtDeviceLoop.read_nsub: built without"
+                " MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT"
+            )
+        ctx.enqueue_copy(
+            dst_buf=self.h_nsub.value(), src_buf=self.nsub_d.value()
+        )
         ctx.synchronize()
-        return Int(self.h_nsub.unsafe_ptr()[unsafe_offset=0])
+        return Int(self.h_nsub.value().unsafe_ptr()[unsafe_offset=0])
 
     def word(self, w: Int) -> Int:
         """Header word `w` as of the last drain."""
