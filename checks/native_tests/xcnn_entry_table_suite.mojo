@@ -364,6 +364,41 @@ def case_gcn_loops() raises:
 
 def case_gcn_backward_t() raises:
     _refuses_call(XC_GCN_BACKWARD_T, [0], [1, 1], "x_cnn: this entry takes 13 addresses")
+    # The host form under recording (autograd/graph_tape.mojo
+    # gcn_record_backward with the host rules): one node with its self loop
+    # (n = d = f = 1, nnz = 1, no bias), x = 2, W = 3, upstream g = 1, G^T = 1.
+    # h and out are recorded values the rules never read; they must be
+    # disjoint storage (bindings/xcnn_graph_native_door.mojo passes two halves
+    # of one [2n, f] array). The same address for both is the tape's aliasing
+    # refusal: the host GCN quality reference failed with it (fix-smoke-refusals,
+    # 2026-11-14; since ba9adf41e1).
+    var g: List[Float32] = [1.0]
+    var x: List[Float32] = [2.0]
+    var hv: List[Float32] = [0.0, 0.0]
+    var w: List[Float32] = [3.0]
+    var gw: List[Float32] = [0.0]
+    var dx: List[Float32] = [0.0]
+    var dh: List[Float32] = [0.0]
+    var vt: List[Float32] = [1.0]
+    var csr: List[Int32] = [0, 1, 0, 0]
+    var h_addr = _f32(hv)
+    var words: List[Int] = [1, 1, 1, 1, 0, 0, 0, 0]
+    _refuses_call(XC_GCN_BACKWARD_T,
+                  [_f32(g), _f32(x), h_addr, h_addr, _f32(w), _f32(gw), _f32(dx), _f32(dh), _f32(vt), _i32(csr), 0, 0, 0],
+                  words, "custom_into: output overlaps the value storage of a recorded tensor")
+    require(_call(XC_GCN_BACKWARD_T,
+                  [_f32(g), _f32(x), h_addr, h_addr + 4, _f32(w), _f32(gw), _f32(dx), _f32(dh), _f32(vt), _i32(csr),
+                   0, 0, 0],
+                  words) == 1, "gcn backward count")
+    _same(dh, [1.0], "gcn backward dh")
+    _same(gw, [2.0], "gcn backward dW")
+    _same(dx, [3.0], "gcn backward dx")
+    _ = g
+    _ = x
+    _ = hv
+    _ = w
+    _ = vt
+    _ = csr
 
 def case_sage_backward_t() raises:
     _refuses_call(XC_SAGE_BACKWARD_T, List[Int](), List[Int](), "x_cnn sage backward: 2 parameter words required")
