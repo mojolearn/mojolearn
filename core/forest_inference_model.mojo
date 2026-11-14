@@ -689,16 +689,22 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     # host scan of a borrowed X to this test (trees_public_forest
     # `_public_deferred`). Numerics: none (a predicate on bits).
     var scan_input = not uploaded and not T36_FINITE_STAGE
-    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
-    var hstat = ctx.enqueue_create_host_buffer[DType.int32](1)
+    # Lane forests-regression (2026-11-14): word 0 is the input's status,
+    # word 1 the output's. The output test was `device_all_finite(ctx, dout,
+    # ...)` after the synchronize below: its own flag buffer, pinned host
+    # word, launch and a SECOND synchronize per predict. It is now the same
+    # predicate (`|bits| >= 0x7F800000`, the exponent of all ones that
+    # `forest_nonfinite_kernel` tested) enqueued after the traversal and
+    # copied back with the output under the one synchronize. Numerics: none.
+    var dstat = ctx.enqueue_create_buffer[DType.int32](2)
+    var hstat = ctx.enqueue_create_host_buffer[DType.int32](2)
     try:
+        dstat.enqueue_fill(Int32(0))
         if not uploaded:
             ctx.enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
         if scan_input:
-            dstat.enqueue_fill(Int32(0))
             enqueue_finite_status(ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows * features,
                                   dstat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0)
-            ctx.enqueue_copy(dst_ptr=hstat.unsafe_ptr(), src_buf=dstat)
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t2 = Int(perf_counter_ns())
@@ -711,11 +717,14 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t3 = Int(perf_counter_ns())
+        enqueue_finite_status(ctx, dout.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows * outputs,
+                              dstat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 1)
         ctx.enqueue_copy(dst_ptr=output, src_buf=dout.create_sub_buffer[DType.float32](0, rows*outputs))
+        ctx.enqueue_copy(dst_ptr=hstat.unsafe_ptr(), src_buf=dstat)
         ctx.synchronize()
         if scan_input and hstat.unsafe_ptr().unsafe_load(0) != 0:
             raise Error("resident forest requires finite Float32 values")
-        if not device_all_finite(ctx, dout, rows * outputs):
+        if hstat.unsafe_ptr().unsafe_load(1) != 0:
             raise Error("resident forest requires finite Float32 values")
     except e:
         ctx.synchronize()
