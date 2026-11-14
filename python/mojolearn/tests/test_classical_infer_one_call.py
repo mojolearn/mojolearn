@@ -91,3 +91,38 @@ def test_svc_query_is_one_native_call(method, monkeypatch):
     out = np.asarray(getattr(model, method)(x))
     assert calls == ["family_svc_svc_" + ("predict" if method == "predict" else "decision")]
     assert out.shape == (80,)
+
+
+def test_svc_resident_predict_holds_its_query_between_calls():
+    """Lane fix-svc-query-resident: a resident SVC predict keeps its query
+    buffers under its lease (core/query_x_held.mojo), so the store holds one
+    query after a predict, repeated predicts give the same answers, a NaN
+    query is still refused, and dropping the model frees the held query."""
+    import gc
+    from mojolearn import _backend
+
+    binding = _backend.binding("_mojolearn_svm", "identical")
+    if not hasattr(binding, "svm_resident_stats"):
+        pytest.skip("CPU provider has no device-resident SVM store")
+    gc.collect()
+    before = binding.svm_resident_stats()
+    if len(before) < 6:
+        pytest.skip("binding predates the held-query readout")
+    x = _x(rows=80)
+    y = (x[:, 0] + 0.25 * x[:, 1] > 0).astype(np.float32)
+    model = ml.SVC(C=1.0, kernel="rbf", gamma=0.2).fit(x, y)
+    first = np.asarray(model.predict(x))
+    assert binding.svm_resident_stats()[5] == before[5] + 1
+    smaller = np.asarray(model.predict(x[:30]))  # a prefix of the held buffer
+    again = np.asarray(model.predict(x))
+    np.testing.assert_array_equal(first, again)
+    np.testing.assert_array_equal(first[:30], smaller)
+    assert binding.svm_resident_stats()[5] == before[5] + 1
+    bad = x.copy()
+    bad[3, 1] = np.inf
+    with pytest.raises(Exception, match="NaN or infinity"):
+        model.predict(bad)
+    np.testing.assert_array_equal(np.asarray(model.predict(x)), first)  # the refused call's flag is not this call's
+    del model
+    gc.collect()
+    assert binding.svm_resident_stats()[5] == before[5]
