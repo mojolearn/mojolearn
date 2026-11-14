@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """`lengths=`, the ragged right-padded batch (python/mojolearn/_ragged.py, 2026-09-15).
 
-Two groups. The helper tests need nothing compiled: they hold the byte
-copies, the refusals and the last-real-position gather to their contract
-with a stand-in call. The surface tests run each model that takes
+Two groups. The helper tests need nothing compiled: they hold the
+refusals and the ragged_forward composition to their contract with a
+stand-in call. The byte passes themselves (padded copy, in-place zero
+padding, int32 ids, the last-real-position gather) run natively in
+checks/native_tests/core_ragged_lengths_*.mojo. The surface tests run each model that takes
 `lengths` against the same rows run alone, on whatever bindings this
 install has, and skip BY NAME when the binding is absent (the CPU-only
 install has the host byte LM and nothing on a GPU): every real position must
@@ -21,38 +23,6 @@ LENS = (16, 1, 7, 9, 16, 3, 12, 15)
 
 
 # ---------------------------------------------------------------- helpers, nothing compiled
-
-def test_padded_copy_keeps_real_positions_and_zeros_padding():
-    x = np.arange(2 * 4 * 3, dtype=np.float32).reshape(2, 4, 3) + 1
-    out = np.asarray(_ragged.padded_copy(x, (4, 2), "<f4", "t"))
-    assert out[0].tobytes() == x[0].tobytes()
-    assert out[1, :2].tobytes() == x[1, :2].tobytes()
-    assert out[1, 2:].tobytes() == bytes(out[1, 2:].nbytes)
-    assert x[1, 2:].min() > 0                       # the source is untouched
-
-
-def test_zero_padding_writes_positive_zero_in_place():
-    y = np.full((3, 5, 2), -1.0, dtype=np.float32)
-    back = _ragged.zero_padding(y, (5, 1, 3), "t")
-    assert back is y
-    for i, n in enumerate((5, 1, 3)):
-        assert (y[i, :n] == -1.0).all()
-        assert y[i, n:].tobytes() == bytes(y[i, n:].nbytes)   # +0.0, never -0.0
-
-
-def test_int32_ids_are_copied_by_position():
-    ids = np.array([[5, 6, 7], [8, 9, 10]], dtype=np.int32)
-    out = np.asarray(_ragged.padded_copy(ids, (1, 3), "<i4", "t"))
-    assert out.tolist() == [[5, 0, 0], [8, 9, 10]]
-
-
-def test_last_real_rows_reads_each_rows_last_real_position():
-    logits = np.arange(2 * 3 * 4, dtype=np.float32).reshape(2, 3, 4)
-    out = np.asarray(_ragged.last_real_rows(logits, (2, 3), "t"))
-    assert out.shape == (2, 1, 4)
-    assert out[0, 0].tolist() == logits[0, 1].tolist()
-    assert out[1, 0].tolist() == logits[1, 2].tolist()
-
 
 @pytest.mark.parametrize("bad, kind, text", [
     ((0, 3), ValueError, "outside [1, L = 3]"),
