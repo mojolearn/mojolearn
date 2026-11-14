@@ -6,11 +6,11 @@ capability that neither cuML nor scikit-learn has).
 
     cd python && python3 -m mojolearn.tests.test_transductive_predict
 
-This controller retains DBSCAN numerical/public checks and both models'
-public array packing, prediction-data flags, archive handling and refusals.
-Agglomerative tree and query corner oracles execute in the Mojo suites under
-checks/native_tests/agglo_native_cases.mojo. DBSCAN's numerical controller
-remains until its replacement coverage is complete.
+This controller keeps both models' public array packing, prediction-data
+flags, archive handling, the CPU host binding against the GPU bytes and the
+refusals. The DBSCAN fit/predict corner oracles execute in
+checks/native_tests/dbscan_native_cases.mojo and the agglomerative tree and
+query corner oracles in checks/native_tests/agglo_native_cases.mojo.
 
 When `MOJOLEARN_HOST_DIR` holds `_mojolearn_estimators_host.so` the HOST
 arm loads every saved model through `_classical_host.host_model` and holds
@@ -26,13 +26,7 @@ import numpy as np
 
 import mojolearn
 from mojolearn import AgglomerativeClustering, DBSCAN
-from mojolearn.tests._expose_d_harness import Report, bind_or_exit, mode, run
-
-
-def _identical(rep, arm, cond, what):
-    if mode() == "identical":
-        return rep.check(arm, cond, what)
-    return rep.report_only(arm, cond, what)
+from mojolearn.tests._expose_d_harness import Report, bind_or_exit, run
 
 
 def _grid_clusters():
@@ -46,6 +40,13 @@ def _grid_clusters():
 
 
 def arm_dbscan(rep):
+    # The numerical corners (fit labels and core/noise membership, every
+    # training row's prediction, a query at eps and one ulp past it, the
+    # exact tie to the lowest (distance, core index), far points, rows alone
+    # and reversed, duplicated rows, algorithm='rbc', metric='manhattan',
+    # uniform weights and an empty core) run natively on this same grid in
+    # checks/native_tests/dbscan_native_cases.mojo (profiles grid_*). This
+    # arm keeps the public flags, attributes, packing, archive and refusals.
     x = _grid_clusters()
     plain = DBSCAN(eps=1.0, min_samples=4, algorithm="brute").fit(x)
     m = DBSCAN(eps=1.0, min_samples=4, algorithm="brute", prediction_data=True).fit(x)
@@ -64,74 +65,11 @@ def arm_dbscan(rep):
     rep.check("DBSCAN", idx.dtype == np.int32 and comps.dtype == np.float32 and comps.shape == (idx.size, 2),
               "core_sample_indices_ int32 and components_ float32 (n_core, d)", (idx.dtype, comps.shape))
     rep.check("DBSCAN", np.array_equal(comps, x[idx]), "components_ are the training rows at core_sample_indices_")
-    rep.check("DBSCAN", bool(np.all(np.diff(idx) > 0)), "core_sample_indices_ ascending")
-    rep.check("DBSCAN", len(set(fitted[fitted >= 0].tolist())) == 2 and int(np.sum(fitted == -1)) == 2,
-              "the fixture fits two clusters and two noise points", fitted.tolist())
 
     p = np.asarray(m.predict(x))
     rep.check("DBSCAN", p.dtype == np.int32 and p.shape == (x.shape[0],), "predict returns int32 (n,)")
-    rep.check("DBSCAN", np.array_equal(p[idx], fitted[idx]), "every core training row predicts its fitted label")
-    noise = fitted == -1
-    rep.check("DBSCAN", np.array_equal(p[noise], fitted[noise]), "every noise training row predicts -1 (algorithm='brute')")
-    border = ~noise & ~np.isin(np.arange(x.shape[0]), idx)
-    rep.report_only("DBSCAN", np.array_equal(p[border], fitted[border]),
-                    f"{int(border.sum())} border rows predict their fitted label (not promised by the rule)")
-
-    label_b = int(fitted[0])
-    label_a = int(fitted[9])
-    at_eps = np.asarray([[7.0, 1.0], [-5.0, 1.0]], dtype=np.float32)
-    past = np.asarray([[np.nextafter(np.float32(7.0), np.float32(8.0)), 1.0]], dtype=np.float32)
-    rep.check("DBSCAN", np.array_equal(np.asarray(m.predict(at_eps)), [label_b, label_a]),
-              "a query exactly at eps from a core row takes that row's cluster (acc <= thresh)")
-    rep.check("DBSCAN", int(np.asarray(m.predict(past))[0]) == -1, "a query one ulp past eps is noise")
-    # The tie by construction: A spans x in [-4, -2], B x in [4, 6]; at
-    # eps=3 every grid row is core and (1, 1) is at squared distance 9 from
-    # B's (4, 1) (training index 1) and A's (-2, 1) (index 16), and at least
-    # 10 from every other row.
-    mid = np.asarray([[1.0, 1.0]], dtype=np.float32)
-    wide = DBSCAN(eps=3.0, min_samples=4, algorithm="brute", prediction_data=True).fit(x)
-    wl = np.asarray(wide.labels_)
-    wcore = set(np.asarray(wide.core_sample_indices_).tolist())
-    got = int(np.asarray(wide.predict(mid))[0])
-    rep.check("DBSCAN", {1, 16} <= wcore and wl[1] != wl[16] and got == int(wl[1]),
-              "an exact tie between two clusters goes to the lowest (distance, core index)", (got, int(wl[1]), int(wl[16])))
-
-    far = np.asarray([[1000.0, -1000.0], [-500.0, 700.0]], dtype=np.float32)
-    rep.check("DBSCAN", np.array_equal(np.asarray(m.predict(far)), [-1, -1]), "far points are noise")
     q64 = x[:7].astype(np.float64)
     rep.check("DBSCAN", np.array_equal(np.asarray(m.predict(q64)), p[:7]), "a float64 query returns the float32 query's labels")
-    alone = [int(np.asarray(m.predict(x[i:i + 1]))[0]) for i in range(x.shape[0])]
-    rev = np.asarray(m.predict(x[::-1].copy()))
-    _identical(rep, "DBSCAN", alone == p.tolist() and np.array_equal(rev[::-1], p),
-               "rows alone and reversed query order give the batch's bytes")
-
-    dup = np.concatenate([x, x]).astype(np.float32)
-    dm = DBSCAN(eps=1.0, min_samples=4, algorithm="brute", prediction_data=True).fit(dup)
-    dp = np.asarray(dm.predict(dup))
-    didx = np.asarray(dm.core_sample_indices_)
-    rep.check("DBSCAN", np.array_equal(dp[didx], np.asarray(dm.labels_)[didx]),
-              "duplicated rows (distance-0 ties): core rows still predict their fitted label")
-
-    rbc = DBSCAN(eps=1.0, min_samples=4, prediction_data=True).fit(x)
-    ridx = np.asarray(rbc.core_sample_indices_)
-    rp = np.asarray(rbc.predict(x))
-    rep.check("DBSCAN", np.array_equal(rp[ridx], np.asarray(rbc.labels_)[ridx]), "algorithm='rbc': core rows predict their fitted label")
-
-    l1 = DBSCAN(eps=1.0, min_samples=4, metric="manhattan", algorithm="brute", prediction_data=True).fit(x)
-    # (6.5, 1.5) is at L1 distance exactly 1 from the core row (6, 1);
-    # (6.75, 1.75) is 1.5 from it and 1 only from the BORDER row (6, 2).
-    lp = np.asarray(l1.predict(np.asarray([[7.0, 1.0], [6.5, 1.5], [6.75, 1.75]], dtype=np.float32)))
-    rep.check("DBSCAN", lp[0] == l1.labels_[0] and lp[1] == l1.labels_[0] and lp[2] == -1,
-              "metric='manhattan': the L1 sum against Float32(eps), at eps inside and past it outside", lp.tolist())
-
-    w = np.ones(x.shape[0], dtype=np.float32)
-    wm = DBSCAN(eps=1.0, min_samples=4, algorithm="brute", prediction_data=True).fit(x, sample_weight=w)
-    rep.check("DBSCAN", np.array_equal(np.asarray(wm.predict(x)), p), "uniform sample_weight predicts the unweighted labels")
-
-    empty_core = DBSCAN(eps=0.1, min_samples=50, prediction_data=True).fit(x)
-    rep.check("DBSCAN", np.asarray(empty_core.core_sample_indices_).size == 0
-              and np.array_equal(np.asarray(empty_core.predict(x[:3])), [-1, -1, -1]),
-              "a fit with no core sample predicts noise")
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "dbscan.npz")

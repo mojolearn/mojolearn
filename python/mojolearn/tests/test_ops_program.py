@@ -7,7 +7,8 @@ model whose token ids are an ids input: embedding, layer norm, logits and
 the embedding of the greedy next token, plus a take by ids), a second run
 gives the same words, a saved program loads into a new session and gives
 them again, and the refusals hold. Prints PROGRAM_DIGEST lines to diff across CPU,
-Metal, NVIDIA and AMD."""
+Metal, NVIDIA and AMD. The mixture classifier's predict path and the
+attention product run natively in checks/native_tests/core_ops_program_*.mojo."""
 import hashlib
 import pathlib
 import re
@@ -93,27 +94,6 @@ def test_program_session_quickstart():
     _check("quickstart", _quickstart, a, b)
 
 
-def test_program_mixture_predict():
-    rng = np.random.default_rng(0)
-    params = {k: 0.1 * rng.standard_normal(sh, dtype=np.float32) for k, sh in
-              (("W0", (4, 2)), ("b0", (1, 2)), ("W1", (4, 2)), ("b1", (1, 2)), ("Wg", (4, 2)), ("bg", (1, 2)))}
-    first = np.array([[1.0], [0.0]], np.float32)
-    second = np.array([[0.0], [1.0]], np.float32)
-
-    def build(s, arrays):
-        (X,) = arrays
-        x = s.tensor(X)
-        p = {k: s.tensor(v) for k, v in params.items()}
-        z0 = s.linear(x, p["W0"], p["b0"])
-        z1 = s.linear(x, p["W1"], p["b1"])
-        gate = s.linear(x, p["Wg"], p["bg"], activation="softmax")
-        logits = s.add(s.mul(s.matmul(gate, s.tensor(first)), z0), s.mul(s.matmul(gate, s.tensor(second)), z1))
-        return [x], [s.softmax(logits), gate]
-
-    _check("mixture", build, [rng.standard_normal((128, 4), dtype=np.float32)],
-           [rng.standard_normal((128, 4), dtype=np.float32)])
-
-
 def test_program_shapes_conv():
     rng = np.random.default_rng(0)
     K = 0.3 * rng.standard_normal((4, 1, 3, 3), dtype=np.float32)
@@ -130,23 +110,6 @@ def test_program_shapes_conv():
 
     _check("shapes_conv", build, [rng.standard_normal((8, 1, 8, 8), dtype=np.float32)],
            [rng.standard_normal((8, 1, 8, 8), dtype=np.float32)])
-
-
-def test_program_shapes_attention():
-    rng = np.random.default_rng(0)
-
-    def build(s, arrays):
-        Q, Kv = arrays
-        q, kv = s.tensor(Q), s.tensor(Kv)
-        scores = s.scale(s.matmul(q, s.transpose(kv)), 0.5)
-        out = s.matmul(s.softmax(scores), kv)
-        merged = s.reshape(s.permute(out, (0, 2, 1, 3)), (2, 6, 16))
-        pieces = s.split(merged, 2, axis=2)
-        return [q, kv], [merged, s.concat([pieces[1], pieces[0]], axis=2), s.max(merged, axis=1)]
-
-    a = [rng.standard_normal((2, 4, 6, 4), dtype=np.float32), rng.standard_normal((2, 4, 6, 4), dtype=np.float32)]
-    b = [rng.standard_normal((2, 4, 6, 4), dtype=np.float32), rng.standard_normal((2, 4, 6, 4), dtype=np.float32)]
-    _check("shapes_attention", build, a, b)
 
 
 def _embedding_lm(s, arrays):

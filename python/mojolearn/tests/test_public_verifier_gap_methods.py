@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Independent public-output checks for changed endpoints lacking verifier lanes."""
+"""Independent public-output checks for changed endpoints lacking verifier lanes.
+
+sparse_encode on an orthonormal dictionary (soft threshold, omp) runs natively
+in checks/native_tests/core_verifier_gap_methods_*.mojo."""
 import math
 
 import numpy as np
@@ -32,22 +35,6 @@ def test_johnson_lindenstrauss_dimension_matches_stated_bound(n, eps):
 def test_johnson_lindenstrauss_refuses_invalid_bound_parameters(n, eps):
     with pytest.raises(ValueError):
         ml.johnson_lindenstrauss_min_dim(n, eps=eps)
-
-
-@pytest.mark.parametrize("algorithm", ["threshold", "lasso_cd", "lasso_lars"])
-def test_sparse_encode_orthonormal_dictionary_matches_soft_threshold(algorithm):
-    rows = np.array([[2, -0.75, 0.0625], [-0.5, 1, -3]], dtype="f4")
-    expected = np.sign(rows) * np.maximum(np.abs(rows) - np.float32(0.125), np.float32(0))
-    got = ml.sparse_encode(rows, np.eye(3, dtype="f4"), algorithm=algorithm,
-                           alpha=0.125, max_iter=100, numeric_mode="identical")
-    np.testing.assert_allclose(np.asarray(got), expected, rtol=0, atol=1e-6)
-
-
-def test_sparse_encode_omp_keeps_largest_orthonormal_atom():
-    rows = np.array([[2, -0.75, 0.0625], [-0.5, 1, -3]], dtype="f4")
-    got = ml.sparse_encode(rows, np.eye(3, dtype="f4"), algorithm="omp", n_nonzero_coefs=1,
-                           numeric_mode="identical")
-    np.testing.assert_array_equal(np.asarray(got), np.array([[2, 0, 0], [0, 0, -3]], dtype="f4"))
 
 
 @pytest.mark.parametrize("probability", [0.0, 0.375])

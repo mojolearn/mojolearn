@@ -16,8 +16,7 @@ session and only when a collected test carries its marker.
 reason in the lane table). MOJOLEARN_TEST_SLOW=0 deselects them; the default
 keeps them in.
 
-The probes live in _suite_env.py, which test modules also use
-(`identity_harness_or_skip` for a module-level import of the harness).
+The probes live in _suite_env.py.
 """
 import os
 
