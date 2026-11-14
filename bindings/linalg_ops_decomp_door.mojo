@@ -26,7 +26,7 @@ from bindings.classical_arrays_door import classical_address
 from bindings.family_common_unpack import family_repr
 from bindings.family_common_pack import family_call
 from bindings.linalg_ops_buffers_unpack import lin_truth
-from bindings.admitted_input_unpack import AdmittedBuf, admitted_zeros
+from bindings.admitted_input_unpack import AdmittedBuf, admitted_zeros, admitted_unfilled
 from bindings.linalg_ops_lowbit_door import lin_operand, lin_state, lin_ints, lin_connected_binding
 from providers.python.linalg_result_pyapi_door import linalg_result_new
 from bindings.kit_call_unpack import kit_capabilities, kit_entry_ref
@@ -70,14 +70,15 @@ def _lin_out(mut kit: LinKit, a: Int, context: PythonObject) raises -> PythonObj
     device matrix is downloaded once (it moves), the GIL released."""
     var rows = kit.r(a)
     var cols = kit.c(a)
-    var result = admitted_zeros([rows, cols], "<f4", context).keep
+    # lane fix-output-zero-fill (2026-11-14): unfilled; _lin_copy_out writes all rows * cols.
+    var result = admitted_unfilled([rows, cols], "<f4", context).keep
     _lin_copy_out(kit, a, result, rows * cols)
     return result
 
 
 def _lin_out_vector(mut kit: LinKit, a: Int, length: Int, context: PythonObject) raises -> PythonObject:
     """PACK `_M.out((length,))`."""
-    var result = admitted_zeros([length], "<f4", context).keep
+    var result = admitted_unfilled([length], "<f4", context).keep
     _lin_copy_out(kit, a, result, length)
     return result
 
@@ -111,7 +112,8 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> 
     """PACK `_triu(h, r).out()`: the first r rows of h (a host factor),
     everything below the diagonal zeroed (pure data movement)."""
     var c = kit.c(h)
-    var out = admitted_zeros([r, c], "<f4", context).keep
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the memcpy below writes all r * c.
+    var out = admitted_unfilled([r, c], "<f4", context).keep
     var dst = KIT_F32P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
     if r * c:

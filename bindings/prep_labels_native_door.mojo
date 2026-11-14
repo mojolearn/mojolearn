@@ -14,7 +14,7 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_array_storage_door import native_array_zeros, native_array_empty, native_array_from_bytes
+from bindings.native_array_storage_door import native_array_zeros, native_array_empty, native_array_from_bytes, native_array_unfilled
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words_unpack import stash_python_error
@@ -220,7 +220,8 @@ def _label_buffer(y: PythonObject, context: PythonObject) raises -> Optional[Lab
     var nw = n * spec[1]
     if nw > LABEL_WORDS_MAX:
         return None
-    var words = classical_wrap_array(native_array_zeros("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the memcpy below writes all nw words.
+    var words = classical_wrap_array(native_array_unfilled("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
     unsafe_memcpy(dest=I32P(unsafe_from_address=Int(py=classical_address(words))), src=I32P(unsafe_from_address=Int(py=classical_address(view))), count=nw)
     _ = view  # keep the Python object alive through the native call above
     _ = words  # keep the Python object alive through the native call above
@@ -678,7 +679,8 @@ def _text_fit(table: StrTable, context: PythonObject) raises -> LabelFit:
     (bindings/str_labels_native.mojo `str_unique_into`); the former route
     merge-sorted all n labels on one thread."""
     var n = len(table.starts)
-    var codes = classical_wrap_array(native_array_zeros("i", n), Python.tuple(n), "<i4", "C", _out(context))
+    # lane fix-output-zero-fill (2026-11-14): unfilled; str_unique_into writes every label's code.
+    var codes = classical_wrap_array(native_array_unfilled("i", n), Python.tuple(n), "<i4", "C", _out(context))
     var firsts = str_unique_into(table, n, Int(py=classical_address(codes)))
     var k = len(firsts)
     _ = codes  # keep the Python object alive through the native writes above
@@ -712,7 +714,8 @@ def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context:
         return PythonObject(None)
     var lookup_classes = str_classes(known, k)
     var n = len(table.starts)
-    var codes = classical_wrap_array(native_array_zeros("f" if as_float else "i", n), Python.tuple(n),
+    # lane fix-output-zero-fill (2026-11-14): unfilled; str_codes_into writes every label's index (-1 unseen).
+    var codes = classical_wrap_array(native_array_unfilled("f" if as_float else "i", n), Python.tuple(n),
                                      "<f4" if as_float else "<i4", "C", _out(context))
     var unseen = str_codes_into(table, known, lookup_classes, Int(py=classical_address(codes)), as_float)
     _ = codes  # keep the Python object alive through the native writes above
@@ -950,7 +953,8 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
         # refusal names the first five unseen labels in label order. No
         # Python `in` / subscript call per label.
         var index = _object_index(classes)
-        var store = native_array_zeros("i", n)
+        # lane fix-output-zero-fill (2026-11-14): unfilled; p3_dict_codes writes every label's code (-1 unseen).
+        var store = native_array_unfilled("i", n)
         var codes = classical_wrap_array(store, Python.tuple(n), "<i4", "C", _out(context))
         var address = Int(py=classical_address(codes))
         p3_dict_codes(index, values, address, -1)
@@ -1229,7 +1233,8 @@ def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, c
             for i in range(Int(py=cats.size)):  # driver-loop: over the fitted category words
                 both.append(Float64(source[i]))
                 _ = cats  # keep the Python object alive through the native call above
-        table = classical_wrap_array(native_array_zeros("f", len(both)), Python.tuple(len(both)), "<f4", "C", _out(context))
+        # lane fix-output-zero-fill (2026-11-14): unfilled; the loop below writes all len(both) words.
+        table = classical_wrap_array(native_array_unfilled("f", len(both)), Python.tuple(len(both)), "<f4", "C", _out(context))
         var dest = F32P(unsafe_from_address=Int(py=classical_address(table)))
         _ = table  # keep the Python object alive through the native call above
         for i in range(len(both)):  # driver-loop: over the doubled category words

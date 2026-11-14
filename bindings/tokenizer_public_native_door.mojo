@@ -15,7 +15,7 @@ from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_json_door import native_json_read, native_json_parse, native_path, native_path_exists
 from bindings.native_error_class import error_without_class
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.neural_block_admission_door import neural_array_snapshot
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -1552,7 +1552,8 @@ def tokenizer_bpe_encode_corpus(tokenizer: PythonObject, data: PythonObject, poi
         raise Error("RuntimeError: corpus encoder returned an invalid token count")
     # Existing array('i') result, allocated by native CPython sequence-repeat
     # over the connected exact zero seed. No Python array constructor runs.
-    var result_ids = native_array_zeros("i", total)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; copy_from below writes all total ids.
+    var result_ids = native_array_unfilled("i", total)
     var pin = AdmittedBorrowedBuffer(result_ids, True)
     try:
         pin.layout.value().copy_from(Int(ids.unsafe_ptr()))

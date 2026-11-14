@@ -8,7 +8,7 @@
 # the UNPACK half is `bindings/arena_buffer_copy_unpack.mojo`.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_cpython_table import cpython_table
@@ -37,7 +37,9 @@ def buffer_copy_to_array(code: String, source: PythonObject) raises -> PythonObj
         var size = view[2]
         if size % width != 0:
             raise Error("ValueError: bytes length not a multiple of item size")
-        result = native_array_zeros(code, size // width)
+        # lane fix-output-zero-fill (2026-11-14): unfilled; PyBuffer_ToContiguous writes all size bytes
+        # (a failure raises before the store escapes).
+        result = native_array_unfilled(code, size // width)
         if size > 0:
             var address = native_buffer_address(result)
             if cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(address, pointer, size, Int8(67)) != 0:

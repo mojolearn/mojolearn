@@ -46,8 +46,8 @@ from core.shared_slot import SharedSlot
 
 #: Layout version of `CPythonTable` (core/shared_slot.mojo rule; the slot
 #: name carries it too). V8: the layout word.
-comptime _CPYTHON_TABLE_LAYOUT = 14
-comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV14"
+comptime _CPYTHON_TABLE_LAYOUT = 15
+comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV15"
 
 # PyObject *PyImport_GetModuleDict(void)  (borrowed)
 comptime _PyImport_GetModuleDict = ExternalFunction[
@@ -314,6 +314,12 @@ comptime _PyUnicode_AsUCS4Copy = ExternalFunction[
 # void PyMem_Free(void *p)  (address word)
 comptime _PyMem_Free = ExternalFunction[
     "PyMem_Free", def(Int) thin abi("C") -> NoneType]
+# void *PyMem_Malloc(size_t n)  (address word; 0 on failure, no exception set)
+# Added by lane fix-output-zero-fill (2026-11-14) for
+# bindings/native_array_storage_door.mojo `native_array_unfilled`: the item
+# block of an array.array, which the array frees with PyMem_Free.
+comptime _PyMem_Malloc = ExternalFunction[
+    "PyMem_Malloc", def(Int) thin abi("C") -> Int]
 
 
 struct CPythonTable(Defaultable, Movable):
@@ -393,6 +399,7 @@ struct CPythonTable(Defaultable, Movable):
     var PyUnicode_GetLength: _PyUnicode_GetLength.type
     var PyUnicode_AsUCS4Copy: _PyUnicode_AsUCS4Copy.type
     var PyMem_Free: _PyMem_Free.type
+    var PyMem_Malloc: _PyMem_Malloc.type
 
     def __init__(out self):
         # loads symbol addresses only: running twice is harmless (the
@@ -475,6 +482,7 @@ struct CPythonTable(Defaultable, Movable):
         self.PyUnicode_GetLength = _PyUnicode_GetLength.load(lib)
         self.PyUnicode_AsUCS4Copy = _PyUnicode_AsUCS4Copy.load(lib)
         self.PyMem_Free = _PyMem_Free.load(lib)
+        self.PyMem_Malloc = _PyMem_Malloc.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of

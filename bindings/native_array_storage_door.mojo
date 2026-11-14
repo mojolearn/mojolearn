@@ -53,9 +53,10 @@ def _repeat_copies_per_item() raises -> Bool:
     return Int(py=info[0]) == 3 and Int(py=info[1]) < 12
 
 
-def native_array_zeros(code: String, count: Int) raises -> PythonObject:
-    if count < 0:
-        raise Error("ValueError: native array element count must be nonnegative")
+def _zero_seed(code: String) raises -> PythonObject:
+    """The fixed one-item zero store of `code` (import-time metadata),
+    refused unless it is still an exact one-item array of that code whose
+    raw bytes are all zero."""
     var metadata = _storage_metadata()
     var cls = _storage_type(metadata)
     var seeds = py_get(metadata, "ZERO_STORES")
@@ -73,6 +74,17 @@ def native_array_zeros(code: String, count: Int) raises -> PythonObject:
     for i in range(Int(py=seed.itemsize)):  # small-loop(seed.itemsize: scalar storage byte width): at most eight native storage bytes
         if bytes[i] != 0:
             raise Error("TypeError: native array storage seed changed")
+    return seed
+
+
+def native_array_zeros(code: String, count: Int) raises -> PythonObject:
+    """A new ZERO-FILLED array.array of `count` items of `code`: for a
+    destination that is written in part, accumulated into, or whose zeros are
+    read. A destination that one native writer fills in full before anything
+    reads it takes `native_array_unfilled` (no fill pass)."""
+    if count < 0:
+        raise Error("ValueError: native array element count must be nonnegative")
+    var seed = _zero_seed(code)
     ref cpy = Python().cpython()
     if count >= 2 * _ZERO_BLOCK_ITEMS and _repeat_copies_per_item():
         # 0.8.66 regression C3 (knn fit 8.5x, iforest fit 39.6x, gbdt-rank
@@ -105,6 +117,84 @@ def native_array_zeros(code: String, count: Int) raises -> PythonObject:
     if not result:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=result)
+
+
+# The array.array object words `native_array_unfilled` writes (CPython
+# Modules/arraymodule.c `arrayobject`, unchanged from 3.10 through 3.14 on the
+# default build): PyObject_VAR_HEAD (ob_refcnt, ob_type, ob_size), then
+# ob_item (char *), then allocated (Py_ssize_t). Probed on every call against
+# the live seed (below); a build whose layout differs (free-threaded,
+# Py_TRACE_REFS) fails the probe and keeps the zero-filled store.
+comptime _ARRAY_WORD_SIZE = 2
+comptime _ARRAY_WORD_ITEM = 3
+comptime _ARRAY_WORD_ALLOCATED = 4
+
+
+def _array_words(value: PythonObject) -> MutPointer[Int, MutUntrackedOrigin]:
+    return MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(value._obj_ptr))
+
+
+def _array_layout_matches(seed: PythonObject) raises -> Bool:
+    """True when the one-item seed's object words are where
+    `native_array_unfilled` writes them: ob_size is 1, ob_item is the address
+    its buffer export reports (a heap address no header word can equal), and
+    allocated holds the item."""
+    var words = _array_words(seed)
+    var item = native_buffer_address(seed)
+    var matched = (words[_ARRAY_WORD_SIZE] == 1 and words[_ARRAY_WORD_ITEM] == item
+                   and words[_ARRAY_WORD_ALLOCATED] >= 1)
+    _ = seed  # retain the seed while its words are read
+    return matched
+
+
+def native_array_unfilled(code: String, count: Int) raises -> PythonObject:
+    """A new array.array of `count` items of `code` whose contents are NOT
+    initialised (lane fix-output-zero-fill, 2026-11-14): the destination of
+    one native writer (a kernel download, a memcpy, a cast) that writes every
+    item before anything reads it or the array escapes. Never for a
+    destination written in part or accumulated into: those keep
+    `native_array_zeros`.
+
+    The array is a plain empty array of `code` (the public sequence-repeat of
+    its seed, zero times) whose item block is then ONE PyMem_Malloc of
+    count * itemsize bytes, installed as the array's own block (ob_item,
+    allocated, ob_size). The array frees and resizes that block with
+    PyMem_Free / PyMem_Realloc as it does every block it allocates itself, so
+    the result is the same object `native_array_zeros` returns minus the fill
+    pass. array.array has no public uninitialised constructor; 0.8.55 and the
+    zero allocator filled every output (a memset or per-block memcpy over the
+    whole destination: 80.8% of the gemm row and 86.7% of lm-forward's
+    snapshot in the 2026-11-14 L40S profile) before the writer overwrote it.
+    The object layout is probed on the live seed each call; when it does not
+    match, the zero-filled store is returned (the same bytes the writer then
+    overwrites)."""
+    if count < 0:
+        raise Error("ValueError: native array element count must be nonnegative")
+    if count == 0:
+        return native_array_zeros(code, 0)
+    var seed = _zero_seed(code)
+    if not _array_layout_matches(seed):
+        return native_array_zeros(code, count)
+    var itemsize = Int(py=seed.itemsize)
+    if count > (Int.MAX // 2) // itemsize:
+        raise Error("MemoryError: native array of " + String(count) + " items is too large")
+    ref cpy = Python().cpython()
+    var raw = cpython_table()[].PySequence_Repeat(seed._obj_ptr, 0)
+    _ = seed  # retain the original owner through the native repeat operation
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=raw)
+    var words = _array_words(result)
+    # A fresh empty array owns no block (CPython newarrayobject, size 0).
+    if words[_ARRAY_WORD_SIZE] != 0 or words[_ARRAY_WORD_ITEM] != 0 or words[_ARRAY_WORD_ALLOCATED] != 0:
+        return native_array_zeros(code, count)
+    var block = cpython_table()[].PyMem_Malloc(count * itemsize)
+    if block == 0:
+        raise Error("MemoryError: native array of " + String(count) + " items could not be allocated")
+    words[_ARRAY_WORD_ITEM] = block
+    words[_ARRAY_WORD_ALLOCATED] = count
+    words[_ARRAY_WORD_SIZE] = count
+    return result
 
 
 def native_scratch_bytes(nbytes: Int) raises -> PythonObject:

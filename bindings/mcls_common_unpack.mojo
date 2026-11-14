@@ -56,7 +56,7 @@ from core.labels_score_encode import score_encode_signed as mc_encode_signed
 from core.metrics_exp_impl import mexp_gather_i32
 from providers.python.metrics_vector_input_pyapi_unpack import metric_vector_exact, metric_i32_vector, metric_f32_vector
 from bindings.metrics_reg_door import _reg_weights
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.p3_labels_metrics_native_door import (
     p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK)
 from bindings.py_cpython_table import cpython_table
@@ -385,8 +385,9 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
     if not input:
         return PythonObject(None)
     var count = input.value().count
-    # Keep the existing zeroed Int64 store and native conversion route.
-    var store = native_array_zeros(String("q"), count)
+    # The native conversion route writes all count words, or refuses and the
+    # store is dropped (lane fix-output-zero-fill (2026-11-14): unfilled, was zero-filled).
+    var store = native_array_unfilled(String("q"), count)
     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
     var admitted = admitted_ids_i64(Int(py=classical_address(input.value().view)), input.value().stride,
         0, count, 1, input.value().item, input.value().signed, False, dst)

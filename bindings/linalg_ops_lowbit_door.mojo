@@ -22,7 +22,7 @@ from bindings.tensor_view import TensorView, shape_text
 from bindings.linalg_ops_buffers_unpack import lin_truth, lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.linalg_ops_lowbit_run import lin_op_code
-from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
+from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_unfilled, admit_typed, admitted_shape_tuple
 
 comptime OP_NN = 0
 comptime OP_NT = 1
@@ -288,10 +288,18 @@ def _lin_bits_admitted(input: TensorView, var input_pin: AdmittedTypedPin, name:
     return admitted_typed_c(input, input_pin^, "<u2", name, context)
 
 
+# lane fix-output-zero-fill (2026-11-14): every new output in this door is
+# admitted_unfilled (was admitted_zeros). Each kernel writes its whole output
+# before it is returned: the GEMMs download all m*n cells (degenerate shapes
+# are refused before any launch), the bf16/f16 conversions write n items,
+# quantize writes every code and every row exponent, dequantize every cell.
+# The zero fill of matmul's output was 80.8% of the gemm row (L40S profile
+# 80a7f8aca3); 0.8.55 filled it too (_buffer.empty, array([0]) * size).
+# No output bit changes: the zeros were overwritten before any read.
 def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> AdmittedBuf:
     """`_out_or_new(out, m, n, who)`."""
     if out_buf is None:
-        return admitted_zeros([m, n], "<f4", context)
+        return admitted_unfilled([m, n], "<f4", context)
     var input_pin = AdmittedTypedPin()
     var input = admitted_typed_once(out_buf, context, input_pin)
     var v = input.copy()
@@ -344,7 +352,7 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var out_obj = args[5]
     var out: AdmittedBuf
     if out_obj is None:
-        out = admitted_zeros([m, n], "<f4", context)
+        out = admitted_unfilled([m, n], "<f4", context)
     else:
         var output_pin = AdmittedTypedPin()
         var output = admitted_typed_once(out_obj, context, output_pin)
@@ -461,7 +469,7 @@ def _lin_matmul_fused(args: PythonObject, context: PythonObject) raises -> Pytho
     var out_obj = args[8]
     var out: AdmittedBuf
     if out_obj is None:
-        out = admitted_zeros([m, n], "<f4", context)
+        out = admitted_unfilled([m, n], "<f4", context)
     else:
         var output_pin = AdmittedTypedPin()
         var output = admitted_typed_once(out_obj, context, output_pin, True)
@@ -491,7 +499,7 @@ def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObje
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.to_bf16: x has no elements")
-    var out = admitted_zeros(a.shape, "<u2", context)
+    var out = admitted_unfilled(a.shape, "<u2", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "to_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -504,7 +512,7 @@ def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonOb
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.from_bf16: bits has no elements")
-    var out = admitted_zeros(a.shape, "<f4", context)
+    var out = admitted_unfilled(a.shape, "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "from_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -517,7 +525,7 @@ def _lin_from_f16(args: PythonObject, context: PythonObject) raises -> PythonObj
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.from_f16: bits has no elements")
-    var out = admitted_zeros(a.shape, "<f4", context)
+    var out = admitted_unfilled(a.shape, "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "from_f16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -529,8 +537,8 @@ def lin_quantize_int8(binding: PythonObject, a: AdmittedBuf, context: PythonObje
     """`quantize_int8` of an admitted operand: (codes, exponents)."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var codes = admitted_zeros([rows, cols], "<i1", context)
-    var exps = admitted_zeros([rows], "<i4", context)
+    var codes = admitted_unfilled([rows, cols], "<i1", context)
+    var exps = admitted_unfilled([rows], "<i4", context)
     _ = lin_call(lin_lowbit(binding, context), context, "quantize_int8", PythonObject(codes.addr), PythonObject(exps.addr),
                  PythonObject(a.addr), lin_ints(rows, cols))
     _ = exps  # keep the Python object alive through the native call above
@@ -553,7 +561,7 @@ def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> Py
     if e.rank() != 1 or e.dim(0) != rows:
         raise Error("mojolearn.linalg.dequantize_int8: exponents has shape " + e.text() + ", want ("
                     + String(rows) + ",)")
-    var out = admitted_zeros([rows, cols], "<f4", context)
+    var out = admitted_unfilled([rows, cols], "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "dequantize_int8", PythonObject(out.addr), PythonObject(q.addr),
                  PythonObject(e.addr), lin_ints(rows, cols))
     _ = out  # keep the Python object alive through the native call above
@@ -677,9 +685,9 @@ def lin_quantize_int15(binding: PythonObject, a: AdmittedBuf, context: PythonObj
     """`quantize_int15` of an admitted operand: (hi, lo, exponents)."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var hi = admitted_zeros([rows, cols], "<i1", context)
-    var lo = admitted_zeros([rows, cols], "<i1", context)
-    var exps = admitted_zeros([rows], "<i4", context)
+    var hi = admitted_unfilled([rows, cols], "<i1", context)
+    var lo = admitted_unfilled([rows, cols], "<i1", context)
+    var exps = admitted_unfilled([rows], "<i4", context)
     # addrs (mirrored in quantize_int15_binding): hi, lo, exponents, x
     var addrs = Python.list(PythonObject(hi.addr), PythonObject(lo.addr), PythonObject(exps.addr), PythonObject(a.addr))
     _ = exps  # keep the Python object alive through the native call above
@@ -719,7 +727,7 @@ def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> P
     _lin_int15_planes(Python.tuple(args[1], args[2], args[3]), "operand", "dequantize_int15", context, h, l, e)
     var rows = h.dim(0)
     var cols = h.dim(1)
-    var out = admitted_zeros([rows, cols], "<f4", context)
+    var out = admitted_unfilled([rows, cols], "<f4", context)
     # addrs: y, hi, lo, exponents (mirrored in the binding)
     var addrs = Python.list(PythonObject(out.addr), PythonObject(h.addr), PythonObject(l.addr), PythonObject(e.addr))
     _ = out  # keep the Python object alive through the native call above

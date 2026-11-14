@@ -137,7 +137,7 @@ class TokenizerPublicSource(unittest.TestCase):
         source = NATIVE.read_text()
         corpus = source.split("def tokenizer_bpe_identity_file(", 1)[1].split("def tokenizer_public_call(", 1)[0]
         for retained in ("bpe_encode_corpus_into(owner[]", "bpe_train_corpus_fill(handle,",
-                         "tokens_gather_rows_into(src, dst,", 'native_array_zeros("i", total)',
+                         "tokens_gather_rows_into(src, dst,", 'native_array_unfilled("i", total)',
                          'neural_array_snapshot(ids_all, context)', 'neural_array_snapshot(output, context)',
                          '"mojolearn.bpe-trainer.v1"', 'PyUnicode_AsASCIIString'):
             self.assertIn(retained, corpus)

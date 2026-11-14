@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.optimizer_admission_door import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec_admitted
 from bindings.optimizer_scalar_boundary_unpack import optimizer_integer, optimizer_truth
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.py_lists import py_list_f32
@@ -154,7 +154,8 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
             with GILReleased(Python()):
                 plan.fill(rates.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
             return py_list_f32(rates)
-        var result = native_array_zeros("f", plan.count)
+        # lane fix-output-zero-fill (2026-11-14): unfilled; plan.fill writes all plan.count rates.
+        var result = native_array_unfilled("f", plan.count)
         # Fresh unpublished native storage has no foreign resize owner; pin
         # the array locally until the unchanged native fill returns.
         var address = native_buffer_address(result)

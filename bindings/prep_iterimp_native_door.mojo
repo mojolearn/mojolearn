@@ -25,7 +25,7 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.x_prep_native_owner_door import xprep_values
 from bindings.user_objects_native_door import user_objects_call
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.prep_stateless_native_door import _int_like, _repr, _name
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has
@@ -454,9 +454,11 @@ def _truncnorm(mus: PythonObject, sig: PythonObject, lo: Float64, hi: Float64, m
     var mu = _pred_f64(mus, context)
     var sd = _pred_f64(sig, context)
     var k = min(len(mu), len(sd))
-    var mb = native_array_zeros("d", k)
-    var sb = native_array_zeros("d", k)
-    var out = native_array_zeros("d", k)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the loop below writes all k of mb and sb,
+    # truncnorm_draws_binding all k draws of out.
+    var mb = native_array_unfilled("d", k)
+    var sb = native_array_unfilled("d", k)
+    var out = native_array_unfilled("d", k)
     var mp = F64P(unsafe_from_address=Int(py=py_call(mb.buffer_info)[0]))
     var sp = F64P(unsafe_from_address=Int(py=py_call(sb.buffer_info)[0]))
     for i in range(k):  # cpu-route: one feature's native posterior buffers

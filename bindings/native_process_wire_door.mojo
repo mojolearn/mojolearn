@@ -20,7 +20,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.native_codec_door import CODEC_BOUNDARY, _codec_keys, _codec_packed_class, _codec_packed_fields, _codec_dtype, _codec_code
 from bindings.native_array_snapshot_door import native_array_snapshot, native_array_slots
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.native_transport_door import _transport_state
@@ -210,7 +210,9 @@ def _wire_array(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonO
     var probe = native_array_zeros(code, 0)
     var itemsize = Int(py=probe.itemsize)
     var count = tensor.byte_count // itemsize
-    var store = native_array_zeros(code, count)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; posix_transfer writes the tensor's bytes
+    # (a short read raises before the store escapes).
+    var store = native_array_unfilled(code, count)
     if count > 0:
         posix_transfer(fd, PosixBytes(unsafe_from_address=native_buffer_address(store)), tensor.byte_count, timeout, False)
     var shape = bi.list()
