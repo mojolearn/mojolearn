@@ -312,9 +312,9 @@ def test_program_run_direct_route_boundary():
     full = prog.run(X, dynamic_shapes=True)
     assert np.array_equal(_words(full), _words(eager))
     assert np.array_equal(_words(s.run(prog, X)), _words(eager))
-    with pytest.raises(TypeError, match="native tuple or list|native list or tuple"):
-        ops.Program.run.__wrapped__(prog, X) if hasattr(ops.Program.run, "__wrapped__") else (
-            ops._PROGRAM_CALL(prog, "run", (X, False, False, False)))
+    # a bare array where the inputs tuple belongs: the full route refuses it
+    with pytest.raises(TypeError, match="native list or tuple"):
+        ops._PROGRAM_CALL(prog, "run", (X, False, False, False))
     other = ops.Session()
     with pytest.raises(Exception, match="another Session|same session|of this session"):
         other.run(prog, X)
