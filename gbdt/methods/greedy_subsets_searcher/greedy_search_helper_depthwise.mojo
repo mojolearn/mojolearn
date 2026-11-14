@@ -872,6 +872,33 @@ struct TDepthwiseWorkspace(Movable):
     var h_feat_table: HostBuffer[DType.uint32]
     var d_nsplit: DeviceBuffer[DType.uint32]
     var h_nsplit: HostBuffer[DType.uint32]
+    # lane gbdt-per-node-regression (2026-11-14): THE TREE TAIL'S SCRATCH,
+    # POOLED. The leaf values, their double sums and the Lossguide exact
+    # replay's slot lists were allocated per tree (2 device + 2 pinned host
+    # buffers every tree, + 4 + 4 more on a Lossguide exact fit since
+    # 7656826862): one allocation each per fit now, sized by the leaf capacity
+    # (`max_leaves`, a key). `lv_cap_key` is the most leaf rows they hold.
+    var lv_cap_key: Int
+    var d_leaf_vals: DeviceBuffer[DType.float32]
+    var h_leaf_vals: HostBuffer[DType.float32]
+    var d_sums64: DeviceBuffer[DType.uint64]
+    var h_sums64: HostBuffer[DType.uint64]
+    var d_lg_slot_off: DeviceBuffer[DType.int32]
+    var h_lg_slot_off: HostBuffer[DType.int32]
+    var d_lg_slots: DeviceBuffer[DType.int32]
+    var h_lg_slots: HostBuffer[DType.int32]
+    var d_lg_kept: DeviceBuffer[DType.int32]
+    var h_lg_kept: HostBuffer[DType.int32]
+    var d_lg_nstats: DeviceBuffer[DType.float32]
+    var h_lg_nstats: HostBuffer[DType.float32]
+    #: `lg_node_stats` floats the pool holds: a tree has at most
+    #: `2 * max_leaves - 1` nodes (each split adds two)
+    var lg_nstats_cap: Int
+    #: The last tree's host drains (the manager's counted waits plus the
+    #: grower's direct `ctx.synchronize` calls) and growth rounds, read by
+    #: `checks/gbdt_step_cost_check.mojo`. Plain Ints, written once per tree.
+    var last_tree_drains: Int
+    var last_tree_rounds: Int
 
     def __init__(
         out self,
@@ -1038,6 +1065,37 @@ struct TDepthwiseWorkspace(Movable):
             WINNER_RECORD_WORDS * max_leaves
         )
         self.d_ids_arena = arena^
+        # the tree tail's pooled scratch (see the field block)
+        var lv_cap = max_leaves + 1
+        self.lv_cap_key = lv_cap
+        var lv_cells = lv_cap * max(1, stat_count - 1)
+        self.d_leaf_vals = ctx.enqueue_create_buffer[DType.float32](lv_cells)
+        self.h_leaf_vals = ctx.enqueue_create_host_buffer[DType.float32](
+            lv_cells
+        )
+        self.d_sums64 = ctx.enqueue_create_buffer[DType.uint64](
+            lv_cap * stat_count
+        )
+        self.h_sums64 = ctx.enqueue_create_host_buffer[DType.uint64](
+            lv_cap * stat_count
+        )
+        self.d_lg_slot_off = ctx.enqueue_create_buffer[DType.int32](lv_cap)
+        self.h_lg_slot_off = ctx.enqueue_create_host_buffer[DType.int32](
+            lv_cap
+        )
+        self.d_lg_slots = ctx.enqueue_create_buffer[DType.int32](lv_cap)
+        self.h_lg_slots = ctx.enqueue_create_host_buffer[DType.int32](lv_cap)
+        self.d_lg_kept = ctx.enqueue_create_buffer[DType.int32](lv_cap)
+        self.h_lg_kept = ctx.enqueue_create_host_buffer[DType.int32](lv_cap)
+        self.lg_nstats_cap = 2 * lv_cap * stat_count
+        self.d_lg_nstats = ctx.enqueue_create_buffer[DType.float32](
+            self.lg_nstats_cap
+        )
+        self.h_lg_nstats = ctx.enqueue_create_host_buffer[DType.float32](
+            self.lg_nstats_cap
+        )
+        self.last_tree_drains = 0
+        self.last_tree_rounds = 0
 
 
 def is_terminal_leaf(
@@ -1229,6 +1287,13 @@ comptime LG_EXACT_ID = (
 #: planes x cells per leaf) a batched IDENTICAL Lossguide fit may address.
 #: Int32 offsets index the histogram and fixed-point accumulator planes.
 comptime LG_EXACT_ID_MAX_CELLS = 2147483647
+#: lane gbdt-per-node-regression (2026-11-14), `-D MOJOLEARN_IDN_GBDT_STEP_OLD`
+#: (default OFF, every vendor and the host build): the A/B arm that restores
+#: the Lossguide tree pool at `1 << max_depth` leaf slots (see `pool_slots` in
+#: `fit_non_symmetric_tree`). Default: the pool holds the fit's leaf capacity.
+#: Bits: none (the same slots are written and read). NOT MEASURED; the arm is
+#: owed one NVIDIA + AMD A/B on gbdt-lossguide istella/taxi; the loser goes.
+comptime GBDT_STEP_OLD = is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"]()
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
@@ -1902,9 +1967,6 @@ def fit_non_symmetric_tree[
     var stat_count = 1 + approx_dim
     var max_leaves = options.max_leaves
     var max_depth = options.max_depth
-    # The symmetric pool's leaf key is what `TTreeWorkspace` stores, `1 <<
-    # max_depth`'s slots; historically compared with `max_leaves`.
-    var ws_leaves_key = max_leaves
     # LG_EXACT_BATCH: `max_leaves` below is the leaf CAPACITY (slots); the
     # policy reads `options.max_leaves`. `lg_room_bound` says the capacity
     # is below what `max_depth` allows, so a round must leave room for the
@@ -1915,10 +1977,6 @@ def fit_non_symmetric_tree[
             var depth_leaves = options.max_leaves
             if max_depth < 30:
                 depth_leaves = 1 << max_depth
-                # the pool is keyed on the slots it holds, so a Lossguide
-                # fit whose max_leaves is not 1 << max_depth keeps its pool
-                # from tree to tree
-                ws_leaves_key = depth_leaves
             if depth_leaves > options.max_leaves:
                 max_leaves = 2 * options.max_leaves
                 if max_leaves >= depth_leaves:
@@ -1973,8 +2031,24 @@ def fit_non_symmetric_tree[
             if not lg_gate_ok:
                 lg_exact = False
                 max_leaves = options.max_leaves
-                ws_leaves_key = options.max_leaves
                 lg_room_bound = False
+    # gbdt-per-node-regression (2026-11-14): THE TREE POOL'S LEAF SLOTS.
+    # Depthwise addresses every slot of `1 << max_depth` (unchanged).
+    # Lossguide addresses slot ids below its leaf capacity `max_leaves`
+    # only (the exact batch's doubled capacity, or the user's budget), so
+    # the pool holds exactly that many. Before, the pool was `1 << max_depth`
+    # slots whatever the policy: the board's Lossguide lanes run max_depth 16
+    # (tools/speed_gbdt_arm.py LOSSGUIDE_MAX_DEPTH, the 2026-10-13 fairness
+    # fix), so a 256-leaf fit held 65,536 histogram slots (512 used) and
+    # `enqueue_fill` zeroed all of them, histogram and accumulator planes,
+    # once per tree. No bits change: the same slots are written and read.
+    # `-D MOJOLEARN_IDN_GBDT_STEP_OLD` restores the depth-sized pool (A/B arm).
+    var pool_slots = max_leaves
+    if not lossguide:
+        pool_slots = 1 << max_depth
+    comptime if GBDT_STEP_OLD:
+        if lossguide and max_depth < 30:
+            pool_slots = 1 << max_depth
     # DEVIATION 2007a: the SM count is read off the symmetric pool below
     # (one `ctx.get_attribute` per WORKSPACE build, not per tree -- the
     # query is 1.26 ms/call on Metal, the price note in
@@ -2004,7 +2078,7 @@ def fit_non_symmetric_tree[
         len(ws) == 0
         or ws[0].n_rows_key != n_rows
         or ws[0].stat_count_key != stat_count
-        or ws[0].max_leaves_key != ws_leaves_key
+        or ws[0].max_leaves_key != pool_slots
         or ws[0].n_features_key != len(fold_counts)
         or ws[0].hist_cells_per_leaf_key != hist_cells_per_leaf
         or ws[0].acc_live_key != _ACC_LIVE
@@ -2013,7 +2087,7 @@ def fit_non_symmetric_tree[
         ws.append(
             TTreeWorkspace(
                 ctx, layout, blocks, n_rows, stat_count, max_depth,
-                _ACC_LIVE,
+                _ACC_LIVE, leaf_slots=pool_slots,
             )
         )
     # DEVIATION 2007a: no override, so the pool's cached machine constant.
@@ -2257,6 +2331,9 @@ def fit_non_symmetric_tree[
     # Empty stays empty: their `UpdateFeatureWeightsForBestSplits` leaves
     # 1.0 everywhere when there are no CTRs (`update_feature_weights.cpp
     # :14-22`), which is what the workspace already holds.
+    # gbdt-per-node-regression: the grower's own `ctx.synchronize` calls,
+    # which the manager's `sync_count` does not see (`last_tree_drains`)
+    var direct_drains = 0
     if len(options.feature_weights) != 0:
         if len(options.feature_weights) != len(fold_counts):
             raise Error(
@@ -2273,6 +2350,7 @@ def fit_non_symmetric_tree[
             hfw.unsafe_ptr().unsafe_store(i, options.feature_weights[i])
         ctx.enqueue_copy(dst_buf=ws[0].ffw, src_ptr=hfw.unsafe_ptr())
         ctx.synchronize()
+        direct_drains += 1
         # past the drain; `mojo-buffer-freed-at-last-use`
         _ = hfw^
 
@@ -4037,14 +4115,18 @@ def fit_non_symmetric_tree[
             # capacity: every slot leaf, or the replay's final leaves (at
             # most `max_leaves`), whichever is larger
             var lv_cap = max(len(leaves), options.max_leaves) + 1
-            var lv_cells = lv_cap * max(1, lv_dim)
-            var d_leaf_vals = ctx.enqueue_create_buffer[DType.float32](lv_cells)
-            var h_leaf_vals = ctx.enqueue_create_host_buffer[DType.float32](
-                lv_cells
-            )
-            var d_sums64 = ctx.enqueue_create_buffer[DType.uint64](
-                lv_cap * stat_count
-            )
+            # gbdt-per-node-regression: the fit's pooled scratch (was four
+            # allocations per tree); a tree past the capacity is a
+            # bookkeeping break, never a data condition
+            if lv_cap > dws[0].lv_cap_key:
+                raise Error(
+                    String("tree tail: ") + String(lv_cap)
+                    + " leaf rows past the pool's " + String(dws[0].lv_cap_key)
+                )
+            ref d_leaf_vals = dws[0].d_leaf_vals
+            ref h_leaf_vals = dws[0].h_leaf_vals
+            ref d_sums64 = dws[0].d_sums64
+            ref h_sums64 = dws[0].h_sums64
             var lv_l2_bits = bitcast[DType.uint64](Float64(options.l2_reg))
             var lv_eps_bits = bitcast[DType.uint64](Float64(1e-20))
             var lv_mc = Int32(1) if multiclass_optimization else Int32(0)
@@ -4147,27 +4229,27 @@ def fit_non_symmetric_tree[
             # same kernel takes the Newton step on them; plain trees already
             # have their values home from the stats wait.
             # the replay's double sums come home for the model weights
-            var h_sums64 = ctx.enqueue_create_host_buffer[DType.uint64](
-                lv_cap * stat_count if lv_on_sums else 1
-            )
+            # (`h_sums64`, pooled with the rest of the tail's scratch)
             if lv_on_sums and num_leaves > 0:
                 # the walk's slot lists and kept nodes (model structure) go
                 # up; the partition stats stay on the device, where
                 # `dw_lg_final_sums_kernel` folds them in the walk's order
                 var n_slots = len(lg_slots)
                 var n_nstats = len(lg_node_stats)
-                var h_slot_off = ctx.enqueue_create_host_buffer[DType.int32](
-                    num_leaves + 1
-                )
-                var h_slots = ctx.enqueue_create_host_buffer[DType.int32](
-                    max(n_slots, 1)
-                )
-                var h_kept = ctx.enqueue_create_host_buffer[DType.int32](
-                    num_leaves
-                )
-                var h_nstats = ctx.enqueue_create_host_buffer[DType.float32](
-                    max(n_nstats, 1)
-                )
+                if (
+                    num_leaves + 1 > dws[0].lv_cap_key
+                    or n_slots > dws[0].lv_cap_key
+                    or n_nstats > dws[0].lg_nstats_cap
+                ):
+                    raise Error(
+                        String("Lossguide replay: ") + String(num_leaves)
+                        + " leaves, " + String(n_slots) + " slots, "
+                        + String(n_nstats) + " node stats past the pool"
+                    )
+                ref h_slot_off = dws[0].h_lg_slot_off
+                ref h_slots = dws[0].h_lg_slots
+                ref h_kept = dws[0].h_lg_kept
+                ref h_nstats = dws[0].h_lg_nstats
                 unsafe_memcpy(
                     dest=h_slot_off.unsafe_ptr(),
                     src=lg_slot_off.unsafe_ptr(),
@@ -4190,16 +4272,12 @@ def fit_non_symmetric_tree[
                         src=lg_node_stats.unsafe_ptr(),
                         count=n_nstats,
                     )
-                var d_slot_off = ctx.enqueue_create_buffer[DType.int32](
-                    num_leaves + 1
-                )
-                var d_slots = ctx.enqueue_create_buffer[DType.int32](
-                    max(n_slots, 1)
-                )
-                var d_kept = ctx.enqueue_create_buffer[DType.int32](num_leaves)
-                var d_nstats = ctx.enqueue_create_buffer[DType.float32](
-                    max(n_nstats, 1)
-                )
+                ref d_slot_off = dws[0].d_lg_slot_off
+                ref d_slots = dws[0].d_lg_slots
+                ref d_kept = dws[0].d_lg_kept
+                ref d_nstats = dws[0].d_lg_nstats
+                # whole pooled buffers, host to device (a few KiB; the
+                # kernel reads only the first `num_leaves` rows)
                 ctx.enqueue_copy(dst_buf=d_slot_off, src_ptr=h_slot_off.unsafe_ptr())
                 ctx.enqueue_copy(dst_buf=d_slots, src_ptr=h_slots.unsafe_ptr())
                 ctx.enqueue_copy(dst_buf=d_kept, src_ptr=h_kept.unsafe_ptr())
@@ -4233,16 +4311,7 @@ def fit_non_symmetric_tree[
                     dst_ptr=h_sums64.unsafe_ptr(), src_buf=d_sums64
                 )
                 ctx.synchronize()
-                _ = h_slot_off^  # past the drain (step-33 race class)
-                _ = h_slots^
-                _ = h_kept^
-                _ = h_nstats^
-                _ = d_slot_off^
-                _ = d_slots^
-                _ = d_kept^
-                _ = d_nstats^
-            _ = d_sums64^
-            _ = d_leaf_vals^
+                direct_drains += 1
             var hlv = h_leaf_vals.unsafe_ptr()
             # model assembly from the device's results: the weight is the
             # stats word (or the replay's double sum) widened, the values
@@ -4282,8 +4351,6 @@ def fit_non_symmetric_tree[
                 if not lg_path_done:
                     result_paths.append(leaves[leaf_id].path.copy())
                     final_rows.append(leaves[leaf_id].size)
-            _ = h_leaf_vals^  # `hlv` points into it (last-use rule)
-            _ = h_sums64^
             comptime if NS_INHERIT_PARTITION:
                 # the result leaves in the model's leaf order, which is
                 # their order along the row index; a total that is not
@@ -4327,6 +4394,10 @@ def fit_non_symmetric_tree[
         trace.record_list_f32(tag_prefix + "final.leafweights", flat_w)
 
     # `return BuildTreeLikeModel<TModel>(leaves, leavesWeights, leavesValues)`
+    # the tree's step cost, for `checks/gbdt_step_cost_check.mojo`
+    dws[0].last_tree_drains = mgr.sync_count() + direct_drains
+    dws[0].last_tree_rounds = iteration
+
     comptime if NS_INHERIT_PARTITION:
         dws[0].final_offsets = inherit_offsets.copy()
         dws[0].final_sizes = inherit_sizes.copy()

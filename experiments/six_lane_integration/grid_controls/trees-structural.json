@@ -5,6 +5,24 @@
  "head": "75dd2db9a",
  "mode": "identical",
  "controls": {
+  "GBDT_STEP_OLD": {
+   "define": "MOJOLEARN_IDN_GBDT_STEP_OLD",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_GBDT_STEP_OLD"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1296"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "new",
+   "notes": "lane gbdt-per-node-regression 2026-11-14: on = the Lossguide tree pool back at 1 << max_depth leaf slots (65,536 at the board's max_depth 16, zeroed every tree); off (default) = the fit's leaf capacity. A/B owed on gbdt-lossguide istella/taxi, NVIDIA + AMD."
+  },
   "ORD_STD_GRIDFOLD": {
    "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF",
    "kind": "switch",

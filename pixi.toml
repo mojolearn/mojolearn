@@ -1195,6 +1195,10 @@ check-lossguide-policy = "mojo run -I . checks/lossguide_policy_check.mojo"
 # untraced one.
 check-lossguide = "mojo run -I . checks/lossguide_check.mojo"
 
+# Host drains per tree and the Lossguide pool size of the non-symmetric grower
+# (lane gbdt-per-node-regression, 2026-11-14).
+check-gbdt-step-cost = "mojo run -I . checks/gbdt_step_cost_check.mojo"
+
 # THE STAGE-HASH INSTRUMENT, writer and reader gated together.
 # `core/identity_trace.mojo` makes a fit emit named checkpoints, each an
 # FNV-1a64 over a buffer's raw bit patterns, and
