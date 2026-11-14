@@ -5,8 +5,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type
-from bindings.samba_state_native_door import samba_snapshot, samba_validate_state, samba_from_state, samba_publish, samba_apply_gradients_from_state
+from bindings.py_balanced import py_call, py_type, py_get
+from bindings.samba_state_native_door import samba_fields, samba_snapshot, samba_validate_state, samba_from_state, samba_publish, samba_apply_gradients_from_state
 from bindings.samba_training_native_door import samba_gradients, samba_gradients_from_state
 from bindings.generator_state_native_pack import generator_init, generator_snapshot, generator_restore, generator_next
 from bindings.samba_construct_native_pack import samba_construct, samba_load_weights, samba_parameters
@@ -15,7 +15,7 @@ from bindings.samba_inference_native_door import samba_forward, samba_allocate, 
 from bindings.samba_checkpoint_native_pack import samba_checkpoint_save, samba_checkpoint_load, samba_checkpoint_read
 from bindings.samba_cpu_inference_pack import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
 from bindings.samba_admission_door import samba_admit
-from core.weight_epoch import weight_epoch_bump
+from core.weight_epoch import weight_epoch_bump, registry_epoch_bump
 # RUN (lane rs-neural): typed operation predicate, no Python import.
 from training.samba_public_run import _samba_writes_registry
 from bindings.samba_decode_native_unpack import (
@@ -55,6 +55,31 @@ def _samba_public_items(value: PythonObject) raises -> PythonObject:
     return PythonObject(items)
 
 
+def _samba_written_registry(operation: String, values: PythonObject) raises -> Int:
+    """UNPACK (lane fix-samba-weight-epoch-per-model, 2026-11-13): the host
+    address of the model registry (`flat`) a writing operation writes in
+    place, 0 when it writes none. `model_train_step`, `publish` and
+    `load_weights` write their model's (values[0]) registry. `apply` writes
+    the validated state's private parameter copy and `checkpoint_load` builds
+    a new model (samba_validate_state copies): no existing registry, so no
+    other copy is stamped. Read at each stamp: a write that replaced `flat`
+    stamps the new address too."""
+    if operation != "model_train_step" and operation != "publish" and operation != "load_weights":
+        return 0
+    var flat = py_get(samba_fields(values[0]), "flat", PythonObject(None))
+    if flat is None:
+        return 0
+    return Int(py=flat._addr)
+
+
+def _samba_stamp_written(operation: String, values: PythonObject) raises:
+    """A write moves the written registry's own epoch (its resident copies
+    reload; another model's copy stays current) and the process epoch (the
+    per-block programs keyed by views into this registry; core/weight_epoch.mojo)."""
+    registry_epoch_bump(_samba_written_registry(operation, values))
+    weight_epoch_bump()
+
+
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var writes = False
     try:
@@ -71,7 +96,7 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         samba_admit(operation, values, context)
         writes = _samba_writes_registry(operation)
         if writes:
-            weight_epoch_bump()
+            _samba_stamp_written(operation, values)
         var result = PythonObject(None)
         if operation == "model_train_step":
             result = samba_train_step(values[0], values[1], values[2], context)
@@ -162,15 +187,19 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         else:
             raise Error("Samba: unknown native state operation")
         if writes:
-            weight_epoch_bump()
+            _samba_stamp_written(operation, values)
         return result.steal_data()
     except error:
         if writes:
             # a failed write may have changed part of the registry
             try:
-                weight_epoch_bump()
+                var failed_args = PythonObject(from_borrowed=args_ptr)
+                _samba_stamp_written(String(failed_args[0]), failed_args[1])
             except:
-                pass
+                try:
+                    weight_epoch_bump()
+                except:
+                    pass
         var message = String(error)
         if message.startswith("NotImplementedError:"):
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
