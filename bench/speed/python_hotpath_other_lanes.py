@@ -28,39 +28,9 @@ def cell(name):
 # regressors' score is the native owners' R^2 program (core/linear_score_program.mojo, bindings/svc_common_door.mojo).
 
 
-@cell("linear_model._accuracy_host (LogisticRegression/SVC score), int64 y")
-def _(n, r):
-    pred = arr(r.integers(0, 3, n)); y = r.integers(0, 3, n)
-    return lambda: LM._accuracy_host(pred, y)
-
-
-@cell("linear_model: LogisticRegression.fit label prep (_labels_1d + sorted_classes + f32 codes)")
-def _(n, r):
-    y = r.integers(0, 3, n)
-
-    def run():
-        labels, _shape = LM._labels_1d(y)
-        classes, codes = _labels.sorted_classes(labels)
-        return Array.from_list([float(c) for c in codes], "<f4")
-    return run
-
-
-@cell("linear_model._column_means weighted [n,10] (LinearRegression.fit + sample_weight)")
-def _(n, r):
-    x = arr(r.random((n // 10, 10), dtype=np.float32)); w = arr(r.random(n // 10, dtype=np.float32))
-    return (lambda: LM._column_means(x, w)), 10.0
-
-
-@cell("linear_model._vector_mean weighted + _weight_total")
-def _(n, r):
-    v = arr(r.random(n, dtype=np.float32)); w = arr(r.random(n, dtype=np.float32))
-    return lambda: LM._vector_mean(v, w)
-
-
-@cell("linear_model: sqrt(weights) root list (LinearRegression.fit:620)")
-def _(n, r):
-    w = arr(r.random(n, dtype=np.float32))
-    return lambda: [LM._round_f32(math.sqrt(v)) for v in w.tolist()]
+# linear_model._accuracy_host, _labels_1d, _column_means, _vector_mean and _round_f32 cells removed 2026-11-14
+# (lane py-classical-linalg): the Python helpers had no product caller and are deleted; their native owners are
+# bindings/svc_common_door.mojo, bindings/logistic_native_door.mojo and core/p3_linear_impl.mojo.
 
 
 @cell("linear_model: binary predict codes + decode_labels (LogisticRegression.predict)")
