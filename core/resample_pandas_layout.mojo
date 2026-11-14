@@ -3,8 +3,8 @@
 # (providers/python/resample_pandas_pyapi.mojo `_RPArray`): the dtype words
 # and the storage layout the cell routines read. No Python object: the door's
 # `_RPArray` keeps the ndarray view, dtype and scalar API owners that keep
-# `address` valid, and RUN routines (`_rp_number`, `_rp_widen`,
-# `_rp_cell_code`, `_rp_plan_column`, `_rp_copy_block`, ...) take this view.
+# `address` valid, and RUN routines (core/resample_pandas_copy.mojo `rp_number`, `rp_widen`,
+# `rp_copy_cell`; the door's `_rp_cell_code`, `_rp_plan_column`, `_rp_copy_block`, ...) take this view.
 # Composed once per array (lane entangled-array-owner-2, 2026-11-12); a RUN
 # routine borrows it, so no cell copies it.
 
