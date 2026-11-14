@@ -499,8 +499,9 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
         # Lane fix-iforest-save-device-forest: the forest this fit built is
         # read out now (the forest `_run` just kept, no second fit on any
         # binary since lane fix-iforest-double-fit; a refit-per-call binary
-        # drops it after the read) and held as `_if_forest`. `save()` and pickle write it, so a caller's
-        # in-place edit of a borrowed X after fit, or a resident-store
+        # drops it after the read) and held as `_if_forest`. `save()` and
+        # pickle write it, so a caller's in-place edit of a borrowed X after
+        # fit, or a resident-store
         # eviction, never changes a saved model. Scores are unchanged: the
         # live estimator scores its resident forest as before.
         py_setitem(fields, _FOREST_FIELD, iforest_export_forest(model, context))
