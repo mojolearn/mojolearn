@@ -123,6 +123,43 @@ struct CausalExecutionEntries(Movable, Writable):
         self.write_to(writer)
 
 
+# The plain (non-callable) values the CausalLM admission writes into the
+# execution registry (bindings/causal_lm_public_door.mojo causal_lm_admit_binding,
+# bindings/parallel_causal_native_door.mojo). The builder writes these names
+# through the constants below and _causal_entries admits exactly them as plain
+# metadata; every other entry must be a compiled module function or a retained
+# native provider. One table, so a new plain entry cannot be written without
+# being admitted (fix-smoke-refusals, 2026-11-14: "resident" and "program_read"
+# became plain words in 8f441d6496 and every GPU generate was refused).
+# entry_mode/entry_vendor: the CausalLM entry table key words
+# (core/causal_lm_entry_table.mojo). block_session/forward15: the GPU
+# Transformer session route flags (lane transformer-session-native).
+# resident/resident_vendor: the resident GPU session route flag and its vendor;
+# program_read: the decode program's session family word
+# (core/causal_lm_entry_table_sessions.mojo, lane causal-lm-sessions-native).
+comptime CAUSAL_ENTRY_CPU = "cpu"
+comptime CAUSAL_ENTRY_WEIGHT_NAMES = "weight_names"
+comptime CAUSAL_ENTRY_MAMBA1_PROFILE = "mamba1_profile"
+comptime CAUSAL_ENTRY_NATIVE_ENABLED = "native_enabled"
+comptime CAUSAL_ENTRY_MODE = "entry_mode"
+comptime CAUSAL_ENTRY_VENDOR = "entry_vendor"
+comptime CAUSAL_ENTRY_BLOCK_SESSION = "block_session"
+comptime CAUSAL_ENTRY_FORWARD15 = "forward15"
+comptime CAUSAL_ENTRY_RESIDENT = "resident"
+comptime CAUSAL_ENTRY_RESIDENT_VENDOR = "resident_vendor"
+comptime CAUSAL_ENTRY_PROGRAM_READ = "program_read"
+
+
+def causal_entry_is_plain(name: String) -> Bool:
+    # Compares against the static table; no allocation per entry.
+    return (name == CAUSAL_ENTRY_CPU or name == CAUSAL_ENTRY_WEIGHT_NAMES
+        or name == CAUSAL_ENTRY_MAMBA1_PROFILE or name == CAUSAL_ENTRY_NATIVE_ENABLED
+        or name == CAUSAL_ENTRY_MODE or name == CAUSAL_ENTRY_VENDOR
+        or name == CAUSAL_ENTRY_BLOCK_SESSION or name == CAUSAL_ENTRY_FORWARD15
+        or name == CAUSAL_ENTRY_RESIDENT or name == CAUSAL_ENTRY_RESIDENT_VENDOR
+        or name == CAUSAL_ENTRY_PROGRAM_READ)
+
+
 def causal_pin_entries(mut mods: NativeModules, fields: PythonObject, entries: PythonObject) raises:
     neural_string_keys(mods, fields)
     neural_string_keys(mods, entries)
@@ -165,14 +202,9 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
             # Typed provider/lifetime admission occurs at its native boundary;
             # these values are retained, never called or traversed as Python.
             py_setitem(result, names[i], item)
-        elif (name == "cpu" or name == "weight_names" or name == "resident_vendor"
-                or name == "mamba1_profile" or name == "native_enabled"
-                or name == "entry_mode" or name == "entry_vendor"
-                or name == "block_session" or name == "forward15"):
-            # entry_mode/entry_vendor: the CausalLM entry table key words
-            # (core/causal_lm_entry_table.mojo), plain admitted integers.
-            # block_session/forward15: the GPU Transformer session route flags
-            # (lane transformer-session-native; they were Python entries).
+        elif causal_entry_is_plain(name):
+            # The plain entries named in CAUSAL_ENTRY_* above (one table with
+            # the builder, causal_lm_admit_binding).
             neural_plain_value(mods, item, 0, context)
             py_setitem(result, names[i], neural_metadata_snapshot(mods, item))
         else:

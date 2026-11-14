@@ -66,6 +66,7 @@ from bindings.tokenizer_public_native_door import tokenizer_vocab_encode, tokeni
 from bindings.mode_metadata_native_door import _fields as _native_record_fields, _truth
 from bindings.neural_block_admission_door import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_block_weight_names, neural_metadata_snapshot, neural_block_fields
 from bindings.causal_model_config_door import model_record_fields, model_plan_snapshot, model_dict, model_plain
+from bindings.causal_operation_owner_door import CAUSAL_ENTRY_CPU, CAUSAL_ENTRY_MODE, CAUSAL_ENTRY_VENDOR, CAUSAL_ENTRY_WEIGHT_NAMES, CAUSAL_ENTRY_BLOCK_SESSION, CAUSAL_ENTRY_FORWARD15, CAUSAL_ENTRY_RESIDENT, CAUSAL_ENTRY_RESIDENT_VENDOR, CAUSAL_ENTRY_MAMBA1_PROFILE, CAUSAL_ENTRY_PROGRAM_READ
 from bindings.causal_operation_owner_door import causal_model_capture, causal_model_publish, causal_model_origin, causal_state_capture, causal_state_publish, causal_state_origin, causal_state_fields, causal_snapshot_fields, causal_model_cache_set, causal_block_cache_set, causal_checkpoint_capture, causal_pin_entries, causal_layer_capture, causal_layer_publish
 from core.shared_slot import SharedSlot
 from core.causal_lm_entry_table import (
@@ -252,7 +253,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entries = g[].bi.dict()
     var requested_gpu = String(model.device) == "gpu"
-    py_setitem(entries, "cpu", PythonObject(not requested_gpu))
+    py_setitem(entries, CAUSAL_ENTRY_CPU, PythonObject(not requested_gpu))
     var kind = String(model.kind)
     var block_prefix = ("transformer" if kind == "transformer" else "mamba") if requested_gpu else "neural_host"
     var primitive_prefix = "training" if requested_gpu else "neural_host"
@@ -287,11 +288,11 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     # rms_norm_forward, linear_forward, quantize_int15, gemm_int15,
     # transformer_forward_int15 (CPU) and the Mamba forward/decode are gone.
     var key = CausalEntryKey(mode, causal_entry_vendor(vendor))
-    py_setitem(entries, "entry_mode", PythonObject(key.mode))
-    py_setitem(entries, "entry_vendor", PythonObject(key.vendor))
+    py_setitem(entries, CAUSAL_ENTRY_MODE, PythonObject(key.mode))
+    py_setitem(entries, CAUSAL_ENTRY_VENDOR, PythonObject(key.vendor))
     causal_tables_admit(key, CAUSAL_TABLE_BLOCK if kind == "transformer" else (CAUSAL_TABLE_MAMBA if kind == "mamba1" or kind == "mamba2" else -1), int15_binding is not None)
     var local_blocks = py_get(_standalone_record_fields(mods, model), "_native_block_fields")
-    py_setitem(entries, "weight_names", local_blocks[0]["_neural_weight_names"] if local_blocks is not None else neural_block_weight_names(mods, model._blocks[0]))
+    py_setitem(entries, CAUSAL_ENTRY_WEIGHT_NAMES, local_blocks[0]["_neural_weight_names"] if local_blocks is not None else neural_block_weight_names(mods, model._blocks[0]))
     if kind == "transformer":
         py_setitem(entries, "forward", _native_function(mods, block_binding, "transformer_forward"))
         py_setitem(entries, "decode", _native_function(mods, block_binding, "transformer_decode_step"))
@@ -309,9 +310,9 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         # transformer_native_session_handle_v1) are gone.
         if requested_gpu:
             _ = neural_table_entry[NEURAL_TABLE_BLOCK_FORWARD](NeuralEntryKey(key.mode, key.vendor))
-            py_setitem(entries, "block_session", PythonObject(True))
+            py_setitem(entries, CAUSAL_ENTRY_BLOCK_SESSION, PythonObject(True))
             if model._head_int15 is not None:
-                py_setitem(entries, "forward15", PythonObject(True))
+                py_setitem(entries, CAUSAL_ENTRY_FORWARD15, PythonObject(True))
         # The resident GPU route for fixed-length greedy generation and the
         # resident forward: every session operation is the transformer
         # image's session entry (core/causal_lm_entry_table_sessions.mojo),
@@ -320,8 +321,8 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         # transformer_vendor) are gone (lane causal-lm-sessions-native).
         if requested_gpu:
             causal_sessions_tables_admit(key, CAUSAL_SESSIONS_TRANSFORMER)
-            py_setitem(entries, "resident", PythonObject(True))
-            py_setitem(entries, "resident_vendor", PythonObject(vendor))
+            py_setitem(entries, CAUSAL_ENTRY_RESIDENT, PythonObject(True))
+            py_setitem(entries, CAUSAL_ENTRY_RESIDENT_VENDOR, PythonObject(vendor))
             for name in [String("transformer_arithmetic_profile"), String("transformer_arithmetic_profile_changed")]:  # small-loop(optional profile entry names)
                 if _native_has_entry(mods, block_binding, name):
                     py_setitem(entries, name, _native_function(mods, block_binding, name))
@@ -330,7 +331,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         if _native_has_entry(mods, block_binding, "mamba1_profile"):
             profile = Int(py=_native_function(mods, block_binding, "mamba1_profile")())
             mods.released()
-        py_setitem(entries, "mamba1_profile", PythonObject(profile))
+        py_setitem(entries, CAUSAL_ENTRY_MAMBA1_PROFILE, PythonObject(profile))
     elif kind == "mamba2":
         pass
     else:
@@ -341,7 +342,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     if requested_gpu:
         var program_family = CAUSAL_SESSIONS_TRANSFORMER if kind == "transformer" else CAUSAL_SESSIONS_MAMBA
         causal_sessions_tables_admit(key, program_family)
-        py_setitem(entries, "program_read", PythonObject(program_family))
+        py_setitem(entries, CAUSAL_ENTRY_PROGRAM_READ, PythonObject(program_family))
     # Native ownership migration: resolve descriptor tables at admission by
     # default, so supported local operations enter the native execution engine.
     # Explicit MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 retains the compatibility route.
