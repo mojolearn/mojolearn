@@ -20,6 +20,7 @@ pins and repeat checks are unconditional here. The public storage, dtype,
 input conversion, snapshot, training-shortcut and refit-guard checks stay in
 Python.
 """
+from std.memory import bitcast
 from std.math import isfinite
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.neighbors_entry_table_umap import (
@@ -129,7 +130,7 @@ def case_public_layout(entry: NativeDescriptorCall) raises:
     var pins = layout_bits()
     var moved = 0
     for i in range(16):
-        moved += Int(layout[i].to_bits() != pins[i])
+        moved += Int(bitcast[DType.uint32](layout[i]) != pins[i])
     require(moved == 0, "public layout: " + String(moved) + " words differ from LAYOUT_BITS")
     var again = fit(entry, x, 8, 1, cfg)
     require(same_bits(layout, again), "public layout: a second fit moved the bits")
@@ -174,7 +175,7 @@ def case_profile(entry: NativeDescriptorCall, profile: Int) raises:
         var pins = broader_layout_bits()
         var moved = 0
         for i in range(48):
-            moved += Int(layout[i].to_bits() != pins[i])
+            moved += Int(bitcast[DType.uint32](layout[i]) != pins[i])
         require(moved == 0, tag + ": " + String(moved) + " words differ from BROADER_LAYOUT_BITS")
     var again = fit(entry, x, 16, 3, cfg)
     require(same_bits(layout, again), tag + ": a second fit moved the bits")

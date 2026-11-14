@@ -16,6 +16,7 @@ Inputs are small integers as float32 (the Python test's `_ints`): every
 linear product and sum is exact in float32, so a wrong slot or count shows
 as a wrong number. Tolerances are the Python test's.
 """
+from std.memory import bitcast
 from std.math import sqrt
 from checks.native_tests.training_check_common import same_words, all_finite, uniform_int
 from core.host_parallel import host_parallelize
@@ -164,7 +165,7 @@ def check_ordered_fold(stack: List[Float32]) raises:
     """The last slot holds the left-associated sum: both separate additions of
     the tiny terms tie to even (a tree combining them first moves one ULP)."""
     var base = (FOLD_SHARDS - 1) * FOLD_COUNT
-    require(stack[base].to_bits() == UInt32(0x3F800000) and stack[base + 1].to_bits() == UInt32(0xBF800000),
+    require(bitcast[DType.uint32](stack[base]) == UInt32(0x3F800000) and bitcast[DType.uint32](stack[base + 1]) == UInt32(0xBF800000),
             "the ordered fold is not left-associated: " + String(stack[base]) + ", " + String(stack[base + 1]))
     for i in range(6):  # small-loop(check comparison)
         require(stack[base + 2 + i] == Float32(i) + 3, "the ordered fold of the second tensor is not first + 3")
