@@ -58,7 +58,7 @@ date and release, and new / best-ever:
                  were not recorded (boards before the parameter read-back)
   PARAMS-DIFFER  the best-ever cell's parameters (a shared key) or output hash differ from the new cell's: a slower
                  time may be a parameter or algorithm change, not a regression
-  BEST-EVER-SUSPECT  new / best ever > 1.10 but the best ever is implausible (board_best_ever.suspect_reason)
+  BEST-EVER-SUSPECT  new / best ever > 1.10 but the best ever is below 5% of the row's median time (board_best_ever.suspect_reason)
   BEST-EVER-HW-DIFF  the best ever was measured on another device than the new board's
 Every our-arm cell of the new boards outside the recipes (a full-board screen, tools/ops/paper_compare_job.sh
 board-all) gets an extra row in its own table with the same best-ever column; the recipe rows and their flags are

@@ -283,10 +283,9 @@ SUSPECT_FRACTION = 0.05
 
 def suspect_reason(best, timeline):
     """Why a best-ever time is implausible, or None (2026-11-13: 0.8.25 bests such as a 0.164 ms radius-neighbors
-    fit). A best below 5% of the median of the row's other recorded times, or one whose record lacks its
-    params, is SUSPECT: kept and shown, never dropped, never called a regression baseline."""
-    if not isinstance(best.get("params"), dict):
-        return "record lacks params"
+    fit). A best below 5% of the median of the row's other recorded times is SUSPECT: kept and shown, never
+    dropped, never called a regression baseline. A record that merely lacks params is not SUSPECT (it stays a
+    possible regression, BEST-EVER-REGRESSION-UNCHECKED)."""
     others = sorted(r["ms"] for r in timeline if r is not best and number(r.get("ms")))
     if others:
         n = len(others)

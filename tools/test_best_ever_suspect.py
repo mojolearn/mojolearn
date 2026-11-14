@@ -23,9 +23,9 @@ class Suspect(unittest.TestCase):
         tl = [ent(30.0), ent(40.0), ent(42.0)]
         self.assertIsNone(BE.suspect_reason(tl[0], tl))
 
-    def test_missing_params_is_suspect(self):
+    def test_missing_params_is_not_suspect(self):
         tl = [ent(30.0, None), ent(40.0)]
-        self.assertEqual(BE.suspect_reason(tl[0], tl), "record lacks params")
+        self.assertIsNone(BE.suspect_reason(tl[0], tl))
 
     def test_compare_flags_suspect_not_regression(self):
         tl = [ent(0.164), ent(40.0), ent(42.0)]
