@@ -183,10 +183,10 @@ def test_device_stateless_forward_takes_the_resident_route():
 
 def test_resident_forward_uploads_unchanged_weights_once():
     # lane fix-samba-weight-upload (2026-11-13): the resident forward keys its
-    # device registry by the registry address and the process weight epoch
-    # (core/weight_epoch.mojo). Two forwards with unchanged weights make one
+    # device registry by the registry address and that registry's epoch
+    # (core/weight_epoch.mojo RegistryKey). Two forwards with unchanged weights make one
     # registry upload between them; every registry writer (train_step,
-    # load_state_dict) moves the epoch, so the next forward uploads again and
+    # load_state_dict) stamps the registry, so the next forward uploads again and
     # its logits are the new weights' bits, never stale ones.
     model, twin = _models(["mamba3", "attention"])
     ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
