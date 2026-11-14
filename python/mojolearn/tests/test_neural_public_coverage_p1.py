@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """Real-path and refusal tests for neural endpoints changed since 0.8.55.
 
-Sequence optimizer state (`RMSprop.square_avg`, `Adagrad.sum`, `Lion.exp_avg`),
-`Adafactor`, the `StepLR` / `ExponentialLR` / `OneCycleLR` constructors,
-`SmallMLPTrainer` (`weights_`, `loss_and_grads`, `predict_logits_sessions`,
-`train_steps`), `training.mlp_inference_sessions` and the `Mamba3Block` owned
+Sequence optimizer refusals (`RMSprop.square_avg`, `Adagrad.sum`, `Lion.exp_avg`),
+`Adafactor`, the `StepLR` / `ExponentialLR` / `OneCycleLR` constructor refusals,
+`SmallMLPTrainer` (`weights_`, refusals, `train_steps`),
+`training.mlp_inference_sessions` refusals and the `Mamba3Block` owned
 weight snapshot. No binding is replaced: every call is the public path.
+
+Moved to native checks (lane tmig-training, 2026-11-14): the one-step state
+values of RMSprop, Adagrad and Lion (checks/native_tests/sequence_optimizer_*),
+the StepLR / ExponentialLR / OneCycleLR values (lr_schedule_check.mojo), and the
+SmallMLP cross-entropy, sessions-forward and inference-sessions references
+(training_small_mlp_{cpu,gpu}.mojo).
 """
 import os
 
@@ -28,20 +34,6 @@ def _stepped(optimizer, **kw):
 
 
 # ---------------------------------------------------------------- optimizer state
-def test_rmsprop_square_avg_after_one_step():
-    opt, _ = _stepped(ml.RMSprop, alpha=0.99)
-    np.testing.assert_allclose(np.asarray(opt.square_avg).ravel(), np.full(6, 0.01 * 0.25), rtol=1e-6)
-
-
-def test_adagrad_sum_after_one_step():
-    opt, _ = _stepped(ml.Adagrad, initial_accumulator_value=0.1)
-    np.testing.assert_allclose(np.asarray(opt.sum).ravel(), np.full(6, 0.1 + 0.25), rtol=1e-6)
-
-
-def test_lion_exp_avg_after_one_step():
-    opt, w = _stepped(ml.Lion, lr=0.1, betas=(0.9, 0.99))
-    np.testing.assert_allclose(np.asarray(opt.exp_avg).ravel(), np.full(6, 0.01 * 0.5), rtol=1e-5)
-    np.testing.assert_allclose(w, np.full((2, 3), -0.1), rtol=1e-6)
 
 
 @pytest.mark.parametrize("optimizer,state", [(ml.RMSprop, "square_avg"), (ml.Adagrad, "sum"), (ml.Lion, "exp_avg")],
@@ -77,22 +69,6 @@ def test_adafactor_init_refusals(params, kw, err):
 
 
 # ---------------------------------------------------------------- schedules
-def test_steplr_values():
-    sched = ml.StepLR(0.1, step_size=2, gamma=0.5)
-    assert [sched.lr_at(t) for t in (1, 2, 3, 5)] == pytest.approx([0.1, 0.1, 0.05, 0.025], rel=1e-6)
-
-
-def test_exponentiallr_values():
-    sched = ml.ExponentialLR(0.1, gamma=0.5)
-    assert [sched.lr_at(t) for t in (1, 2, 3)] == pytest.approx([0.1, 0.05, 0.025], rel=1e-6)
-
-
-def test_onecyclelr_values():
-    sched = ml.OneCycleLR(1.0, total_steps=10)
-    lrs = [sched.lr_at(t) for t in range(1, 11)]
-    assert lrs[0] == pytest.approx(1.0 / 25, rel=1e-6)
-    assert max(lrs) == pytest.approx(1.0, rel=1e-6)
-    assert lrs[-1] < lrs[0]
 
 
 @pytest.mark.parametrize("build,err,match", [
@@ -123,10 +99,6 @@ XM = _rng.random((12, 8), dtype=np.float32)
 YM = _rng.integers(0, 3, 12)
 
 
-def _logits(X):
-    return np.maximum(X @ W1.T + B1, 0) @ W2.T + B2
-
-
 def _trainer():
     return ml.SmallMLPTrainer(W1, B1, W2, B2, data_schedule={"batch_size": 12})
 
@@ -138,17 +110,6 @@ def test_small_mlp_weights_are_the_initial_parameters():
         np.testing.assert_array_equal(np.asarray(weights[name]), want)
 
 
-def test_small_mlp_loss_and_grads_is_cross_entropy_without_a_step():
-    trainer = _trainer()
-    loss, grads = trainer.loss_and_grads(XM, YM)
-    z = _logits(XM)
-    z = z - z.max(1, keepdims=True)
-    p = np.exp(z) / np.exp(z).sum(1, keepdims=True)
-    assert loss == pytest.approx(float(-np.log(p[np.arange(12), YM]).mean()), rel=1e-5)
-    assert [np.asarray(g).shape for g in grads] == [(16, 8), (16,), (3, 16), (3,)]
-    assert trainer.step_ == 0
-
-
 @pytest.mark.parametrize("args,match", [
     pytest.param((XM, np.full(12, 3)), "classes 0..2", id="label-3"),
     pytest.param((XM[:, :7], YM), r"shape \(batch, 8\)", id="width"),
@@ -158,13 +119,6 @@ def test_small_mlp_loss_and_grads_is_cross_entropy_without_a_step():
 def test_small_mlp_loss_and_grads_refusals(args, match):
     with pytest.raises(ValueError, match=match):
         _trainer().loss_and_grads(*args)
-
-
-def test_small_mlp_predict_logits_sessions_concatenates():
-    trainer = _trainer()
-    got = np.asarray(trainer.predict_logits_sessions([XM[:5], XM[5:]]))
-    np.testing.assert_allclose(got, _logits(XM), rtol=1e-5, atol=1e-6)
-    np.testing.assert_allclose(got, np.asarray(trainer.predict_logits(XM)), atol=1e-6)
 
 
 @pytest.mark.parametrize("inputs,err", [
@@ -188,11 +142,6 @@ def test_small_mlp_train_steps_refuses_nonpositive_k():
     with pytest.raises(ValueError, match="positive"):
         trainer.train_steps(XM, YM, 0)
     assert trainer.step_ == 0
-
-
-def test_mlp_inference_sessions_matches_reference():
-    got = np.asarray(training.mlp_inference_sessions([XM[:5], XM[5:]], W1, B1, W2, B2))
-    np.testing.assert_allclose(got, _logits(XM), rtol=1e-5, atol=1e-6)
 
 
 @pytest.mark.parametrize("inputs,kw,err", [
