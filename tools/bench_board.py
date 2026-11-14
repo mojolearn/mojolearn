@@ -2866,11 +2866,39 @@ FIXTURES_VENV_MARKER = ".mojolearn-fixtures-venv"
 
 
 def fixtures_requirements(vendor):
-    """[numpy, torch==<board pin, no +cuda/+rocm suffix>, torch-geometric==<algos pin>]."""
+    """[numpy, torch==<board pin, no +cuda/+rocm suffix>, torch-geometric==<algos pin>, NEURAL_PINS...].
+
+    QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): the same CPU-torch venv is the interpreter of the
+    neural forward lanes' untimed eager FP32 quality reference (bench_board_neural --reference-python), which needs
+    einops (the Mamba-1 reference scan) and transformers (the transformer twin); the ours-only measurement venv has
+    no torch, so rel_fro_vs_torch_eager_fp32 was silently missing on mamba1/2/3-forward and transformer-forward."""
     torch = DEFAULT_TORCH_SPEC.get(vendor) or DEFAULT_TORCH_SPEC["apple"]
     torch = torch.split()[0].split("+")[0]
     pyg = [r for r in ALGOS.PINS_COMMON if r.lower().startswith("torch-geometric==")]
-    return ["numpy", torch] + pyg[:1]
+    return ["numpy", torch] + pyg[:1] + list(NEURAL_PINS)
+
+
+def ensure_reference_python(ctx, races):
+    """The CPU-torch reference interpreter for the neural races whose quality has a torch reference
+    (bench_board_neural.TORCH_REFERENCE_LANES), made from --fixtures-venv; ctx["reference_python"]. Without
+    --fixtures-venv nothing is made and the reference runs in the race's own --theirs-python (a full opponent
+    venv has torch); when that fails the arm's cell says quality_unavailable, never a silent gap."""
+    lanes = set(NEURAL_TORCH_REFERENCE_LANES)
+    if not ctx.get("fixtures_venv") or not any(r["family"] == "neural" and r["lane"] in lanes for r in races):
+        return None
+    log = os.path.join(ctx["out"], "logs", "neural-fixtures.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    py = ensure_fixtures_venv(ctx["fixtures_venv"], ctx["vendor"], log)
+    if not py:
+        print("bench_board: the reference venv failed (see %s); the torch quality reference says "
+              "quality_unavailable" % log, flush=True)
+        return None
+    ctx["reference_python"] = py
+    return py
+
+
+#: bench_board_neural.TORCH_REFERENCE_LANES (kept literal: this module never imports the neural driver)
+NEURAL_TORCH_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward")
 
 
 def layer_races(races):
@@ -3042,6 +3070,8 @@ def neural_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
            "--round-seconds", str(rsec), "--keep-outputs"]
+    if ctx.get("reference_python") and race["lane"] in NEURAL_TORCH_REFERENCE_LANES:
+        cmd += ["--reference-python", shlex.quote(ctx["reference_python"])]
     if race.get("dataset") == "higgs":
         cmd += ["--higgs", race_data_files(ctx, race)[0][1]]
     n = len(race["arms"])
@@ -5938,6 +5968,8 @@ def main(argv=None):
     if any(r["family"] == "algos" for r in todo):
         ensure_algos_prep(ctx, todo)
         ensure_neural_fixtures(ctx, todo)
+    if any(r["family"] == "neural" for r in todo):
+        ensure_reference_python(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
     if _synthetic_on():
