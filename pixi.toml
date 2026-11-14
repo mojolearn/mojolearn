@@ -241,6 +241,8 @@ check-native-core-ops-program-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 check-native-core-ops-program-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_ops_program_gpu.mojo"
 check-native-core-ops-import-kinds-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/core_ops_import_kinds_cpu.mojo"
 check-native-core-ops-import-kinds-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_ops_import_kinds_gpu.mojo"
+check-native-core-program-loop-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/core_program_loop_cpu.mojo"
+check-native-core-program-loop-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/core_program_loop_gpu.mojo"
 check-native-spectral-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_state.mojo"
 check-native-spectral-resident-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_resident_gpu.mojo"
 check-native-spectral-assignment-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/spectral_assignment_cpu.mojo"
