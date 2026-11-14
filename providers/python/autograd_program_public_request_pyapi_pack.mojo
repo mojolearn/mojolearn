@@ -10,7 +10,7 @@ from sequence.exec_trait import Exec
 from providers.python.autograd_program_owner_pyapi_door import program_owner_fields
 from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
 from providers.python.autograd_session_frontend_pyapi_door import ops_session_fields
-from providers.python.autograd_program_arrays_pyapi_door import program_numeric_scalar
+from providers.python.autograd_program_arrays_pyapi_door import program_numeric_scalar, program_builtin_types
 from providers.python.autograd_program_pyapi_door import _program_run_fixed, PROGRAM_RUN_ENTRY
 from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResource
 from autograd.ops_api import ops_session_registry_token
@@ -73,12 +73,16 @@ def _fixed_run_session[KIND: Int](
 def ops_program_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     owner: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
-    var tuple_type = py_type(Python.tuple())
-    if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not tuple_type:
+    # Lane fix-wave2-leftovers: the exact builtin types come from the state
+    # connected at Session setup (was: an empty tuple, a "" str and a 0 int
+    # built per call to read their types).
+    var types = program_builtin_types()
+    var tuple_type = types[].tuple_type
+    if py_type(operation) is not types[].str_type or py_type(args) is not tuple_type:
         raise Error("TypeError: Program requires an exact operation string and argument tuple")
     var fields = program_owner_fields(owner)
     var pid = fields["_id"]
-    var int_type = py_type(PythonObject(0))
+    var int_type = types[].int_type
     if pid is not None and py_type(pid) is not int_type:
         raise Error("TypeError: Program handle requires an exact native integer")
     comptime if not PROGRAM_RUN_ENTRY:

@@ -23,6 +23,14 @@ struct _ProgramArrays(Defaultable, Movable):
     var integer_type: PythonObject
     var mmap_type: PythonObject
     var admission: PythonObject
+    # Lane fix-wave2-leftovers (program-run doubt): the exact builtin types
+    # the per-call admissions compare against, resolved once here instead of
+    # building a throwaway tuple, list, dict or str per call to read its type.
+    var tuple_type: PythonObject
+    var list_type: PythonObject
+    var dict_type: PythonObject
+    var str_type: PythonObject
+    var int_type: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -31,6 +39,11 @@ struct _ProgramArrays(Defaultable, Movable):
         self.integer_type = PythonObject(None)
         self.mmap_type = PythonObject(None)
         self.admission = PythonObject(None)
+        self.tuple_type = PythonObject(None)
+        self.list_type = PythonObject(None)
+        self.dict_type = PythonObject(None)
+        self.str_type = PythonObject(None)
+        self.int_type = PythonObject(None)
 
 
 comptime _PROGRAM_ARRAYS = SharedSlot[_ProgramArrays, "MojolearnProgramArraysV2"]
@@ -47,6 +60,11 @@ def initialize_program_arrays(admission: PythonObject) raises:
         state[].admission = admission
     if not state[].ready:
         state[].builtins = Python.import_module("builtins")
+        state[].tuple_type = state[].builtins.tuple
+        state[].list_type = state[].builtins.list
+        state[].dict_type = state[].builtins.dict
+        state[].str_type = state[].builtins.str
+        state[].int_type = state[].builtins.int
         var numpy = Python.import_module("numpy")
         state[].ndarray = numpy.ndarray
         state[].integer_type = numpy.integer
@@ -59,6 +77,16 @@ def program_admission_context() raises -> PythonObject:
     if state[].admission is None:
         raise Error("TypeError: program native input admission must be connected during package import")
     return state[].admission
+
+
+def program_builtin_types() raises -> UnsafePointer[_ProgramArrays, MutUntrackedOrigin]:
+    """The connected state holding the exact builtin types (`tuple_type`,
+    `list_type`, `dict_type`, `str_type`, `int_type`), resolved once at
+    Session setup (lane fix-wave2-leftovers)."""
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if not state[].ready:
+        raise Error("TypeError: program native input admission must be connected during package import")
+    return state
 
 
 def program_admit_value(value: PythonObject) raises:
