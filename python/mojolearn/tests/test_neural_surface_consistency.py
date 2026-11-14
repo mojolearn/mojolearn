@@ -8,7 +8,7 @@ import inspect
 
 import pytest
 
-from mojolearn import _byte_lm_host, _byte_lm_impl, _mlp_impl
+from mojolearn import _byte_lm_host, _byte_lm_impl
 
 
 def _defaults(fn, names):
@@ -26,7 +26,7 @@ def test_host_trainer_optimizer_defaults_match_the_gpu_trainer():
     assert host == gpu
 
 
-def test_mlp_batch_refuses_a_list_by_type_not_by_shape():
-    # A correctly shaped nested list used to be told "must have shape (batch, 8)".
-    with pytest.raises(TypeError, match="float32 array"):
-        _mlp_impl._batch([[0.0] * 8, [1.0] * 8])
+# test_mlp_batch_refuses_a_list_by_type_not_by_shape exercised the dead Python
+# `_mlp_impl._batch`; the refusal it pinned ("SmallMLPTrainer X must be a
+# float32 array of shape (batch, 8) ... got list") is the native owner's
+# (bindings/small_mlp_native_door.mojo `_batch_in`), lane py-lm-neural.
