@@ -37,11 +37,12 @@ PYEOF
 ) || { say "$rid: $cmd"; continue; }
     mkdir -p "$RES/raw" "$RES/work"
     say "race $rid"; t0=$(date +%s)
-    if [ -n "${PYSPY:-}" ] && "$PYSPY" record --native --rate "$RATE" --format raw --nonblocking -o "$RES/$name.collapsed" -- bash -c "$cmd" > "$RES/$name.log" 2>&1; then
+    if [ -n "${PYSPY:-}" ] && "$PYSPY" record --native --rate "$RATE" --format raw -o "$RES/$name.collapsed" -- bash -c "$cmd" > "$RES/$name.log" 2>&1; then
         mode=py-spy
     else
         say "py-spy failed (tail: $(tail -n 2 "$RES/$name.log" | tr '\n' ' ' | cut -c1-200)); cProfile fallback"
-        bash -c "${cmd/$PY/$PY -m cProfile -o $RES/$name.pstats}" > "$RES/$name.cprof.log" 2>&1; mode=cprofile
+        # the recorded command is "<python> -u <script> ..."; cProfile takes no -u, so it replaces "<python> -u"
+        bash -c "${cmd/$PY -u/$PY -m cProfile -o $RES/$name.pstats}" > "$RES/$name.cprof.log" 2>&1; mode=cprofile
     fi
     say "race $rid done mode=$mode $(( $(date +%s) - t0 )) s; $(grep -h -c -E '^(FSPEED|CTD|ALGOS|NEURAL) ' "$RES/raw"/*/*.log 2>/dev/null | paste -sd+ | bc 2>/dev/null) result lines"
     python3 "$(dirname "$0")/profile_fixed_cost_summary.py" --race "$rid" --collapsed "$RES/$name.collapsed" --pstats "$RES/$name.pstats" --out "$RES/$name.summary.txt" 2>&1 | tail -n 3
