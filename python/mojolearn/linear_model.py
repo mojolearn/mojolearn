@@ -14,16 +14,14 @@ What is still Python here is named at each site: label encoding
 (permitted, O(rows)).
 """
 
-import array
 import numbers
 from . import _portable_math as math
 
 from . import _backend, _mojolearn_estimators
 from ._array import Array
 from ._buffer import (
-    addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
+    addr, addr_ro, view, zeros,
 )
-from ._labels import flatten_labels
 from . import _native_archive_bridge, _native_classical_bridge
 from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
 
@@ -50,28 +48,9 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # ---------------------------------------------------------------------------
 
 
-def _round_f32(v):
-    """`float(np.float32(v))`: ONE round-to-nearest-even of a Python float
-    (binary64) to binary32 and back. `array.array('f')` stores through the C
-    `(float)` cast, which is that rounding; an out-of-range value becomes
-    +-inf exactly as NumPy's `astype(float32)` makes it."""
-    return array.array("f", (float(v),))[0]
-
-
 # `_shape_of` is the conversion layer's `shape_of` (lane migrate-shared-labels):
 # reading an argument's shape is argument checking, the shell's job.
 from ._buffer import shape_of as _shape_of  # noqa: E402
-
-
-def _labels_1d(y):
-    """`y` as a Python list of scalars, plus its shape. Labels may be ints,
-    floats or strings, so this never goes through a float buffer; `tolist()`
-    (ndarray, Array, array.array) or plain iteration. O(rows), which is the
-    one Python loop the contract permits on labels."""
-    shape = _shape_of(y)
-    if len(shape) != 1:
-        return None, shape
-    return flatten_labels(y), shape
 
 
 # The `classes_` ORDER RULE and the label <-> code maps live in
@@ -127,137 +106,17 @@ def _dtype_name(y):
     return f"type {type(y).__name__}"
 
 
-def _accuracy_host(pred, y):
-    """The fraction of rows where `pred == y`: the exact match count of the
-    x_metrics binding's grouped sums (`_expansion_metrics.accuracy_fraction`,
-    on the device on a GPU install) over the row count. Lane pyglue-sweep
-    (Oct 3): this was a Python count over O(rows) labels."""
-    from ._expansion_metrics import accuracy_fraction
-    if len(_shape_of(y)) != 1 or _shape_of(y)[0] != len(pred):
-        raise ValueError(
-            "mojolearn: y must be 1-D with one entry per row of X"
-        )
-    return accuracy_fraction(y, pred)
-
-
 # TOMBSTONE: `_r2_sums` (the Python `_Reg` / `_r2_sums_of` R^2 program; no product caller, its native owners
 # are core/linear_score_program.mojo and bindings/svc_common_door.mojo `svc_r2_sums`) deleted 2026-11-11 by lane
 # pyout-metrics-cnn; code recoverable at 6f82d0255d.
 
 
-# The centering of LinearRegression and Ridge (lane hr-small-passes,
-# 2026-10-02) runs in the estimators binding: `lm_col_sums`, `lm_center`
-# and `lm_scale_rows`, on the device on a GPU install
-# (glm/impl/center_device.mojo) and over the same items on the CPU column
-# (glm/host/center_host.mojo), so every tier writes the same words. `b` is
-# the estimator's `_bind("_mojolearn_estimators")`.
-
-
-def _col_sums(b, x, rows, cols):
-    """The column sums of a C-contiguous float32 `[rows, cols]` buffer: each
-    the EXACT sum rounded once to float64 (round to nearest even), so the
-    blocked device fold and the host pass agree on every vendor
-    (glm/impl/center_items.mojo). Returns a float64 `Array` of `cols`."""
-    out = empty((cols,), "<f8")
-    b.lm_col_sums(addr_ro(x, name="X"), addr(out, name="column sums"),
-                  [int(rows), int(cols)])
-    return out
-
-
-def _means(b, x, rows, cols, total=None):
-    """(float64 means, float32 means) of the columns of a `[rows, cols]`
-    buffer, as two `Array`s: `_col_sums` finished in Mojo
-    (`lm_means_finish`, glm/impl/lm_finish.mojo): sum / rows (one binary64
-    division), and with a `total` then `* rows / total`; the float32 means
-    are one round-to-nearest-even of the float64 ones. A 1-D vector is a
-    `[rows, 1]` matrix here."""
-    sums = _col_sums(b, x, rows, cols)
-    m64, m32 = empty((cols,), "<f8"), empty((cols,), "<f4")
-    b.lm_means_finish(addr(sums, name="column sums"), addr(m64, name="means"),
-                      addr(m32, name="float32 means"),
-                      [int(cols), int(rows), 0 if total is None else 1],
-                      0.0 if total is None else float(total))
-    return m64, m32
-
-
-def _weight_total(b, weights):
-    """`sum(w)`: the exact sum rounded once to float64 (`_col_sums` over a
-    `[rows, 1]` view)."""
-    total = float(_col_sums(b, weights, weights.shape[0], 1)[0])
-    if total <= 0.0:
-        raise ValueError(
-            "mojolearn: sample_weight sums to zero, so the weighted mean "
-            "cuML's preProcessData forms is a division by zero"
-        )
-    return total
-
-
-def _column_means(b, x, weights):
-    """Column means in float64, narrowed to float32 -- weighted when
-    `weights` is not None. Returns a float32 `Array`.
-
-    Unweighted: `_means`. Weighted it is cuML's
-    `raft::stats::weightedMean`, `sum_i w_i x_ij / sum_i w_i`, in THIS
-    ORDER: (1) `wx_ij = fl32(x_ij * w_i)` (`lm_scale_rows`); (2) the
-    column means of `wx`; (3) `mean_j * rows / total` in float64, `total`
-    the weights' `_weight_total`; (4) one narrowing to float32 (steps 2-4
-    are `lm_means_finish`). Theirs divides by the SUM OF THE WEIGHTS and
-    not by the row count, so a uniform weight of 2 leaves the mean
-    unchanged.
-    """
-    rows, cols = x.shape
-    if weights is None:
-        return _means(b, x, rows, cols)[1]
-    total = _weight_total(b, weights)
-    wx = _helper_output(x.shape, rows * cols)
-    b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(weights, name="sample_weight"),
-                    addr(wx, name="weighted X"), [int(rows), int(cols)])
-    return _means(b, wx, rows, cols, total)[1]
-
-
-def _vector_mean(b, v, weights):
-    """(float64 mean, float32 mean `Array` of one) of the target, weighted
-    when `weights` is not None: the 1-D half of `_column_means`."""
-    n = v.shape[0]
-    if weights is None:
-        m64, m32 = _means(b, v, n, 1)
-    else:
-        total = _weight_total(b, weights)
-        wy = _helper_output(v.shape, n)
-        b.lm_scale_rows(addr_ro(v, name="y"), addr_ro(weights, name="sample_weight"),
-                        addr(wy, name="weighted y"), [int(n), 1])
-        m64, m32 = _means(b, wy, n, 1, total)
-    return float(m64[0]), m32
-
-
-def _dims(x):
-    """`(rows, cols)` of a 2-D Array, or `(rows, 1)` of a 1-D one: a vector
-    is a `[rows, 1]` matrix to every helper in this file."""
-    return (x.shape[0], x.shape[1]) if x.ndim == 2 else (x.shape[0], 1)
-
-
-def _helper_output(shape, size):
-    """DEVIATION 2632: the float32 destination of an op that writes EVERY
-    element (`lm_center`, `lm_scale_rows`), taken from
-    `_buffer._output_store`'s uninitialized raw allocation instead of
-    `empty`, whose zero fill cost 105 to 121 ms of a 4,000,000 x 11
-    LinearRegression fit on the H100 pod. No byte of the result comes from
-    the allocation, so no bit moves."""
-    from ._buffer import _output_store
-    return Array._owned(_output_store("f", size), tuple(shape), "<f4", "C")
-
-
-def _center(b, x, mu32):
-    """`x - mu` in float32 per column (`lm_center`): one binary32
-    subtraction per cell, operands and result flushed to signed zero when
-    subnormal; `x` is `[rows, cols]` or a vector with `cols == 1`, `mu32` a
-    float32 `Array` of `cols` means."""
-    rows, cols = _dims(x)
-    mean = mu32
-    out = _helper_output(x.shape, rows * cols)
-    b.lm_center(addr_ro(x, name="X"), addr_ro(mean, name="column means"),
-                addr(out, name="centered X"), [int(rows), int(cols)])
-    return out
+# TOMBSTONE: linear_model `_round_f32`, `_labels_1d`, `_accuracy_host`, `_col_sums`, `_means`,
+# `_weight_total`, `_column_means`, `_vector_mean`, `_dims`, `_helper_output` and `_center` (no product
+# caller: the OLS/Ridge fit, its centering and sample-weight total are core/p3_linear_impl.mojo and
+# bindings/x_linear_native_door.mojo; the score's shape refusal and match count are
+# bindings/svc_common_door.mojo and bindings/logistic_native_door.mojo) deleted 2026-11-14 by lane
+# py-classical-linalg; code recoverable at 9140ed9c6c.
 
 
 # TOMBSTONE: linear_model._check_sample_weight and the module _sample_weight (no product caller:
