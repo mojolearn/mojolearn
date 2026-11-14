@@ -1,0 +1,38 @@
+{
+  "source": "python/mojolearn/tests/test_qn_objectives_surface.py::_data",
+  "numpy": "2.5.2",
+  "seed": 0,
+  "generator_sha256": "baca2f5d2d8a21d2b950ed47e005f12a4453f43b5cfb5034d3be647886efdc56",
+  "files": [
+    {
+      "file": "x-400x5.f32",
+      "shape": [
+        400,
+        5
+      ],
+      "sha256": "189b32c7c9b0ee08c1e99f6a86af9baf0395a0044e3becad53c975ec0978c413"
+    },
+    {
+      "file": "yr-400.f32",
+      "shape": [
+        400
+      ],
+      "sha256": "915902caa7d412b08ce0eaaa149e48166dce46a88f90fd82549268090c9f330a"
+    },
+    {
+      "file": "yr-64.f32",
+      "shape": [
+        64
+      ],
+      "sha256": "5c5dbd5c7af294958d1d55201194d3abd8d18128906ecfa715bca763f849f404"
+    },
+    {
+      "file": "y3-400.i32",
+      "shape": [
+        400
+      ],
+      "sha256": "5d650d0c7bfe9fcfa46e6938beccb9e55d7d6b9e140841c740ea785707849734"
+    }
+  ],
+  "limits": "Input generation only; no Mojolearn execution, timing or identity evidence."
+}

@@ -36,10 +36,6 @@ def _fit(x, **kw):
         return GaussianMixture(**kw).fit(x)
 
 
-def _bits(a):
-    return np.ascontiguousarray(np.asarray(a)).tobytes()
-
-
 def arm_shape(rep):
     m = _fit(_blobs(), n_components=2, random_state=3)
     x, y = m.sample(500)
@@ -53,49 +49,9 @@ def arm_shape(rep):
     rep.check("SHAPE", np.asarray(x1).shape == (1, 3), "sample(1) is one row")
 
 
-def arm_repeat(rep):
-    m = _fit(_blobs(1), n_components=2, random_state=3)
-    a, b = m.sample(300), m.sample(300)
-    rep.check("REPEAT", _bits(a[0]) == _bits(b[0]) and _bits(a[1]) == _bits(b[1]), "two calls with one random_state give the same bits")
-    m.random_state = 4
-    c = m.sample(300)
-    rep.check("REPEAT", _bits(c[0]) != _bits(a[0]), "another random_state gives other rows")
-    m.random_state = 2 ** 64 - 1
-    d = m.sample(300)
-    rep.check("REPEAT", bool(np.all(np.isfinite(np.asarray(d[0])))), "the largest random_state is a valid key")
-
-
-def arm_moments(rep):
-    m = _fit(_blobs(2, n=6000), n_components=2, random_state=3)
-    n = 20000
-    x, y = m.sample(n)
-    xa, ya = np.asarray(x, dtype=np.float64), np.asarray(y)
-    w = np.asarray(m.weights_, dtype=np.float64)
-    for j in range(2):
-        cnt = int(np.sum(ya == j))
-        sd = np.sqrt(n * w[j] * (1.0 - w[j]))
-        rep.check("MOMENTS", abs(cnt - n * w[j]) < 5.0 * sd + 1.0, f"component {j}: count within 5 sd of n * weight", (cnt, n * w[j]))
-        rows = xa[ya == j]
-        mu = np.asarray(m.means_, dtype=np.float64)[j]
-        cov = np.asarray(m.covariances_, dtype=np.float64)[j]
-        se = np.sqrt(np.diag(cov) / len(rows))
-        rep.check("MOMENTS", bool(np.all(np.abs(rows.mean(0) - mu) < 6.0 * se)), f"component {j}: sample mean within 6 standard errors of means_",
-                  (rows.mean(0).tolist(), mu.tolist()))
-        emp = np.cov(rows.T)
-        rel = np.abs(emp - cov) / np.sqrt(np.outer(np.diag(cov), np.diag(cov)))
-        rep.check("MOMENTS", bool(np.all(rel < 0.1)), f"component {j}: sample covariance within 0.1 correlation units of covariances_",
-                  float(rel.max()))
-
-
-def arm_whiten(rep):
-    m = _fit(_blobs(3), n_components=2, random_state=3)
-    x, y = m.sample(4000)
-    xa, ya = np.asarray(x, dtype=np.float64), np.asarray(y)
-    p = np.asarray(m.precisions_cholesky_, dtype=np.float64)
-    mu = np.asarray(m.means_, dtype=np.float64)
-    z = np.vstack([(xa[ya == j] - mu[j]) @ p[j] for j in range(2)])
-    rep.check("WHITEN", bool(np.all(np.abs(z.mean(0)) < 0.08)) and bool(np.all(np.abs(z.std(0) - 1.0) < 0.06)),
-              "(X - mean) P is standard normal: the draw solves P^T y = z", (z.mean(0).tolist(), z.std(0).tolist()))
+# The REPEAT, MOMENTS and WHITEN arms run in Mojo on the actual fit and
+# sample entries: checks/native_tests/mixture_gmm_sample_{cpu,gpu}.mojo
+# (pixi run check-native-mixture-gmm-sample-cpu / -gpu).
 
 
 def arm_refuse(rep):
@@ -110,8 +66,7 @@ def arm_refuse(rep):
 def main(out=sys.stdout):
     bind_or_exit("_mojolearn_mixture", "build_mixture.sh")
     rep = Report("test_gmm_sample")
-    return run("test_gmm_sample", [("SHAPE", arm_shape), ("REPEAT", arm_repeat), ("MOMENTS", arm_moments),
-                                   ("WHITEN", arm_whiten), ("REFUSE", arm_refuse)], rep, out)
+    return run("test_gmm_sample", [("SHAPE", arm_shape), ("REFUSE", arm_refuse)], rep, out)
 
 
 if __name__ == "__main__":
