@@ -133,6 +133,10 @@
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
    "status": "define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits"
   },
+  "mamba12-forward-copies-old": {
+   "define": "MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD",
+   "status": "define in code (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_COPIES_OLD; mamba/impl/mamba_block_program.mojo, bindings/causal_lm_public_door.mojo causal_layer_stateless, bindings/neural_block_public_door.mojo _neural_plain): B = the Mamba-1/2 per-call forward with its per-call plumbing (19 / 28 stage buffers allocated and zero-filled per L > 1 run, Mamba-1 with a constructor wait; the Mamba-2 h_last report copied device-to-device into the entry; forward(x) with no state allocating a host zero state that the call uploads and downloads; y and h_last zero-filled); A = stages held per (B, L[, buf_len]) on the program's step entry and refilled with zeros (rezero), h_last read from the held stages, the stateless call zeroing the state on the device with nothing read back, y and h_last unfilled. Same kernels, same launch order, same bits"
+  },
   "mamba3-forward-zero-fill": {
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
    "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = every Mamba-3 output a native call writes whole zero-filled per call (the forward's y and four reports; since fix-mamba3-unfilled-rest also _m3_state_call's y and reports in bindings/samba_inference_native_door.mojo, the kind-3 session step/decode outputs via _session_output in bindings/mamba_public_native_door.mojo, and the tape prefill y) (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
@@ -1061,6 +1065,21 @@
     "et-device-loop-early-exit"
    ],
    "decides": "promote the early-exit device loop (B) over the host-queue loop (A) only if B is at least as fast on the NVIDIA+AMD average of istella and taxi fit; read with restore-et-device-loop (plain device loop) in the same build; ET output hashes must not move in any arm"
+  },
+  {
+   "id": "fix-mamba12-forward-exec",
+   "source": "fix-mamba12-forward-exec (2026-11-13; history audit hist-neural doubt 5, paper compare of ba08dac006 on the L40S: mamba1-forward 3.43 -> 3.83 ms, mamba2-forward 5.57 -> 6.31 ms vs 0.8.55, STILL-REGRESSED after the restores)",
+   "kind": "ab",
+   "lane": [
+    "mamba1-forward",
+    "mamba2-forward"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mamba12-forward-copies-old"
+   ],
+   "decides": "keep the plumbing removal (A) unless the per-call stages and host state round trip (B, mamba12-forward-copies-old) are at least as fast on the NVIDIA and AMD average; same kernels, digests must not move in either arm"
   },
   {
    "id": "restore-mamba-backward-glue",
