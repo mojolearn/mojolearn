@@ -1537,6 +1537,7 @@ check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 # lane fix-mamba3-unfilled-rest: every Mamba-3 output the doors allocate unfilled is written whole (0xFF vs zero-filled outputs, bit for bit)
 check-native-mamba3-output-coverage-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/mamba3_output_coverage_cpu.mojo"
 check-native-mamba3-output-coverage-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/mamba3_output_coverage_gpu.mojo"
+check-native-mamba12-forward-exec-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/mamba12_forward_exec_gpu.mojo"
 # the tape-assembled Mamba-1/2 backward (autograd/rules_mamba.mojo) against the stored Apple/NVIDIA/AMD digests (mamba/checks/mamba_tape_backward_digests.tsv) and, for Mamba-1, the host oracle word for word
 check-mamba-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_tape_backward_check.mojo"
 check-mamba-step-backward-glue = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_step_backward_glue_check.mojo"
