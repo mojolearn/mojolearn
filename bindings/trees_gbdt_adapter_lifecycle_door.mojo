@@ -30,7 +30,9 @@ from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, records_drop, ContentRecord, content_fields,
     content_object, RECORDS_TREES,
 )
-from bindings.trees_public_gbdt_fit_door import adapter_classifier_fit, adapter_regressor_fit, _adapter_eval
+from bindings.trees_public_gbdt_fit_door import (
+    adapter_classifier_fit, adapter_regressor_fit, _adapter_eval, adapter_new_learner, adapter_validate_params,
+)
 from bindings.trees_public_gbdt_fit_door import gbdt_fit, _tables as _gbdt_tables, _in as _gbdt_in
 from bindings.trees_public_gbdt_door import adapter_decision_function, adapter_predict, adapter_predict_proba
 from bindings.trees_public_gbdt_door import gbdt_predict, gbdt_predict_proba, ordered_rmse_fit, feature_freq_fit
@@ -180,6 +182,14 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     if kind is None:
         raise Error("TypeError: native GBDT lifecycle requires a connected adapter class")
     var native = _context(context)
+    # `_GBDTAdapter._new_learner(mode)` / `_validate_params()` (lane py-trees,
+    # 2026-11-14): the learner the fit builds, before any input or fitted
+    # state is read.
+    if operation == "trees_public_gbdt_adapter_new_learner":
+        return adapter_new_learner(model, args[0], native)
+    if operation == "trees_public_gbdt_adapter_validate_params":
+        adapter_validate_params(model, native)
+        return PythonObject(None)
     var fields = _adapter_state(model, native)
     if operation == "trees_public_gbdt_adapter_is_fitted":
         return tree_is_fitted(model, False)
