@@ -3,9 +3,12 @@
 fix-transformer-decode-door, 2026-11-13), on a GPU column.
 
 The door (providers/python/transformer_decode_pyapi_door.mojo) now holds a
-registry decode session and reaches it through the CausalLM session table:
-CAUSAL_SESSION_DECODE_STEP once per token, CAUSAL_SESSION_DECODE_RUN for the
-resident N-token loop (`AttnStepArm.decode`). Case 0 decodes 8 tokens per row
+registry decode session and reaches it through the CausalLM session table,
+on a lease it takes once (CAUSAL_SESSION_DECODE_PIN; hot-path audit
+2026-11-13): CAUSAL_SESSION_DECODE_PINNED with kind STEP once per token,
+kind RUN for the resident N-token loop (`AttnStepArm.decode`). Case 2: the
+pin outlives the registry handle (close, then a pinned step is refused as not
+open, then UNPIN). Case 0 decodes 8 tokens per row
 both ways on two sessions opened on the same small random weights and zero
 caches and requires the outputs and both caches to be the same bits, token
 for token; then 4 more tokens both ways (the per-token arm's position word
@@ -23,11 +26,12 @@ from core.causal_lm_entry_table import CausalEntryKey, causal_entry_vendor
 from core.causal_lm_entry_table_sessions import (
     causal_sessions_ref, causal_sessions_call, CAUSAL_SESSIONS_TRANSFORMER,
     CAUSAL_SESSION_DECODE_CREATE, CAUSAL_SESSION_DECODE_OPEN, CAUSAL_SESSION_DECODE_EXPORT,
-    CAUSAL_SESSION_DECODE_CLOSE, CAUSAL_SESSION_DECODE_STEP, CAUSAL_SESSION_DECODE_RUN,
+    CAUSAL_SESSION_DECODE_CLOSE, CAUSAL_SESSION_DECODE_PIN, CAUSAL_SESSION_DECODE_UNPIN,
+    CAUSAL_SESSION_DECODE_PINNED, CAUSAL_DECODE_PINNED_STEP, CAUSAL_DECODE_PINNED_RUN,
 )
 from transformer.causal_entry_device import publish_causal_transformer_device
 
-comptime TRANSFORMER_DECODE_DOOR_CASES = 2
+comptime TRANSFORMER_DECODE_DOOR_CASES = 3
 comptime _B = 2
 comptime _D = 16
 comptime _NH = 2
@@ -53,6 +57,16 @@ def _key() raises -> CausalEntryKey:
 def _t(op: Int, a: List[Int], words: List[Int]) raises -> Int:
     return causal_sessions_call(causal_sessions_ref(CAUSAL_SESSIONS_TRANSFORMER, _key()), op, a, words,
                                 List[Float64]())
+
+
+def _pin(h: Int) raises -> Int:
+    var pin = _t(CAUSAL_SESSION_DECODE_PIN, List[Int](), [h])
+    require(pin != 0, "decode pin returned 0")
+    return pin
+
+
+def _unpin(pin: Int) raises:
+    _ = _t(CAUSAL_SESSION_DECODE_UNPIN, List[Int](), [pin])
 
 
 def _fill(mut values: List[Float32], mut seed: UInt64, scale: Float32, offset: Float32):
@@ -115,8 +129,8 @@ def _steps(h: Int, x: List[Float32], mut y: List[Float32], n: Int, start: Int) r
             for j in range(_D):  # small-loop(fixture gather: sixteen features)
                 xt[b * _D + j] = x[(b * n + t) * _D + j]
         var a: List[Int] = [Int(xt.unsafe_ptr()), Int(yt.unsafe_ptr())]
-        var words: List[Int] = [h, start + t]
-        var cached = _t(CAUSAL_SESSION_DECODE_STEP, a, words)
+        var words: List[Int] = [h, CAUSAL_DECODE_PINNED_STEP, 0, start + t]
+        var cached = _t(CAUSAL_SESSION_DECODE_PINNED, a, words)
         require(cached == start + t + 1, "step returned cached_tokens " + String(cached))
         for b in range(_B):  # small-loop(fixture scatter: two rows)
             for j in range(_D):  # small-loop(fixture scatter: sixteen features)
@@ -128,8 +142,8 @@ def _steps(h: Int, x: List[Float32], mut y: List[Float32], n: Int, start: Int) r
 def _run(h: Int, x: List[Float32], mut y: List[Float32], n: Int, start: Int) raises:
     # The resident loop: one RUN call for all n tokens.
     var a: List[Int] = [Int(x.unsafe_ptr()), Int(y.unsafe_ptr())]
-    var words: List[Int] = [h, n, start]
-    var cached = _t(CAUSAL_SESSION_DECODE_RUN, a, words)
+    var words: List[Int] = [h, CAUSAL_DECODE_PINNED_RUN, n, start]
+    var cached = _t(CAUSAL_SESSION_DECODE_PINNED, a, words)
     require(cached == start + n, "decode run returned cached_tokens " + String(cached))
     _ = x
     _ = y
@@ -151,8 +165,12 @@ def case(unit: Int) raises:
     var block = _Block()
     var kc = List[Float32](length=block.cache_n, fill=0)
     var vc = List[Float32](length=block.cache_n, fill=0)
-    var stepped = _open(block, kc, vc)
-    var resident = _open(block, kc, vc)
+    var stepped_h = _open(block, kc, vc)
+    var resident_h = _open(block, kc, vc)
+    # `_steps` / `_run` take the pin word (the door's per-token route)
+    var stepped = _pin(stepped_h)
+    var resident = _pin(resident_h)
+    var closed = False
     try:
         if unit == 0:
             var seed: UInt64 = 7
@@ -172,27 +190,46 @@ def case(unit: Int) raises:
             _run(stepped, more, m_step, _MORE, _N)
             _run(resident, more, m_run, _MORE, _N)
             _same(m_step, m_run, "4 more tokens after 8 steps vs after one decode")
-            var ks = _export(stepped, block.cache_n)
-            var kr = _export(resident, block.cache_n)
+            var ks = _export(stepped_h, block.cache_n)
+            var kr = _export(resident_h, block.cache_n)
             _same(ks[0], kr[0], "key cache")
             _same(ks[1], kr[1], "value cache")
-        else:
+        elif unit == 1:
             var xt = List[Float32](length=_B * _D, fill=1)
             var yt = List[Float32](length=_B * _D, fill=0)
             var a: List[Int] = [Int(xt.unsafe_ptr()), Int(yt.unsafe_ptr())]
-            var wrong: List[Int] = [stepped, 3]
+            var wrong: List[Int] = [stepped, CAUSAL_DECODE_PINNED_STEP, 0, 3]
             try:
-                _ = _t(CAUSAL_SESSION_DECODE_STEP, a, wrong)
+                _ = _t(CAUSAL_SESSION_DECODE_PINNED, a, wrong)
                 raise Error("a step at the wrong position was not refused")
             except problem:
                 require("the caller believes cached_tokens = 3" in String(problem), "unexpected refusal: " + String(problem))
-            var right: List[Int] = [stepped, 0]
-            require(_t(CAUSAL_SESSION_DECODE_STEP, a, right) == 1, "the session was not usable after a refused step")
+            var right: List[Int] = [stepped, CAUSAL_DECODE_PINNED_STEP, 0, 0]
+            require(_t(CAUSAL_SESSION_DECODE_PINNED, a, right) == 1, "the session was not usable after a refused step")
+            _ = xt
+            _ = yt
+        else:
+            # The pin outlives the handle: after CLOSE (handle released), a
+            # pinned step is refused as not open, never a freed read.
+            _ = _t(CAUSAL_SESSION_DECODE_CLOSE, List[Int](), [stepped_h])
+            _ = _t(CAUSAL_SESSION_DECODE_CLOSE, List[Int](), [resident_h])
+            closed = True
+            var xt = List[Float32](length=_B * _D, fill=1)
+            var yt = List[Float32](length=_B * _D, fill=0)
+            var a: List[Int] = [Int(xt.unsafe_ptr()), Int(yt.unsafe_ptr())]
+            try:
+                _ = _t(CAUSAL_SESSION_DECODE_PINNED, a, [stepped, CAUSAL_DECODE_PINNED_STEP, 0, 0])
+                raise Error("a pinned step on a closed session was not refused")
+            except problem:
+                require("not open" in String(problem), "unexpected refusal: " + String(problem))
             _ = xt
             _ = yt
     finally:
-        _ = _t(CAUSAL_SESSION_DECODE_CLOSE, List[Int](), [stepped])
-        _ = _t(CAUSAL_SESSION_DECODE_CLOSE, List[Int](), [resident])
+        if not closed:
+            _ = _t(CAUSAL_SESSION_DECODE_CLOSE, List[Int](), [stepped_h])
+            _ = _t(CAUSAL_SESSION_DECODE_CLOSE, List[Int](), [resident_h])
+        _unpin(stepped)
+        _unpin(resident)
     _ = block
     _ = kc
     _ = vc

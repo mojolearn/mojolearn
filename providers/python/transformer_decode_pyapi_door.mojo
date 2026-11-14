@@ -31,8 +31,9 @@ from core.causal_lm_entry_table import CausalEntryKey, causal_entry_vendor
 from core.causal_lm_entry_table_sessions import (
     causal_sessions_ref, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_DECODE_CREATE, CAUSAL_SESSION_DECODE_OPEN,
     CAUSAL_SESSION_DECODE_OPEN15, CAUSAL_SESSION_DECODE_EXPORT, CAUSAL_SESSION_DECODE_LOAD,
-    CAUSAL_SESSION_DECODE_CLOSE, CAUSAL_SESSION_DECODE_STEP, CAUSAL_SESSION_DECODE_RUN,
-    CAUSAL_SESSION_DECODE_FORWARD,
+    CAUSAL_SESSION_DECODE_CLOSE, CAUSAL_SESSION_DECODE_PIN, CAUSAL_SESSION_DECODE_UNPIN,
+    CAUSAL_SESSION_DECODE_PINNED, CAUSAL_DECODE_PINNED_STEP, CAUSAL_DECODE_PINNED_RUN,
+    CAUSAL_DECODE_PINNED_FORWARD,
 )
 
 
@@ -107,6 +108,12 @@ struct TransformerDecodeHandle(Movable, Writable):
     # and the per-token-door arm keep 0).
     var entry: EntryRef
     var word: Int
+    # Hot-path audit 2026-11-13: the door's lease on that session
+    # (CAUSAL_SESSION_DECODE_PIN), taken once right after create and dropped
+    # only when this handle is destroyed (an in-flight call on another thread
+    # holds this handle, so the lease outlives it). Every step / decode /
+    # forward runs on it: no registry lookup per token. 0: none.
+    var pin: Int
 
     def __init__(out self, binding: PythonObject, block: PythonObject, state: PythonObject):
         self.binding = binding
@@ -131,6 +138,7 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.tail_content = ContentRecord()
         self.entry = entry_ref_unresolved()
         self.word = 0
+        self.pin = 0
 
     def __deinit__(deinit self):
         # A registry session the Python owner never closed (an open that
@@ -140,6 +148,12 @@ struct TransformerDecodeHandle(Movable, Writable):
         if self.word != 0:
             try:
                 _transformer_decode_native_close(self.entry, self.word)
+            except:
+                pass
+        if self.pin != 0:
+            try:
+                var words: List[Int] = [self.pin]
+                _ = _transformer_decode_native_lists(self.entry, CAUSAL_SESSION_DECODE_UNPIN, List[Int](), words)
             except:
                 pass
 
@@ -277,23 +291,19 @@ def _transformer_decode_native_close(entry: EntryRef, word: Int) raises:
     _ = _transformer_decode_native_lists(entry, CAUSAL_SESSION_DECODE_CLOSE, List[Int](), words)
 
 
-def _transformer_decode_native_run(entry: EntryRef, op: Int, px: Int, py: Int, word: Int, count: Int, cached: Int) raises -> Int:
-    # The per-token call (CAUSAL_SESSION_DECODE_STEP: count 0) and the
-    # N-token / L-token calls (RUN / FORWARD): one indirect call over
-    # envelopes on this frame (no heap, no Python object), GIL released.
+def _transformer_decode_native_run(entry: EntryRef, kind: Int, px: Int, py: Int, pin: Int, count: Int, cached: Int) raises -> Int:
+    # The per-token call (CAUSAL_DECODE_PINNED_STEP: count 0) and the
+    # N-token / L-token calls (RUN / FORWARD) on the pinned session: one
+    # indirect call over envelopes on this frame, GIL released. The session
+    # image reads them in place (no native List, no registry lookup, no lock:
+    # transformer/causal_session_entry.mojo `_decode_pinned`).
     var a: Array[Int, 2] = [px, py]
     var f: Array[Float64, 0] = []
+    var p: Array[Int, 4] = [pin, kind, count, cached]
     var result = 0
-    if op == CAUSAL_SESSION_DECODE_STEP:
-        var p: Array[Int, 2] = [word, cached]
-        with GILReleased(Python()):
-            result = entry_ref_call(entry, op, a, p, f)
-        _ = p
-    else:
-        var p: Array[Int, 3] = [word, count, cached]
-        with GILReleased(Python()):
-            result = entry_ref_call(entry, op, a, p, f)
-        _ = p
+    with GILReleased(Python()):
+        result = entry_ref_call(entry, CAUSAL_SESSION_DECODE_PINNED, a, p, f)
+    _ = p
     _ = a
     _ = f
     return result
@@ -676,6 +686,10 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
             # closes the handle when `handle` is destroyed (its __deinit__).
             handle.entry = causal_sessions_ref(CAUSAL_SESSIONS_TRANSFORMER, _transformer_decode_native_key(binding))
             handle.word = _transformer_decode_native_lists(handle.entry, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int]())
+            # Resolve the session once (hot-path audit 2026-11-13): the lease
+            # every per-token call runs on, dropped by the handle's __deinit__.
+            var pin_words: List[Int] = [handle.word]
+            handle.pin = _transformer_decode_native_lists(handle.entry, CAUSAL_SESSION_DECODE_PIN, List[Int](), pin_words)
             var open_words: List[Int] = [handle.word]
             for i in range(len(open_p)):  # driver-loop: resident shape words after the handle
                 open_words.append(open_p[i])
@@ -764,10 +778,11 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
     var native_word = h[].word
     if native_word != 0:
         # Default arm: one native call through the session table per step
-        # (or per decode / forward call); no Python call, no Python lists.
+        # (or per decode / forward call) on the pinned session; no Python
+        # call, no Python lists, no registry lookup.
         var entry = h[].entry
-        var op = CAUSAL_SESSION_DECODE_RUN if decode else (CAUSAL_SESSION_DECODE_STEP if step else CAUSAL_SESSION_DECODE_FORWARD)
-        cached = _transformer_decode_native_run(entry, op, px, py, native_word, length, cached)
+        var kind = CAUSAL_DECODE_PINNED_RUN if decode else (CAUSAL_DECODE_PINNED_STEP if step else CAUSAL_DECODE_PINNED_FORWARD)
+        cached = _transformer_decode_native_run(entry, kind, px, py, h[].pin, length, cached)
     elif h[].device is not None and decode:
         # The provider descriptor wraps the same session object; the decode
         # entry is called on it directly.

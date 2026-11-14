@@ -56,9 +56,18 @@ comptime CAUSAL_SESSION_PROGRAM_RELEASE = 13  # words [h]
 # registry decode session, so the public door reaches them natively (no Python
 # call into the GPU binding per token). The position is the caller's belief,
 # refused on a mismatch as the former session entries refused it.
-comptime CAUSAL_SESSION_DECODE_STEP = 14      # a: [x, y] (B * d_model); words [h, cached] -> cached
-comptime CAUSAL_SESSION_DECODE_RUN = 15       # a: [x, y] (B * N * d_model); words [h, N, cached] -> cached
-comptime CAUSAL_SESSION_DECODE_FORWARD = 16   # a: [x, y] (B * L * d_model); words [h, L, cached] -> cached
+# Hot-path audit 2026-11-13 (BLOCK causal_session_entry.mojo:165): the door
+# resolves its session ONCE, at open (PIN: a lease on the session, held by the
+# door's handle until the handle is destroyed), and every step / decode /
+# forward runs on the pinned session (PINNED): no registry lookup or lock, no
+# native List built per token. UNPIN drops the lease.
+comptime CAUSAL_SESSION_DECODE_PIN = 14       # words [h] -> pin word (a lease on the session)
+comptime CAUSAL_SESSION_DECODE_UNPIN = 15     # words [pin]: drop the lease
+comptime CAUSAL_SESSION_DECODE_PINNED = 16    # a: [x, y]; words [pin, kind, count, cached] -> cached
+#: `kind` of CAUSAL_SESSION_DECODE_PINNED (count is unused by a step).
+comptime CAUSAL_DECODE_PINNED_STEP = 0        # x, y: B * d_model
+comptime CAUSAL_DECODE_PINNED_RUN = 1         # x, y: B * N * d_model, count N
+comptime CAUSAL_DECODE_PINNED_FORWARD = 2     # x, y: B * L * d_model, count L
 
 
 def causal_session_handle_word(handle: StateHandle) raises -> Int:

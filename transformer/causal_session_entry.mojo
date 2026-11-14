@@ -15,7 +15,7 @@ handle. Numerical session bodies are untouched.
 The registries are named per tier: an identical and a fast image in one
 process never share session storage.
 """
-from std.memory import ArcPointer
+from std.memory import ArcPointer, alloc
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.state_registry import StateRegistry
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -28,10 +28,10 @@ from core.causal_lm_entry_table_sessions import (
     CAUSAL_SESSION_DECODE_EXPORT, CAUSAL_SESSION_DECODE_LOAD, CAUSAL_SESSION_DECODE_CLOSE,
     CAUSAL_SESSION_LM_CREATE, CAUSAL_SESSION_LM_OPEN, CAUSAL_SESSION_LM_OPEN15, CAUSAL_SESSION_LM_RUN,
     CAUSAL_SESSION_LM_FORWARD, CAUSAL_SESSION_LM_CLOSE, CAUSAL_SESSION_PROGRAM_READ, CAUSAL_SESSION_PROGRAM_RELEASE,
-    CAUSAL_SESSION_DECODE_STEP, CAUSAL_SESSION_DECODE_RUN, CAUSAL_SESSION_DECODE_FORWARD,
+    CAUSAL_SESSION_DECODE_PIN, CAUSAL_SESSION_DECODE_UNPIN, CAUSAL_SESSION_DECODE_PINNED,
 )
 from transformer.transformer_binding_impl import TransformerDecodeSession, CausalLMSession
-from transformer.native_decode_dispatch import transformer_decode_operation
+from transformer.native_decode_dispatch import transformer_decode_operation, transformer_decode_reserved_run
 from transformer.native_lm_resident_dispatch import transformer_lm_resident_operation
 from transformer.causal_program_entry import causal_program_operation
 
@@ -52,9 +52,6 @@ comptime _DECODE_OPEN15 = 4
 comptime _DECODE_EXPORT = 7
 comptime _DECODE_LOAD = 8
 comptime _DECODE_CLOSE = 9
-comptime _DECODE_STEP = 10
-comptime _DECODE_RUN = 11
-comptime _DECODE_FORWARD = 12
 comptime _LM_RESERVE = 25
 comptime _LM_UNRESERVE = 26
 comptime _LM_OPEN = 27
@@ -63,6 +60,11 @@ comptime _LM_CLOSE = 29
 comptime _GROUP_RESERVE = 30
 comptime _GROUP_RELEASE = 31
 comptime _GROUP_EXECUTE = 32
+
+#: A door's lease on one decode session (CAUSAL_SESSION_DECODE_PIN): a heap
+#: box holding a copy of the registry's Arc, so the session stays alive while
+#: the door's handle holds the pin word, whatever the registry does.
+comptime _DecodePin = UnsafePointer[ArcPointer[TransformerDecodeSession], MutUntrackedOrigin]
 
 
 def _decode_address(lease: ArcPointer[TransformerDecodeSession]) -> Int:
@@ -156,18 +158,15 @@ def causal_session_operation(op: Int, a: List[Int], words: List[Int], f: List[Fl
         if op == CAUSAL_SESSION_DECODE_EXPORT:
             return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_EXPORT, a, scalars)
         return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_LOAD, a, scalars)
-    if op == CAUSAL_SESSION_DECODE_STEP or op == CAUSAL_SESSION_DECODE_RUN or op == CAUSAL_SESSION_DECODE_FORWARD:
-        # Lane fix-transformer-decode-door: the public decode session's
-        # per-token step, resident decode and forward (reserve, run,
-        # unreserve, as the former binding entries' busy protocol).
-        if len(f) != 0:
-            raise Error("causal lm sessions: unexpected floating scalars")
-        var lease = DECODE_SESSIONS.acquire(handle)
-        if op == CAUSAL_SESSION_DECODE_STEP:
-            return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_STEP, a, scalars)
-        if op == CAUSAL_SESSION_DECODE_RUN:
-            return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_RUN, a, scalars)
-        return _decode_reserved(lease, _DECODE_RESERVE_OPEN, _DECODE_FORWARD, a, scalars)
+    if op == CAUSAL_SESSION_DECODE_PIN:
+        # Once per door handle (at its open): the lease the door's per-token
+        # calls run on (`_decode_pinned`), dropped by UNPIN when the door's
+        # handle is destroyed.
+        if len(a) != 0 or len(scalars) != 0 or len(f) != 0:
+            raise Error("causal lm sessions: invalid pin descriptor")
+        var box = alloc[ArcPointer[TransformerDecodeSession]](1)
+        box.unsafe_write(DECODE_SESSIONS.acquire(handle))
+        return Int(box)
     if op == CAUSAL_SESSION_DECODE_CLOSE:
         if len(a) != 0 or len(scalars) != 0 or len(f) != 0:
             raise Error("causal lm sessions: invalid close descriptor")
@@ -216,9 +215,44 @@ def causal_session_operation(op: Int, a: List[Int], words: List[Int], f: List[Fl
     raise Error("causal lm sessions: unknown operation")
 
 
+def _decode_unpin(pin: Int) raises:
+    if pin == 0:
+        raise Error("causal lm sessions: null decode pin")
+    var box = _DecodePin(unsafe_from_address=pin)
+    box.unsafe_deinit_pointee()
+    box.free()
+
+
+def _decode_pinned(pin: Int, kind: Int, count: Int, cached: Int, x: Int, y: Int) raises -> Int:
+    # The door's per-token step (and its decode / forward) on the session its
+    # pin leases: typed words, no registry lookup, no lock, no List.
+    if pin == 0:
+        raise Error("causal lm sessions: null decode pin")
+    var box = _DecodePin(unsafe_from_address=pin)
+    return transformer_decode_reserved_run(box[][], kind, x, y, count, cached)
+
+
 def causal_sessions_transformer_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                                    result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
+        if op == CAUSAL_SESSION_DECODE_PINNED or op == CAUSAL_SESSION_DECODE_UNPIN:
+            # Hot-path audit 2026-11-13: read the caller's envelopes in place
+            # (two address words, four or one scalar words), no native List.
+            if result == 0:
+                raise Error("causal lm sessions native ABI: null result")
+            var words = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
+            if op == CAUSAL_SESSION_DECODE_UNPIN:
+                if na != 0 or np != 1 or nf != 0 or pp == 0:
+                    raise Error("causal lm sessions: invalid unpin descriptor")
+                _decode_unpin(words[0])
+                MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = 0
+                return 0
+            if na != 2 or np != 4 or nf != 0 or aa == 0 or pp == 0:
+                raise Error("causal lm sessions: a pinned decode call takes [x, y] and [pin, kind, count, cached]")
+            var buffers = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = _decode_pinned(
+                words[0], words[1], words[2], words[3], buffers[0], buffers[1])
+            return 0
         if op < 0 or op >= CAUSAL_SESSIONS_OPERATIONS or na < 0 or na > 4096 or np < 0 or np > 4096 or nf < 0 or nf > 64:
             raise Error("causal lm sessions native ABI: unknown operation or span")
         if result == 0:
