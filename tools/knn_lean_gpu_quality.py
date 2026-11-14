@@ -23,6 +23,9 @@ def _sha(mod):
 def _knn(out):
     import mojolearn as ml
     from mojolearn import _backend
+    # The NaN-cell walk this tool reads is the frozen former method (the package
+    # deleted it: KNNImputer's public methods are one native call each).
+    from mojolearn.tests._legacy_neighbors_loc import LegacyKNNImputer
     b = _backend.binding("_mojolearn_x_neighbors", "fast")
     reach = int(getattr(b, "x_neighbors_nc_fit_lean", lambda: 0)())
     rng = np.random.default_rng(72)
@@ -39,7 +42,7 @@ def _knn(out):
             out[f"k{i}_{int(keep)}_valid"] = np.array(m._valid, dtype=np.int8)
             out[f"k{i}_{int(keep)}_miss"] = np.array(m._miss_cols, dtype=np.int32)
         # independent: the fit's column flags are numpy's NaN counts
-        _, got_cm, got_total = m._nan_cells(m._masked(X), 1)
+        _, got_cm, got_total = LegacyKNNImputer._nan_cells(m, LegacyKNNImputer._masked(m, X), 1)
         out[f"k{i}_column_counts"] = np.array(got_cm, dtype=np.int32)
         out[f"k{i}_total"] = np.array([got_total], dtype=np.int32)
         cm = np.isnan(X).sum(axis=0)
@@ -74,7 +77,7 @@ def _knn(out):
                            [0, X.shape[1], 1], [])
             cols, total = cm, int(info[0])
         else:
-            _, cols, total = m._nan_cells(m._masked(X), 1)
+            _, cols, total = LegacyKNNImputer._nan_cells(m, LegacyKNNImputer._masked(m, X), 1)
         ref = np.isnan(X).sum(axis=0)
         assert np.array_equal(cols, ref) and total == int(ref.sum())
         out[f"edge{i}_columns"] = np.array(cols, dtype=np.int32)
