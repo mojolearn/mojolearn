@@ -375,6 +375,9 @@ def _basic_block(k: Int) raises:
         _ = dxd^
     else:
         conv_run_add(entry, addr(dx1), addr(gp), addr(dx), len(dx))
+    # The add reads dx1 by address; its last named use is that `addr(dx1)` argument, so Mojo freed it
+    # before the add ran and dx word 0 came from freed heap (NaN in block 0, 2.243 in block 1).
+    _ = dx1^
     # the float64 reference of the same block (bn: gamma 1, beta 0, batch statistics)
     var ones = List[Float64](length=planes, fill=1.0)
     var nulls = List[Float64](length=planes, fill=0.0)
