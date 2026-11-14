@@ -269,4 +269,8 @@ def run_cases(column: Column, mut report: Report):
 
 
 def register() -> Check:
-    return Check("optimizer_maximize", cpu=True, gpu=True, serial="", run=run_cases)
+    # Serial: the host state slots live in the process-global HOST_OPT_POOL, which host_open appends to without a
+    # lock (training/host/optimizer_public_host.mojo:51-63); parallel fixtures raced it (index 3 out of bounds at
+    # optimizer_public_host.mojo:141 on the GitHub CPU run of 384d53115c).
+    return Check("optimizer_maximize", cpu=True, gpu=True,
+                 serial="fixtures share the process-global host optimizer slot pool", run=run_cases)
