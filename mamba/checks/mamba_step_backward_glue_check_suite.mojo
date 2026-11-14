@@ -28,6 +28,7 @@ from mamba.impl.modeling.modeling_mamba import (
 )
 from mamba.impl.modules.mamba2 import Mamba2DeviceWeights, allocate_inference_cache, _m2_weight_sizes
 from autograd.rules_mamba import (
+    Mamba1HandBuffers,
     Mamba1TapeStack,
     Mamba2TapeStack,
     mamba1_step_forward,
@@ -102,7 +103,10 @@ def _m1_arm(ctx: DeviceContext, w: MambaWeights, x: List[Float32], dy: List[Floa
     var at = _offsets(sizes)
     var d_w = mamba_zeros(ctx, _total(sizes))
     if hand:
-        mamba1_step_backward_hand(S, _addr(d_out), _addr(d_x), _addr(d_w), at)
+        # lane fix-wave2-leftovers: the hand chain's six intermediates in a
+        # held set (the step op keeps one across steps).
+        var held = List[Mamba1HandBuffers]()
+        mamba1_step_backward_hand(S, held, _addr(d_out), _addr(d_x), _addr(d_w), at)
     else:
         mamba1_step_backward_tape(S, _addr(d_out), _addr(d_x), _addr(d_w), at)
     ctx.synchronize()

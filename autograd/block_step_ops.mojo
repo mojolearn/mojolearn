@@ -100,7 +100,7 @@ from transformer.lean_stages import _lean_for
 from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 from autograd.rules_mamba import (
-    Mamba1TapeStack, Mamba2TapeStack, mamba1_step_forward, mamba1_step_backward, mamba2_step_forward,
+    Mamba1HandBuffers, Mamba1TapeStack, Mamba2TapeStack, mamba1_step_forward, mamba1_step_backward, mamba2_step_forward,
     mamba2_step_backward,
 )
 from autograd.rules_mamba3 import mamba3_step_backward
@@ -454,6 +454,11 @@ struct _M1Block(Movable):
     #: the backward reads it
     var train_l: Int
     var train: Optional[Mamba1TapeStack]
+    #: lane fix-wave2-leftovers (audit NOTE rules_mamba.mojo:959): the hand
+    #: backward's six intermediates, kept across recorded runs and backward
+    #: calls (rebuilt when (B, L) changes; `drop_training` keeps them: they
+    #: hold no recorded values). Empty until the first hand backward.
+    var hand: List[Mamba1HandBuffers]
 
     def __init__(out self, ctx: DeviceContext, ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, b: Int, dm: Int) raises:
         var dims = MambaDims.of(dm)
@@ -471,6 +476,7 @@ struct _M1Block(Movable):
         self.held_n = 0
         self.train_l = 0
         self.train = None
+        self.hand = List[Mamba1HandBuffers]()
         self.arena_w = aw^
         self.arena_s = as_^
         self.w = dw^
@@ -2080,7 +2086,7 @@ def mamba_step_backward(
                 var ints: List[Int] = [sc.m1[i].b, sc.m1[i].dm]
                 var at = block_offsets(block_weight_sizes(code, ints), block_guard(code))
                 ref blk = sc.m1[i]
-                mamba1_step_backward(blk.train.value(), d_out, d_x, d_w, at)
+                mamba1_step_backward(blk.train.value(), blk.hand, d_out, d_x, d_w, at)
                 return
     elif code == OPS_M2_STEP:
         for i in range(len(sc.m2)):  # driver-loop: over resident Mamba-2 blocks
