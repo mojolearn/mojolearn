@@ -32,7 +32,8 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records
-from bindings.prep_encode_prog_run import EncProgram, OUT_MIN_WORDS, OUT_MARK
+from bindings.prep_encode_prog_run import (
+    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_sel, enc_bad_rows_stages, enc_assign_fold_i64, enc_check_train_i64)
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -132,11 +133,7 @@ comptime OP_CAT_PACK = 161
 comptime OP_UNIQUE_INVERSE = 177
 comptime OP_RGATHER = 204
 comptime OP_SMROWS = 205
-comptime OP_SEL_COUNT = 206
-comptime OP_SEL_SCAN = 207
-comptime OP_SEL_WRITE = 208
 comptime OP_TRANSPOSE = 209
-comptime OP_ROWFLAG = 210
 comptime OP_WBLK = 230
 comptime OP_WSCAN = 231
 comptime OP_WDRAW = 232
@@ -341,36 +338,6 @@ def _cs(mut p: EncProg, mode: PythonObject, entries: PythonObject, xo: Int, n: I
             _stage(p.prog.program, OP_COLB_VAR, d, ss, nb, d, out_buf)
     else:
         _stage(p.prog.program, OP_COL_STATS, d, xo, n, d, out_buf)
-
-
-def _sel_chunks(n: Int) -> Tuple[Int, Int]:
-    # `_p2m_chunks(n)`: (rows a chunk, chunks).
-    var ch = max(SEL_CHUNKS, (n + SEL_CHUNKS - 1) // SEL_CHUNKS, (n + 16777215) // 16777216, 1)
-    return (ch, max(1, (n + ch - 1) // ch))
-
-
-def _sel(mut p: EncProg, xo: Int, n: Int, d: Int, mode: Int, dst: Int) -> Int:
-    """`_p2m_sel`: per column of the (n, d) block at xo, the selected rows
-    (mode 0: the non-NaN words; 1: the positive rows' indices) ascending at
-    dst + j*n. Returns the offset of the d int32 counts."""
-    var chunks = _sel_chunks(n)
-    var ch = chunks[0]
-    var nch = chunks[1]
-    var cnt = p.alloc(d * nch)
-    var tot = p.alloc(d)
-    _stage(p.prog.program, OP_SEL_COUNT, d * nch, xo, n, d, ch, nch, mode, cnt)
-    _stage(p.prog.program, OP_SEL_SCAN, d, cnt, nch, tot)
-    _stage(p.prog.program, OP_SEL_WRITE, d * nch, xo, n, d, ch, nch, mode, cnt, dst)
-    return tot
-
-
-def _bad_rows_stages(mut p: EncProg, codes: Int, n: Int, d: Int, bad: Int, strict: Int) -> Tuple[Int, Int]:
-    # `_bad_rows_stages`: (ROWS, TOT) of the rows holding a `bad` code (in a
-    # column whose `strict` word is nonzero, when given).
-    var flags = p.alloc(n)
-    var rows = p.alloc(n)
-    _stage(p.prog.program, OP_ROWFLAG, n, codes, n, d, bad, strict, flags)
-    return (rows, _sel(p, flags, n, 1, 1, rows))
 
 
 def _bad_rows(ran: PythonObject, staged: Tuple[Int, Int], limit: Int) raises -> List[Int]:
@@ -681,7 +648,7 @@ def _check_weights(source: PythonObject, n: Int, who: String, context: PythonObj
     var st = p.alloc(6)
     _cs(p, mode, entries, wo, n, 1, st, False)
     var rows = p.alloc(n)
-    var pos = _sel(p, wo, n, 1, 1, rows)
+    var pos = enc_sel(p.prog, wo, n, 1, 1, rows)
     var ran = p.run(entries, context)
     var count = _word(ran, st)
     var low = _word(ran, st + 3)
@@ -822,7 +789,7 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
             if m < n:
                 wo = p.put(w.value(), n)
                 var ro = p.alloc(n)
-                _ = _sel(p, wo, n, 1, 1, ro)
+                _ = enc_sel(p.prog, wo, n, 1, 1, ro)
                 var xz = p.alloc(m * d)
                 _stage(p.prog.program, OP_RGATHER, m * d, xo, d, ro, xz)
                 _cs(p, mode, entries, xz, m, d, stw)
@@ -960,7 +927,7 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
     var out = p.output(n * d, entries)
     var eo2 = p.put_fitted(model, "_edges", fields["_edges"], context)
     _stage(p.prog.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
-    var staged = _bad_rows_stages(p, codes, n, d, bad_code, NONE)
+    var staged = enc_bad_rows_stages(p.prog, codes, n, d, bad_code, NONE)
     var ran = p.run(entries, context)
     var bad = _bad_rows(ran, staged, 10)
     if len(bad) > 0:
@@ -1706,7 +1673,7 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
     if grouped:
         codes = _remap(p, codes, n, d, back, NONE)
     var out = _gather_categories(p, codes, n, d, cats, context, model)
-    var staged = _bad_rows_stages(p, codes, n, d, -2, NONE)
+    var staged = enc_bad_rows_stages(p.prog, codes, n, d, -2, NONE)
     var ran = p.run(entries, context)
     var bad = _bad_rows(ran, staged, 10)
     if len(bad) > 0:
@@ -1998,7 +1965,7 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
         var hard = handle_text == "error" or (handle_text != "ignore" and infrequent is not None and infrequent[j] is not None)
         strict.append(1.0 if hard else 0.0)
     var sto = p.put_floats(strict, context)
-    var staged = _bad_rows_stages(p, grouped, n, d, -1, sto)
+    var staged = enc_bad_rows_stages(p.prog, grouped, n, d, -1, sto)
     var ran = p.run(entries, context)
     var bad = _bad_rows(ran, staged, 10)
     if len(bad) > 0:
@@ -2252,7 +2219,7 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
             kst = p.alloc(6 * d)
             var wo = p.put(w, n)
             var ro = p.alloc(n)
-            _ = _sel(p, wo, n, 1, 1, ro)
+            _ = enc_sel(p.prog, wo, n, 1, 1, ro)
             var xz = p.alloc(wl * d)
             _stage(p.prog.program, OP_RGATHER, wl * d, xo, d, ro, xz)
             _cs(p, mode, entries, xz, wl, d, kst, False)
@@ -2743,39 +2710,6 @@ struct IndexI64(Copyable, Movable):
         self.size = Int(py=out.size)
 
 
-def _assign_fold(idx: IndexI64, rows: Int, fold: Int, folds: I32P) -> Int:
-    # `assign_fold_i64`: 0, 1 when an index is outside [0, rows), 2 when the row already has a fold.
-    var ip = I64P(unsafe_from_address=idx.addr)
-    for i in range(idx.size):  # cpu-route: one user cv test index list, read once (its rows)
-        var r = Int(ip[i])
-        if r < 0 or r >= rows:
-            return 1
-        if folds[r] != -1:
-            return 2
-        folds[r] = Int32(fold)
-    return 0
-
-
-def _check_train(idx: IndexI64, rows: Int, fold: Int, folds: I32P) -> Bool:
-    # `check_indices_i64` (all in [0, rows) and distinct) and
-    # `count_fold_hits_i64` (none in `fold`): True when the list passes.
-    var ip = I64P(unsafe_from_address=idx.addr)
-    for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
-        var r = Int(ip[i])
-        if r < 0 or r >= rows:
-            return False
-    var seen = List[Bool](length=rows, fill=False)
-    for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
-        var r = Int(ip[i])
-        if seen[r]:
-            return False
-        seen[r] = True
-    for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
-        if folds[Int(ip[i])] == Int32(fold):
-            return False
-    return True
-
-
 def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject, n: Int,
                            context: PythonObject) raises -> PythonObject:
     """`TargetEncoder._splitter_folds`: (row -> fold int32 Array, n_splits)
@@ -2815,7 +2749,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
         if len(pair) < 2:
             raise Error("not enough values to unpack (expected 2, got " + String(len(pair)) + ")")
         var te = IndexI64(pair[1], "test", context)
-        if _assign_fold(te, n, k, fp) != 0:
+        if enc_assign_fold_i64(te.addr, te.size, n, k, fp) != 0:
             raise Error(cover)
         _ = te^
         trains.append(IndexI64(pair[0], "train", context))
@@ -2825,7 +2759,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
             raise Error(cover)
         sizes[Int(fp[i])] += 1
     for k in range(F):  # cpu-route: user cv splitter train index lists, one per fold
-        if trains[k].size != n - sizes[k] or (trains[k].size > 0 and not _check_train(trains[k], n, k, fp)):
+        if trains[k].size != n - sizes[k] or (trains[k].size > 0 and not enc_check_train_i64(trains[k].addr, trains[k].size, n, k, fp)):
             raise Error("NotImplementedError: mojolearn: TargetEncoder cv folds whose training rows are not every "
                         + "row outside the test fold are not implemented")
     _ = trains^

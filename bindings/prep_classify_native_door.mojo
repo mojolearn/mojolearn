@@ -44,6 +44,7 @@ from bindings.admitted_input_unpack import admit_weight_words
 from bindings.x_prep_native_inputs_door import _values, _rows_fields
 from bindings.arena_cache_release_door import arena_cache_release_operation
 from bindings.prep_classify_prog_door import ClsProg, NONE, f32_array, i32_array, f32_input
+from bindings.prep_classify_prog_run import cls_class_counts
 from bindings.prep_classify_common_door import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_entry,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
@@ -92,16 +93,10 @@ comptime OP_CAT_HPART = 133
 comptime OP_CAT_HFOLD = 134
 comptime OP_COLBLOCK = 141
 comptime OP_CENTERED_MATMUL = 178
-comptime OP_P2M_CCOUNT = 200
-comptime OP_P2M_CSCAN = 201
-comptime OP_P2M_CSTART = 202
-comptime OP_P2M_CWRITE = 203
 comptime OP_P2M_RGATHER = 204
 comptime OP_Q64_SOFTMAX = 213
 # CategoricalNB's block histograms hold at most this many words (_CAT_HIST_WORDS).
 comptime CAT_HIST_WORDS = 67108864
-# `_p2m_chunks`' chunk cap (_II_CH).
-comptime II_CH = 1024
 # What a scoring program reads back.
 comptime W_PREDICT = 1
 comptime W_PROBA = 2
@@ -1359,13 +1354,13 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     var mode = cls_mode(context)
     # without a covariance_estimator the count check reads the program's own
     # class counts right after the run; an estimator fits per class inside
-    # the build, so its check stays first (`_class_counts`, a p2m program)
+    # the build, so its check stays first (`cls_class_counts`, a p2m program)
     var late = est is None
     if not late:
         var cp = ClsProg()
         var co = cp.put_codes(codes)
         var tot = 0
-        tot = _class_counts(cp, co, n, K)
+        tot = cls_class_counts(cp.program, co, n, K)
         cp.run(mode, context)
         var totals = I32P(unsafe_from_address=cp.base) + tot
         for k in range(K):  # driver-loop: over the class counts (class count)
@@ -1451,17 +1446,6 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     _set(fields, "numeric_mode_", mode)
     _set(fields, "n_features_in_", PythonObject(d))
     return model
-
-
-def _class_counts(mut pr: ClsProg, co: Int, n: Int, K: Int) -> Int:
-    """`_class_counts`' p2m stages: the class counts (int32 words) offset."""
-    var ch = max(II_CH, (n + II_CH - 1) // II_CH, (n * K + 16777215) // 16777216, 1)
-    var nch = max(1, (n + ch - 1) // ch)
-    var cnt = pr.alloc(nch * K)
-    var tot = pr.alloc(K)
-    pr.stage(OP_P2M_CCOUNT, nch, co, n, K, ch, cnt)
-    pr.stage(OP_P2M_CSCAN, K, cnt, nch, K, tot)
-    return tot
 
 
 # ---------------------------------------------------------------- the door

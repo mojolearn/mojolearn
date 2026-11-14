@@ -24,7 +24,8 @@ from bindings.sequential_arrays_door import sequential_address
 from bindings.sequential_inputs_door import _promote
 from core.classical_pandas_impl import pd_raw_at, _pd_double
 from core.resample_pandas_layout import RPLayout as _RPLayout
-from core.cast_in import cast_in_kind, cast_w64_bits, _top_bit
+from core.resample_pandas_copy import rp_number, rp_wide_word, rp_widen, rp_time_unit, rp_float_integer_fill, rp_copy_cell, rp_sparse_fill_copy
+from core.cast_in import cast_in_kind, cast_w64_bits
 from core.sequence_array_cast import sequence_store_word
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -218,23 +219,6 @@ def _rp_object(destination: Int, value: PythonObject) raises:
     _ = value
 
 
-def _rp_number(source: _RPLayout, address: Int, imaginary: Bool = False) raises -> Float64:
-    var kind = source.kind
-    var size = source.item
-    var offset = 0
-    if kind == "c":
-        kind = "f"
-        size //= 2
-        if imaginary:
-            offset = size
-    elif imaginary:
-        return Float64(0)
-    if size > 8:
-        raise Error("TypeError: mixed pandas numeric conversion requires native widths up to float64")
-    var tag = 2 if kind == "f" else (1 if kind == "i" else 0)
-    return _pd_double(pd_raw_at(address, offset, size, source.native), tag, size)
-
-
 def _rp_box(source: _RPArray, address: Int) raises -> PythonObject:
     if source.layout.kind == "O":
         var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=address)[0]
@@ -259,10 +243,10 @@ def _rp_box(source: _RPArray, address: Int) raises -> PythonObject:
         _ = source.owner
         return PythonObject(from_owned=raw)
     if source.layout.kind == "f":
-        return PythonObject(_rp_number(source.layout, address))
+        return PythonObject(rp_number(source.layout, address))
     if source.layout.kind == "c":
         ref cpy = Python().cpython()
-        var result = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(_rp_number(source.layout, address), _rp_number(source.layout, address, True))
+        var result = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(rp_number(source.layout, address), rp_number(source.layout, address, True))
         if not result:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=result)
@@ -333,121 +317,24 @@ def _rp_promote(mut kind: String, mut size: Int, incoming: String, width: Int) r
         _promote(kind, size, incoming, width)
 
 
-def _rp_wide_word(destination: Int, low: UInt64, high: UInt64, native: Bool):
-    var out = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination)
-    for byte in range(16):  # driver-loop: store the native extended floating representation without a foreign cast
-        var word = low if byte < 8 else high
-        out[byte if native else 15 - byte] = UInt8(word >> UInt64((byte % 8) * 8))
-
-
-def _rp_widen(source: _RPLayout, address: Int, destination: Int, imaginary: Bool, native: Bool) raises:
-    if imaginary and source.kind != "c":
-        _rp_wide_word(destination, 0, 0, native)
-        return
-    var component = source.item // 2 if source.kind == "c" else source.item
-    var src = address + (component if imaginary else 0)
-    if component == 16 and (source.kind == "f" or source.kind == "c"):
-        var input = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src)
-        var output = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination)
-        for byte in range(16):  # driver-loop: same-format extended precision is a raw native storage copy
-            output[byte] = input[byte if source.native == native else 15 - byte]
-        return
-    var negative = False
-    var exponent = 0
-    var significant = UInt64(0)
-    var special = 0
-    if source.kind == "i" or source.kind == "u" or source.kind == "b":
-        var word = cast_w64_bits(pd_raw_at(src, 0, component, source.native), 1 if source.kind == "i" else 0, component)
-        negative = source.kind == "i" and (word >> 63) != 0
-        var magnitude = (~word + UInt64(1)) if negative else word
-        if magnitude != 0:
-            exponent = _top_bit(magnitude)
-            significant = magnitude << UInt64(63 - exponent)
-    else:
-        var word = bitcast[DType.uint64](_rp_number(source, address, imaginary))
-        negative = (word >> 63) != 0
-        var encoded = Int((word >> 52) & UInt64(0x7ff))
-        var fraction = word & UInt64(0xfffffffffffff)
-        if encoded == 2047:
-            special = 1 if fraction == 0 else 2
-            significant = UInt64(0x8000000000000000) | (fraction << 11)
-            if special == 2:
-                significant |= UInt64(0x4000000000000000)
-        elif encoded == 0:
-            if fraction != 0:
-                var top = _top_bit(fraction)
-                exponent = top - 1074
-                significant = fraction << UInt64(63 - top)
-        else:
-            exponent = encoded - 1023
-            significant = (fraction | UInt64(0x10000000000000)) << 11
-    var biased = 0 if significant == 0 else (32767 if special != 0 else exponent + 16383)
-    var sign = UInt64(1) if negative else UInt64(0)
-    comptime if CompilationTarget.is_x86():
-        # SysV x86 long double: explicit integer bit, 15-bit exponent, padding.
-        _rp_wide_word(destination, significant, (sign << 15) | UInt64(biased), native)
-    else:
-        # AArch64 Linux long double: IEEE binary128. Apple's long double is
-        # binary64 and never takes this width-16 branch.
-        var low = significant << 49
-        var high = (sign << 63) | (UInt64(biased) << 48) | ((significant >> 15) & UInt64(0xffffffffffff))
-        _rp_wide_word(destination, low, high, native)
-
 def _rp_copy(source: _RPArray, address: Int, destination: Int, target: _RPArray) raises:
+    # UNPACK/PACK: an object target boxes the cell (CPython); every other
+    # target is the typed cell conversion (core/resample_pandas_copy.mojo).
     if target.layout.kind == "O":
         _rp_object(destination, _rp_box(source, address))
         return
-    if source.layout.code == target.layout.code:
-        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
-               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=source.layout.item)
-        return
-    if (target.layout.kind == "M" or target.layout.kind == "m") and source.layout.kind == target.layout.kind:
-        var delta = _rp_time_unit(target.layout.code) - _rp_time_unit(source.layout.code)
-        if delta < 0:
-            raise Error("ValueError: pandas common temporal dtype must retain the finest resolution")
-        var word = pd_raw_at(address, 0, 8, source.layout.native)
-        if word != UInt64(1) << 63:
-            for i in range(delta):  # driver-loop: storage unit scaling to the common finest temporal dtype
-                word *= UInt64(1000)
-        sequence_store_word(destination, word, 8, target.layout.native)
-        return
-    if target.layout.kind == "f" or target.layout.kind == "c":
-        var components = 2 if target.layout.kind == "c" else 1
-        var size = target.layout.item // components
-        for component in range(components):  # driver-loop: native ABI scalar conversion, no NumPy conversion calls
-            if size == 16:
-                _rp_widen(source.layout, address, destination + component * size, component == 1, target.layout.native)
-                continue
-            var value = _rp_number(source.layout, address, component == 1)
-            var word = UInt64(0)
-            if size == 8:
-                word = bitcast[DType.uint64](value)
-            elif size == 4:
-                word = UInt64(bitcast[DType.uint32](Float32(value)))
-            elif size == 2:
-                word = UInt64(bitcast[DType.uint16](Float16(value)))
-            else:
-                raise Error("TypeError: mixed pandas floating widths above float64 need native conversion support")
-            sequence_store_word(destination + component * size, word, size, target.layout.native)
-        return
-    if (target.layout.kind == "i" or target.layout.kind == "u" or target.layout.kind == "b") and (source.layout.kind == "i" or source.layout.kind == "u" or source.layout.kind == "b"):
-        var word = cast_w64_bits(pd_raw_at(address, 0, source.layout.item, source.layout.native), 1 if source.layout.kind == "i" else 0, source.layout.item)
-        if target.layout.kind == "b":
-            word = UInt64(1) if word != 0 else UInt64(0)
-        sequence_store_word(destination, word, target.layout.item, target.layout.native)
-        return
-    raise Error("TypeError: pandas blocks require unsupported native dtype promotion")
+    rp_copy_cell(source.layout, address, destination, target.layout)
 
 
 def _rp_missing_numeric(destination: Int, target: _RPLayout) raises:
     var width = target.item // 2 if target.kind == "c" else target.item
     if width == 16 and (target.kind == "f" or target.kind == "c"):
         comptime if CompilationTarget.is_x86():
-            _rp_wide_word(destination, UInt64(0xc000000000000000), UInt64(0x7fff), target.native)
+            rp_wide_word(destination, UInt64(0xc000000000000000), UInt64(0x7fff), target.native)
         else:
-            _rp_wide_word(destination, UInt64(0), UInt64(0x7fff800000000000), target.native)
+            rp_wide_word(destination, UInt64(0), UInt64(0x7fff800000000000), target.native)
         if target.kind == "c":
-            _rp_wide_word(destination + 16, UInt64(0), UInt64(0), target.native)
+            rp_wide_word(destination + 16, UInt64(0), UInt64(0), target.native)
         return
     if (target.kind != "f" and target.kind != "c") or (width != 2 and width != 4 and width != 8):
         raise Error("TypeError: pandas missing-value storage requires a native floating component width")
@@ -455,18 +342,6 @@ def _rp_missing_numeric(destination: Int, target: _RPLayout) raises:
     sequence_store_word(destination, nan, width, target.native)
     if target.kind == "c":
         sequence_store_word(destination + width, UInt64(0), width, target.native)
-
-
-def _rp_time_unit(code: String) raises -> Int:
-    if code.endswith("[s]"):
-        return 7
-    if code.endswith("[ms]"):
-        return 8
-    if code.endswith("[us]"):
-        return 9
-    if code.endswith("[ns]"):
-        return 10
-    raise Error("TypeError: pandas temporal storage requires seconds, milliseconds, microseconds or nanoseconds")
 
 
 def _rp_na() raises -> PythonObject:
@@ -573,7 +448,7 @@ def _rp_time_box(source: _RPArray, address: Int, tz: PythonObject) raises -> Pyt
         if nat is None:
             nat = _rp_item("pandas._libs.tslibs.nattype", "NaT")
         return nat
-    var unit = _rp_time_unit(source.layout.code)
+    var unit = rp_time_unit(source.layout.code)
     # the boxing classmethod was bound once per operation (N047); the MRO
     # walk below runs only for an array built outside the operation context
     var boxer = source.time_from
@@ -761,10 +636,10 @@ def _rp_category_logical(record: PythonObject, context: PythonObject) raises -> 
 
 def _rp_comparison_scalar(source: _RPArray, address: Int) raises -> PythonObject:
     if source.layout.kind == "f":
-        return PythonObject(_rp_number(source.layout, address))
+        return PythonObject(rp_number(source.layout, address))
     if source.layout.kind == "c":
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(_rp_number(source.layout, address), _rp_number(source.layout, address, True))
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(rp_number(source.layout, address), rp_number(source.layout, address, True))
         if not raw:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=raw)
@@ -782,7 +657,7 @@ def _rp_category_cell_equal(left: _RPArray, li: Int, right: _RPArray, ri: Int) r
             return False
         var lv = bitcast[DType.int64](pd_raw_at(la, 0, 8, left.layout.native))
         var rv = bitcast[DType.int64](pd_raw_at(ra, 0, 8, right.layout.native))
-        var delta = _rp_time_unit(left.layout.code) - _rp_time_unit(right.layout.code)
+        var delta = rp_time_unit(left.layout.code) - rp_time_unit(right.layout.code)
         var value = rv if delta > 0 else lv
         for i in range(abs(delta)):  # driver-loop: ordered temporal category equality compares exact common-resolution instants
             if value > Int64.MAX // 1000 or value < -(Int64.MAX // 1000):
@@ -803,8 +678,8 @@ def _rp_category_cell_equal(left: _RPArray, li: Int, right: _RPArray, ri: Int) r
         for component in range(components):  # driver-loop: ordered numerical categories compare after exact native widening
             var lbytes = Array[UInt8, 16](uninitialized=True)
             var rbytes = Array[UInt8, 16](uninitialized=True)
-            _rp_widen(left.layout, la, Int(lbytes.unsafe_ptr()), component == 1, True)
-            _rp_widen(right.layout, ra, Int(rbytes.unsafe_ptr()), component == 1, True)
+            rp_widen(left.layout, la, Int(lbytes.unsafe_ptr()), component == 1, True)
+            rp_widen(right.layout, ra, Int(rbytes.unsafe_ptr()), component == 1, True)
             var equal = True
             var lzero = True
             var rzero = True
@@ -1233,102 +1108,13 @@ def _rp_sparse_fills_equal(left: PythonObject, right: PythonObject, context: Pyt
     return _rp_category_cell_equal(ldata, 0, rdata, 0)
 
 
-def _rp_float_integer_fill(source: _RPLayout, destination: Int, target: _RPLayout) raises:
-    var negative = False
-    var exponent = 0
-    var high = UInt64(0)
-    var low = UInt64(0)
-    var precision = 53
-    var nonfinite = False
-    if source.item == 16:
-        low = pd_raw_at(source.address, 0 if source.native else 8, 8, source.native)
-        high = pd_raw_at(source.address, 8 if source.native else 0, 8, source.native)
-        comptime if CompilationTarget.is_x86():
-            negative = (high & UInt64(0x8000)) != 0
-            var encoded = Int(high & UInt64(0x7fff))
-            exponent = encoded - 16383
-            nonfinite = encoded == 32767
-            precision = 64
-            high = low
-            low = 0
-        else:
-            negative = (high >> 63) != 0
-            var encoded = Int((high >> 48) & UInt64(0x7fff))
-            exponent = encoded - 16383
-            nonfinite = encoded == 32767
-            precision = 113
-            high = (high & UInt64(0xffffffffffff)) | UInt64(0x1000000000000)
-    else:
-        var word = bitcast[DType.uint64](_rp_number(source, source.address))
-        negative = (word >> 63) != 0
-        var encoded = Int((word >> 52) & UInt64(0x7ff))
-        exponent = encoded - 1023
-        nonfinite = encoded == 2047
-        high = (word & UInt64(0xfffffffffffff)) | UInt64(0x10000000000000)
-    if target.kind == "b":
-        # Floating zero alone is false; NaN and infinity are nonzero.
-        var zero = True
-        var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.address)
-        var meaningful = source.item
-        comptime if CompilationTarget.is_x86():
-            if meaningful == 16:
-                meaningful = 10
-        for byte in range(meaningful):  # driver-loop: native floating-to-bool scalar storage conversion
-            var value = bytes[byte if source.native else source.item - 1 - byte]
-            if byte == meaningful - 1:
-                value &= UInt8(0x7f)
-            zero = zero and value == 0
-        sequence_store_word(destination, UInt64(0) if zero else UInt64(1), 1, target.native)
-        return
-    if nonfinite:
-        raise Error("ValueError: a nonfinite sparse fill cannot be represented in the selected integer dtype")
-    if exponent > 63:
-        raise Error("OverflowError: sparse floating fill exceeds the selected integer dtype")
-    var magnitude = UInt64(0)
-    if exponent >= 0:
-        if precision == 113:
-            magnitude = (high >> UInt64(48 - exponent)) if exponent <= 48 else ((high << UInt64(exponent - 48)) | (low >> UInt64(112 - exponent)))
-        elif exponent >= precision - 1:
-            magnitude = high << UInt64(exponent - precision + 1)
-        else:
-            magnitude = high >> UInt64(precision - 1 - exponent)
-    var limit = UInt64.MAX if target.item == 8 else (UInt64(1) << UInt64(target.item * 8)) - 1
-    if target.kind == "i":
-        limit = UInt64(1) << UInt64(target.item * 8 - 1)
-        if not negative:
-            limit -= 1
-    if (negative and magnitude != 0 and target.kind == "u") or magnitude > limit:
-        raise Error("OverflowError: sparse floating fill exceeds the selected integer dtype")
-    var word = (~magnitude + UInt64(1)) if negative else magnitude
-    sequence_store_word(destination, word, target.item, target.native)
-
 def _rp_sparse_fill_copy(source: _RPArray, destination: Int, target: _RPArray) raises:
-    if source.layout.kind == "f" and (target.layout.kind == "i" or target.layout.kind == "u" or target.layout.kind == "b"):
-        _rp_float_integer_fill(source.layout, destination, target.layout)
+    # An object target boxes the fill (`_rp_copy`'s object branch); every
+    # other target is the typed fill conversion (core/resample_pandas_copy.mojo).
+    if target.layout.kind == "O":
+        _rp_object(destination, _rp_box(source, source.layout.address))
         return
-    if (source.layout.kind == "i" or source.layout.kind == "u" or source.layout.kind == "b") and (target.layout.kind == "i" or target.layout.kind == "u"):
-        var word = cast_w64_bits(pd_raw_at(source.layout.address, 0, source.layout.item, source.layout.native), 1 if source.layout.kind == "i" else 0, source.layout.item)
-        var negative = source.layout.kind == "i" and (word >> 63) != 0
-        var magnitude = (~word + UInt64(1)) if negative else word
-        var limit = UInt64.MAX if target.layout.item == 8 else (UInt64(1) << UInt64(target.layout.item * 8)) - 1
-        if target.layout.kind == "i":
-            limit = UInt64(1) << UInt64(target.layout.item * 8 - 1)
-            if not negative:
-                limit -= 1
-        if (negative and target.layout.kind == "u") or magnitude > limit:
-            raise Error("OverflowError: pandas sparse fill is outside the selected integer dtype")
-    # A scalar's actual unit can be finer than the sparse dtype even though
-    # its TYPE in result_type is a generic datetime64/timedelta64 descriptor.
-    if (target.layout.kind == "M" or target.layout.kind == "m") and source.layout.kind == target.layout.kind:
-        var delta = _rp_time_unit(target.layout.code) - _rp_time_unit(source.layout.code)
-        if delta < 0:
-            var value = bitcast[DType.int64](pd_raw_at(source.layout.address, 0, 8, source.layout.native))
-            if value != Int64.MIN:
-                for i in range(-delta):  # driver-loop: native scalar assignment uses floor when reducing temporal resolution
-                    value = value // 1000
-            sequence_store_word(destination, bitcast[DType.uint64](value), 8, target.layout.native)
-            return
-    _rp_copy(source, source.layout.address, destination, target)
+    rp_sparse_fill_copy(source.layout, destination, target.layout)
 
 
 def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
@@ -1837,7 +1623,7 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
             temporal = temporal and kind == logical[0].layout.kind
             numeric = numeric and (kind == "b" or kind == "i" or kind == "u" or kind == "f" or kind == "c")
             if kind == "M" or kind == "m":
-                finest = max(finest, _rp_time_unit(logical[k].layout.code))
+                finest = max(finest, rp_time_unit(logical[k].layout.code))
         if use_sparse_promotion and (temporal or not numeric):
             force_object = True
             dtype = PythonObject("O")
@@ -1919,7 +1705,7 @@ def _rp_cell_code(source: _RPLayout, target: _RPLayout, mut delta: Int) raises -
     if source.code == target.code:
         return _RP_CELL_MEMCPY
     if (target.kind == "M" or target.kind == "m") and source.kind == target.kind:
-        delta = _rp_time_unit(target.code) - _rp_time_unit(source.code)
+        delta = rp_time_unit(target.code) - rp_time_unit(source.code)
         if delta < 0:
             raise Error("ValueError: pandas common temporal dtype must retain the finest resolution")
         return _RP_CELL_TIME
@@ -1958,7 +1744,7 @@ def _rp_cell(plan: MutPointer[Int, MutUntrackedOrigin], address: Int, destinatio
         for component in range(components):  # small-loop(components: real and imaginary, at most two): one scalar per component
             var value = Float64(0)
             if plan[8] != 0 or component == 0:
-                # `_rp_number`: a complex source reads its component half;
+                # `rp_number`: a complex source reads its component half;
                 # a real source has no imaginary part
                 var offset = plan[5] if (plan[8] != 0 and component == 1) else 0
                 value = _pd_double(pd_raw_at(address, offset, plan[5], source_native), plan[6], plan[5])

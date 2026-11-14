@@ -10,7 +10,7 @@
 # into the score with the same binary64 operations in the same order. The
 # micro-average precision no longer runs the one-vs-rest curve program
 # whose results it never read. Same kernels: the bits do not move.
-from std.memory import unsafe_memcpy, bitcast
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family_f64
 from bindings.native_loaded_module_door import native_loaded_module
@@ -30,6 +30,7 @@ from core.family_cast_impl import family_min_f32, family_max_f32
 from bindings.metrics_exp_common_run import MX_NONE, mx_nan, mx_isnan
 from bindings.metrics_program_pack import metric_arena_array, metric_f64_array
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.metrics_exp_curve_run import curve_fold_stages, curve_f32_bits, CURVE_CF_OUT, CURVE_CF_CHUNK
 from bindings.arena_prog_run import MetricArenaOwner
 from bindings.metrics_exp_common_unpack import (
     MxLab, MxMat, mx_b, mx_len, mx_truthy, mx_is_bool, mx_is_str, mx_is_integral, mx_float, mx_zero_division,
@@ -37,8 +38,6 @@ from bindings.metrics_exp_common_unpack import (
     mx_pos_label, mx_scores, mx_weights, mx_eq, mx_list_labels,
 )
 
-comptime _CF_OUT = 10
-comptime _CF_CHUNK = 1024
 comptime _CO_ROC = 0
 comptime _CO_PR = 1
 comptime _CO_DET = 2
@@ -217,49 +216,6 @@ def _f64_word_list(values: PythonObject, n: Int) raises -> List[Int32]:
 # ---------------------------------------------------------------- the device curve fold
 
 
-def _f32_bits(x: Float32) -> Int:
-    return Int(bitcast[DType.int32](x))
-
-
-def _fold_stages(mut prog: MetricDoorProg, S: Int, stride: Int, POS: Int, W: Int, n: Int, problems: Int, auc: Bool,
-                 has_max_fpr: Bool, max_fpr: Float64, out_in: Int) raises -> Int:
-    """`_fold_stages`: the curve and its fold; the fold's CF_OUT words per problem."""
-    var N = n * problems
-    var order = prog.scratch(N)
-    var cnt = prog.scratch(problems)
-    var fps = prog.scratch(N)
-    var tps = prog.scratch(N)
-    var thr = prog.scratch(N)
-    var keep = MX_NONE
-    var CF = 0
-    var CM = 0
-    if auc:
-        keep = prog.scratch(N)
-        CF = prog.scratch(3 * N)
-        CM = prog.scratch(problems)
-    prog.stage("bin_curve", problems, [S, stride, POS, W, n, order, fps, tps, thr, cnt, keep, 1 if auc else 0, CF, CM])
-    var out = out_in
-    if out < 0:
-        out = prog.want(prog.alloc(_CF_OUT * problems), _CF_OUT * problems)
-    var mode = 1
-    var mh = 0
-    var ml = 0
-    if auc:
-        mode = 0
-        if has_max_fpr:
-            # `_f32_split`: hi the nearest float32, lo the nearest float32 of the remainder
-            var hi = Float32(max_fpr)
-            var lo = Float32(max_fpr - Float64(hi))
-            mode = 2
-            mh = _f32_bits(hi)
-            ml = _f32_bits(lo)
-    if auc:
-        prog.stage("curve_fold", problems, [n, CF, CF + N, CM, out, mode, mh, ml, _CF_CHUNK])
-    else:
-        prog.stage("curve_fold", problems, [n, fps, tps, cnt, out, mode, mh, ml, _CF_CHUNK])
-    return out
-
-
 struct _Fold(Copyable, Movable):
     """`_FoldCurve._words`: s, F, T, k, a, b, u, v, c."""
     var s: Float64
@@ -322,7 +278,7 @@ def _ap_binary(true: MxLab, args: PythonObject, context: PythonObject) raises ->
     var W = MX_NONE
     if w is not None:
         W = prog.put(w)
-    var out = _fold_stages(prog, S, 1, POS, W, n, 1, False, False, 0.0, -1)
+    var out = curve_fold_stages(prog.plan, S, 1, POS, W, n, 1, False, False, 0.0, -1)
     var arena = metric_door_run(prog, args[4], context)
     return PythonObject(_fold_ap(arena, out))
 
@@ -367,7 +323,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
             var W0 = prog.put(w)
             W = prog.scratch(n * k)
             prog.stage("rep_rows", n * k, [W0, W, k])
-        var out = _fold_stages(prog, S, 1, POS, W, n * k, 1, False, False, 0.0, -1)
+        var out = curve_fold_stages(prog.plan, S, 1, POS, W, n * k, 1, False, False, 0.0, -1)
         var arena = metric_door_run(prog, args[4], context)
         return PythonObject(_fold_ap(arena, out))
     # one-vs-rest: the class-major one-hot flags, the folds and the tail
@@ -378,7 +334,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
     var W = MX_NONE
     if w is not None:
         W = prog.put(w)
-    var out = _fold_stages(prog, S, k, POS, W, n, k, False, False, 0.0, -1)
+    var out = curve_fold_stages(prog.plan, S, k, POS, W, n, k, False, False, 0.0, -1)
     # `_OvrTail("ap", False, average)`
     var weighted = W != MX_NONE
     var g = prog.group(C, n, k, MX_NONE, 1, W, 1)
@@ -404,7 +360,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
     var scores = List[Float64]()
     for c in range(k):  # driver-loop: over the classes' scores
         if arena.i32(fl + c) == 2:
-            scores.append(_fold_ap(arena, out + _CF_OUT * c))
+            scores.append(_fold_ap(arena, out + CURVE_CF_OUT * c))
         else:
             scores.append(arena.f64(sc + 2 * c))
     if average is None:
@@ -465,7 +421,7 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
             var thr = Float32(0.5) if (family_min_f32(p, n) >= 0 and family_max_f32(p, n) <= 1) else Float32(0.0)
             var S1 = prog.put(s.a)
             S = prog.scratch(2 * n)
-            prog.stage("pair_cols", n, [S1, S, _f32_bits(thr)])
+            prog.stage("pair_cols", n, [S1, S, curve_f32_bits(thr)])
             kk = 1
             cols = 2
         else:
@@ -539,11 +495,11 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
         var tps = curves[4 * fold + 1]
         var thr = curves[4 * fold + 2]
         var count = curves[4 * fold + 3]
-        var folded = prog.alloc(_CF_OUT)
+        var folded = prog.alloc(CURVE_CF_OUT)
         totals.append(prog.want(folded + 2, 2))
         var result = prog.want(prog.alloc(2), 2)
         var status = prog.want(prog.alloc(1), 1)
-        prog.stage("curve_fold", 1, [n, fps, tps, count, folded, fold, 0, 0, _CF_CHUNK])
+        prog.stage("curve_fold", 1, [n, fps, tps, count, folded, fold, 0, 0, CURVE_CF_CHUNK])
         prog.stage("rank_epi", 1, [_RANK_CURVE_SCORE, folded, 1, fold, result, status, MX_NONE, 0, 0])
         outputs.extend([result, status])
         if include_curves:
