@@ -5,13 +5,15 @@ host cores."""
 from core.host_parallel import host_parallelize
 from core.mojolearn_training_host_impl import (
     rms_norm_forward_host_into, rms_norm_backward_host_into, linear_forward_host_into, linear_backward_host_into,
+    accumulate_host_into,
 )
 from checks.native_tests.training_primitives_cases import (
     RMS_M, RMS_D, LIN_M, LIN_K, LIN_N, rms_x, rms_w, rms_dy, check_rms, lin_a, lin_w, lin_dc, check_linear,
+    FOLD_SHARDS, FOLD_COUNT, fold_stack, check_ordered_fold,
 )
 from checks.native_tests.training_check_common import require
 
-comptime PRIMITIVE_FIXTURES = 2
+comptime PRIMITIVE_FIXTURES = 3
 
 
 def _rms() raises:
@@ -42,6 +44,16 @@ def _linear() raises:
     check_linear(a, w, dc, c, da, dw, c1)
 
 
+def _fold() raises:
+    var stack = fold_stack()
+    var base = Int(stack.unsafe_ptr())
+    for shard in range(1, FOLD_SHARDS):  # dependent ordered fold: ascending shard order
+        var dst = base + 4 * shard * FOLD_COUNT
+        var src = base + 4 * (shard - 1) * FOLD_COUNT
+        _ = accumulate_host_into([dst, src], FOLD_COUNT, 2, -1)
+    check_ordered_fold(stack)
+
+
 def run_checks() raises:
     var failures = List[Int](length=PRIMITIVE_FIXTURES, fill=0)
     var fp = failures.unsafe_ptr()
@@ -49,8 +61,10 @@ def run_checks() raises:
         try:
             if unit == 0:
                 _rms()
-            else:
+            elif unit == 1:
                 _linear()
+            else:
+                _fold()
         except error:
             fp.unsafe_store(unit, 1)
             print("FAIL training_primitives_cpu fixture", unit, String(error))
@@ -59,4 +73,4 @@ def run_checks() raises:
     for value in failures:
         failed += value
     require(failed == 0, "training_primitives_cpu failed " + String(failed) + " fixtures")
-    print("PASS training_primitives_cpu:", PRIMITIVE_FIXTURES, "fixtures (rms_norm, linear)")
+    print("PASS training_primitives_cpu:", PRIMITIVE_FIXTURES, "fixtures (rms_norm, linear, ordered gradient fold)")

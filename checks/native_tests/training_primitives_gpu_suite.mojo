@@ -7,10 +7,11 @@ parallelism."""
 from training.native_primitive_dispatch import native_primitive_operation
 from checks.native_tests.training_primitives_cases import (
     RMS_M, RMS_D, LIN_M, LIN_K, LIN_N, rms_x, rms_w, rms_dy, check_rms, lin_a, lin_w, lin_dc, check_linear,
+    FOLD_SHARDS, FOLD_COUNT, fold_stack, check_ordered_fold,
 )
 from checks.native_tests.training_check_common import require
 
-comptime PRIMITIVE_FIXTURES = 2
+comptime PRIMITIVE_FIXTURES = 3
 
 
 def _rms() raises:
@@ -43,16 +44,28 @@ def _linear() raises:
     check_linear(a, w, dc, c, da, dw, c1)
 
 
+def _fold() raises:
+    var stack = fold_stack()
+    var base = Int(stack.unsafe_ptr())
+    for shard in range(1, FOLD_SHARDS):  # dependent ordered fold: ascending shard order
+        var dst = base + 4 * shard * FOLD_COUNT
+        var src = base + 4 * (shard - 1) * FOLD_COUNT
+        _ = native_primitive_operation(9, [dst, src], [FOLD_COUNT, 2, -1], List[Float64]())
+    check_ordered_fold(stack)
+
+
 def run_checks() raises:
     var failed = 0
     for unit in range(PRIMITIVE_FIXTURES):  # ordered: one shared device context
         try:
             if unit == 0:
                 _rms()
-            else:
+            elif unit == 1:
                 _linear()
+            else:
+                _fold()
         except error:
             failed += 1
             print("FAIL training_primitives_gpu fixture", unit, String(error))
     require(failed == 0, "training_primitives_gpu failed " + String(failed) + " fixtures")
-    print("PASS training_primitives_gpu:", PRIMITIVE_FIXTURES, "fixtures (rms_norm, linear)")
+    print("PASS training_primitives_gpu:", PRIMITIVE_FIXTURES, "fixtures (rms_norm, linear, ordered gradient fold)")

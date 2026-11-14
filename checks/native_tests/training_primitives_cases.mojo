@@ -119,3 +119,41 @@ def check_linear(a: List[Float32], w: List[Float32], dc: List[Float32], c: List[
     for j in range(LIN_N):  # small-loop(row copy): three values
         first[j] = c[j]
     require(same_words(c_first_row, first), "one row alone is not that row of the batch, word for word")
+
+
+# ---------------------------------------------------------------- ordered gradient fold
+# Ported from `test_ordered_gradient_fold_has_fixed_left_association_and_owns_inputs`
+# (test_parallel_mlp_native.py): `ordered_sum_gradients` stacks the shards
+# [S, count] (shard k in slot k) and folds them in ascending order IN PLACE
+# with the accumulate primitive (addresses [slot k, slot k-1], ints
+# [count, 2, -1]), bindings/parallel_mlp_native_door.mojo `neural_ordered_sum`.
+
+comptime FOLD_SHARDS = 3
+comptime FOLD_COUNT = 8  # a (2,) tensor then a (2, 3) tensor
+
+
+def fold_stack() -> List[Float32]:
+    """Shard 0: [1, -1] and arange(6); shards 1 and 2: [2^-24, -2^-24] with
+    ones and twos."""
+    var tiny = Float32(5.9604644775390625e-08)  # 2^-24
+    var stack = List[Float32](length=FOLD_SHARDS * FOLD_COUNT, fill=0)
+    stack[0] = 1.0
+    stack[1] = -1.0
+    for i in range(6):  # small-loop(fixture fill)
+        stack[2 + i] = Float32(i)
+    for shard in range(1, FOLD_SHARDS):  # small-loop(fixture fill)
+        stack[shard * FOLD_COUNT] = tiny
+        stack[shard * FOLD_COUNT + 1] = -tiny
+        for i in range(6):
+            stack[shard * FOLD_COUNT + 2 + i] = Float32(shard)
+    return stack^
+
+
+def check_ordered_fold(stack: List[Float32]) raises:
+    """The last slot holds the left-associated sum: both separate additions of
+    the tiny terms tie to even (a tree combining them first moves one ULP)."""
+    var base = (FOLD_SHARDS - 1) * FOLD_COUNT
+    require(stack[base].to_bits() == UInt32(0x3F800000) and stack[base + 1].to_bits() == UInt32(0xBF800000),
+            "the ordered fold is not left-associated: " + String(stack[base]) + ", " + String(stack[base + 1]))
+    for i in range(6):  # small-loop(check comparison)
+        require(stack[base + 2 + i] == Float32(i) + 3, "the ordered fold of the second tensor is not first + 3")

@@ -24,6 +24,11 @@ Fixtures:
   2  The sessions forward of 12 rows matches the Float64 logits at rtol
      1e-5, atol 1e-6 and the program's own forward (predict_logits) at
      atol 1e-6.
+  3  The parallel owner's shard gradient (test_parallel_mlp_native.py
+     `test_gradient_matches_independent_calculus_and_preserves_input`):
+     loss and the four gradients against the independent Float64 calculus.
+  4  The parallel owner's apply (`test_native_adamw_update_matches_independent_first_two_step_equations`):
+     two APPLY steps against the first two AdamW steps.
 
 Inputs: fixture 0 keeps the Python test's closed-form values; fixtures 1 and
 2 regenerate the Python test's NumPy draws (normal * 0.1 weights, uniform
@@ -33,7 +38,7 @@ are relations to the reference, so no NumPy stream is needed.
 from std.math import exp, log, sqrt
 from sequence.exec_trait import Exec
 from autograd.small_mlp_program import (
-    SMALL_MLP_PROGRAM_STEP, SMALL_MLP_PROGRAM_DOWNLOAD, SMALL_MLP_PROGRAM_CLOSE,
+    SMALL_MLP_PROGRAM_STEP, SMALL_MLP_PROGRAM_DOWNLOAD, SMALL_MLP_PROGRAM_APPLY, SMALL_MLP_PROGRAM_CLOSE,
     SMALL_MLP_PROGRAM_FORWARD, SMALL_MLP_PROGRAM_GRADS, SMALL_MLP_PROGRAM_TRAIN,
     small_mlp_program_open, small_mlp_program_run, small_mlp_sessions_forward,
 )
@@ -41,7 +46,7 @@ from checks.native_tests.training_check_common import (
     require, close64, all_close, all_close64, same_words, all_finite, uniform, uniform_int, to_f64,
 )
 
-comptime SMALL_MLP_FIXTURES = 3
+comptime SMALL_MLP_FIXTURES = 5
 comptime IN = 8
 comptime HID = 16
 comptime OUT = 3
@@ -369,3 +374,128 @@ def sessions_fixture[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, var p
     _close[E, KIND](handle)
     _ = w
     _ = x
+
+
+# ---------------------------------------------------------------- fixtures 3 and 4: the parallel owner
+# Ported from test_parallel_mlp_native.py: a ParallelNeural shard's
+# 'gradient' is ONE program run in loss-and-gradients mode and 'apply' is the
+# program's APPLY (bindings/parallel_mlp_native_door.mojo). The integer label
+# dtypes and the Fortran-ordered input of the Python test are boundary
+# admission and stay there.
+
+
+def _parallel_weights() -> Weights:
+    """`model_fixture`: zeros except w1[0, 0] = 1, b1[0] = .5 and
+    w2[:, 0] = [.25, -.25, .125]."""
+    var w = Weights()
+    w.w1[0] = 1.0
+    w.b1[0] = 0.5
+    w.w2[0 * HID] = 0.25
+    w.w2[1 * HID] = -0.25
+    w.w2[2 * HID] = 0.125
+    return w^
+
+
+def parallel_gradient_fixture[E: Exec & Movable & Deinitable, KIND: Int](var ex: E) raises:
+    """The independent calculus: loss at rel 2e-6 / abs 2e-7, gradients at
+    rtol 3e-6, atol 3e-7, the weights unchanged."""
+    comptime rows = 3
+    var w = _parallel_weights()
+    var x = List[Float32](length=rows * IN, fill=0)
+    x[0 * IN] = 1.0
+    x[1 * IN] = -0.25
+    x[2 * IN] = 0.5
+    var y: List[Int32] = [0, 1, 2]
+    var handle = _open[E, KIND](ex^, w, 0, Float32(.0625), Float32(.5), Float32(.75), Float32(1e-8), Float32(.25))
+    try:
+        var result = _step[E, KIND](handle, x, y, rows, SMALL_MLP_PROGRAM_GRADS, False)
+        # independent Float64 calculus (the Python test's `independent_gradient`)
+        var z = List[Float64](length=rows * HID, fill=0)
+        var h = List[Float64](length=rows * HID, fill=0)
+        var dl = List[Float64](length=rows * OUT, fill=0)
+        var loss = Float64(0)
+        for r in range(rows):  # small-loop(oracle rows): three rows
+            for k in range(HID):
+                var acc = Float64(w.b1[k])
+                for i in range(IN):
+                    acc += Float64(x[r * IN + i]) * Float64(w.w1[k * IN + i])
+                z[r * HID + k] = acc
+                h[r * HID + k] = max(acc, 0.0)
+            var logits = List[Float64](length=OUT, fill=0)
+            var top = Float64(-1e300)
+            for o in range(OUT):
+                var acc = Float64(w.b2[o])
+                for k in range(HID):
+                    acc += h[r * HID + k] * Float64(w.w2[o * HID + k])
+                logits[o] = acc
+                top = max(top, acc)
+            var total = Float64(0)
+            for o in range(OUT):
+                total += exp(logits[o] - top)
+            for o in range(OUT):
+                var p = exp(logits[o] - top) / total
+                if o == Int(y[r]):
+                    loss += -log(p)
+                    p -= 1.0
+                dl[r * OUT + o] = p / Float64(rows)
+        loss /= Float64(rows)
+        var want = List[Float64](length=TOTAL, fill=0)
+        for r in range(rows):  # small-loop(oracle rows)
+            for k in range(HID):
+                var dh = Float64(0)
+                for o in range(OUT):
+                    dh += dl[r * OUT + o] * Float64(w.w2[o * HID + k])
+                if z[r * HID + k] <= 0:
+                    dh = 0
+                for i in range(IN):
+                    want[k * IN + i] += dh * Float64(x[r * IN + i])
+                want[128 + k] += dh
+            for o in range(OUT):
+                for k in range(HID):
+                    want[144 + o * HID + k] += dl[r * OUT + o] * h[r * HID + k]
+                want[192 + o] += dl[r * OUT + o]
+        require(abs(Float64(result.loss[0]) - loss) <= max(2e-6 * abs(loss), 2e-7),
+                "loss " + String(result.loss[0]) + " is not the independent calculus " + String(loss))
+        require(all_close(result.gradients(), want, 3e-6, 3e-7), "gradients are not the independent calculus")
+        var after = _download[E, KIND](handle)
+        require(same_words(after.flat(), w.flat()), "the gradient moved the weights")
+    except error:
+        _close[E, KIND](handle)
+        raise error
+    _close[E, KIND](handle)
+
+
+def parallel_apply_fixture[E: Exec & Movable & Deinitable, KIND: Int](var ex: E) raises:
+    """Two APPLY steps of constant .125 gradients against the first two AdamW
+    steps: parameters at rtol 3e-6, atol 3e-7, moments at atol 1e-8."""
+    var w = _parallel_weights()
+    var lr = Float64(.0625)
+    var beta1 = Float64(.5)
+    var beta2 = Float64(.75)
+    var eps = Float64(1e-8)
+    var wd = Float64(.25)
+    var handle = _open[E, KIND](ex^, w, 0, Float32(lr), Float32(beta1), Float32(beta2), Float32(eps), Float32(wd))
+    try:
+        var gradients = List[Float32](length=TOTAL, fill=0.125)
+        var expected = to_f64(w.flat())
+        var m = Float64(0)
+        var v = Float64(0)
+        for step in range(1, 3):  # dependent optimizer recurrence
+            var n = small_mlp_program_run[E, KIND](SMALL_MLP_PROGRAM_APPLY, [Int(gradients.unsafe_ptr())], [handle], List[Float32]())
+            require(n == TOTAL, "apply returned " + String(n) + " values")
+            m = beta1 * m + (1.0 - beta1) * 0.125
+            v = beta2 * v + (1.0 - beta2) * 0.125 * 0.125
+            for i in range(TOTAL):  # small-loop(oracle cells)
+                expected[i] = expected[i] * (1.0 - lr * wd) - lr * (m / (1.0 - beta1 ** Float64(step))) / (
+                    sqrt(v / (1.0 - beta2 ** Float64(step))) + eps)
+            var after = _download[E, KIND](handle)
+            require(all_close(after.flat(), expected, 3e-6, 3e-7), "step " + String(step) + ": parameters are not AdamW")
+            require(all_close(after.m, List[Float64](length=TOTAL, fill=m), 0.0, 1e-8),
+                    "step " + String(step) + ": first moment is not AdamW")
+            require(all_close(after.v, List[Float64](length=TOTAL, fill=v), 0.0, 1e-8),
+                    "step " + String(step) + ": second moment is not AdamW")
+        _ = gradients
+    except error:
+        _close[E, KIND](handle)
+        raise error
+    _close[E, KIND](handle)

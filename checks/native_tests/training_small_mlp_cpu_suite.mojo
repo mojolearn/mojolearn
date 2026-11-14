@@ -12,6 +12,7 @@ from autograd.ops_api import OPS_HOST
 from sequence.exec import HostExec
 from checks.native_tests.training_small_mlp_cases import (
     SMALL_MLP_FIXTURES, adamw_fixture, loss_and_grads_fixture, sessions_fixture,
+    parallel_gradient_fixture, parallel_apply_fixture,
 )
 from checks.native_tests.training_check_common import require
 
@@ -25,10 +26,14 @@ def run_checks() raises:
                 adamw_fixture[HostExec, OPS_HOST](HostExec())
             elif unit == 1:
                 loss_and_grads_fixture[HostExec, OPS_HOST](HostExec())
-            else:
+            elif unit == 2:
                 sessions_fixture[HostExec, OPS_HOST](HostExec(), HostExec())
+            elif unit == 3:
+                parallel_gradient_fixture[HostExec, OPS_HOST](HostExec())
+            else:
+                parallel_apply_fixture[HostExec, OPS_HOST](HostExec())
         except error:
             failed += 1
             print("FAIL training_small_mlp_cpu fixture", unit, String(error))
     require(failed == 0, "training_small_mlp_cpu failed " + String(failed) + " fixtures")
-    print("PASS training_small_mlp_cpu:", SMALL_MLP_FIXTURES, "fixtures (AdamW equations, cross-entropy, sessions forward)")
+    print("PASS training_small_mlp_cpu:", SMALL_MLP_FIXTURES, "fixtures (AdamW equations, cross-entropy, sessions forward, parallel gradient and apply)")
