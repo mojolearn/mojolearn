@@ -158,6 +158,7 @@ def case_rebase_offsets() raises:
         raise Error("disagreeing sizes did not refuse")
     except problem:
         _refuses(problem, "part lengths disagree")
+    _ = out  # the second call takes its address
     _ = raw
     _ = lens
 
@@ -201,6 +202,9 @@ def case_ivf_shard_plan() raises:
     require(parallel_ivf_shard_plan(_ivf(_key()), Int(dup.unsafe_ptr()), Int(offs.unsafe_ptr()), Int(soff.unsafe_ptr()),
                                     Int(loc.unsafe_ptr()), Int(mp.unsafe_ptr()), 4, 2, 2) == 1,
             "a repeated id is not a permutation")
+    _ = soff  # written through their addresses by the call above
+    _ = loc
+    _ = mp
     _ = ind
     _ = offs
     _ = dup
@@ -238,6 +242,7 @@ def case_ivf_finalize() raises:
         raise Error("a negative count did not refuse")
     except problem:
         _refuses(problem, "nonnegative")
+    _ = values  # the refused call takes its address
 
 
 def case_archive_export() raises:
