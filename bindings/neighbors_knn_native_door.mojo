@@ -403,14 +403,15 @@ def knn_release(model: PythonObject) raises:
 # Lane a7b-device-x-neighbors (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
 # section 3.2 step 3): the k-NN doors admit a borrowed float32 X with NO host
 # scan (`defer_finite`). The GPU entries test the words they upload anyway and
-# return the status word: the fit index behind `knn_index_prepare`'s one
-# upload, the queries behind the resident search/classify/regress upload,
+# return the status word: the fitted index behind `knn_index_prepare`'s one
+# upload at the first query (moved from fit 2026-11-14, see `_nn_fit`), the queries behind the resident search/classify/regress upload,
 # and a radius query behind `radius_neighbors_count`'s
 # (core/admitted_finite_status.mojo). A radius index is tested once, at fit or
 # archive load (lane a8b-device-x-neighbors-rest).
 # A cast X is refused by its cast and a model-selection fold by its gather.
 # The CPU column (a binding without `knn_index_prepare`) and the RBC search
-# (host addresses) keep one parallel host scan (`knn_host_finite`). Every
+# (host addresses) keep one parallel host scan (`knn_host_finite`; the
+# fitted index's once, at the first query, `knn_index_finite_once`). Every
 # refusal is `admitted_finite_refuse`'s wording. Before this lane the k-NN
 # doors did not refuse a NaN X at all (behaviour: now refused, as
 # scikit-learn does).
@@ -447,23 +448,38 @@ def knn_host_finite_at(model: PythonObject, address: Int, count: Int) raises:
     admitted_finite_refuse(knn_finite_status(address, count), _class_name(model))
 
 
+def knn_index_finite_once(model: PythonObject, idx: PythonObject) raises:
+    """The finite test of the fitted index where no device prepare tests it
+    (the CPU column, RBC): one parallel host scan at the first query, keyed
+    on the index's address and shape in the resident holder (a refit starts
+    a fresh holder), so no later query scans it again. Moved from fit with
+    the device upload (0.8.55's fit scanned nothing; see `_nn_fit`)."""
+    var fields = py_fields(model)
+    var holder = _holder(fields)
+    var key = Python.tuple(classical_address(idx), family_call(_b().tuple, idx.shape))
+    var held = py_get(holder, PythonObject("index_finite"), PythonObject(None))
+    if held is not None and _eq(held, key):
+        return
+    knn_host_finite_at(model, Int(py=key[0]), Int(py=idx.size))
+    _ = idx  # keep the Python object alive through the native scan above
+    py_setitem(holder, "index_finite", key)
+
+
 def knn_with_status(dist: PythonObject, status: List[Int32]) raises -> PythonObject:
     """`dist` (`_dist_params`) with the status word's host address as its
     fourth value (bindings/_mojolearn.mojo `_dist_status`)."""
     return Python.list(dist[0], dist[1], dist[2], PythonObject(Int(status.unsafe_ptr())))
 
 
-def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObject,
-                     test: Bool = False) raises -> PythonObject:
+def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObject) raises -> PythonObject:
     """`NearestNeighbors._resident_index_handle(binding, idx)`: the handle of
-    the device-resident copy of `idx`, prepared on the first call and reused
+    the device-resident copy of `idx`, prepared on the first query and reused
     while the index keeps its address and shape; None where the binding has
-    no `knn_index_prepare`. `test` (the fit of a borrowed X, lane a7b): the
-    prepare tests the index behind its upload, a non-finite index is refused
-    and nothing is held. A query's prepare does not test it again: every
-    `_index` was tested once, at fit or at archive load (lane
-    a8b-device-x-neighbors-rest; host_archive_native.mojo
-    host_archive_neighbors)."""
+    no `knn_index_prepare`. The prepare that mints a handle tests the index
+    behind its one upload (lane a7b's finite test, moved from fit to the
+    first query as 0.8.55 had no fit-time upload): a non-finite index is
+    refused with `admitted_finite_refuse`'s wording and nothing is held; a
+    reused handle is never tested again."""
     var b = _b()
     var ops = knn_ops_key(binding)
     if ops.vendor == 0:
@@ -495,7 +511,7 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
     var n_index = Int(py=family_call(b.int, idx.shape[0]))
     var n_features = Int(py=family_call(b.int, idx.shape[1]))
     var index_address = Int(py=key[0])
-    var status_address = Int(status.unsafe_ptr()) if test else 0
+    var status_address = Int(status.unsafe_ptr())
     var entry = neighbors_ops_entry(ops)
     var handle_word = 0
     with GILReleased(Python()):
@@ -587,9 +603,11 @@ def _is_knn(model: PythonObject, context: PythonObject) raises -> Bool:
     return family_isinstance(model, context["family_xn_knn_classes"])
 
 
-def _check_refusals(model: PythonObject, context: PythonObject) raises:
+def _check_refusals(model: PythonObject, context: PythonObject) raises -> Int:
     """`NearestNeighbors._check_refusals` (and, for the k-NN classes, their
-    `_resolve_weights` after it): every refusal by name, at fit."""
+    `_resolve_weights` after it): every refusal by name, at fit. Returns the
+    brute-force metric code it resolved (-1 under algorithm='rbc'), so the
+    fit resolves the metric once."""
     var fields = py_fields(model)
     var cls_name = _class_name(model)
     var knn = _is_knn(model, context)
@@ -601,14 +619,16 @@ def _check_refusals(model: PythonObject, context: PythonObject) raises:
             and _eq(family_call(py_call(_b().getattr, metric, PythonObject("lower"))), PythonObject("inner_product"))):
         knn_refuse_distance_inner_product(cls_name)
     var algorithm = family_field(fields, "algorithm")
+    var value = -1
     if _eq(algorithm, PythonObject("rbc")):
         _ = host_archive_rbc_metric_object(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
     elif py_contains(Python.tuple(PythonObject("brute"), PythonObject("auto")), algorithm):
-        _ = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"))
+        value = Int(py=knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"))[0])
     else:
         knn_refuse_algorithm(family_repr(algorithm))
     if knn:
         _ = knn_resolve_weights(cls_name, family_field(fields, "weights"))
+    return value
 
 
 def _dist_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -674,15 +694,12 @@ def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: 
 # ------------------------------------------------------------------ fit
 
 
-def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
-            binding: PythonObject) raises:
+def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) raises:
     """`NearestNeighbors.fit(X)`: the refusals, the release of the last
-    fit's device index, then the float32 points held on the instance.
-    `binding`: the search binding the index is prepared on (None: the
-    model's `_mojolearn` binding, the one its queries resolve)."""
+    fit's device index, then the float32 points held on the instance."""
     var fields = py_fields(model)
     var cls_name = _class_name(model)
-    _check_refusals(model, context)
+    var metric_value = _check_refusals(model, context)
     # A refit drops the device copy of the previous index HERE, not at the
     # next call: the copy is keyed on the array's address and shape.
     knn_release(model)
@@ -701,25 +718,25 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
         idx = input_pin.keep
     else:
         idx = admit_family_owned(input, input_pin, context)
-    var rbc = _eq(family_field(fields, "algorithm"), PythonObject("rbc"))
     knn_door_clock_mark("fit_admit_x")
-    if not knn_x_tested(input, x_source, context):
-        # Lane a7b: the fit's finite test. On the GPU binding the index is
-        # uploaded here once (the resident copy every query searches) and
-        # tested behind that upload; the CPU column and RBC scan on the host.
-        var search = binding if binding is not None else estimator_binding(model, "_mojolearn", context)
-        if not rbc and knn_device_tests(search):
-            _ = _resident_handle(model, search, idx, True)
-        else:
-            knn_host_finite(model, input)
+    # A MEASURED WINNER RESTORED (AGENTS.md "A measured winner is never
+    # deleted on reasoning"; coordinator, 2026-11-14): 0.8.55's fit held the
+    # host block and nothing else (python/mojolearn/neighbors.py at 0.8.55,
+    # `fit`: refusals, release, `as_f32_dense_c`, the metric input check),
+    # no device copy and no finite scan. Lane a7b moved the index upload and
+    # its finite test into fit (`_resident_handle(..., True)` here); measured
+    # k-NN fit 24.6 ms (0.8.55) -> 35.4 ms on taxi (L40S). The upload and the
+    # finite test of the index now run at the first query, once per model
+    # (`_resident_handle` mints and tests; `knn_index_finite_once` on the CPU
+    # column and RBC), held with the handle so no later query pays them.
+    # The metric is resolved once, by `_check_refusals` above (-1 for rbc).
     knn_door_clock_mark("fit_prepare_finite")
-    if not rbc:
-        var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"))
-        _check_metric_input(cls_name, Int(py=resolved[0]), input)
+    if metric_value >= 0:
+        _check_metric_input(cls_name, metric_value, input)
     py_setitem(fields, "_index", idx)
     py_setitem(fields, "n_samples_fit_", PythonObject(input.shape[0]))
     py_setitem(fields, "n_features_in_", PythonObject(input.shape[1]))
-    _ = input_pin^  # the door's pin held X through the device upload or host scan
+    _ = input_pin^  # the door's pin held X through admission and the metric check
     knn_door_clock_mark("fit_metric_store")
 
 
@@ -823,7 +840,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     """`KNeighborsClassifier.fit(X, y)`: the index, then int32 label columns
     (POLICY 6: `n_outputs` contiguous columns) and the classes per column."""
     var b = _b()
-    _nn_fit(model, args[1], context, PythonObject(None))
+    _nn_fit(model, args[1], context)
     var fields = py_fields(model)
     var y = args[2]
     var shape = _y_shape(y, fields, context)
@@ -927,7 +944,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     """`KNeighborsRegressor.fit(X, y)`: the index, then float32 target
     columns (POLICY 6)."""
     var b = _b()
-    _nn_fit(model, args[1], context, PythonObject(None))
+    _nn_fit(model, args[1], context)
     var fields = py_fields(model)
     var target_pin = ArrayPin()
     var target = admit_family_meta(args[2], -1, "y", context, target_pin)
@@ -1134,6 +1151,7 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     else:
         if fold.active():
             raise Error("RuntimeError: a resident k-NN fold needs the binding's resident entries")
+        knn_index_finite_once(model, idx)  # the CPU column's index test, first query only (see `_nn_fit`)
         if not tested:
             knn_host_finite_at(model, q_addr, nq * call.n_features)
         with GILReleased(Python()):
@@ -1307,6 +1325,7 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     else:
         if fold.active():
             raise Error("RuntimeError: a resident k-NN fold needs the binding's resident entries")
+        knn_index_finite_once(model, idx)  # the CPU column's index test, first query only (see `_nn_fit`)
         if not tested:
             knn_host_finite_at(model, q_addr, nq * call.n_features)
         with GILReleased(Python()):
@@ -1376,7 +1395,7 @@ def _neighbors_knn_operation(model: PythonObject, operation: String, var args: P
     knn_door_clock_mark("binding_arguments")
     if operation == "family_xn_knn_nn_fit":
         # args = (X,)
-        _nn_fit(model, args[0], context, PythonObject(None))
+        _nn_fit(model, args[0], context)
         return model
     if operation == "family_xn_knn_clf_fit":
         # args = (x_neighbors binding, X, y)
@@ -1429,7 +1448,7 @@ def neighbors_knn_operation(model: PythonObject, operation: String, args: Python
         # `NearestNeighbors._check_refusals()` (and the k-NN classes' weights
         # after it): the fit's refusals with no data, one binding call (lane
         # py-neighbors 2026-11-14; the Python resolution is deleted).
-        _check_refusals(model, context)
+        _ = _check_refusals(model, context)
         return PythonObject(None)
     if operation == "family_xn_knn_dist_params":
         # `NearestNeighbors._dist_params()`: `[metric, metric_arg, weights]`.
