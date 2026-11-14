@@ -872,6 +872,33 @@ struct TDepthwiseWorkspace(Movable):
     var h_feat_table: HostBuffer[DType.uint32]
     var d_nsplit: DeviceBuffer[DType.uint32]
     var h_nsplit: HostBuffer[DType.uint32]
+    # lane gbdt-per-node-regression (2026-11-14): THE TREE TAIL'S SCRATCH,
+    # POOLED. The leaf values, their double sums and the Lossguide exact
+    # replay's slot lists were allocated per tree (2 device + 2 pinned host
+    # buffers every tree, + 4 + 4 more on a Lossguide exact fit since
+    # 7656826862): one allocation each per fit now, sized by the leaf capacity
+    # (`max_leaves`, a key). `lv_cap_key` is the most leaf rows they hold.
+    var lv_cap_key: Int
+    var d_leaf_vals: DeviceBuffer[DType.float32]
+    var h_leaf_vals: HostBuffer[DType.float32]
+    var d_sums64: DeviceBuffer[DType.uint64]
+    var h_sums64: HostBuffer[DType.uint64]
+    var d_lg_slot_off: DeviceBuffer[DType.int32]
+    var h_lg_slot_off: HostBuffer[DType.int32]
+    var d_lg_slots: DeviceBuffer[DType.int32]
+    var h_lg_slots: HostBuffer[DType.int32]
+    var d_lg_kept: DeviceBuffer[DType.int32]
+    var h_lg_kept: HostBuffer[DType.int32]
+    var d_lg_nstats: DeviceBuffer[DType.float32]
+    var h_lg_nstats: HostBuffer[DType.float32]
+    #: `lg_node_stats` floats the pool holds: a tree has at most
+    #: `2 * max_leaves - 1` nodes (each split adds two)
+    var lg_nstats_cap: Int
+    #: The last tree's host drains (the manager's counted waits plus the
+    #: grower's direct `ctx.synchronize` calls) and growth rounds, read by
+    #: `checks/gbdt_step_cost_check.mojo`. Plain Ints, written once per tree.
+    var last_tree_drains: Int
+    var last_tree_rounds: Int
 
     def __init__(
         out self,
@@ -1038,6 +1065,37 @@ struct TDepthwiseWorkspace(Movable):
             WINNER_RECORD_WORDS * max_leaves
         )
         self.d_ids_arena = arena^
+        # the tree tail's pooled scratch (see the field block)
+        var lv_cap = max_leaves + 1
+        self.lv_cap_key = lv_cap
+        var lv_cells = lv_cap * max(1, stat_count - 1)
+        self.d_leaf_vals = ctx.enqueue_create_buffer[DType.float32](lv_cells)
+        self.h_leaf_vals = ctx.enqueue_create_host_buffer[DType.float32](
+            lv_cells
+        )
+        self.d_sums64 = ctx.enqueue_create_buffer[DType.uint64](
+            lv_cap * stat_count
+        )
+        self.h_sums64 = ctx.enqueue_create_host_buffer[DType.uint64](
+            lv_cap * stat_count
+        )
+        self.d_lg_slot_off = ctx.enqueue_create_buffer[DType.int32](lv_cap)
+        self.h_lg_slot_off = ctx.enqueue_create_host_buffer[DType.int32](
+            lv_cap
+        )
+        self.d_lg_slots = ctx.enqueue_create_buffer[DType.int32](lv_cap)
+        self.h_lg_slots = ctx.enqueue_create_host_buffer[DType.int32](lv_cap)
+        self.d_lg_kept = ctx.enqueue_create_buffer[DType.int32](lv_cap)
+        self.h_lg_kept = ctx.enqueue_create_host_buffer[DType.int32](lv_cap)
+        self.lg_nstats_cap = 2 * lv_cap * stat_count
+        self.d_lg_nstats = ctx.enqueue_create_buffer[DType.float32](
+            self.lg_nstats_cap
+        )
+        self.h_lg_nstats = ctx.enqueue_create_host_buffer[DType.float32](
+            self.lg_nstats_cap
+        )
+        self.last_tree_drains = 0
+        self.last_tree_rounds = 0
 
 
 def is_terminal_leaf(
