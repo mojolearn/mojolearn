@@ -32,6 +32,7 @@ whole caller buffers.
 """
 
 from std.memory import bitcast, unsafe_memcpy
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
@@ -50,6 +51,7 @@ from autograd.block_step_ops import (
     attn_step_restart,
     attn_step_run_kept,
     attn_step_run_kept_host,
+    attn_step_word,
     block_guard,
     block_offsets,
     block_state_sizes,
@@ -59,6 +61,18 @@ from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
 from transformer.impl.llama.modeling_llama import LlamaDims, LlamaDeviceWeights
+
+#: Lane fix-transformer-decode-door (2026-11-13): the decode session's step
+#: (`run` at L = 1) and its resident decode (`decode`) no longer queue the
+#: op's position word after every token: the word only mirrors the resident
+#: entry's position and is read only when an entry is built over it, so the
+#: arm writes it once (`_flush_word`) before any operation that can build an
+#: entry or hand the word on. The B arm, `-D
+#: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR` (the same define as the
+#: public door's per-token form, providers/python/transformer_decode_pyapi_door.mojo,
+#: owed row wave2-transformer-decode-loop), keeps one fill per token. No
+#: kernel, order or stage changes: no output bit moves.
+comptime _WORD_EACH_TOKEN = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"]()
 
 
 def _fp(addr: Int) -> FP:
@@ -147,6 +161,9 @@ struct AttnStepArm(Movable):
     var bst: Optional[LlamaBackwardStages]
     var dout: Optional[DeviceBuffer[DType.float32]]
     var bkey: List[Int]
+    #: the position word at `q` lags `cached` (steps ran without writing
+    #: it); `_flush_word` writes it before anything can read it
+    var word_due: Bool
 
     def __init__(
         out self, ctx: DeviceContext, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
@@ -208,6 +225,7 @@ struct AttnStepArm(Movable):
         self.bst = Optional[LlamaBackwardStages]()
         self.dout = Optional[DeviceBuffer[DType.float32]]()
         self.bkey = List[Int]()
+        self.word_due = False
         if keyed:
             self.epoch = weight_epoch()
             self.w_src = src.copy()
@@ -262,6 +280,7 @@ struct AttnStepArm(Movable):
         self.bst = Optional[LlamaBackwardStages]()
         self.dout = Optional[DeviceBuffer[DType.float32]]()
         self.bkey = List[Int]()
+        self.word_due = False
         self._shape(ints)
         if s0 < 0 or s0 > self.smax:
             raise Error(
@@ -322,6 +341,15 @@ struct AttnStepArm(Movable):
     def _view(self, p: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
         return _exec_view(self.ex, p, n)
 
+    def _flush_word(mut self) raises:
+        """Queue the deferred position word (lane fix-transformer-decode-
+        door): every operation other than a decode step calls this first, so
+        an entry built later (after a weight refresh, a shape change or an
+        eviction) reads the position the arm holds."""
+        if self.word_due:
+            attn_step_word(self.ex, self.q, self.cached)
+            self.word_due = False
+
     # ------------------------------------------------------------ copies
     def _upload_weights(mut self, src: List[Int]) raises:
         var ctx = self.ex.ctx.copy()
@@ -359,6 +387,8 @@ struct AttnStepArm(Movable):
         self._caches_in(pk, pv)
         attn_step_restart(self.ex, self.sc, self._operands(self.w), self._counts(1), self.ints, s0, False)
         self.cached = s0
+        # restart wrote the word
+        self.word_due = False
 
     def refresh_weights(mut self, a: List[Int]) raises:
         """The block session's version key (lane x45c): the same caller
@@ -375,19 +405,23 @@ struct AttnStepArm(Movable):
         var now = weight_epoch()
         if now == self.epoch and src == self.w_src:
             return
+        self._flush_word()
         self.sc.forget(Int(self.w))
         self.epoch = now
         self.w_src = src.copy()
         self._upload_weights(src)
 
     # ------------------------------------------------------------ runs
-    def _run(mut self, l: Int, forward_only: Bool) raises:
+    def _run(mut self, l: Int, forward_only: Bool, write_word: Bool = True) raises:
         """`l` tokens per row from `xio` to `yio` through the op, on the
-        kept stages."""
+        kept stages. `write_word` False leaves the position word due (the
+        caller flushed any earlier due word before its first run)."""
         var n = self.b * l * self.dm
         attn_step_run_kept(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints, self.yio,
-                           self.pre, forward_only)
+                           self.pre, forward_only, write_word)
         self.cached += l
+        # the run wrote the current position, or left it due
+        self.word_due = not write_word
 
     def run(mut self, px: Int, py: Int, l: Int) raises -> Int:
         """`l` tokens per row through the op (L = 1 a decode step, L > 1 a
@@ -400,11 +434,19 @@ struct AttnStepArm(Movable):
             # the decode step from and to the caller's arrays, no resident
             # x/y hop and no device-to-device copies (fable-perf-neural-0855;
             # 0.8.55's `_session_step_run`); the same op entry and stages
-            attn_step_run_kept_host(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints,
-                                    px, py, self.pre, False)
+            comptime if _WORD_EACH_TOKEN:
+                self._flush_word()
+                attn_step_run_kept_host(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints,
+                                        px, py, self.pre, False)
+            else:
+                # No position-word fill per token: the word is left due.
+                attn_step_run_kept_host(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints,
+                                        px, py, self.pre, False, False)
+                self.word_due = True
             self.cached += 1
             self.ex.sync()
             return self.cached
+        self._flush_word()
         var ctx = self.ex.ctx.copy()
         ctx.enqueue_copy(dst_buf=self._view(self.xio, n), src_ptr=f32_ptr(px))
         self._run(l, False)
@@ -419,6 +461,7 @@ struct AttnStepArm(Movable):
         Queued only; the stack waits."""
         if l < 1:
             raise Error("causal lm session: L must be positive")
+        self._flush_word()
         var n = self.b * l * self.dm
         self._io(n)
         var ctx = self.ex.ctx.copy()
@@ -436,6 +479,7 @@ struct AttnStepArm(Movable):
         token t moved on the device, the (B, N, d_model) output down once.
         Bytes equal `steps` calls of `run(.., 1)`."""
         decode_slab_check(self.b, steps, self.dm, "transformer decode session decode")
+        self._flush_word()
         var row = self.b * self.dm
         var n = row * steps
         var xs = self.ex.alloc(n)
@@ -450,8 +494,11 @@ struct AttnStepArm(Movable):
             ctx.enqueue_copy(dst_buf=xs_v, src_ptr=f32_ptr(px))
             for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the cache the previous step left), the step op once each
                 decode_slab_take(ctx, xt_v, xs_v, self.b, steps, self.dm, t)
-                self._run(1, False)
+                # The position word once after the loop, not per token
+                # (`_WORD_EACH_TOKEN`, the B arm, keeps the fill per token).
+                self._run(1, False, _WORD_EACH_TOKEN)
                 decode_slab_put(ctx, ys_v, yt_v, self.b, steps, self.dm, t)
+            self._flush_word()
             ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=ys_v)
             self.ex.sync()
         except err:
@@ -464,6 +511,7 @@ struct AttnStepArm(Movable):
 
     def export(mut self, pk: Int, pv: Int) raises -> Int:
         """Both caches into the caller's buffers, one wait."""
+        self._flush_word()
         self._caches_out(pk, pv)
         self.ex.sync()
         return self.cached
@@ -489,6 +537,7 @@ struct AttnStepArm(Movable):
         nothing of them crosses the host, `forward_only` (no backward reads
         these stages). Otherwise the caller's caches up at s0, the run, the
         caches back down (the host arrays are the state). One wait."""
+        self._flush_word()
         self._shape(ints)
         self.refresh_weights(a)
         var n = self.b * l * self.dm
@@ -532,6 +581,7 @@ struct AttnStepArm(Movable):
         weights, rotary table and input. `a` is the backward's 21 addresses:
         x, the nine weights, grad_output, d_x and the nine weight gradients.
         One wait."""
+        self._flush_word()
         self._shape(ints)
         var fa = List[Int](length=13 + BLOCK_OPTION_ADDRS, fill=0)
         fa[0] = a[0]
