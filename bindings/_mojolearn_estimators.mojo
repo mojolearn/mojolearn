@@ -953,7 +953,7 @@ def ols_predict_binding(
     var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
         Int(py=params[0]), Int(py=params[1]), Float64(py=params[2]), False)
     with GILReleased(Python()):
-        linear_predict_device(request)
+        _ = linear_predict_device(request)
     return PythonObject(0)
 
 
@@ -969,7 +969,7 @@ def ols_predict_wide_binding(
     var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
         Int(py=params[0]), Int(py=params[1]), Float64(py=params[2]), True)
     with GILReleased(Python()):
-        linear_predict_device(request)
+        _ = linear_predict_device(request)
     return PythonObject(0)
 
 

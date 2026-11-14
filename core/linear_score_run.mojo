@@ -85,7 +85,7 @@ def linear_score_run(predict: NativeDescriptorCall, metrics: NativeDescriptorCal
     var address = Int(arena.unsafe_ptr())
     try:
         var request = linear_state_predict_request(state, x, address + 4 * layout.p, rows, cols, False, estimator)
-        linear_predict_run(predict, request)
+        _ = linear_predict_run(predict, request)
         return linear_r2_finish(metrics, layout, address, rows, target, vendor, mode)
     finally:
         _ = layout

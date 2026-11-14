@@ -40,7 +40,6 @@ from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
-from core.gemm import gemv_n_ols_predict
 from core.identity_trace import IdentityTrace
 from glm.impl.ols import (
     OLS_ALGO_EIG,
@@ -73,28 +72,9 @@ from core.gram_splitk import (
 from glm.impl.center_device import center_buf, col_means_buf, col_sums_buf, col_sums_pair_buf
 
 
-def _add_scalar_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin], n_in: Int32, value: Float32
-):
-    """`dst += value`, one thread per element. The intercept epilogue.
-
-    IDENTITY_PATHS row 10, DEVIATION 527. `dst` is the prediction vector a
-    caller reads and this add is the last operation performed on it, so it
-    is a float SEAM in row 10's sense: the operand comes from `gemv_n` and
-    the result leaves the device. A prediction near zero -- an ordinary
-    thing for a centered regression -- plus a small intercept is exactly
-    where the cancellation lands in the denormal range, and there CUDA
-    keeps a number Metal has already flushed. Bitwise inert on an FTZ
-    backend, which is why it costs nothing to have.
-
-    Row 9 is NOT reachable here: there is no multiply, so there is no
-    contraction to pin, and `identical_mul_add` is deliberately not called
-    rather than called-and-inert.
-    """
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var v = ftz(dst.unsafe_load(i))
-        dst.unsafe_store(i, ftz(v + ftz(value)))
+# _add_scalar_kernel (the intercept epilogue, DEVIATION 527) and ols_predict_host
+# moved into core/p3_linear_impl.mojo ols_predict_device's one epilogue launch
+# (lane ols-regression, 2026-11-14); no other caller.
 
 
 def ols_fit_host(
@@ -367,51 +347,6 @@ def ols_fit_weighted_host(
         coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
     _ = hw^
     _ = sw^
-
-
-def ols_predict_host(
-    ctx: DeviceContext,
-    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n_rows: Int,
-    n_features: Int,
-    intercept: Float32,
-) raises:
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var coef = ctx.enqueue_create_buffer[DType.float32](n_features)
-    var out = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
-    ctx.synchronize()
-    gemv_n_ols_predict(ctx, out, x, coef, n_rows, n_features)
-    # A HOST FLOAT COMPARISON DECIDING A LAUNCH, audited for DEVIATION 527
-    # and left as it is. `intercept` is a value the caller hands in, not one
-    # this repository computed on the device, so the compare is against a
-    # host constant and is the same answer on every host. THE SENTENCE THAT
-    # STOOD HERE -- "`ols_fit_host` refuses `fit_intercept`, so on the
-    # fitted path it is always exactly 0.0" -- WAS FALSE at the surface
-    # (corrected 2026-08-23, DEVIATION 517): the implemented `ols_fit` refuses
-    # `fit_intercept`, but `python/mojolearn/linear_model.py` centers X and
-    # y ON THE HOST before calling this file and hands a NON-ZERO intercept
-    # back in, so `mojolearn.LinearRegression()`'s default takes this
-    # branch on every fit. The intercept is a host float64 quantity
-    # (exactly-rounded sums, no BLAS; see that file), so the compare is
-    # still a function of the inputs alone. What the branch DOES change,
-    # and it is the honest residue: `x + 0.0` is `x` for every `x` except
-    # `-0.0`, which becomes `+0.0`. That is one sign bit on one value,
-    # identical on every vendor, and taking the branch out would launch a
-    # kernel over every prediction to achieve it.
-    if intercept != Float32(0.0):
-        ctx.enqueue_function[_add_scalar_kernel](
-            out.unsafe_ptr(), Int32(n_rows), intercept,
-            grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-        )
-    var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
-    ctx.synchronize()
-    for i in range(n_rows):
-        out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
 
 
 # ===========================================================================

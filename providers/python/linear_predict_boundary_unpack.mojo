@@ -9,8 +9,10 @@ from std.memory import ArcPointer
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get
 from bindings.classical_arrays_door import classical_array, classical_address
-from bindings.classical_validate_unpack import classical_check_x_snapshot, classical_estimator_name
-from bindings.admitted_input_unpack import admit_x
+from bindings.classical_validate_unpack import classical_estimator_name
+from bindings.admitted_input_unpack import admit_x, admit_x_unrecorded
+from core.admitted_refusals import admitted_finite_refuse
+from core.host_finite_scan import host_all_finite_f32
 from bindings.sequential_description_unpack import sequential_fields
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from providers.python.linear_state_boundary_door import LinearStateOwner, linear_state_owner, linear_state_refresh
@@ -35,11 +37,26 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var feature_source = fields["n_features_in_"]
     var intercept_source = fields["intercept_"]
     var est = classical_estimator_name(model)
-    var admitted_x = classical_check_x_snapshot(value, est, context, admitted=True)
+    # X's finite test is deferred to the prediction entry (lane
+    # ols-regression, 2026-11-14): a borrowed float32 C-order X takes no host
+    # pass here; the entry tests the words it uploads and returns the status
+    # word at its one drain (core/p3_linear_impl.mojo ols_predict_device; the
+    # host column scans in its entry). A cast X was tested in the cast pass
+    # (`finite` True) and is not tested again. 0.8.55's predict scanned
+    # nothing; the host scan here was the added pass (ols taxi infer L40S
+    # 5.45 -> 9.30 ms against 0.8.55, paper board 80a7f8aca3).
+    var admitted_x = admit_x_unrecorded(value, est, context, admitted=True, defer_finite=True)
     var x = admitted_x.array
     var rows = admitted_x.rows
     var cols = admitted_x.cols
+    var test_x = not admitted_x.finite
     state.features = Int(py=feature_source)
+    if test_x and cols != state.features:
+        # scikit-learn refuses a non-finite X before the feature-count check;
+        # only a refused call pays this scan.
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=admitted_x.address),
+                                   rows * cols):
+            admitted_finite_refuse(1, est, "X")
     linear_state_check_width(state, cols, est)
     var coef = admit_x(coefficient_source, 1, "coef_", context)
     state.coef_count = Int(py=coef.size)
@@ -53,9 +70,10 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var key = connection.key.copy()
     var destination = Int(py=classical_address(dst))
     var py = Python()
+    var status = 0
     try:
         with GILReleased(py):
-            linear_lease_predict(key, lease, admitted_x.address, destination, rows, cols, wide, est)
+            status = linear_lease_predict(key, lease, admitted_x.address, destination, rows, cols, wide, est, test_x)
     finally:
         # Raw addresses and the copied native function pointer do not retain
         # the admitted arrays or the extension image that owns the endpoint.
@@ -69,6 +87,7 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
         _ = lease
         _ = native_call
         _ = prior
+    admitted_finite_refuse(status, est, "X")
     return dst
 
 

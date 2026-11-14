@@ -14,10 +14,16 @@ comptime LINEAR_STATES = StateRegistry[LinearModelState, "MojolearnLinearModelSt
 
 
 def linear_lease_predict(key: LinearEntryKey, lease: ArcPointer[LinearModelState],
-    x: Int, dst: Int, rows: Int, cols: Int, wide: Bool, estimator: String) raises:
+    x: Int, dst: Int, rows: Int, cols: Int, wide: Bool, estimator: String, test_x: Bool = False) raises -> Int:
+    """Predict through the leased state; the entry's result word (1: the
+    deferred finite test of X found a NaN or an infinity, see
+    `linear_predict_run`)."""
     var request = linear_state_predict_request(lease[], x, dst, rows, cols, wide, estimator)
+    request.test_x = test_x
     var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 1, String(LINEAR_PREDICT_ABI), 1)
+    var status = 0
     try:
-        linear_predict_run(entry, request)
+        status = linear_predict_run(entry, request)
     finally:
         _ = lease
+    return status

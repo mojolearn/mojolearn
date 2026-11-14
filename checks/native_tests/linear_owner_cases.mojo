@@ -245,9 +245,9 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     _fill(query, known, query_rows, cols, intercept, ridge, cid, 91)
     var narrow = List[Float32](length=query_rows + 2, fill=-999)
     var wide = List[Float64](length=query_rows + 2, fill=-999)
-    linear_predict_run(api.predict, LinearPredictRequest(Int(query.unsafe_ptr()), ca,
+    _ = linear_predict_run(api.predict, LinearPredictRequest(Int(query.unsafe_ptr()), ca,
         Int(narrow.unsafe_ptr()) + 4, query_rows, cols, result.intercept, False))
-    linear_predict_run(api.predict, LinearPredictRequest(Int(query.unsafe_ptr()), ca,
+    _ = linear_predict_run(api.predict, LinearPredictRequest(Int(query.unsafe_ptr()), ca,
         Int(wide.unsafe_ptr()) + 8, query_rows, cols, result.intercept, True))
     for row in range(query_rows):
         var wanted = Float64(known[row])
@@ -261,7 +261,7 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     # Fit-derived predictions on training data also retain the original
     # numerical check. Held-out points above prevent training-only overfit.
     var training = List[Float32](length=rows, fill=0)
-    linear_predict_run(api.predict, LinearPredictRequest(Int(x.unsafe_ptr()), ca,
+    _ = linear_predict_run(api.predict, LinearPredictRequest(Int(x.unsafe_ptr()), ca,
         Int(training.unsafe_ptr()), rows, cols, result.intercept, False))
     for row in range(rows):
         var wanted = Float64(y[row])

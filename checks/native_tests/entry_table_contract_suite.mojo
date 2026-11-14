@@ -198,7 +198,7 @@ def borrowed_linear_case() raises:
     try:
         var request = linear_state_predict_request(lease[], Int(source.unsafe_ptr()),
             Int(destination.unsafe_ptr()), 2, 3, False, String("Ridge"))
-        linear_predict_run(linear_predict_host_v1, request)
+        _ = linear_predict_run(linear_predict_host_v1, request)
         require(destination[0] == Float32(3.25) and destination[1] == Float32(1.25),
             "active linear lease mixed a refit's coefficients")
         var refused = False
