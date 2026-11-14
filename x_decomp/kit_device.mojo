@@ -68,7 +68,9 @@ from x_decomp.device import (
     rowsum_scratch,
     xd_ctx,
     XD_FAST_SVD_ONE_BLOCK,
+    XD_EIGH_ONE_BLOCK_N,
 )
+from x_decomp.rr_block import IDN_EIGH_BLOCK
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.kit import (
     Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
@@ -401,6 +403,21 @@ struct DKit(Movable):
     var svd_word: DMat
     var svd_host_word: List[Float32]
     var svd_pending: Bool
+    # lane mcd-per-step-cost (2026-11-14): `eigh_deferred`'s status words
+    # (one per narrow solve since the last sync), read at the next `sync`,
+    # so MinCovDet's narrow pinvh adds no drain of its own to a C-step
+    # whose log determinant already waits there
+    var eig_status: List[DeviceBuffer[DType.int32]]
+    # the selection scratch (`_sorted_order`, `smallest_dev`): keys, vals,
+    # temp keys, temp vals as uint32; counts, flag, scan as int32. Created
+    # on the first selection and grown to the largest n, then reused by
+    # every later selection of the fit (was seven device buffers created a
+    # selection, one selection a C-step)
+    var sel_cap: Int
+    var sel_u32: List[DeviceBuffer[DType.uint32]]
+    var sel_i32: List[DeviceBuffer[DType.int32]]
+    # the drains this kit's `sync` ran (tests/checks/mcd_step_cost_check.mojo)
+    var drains: Int
 
     def __init__(out self) raises:
         self.ctx = xd_ctx()
@@ -413,6 +430,11 @@ struct DKit(Movable):
         self.svd_word = DMat(1, 1)
         self.svd_host_word = List[Float32](length=1, fill=Float32(0))
         self.svd_pending = False
+        self.eig_status = List[DeviceBuffer[DType.int32]]()
+        self.sel_cap = 0
+        self.sel_u32 = List[DeviceBuffer[DType.uint32]]()
+        self.sel_i32 = List[DeviceBuffer[DType.int32]]()
+        self.drains = 0
         # the unused broadcast operand: Kit's `one`, a 0
         var z = List[Float32](length=1, fill=Float32(0))
         self.ctx.enqueue_copy(
@@ -469,9 +491,26 @@ struct DKit(Movable):
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.svd_host_word.unsafe_ptr())),
                 src_buf=_pool_buf_view(self.svd_word.id, 1),
             )
+        var ne = len(self.eig_status)
+        var eig_host = List[Int32](length=max(ne, 1), fill=Int32(0))
+        for i in range(ne):  # small-loop(eig_status: narrow eigh solves since the last sync, one or two a C-step)
+            var st = self.eig_status[i]
+            self.ctx.enqueue_copy(dst_ptr=I32Ptr(unsafe_from_address=Int(eig_host.unsafe_ptr()) + 4 * i), src_buf=st)
+            _ = st^
         self.ctx.synchronize()
+        self.drains += 1
         self.hold_f.clear()
         self.hold_i.clear()
+        if ne > 0:
+            self.eig_status.clear()
+            for i in range(ne):  # small-loop(eig_status: as above)
+                if eig_host[i] != Int32(0):
+                    raise Error(
+                        "eigh: " + String(Int(eig_host[i])) + " solve(s) did not converge"
+                        " (a resident narrow solve read at the next sync). An unconverged decomposition"
+                        " is not returned as if it were one (DEVIATION 590)."
+                    )
+        _ = eig_host^
         if scheck:
             self.svd_pending = False
             if self.svd_host_word[0] != Float32(0):
@@ -501,19 +540,37 @@ struct DKit(Movable):
             self.ctx.enqueue_copy(dst_buf=self._sub(dst), src_buf=self._sub(src))
 
     # ---- selections on the device (lane cpu3-core)
-    def _sorted_order(self, v: DMat, bad: DMat) raises -> DeviceBuffer[DType.uint32]:
+    def _sel_scratch(mut self, n: Int) raises:
+        """The selection scratch at capacity >= n (grown, never shrunk; the
+        old buffers die in stream order behind the launches that read them)."""
+        if n <= self.sel_cap and len(self.sel_u32) == 4:
+            return
+        var cap = max(n, self.sel_cap, 1)
+        self.sel_u32.clear()
+        self.sel_i32.clear()
+        for _ in range(4):  # driver-loop: over the four uint32 scratch roles
+            self.sel_u32.append(self.ctx.enqueue_create_buffer[DType.uint32](cap))
+        self.sel_i32.append(self.ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(cap), 1)))
+        self.sel_i32.append(self.ctx.enqueue_create_buffer[DType.int32](cap))
+        self.sel_i32.append(self.ctx.enqueue_create_buffer[DType.int32](cap + 1))
+        self.sel_cap = cap
+
+    def _sorted_order(mut self, v: DMat, bad: I32Ptr) raises -> DeviceBuffer[DType.uint32]:
         """v's indices in (value, index) order, resident (a stable radix
-        sort of the monotone images); a NaN sets bad's word."""
+        sort of the monotone images); a NaN sets the word at `bad`. The
+        answer is the kit's selection scratch: read it before the next
+        selection."""
         var n = v.n()
-        var keys = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
-        var vals = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
-        var tk = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
-        var tv = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
-        var cnt = self.ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
+        self._sel_scratch(n)
+        # shared references to the kit's scratch (no allocation)
+        var keys = self.sel_u32[0]
+        var vals = self.sel_u32[1]
+        var tk = self.sel_u32[2]
+        var tv = self.sel_u32[3]
+        var cnt = self.sel_i32[0]
         if n > 0:
             self.ctx.enqueue_function[mcd_sort_keys_kernel](
-                v.p(), Int32(n), keys.unsafe_ptr(), vals.unsafe_ptr(),
-                bad.p().bitcast[Int32](), grid_dim=_blocks(n), block_dim=TPB,
+                v.p(), Int32(n), keys.unsafe_ptr(), vals.unsafe_ptr(), bad, grid_dim=_blocks(n), block_dim=TPB,
             )
             fast_radix_sort_pairs_u32(self.ctx, n, keys, vals, tk, tv, cnt)
         _ = keys^
@@ -522,36 +579,24 @@ struct DKit(Movable):
         _ = cnt^
         return vals^
 
-    def _bad_flag(mut self) raises -> DMat:
-        var bad = DMat(1, 1)
-        var bv = _pool_buf_view(bad.id, 1)
-        enqueue_fill(self.ctx, bv, Float32(0))
-        _ = bv^
-        return bad^
-
-    def _refuse_nan(mut self, bad: DMat) raises:
-        """One word home: `_key`'s NaN refusal, as the host sort raised it."""
-        var h = List[Int32](length=1, fill=Int32(0))
-        self.ctx.enqueue_copy(
-            dst_ptr=F32Ptr(unsafe_from_address=Int(h.unsafe_ptr())),
-            src_buf=_pool_buf_view(bad.id, 1),
-        )
-        self.sync()
-        if h[0] != Int32(0):
-            raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
+    # TOMBSTONE: DKit._bad_flag / DKit._refuse_nan (argsort_dev's own NaN word and its immediate drain) deleted
+    # 2026-11-14 by lane mcd-per-step-cost: argsort_dev sets the kit's resident NaN word, read at the next sync
+    # like smallest_dev's (two drains a MinCovDet fit); code recoverable at origin/preinteg/wave2-20261113.
 
     def argsort_dev(mut self, v: DMat) raises -> DMat:
         """`argsort_values(v)` as a resident (n x 1) index vector."""
         var n = v.n()
-        var bad = self._bad_flag()
-        var order = self._sorted_order(v, bad)
+        var badp = self.nan_word.p().bitcast[Int32]()
+        var order = self._sorted_order(v, badp)
         var out = DMat(n, 1)
         if n > 0:
             self.ctx.enqueue_function[u32_to_idx_kernel](
                 order.unsafe_ptr(), Int32(n), out.p().bitcast[Int32](),
                 grid_dim=_blocks(n), block_dim=TPB,
             )
-        self._refuse_nan(bad)
+        # the NaN word is read at the next sync, as smallest_dev's: the order
+        # is a permutation either way, so every gather before it stays in range
+        self.nan_pending = True
         _ = order^
         return out^
 
@@ -562,9 +607,10 @@ struct DKit(Movable):
         if h <= 0:
             return DMat(0, 1)
         var take = min(h, n)
-        var order = self._sorted_order(v, self.nan_word)
-        var flag = self.ctx.enqueue_create_buffer[DType.int32](max(n, 1))
-        var scan = self.ctx.enqueue_create_buffer[DType.int32](n + 1)
+        var badp = self.nan_word.p().bitcast[Int32]()
+        var order = self._sorted_order(v, badp)
+        var flag = self.sel_i32[1]
+        var scan = self.sel_i32[2]
         enqueue_fill(self.ctx, flag, Int32(0))
         var out = DMat(take, 1)
         if n > 0:
@@ -1174,6 +1220,34 @@ struct DKit(Movable):
         _ = dv^
         return _Eig(wd^, vd^)
 
+    def eigh_deferred(mut self, A: DMat) raises -> _Eig:
+        """`eigh` with the narrow solve's status read at the kit's NEXT
+        `sync` instead of a drain of its own (lane mcd-per-step-cost,
+        2026-11-14). Up to XD_EIGH_ONE_BLOCK_N this is `eigh_into`'s own
+        route (`DevExec._eigh_batch_on`: the one-block batched Jacobi with a
+        batch of one) minus its wait, the same launches and words; an
+        unconverged solve raises at that sync, before any host decision
+        reads a value computed from it. Above it (and under the quarantined
+        IDN_EIGH_BLOCK build) it is `eigh`. Only for callers whose every
+        result is followed by a kit `sync` (MinCovDet's C-step: its log
+        determinant, and `_write_dev` at the end of the fit)."""
+        var n = A.r
+        comptime if not IDN_EIGH_BLOCK:
+            if n >= 1 and n <= XD_EIGH_ONE_BLOCK_N:
+                var wd = DMat(1, n)
+                var vd = DMat(n, n)
+                var da = self.ctx.enqueue_create_buffer[DType.float32](n * n)
+                self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+                var dw = self._sub(wd)
+                var dv = self._sub(vd)
+                var status = DevExec._eigh_batch_enq(self.ctx, da, 1, n, dw, dv)
+                self.eig_status.append(status^)
+                _ = da^
+                _ = dw^
+                _ = dv^
+                return _Eig(wd^, vd^)
+        return self.eigh(A)
+
     def rev_vec(self, A: DMat) raises -> DMat:
         """A 1 x n (or n x 1) vector's words reversed, on the device."""
         var out = DMat(A.r, A.c)
@@ -1257,11 +1331,15 @@ struct DMcd:
     var k: DKit
     var seed: Int
     var draws: Int
+    # the log determinants evaluated (one a C-step: the value the loop
+    # branches on; checks/mcd_step_cost_check.mojo)
+    var csteps: Int
 
     def __init__(out self, seed: Int) raises:
         self.k = DKit()
         self.seed = seed
         self.draws = 0
+        self.csteps = 0
 
     def emp_cov(self, Xs: DMat) raises -> DMat:
         var Xc = self.k.ew2(OP_SUB, Xs, self.k.colmean(Xs))
@@ -1288,7 +1366,9 @@ struct DMcd:
         (`pinv_mask_dev_kernel`; lane n9-decomp-eigh-families: was w home
         and a sync)."""
         var n = A.r
-        var e = self.k.eigh(A)
+        # the narrow solve's status rides the C-step's next sync (lane
+        # mcd-per-step-cost: was a drain of its own a pinvh)
+        var e = self.k.eigh_deferred(A)
         var keep = self.k.ew1(OP_RECIP, e.wd, 0.0)
         var inv = DMat(1, n)
         if n > 0:
@@ -1385,17 +1465,42 @@ struct DMcd:
         """The distances under cov: its Cholesky when it factors, pinvh
         otherwise."""
         var f = self.chol(cov)
+        self.csteps += 1
         if f.det != _neg_inf():
             return self.mahal_chol(X, loc, f.li)
         var P = self.pinvh(cov)
         return self.mahal(X, loc, P)
 
+    def finish(mut self, X: DMat, mut e: DEst) raises:
+        """A C-step's final distances, owed since `c_step` (lane
+        mcd-per-step-cost, 2026-11-14): `dist = mahal(X - location,
+        precision)` with the precision the loop last used, or pinvh(cov)
+        when the first log determinant was -inf and the loop never ran
+        (the precision sklearn's `_c_step` takes there). The same calls on
+        the same operands as before, run only for the candidate whose
+        distances are read: `select_candidates` hands every other one on
+        as (location, covariance, det), so their final distances (and, at
+        a -inf start, their pinvh: every istella candidate, a 220-wide
+        eigh each) had no reader."""
+        if not e.owed:
+            return
+        if e.P.r == 0:
+            var P = self.pinvh(e.cov)
+            e.dist = self.mahal(X, e.loc, P)
+        elif e.p_chol:
+            e.dist = self.mahal_chol(X, e.loc, e.P)
+        else:
+            e.dist = self.mahal(X, e.loc, e.P)
+        e.P = DMat(0, 0)
+        e.owed = False
+
     def c_step_chol(
-        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat, want_dist: Bool
+        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat
     ) raises -> DEst:
         """`c_step` with the Cholesky's log determinant and distances
         (IDN_MCD_CHOL; x_decomp/mcd.mojo `Mcd.c_step_chol` is the host
-        column): the same control flow, statement for statement."""
+        column): the same control flow, statement for statement; the final
+        distances owed (`finish`)."""
         var iters = n_iter
         var dist = DMat(0, 1)
         var sel: DMat
@@ -1411,12 +1516,13 @@ struct DMcd:
         var loc = self.k.colmean(Xs)
         var cov = self.emp_cov_at(Xs, loc)
         var f = self.chol(cov)
+        self.csteps += 1
         var det = f.det
+        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
         var P = DMat(0, 0)
         var p_chol = False
         var has_p = False
         if det == _neg_inf():
-            P = self.pinvh(cov)
             has_p = True
         var prev_det = _pos_inf()
         var have_prev = False
@@ -1439,6 +1545,7 @@ struct DMcd:
             loc = self.k.colmean(Xs)
             cov = self.emp_cov_at(Xs, loc)
             f = self.chol(cov)
+            self.csteps += 1
             det = f.det
             iters -= 1
         if not has_p:
@@ -1447,23 +1554,18 @@ struct DMcd:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
-        var final = DMat(0, 1)
-        if want_dist:
-            if p_chol:
-                final = self.mahal_chol(X, loc, P)
-            else:
-                final = self.mahal(X, loc, P)
-        return DEst(loc^, cov^, det, sel^, final^)
+            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, DMat(0, 0), False, False)
+        return DEst(loc^, cov^, det, sel^, DMat(0, 1), P^, p_chol, True)
 
     def c_step(
-        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat, want_dist: Bool
+        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat
     ) raises -> DEst:
         """x_decomp/mcd.mojo's `c_step` with every selection, gather and
         distance resident (lane cpu3-core): the host reads only the log
-        determinants the loop branches on (and the NaN refusal words)."""
+        determinants the loop branches on (and the NaN refusal words). The
+        final distances are owed to `finish` (lane mcd-per-step-cost)."""
         comptime if IDN_MCD_CHOL:
-            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0, want_dist)
+            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0)
         var iters = n_iter
         var dist = DMat(0, 1)
         var sel: DMat
@@ -1481,10 +1583,13 @@ struct DMcd:
         var loc = self.k.colmean(Xs)
         var cov = self.emp_cov_at(Xs, loc)
         var det = self.k.lu_logdet(cov)
+        self.csteps += 1
+        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
+        # (was computed here on every such C-step and read only by the
+        # final distances; lane mcd-per-step-cost)
         var P = DMat(0, 0)
         var has_p = False
         if det == _neg_inf():
-            P = self.pinvh(cov)
             has_p = True
         var prev_det = _pos_inf()
         var have_prev = False
@@ -1506,6 +1611,7 @@ struct DMcd:
             loc = self.k.colmean(Xs)
             cov = self.emp_cov_at(Xs, loc)
             det = self.k.lu_logdet(cov)
+            self.csteps += 1
             iters -= 1
         if not has_p:
             # Python's final `_mahal(k, X, loc, None)` fails here (a +inf or
@@ -1516,11 +1622,8 @@ struct DMcd:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
-        var final = DMat(0, 1)
-        if want_dist:
-            final = self.mahal(X, loc, P)
-        return DEst(loc^, cov^, det, sel^, final^)
+            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, DMat(0, 0), False, False)
+        return DEst(loc^, cov^, det, sel^, DMat(0, 1), P^, False, True)
 
     def select_random(
         mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut output: DCands
@@ -1532,7 +1635,7 @@ struct DMcd:
         var tr = DCands(trials, X.c)
         var none = DMat(0, 0)
         for _t in range(trials):  # small-loop(trials: C-step candidates): one enqueued C-step a candidate, the plan's trial count
-            var e = self.c_step(X, h, n_iter, False, none, none, False)
+            var e = self.c_step(X, h, n_iter, False, none, none)
             tr.push(self.k, e.loc, e.cov, e.det)
         var top = _top_of(tr.det, keep)
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
@@ -1546,7 +1649,7 @@ struct DMcd:
         locations and covariances appended to `output` (packed, as above)."""
         var tr = DCands(inits.count(), X.c)
         for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
-            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t), False)
+            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t))
             tr.push(self.k, e.loc, e.cov, e.det)
         var top = _top_of(tr.det, keep)
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
@@ -1557,14 +1660,15 @@ struct DMcd:
         mut self, X: DMat, h: Int, inits: DCands, n_iter: Int, want_dist: Bool
     ) raises -> DEst:
         """`select_candidates(...)[0]` from initial estimates: the best
-        (det, j) candidate kept whole (support rows and distances), every
+        (det, j) candidate kept whole (support rows and, when `want_dist`,
+        its final distances, computed for it alone by `finish`), every
         other one released as soon as it loses. A NaN determinant is
         refused after every C-step ran, as `_order_by_det` refused it."""
         var best = Optional[DEst]()
         var best_key = UInt64(0)
         var nan_seen = False
         for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
-            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t), want_dist)
+            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t))
             var f = Float32(e.det)
             if f != f:
                 nan_seen = True
@@ -1577,7 +1681,10 @@ struct DMcd:
             raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
         if not best:
             raise Error("x_decomp MinCovDet: no candidate to select from")
-        return best.take()
+        var out = best.take()
+        if want_dist:
+            self.finish(X, out)
+        return out^
 
 
 struct DCands(Movable):
@@ -1631,19 +1738,31 @@ struct DChol(Movable):
 
 struct DEst(Movable):
     """`Est` with every matrix resident: location, covariance, the log
-    determinant, the support rows (an index vector) and the distances."""
+    determinant, the support rows (an index vector) and the distances.
+    `owed`: the final distances are not computed yet (`DMcd.finish` runs
+    them from P, the precision the loop last used (L^{-1} when `p_chol`),
+    or from pinvh(cov) when P is empty)."""
     var loc: DMat
     var cov: DMat
     var det: Float64
     var sel: DMat
     var dist: DMat
+    var P: DMat
+    var p_chol: Bool
+    var owed: Bool
 
-    def __init__(out self, var loc: DMat, var cov: DMat, det: Float64, var sel: DMat, var dist: DMat):
+    def __init__(
+        out self, var loc: DMat, var cov: DMat, det: Float64, var sel: DMat, var dist: DMat, var P: DMat,
+        p_chol: Bool, owed: Bool,
+    ):
         self.loc = loc^
         self.cov = cov^
         self.det = det
         self.sel = sel^
         self.dist = dist^
+        self.P = P^
+        self.p_chol = p_chol
+        self.owed = owed
 
 
 def _top_of(dets: List[Float64], keep: Int) raises -> List[Int]:
@@ -1672,19 +1791,29 @@ def _write_dev(
     k.sync()
 
 
+@fieldwise_init
+struct McdSteps(Copyable, Movable):
+    """A `fast_mcd_dev` run's counts: the resident kit's drains (its
+    `sync`s) and the log determinants evaluated (one a C-step). Read by
+    checks/mcd_step_cost_check.mojo; zero on the FAST batched route."""
+    var drains: Int
+    var csteps: Int
+
+
 def fast_mcd_dev(
     X: Mat, p: List[Int], loc_out: F32Ptr, cov_out: F32Ptr, sup_out: I32Ptr, dist_out: F32Ptr,
-) raises:
+) raises -> McdSteps:
     """`fast_mcd` (x_decomp/mcd.mojo) with X resident: the same plan, the
     same C-steps, the same draws and orders. Every permutation, selection,
-    support and distance stays on the device (lane cpu3-core)."""
+    support and distance stays on the device (lane cpu3-core). Returns the
+    run's drain and C-step counts."""
     # FAST on Apple, under MCD_BATCH_COMPAT (the old -D MOJOLEARN_MCD_DEVICE_CSTEPS
     # arm was DROPPED-quality, see x_decomp/mcd_fast.mojo): every candidate's
     # C-steps together on the device (lane/apple-fast-robust; M3 A/B min-cov-det
     # taxi 79,925 -> 215 ms, M2 robust-ee-taxi-x 64,578 -> 267.5 ms)
     comptime if MCD_DEVICE_CSTEPS:
         if fast_mcd_fast(X, p, loc_out, cov_out, sup_out, dist_out):
-            return
+            return McdSteps(0, 0)
     var n = p[0]
     var d = p[1]
     var h = p[2]
@@ -1741,7 +1870,7 @@ def fast_mcd_dev(
             _write_dev(run.k, m0.loc, m0.cov, sup, dist, n, d, loc_out, cov_out, sup_out, dist_out)
             _ = selection_all^
             _ = Xd^
-            return
+            return McdSteps(run.k.drains, run.csteps)
         var merged = DCands(n_best_m, d)
         run.select_init(Xm, h_m, cands, n_best_m, 30, merged)
         _ = cands^
@@ -1759,6 +1888,7 @@ def fast_mcd_dev(
         )
     _write_dev(run.k, best.loc, best.cov, sup, best.dist, n, d, loc_out, cov_out, sup_out, dist_out)
     _ = Xd^
+    return McdSteps(run.k.drains, run.csteps)
 
 
 # ---- LatentDirichletAllocation's online pass on the resident kit
@@ -1854,7 +1984,7 @@ def mcd_dev_run(px: F32Ptr, pl: F32Ptr, pc: F32Ptr, ps: I32Ptr, pd: F32Ptr, q: L
     var n = q[0]
     var d = q[1]
     var X = mat_from(px, n, d)
-    fast_mcd_dev(X, q, pl, pc, ps, pd)
+    _ = fast_mcd_dev(X, q, pl, pc, ps, pd)
     return n
 
 
