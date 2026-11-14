@@ -208,20 +208,24 @@ def test_decode_admitted_steps_keep_the_admitted_block():
     block, weights = _block_and_weights()
     state = block.allocate_state(1, 8)
     session = block.decode_session(state)
+    # The admitted step is the GPU registry session's (its native marker is
+    # the handle word, an int); the host route admits in full every step.
+    admitted = isinstance(session._native, int)
+    original = session._block
     try:
         for i, t in enumerate(tokens):
             if i == 2:
                 for value in weights.values():
                     value *= 3
-            if i == 4:
-                original = session._block
+            if i == 4 and admitted:
                 session._block = _block()
             actual = session.step(t)
             assert np.asarray(actual).shape == (1, 1, 16)
             assert np.asarray(actual).tobytes() == expected[i].tobytes()
             assert state.cached_tokens == i + 1
-        with pytest.raises(TypeError):
-            session.sync_state()
+        if admitted:
+            with pytest.raises(TypeError):
+                session.sync_state()
         session._block = original
         session.sync_state()
         np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
