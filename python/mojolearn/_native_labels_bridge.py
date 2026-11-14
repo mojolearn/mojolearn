@@ -91,6 +91,20 @@ LABELS_OP_DECODE = 3
 LABELS_OP_CLASS_WEIGHT_ROWS = 4
 LABELS_OP_FLATTEN = 5
 LABELS_OP_SORTED = 6
+#: Lane py-admission (bindings/labels_admission_unpack.mojo): the label, target
+#: and X refusals `_labels` and `_sk_validate` made in Python.
+LABELS_OP_PREPARE_TARGETS = 7
+LABELS_OP_ENCODE_NUMERIC = 8
+LABELS_OP_UNIQUE_INVERSE = 9
+LABELS_OP_ARGMAX_ROWS = 10
+LABELS_OP_CLASS_INDEX = 11
+ADMISSION_OP_CHECK_X = 12
+ADMISSION_OP_CHECK_Y = 13
+#: ADMISSION_OP_CHECK_Y flags.
+ADMISSION_Y_COMPLEX = 1
+ADMISSION_Y_SCAN = 2
+ADMISSION_Y_CLASSIFIER = 4
+ADMISSION_Y_MISSING = 8
 #: `labels_encode` kind: the ORDER RULE classes of `_labels` and int32 codes.
 LABELS_KIND_ORDER_RULE = 0
 

@@ -21,6 +21,10 @@
 #                     (classes list) for any other labels
 #   labels_argmax_op(scores)
 #                     `_labels.argmax_rows`: first-max column per row, int64
+#   labels_decode_any_op(classes, codes)
+#                     `_labels.decode_labels`: codes of any integer form (an
+#                     Array, a buffer, a list, any rank) made one 1-D int
+#                     Array, then the one decode
 #   labels_class_index_op(classes, key)
 #                     `_labels.ClassLabels.__getitem__` with an integer array
 #                     key: its refusals, the widening and the decode
@@ -282,6 +286,30 @@ def labels_class_index_op(classes: PythonObject, key: PythonObject, context: Pyt
     var result = classical_decode_labels(listed, codes, context)
     _ = codes
     _ = view
+    return result
+
+
+def labels_decode_any_op(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_labels.decode_labels(classes, codes)`: a 1-D int32 / int64 Array
+    of codes is decoded as it is; any other codes (a list or tuple, a
+    buffer, another integer dtype, a matrix read in C order) are first one
+    int64 Array of the same values."""
+    if classical_is_array(codes, context) and Int(py=codes.ndim) == 1:
+        var dtype = String(codes.dtype)
+        if dtype == "<i4" or dtype == "<i8":
+            return classical_decode_labels(classes, codes, context)
+    var b = labels_builtins()
+    if (py_type(codes) is b.list or py_type(codes) is b.tuple) and len(codes) == 0:
+        var none = admitted_vector(0, "<i8", context)
+        return classical_decode_labels(classes, none, context)
+    var view = admit_c_view(codes, "codes", context)
+    var typestr = admitted_dtype(view, context)
+    var n = Int(py=view.size)
+    var wide = admitted_vector(n, "<i8", context)
+    labels_cast(Int(py=classical_address(view)), typestr, labels_address(wide), "<i8", n, context)
+    _ = view
+    var result = classical_decode_labels(classes, wide, context)
+    _ = wide
     return result
 
 

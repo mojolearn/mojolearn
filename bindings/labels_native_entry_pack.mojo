@@ -10,7 +10,7 @@
 #                                                             pred classes, pred codes,
 #                                                             kind, sorted union)
 #   LABELS_OP_SCORE_FROM_CODES (y, classes, codes, w, mode) -> accuracy (float)
-#   LABELS_OP_DECODE           (classes, codes)           -> labels
+#   LABELS_OP_DECODE           (classes, codes)           -> labels (codes: any integer form)
 #   LABELS_OP_CLASS_WEIGHT_ROWS (class_weight, classes, int32 codes, x_trees entries)
 #                                                         -> float32 row weights or None
 #   LABELS_OP_FLATTEN          (y,)                       -> flat list of the label objects
@@ -49,7 +49,7 @@ from bindings.classical_labels_door import (
     labels_class_weight_rows, ClassicalLabels, _flatten_labels, _sorted_classes)
 from bindings.labels_admission_unpack import (
     labels_prepare_targets_op, labels_encode_numeric_op, labels_unique_inverse_op, labels_argmax_op,
-    labels_class_index_op, admission_check_x_op, admission_check_y_op)
+    labels_class_index_op, labels_decode_any_op, admission_check_x_op, admission_check_y_op)
 
 comptime LABELS_OP_ENCODE = 0
 comptime LABELS_OP_UNION_ENCODE = 1
@@ -80,7 +80,8 @@ def _labels_operation(op: Int, args: PythonObject, context: PythonObject) raises
     if op == LABELS_OP_SCORE_FROM_CODES:
         return PythonObject(classical_score_from_codes(args[0], args[1], args[2], args[3], args[4], context))
     if op == LABELS_OP_DECODE:
-        return classical_decode_labels(args[0], args[1], context)
+        # any integer codes (lane py-admission: the shell's normalization)
+        return labels_decode_any_op(args[0], args[1], context)
     if op == LABELS_OP_CLASS_WEIGHT_ROWS:
         # `_class_weights._class_weight_rows` on the x_trees binding: the
         # counts, the k weight checks and the per-row gather in one call
