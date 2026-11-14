@@ -118,13 +118,8 @@ def test_train_copies_inputs_and_returns_all_preupdate_gradients():
     assert np.asarray(model.parameters_).tobytes() == parameters.tobytes()
 
 
-def test_evaluate_preserves_all_state_and_has_no_gradient_output():
-    model = trainer()
-    model.train_step(ids())
-    before = state_digest(model)
-    loss = model.evaluate(ids())
-    assert math.isfinite(loss)
-    assert state_digest(model) == before
+# test_evaluate_preserves_all_state_and_has_no_gradient_output moved to
+# checks/native_tests/byte_lm_trainer_session_cases.mojo unit 4 (lane tmig-lm-1).
 
 
 def test_state_load_snapshot_isolation_and_cursor_validation():
