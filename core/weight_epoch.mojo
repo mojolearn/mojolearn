@@ -114,116 +114,171 @@ struct WeightKey(Copyable, Movable):
 # uploaded when an upload happens: only the upload COUNT differs.
 comptime SAMBA_WEIGHT_EPOCH_GLOBAL = is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"]()
 
-comptime _REGISTRY_LAYOUT = 1
-comptime _REGISTRY_NAME = "MojolearnRegistryEpochV1"
-#: Distinct registries stamped before the table is forgotten (one entry per
-#: model registry a write has ever touched; a process holds a handful). A full
-#: table is cleared and the floor moves past every stamp handed out, so every
-#: copy keyed before reloads once: bounded memory, never a stale copy.
+comptime _REGISTRY_LAYOUT = 2
+comptime _REGISTRY_NAME = "MojolearnRegistryEpochV2"
+#: Registry slots in the process table (one per model registry a resident
+#: copy has been keyed by; a process holds a handful). A full table reuses
+#: the oldest slot round-robin and gives it a fresh stamp, so a key still
+#: pointing at that slot reloads once: bounded memory, never a stale copy.
 comptime _REGISTRY_CAP = 1024
-#: `words` layout: [lock, last stamp handed out, floor (an unstamped
-#: registry's epoch)].
-comptime _W_LOCK = 0
-comptime _W_STAMP = 1
-comptime _W_FLOOR = 2
+#: `ctl` layout: [lock, last stamp handed out, slots in use, next slot to
+#: reuse when full].
+comptime _C_LOCK = 0
+comptime _C_STAMP = 1
+comptime _C_USED = 2
+comptime _C_CURSOR = 3
+
+# Hot-path audit 2026-11-13 (BLOCK core/weight_epoch.mojo:155): the READ is
+# lock-free. Each registry owns one epoch word at a fixed slot of the table
+# (`epochs[i]`, allocated once at the table's creation, never moved). A
+# resident copy's `RegistryKey` resolves its registry's slot ONCE, when it
+# loads (`take`, under the lock, beside an upload), and keeps the word's
+# address; `current` is then one `Atomic.load` of that word and two integer
+# compares, as the process epoch's `WeightKey.current` was. The lock is taken
+# only by writers (`registry_epoch_bump`) and by `take`. Every stamp is
+# unique (one process counter), so a reused slot (full table) and a bump both
+# leave every key taken before them not current.
 
 
 struct _RegistryEpochs(Defaultable, Movable):
-    var words: List[Int64]
+    var ctl: List[Int64]
     var addrs: List[Int]
-    var stamps: List[Int]
+    var epochs: List[Int64]
 
     def __init__(out self):
-        # side-effect free (core/shared_slot.mojo first creation)
-        self.words = List[Int64](length=3, fill=Int64(1))
-        self.words[_W_LOCK] = Int64(0)
-        self.addrs = List[Int]()
-        self.stamps = List[Int]()
+        # side-effect free (core/shared_slot.mojo first creation); the three
+        # lists are sized once here and never grow, so a slot's epoch word
+        # keeps its address for the process
+        self.ctl = List[Int64](length=4, fill=Int64(0))
+        self.addrs = List[Int](length=_REGISTRY_CAP, fill=0)
+        self.epochs = List[Int64](length=_REGISTRY_CAP, fill=Int64(0))
 
 
 comptime _REGISTRY = SharedSlot[_RegistryEpochs, _REGISTRY_NAME, _REGISTRY_LAYOUT]
+comptime _EpochWord = MutPointer[Int64, MutUntrackedOrigin]
+
+
+def _lock_word(slot: UnsafePointer[_RegistryEpochs, MutUntrackedOrigin]) -> _EpochWord:
+    return _EpochWord(unsafe_from_address=Int(slot[].ctl.unsafe_ptr()) + _C_LOCK * 8)
+
+
+def _slot_word(slot: UnsafePointer[_RegistryEpochs, MutUntrackedOrigin], i: Int) -> _EpochWord:
+    return _EpochWord(unsafe_from_address=Int(slot[].epochs.unsafe_ptr()) + i * 8)
+
+
+def _find(slot: UnsafePointer[_RegistryEpochs, MutUntrackedOrigin], addr: Int) -> Int:
+    """The slot of `addr`, -1 when it has none. Caller holds the lock."""
+    var used = Int(slot[].ctl[_C_USED])
+    for i in range(used):  # driver-loop: over the registries keyed in this process (lock held; load or write only)
+        if slot[].addrs[i] == addr:
+            return i
+    return -1
+
+
+def _next_stamp(slot: UnsafePointer[_RegistryEpochs, MutUntrackedOrigin]) -> Int64:
+    """A stamp no word holds yet. Caller holds the lock."""
+    var stamp = slot[].ctl[_C_STAMP] + 1
+    slot[].ctl[_C_STAMP] = stamp
+    return stamp
+
+
+def registry_word(addr: Int) raises -> Int:
+    """The address of the epoch word of the registry at host address `addr`,
+    giving it a slot (and a fresh stamp) when it has none. Resolved once per
+    load by `RegistryKey.take`, never per call."""
+    var slot = _REGISTRY.get_or_create_ptr()
+    var lock = _lock_word(slot)
+    shared_slot_lock(lock)
+    var i = _find(slot, addr)
+    if i < 0:
+        var used = Int(slot[].ctl[_C_USED])
+        if used < _REGISTRY_CAP:
+            i = used
+            slot[].ctl[_C_USED] = Int64(used + 1)
+        else:
+            # Full: reuse the next slot round-robin. Its fresh stamp leaves
+            # every key of the registry that held it not current.
+            i = Int(slot[].ctl[_C_CURSOR])
+            slot[].ctl[_C_CURSOR] = Int64((i + 1) % _REGISTRY_CAP)
+        slot[].addrs[i] = addr
+        Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
+    var word = Int(_slot_word(slot, i))
+    shared_slot_unlock(lock)
+    return word
 
 
 def registry_epoch(addr: Int) raises -> Int:
-    """The epoch (>= 1) of the registry at host address `addr`: the stamp of
-    its last write through the door, or the floor when none is recorded."""
+    """The epoch (>= 1) of the registry at host address `addr` (its slot's
+    word; a load-time read, never on a call's path)."""
     comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
         return weight_epoch()
     else:
-        var slot = _REGISTRY.get_or_create_ptr()
-        var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].words.unsafe_ptr())
-        shared_slot_lock(lock)
-        var found = Int(slot[].words[_W_FLOOR])
-        for i in range(len(slot[].addrs)):  # driver-loop: over the registries a write has stamped
-            if slot[].addrs[i] == addr:
-                found = slot[].stamps[i]
-                break
-        shared_slot_unlock(lock)
-        return found
+        return Int(Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=registry_word(addr))))
 
 
 def registry_epoch_bump(addr: Int) raises:
     """The registry at `addr` may hold new bytes: every resident copy keyed by
     it reloads at its next use; copies of other registries are untouched.
-    A zero address (no registry) stamps nothing."""
+    A zero address (no registry) stamps nothing; nor does a registry no copy
+    was ever keyed by (it has no slot, so no key can hold it)."""
     comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
         weight_epoch_bump()
     else:
         if addr == 0:
             return
         var slot = _REGISTRY.get_or_create_ptr()
-        var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].words.unsafe_ptr())
+        var lock = _lock_word(slot)
         shared_slot_lock(lock)
-        var stamp = Int(slot[].words[_W_STAMP]) + 1
-        slot[].words[_W_STAMP] = Int64(stamp)
-        var at = -1
-        for i in range(len(slot[].addrs)):  # driver-loop: over the registries a write has stamped
-            if slot[].addrs[i] == addr:
-                at = i
-                break
-        if at >= 0:
-            slot[].stamps[at] = stamp
-        elif len(slot[].addrs) >= _REGISTRY_CAP:
-            # Full: forget every entry and raise the floor to this new stamp.
-            # Every unstamped registry (this one included) now reads a value
-            # no key was taken at, so each copy reloads once.
-            slot[].addrs.clear()
-            slot[].stamps.clear()
-            slot[].words[_W_FLOOR] = Int64(stamp)
-        else:
-            slot[].addrs.append(addr)
-            slot[].stamps.append(stamp)
+        var i = _find(slot, addr)
+        if i >= 0:
+            Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
         shared_slot_unlock(lock)
 
 
 struct RegistryKey(Copyable, Movable):
     """The version key of one resident copy of ONE weight registry (a Samba
-    stack's flat registry): its host address and that registry's epoch at the
-    load. A write to another registry leaves it current.
+    stack's flat registry): its host address, that registry's epoch at the
+    load and the address of the registry's epoch word (resolved once, at the
+    load). A write to another registry leaves it current.
 
         var key = RegistryKey()                  # empty: never current
-        if not key.current(addr):
+        if not key.current(addr):                # one atomic load, no lock
             var fresh = RegistryKey.take(addr)   # read the epoch BEFORE the upload
             upload(addr)
             key = fresh^
     """
     var addr: Int
     var epoch: Int
+    var word: Int
 
     def __init__(out self):
         self.addr = 0
         self.epoch = 0
+        self.word = 0
 
-    def __init__(out self, addr: Int, epoch: Int):
+    def __init__(out self, addr: Int, epoch: Int, word: Int):
         self.addr = addr
         self.epoch = epoch
+        self.word = word
 
     @staticmethod
     def take(addr: Int) raises -> RegistryKey:
         """The key of a copy loaded now from the registry at `addr`."""
-        return RegistryKey(addr, registry_epoch(addr))
+        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
+            return RegistryKey(addr, weight_epoch(), 0)
+        else:
+            var word = registry_word(addr)
+            var epoch = Int(Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=word)))
+            return RegistryKey(addr, epoch, word)
 
     def current(self, addr: Int) raises -> Bool:
         """Whether the copy still holds the bytes of the registry at `addr`:
-        same address and no write to that registry since the load."""
-        return self.epoch != 0 and self.addr == addr and self.epoch == registry_epoch(addr)
+        same address and no write to that registry since the load. One
+        atomic load of the held word; no lock, no table scan."""
+        if self.epoch == 0 or self.addr != addr:
+            return False
+        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
+            return self.epoch == weight_epoch()
+        else:
+            return self.word != 0 and self.epoch == Int(
+                Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
