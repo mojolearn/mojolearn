@@ -48,8 +48,10 @@ comptime _AFS_F32 = MutPointer[Float32, MutAnyOrigin]
 comptime _AFS_I32 = MutPointer[Int32, MutAnyOrigin]
 
 
-def _afs_nonfinite_kernel(src: _AFS_F32, n_: Int32, status: _AFS_I32, slot_: Int32):
-    """status[slot] = 1 when any float32 word of src[0:n] is NaN or infinite."""
+def _afs_nonfinite_kernel(src: _AFS_F32, n_: Int32, status: _AFS_I32, slot_: Int32, mark: Int32):
+    """status[slot] = mark when any float32 word of src[0:n] is NaN or
+    infinite (mark is AFS_NONFINITE, or a held query's call mark: see
+    `enqueue_finite_status`)."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     var n = Int(n_)
@@ -60,25 +62,35 @@ def _afs_nonfinite_kernel(src: _AFS_F32, n_: Int32, status: _AFS_I32, slot_: Int
             break
         i += stride
     if hit:
-        status.unsafe_store(Int(slot_), AFS_NONFINITE)
+        status.unsafe_store(Int(slot_), mark)
 
 
 def enqueue_finite_status[wo: MutOrigin, so: MutOrigin, //](
     ctx: DeviceContext, d_words: MutPointer[Float32, wo], n: Int, d_status: MutPointer[Int32, so], slot: Int,
+    mark: Int32 = AFS_NONFINITE,
 ) raises:
     """Enqueue the finite test of the `n` resident float32 words at device
     pointer `d_words`; word `slot` of the device status buffer `d_status`
-    becomes 1 when any of them is NaN or infinite. The caller fills the
-    status buffer with 0 first and reads it back with its result: this adds
-    no synchronisation. Spans past one launch's Int32 count go in
-    `AFS_MAX_N`-word launches. Either pointer may carry its buffer's origin
-    (a `DeviceBuffer.unsafe_ptr()`); the kernel takes untracked views."""
+    becomes `mark` (1 by default) when any of them is NaN or infinite. The
+    caller fills the status buffer with 0 first and reads it back with its
+    result: this adds no synchronisation. Spans past one launch's Int32
+    count go in `AFS_MAX_N`-word launches. Either pointer may carry its
+    buffer's origin (a `DeviceBuffer.unsafe_ptr()`); the kernel takes
+    untracked views.
+
+    `mark` (lane fix-svc-query-resident, 2026-11-14): a query buffer held
+    across calls (core/query_x_held.mojo) is filled once, at creation, and
+    each call passes its own nonzero mark; the word is flagged for THIS call
+    only when it equals this call's mark, so no per-call fill is needed. The
+    kernel never stores anything else: a store of 0 from one block could
+    land after another block's hit (no order across blocks)."""
     var off = 0
     while off < n:  # driver-loop: over Int32-sized launches of one span
         var m = min(AFS_MAX_N, n - off)
         var grid = max(1, min(AFS_REDUCE_BLOCKS, (m + AFS_TPB - 1) // AFS_TPB))
         ctx.enqueue_function[_afs_nonfinite_kernel](
             d_words.unsafe_origin_cast[MutAnyOrigin]() + off, Int32(m), d_status.unsafe_origin_cast[MutAnyOrigin](), Int32(slot),
+            mark,
             grid_dim=grid, block_dim=AFS_TPB,
         )
         off += m
