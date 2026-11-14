@@ -14,7 +14,6 @@ from mojolearn import _backend, _byte_lm_impl
 from mojolearn._verify_native_runtime import audit_native_call
 
 
-
 def state_fixture():
     shape = ByteLanguageModelConfig(batch=1, length=4, d_model=8, n_heads=2,
                                    n_kv=1, head_dim=4, intermediate=16,
