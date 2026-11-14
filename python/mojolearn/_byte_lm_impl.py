@@ -933,7 +933,10 @@ def _connect_trainer():
     context.update(byte_lm_addr_getter=address_slot.__get__, byte_lm_pooled_mro=mro,
                    byte_lm_pooled_layout=layout,
                    byte_lm_type_mro_getter=type.__dict__['__mro__'].__get__,
-                   byte_lm_type_dict_getter=type.__dict__['__dict__'].__get__)
+                   byte_lm_type_dict_getter=type.__dict__['__dict__'].__get__,
+                   # glue: the unfilled pooled store's "f" view cast, pinned once
+                   byte_lm_view_cast=memoryview.cast, byte_lm_view_format="f",
+                   byte_lm_store_type=bytearray)
     return module.byte_lm_trainer_call, context
 
 

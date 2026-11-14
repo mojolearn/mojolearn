@@ -48,6 +48,11 @@ def test_resident_logits_unfilled_store_holds_only_downloaded_bytes():
     want = np.asarray(first).tobytes()
     assert type(first._store) is bytearray and len(first._store) == first.nbytes
     assert first._mv.format == 'f' and first._readonly is False
+    # the "f" view is over the store itself (hot-path audit 2026-11-13: one
+    # C-API memoryview, its cast through the connect-time descriptor)
+    assert first._mv.obj is first._store and first._mv.nbytes == first.nbytes
+    ctx = impl._LM_TRAINER_CONTEXT
+    assert ctx["byte_lm_view_cast"] is memoryview.cast and ctx["byte_lm_store_type"] is bytearray
     held = first
     for _ in range(3):
         junk = [bytearray(b'\xff' * held.nbytes) for _ in range(4)]

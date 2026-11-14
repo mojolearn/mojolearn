@@ -1400,7 +1400,7 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
             store = pooled.value()
         else:
             store = native_scratch_bytes(count * 4)
-        out = _wrap_pooled_unfilled(mods, context["byte_lm_pooled_class"], store, batch, length, vocab)
+        out = _wrap_pooled_unfilled(context, context["byte_lm_pooled_class"], store, batch, length, vocab)
     py_setitem(py_fields(out), "_pool", pool)
     return out
 
@@ -1434,10 +1434,11 @@ def _pooled_store_type(mut mods: NativeModules, context: PythonObject) raises ->
     comptime if BYTE_LM_LOGITS_ZERO_FILL:
         return context["array_type"]
     else:
-        return _b(mods).bytearray
+        # pinned once at connect (hot-path audit NOTE door:1437)
+        return context["byte_lm_store_type"]
 
 
-def _wrap_pooled_unfilled(mut mods: NativeModules, cls: PythonObject, store: PythonObject, batch: Int,
+def _wrap_pooled_unfilled(context: PythonObject, cls: PythonObject, store: PythonObject, batch: Int,
                           length: Int, vocab: Int) raises -> PythonObject:
     """`classical_wrap_admitted_layout` over an uninitialized bytearray store
     (`native_scratch_bytes`): the same slots, with `_mv` the store's
@@ -1448,7 +1449,13 @@ def _wrap_pooled_unfilled(mut mods: NativeModules, cls: PythonObject, store: Pyt
     if layout.nbytes != len(store):
         raise Error("RuntimeError: a Byte-LM logits store does not match its shape")
     var array = native_storage_allocate(cls)
-    var view = py_call(py_call(_b(mods).memoryview, store).cast, PythonObject("f"))
+    # Hot-path audit 2026-11-13 (BLOCK door:1451): the store's memoryview is
+    # one C-API call (PyMemoryView_FromObject through the CPython table, as
+    # `classical_wrap_admitted_layout` makes `_mv`), and its "f" cast calls
+    # the `memoryview.cast` descriptor with the "f" format object, both
+    # pinned once at connect (`byte_lm_view_cast`, `byte_lm_view_format`):
+    # no builtins attribute lookups and no format string built per call.
+    var view = py_call(context["byte_lm_view_cast"], native_buffer_view(store), context["byte_lm_view_format"])
     py_setattr(array, "_store", store)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", PythonObject(None))
