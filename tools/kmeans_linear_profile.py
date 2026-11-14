@@ -52,7 +52,6 @@ class TimedBinding:
 
 def run(lane, X, y, init, reps):
     import mojolearn as ml
-    from mojolearn import linear_model as lm
     from mojolearn import _buffer as buf
 
     rows = []
@@ -67,10 +66,9 @@ def run(lane, X, y, init, reps):
             est = ml.LinearRegression(fit_intercept=True)
         real_bind = est._bind
         est._bind = lambda name, _rb=real_bind, _c=clock: TimedBinding(_rb(name), _c, "native.")
-        saved = {}
-        for fn in ("_column_means", "_vector_mean", "_center", "_shift"):
-            saved[fn] = getattr(lm, fn)
-            setattr(lm, fn, clock.wrap("host." + fn, saved[fn]))
+        # The Python centering helpers this wrapped (_column_means,
+        # _vector_mean, _center, _shift) are deleted (lane
+        # py-classical-linalg, 2026-11-14): the OLS fit is one native call.
         saved_native = buf._native
         try:
             t0 = time.perf_counter()
@@ -80,8 +78,6 @@ def run(lane, X, y, init, reps):
                 est.fit(X)
             total = (time.perf_counter() - t0) * 1e3
         finally:
-            for fn, v in saved.items():
-                setattr(lm, fn, v)
             buf._native = saved_native
         named = sum(clock.t.values())
         row = {"rep": rep, "total_ms": total, "python_glue_ms": total - named}
