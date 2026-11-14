@@ -2,10 +2,11 @@
 (plan NATIVE_ENTRY_POINTS_AFTER_0866 section 2G, lane ne2-g-decomp).
 
 Each case checks that the shortened path returns the bits of the long one
-and that a change of the state it stands on is still seen:
+and that a change of the state it stands on is still seen. These are the
+public-boundary caches (query records, once-per-table checks, admission
+casts); GaussianMixture.fit_predict (N401, the GPU fit writing its own labels)
+is checked natively in checks/native_tests/decomp_ne2_g_decomp_entries_gpu.mojo.
 
-- GaussianMixture.fit_predict returns the labels of fit(X).predict(X)
-  (the GPU fit writes them from its own device buffers, N401);
 - the dictionary-learning and SparsePCA transforms keep the Gram of the
   fitted components between queries (N339, N333): repeated queries agree,
   and a refit or a changed ridge_alpha is honoured;
@@ -27,13 +28,6 @@ from mojolearn import _expansion_decomp as decomp
 def _data(rows=64, cols=6, seed=0):
     rng = np.random.default_rng(seed)
     return rng.standard_normal((rows, cols)).astype(np.float32)
-
-
-def test_gmm_fit_predict_equals_fit_then_predict():
-    x = np.concatenate([_data(40, 3, 1) - 3.0, _data(40, 3, 2) + 3.0]).astype(np.float32)
-    fused = ml.GaussianMixture(n_components=2, random_state=0).fit_predict(x)
-    model = ml.GaussianMixture(n_components=2, random_state=0).fit(x)
-    np.testing.assert_array_equal(np.asarray(fused), np.asarray(model.predict(x)))
 
 
 def test_dictionary_transform_gram_kept_and_refit_seen():
