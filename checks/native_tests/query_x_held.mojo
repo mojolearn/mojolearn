@@ -139,6 +139,10 @@ def _held_marks_and_growth(ctx: DeviceContext) raises:
     print("PASS query_x_held marks and growth")
 
 
+def _buf_addr(buf: DeviceBuffer[DType.float32]) -> Int:
+    return Int(buf.unsafe_ptr())
+
+
 def _lease_holds(ctx: DeviceContext) raises:
     var store = _TEST_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var lease = fitted_lease_open(store)
@@ -152,14 +156,18 @@ def _lease_holds(ctx: DeviceContext) raises:
     var x = _words(rows * cols, 6)
     var q = resident_query_x(store, ctx, lease, Int(x.unsafe_ptr()), rows, cols, QueryFold.none())
     ctx.synchronize()
-    # The lifetime checker refuses a `q^` inside a `comptime if` whose other arm also consumes `q` ("used later"):
-    # consume it once, outside the branches, and keep each arm's tail in its own function.
-    var addr = Int(q.bufs.x.unsafe_ptr())
+    # Read what the checks need into locals first: a field borrow of q (q.bufs.x, q.x) that is still live when q^ is
+    # consumed makes the lifetime checker refuse the consume ("used later"), seen in the first union builds; the
+    # consume itself happens once, outside the comptime branches, with each arm's tail in its own function.
+    var q_held = q.bufs.held()
+    var q_x = q.bufs.x
+    var addr = _buf_addr(q_x)
+    _ = q_x^
     comptime if IDN_QUERY_X_HELD:
-        _require(q.bufs.held(), "a live lease's predict uses held buffers")
+        _require(q_held, "a live lease's predict uses held buffers")
         _require(not fitted_query_take(store, lease), "a second take while a call holds them finds none")
     else:
-        _require(not q.bufs.held(), "the B arm uses per-call buffers")
+        _require(not q_held, "the B arm uses per-call buffers")
     resident_query_x_done(store, lease, q^)
     comptime if IDN_QUERY_X_HELD:
         _lease_holds_held_tail(store, ctx, lease, x, rows, cols, addr)
@@ -182,9 +190,14 @@ def _lease_holds_held_tail(store: UnsafePointer[FittedResidentStore, MutAnyOrigi
     _require(fitted_resident_stats(store)[5] == 1, "the lease keeps its query after the call")
     var q2 = resident_query_x(store, ctx, lease, Int(x.unsafe_ptr()), rows, cols, QueryFold.none())
     ctx.synchronize()
-    _require(Int(q2.bufs.x.unsafe_ptr()) == addr, "the next call reuses the lease's buffers")
+    var q2_bufs_x = q2.bufs.x
+    var q2_x = q2.x
+    _require(_buf_addr(q2_bufs_x) == addr, "the next call reuses the lease's buffers")
     _require(fitted_resident_stats(store)[5] == 0, "taken while the call runs")
-    _same_words(_download(ctx, q2.x, rows * cols), x, rows * cols, "the reused buffers hold this call's words")
+    _ = q2_bufs_x^
+    var words = _download(ctx, q2_x, rows * cols)
+    _ = q2_x^
+    _same_words(words, x, rows * cols, "the reused buffers hold this call's words")
     resident_query_x_done(store, lease, q2^)
     _require(fitted_resident_stats(store)[5] == 1, "given back again")
     fitted_lease_close(store, lease)
