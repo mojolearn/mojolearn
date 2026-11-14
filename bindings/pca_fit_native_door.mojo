@@ -16,7 +16,7 @@ from core.pca_native_api import (
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.decomp_inputs_unpack import decomp_admit
 from bindings.admitted_input_unpack import admitted_finite_refuse
-from bindings.device_rows_door import door_rows_refuse
+from bindings.device_rows_door import door_rows_refuse, door_is_device_rows
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_capture
 from providers.python.pca_fit_model_pyapi_unpack import pca_fit_entries, pca_fit_host_only, pca_fit_preflight
 from providers.python.pca_fit_model_pyapi_pack import pca_fit_fields
@@ -86,7 +86,9 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # words from the gather); otherwise a fold's rows are gathered on the
     # host by the admission.
     var fold_connection = -1
-    if pca_mode(connection) == 1 and not project and solver != "randomized":
+    # fix-classical-infer-xq: the fold provider (lookup, vendor and mode
+    # refusals) is connected only for a DeviceRows fold, never per plain fit.
+    if pca_mode(connection) == 1 and not project and solver != "randomized" and door_is_device_rows(source, context):
         fold_connection = pca_fold_connection(context)
     var fold_ok = fold_connection >= 0
     var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=True)
