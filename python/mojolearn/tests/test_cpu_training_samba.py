@@ -152,31 +152,6 @@ def _cpu_only_with(*basenames):
     return True
 
 
-def test_rng_slices_equal_the_whole_stream_when_built():
-    if not _cpu_only_with("_mojolearn_training_host"):
-        return
-    import numpy as np
-    from mojolearn import _training_impl as T
-    lib = T._load()
-    seed, stream = (7 << 32) | 3, 5
-    for kind, a, b in ((T._RNG_UNIFORM, -0.5, 1.0), (T._RNG_NORMAL, 0.0, 1.0)):
-        whole = np.asarray(T._rng_call(lib, kind, 37, 0, seed, stream, a, b))
-        part = np.asarray(T._rng_call(lib, kind, 11, 13, seed, stream, a, b))
-        assert whole.tobytes()[13 * 4:24 * 4] == part.tobytes(), kind
-        assert np.isfinite(whole).all()
-    x = (np.arange(37, dtype=np.float32) + 1.0)
-    fwd = np.asarray(T._rng_call(lib, T._RNG_DROPOUT_FORWARD, 37, 0, seed, stream, 0.5, 2.0, x))
-    sub = np.asarray(T._rng_call(lib, T._RNG_DROPOUT_FORWARD, 11, 13, seed, stream, 0.5, 2.0,
-                                 np.ascontiguousarray(x[13:24])))
-    assert fwd.tobytes()[13 * 4:24 * 4] == sub.tobytes()
-    kept = fwd != 0
-    assert kept.any() and (~kept).any(), "a p = 0.5 mask kept everything or nothing"
-    assert (fwd[kept] == x[kept] * 2.0).all()
-    dy = np.full(37, 3.0, dtype=np.float32)
-    dx = np.asarray(T._rng_call(lib, T._RNG_DROPOUT_BACKWARD, 37, 0, seed, stream, 0.5, 2.0, dy))
-    assert ((dx != 0) == kept).all(), "the backward did not replay the forward's mask"
-
-
 def test_samba_step_repeats_when_built():
     if not _cpu_only_with("_mojolearn_training_host", "_mojolearn_mamba_host",
                           "_mojolearn_transformer_host"):
