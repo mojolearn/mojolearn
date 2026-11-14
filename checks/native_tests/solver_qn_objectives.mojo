@@ -347,7 +347,11 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
             same = same and bitcast[DType.uint32](a[0][f]) == bitcast[DType.uint32](b[0][f])
         require(not same, "LinearSVR epsilon 0 and 0.5 gave the same coefficients: epsilon was not read")
     else:
-        var x = recorded_f32("x-400x5.f32", QN_SMALL_ROWS * QN_FEATURES)
+        # The n = 64 draw shares X's prefix (generate.py): its X is the first 64 rows of x-400x5.f32.
+        var x_all = recorded_f32("x-400x5.f32", QN_ROWS * QN_FEATURES)
+        var x = List[Float32](capacity=QN_SMALL_ROWS * QN_FEATURES)
+        for i in range(QN_SMALL_ROWS * QN_FEATURES):  # small-loop(fixture prefix): 320 stored words
+            x.append(x_all[i])
         var yr = recorded_f32("yr-64.f32", QN_SMALL_ROWS)
         var none = List[Float32]()
         var ones = List[Float32](length=QN_SMALL_ROWS, fill=1)
