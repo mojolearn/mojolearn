@@ -86,7 +86,7 @@ from core.forest_fit_request import (
 )
 from core.entry_table import EntryRef
 from core.forest_calls import (
-    ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_fit_dart, xf_export_sizes, xf_export_into,
+    ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,
     xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
@@ -680,15 +680,8 @@ def _launch(native: PythonObject, fit: ForestFit, x: AdmittedXView, args: Forest
     return forest_export_handle(key, handle, selection, context)
 
 
-def forest_fit_dart_member(native: PythonObject, dart_handle: Int, cls: Int, rows_addr: Int, cols_addr: Int,
-                           params: PythonObject, criterion: PythonObject, context: PythonObject) raises -> PythonObject:
-    """A DART member's one-tree fit on the DART session (XF_FIT_DART, the
-    former `rf_regressor_fit_dart_export`), exported into the model Arrays."""
-    var key = forest_key(native)
-    var args = forest_fit_request_py(rows_addr, cols_addr, params, criterion)
-    args.session = dart_handle
-    args.cls = cls
-    return forest_export_handle(key, xf_fit_dart(key, args), "into", context)
+# `forest_fit_dart_member` (the DART member's XF_FIT_DART fit and export) moved
+# to bindings/trees_dart_rounds_run.mojo `_member_fit` (lane py-trees, 2026-11-14).
 
 
 # ------------------------------------------------------------- fit params
