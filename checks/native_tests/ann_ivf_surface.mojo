@@ -88,6 +88,9 @@ def _run_gpu(mut report: Report) raises:
     var params = IvfFlatIndexParams.default()
     params.n_lists = LISTS
     params.seed = UInt64(1)
+    # The admitted value, as every product build sets it (ivf/estimator.mojo:119): default() carries the
+    # reference's 0.5, which ivf_flat_build refuses by design (DEVIATION 1781).
+    params.kmeans_trainset_fraction = Float64(1.0)
     var index = ivf_flat_build(ctx, trace, params, x, N, D)
     var sp = IvfFlatSearchParams(LISTS)
     var got = ivf_flat_search_traced(ctx, trace, index, sp, q, Q, K, PINNED_TILE_TPB, IVF_EXPAND_TPB, False, keep)
