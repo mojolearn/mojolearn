@@ -936,7 +936,11 @@ def _connect_trainer():
                    byte_lm_type_dict_getter=type.__dict__['__dict__'].__get__,
                    # glue: the unfilled pooled store's "f" view cast, pinned once
                    byte_lm_view_cast=memoryview.cast, byte_lm_view_format="f",
-                   byte_lm_store_type=bytearray)
+                   byte_lm_store_type=bytearray,
+                   # glue: the pool keeps that view with its store (one view per
+                   # store): the `_mv` slot getter, the view type and its exporter getter
+                   byte_lm_view_getter=vars(_Array)["_mv"].__get__, byte_lm_view_type=memoryview,
+                   byte_lm_view_obj=memoryview.obj.__get__)
     return module.byte_lm_trainer_call, context
 
 

@@ -1371,9 +1371,11 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
         raise Error("TypeError: Byte-LM logits pool requires a native list")
     var count = batch * length * vocab
     var store_type = _pooled_store_type(mods, context)
-    # The pool counts a store in its own units: float32 items for the B arm's
-    # array.array, bytes for the default unfilled bytearray.
-    var store_len = count if BYTE_LM_LOGITS_ZERO_FILL else count * 4
+    # The pool counts an entry in float32 items: the B arm's array.array
+    # store, or the default arm's "f" view of its unfilled bytearray store
+    # (lane fix-wave2-leftovers: the pool keeps the view, so a reused store
+    # builds no memoryview).
+    var store_len = count
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var pooled = Optional[PythonObject]()
     for i in range(len(free)):  # driver-loop: over the bounded reusable host-buffer pool
@@ -1396,11 +1398,25 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
             NativeArrayLayout([batch, length, vocab], 4, "C"), "<f4")
     else:
         var store: PythonObject
+        var view: PythonObject
         if pooled:
-            store = pooled.value()
+            # Lane fix-wave2-leftovers (audit door:1451 leftover): a pooled
+            # entry is the "f" view the store was first wrapped with (one
+            # C getter for its exporter), not two new memoryviews per call.
+            view = pooled.value()
+            store = py_call(context["byte_lm_view_obj"], view)
+            if py_type(store) is not context["byte_lm_store_type"]:
+                raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
         else:
             store = native_scratch_bytes(count * 4)
-        out = _wrap_pooled_unfilled(context, context["byte_lm_pooled_class"], store, batch, length, vocab)
+            # The store's memoryview is one C-API call (PyMemoryView_FromObject
+            # through the CPython table, as `classical_wrap_admitted_layout`
+            # makes `_mv`), its "f" cast the `memoryview.cast` descriptor with
+            # the "f" format object, both pinned once at connect: built once
+            # per store, then pooled with it (hot-path audit 2026-11-13, BLOCK
+            # door:1451).
+            view = py_call(context["byte_lm_view_cast"], native_buffer_view(store), context["byte_lm_view_format"])
+        out = _wrap_pooled_unfilled(context, context["byte_lm_pooled_class"], store, view, batch, length, vocab)
     py_setitem(py_fields(out), "_pool", pool)
     return out
 
@@ -1430,32 +1446,27 @@ comptime BYTE_LM_LOGITS_ZERO_FILL = is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FI
 
 
 def _pooled_store_type(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
-    """The exact type of a pooled logits store under the compiled arm."""
+    """The exact type of a logits pool entry under the compiled arm: the
+    array.array store (B arm), or the "f" memoryview of the unfilled
+    bytearray store (default; lane fix-wave2-leftovers)."""
     comptime if BYTE_LM_LOGITS_ZERO_FILL:
         return context["array_type"]
     else:
         # pinned once at connect (hot-path audit NOTE door:1437)
-        return context["byte_lm_store_type"]
+        return context["byte_lm_view_type"]
 
 
-def _wrap_pooled_unfilled(context: PythonObject, cls: PythonObject, store: PythonObject, batch: Int,
-                          length: Int, vocab: Int) raises -> PythonObject:
+def _wrap_pooled_unfilled(context: PythonObject, cls: PythonObject, store: PythonObject, view: PythonObject,
+                          batch: Int, length: Int, vocab: Int) raises -> PythonObject:
     """`classical_wrap_admitted_layout` over an uninitialized bytearray store
-    (`native_scratch_bytes`): the same slots, with `_mv` the store's
-    memoryview cast to "f" (the export pins the bytearray against resizing
-    for the Array's lifetime) and `_addr` its data address. `cls` is the
-    pooled class the caller already admitted."""
+    (`native_scratch_bytes`): the same slots, with `_mv` the caller's "f"
+    view of the store (the export pins the bytearray against resizing for
+    as long as the view lives, the pool's hold included) and `_addr` its
+    data address. `cls` is the pooled class the caller already admitted."""
     var layout = NativeArrayLayout([batch, length, vocab], 4, "C")
-    if layout.nbytes != len(store):
+    if layout.nbytes != len(store) or layout.count != len(view):
         raise Error("RuntimeError: a Byte-LM logits store does not match its shape")
     var array = native_storage_allocate(cls)
-    # Hot-path audit 2026-11-13 (BLOCK door:1451): the store's memoryview is
-    # one C-API call (PyMemoryView_FromObject through the CPython table, as
-    # `classical_wrap_admitted_layout` makes `_mv`), and its "f" cast calls
-    # the `memoryview.cast` descriptor with the "f" format object, both
-    # pinned once at connect (`byte_lm_view_cast`, `byte_lm_view_format`):
-    # no builtins attribute lookups and no format string built per call.
-    var view = py_call(context["byte_lm_view_cast"], native_buffer_view(store), context["byte_lm_view_format"])
     py_setattr(array, "_store", store)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", PythonObject(None))
@@ -1481,7 +1492,14 @@ def byte_lm_pooled_finalize(mut mods: NativeModules, owner: PythonObject, contex
     var pool = py_get(py_fields(owner), "_pool")
     if pool is None or py_type(pool) is not context["byte_lm_logits_pool"]:
         return
-    var store = py_call(context["byte_lm_store_getter"], owner, context["byte_lm_pooled_class"])
+    # The pool entry: the store (B arm) or the store's "f" view, the `_mv`
+    # slot (default arm, lane fix-wave2-leftovers), through the slot getter
+    # pinned at connect.
+    var store: PythonObject
+    comptime if BYTE_LM_LOGITS_ZERO_FILL:
+        store = py_call(context["byte_lm_store_getter"], owner, context["byte_lm_pooled_class"])
+    else:
+        store = py_call(context["byte_lm_view_getter"], owner, context["byte_lm_pooled_class"])
     if py_type(store) is not _pooled_store_type(mods, context):
         return
     var pool_fields = py_fields(pool)
