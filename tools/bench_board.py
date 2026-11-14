@@ -1714,8 +1714,27 @@ def box_key(box):
 
 
 def race_host():
-    """Where a race ran: the hostname and, on RunPod, the pod id."""
-    return {"hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID")}
+    """Where a race ran: the hostname, on RunPod the pod id, and the host probe's host_id (MOJOLEARN_HOST_ID, set by
+    main from --host-probe): tools/paper_compare.py refuses to compare races of two host ids (2026-11-14)."""
+    return {"hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID"),
+            "host_id": os.environ.get("MOJOLEARN_HOST_ID") or None}
+
+
+def load_host_probe(path):
+    """The host probe (tools/ops/host_probe.py) of this box, or None without one. Sets MOJOLEARN_HOST_ID for
+    race_host (the drivers and workers inherit it). An unreadable probe refuses: a board without its box's identity
+    can not be compared (AGENTS.md "Times are compared only on the same box")."""
+    if not path:
+        return None
+    try:
+        with open(path) as fh:
+            probe = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("bench_board: cannot read the host probe %s: %s" % (path, exc))
+    if not probe.get("host_id"):
+        raise SystemExit("bench_board: the host probe %s has no host_id" % path)
+    os.environ["MOJOLEARN_HOST_ID"] = probe["host_id"]
+    return probe
 
 
 # ---------------------------------------------------------------------------
@@ -5401,6 +5420,10 @@ def build_parser():
                    help="PyPI wheel manifest (tools/pypi_wheel_install.py); timing refuses unless ours "
                         "loads from its files, and every cell records it. A GPU box installing "
                         "--mojolearn-version writes <out>/wheel-manifest.json itself")
+    p.add_argument("--host-probe", default=os.environ.get("MOJOLEARN_HOST_PROBE") or None,
+                   help="tools/ops/host_probe.py JSON of this box (default $MOJOLEARN_HOST_PROBE): stored as "
+                        "box.host_probe and its host_id in every race's host record, so tools/paper_compare.py "
+                        "compares a time only with a time from the same box (AGENTS.md, 2026-11-14)")
     p.add_argument("--cache", default=None,
                    help="venv, wheel download and classical blocks (default <out>/cache; "
                         "a leg puts it outside the fetched directory)")
@@ -5906,6 +5929,9 @@ def main(argv=None):
     ctx["artifact_manifest"] = os.path.abspath(args.artifact_manifest) if args.artifact_manifest else None
     ctx["artifact_identity"] = artifact_identity
     box = box_fingerprint(ctx)
+    probe = load_host_probe(getattr(args, "host_probe", None))
+    if probe:
+        box["host_probe"] = probe
     if artifact_identity:
         box["artifact_identity"] = artifact_identity
         box["artifact_hardware"] = _load_tool("bench_board_provenance").hardware_receipt(
