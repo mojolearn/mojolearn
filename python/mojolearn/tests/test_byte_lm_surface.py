@@ -119,7 +119,7 @@ def test_train_copies_inputs_and_returns_all_preupdate_gradients():
 
 
 # test_evaluate_preserves_all_state_and_has_no_gradient_output moved to
-# checks/native_tests/byte_lm_trainer_session_cases.mojo unit 4 (lane tmig-lm-1).
+# checks/native_tests/byte_lm_trainer_session.mojo unit 4 (lane tmig-lm-1).
 
 
 def test_state_load_snapshot_isolation_and_cursor_validation():

@@ -31,7 +31,7 @@ def _batches(shape, n_steps, seed=1):
 
 # test_train_steps_equals_single_steps and
 # test_train_steps_on_an_open_session_runs_the_multi_step_operation moved to
-# checks/native_tests/byte_lm_trainer_session_cases.mojo units 0-3 (lane
+# checks/native_tests/byte_lm_trainer_session.mojo units 0-3 (lane
 # tmig-lm-1): the loss words, completed counts, state and gradient bytes of
 # k steps in one call against k single steps, through the session entry.
 

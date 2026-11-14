@@ -10,7 +10,7 @@ states jointly with alpha, beta and gamma over all `n` points
 Source and surface checks run anywhere. Runtime checks skip, by name, when
 nothing in this process fits Holt-Winters. The estimated method's refit
 bits, parameter ranges and clean-series forecast quality are native:
-checks/native_tests/tsa_holtwinters_initialization_cpu.mojo. The 0.8.13 digests below were
+checks/native_tests/tsa_holtwinters_initialization.mojo. The 0.8.13 digests below were
 computed from the PyPI 0.8.13 wheel on an Apple M4 under IDENTICAL; the
 heuristic fit is bitwise identical across columns, so they hold on every
 column that fits.

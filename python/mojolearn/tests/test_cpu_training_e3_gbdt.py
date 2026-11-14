@@ -19,7 +19,7 @@ the fused cursor update, the phase B border search's subnormal flush); the sabot
 the binding reads it back.
 
 The runtime check (small host fits run twice, the refusals by name) moved to
-the native check `checks/native_tests/gbdt_public_fits_cpu_suite.mojo`
+the native check `checks/native_tests/gbdt_public_fits.mojo`
 (`pixi run check-native-gbdt-public-fits-cpu`, lane tmig-trees, 2026-11-14).
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_e3_gbdt

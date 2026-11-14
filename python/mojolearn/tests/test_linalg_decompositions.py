@@ -308,5 +308,5 @@ def test_svdvals_converges_on_constant_columns():
 
 # The four device-equals-host word comparisons (QR 48x5 and 16x4, svdvals 48x5
 # and the constant-column 64x10, eigh 64x5) run in Mojo:
-# checks/native_tests/linalg_decompositions_gpu.mojo
+# checks/native_tests/linalg_decompositions.mojo
 # (pixi run check-native-linalg-decompositions-gpu).

@@ -165,3 +165,17 @@ def row_sums(values: List[Float32], offset: Int, rows: Int, count: Int,
     _ = values
     _ = centers
     return work^
+
+
+def unchanged(values: List[Float32], original: List[Float32], message: String) raises:
+    require(len(values) == len(original), message + " extent")
+    var failures = List[Int](length=len(values), fill=0)
+    var vp = values.unsafe_ptr()
+    var op = original.unsafe_ptr()
+    var fp = failures.unsafe_ptr()
+    def cell(index: Int) {imm vp, imm op, imm fp}:
+        fp.unsafe_store(index, Int(vp[index] != op[index]))
+    host_parallelize(cell, len(values))
+    failures_clear(failures, message)
+    _ = values
+    _ = original

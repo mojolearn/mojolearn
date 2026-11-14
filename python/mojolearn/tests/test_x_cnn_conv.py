@@ -3,7 +3,7 @@
 """The float64 NumPy reference of PyTorch's nn.Conv2d / nn.Conv1d semantics,
 checked against torch itself where torch is installed (ORACLE). The layers
 are held to the same reference natively in
-checks/native_tests/cnn_conv_cpu_suite.mojo (`pixi run check-native-cnn-conv-cpu`)."""
+checks/native_tests/cnn_conv.mojo (`pixi run check-native-cnn-conv-cpu`)."""
 import numpy as np
 import pytest
 

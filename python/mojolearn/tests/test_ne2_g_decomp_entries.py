@@ -5,7 +5,7 @@ Each case checks that the shortened path returns the bits of the long one
 and that a change of the state it stands on is still seen. These are the
 public-boundary caches (query records, once-per-table checks, admission
 casts); GaussianMixture.fit_predict (N401, the GPU fit writing its own labels)
-is checked natively in checks/native_tests/decomp_ne2_g_decomp_entries_gpu.mojo.
+is checked natively in checks/native_tests/decomp_ne2_g_decomp_entries.mojo.
 
 - the dictionary-learning and SparsePCA transforms keep the Gram of the
   fitted components between queries (N339, N333): repeated queries agree,

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Writes the class labels of checks/native_tests/core_stratified_group_fp64_cases.mojo.
+"""Writes the class labels of checks/native_tests/core_stratified_group_fp64.mojo.
 
 Moved from python/mojolearn/tests/test_stratified_group_fp64_identity.py
 (2026-11-14): the labels are the identity harness's metrics labels

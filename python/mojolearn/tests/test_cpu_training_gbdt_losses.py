@@ -17,7 +17,7 @@ the binding dispatches the new losses, exports the multi-dimensional predict
 and routes the multiclass bootstrap and score noise; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (small host fits run twice, the refusals by name) moved to
-the native check `checks/native_tests/gbdt_public_fits_cpu_suite.mojo`
+the native check `checks/native_tests/gbdt_public_fits.mojo`
 (`pixi run check-native-gbdt-public-fits-cpu`, lane tmig-trees, 2026-11-14).
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_gbdt_losses

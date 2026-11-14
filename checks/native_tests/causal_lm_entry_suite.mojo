@@ -230,7 +230,7 @@ def sessions_table_contract() raises:
     # column: the handle word round trip, the CPU-key refusal (CPU images own
     # no resident session) and an unpublished GPU key's refusal. Its
     # per-operation cases need the GPU images' publications:
-    # checks/native_tests/causal_lm_session_gpu_suite.mojo.
+    # checks/native_tests/causal_lm_session.mojo.
     var word = causal_session_handle_word(StateHandle(5, UInt64(3)))
     var back = causal_session_handle_of(word)
     require(word > 0 and back.index == 5 and back.generation == 3, "session handle word round trip")

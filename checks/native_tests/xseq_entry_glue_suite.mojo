@@ -149,7 +149,7 @@ def preconditions_published() raises:
 
 def _theta_constant(mut y: List[Float32], mut forecast: List[Float32], mut info: List[Float32], h: Int) raises -> Int:
     # One constant series (20) of 8 points, model 0, fixed alpha 1 / theta 2:
-    # its forecast is the level (checks/native_tests/theta_state_cases.mojo).
+    # its forecast is the level (checks/native_tests/theta_state.mojo).
     var addrs: List[Int] = [_f32(y), _f32(forecast), _f32(info)]
     var ints: List[Int] = [1, 8, h, 1, 0, 0, 7]
     var floats: List[Float64] = [20.0, 1.0, 2.0]

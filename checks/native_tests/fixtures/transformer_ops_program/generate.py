@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Writes the inputs of the transformer_softmax fixtures of
-checks/native_tests/transformer_ops_program_cases.mojo.
+checks/native_tests/transformer_ops_program.mojo.
 
 Moved from python/mojolearn/tests/test_ops_transformer_program.py
 (2026-11-14): the inputs are the same NumPy PCG64 draws the Python test made

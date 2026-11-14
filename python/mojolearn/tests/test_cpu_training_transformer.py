@@ -17,7 +17,7 @@ longer names the Transformer block.
 
 The runtime checks (stateless forward == carried prefill, split prefill,
 decode == prefill row, backward repeat, NaN refusal, full causal and window
-8) moved to checks/native_tests/transformer_host_block_cpu_suite.mojo
+8) moved to checks/native_tests/transformer_host_block.mojo
 (2026-11-14); they call the host binding's typed RUN directly.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_transformer

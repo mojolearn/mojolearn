@@ -3,7 +3,7 @@
 """Dropout2d's eval mode (the public layer returns x without a mask) and the
 float64 NumPy reference of PyTorch's adaptive pools checked against torch
 (ORACLE). The mask, adaptive pool and BasicBlock numerics are native
-(checks/native_tests/cnn_blocks_cpu_suite.mojo, `pixi run
+(checks/native_tests/cnn_blocks.mojo, `pixi run
 check-native-cnn-blocks-cpu`); the BasicBlock is also compared with
 torchvision's by a two-stage check."""
 import numpy as np

@@ -135,7 +135,7 @@ def arm_schedule(rep):
     # The schedule values (warmup end, exact-rational warmup and midpoint,
     # min_lr hold, the float64 cos comparison, monotonicity, the one-based
     # status) are checked natively in
-    # checks/native_tests/sequence_samba_surface_cpu.mojo. The refusal by
+    # checks/native_tests/sequence_samba_surface.mojo. The refusal by
     # name, the pins and the config round trip are public surface.
     arm = "SCHEDULE"
     c = T.ConstantLR(1e-3, warmup_steps=4)
@@ -216,7 +216,7 @@ def arm_rng(rep):
     # The stream's values (uniform range, determinism, stream and slice
     # equality, normal statistics, dropout keep fraction, forward/backward
     # masks and scales, replay and microbatch offsets, the p = 1 refusal) are
-    # checked natively in checks/native_tests/sequence_samba_surface_cpu.mojo
+    # checked natively in checks/native_tests/sequence_samba_surface.mojo
     # through the training host image's entry. The Generator's public
     # surface stays here.
     arm = "RNG"

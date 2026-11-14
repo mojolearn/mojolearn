@@ -3,7 +3,7 @@
 
 The inverse programs' class words and output window (binary one and two
 columns, a single class, multiclass first maximum) are checked natively in
-checks/native_tests/prep_label_binarizer_inverse_window_suite.mojo.
+checks/native_tests/prep_label_binarizer_inverse_window.mojo.
 """
 import numpy as np
 from mojolearn._expansion_prep import LabelBinarizer

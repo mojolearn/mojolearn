@@ -113,7 +113,7 @@ def test_lean_result_keys_and_export_gradients():
 
 def test_full_result_keys_on_a_resident_session():
     # The full step's loss and flat gradient equal a lean step's loss and
-    # gradient export: checks/native_tests/byte_lm_trainer_session_cases.mojo
+    # gradient export: checks/native_tests/byte_lm_trainer_session.mojo
     # unit 6 (lane tmig-lm-1). The result's keys and named shapes stay here.
     full = model('full')
     result = full.train_step(ids())

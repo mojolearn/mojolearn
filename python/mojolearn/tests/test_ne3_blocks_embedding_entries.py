@@ -3,7 +3,7 @@ entries keep their answers and refusals after the per-call copies left them.
 
 Rows N118, N158, N160, N164. The embedding gather and fold answers and the
 residual-dropout device/host agreement are checked natively in
-checks/native_tests/embedding_ne3_entries_gpu_suite.mojo (2026-11-14); this
+checks/native_tests/embedding_ne3_entries.mojo (2026-11-14); this
 file keeps the Python entries' refusals and the cross-entropy reductions'
 Python results.
 """

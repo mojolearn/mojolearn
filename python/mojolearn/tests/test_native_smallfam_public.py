@@ -10,7 +10,7 @@ replaced (the same kernels in the same order): accuracy of `predict` through
 `transform`. `lu_factor` / `lu_solve` keep their public contract here
 (dtypes, the plain-tuple pair, the refusals' words, the singular warning);
 the factor reconstructing P A, the solve answering A x = b and A^T x = b,
-and their repeats are native: checks/native_tests/metrics_smallfam_public_cpu.mojo.
+and their repeats are native: checks/native_tests/metrics_smallfam_public.mojo.
 """
 import warnings
 

@@ -3,7 +3,7 @@
 """The float64 NumPy reference of PyTorch's batch_norm (training and eval,
 forward and backward, running statistics), checked against torch where torch
 is installed (ORACLE). BatchNorm2d/1d are held to the same reference natively
-in checks/native_tests/cnn_batchnorm_cpu_suite.mojo
+in checks/native_tests/cnn_batchnorm.mojo
 (`pixi run check-native-cnn-batchnorm-cpu`)."""
 import numpy as np
 import pytest

@@ -2,7 +2,7 @@
 """Python admission, dispatch, packing and refusal coverage of ops.Session.
 
 The full numerical oracles and scheduler state checks live in
-checks/native_tests/ops_session_cases.mojo and execute directly against typed
+checks/native_tests/ops_session.mojo and execute directly against typed
 host/device sessions. Python retains tiny method-routing sentinels, returned
 buffer/scalar contracts, and Python argument/error translation checks.
 """
