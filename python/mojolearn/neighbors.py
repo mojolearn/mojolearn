@@ -14,12 +14,7 @@ k-NN regressor and radius search built on it.
 cover. Every search is exact, never approximate.
 """
 
-from . import _portable_math as math
-
 from . import _mojolearn, _native_archive_bridge, _native_family_bridge
-from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
-from ._labels import decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
@@ -63,345 +58,15 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 
-#: cuVS `DistanceType` values (`cuvs/distance/distance.h:22-69`), mirrored
-#: from `neighbors/impl/distance/detail/distance_ops.mojo`. The value gaps
-#: are theirs.
-_DIST_L2_EXPANDED = 0
-_DIST_L2_SQRT_EXPANDED = 1
-_DIST_COSINE_EXPANDED = 2
-_DIST_L1 = 3
-_DIST_L2_SQRT_UNEXPANDED = 5
-_DIST_INNER_PRODUCT = 6
-_DIST_LINF = 7
-_DIST_CANBERRA = 8
-_DIST_LP_UNEXPANDED = 9
-_DIST_CORRELATION_EXPANDED = 10
-_DIST_BRAY_CURTIS = 14
-_DIST_JENSEN_SHANNON = 15
-
-#: THE BALL COVER'S OWN TABLE, and it is NOT `_METRIC_TABLE`.
-#:
-#: Two rows differ, both for reasons that are about the INDEX and not about
-#: the metric's name (`neighbors/impl/ball_cover/common.mojo`,
-#: DEVIATION 564 and DEVIATION 565).
-#:
-#:   'euclidean' / 'l2'  goes to L2SqrtUNexpanded here where the brute-force
-#:                       table sends it to L2SqrtEXPanded. The cover's index
-#:                       stores `R_1nn_dists` and `R_radius` computed by
-#:                       summing differences directly, and the query compares
-#:                       against them; computing one side by the expanded
-#:                       identity `||a||^2 + ||b||^2 - 2ab` and the other
-#:                       directly permits a boundary case where a point is
-#:                       inside by one formula and outside by the other
-#:                       (DEVIATION 2 in `ball_cover.mojo`).
-#:   'sqeuclidean'       is ABSENT. Squared Euclidean distance is not a
-#:                       metric even though Euclidean distance is: on three
-#:                       collinear points at unit spacing it gives 4 against
-#:                       1 + 1. The pruning here IS the triangle inequality,
-#:                       so admitting it would prune true neighbours
-#:                       silently. 'cosine' is absent for the same class of
-#:                       reason.
-_RBC_METRIC_TABLE = {
-    "euclidean": _DIST_L2_SQRT_UNEXPANDED,
-    "l2": _DIST_L2_SQRT_UNEXPANDED,
-    "cityblock": _DIST_L1,
-    "l1": _DIST_L1,
-    "manhattan": _DIST_L1,
-    "taxicab": _DIST_L1,
-    "chebyshev": _DIST_LINF,
-    "linf": _DIST_LINF,
-    "minkowski": _DIST_LP_UNEXPANDED,
-    "lp": _DIST_LP_UNEXPANDED,
-}
-
-#: cuML's `NearestNeighbors._build_metric_type` (`nearest_neighbors.pyx:
-#: 520-553`), the rows this tree computes. NOT the `pairwise_distances`
-#: table -- cuML has two and they DISAGREE about "euclidean" (that one
-#: sends it to L2SqrtUnexpanded, this one to L2SqrtExpanded). KDE goes
-#: through the other; `python/mojolearn/density.py` has its own.
-_METRIC_TABLE = {
-    "euclidean": _DIST_L2_SQRT_EXPANDED,
-    "l2": _DIST_L2_SQRT_EXPANDED,
-    "sqeuclidean": _DIST_L2_EXPANDED,
-    "cityblock": _DIST_L1,
-    "l1": _DIST_L1,
-    "manhattan": _DIST_L1,
-    "taxicab": _DIST_L1,
-    "chebyshev": _DIST_LINF,
-    "linf": _DIST_LINF,
-    "cosine": _DIST_COSINE_EXPANDED,
-    "minkowski": _DIST_LP_UNEXPANDED,
-    "lp": _DIST_LP_UNEXPANDED,
-    # 2026-09-27 (lane x-neighbors-metrics): distance_ops.mojo::
-    # extra_metric_cell, one thread per cell on the device and the same
-    # function on the host.
-    "canberra": _DIST_CANBERRA,
-    "braycurtis": _DIST_BRAY_CURTIS,
-    "correlation": _DIST_CORRELATION_EXPANDED,
-    "jensenshannon": _DIST_JENSEN_SHANNON,
-    "inner_product": _DIST_INNER_PRODUCT,
-}
-
-#: Names in cuML's `VALID_METRICS["brute"]` (`neighbors/__init__.py:27-48`)
-#: that this tree does not compute. Refused BY NAME so a caller learns the
-#: metric is UNIMPLEMENTED rather than unknown. haversine needs arcsin, and
-#: `checks/numerics.mojo` carries no pinned arcsin: a vendor asin is a
-#: last-bit vendor choice (IDENTITY_PATHS row 12), so it cannot be one
-#: arithmetic on every column.
-_UNSUPPORTED_METRICS = (
-    "haversine",
-)
-
-# The metric tables RadiusNeighbors' native refusals read (the names the
-# saved-model loader reads them under).
-_native_family_bridge.tables(host_archive_neighbor_metrics=dict(_METRIC_TABLE),
-                             host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
-                             host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS))
+# The metric and weights resolution (the brute-force and ball-cover metric
+# tables, `p`, the weights names and every refusal's wording) is native:
+# neighbors/neighbors_knn_run.mojo `knn_metric_code`, `knn_rbc_metric_code`,
+# `knn_metric_resolve`, `knn_rbc_metric_resolve`, `knn_weights_code`, read by
+# bindings/neighbors_knn_native_door.mojo and bindings/host_archive_native_door.mojo.
 # The shared native label, weight and score steps (bindings/classical_labels_door.mojo)
 # the neighbors family's one-call methods read (encode/decode, accuracy, R^2).
 from ._native_labels_bridge import label_context as _label_context  # noqa: E402
 _native_family_bridge.tables(**_label_context())
-
-#: The metrics that need X >= 0 (their logarithms), refused on negative
-#: input as scipy's jensenshannon is undefined there.
-_NONNEGATIVE_METRICS = frozenset({_DIST_JENSEN_SHANNON})
-
-
-def _check_metric_input(cls_name, value, x):
-    """Refuse input a metric is undefined on, before any device work."""
-    if value in _NONNEGATIVE_METRICS and x.size and float(x.min()) < 0.0:
-        raise ValueError(
-            f"mojolearn {cls_name}: metric='jensenshannon' needs X >= 0 "
-            "(it takes logarithms of the coordinates)"
-        )
-
-_WEIGHTS_UNIFORM = 0
-_WEIGHTS_DISTANCE = 1
-
-_WEIGHTS_TABLE = {"uniform": _WEIGHTS_UNIFORM, "distance": _WEIGHTS_DISTANCE}
-
-
-def _resolve_weights(cls_name, weights):
-    """`weights` -> its value for the Mojo boundary.
-
-    scikit-learn also accepts `None` (treated as uniform, `_base.py:92`)
-    and a CALLABLE (`:116`). `None` is honored; the callable is refused by
-    name, and that refusal is one of the two kinds that are still
-    legitimate -- it is genuinely impossible here, because a Python
-    function cannot be called from inside a GPU kernel and there is no
-    portable way to lift one there.
-    """
-    if weights is None:
-        return _WEIGHTS_UNIFORM
-    if callable(weights):
-        raise ValueError(
-            f"mojolearn {cls_name}: weights=<callable> is NOT IMPLEMENTED. "
-            "scikit-learn calls it on the distance matrix in Python; the "
-            "vote here runs in a GPU kernel and there is no portable way "
-            "to lift a Python function into one. Use 'uniform' or "
-            "'distance'."
-        )
-    if not isinstance(weights, str) or weights not in _WEIGHTS_TABLE:
-        raise ValueError(
-            f"mojolearn {cls_name}: weights={weights!r} is not a "
-            "weighting; use 'uniform' or 'distance'"
-        )
-    return _WEIGHTS_TABLE[weights]
-
-
-def _refuse_inert_p(cls_name, metric, p):
-    """A `p` the resolved op never reads is refused by name.
-
-    Only metric='minkowski'/'lp' reads `p`; cuML passes `self.p` for every
-    metric (`nearest_neighbors.pyx:852-854`) and every other op discards it.
-    Accepting `metric='euclidean', p=3` and running Euclidean is a knob that
-    changes nothing, so any value but the constructor default (2) under
-    another metric raises (the claim-surface census, 2026-09-14; the same
-    rule as GradientBoosting's `bagging_temperature` and `subsample`).
-    """
-    try:
-        is_default = not isinstance(p, bool) and float(p) == 2.0
-    except (TypeError, ValueError):
-        is_default = False
-    if not is_default:
-        raise ValueError(
-            f"mojolearn {cls_name}: p is read only by metric='minkowski' "
-            f"(or 'lp'); metric={metric!r} never reads it, so p={p!r} would "
-            "change nothing. Leave p at its default (2) or ask for "
-            "metric='minkowski'."
-        )
-
-
-def _resolve_metric(cls_name, metric, p):
-    """`(metric_value, metric_arg)` for the Mojo boundary.
-
-    scikit-learn's `metric='minkowski', p=2` IS Euclidean and sklearn
-    collapses it (`effective_metric_`); cuML does NOT (`:1016-1017` just
-    echoes `self.metric`), so `metric='minkowski', p=2` goes through the
-    Lp op there and here. That is deliberate: running a DIFFERENT op for
-    p=2 would make two spellings share one code path and hide a bug in
-    whichever of them is unexercised. The Lp op at p=2 agrees with
-    Euclidean to a few ulp, which is what `neighbors/checks/
-    metric_check.mojo::check_metric_arg_is_reached` clause 3 measures.
-    """
-    if not isinstance(metric, str):
-        raise ValueError(
-            f"mojolearn {cls_name}: metric must be a name, got {metric!r}. "
-            "A callable metric is not implemented: it would have to run inside a "
-            "GPU kernel."
-        )
-    key = metric.lower()
-    if key in _METRIC_TABLE:
-        value = _METRIC_TABLE[key]
-    elif key in _UNSUPPORTED_METRICS:
-        raise ValueError(
-            f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
-            "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
-            "(neighbors/NOT_IMPLEMENTED.tsv). Implemented: "
-            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
-        )
-    else:
-        raise ValueError(
-            f"mojolearn {cls_name}: unknown metric {metric!r}. Implemented: "
-            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
-        )
-
-    if value != _DIST_LP_UNEXPANDED:
-        _refuse_inert_p(cls_name, metric, p)
-    arg = 2.0
-    if value == _DIST_LP_UNEXPANDED:
-        arg = float(p)
-        # DEVIATION 552, mirrored here so the message names the Python
-        # parameter the caller actually typed. The Mojo side refuses the
-        # same set by value before any launch.
-        if not (arg > 0.0) or arg != arg or arg == float("inf"):
-            raise ValueError(
-                f"mojolearn {cls_name}: metric='minkowski' needs a finite "
-                f"p > 0, got {p!r}. p = 0 makes 1/p infinite, p < 0 is not "
-                "a metric, and p = infinity is metric='chebyshev'."
-            )
-        if arg < 1.1754943508222875e-38:
-            raise ValueError(
-                f"mojolearn {cls_name}: metric='minkowski' p={p!r} is "
-                "subnormal in float32; the flush policy differs by vendor "
-                "so this cannot be one arithmetic (DEVIATION 552)"
-            )
-    return value, arg
-
-
-def _resolve_rbc_metric(cls_name, metric, p):
-    """`(metric_value, metric_arg)` for anything running on the BALL COVER.
-
-    THE REFUSAL HERE IS NARROWER THAN IT WAS, AND THE ARGUMENT DECIDES THE
-    WIDTH. Until 2026-09-01 this index admitted Euclidean and nothing else,
-    with the correct reason attached: the random ball cover's pruning IS the
-    triangle inequality on the landmark radii, so admitting a non-metric
-    would silently prune away true neighbours rather than return them
-    slowly. That argument is sound and it is kept. What it does NOT cover is
-    every metric it was refusing.
-
-    Minkowski at p >= 1 IS a true metric -- that is Minkowski's inequality,
-    which is what the name refers to -- so an Lp ball cover at p >= 1 is
-    sound, and p = 1 is Manhattan. Chebyshev is the p -> infinity limit and
-    is a metric too. So those are admitted, exactly and exhaustively gated
-    by `neighbors/checks/ball_cover_knn_check.mojo` against a host brute
-    force with no tolerance.
-
-    What stays refused is what genuinely fails the inequality:
-
-      cosine        `1 - cos` is not a metric. Three unit vectors at 0, 60
-                    and 120 degrees give 1.5 against 0.5 + 0.5. It also
-                    fails identity of indiscernibles: d(x, 2x) = 0, so two
-                    distinct points sit at distance zero and a landmark
-                    radius stops bounding its ball.
-      Lp at p < 1   |x|^p is not subadditive below p = 1. At p = 1/2 the
-                    points (0,0), (1,0), (1,1) give a direct distance of 4
-                    against a two-leg path of 1 + 1.
-      sqeuclidean   d^2 is not a metric even though d is: three collinear
-                    points at unit spacing give 4 against 1 + 1.
-
-    cuML draws its line in the same place from the same side and lands
-    somewhere narrower still (`VALID_METRICS["rbc"]` is
-    `{euclidean, haversine, l2}`), which is their scope choice and not an
-    argument about the inequality.
-    """
-    if not isinstance(metric, str):
-        raise ValueError(
-            f"mojolearn {cls_name}: metric must be a name, got {metric!r}"
-        )
-    key = metric.lower()
-    if key in ("sqeuclidean",):
-        raise ValueError(
-            f"mojolearn {cls_name}: metric='sqeuclidean' is REFUSED on the "
-            "random ball cover. The pruning here IS THE TRIANGLE "
-            "INEQUALITY on the landmark radii "
-            "(neighbors/impl/ball_cover/common.mojo, DEVIATION "
-            "565), and SQUARED Euclidean distance does not satisfy it even "
-            "though Euclidean distance does: on three collinear points at "
-            "unit spacing it gives 4 against 1 + 1. A cover built on it "
-            "would prune away true neighbours silently. Ask for "
-            "metric='euclidean' and square the returned distances, which "
-            "is the same answer and is exact."
-        )
-    if key == "cosine":
-        raise ValueError(
-            f"mojolearn {cls_name}: metric='cosine' is REFUSED on the "
-            "random ball cover. The pruning here IS THE TRIANGLE "
-            "INEQUALITY on the landmark radii, and `1 - cos` does not "
-            "satisfy it: three unit vectors at 0, 60 and 120 degrees give "
-            "1.5 against 0.5 + 0.5. It also fails identity of "
-            "indiscernibles, d(x, 2x) = 0, so a landmark radius stops "
-            "bounding its ball. A cover built on it would prune away true "
-            "neighbours silently rather than return them slowly. Use "
-            "NearestNeighbors with algorithm='brute', which needs no "
-            "inequality and honors every implemented metric."
-        )
-    if key in _UNSUPPORTED_METRICS:
-        raise ValueError(
-            f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
-            "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
-            "(neighbors/NOT_IMPLEMENTED.tsv)"
-        )
-    if key in _METRIC_TABLE and key not in _RBC_METRIC_TABLE:
-        raise ValueError(
-            f"mojolearn {cls_name}: metric={metric!r} is computed by brute "
-            "force only (NearestNeighbors(algorithm='brute')). The random "
-            "ball cover's pruning is the triangle inequality on its "
-            "landmark radii and its kernels carry the Minkowski family; "
-            "cuML's own VALID_METRICS['rbc'] is {euclidean, haversine, l2}"
-        )
-    if key not in _RBC_METRIC_TABLE:
-        raise ValueError(
-            f"mojolearn {cls_name}: unknown metric {metric!r}. The random "
-            "ball cover admits: " + ", ".join(sorted(_RBC_METRIC_TABLE))  # glue: metric names for the error message
-        )
-    value = _RBC_METRIC_TABLE[key]
-    if value != _DIST_LP_UNEXPANDED:
-        _refuse_inert_p(cls_name, metric, p)
-    arg = 2.0
-    if value == _DIST_LP_UNEXPANDED:
-        arg = float(p)
-        if arg != arg or arg == float("inf"):
-            raise ValueError(
-                f"mojolearn {cls_name}: metric='minkowski' needs a finite "
-                f"p >= 1, got {p!r}. p = infinity is metric='chebyshev', "
-                "which IS admitted here."
-            )
-        if arg < 1.0:
-            raise ValueError(
-                f"mojolearn {cls_name}: metric='minkowski' with p={p!r} is "
-                "REFUSED on the random ball cover. The pruning here IS THE "
-                "TRIANGLE INEQUALITY on the landmark radii "
-                "(neighbors/impl/ball_cover/common.mojo, "
-                "DEVIATION 564), and |x|^p is not subadditive below p = 1, "
-                "so Lp at p < 1 is not a metric at all: at p = 1/2 the "
-                "points (0,0), (1,0), (1,1) give a direct distance of 4 "
-                "against a two-leg path of 1 + 1. p >= 1 is admitted and "
-                "p = 1 is Manhattan. Use NearestNeighbors with "
-                "algorithm='brute' for p < 1, which is exact brute force "
-                "and needs no inequality."
-            )
-    return value, arg
 
 
 # Maintainer notes (moved from the docstring):
@@ -570,83 +235,20 @@ class NearestNeighbors(NumericModeMixin):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-    #: Subclasses override; the base class never weights.
-    _weights_value = _WEIGHTS_UNIFORM
-
     def _dist_params(self):
         """`[metric, metric_arg, weights]`, the list
         `bindings/_mojolearn.mojo::_dist_triple` reads. ORDER MATTERS and
         is documented there."""
-        value, arg = _resolve_metric(type(self).__name__, self.metric, self.p)
-        return [value, arg, self._weights_value]
+        # Native (bindings/neighbors_knn_native_door.mojo `_dist_params`).
+        return _NATIVE(self, "family_xn_knn_dist_params", (), _NATIVE_CONTEXT)
 
     def _check_refusals(self):
         """Every refusal is BY NAME with the reason, raised at fit so a
         caller learns before the index is held."""
-        # Resolving the metric IS the metric check: it raises by name for
-        # an unimplemented row of cuML's table, for an unknown name, and for a
-        # p that cannot be one arithmetic. One table, one place.
-        # By class, not by `type(self) is NearestNeighbors`: a subclass of
-        # NearestNeighbors alone (the host class `mojolearn.host_model`
-        # returns, 2026-09-15) still runs `kneighbors` and keeps the cover.
-        if self.algorithm == "rbc" and isinstance(self, (KNeighborsClassifier, KNeighborsRegressor)):
-            # REFUSED RATHER THAN ACCEPTED AND IGNORED, which is the whole
-            # of `reached-but-inert`. The classifier and the regressor do
-            # not call `kneighbors`; they call cuML's `knn_classify` /
-            # `knn_regress`, which do their own brute-force search inside
-            # one Mojo entry point (`neighbors/impl/knn/knn.mojo`). Taking
-            # 'rbc' here would change nothing about what runs, and a
-            # parameter that is honored in the signature and inert in the
-            # kernel is worse than one that is refused.
-            raise ValueError(
-                f"mojolearn {type(self).__name__}: algorithm='rbc' is "
-                "refused. The ball cover's k-NN query is wired into "
-                "NearestNeighbors.kneighbors only; this class runs cuML's "
-                "knn_classify / knn_regress, which perform their own "
-                "brute-force search inside one call and have no seam to "
-                "hand an index to. Accepting 'rbc' here would be accepting "
-                "a parameter that changes nothing. Use "
-                "NearestNeighbors(algorithm='rbc').kneighbors and vote on "
-                "the result, or leave this at 'brute'."
-            )
-        if (getattr(self, "weights", None) == "distance"
-                and isinstance(self.metric, str) and self.metric.lower() == "inner_product"):
-            raise ValueError(
-                f"mojolearn {type(self).__name__}: weights='distance' is refused "
-                "with metric='inner_product': it weighs a neighbour by 1 / d, "
-                "and an inner product is a similarity (larger is nearer, and "
-                "it can be zero or negative), not a distance"
-            )
-        if self.algorithm == "rbc":
-            # The INDEXED arm resolves against the cover's own table, which
-            # refuses two rows the brute-force table accepts. Resolving here
-            # means a caller who asks for an index under cosine learns at
-            # fit, not at the first query.
-            _resolve_rbc_metric(type(self).__name__, self.metric, self.p)
-        elif self.algorithm in ("brute", "auto"):
-            # Resolving the metric IS the metric check: it raises by name
-            # for an unimplemented row of cuML's table, for an unknown name, and
-            # for a p that cannot be one arithmetic. One table, one place.
-            _resolve_metric(type(self).__name__, self.metric, self.p)
-        else:
-            raise ValueError(
-                f"mojolearn NearestNeighbors: algorithm={self.algorithm!r} is "
-                "refused. Three are accepted: 'brute' (exact brute force), "
-                "'auto' (which means 'brute' here), and 'rbc' (exact k-NN "
-                "over a RANDOM BALL COVER, an index). "
-                "'kd_tree' and 'ball_tree' are refused, and it is an "
-                "ENGINEERING refusal rather than an attribution one: a "
-                "kd-tree query is a per-query stack walk with "
-                "data-dependent branching and divergent memory access, "
-                "which is the shape a GPU is worst at, and above roughly "
-                "15 dimensions the pruning bound stops firing and it "
-                "degenerates to a full scan, so it would lose to 'brute' "
-                "on exactly the workloads it claims to help. If what you "
-                "want is an index instead of a full scan, that is 'rbc': "
-                "it is EXACT, not approximate, it has no per-query stack, "
-                "and it is the same structure RadiusNeighbors uses "
-                "(neighbors/impl/ball_cover/knn.mojo)."
-            )
+        # Native (bindings/neighbors_knn_native_door.mojo `_check_refusals`,
+        # the check `fit` runs): algorithm, metric, p and, for the k-NN
+        # classes, weights, in the former order and wording.
+        _NATIVE(self, "family_xn_knn_refusals", (), _NATIVE_CONTEXT)
 
     def _release_resident_index(self):
         """Drop the device copy, if one is held. Quiet on a binding that
@@ -849,17 +451,6 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         self._y_cols = None
 
     _HAS_WEIGHTS = True
-
-    @property
-    def _weights_value(self):
-        """`weights` as the value `bindings/_mojolearn.mojo::_dist_triple`
-        reads. `_check_refusals` is what raises on a bad one; this
-        property is only reached after it has run."""
-        return _resolve_weights(type(self).__name__, self.weights)
-
-    def _check_refusals(self):
-        super()._check_refusals()
-        _resolve_weights(type(self).__name__, self.weights)
 
     # File members: the index and parameters `NearestNeighbors.save` writes,
     # `weights`, the `<i4` label columns the binding takes (`_y_cols`,
@@ -1079,17 +670,6 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
 
     _HAS_WEIGHTS = True
 
-    @property
-    def _weights_value(self):
-        """`weights` as the value `bindings/_mojolearn.mojo::_dist_triple`
-        reads. `_check_refusals` is what raises on a bad one; this
-        property is only reached after it has run."""
-        return _resolve_weights(type(self).__name__, self.weights)
-
-    def _check_refusals(self):
-        super()._check_refusals()
-        _resolve_weights(type(self).__name__, self.weights)
-
     # File members: the index and parameters `NearestNeighbors.save` writes,
     # `weights` and the `<f4` target columns the binding takes (`_y_cols`,
     # policy 6). The knn host inference lane, 2026-09-14.
@@ -1200,7 +780,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
 #   `neighbors/checks/radius_check.mojo` against a host brute-force oracle
 #   per cell; the per-metric gate is `pixi run
 #   check-ball-cover-knn-identical`. Metric refusals and their reasons live
-#   in `_resolve_rbc_metric`.
+#   in `knn_rbc_metric_resolve` (neighbors/neighbors_knn_run.mojo).
 # - The distances are recomputed, not stored by the search: a separate pass
 #   walks the finished neighbor list (`neighbors/checks/
 #   radius_distances.mojo` carries the argument that the value is the same;
@@ -1284,7 +864,7 @@ class RadiusNeighbors(NumericModeMixin):
     def _check_refusals(self):
         """Every refusal is BY NAME with the reason, raised at fit.
 
-        NOT `_METRIC_TABLE`, AND NOT THE OLD EUCLIDEAN-ONLY LIST EITHER.
+        NOT THE BRUTE-FORCE TABLE, AND NOT THE OLD EUCLIDEAN-ONLY LIST EITHER.
         Until 2026-09-01 this admitted `euclidean`, `l2` and
         `minkowski` at p = 2 and refused everything else, with a correct
         reason attached: the pruning here IS the triangle inequality on the
@@ -1296,7 +876,8 @@ class RadiusNeighbors(NumericModeMixin):
         Chebyshev and every Lp at p >= 1 are admitted now, and
         `neighbors/checks/ball_cover_knn_check.mojo` gates each of them
         against a host brute force per row with no tolerance.
-        `_resolve_rbc_metric` holds the table and every refusal message.
+        `knn_rbc_metric_resolve` (neighbors/neighbors_knn_run.mojo) holds
+        the table and every refusal message.
         """
         # Native (bindings/host_archive_native_door.mojo
         # `host_archive_radius_refusals`), the check `fit` and `load` run.
@@ -1429,9 +1010,6 @@ _native_archive_bridge.register(
         ("array", "index", "_index"),
         ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"))),
     ),
-    host_archive_neighbor_metrics=dict(_METRIC_TABLE),
-    host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
-    host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS),
 )
 
 

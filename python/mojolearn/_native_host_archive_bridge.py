@@ -12,7 +12,6 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     from .density import _METRICS
     from ._spectral_impl import _CLUSTER_AFFINITIES
     from ._hierarchy_impl import _ALL_METRICS
-    from .neighbors import _METRIC_TABLE, _RBC_METRIC_TABLE, _UNSUPPORTED_METRICS
     from ._umap_impl import _METRICS as umap_metrics
     from ._mode import SklearnTagsMixin
     from ._svm_impl import _SVC_KERNELS, _SVC_REFUSED_KERNELS, _SVR_REFUSED_KERNELS
@@ -31,9 +30,6 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     archive["host_archive_dbscan_metrics"] = tuple(_METRICS)
     archive["host_archive_spectral_affinities"] = tuple(_CLUSTER_AFFINITIES)
     archive["host_archive_agglo_metrics"] = tuple(_ALL_METRICS)
-    archive["host_archive_neighbor_metrics"] = dict(_METRIC_TABLE)
-    archive["host_archive_rbc_metrics"] = dict(_RBC_METRIC_TABLE)
-    archive["host_archive_unsupported_metrics"] = tuple(_UNSUPPORTED_METRICS)
     archive["host_archive_umap_metrics"] = dict(umap_metrics)
     archive["host_archive_svm_kernels"] = dict(_SVC_KERNELS)
     archive["host_archive_svm_refused"] = dict(_SVC_REFUSED_KERNELS)

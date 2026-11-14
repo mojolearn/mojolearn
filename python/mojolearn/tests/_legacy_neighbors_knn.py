@@ -7,7 +7,181 @@ independent test oracle for their one-call native doors
 from mojolearn._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from mojolearn._labels import decode_labels, encode_labels
 from mojolearn.linear_model import _dtype_name, _is_integer_labels, _shape_of
-from mojolearn.neighbors import _WEIGHTS_UNIFORM, _XN, _check_metric_input, _resolve_metric, _resolve_weights
+from mojolearn.neighbors import _XN
+
+
+# Frozen copies of the former Python metric and weights resolution
+# (python/mojolearn/neighbors.py before lane py-neighbors, 2026-11-14, moved
+# it to neighbors/neighbors_knn_run.mojo and the k-NN door), kept with the
+# frozen bodies above as their independent oracle.
+_DIST_L2_EXPANDED = 0
+_DIST_L2_SQRT_EXPANDED = 1
+_DIST_COSINE_EXPANDED = 2
+_DIST_L1 = 3
+_DIST_L2_SQRT_UNEXPANDED = 5
+_DIST_INNER_PRODUCT = 6
+_DIST_LINF = 7
+_DIST_CANBERRA = 8
+_DIST_LP_UNEXPANDED = 9
+_DIST_CORRELATION_EXPANDED = 10
+_DIST_BRAY_CURTIS = 14
+_DIST_JENSEN_SHANNON = 15
+
+#: cuML's `NearestNeighbors._build_metric_type` (`nearest_neighbors.pyx:
+#: 520-553`), the rows this tree computes. NOT the `pairwise_distances`
+#: table -- cuML has two and they DISAGREE about "euclidean" (that one
+#: sends it to L2SqrtUnexpanded, this one to L2SqrtExpanded). KDE goes
+#: through the other; `python/mojolearn/density.py` has its own.
+_METRIC_TABLE = {
+    "euclidean": _DIST_L2_SQRT_EXPANDED,
+    "l2": _DIST_L2_SQRT_EXPANDED,
+    "sqeuclidean": _DIST_L2_EXPANDED,
+    "cityblock": _DIST_L1,
+    "l1": _DIST_L1,
+    "manhattan": _DIST_L1,
+    "taxicab": _DIST_L1,
+    "chebyshev": _DIST_LINF,
+    "linf": _DIST_LINF,
+    "cosine": _DIST_COSINE_EXPANDED,
+    "minkowski": _DIST_LP_UNEXPANDED,
+    "lp": _DIST_LP_UNEXPANDED,
+    # 2026-09-27 (lane x-neighbors-metrics): distance_ops.mojo::
+    # extra_metric_cell, one thread per cell on the device and the same
+    # function on the host.
+    "canberra": _DIST_CANBERRA,
+    "braycurtis": _DIST_BRAY_CURTIS,
+    "correlation": _DIST_CORRELATION_EXPANDED,
+    "jensenshannon": _DIST_JENSEN_SHANNON,
+    "inner_product": _DIST_INNER_PRODUCT,
+}
+
+_UNSUPPORTED_METRICS = (
+    "haversine",
+)
+
+_NONNEGATIVE_METRICS = frozenset({_DIST_JENSEN_SHANNON})
+
+
+def _check_metric_input(cls_name, value, x):
+    """Refuse input a metric is undefined on, before any device work."""
+    if value in _NONNEGATIVE_METRICS and x.size and float(x.min()) < 0.0:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric='jensenshannon' needs X >= 0 "
+            "(it takes logarithms of the coordinates)"
+        )
+
+_WEIGHTS_UNIFORM = 0
+_WEIGHTS_DISTANCE = 1
+
+_WEIGHTS_TABLE = {"uniform": _WEIGHTS_UNIFORM, "distance": _WEIGHTS_DISTANCE}
+
+
+def _resolve_weights(cls_name, weights):
+    """`weights` -> its value for the Mojo boundary.
+
+    scikit-learn also accepts `None` (treated as uniform, `_base.py:92`)
+    and a CALLABLE (`:116`). `None` is honored; the callable is refused by
+    name, and that refusal is one of the two kinds that are still
+    legitimate -- it is genuinely impossible here, because a Python
+    function cannot be called from inside a GPU kernel and there is no
+    portable way to lift one there.
+    """
+    if weights is None:
+        return _WEIGHTS_UNIFORM
+    if callable(weights):
+        raise ValueError(
+            f"mojolearn {cls_name}: weights=<callable> is NOT IMPLEMENTED. "
+            "scikit-learn calls it on the distance matrix in Python; the "
+            "vote here runs in a GPU kernel and there is no portable way "
+            "to lift a Python function into one. Use 'uniform' or "
+            "'distance'."
+        )
+    if not isinstance(weights, str) or weights not in _WEIGHTS_TABLE:
+        raise ValueError(
+            f"mojolearn {cls_name}: weights={weights!r} is not a "
+            "weighting; use 'uniform' or 'distance'"
+        )
+    return _WEIGHTS_TABLE[weights]
+
+
+def _refuse_inert_p(cls_name, metric, p):
+    """A `p` the resolved op never reads is refused by name.
+
+    Only metric='minkowski'/'lp' reads `p`; cuML passes `self.p` for every
+    metric (`nearest_neighbors.pyx:852-854`) and every other op discards it.
+    Accepting `metric='euclidean', p=3` and running Euclidean is a knob that
+    changes nothing, so any value but the constructor default (2) under
+    another metric raises (the claim-surface census, 2026-09-14; the same
+    rule as GradientBoosting's `bagging_temperature` and `subsample`).
+    """
+    try:
+        is_default = not isinstance(p, bool) and float(p) == 2.0
+    except (TypeError, ValueError):
+        is_default = False
+    if not is_default:
+        raise ValueError(
+            f"mojolearn {cls_name}: p is read only by metric='minkowski' "
+            f"(or 'lp'); metric={metric!r} never reads it, so p={p!r} would "
+            "change nothing. Leave p at its default (2) or ask for "
+            "metric='minkowski'."
+        )
+
+
+def _resolve_metric(cls_name, metric, p):
+    """`(metric_value, metric_arg)` for the Mojo boundary.
+
+    scikit-learn's `metric='minkowski', p=2` IS Euclidean and sklearn
+    collapses it (`effective_metric_`); cuML does NOT (`:1016-1017` just
+    echoes `self.metric`), so `metric='minkowski', p=2` goes through the
+    Lp op there and here. That is deliberate: running a DIFFERENT op for
+    p=2 would make two spellings share one code path and hide a bug in
+    whichever of them is unexercised. The Lp op at p=2 agrees with
+    Euclidean to a few ulp, which is what `neighbors/checks/
+    metric_check.mojo::check_metric_arg_is_reached` clause 3 measures.
+    """
+    if not isinstance(metric, str):
+        raise ValueError(
+            f"mojolearn {cls_name}: metric must be a name, got {metric!r}. "
+            "A callable metric is not implemented: it would have to run inside a "
+            "GPU kernel."
+        )
+    key = metric.lower()
+    if key in _METRIC_TABLE:
+        value = _METRIC_TABLE[key]
+    elif key in _UNSUPPORTED_METRICS:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
+            "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
+            "(neighbors/NOT_IMPLEMENTED.tsv). Implemented: "
+            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
+        )
+    else:
+        raise ValueError(
+            f"mojolearn {cls_name}: unknown metric {metric!r}. Implemented: "
+            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
+        )
+
+    if value != _DIST_LP_UNEXPANDED:
+        _refuse_inert_p(cls_name, metric, p)
+    arg = 2.0
+    if value == _DIST_LP_UNEXPANDED:
+        arg = float(p)
+        # DEVIATION 552, mirrored here so the message names the Python
+        # parameter the caller actually typed. The Mojo side refuses the
+        # same set by value before any launch.
+        if not (arg > 0.0) or arg != arg or arg == float("inf"):
+            raise ValueError(
+                f"mojolearn {cls_name}: metric='minkowski' needs a finite "
+                f"p > 0, got {p!r}. p = 0 makes 1/p infinite, p < 0 is not "
+                "a metric, and p = infinity is metric='chebyshev'."
+            )
+        if arg < 1.1754943508222875e-38:
+            raise ValueError(
+                f"mojolearn {cls_name}: metric='minkowski' p={p!r} is "
+                "subnormal in float32; the flush policy differs by vendor "
+                "so this cannot be one arithmetic (DEVIATION 552)"
+            )
+    return value, arg
 
 
 

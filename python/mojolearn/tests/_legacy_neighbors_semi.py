@@ -10,9 +10,44 @@ from mojolearn._buffer import addr, addr_ro, empty
 from mojolearn._lazy_out import _empty_out
 from mojolearn import _expansion_neighbors as xn
 from mojolearn._expansion_neighbors import (
-    _f32, _kfeat_flags, _seed_word, _f32_scalar,
-    _classical_graph_normalization, _argmax_labels, _accuracy, _U_LOG,
+    _f32, _kfeat_flags, _f32_scalar,
+    _classical_graph_normalization, _accuracy, _U_LOG,
 )
+from mojolearn.tests._legacy_neighbors_loc import _argmax_labels
+
+
+# Frozen copy of the former `_expansion_neighbors._seed_word` (deleted by lane
+# py-neighbors, 2026-11-14: the samplers' seed is read natively,
+# bindings/neighbors_semi_native_door.mojo).
+def _seed_word(seed):
+    """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
+    None (numpy's global RandomState) or a caller's numpy RandomState gives
+    ONE draw, a word in [0, 2^31), and that word seeds the device
+    counter-based generator exactly as an int random_state would. The
+    O(d * n_components) table is then drawn on the device. Not
+    scikit-learn's numbers for those two inputs (theirs are not reproducible
+    for None either); the distribution is the same. Anything else is
+    refused. (Lane py-runtime-b deleted the MT19937 Python stream that the
+    _OFF arms drew from.)"""
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        return seed
+    if seed is None:
+        from mojolearn._optional_numpy import require_numpy
+        np = require_numpy('_expansion_neighbors')
+        seed = np.random.mtrand._rand
+    elif not (hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform")):
+        raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
+    return int(seed.randint(0, 1 << 31, size=1)[0])
+
+
+# ====================================================================== PolynomialCountSketch
+# Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
+# 1.9.0): `indexHash_` (`randint(0, n_components, (degree, n_features))`)
+# and `bitHash_` (`choice([-1, 1], (degree, n_features))`); here drawn by the
+# device counter-based generator (x_neighbors/kfeat_rng.mojo, see
+# `_seed_word`), the same distribution, not their legacy RandomState words.
+# The transform is the count sketches' circular convolution, computed
+# directly instead of through an FFT (DEVIATION 5203).
 
 
 # ------------------------------------------------------------ AdditiveChi2Sampler
