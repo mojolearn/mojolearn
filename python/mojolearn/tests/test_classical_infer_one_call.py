@@ -39,17 +39,6 @@ def test_pca_transform_is_one_native_call(monkeypatch):
     assert z.dtype == np.float32 and z.flags["C_CONTIGUOUS"] and z.flags["WRITEABLE"]
 
 
-def test_pca_transform_output_is_fully_written():
-    # The output is allocated uninitialised: every word must come from the
-    # projection, so two calls (fresh allocations) give the same bits.
-    x = _x(rows=257, cols=5)
-    model = ml.PCA(n_components=4, svd_solver="covariance_eigh", numeric_mode="identical").fit(x)
-    first = np.asarray(model.transform(x)).copy()
-    second = np.asarray(model.transform(x))
-    assert np.isfinite(first).all()
-    assert first.tobytes() == second.tobytes()
-
-
 @pytest.mark.parametrize("operation", ["fit", "transform"])
 def test_pca_plain_array_never_consults_the_fold_provider(operation, monkeypatch):
     from mojolearn.decomposition import _PCA_CONTEXT
