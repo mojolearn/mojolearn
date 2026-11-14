@@ -17,7 +17,7 @@ from bindings.parallel_shard_common_run import shard_item
 from bindings.host_archive_native_door import host_archive_rbc_metric_object
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.neighbors_knn_native_door import (
-    _nn_fit, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
+    _nn_fit, knn_index_finite_once, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
     _clf_predict, _clf_predict_proba, _reg_predict, knn_door, _reduce,
     knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status,
 )
@@ -112,6 +112,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
         if not tested and (rbc or not knn_device_tests(binding)):
             knn_host_finite(model, query)
         if rbc:
+            knn_index_finite_once(model, index)  # the index test, first query only (`_nn_fit`)
             var metric = host_archive_rbc_metric_object(String(py_type(model).__name__), fields["metric"], fields["p"], context)
             var count = family_call(family_entry(binding, "rbc_knn_search", context),
                 classical_address(index), PythonObject(query.source.addr), classical_address(ids), classical_address(dist),
@@ -126,6 +127,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
             var sizes = Python.list(index.shape[0], nq, index.shape[1], k, 1, fields["query_tile"])
             var used: PythonObject
             if handle is None:
+                knn_index_finite_once(model, index)  # the CPU column's index test, first query only
                 used = family_call(family_entry(binding, "knn_search", context), classical_address(index), PythonObject(query.source.addr),
                     classical_address(dist), classical_address(ids), sizes, params)
             else:
@@ -393,7 +395,7 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
     var b = native_loaded_module("builtins")
     if operation == "reference_shard":
         var model = shard_model(tables["nearest_class"], args[0])
-        _nn_fit(model, args[1], context, neighbor_binding(tables, "neighbors_base"))
+        _nn_fit(model, args[1], context)
         try:
             return neighbor_kneighbors(model, args[2], args[3], PythonObject(True), neighbor_binding(tables, "neighbors_base"), context)
         finally:
@@ -403,7 +405,7 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
         # under the driver's token until its "release" (pass 3, rank 108).
         _release(args[0], tables, context)
         var stored = shard_model(tables["nearest_class"], args[1])
-        _nn_fit(stored, args[2], context, neighbor_binding(tables, "neighbors_base"))
+        _nn_fit(stored, args[2], context)
         py_setitem(_snapshots(), args[0], stored)
         return PythonObject(None)
     if operation == "reference_vote":
