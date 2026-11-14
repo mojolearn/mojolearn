@@ -120,9 +120,7 @@ an independent artifact. The build is `bash bindings/build_transformer.sh`
 per tier, REBUILT before any run is believed.
 """
 
-from . import _portable_math as math
 import os
-import struct
 import threading
 
 from . import _buffer as _buffers, _bufcheck as _checks
@@ -132,8 +130,8 @@ from . import _backend
 from . import lowbit as _lowbit
 from . import _numeric_profile
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
-from ._bufcheck import dtype_name, is_native_f32, memcopy, probe
+from ._buffer import addr, addr_ro, empty, zeros
+from ._bufcheck import memcopy
 from ._mode import NumericModeMixin
 from . import _ragged
 
@@ -180,70 +178,19 @@ _NORM_EPS_BITS = 0x358637BD  # 1e-6, LlamaConfig.rms_norm_eps: TODAY's eps
 _DEFAULT_TAIL_LEN = 17
 
 
-def _f32_bits(value, what, name, positive=True):
-    """`value` rounded to float32 and returned as its bit pattern (the
-    params spelling), refusing a non-finite or, when `positive`, a
-    non-positive value BY NAME with the value in the message."""
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        raise TypeError(
-            f"mojolearn {what}: {name} must be a float, got {value!r}"
-        ) from None
-    if not math.isfinite(f) or (positive and f <= 0.0):
-        raise ValueError(
-            f"mojolearn {what}: {name} must be a finite"
-            + (" positive" if positive else "")
-            + f" float, got {value!r}"
-        )
-    return struct.unpack("<I", struct.pack("<f", f))[0]
-
-
 def _default_tail():
     tail = [0] * _DEFAULT_TAIL_LEN
     tail[0] = _ROPE_THETA_BITS
-    tail[2] = _f32_bits(1.0, "TransformerBlock", "rope_factor")
-    tail[3] = _f32_bits(1.0, "TransformerBlock", "low_freq_factor")
-    tail[4] = _f32_bits(4.0, "TransformerBlock", "high_freq_factor")
+    # float32 bit patterns of the default rope_factor 1.0, low_freq_factor
+    # 1.0 and high_freq_factor 4.0 (constants, so no Python float rounding;
+    # the per-value refusal of a user's factor runs in Mojo).
+    tail[2] = 0x3F800000
+    tail[3] = 0x3F800000
+    tail[4] = 0x40800000
     tail[5] = _MAX_ABS_POSITION
     tail[7] = _MAX_ABS_POSITION
     tail[11] = _NORM_EPS_BITS
     return tail
-
-
-def _f32_strict(a, what, name):
-    """`a` as a C-contiguous float32 `Array`, REFUSING every other dtype
-    BY NAME (module header: this surface certifies bits, so there is no
-    convenience downcast). Layout may be fixed silently -- a copy to C
-    order moves bytes untouched, so no output bit can move -- but the
-    dtype may not. DEVIATION 2411: the dtype is the buffer's FORMAT,
-    read through `_buffer.view`; `as_f32_c` is reached only by a float32
-    buffer, where its one job is the layout (a zero-copy borrow when the
-    buffer is already C-contiguous)."""
-    try:
-        pb = probe(a)
-    except TypeError:
-        raise TypeError(
-            f"mojolearn {what}: {name} is a {type(a).__name__}, which does "
-            "not support the buffer protocol; this surface is float32 ONLY "
-            "and takes a float32 array (a numpy array, an array.array('f') "
-            "or a mojolearn.Array). Convert yourself and pass float32."
-        ) from None
-    if not is_native_f32(pb.format):
-        raise TypeError(
-            f"mojolearn {what}: {name} has dtype {dtype_name(a, pb)}; this "
-            "surface is float32 ONLY (the fp32 profile, "
-            "transformer/IDENTICAL_TRANSFORMER_CONTRACT.md section 3). "
-            "bfloat16 and float16 are refused BY NAME: the reference's "
-            "reduced-precision runs are a mixture of cast boundaries "
-            "that is not this profile (contract section 11), and a "
-            "certified reduced-precision profile would ship under its "
-            "own version name. float64 is refused rather than downcast "
-            "so the bits that ran are bits you made. Convert yourself "
-            "and pass float32."
-        )
-    arr, _copied = as_f32_c(a, ndim=pb.ndim, name=name)
-    return arr
 
 
 # Contract section 7.2 (transformer/IDENTICAL_TRANSFORMER_CONTRACT.md): caller-owned
