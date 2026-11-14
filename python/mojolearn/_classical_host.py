@@ -1046,19 +1046,15 @@ class HostSpectralClustering(_NativeArchiveLoad, _HostBound, SpectralClustering)
 
 
 class _HostScaler(_HostBound):
-    """The scalers ask for their binding through `_binding(mode)` with the
-    fitted mode; the host answers the estimators host binding for an
-    IDENTICAL model and refuses any other mode by name."""
+    """The host scalers' family binding. Their fixed CPU entries and the
+    IDENTICAL-only refusal are connected natively below
+    (`_native_scaler_bridge.connect_host`, `_native_minmax_bridge.connect_host`)."""
 
     _BINDING = "_mojolearn_preprocessing"
 
-    def _binding(self, mode):
-        if mode != "identical":
-            raise ValueError(
-                f"mojolearn: {type(self).__name__} runs IDENTICAL only on the "
-                f"host; this model was saved {mode!r}"
-            )
-        return self._bind(self._BINDING)
+    # TOMBSTONE: `_HostScaler._binding(mode)` (the Python IDENTICAL-only refusal and binding
+    # selection; no caller: the host scalers run through their native owners) deleted 2026-11-14
+    # by lane py-classical-linalg; code recoverable at 9140ed9c6c.
 
 
 class HostStandardScaler(_HostScaler, StandardScaler):
