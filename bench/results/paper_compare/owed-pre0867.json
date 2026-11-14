@@ -144,6 +144,10 @@
   "nv-fma-asm": {
    "define": "MOJOLEARN_IDN_NV_FMA_ASM_OLD",
    "status": "define in code (checks/nv_fma_rn.mojo IDN_NV_FMA_ASM_OLD, nv_fma_rn_kernel; callers neighbors/checks/pinned_distance_tile.mojo _rt_step/_rt_step_exact, gemm/checks/gemm_identical.mojo _tuned_step/_admit_step, transformer/impl/llama/fused_attention.mojo _step x2): B = the NVIDIA rounded FMA as the inline-asm helper nv_fma_rn_f32 (62a6577b39, candidate 4c2340386abc's shape); A = the llvm.nvvm.fma.rn.f intrinsic (0.8.55's form). Same PTX fma.rn.f32, same fold order, same bits; NVIDIA identical column only (AMD is a no-change check); mul.rn/mul.rn.ftz stay asm in both arms"
+  },
+  "lm-forward-zero-fill": {
+   "define": "MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL",
+   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_ZERO_FILL, _pooled_logits): B = a fresh resident logits store made as array.array('f', bytes(count * 4)) (zero-filled bytes, then a copy into the array; 0.8.66 / candidate shape); A = an unfilled bytearray store (native_scratch_bytes, _wrap_pooled_unfilled), every byte written by the one logits download. Same bits"
   }
  },
  "rows": [
@@ -993,6 +997,18 @@
     "nv-fma-asm"
    ],
    "decides": "keep the intrinsic FMA (A) unless the asm helper (B) is at least as fast on NVIDIA; on record NV L40S 0.8.55 -> candidate 4c2340386abc: lm-train-step 35.6 ms (0.8.66) -> 48.9 ms, hdbscan taxi 435 -> 552 ms, knn-reg taxi 11.5 -> 18.9 ms, knn-clf taxi 14.2 -> 21.6 ms, istella knn and hdbscan still regressed; digests must not move in either arm. If A does not compile (Mojo 1.2 rejects llvm.nvvm.fma.rn.f as it rejects mul.rn), build with the define on and record the row as not runnable"
+  },
+  {
+   "id": "wave2-lm-forward-door",
+   "source": "fix-lm-forward-door (2026-11-13; hist-neural REPORT row 10: lm-forward NV 44.9 -> 60.3 ms, AMD 58.5 -> 66.9 ms, 0.8.55 -> 0.8.66, same kernel)",
+   "kind": "ab",
+   "lane": "lm-forward",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "lm-forward-zero-fill"
+   ],
+   "decides": "keep the unfilled pooled logits store (A) unless the zero-filled array.array store (B) is at least as fast on the NVIDIA and AMD average; same kernels, digests must not move in either arm"
   }
  ]
 }

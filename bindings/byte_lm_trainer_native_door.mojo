@@ -14,15 +14,17 @@ argument words as the Python bodies, so the step keeps its bits.
 """
 from std.memory import unsafe_memcpy
 from std.os import getenv
+from std.sys import is_defined
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains, py_setattr
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_admitted_layout, classical_dtype_str
 from core.cast_in import CAST_KIND_SIGNED
 from core.native_array_layout import NativeArrayLayout
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.byte_lm_state_admission_door import byte_state_admit
@@ -43,6 +45,7 @@ from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHO
 from bindings.byte_checkpoint_native_door import byte_checkpoint_save, byte_checkpoint_load
 from providers.python.byte_lm_json_checkpoint_pyapi_door import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
 from bindings.tsa_hw_native_door import tsa_array
+from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
 from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers_pack import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
@@ -1367,26 +1370,100 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
     if py_type(free) is not _b(mods).list:
         raise Error("TypeError: Byte-LM logits pool requires a native list")
     var count = batch * length * vocab
+    var store_type = _pooled_store_type(mods, context)
+    # The pool counts a store in its own units: float32 items for the B arm's
+    # array.array, bytes for the default unfilled bytearray.
+    var store_len = count if BYTE_LM_LOGITS_ZERO_FILL else count * 4
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var pooled = Optional[PythonObject]()
     for i in range(len(free)):  # driver-loop: over the bounded reusable host-buffer pool
-        if py_type(free[i]) is not context["array_type"]:
+        if py_type(free[i]) is not store_type:
             raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
-        if len(free[i]) == count:
+        if len(free[i]) == store_len:
             pooled = py_call(free.pop, i)
             break
-    var store: PythonObject
-    if pooled:
-        store = pooled.value()
-    else:
-        store = py_call(context["array_type"], "f", py_call(context["native_bytes_type"], count * 4))
     # The pooled class was admitted above (_admit_pooled_logits_layout: exact
     # MRO and every Array slot descriptor pinned at import), so the slots are
     # written directly; the shared Array admission refuses any subclass.
-    var out = classical_wrap_admitted_layout(context["byte_lm_pooled_class"], store,
-        NativeArrayLayout([batch, length, vocab], 4, "C"), "<f4")
+    var out: PythonObject
+    comptime if BYTE_LM_LOGITS_ZERO_FILL:
+        var store: PythonObject
+        if pooled:
+            store = pooled.value()
+        else:
+            store = py_call(context["array_type"], "f", py_call(context["native_bytes_type"], count * 4))
+        out = classical_wrap_admitted_layout(context["byte_lm_pooled_class"], store,
+            NativeArrayLayout([batch, length, vocab], 4, "C"), "<f4")
+    else:
+        var store: PythonObject
+        if pooled:
+            store = pooled.value()
+        else:
+            store = native_scratch_bytes(count * 4)
+        out = _wrap_pooled_unfilled(mods, context["byte_lm_pooled_class"], store, batch, length, vocab)
     py_setitem(py_fields(out), "_pool", pool)
     return out
+
+
+#: lane fix-lm-forward-door (2026-11-13; hist-neural REPORT row 10: lm-forward
+#: NVIDIA 44.9 -> 60.3 ms, AMD 58.5 -> 66.9 ms, 0.8.55 -> 0.8.66, same kernel).
+#: The door migration (6cc681830d) made a fresh logits store as
+#: `array.array("f", bytes(count * 4))`: a zero-filled bytes object, then a
+#: COPY of all of it into the array (at the board's L2048 x V8192 shape a
+#: 64 MiB zero read, a 64 MiB first-touch write and the bytes' free), before
+#: the native download overwrote every byte again. The board's lm-forward
+#: holds the previous result while it calls (`self.out = trainer.logits(ids)`),
+#: so the scored call always misses the pool and pays that. 0.8.55 paid one
+#: zero-fill pass (`array.array("f", [0]) * n`). The default now allocates the
+#: store UNFILLED (`native_scratch_bytes`, an uninitialized bytearray, no fill
+#: pass; `_mv` its memoryview cast to "f", as `generation_array_unfilled`):
+#: the one device-to-host download is the first and only write, and it writes
+#: all batch * length * vocab floats before the call returns (the native
+#: owner checks `written == expected`; a failure raises and the Array is never
+#: returned). No output byte moves: same kernel, same fold, same download.
+#: `-D MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL` keeps the zero-filled array.array
+#: store (B arm of the owed A/B, bench/results/paper_compare/owed-pre0867.json
+#: row wave2-lm-forward-door). Only the resident pooled output changes: the
+#: ragged result (padding must read +0.0) and the stateless output keep
+#: `tsa_array`'s zeros.
+comptime BYTE_LM_LOGITS_ZERO_FILL = is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL"]()
+
+
+def _pooled_store_type(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
+    """The exact type of a pooled logits store under the compiled arm."""
+    comptime if BYTE_LM_LOGITS_ZERO_FILL:
+        return context["array_type"]
+    else:
+        return _b(mods).bytearray
+
+
+def _wrap_pooled_unfilled(mut mods: NativeModules, cls: PythonObject, store: PythonObject, batch: Int,
+                          length: Int, vocab: Int) raises -> PythonObject:
+    """`classical_wrap_admitted_layout` over an uninitialized bytearray store
+    (`native_scratch_bytes`): the same slots, with `_mv` the store's
+    memoryview cast to "f" (the export pins the bytearray against resizing
+    for the Array's lifetime) and `_addr` its data address. `cls` is the
+    pooled class the caller already admitted."""
+    var layout = NativeArrayLayout([batch, length, vocab], 4, "C")
+    if layout.nbytes != len(store):
+        raise Error("RuntimeError: a Byte-LM logits store does not match its shape")
+    var array = native_storage_allocate(cls)
+    var view = py_call(py_call(_b(mods).memoryview, store).cast, PythonObject("f"))
+    py_setattr(array, "_store", store)
+    py_setattr(array, "_base", PythonObject(None))
+    py_setattr(array, "_pin", PythonObject(None))
+    py_setattr(array, "_mv", view)
+    py_setattr(array, "_addr", PythonObject(native_scratch_address(store)))
+    py_setattr(array, "_readonly", PythonObject(False))
+    py_setattr(array, "shape", native_shape_pack(layout.shape))
+    py_setattr(array, "dtype", PythonObject("<f4"))
+    py_setattr(array, "ndim", PythonObject(len(layout.shape)))
+    py_setattr(array, "size", PythonObject(layout.count))
+    py_setattr(array, "nbytes", PythonObject(layout.nbytes))
+    py_setattr(array, "itemsize", PythonObject(layout.itemsize))
+    py_setattr(array, "strides", native_shape_pack(layout.strides))
+    py_setattr(array, "order", PythonObject(layout.order))
+    return array
 
 
 def byte_lm_pooled_finalize(mut mods: NativeModules, owner: PythonObject, context: PythonObject) raises:
@@ -1398,7 +1475,7 @@ def byte_lm_pooled_finalize(mut mods: NativeModules, owner: PythonObject, contex
     if pool is None or py_type(pool) is not context["byte_lm_logits_pool"]:
         return
     var store = py_call(context["byte_lm_store_getter"], owner, context["byte_lm_pooled_class"])
-    if py_type(store) is not context["array_type"]:
+    if py_type(store) is not _pooled_store_type(mods, context):
         return
     var pool_fields = py_fields(pool)
     var free = py_get(pool_fields, "free")
