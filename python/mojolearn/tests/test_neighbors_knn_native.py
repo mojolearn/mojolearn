@@ -255,3 +255,44 @@ def test_fit_keeps_the_resident_index_it_prepared(cls):
         assert after is None or after[1] != 0  # CPU column: nothing prepared at fit
         return
     assert after is not None and after[1] == held[1]
+
+
+@pytest.mark.parametrize("cls", [mojolearn.KNeighborsRegressor, mojolearn.KNeighborsClassifier])
+def test_board_cycle_one_handle_per_fit_and_lazy_x_neighbors(cls):
+    # fix-knn-door-fixed-cost (2026-11-14): the board's clock is construct +
+    # fit + predict with the previous estimator replaced (its finalizer
+    # releases its index inside the next cycle). Every cycle must answer the
+    # same bits, and each predict must reuse the handle its own fit prepared
+    # (one index prepare per fit + predict). A single-output fit no longer
+    # resolves the x_neighbors binding (0.8.55's form); a refit of the same
+    # instance with a multi-output y, whose transpose does resolve it, must
+    # still match the former path, and a single-output refit after it too.
+    X, Q, rng = _data(4)
+    clf = cls is mojolearn.KNeighborsClassifier
+    y1 = rng.integers(0, 3, X.shape[0]).astype(np.int32) if clf else rng.random(X.shape[0], dtype=np.float32)
+    y2 = rng.integers(0, 3, (X.shape[0], 2)) if clf else np.asfortranarray(rng.random((X.shape[0], 2)))
+    first = None
+    held = {}
+    for _ in range(3):  # glue: the board's repeated construct + fit + predict cycle
+        model = cls(n_neighbors=3).fit(X, y1)
+        index = vars(model)["_resident_holder"].get("index")
+        out = model.predict(Q)
+        after = vars(model)["_resident_holder"].get("index")
+        if index is not None:
+            assert after is not None and after[1] == index[1]
+        if first is None:
+            first = _bits(out)
+        assert _bits(out) == first
+        held["model"] = model  # replaces the previous cycle's estimator, as the board does
+    former = cls(n_neighbors=3)
+    model = held["model"]
+    for y in (y2, y1):
+        model.fit(X, y)
+        if clf:
+            legacy.clf_fit(former, X, y)
+            assert _state(model) == _state(former)
+            _same(model.predict(Q), legacy.clf_predict(former, Q))
+        else:
+            legacy.reg_fit(former, X, y)
+            assert _state(model) == _state(former)
+            _same(model.predict(Q), legacy.reg_predict(former, Q))

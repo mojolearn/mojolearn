@@ -10,6 +10,15 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, native_interpreter_finalizing
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from std.sys.compile import is_defined
+from std.time import perf_counter_ns
+
+# fix-knn-door-fixed-cost (2026-11-14): under `-D MOJOLEARN_KNN_PHASE_TIMERS=1`
+# a device class's finalizer prints `KNN_PHASE_TIMERS finalizer <entry>
+# release_ms <ms>`: the release of a dropped estimator's resident index (a
+# benchmark that replaces its estimator each call pays it inside the next
+# call's clock). Undefined: no clock read, nothing printed.
+comptime _RELEASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 
 
 def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
@@ -65,7 +74,13 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
         var release = py_call(b.getattr, held[2], plan[4], PythonObject(None))
         if release is None or py_type(release) is not py_type(b.len):
             return
+        var t_release = 0
+        comptime if _RELEASE_TIMERS:
+            t_release = Int(perf_counter_ns())
         _ = py_call(release, held[1])
+        comptime if _RELEASE_TIMERS:
+            print("KNN_PHASE_TIMERS finalizer", String(plan[4]), "release_ms",
+                  Float64(Int(perf_counter_ns()) - t_release) / 1000000.0)
         return
     var groves = len(plan) > 2 and String(plan[2]) == "groves"
     var cached = py_get(fields, "_groves" if groves else "_resident")

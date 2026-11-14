@@ -84,6 +84,7 @@ from neighbors.neighbors_knn_run import (
     knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_labels_already_int32, knn_float_format,
     knn_labels_finite,
     knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
+    knn_fit_xn_eager, knn_door_clock_open, knn_door_clock_mark, knn_door_clock_close,
 )
 
 #: The metric words, label codes and refusals: neighbors/neighbors_knn_run.mojo.
@@ -687,6 +688,7 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
     # A refit drops the device copy of the previous index HERE, not at the
     # next call: the copy is keyed on the array's address and shape.
     knn_release(model)
+    knn_door_clock_mark("fit_refusals_release")
     # Held on the instance so the memory outlives this call: the search
     # borrows the address at query time (an owned float32 Array: the cast
     # result itself, or the caller's float32 C-order block by reference,
@@ -702,6 +704,7 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
     else:
         idx = admit_family_owned(input, input_pin, context)
     var rbc = _eq(family_field(fields, "algorithm"), PythonObject("rbc"))
+    knn_door_clock_mark("fit_admit_x")
     if not knn_x_tested(input, x_source, context):
         # Lane a7b: the fit's finite test. On the GPU binding the index is
         # uploaded here once (the resident copy every query searches) and
@@ -711,6 +714,7 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
             _ = _resident_handle(model, search, idx, True)
         else:
             knn_host_finite(model, input)
+    knn_door_clock_mark("fit_prepare_finite")
     if not rbc:
         var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
         _check_metric_input(cls_name, Int(py=resolved[0]), input)
@@ -718,6 +722,7 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
     py_setitem(fields, "n_samples_fit_", PythonObject(input.shape[0]))
     py_setitem(fields, "n_features_in_", PythonObject(input.shape[1]))
     _ = input_pin^  # the door's pin held X through the device upload or host scan
+    knn_door_clock_mark("fit_metric_store")
 
 
 def _y_shape(y: PythonObject, fields: PythonObject, context: PythonObject) raises -> List[Int]:
@@ -798,11 +803,28 @@ def _encode_column(y_cols: PythonObject, row: Int, n: Int, context: PythonObject
     return labels.classes
 
 
+def _knn_xn(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The x_neighbors binding of a k-NN fit (`args[0]`), admitted. Its one
+    consumer is the multi-output label transpose (`xn_p2m_transpose[_i]`),
+    so the default resolves it there and nowhere else, as 0.8.55's
+    `self._bind(_XN)` inside the multi-output branch did; a single-output fit
+    never reads it. Under the B arm (-D MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER,
+    neighbors/neighbors_knn_run.mojo knn_fit_xn_eager) the operation already
+    resolved it before the fit and `args[0]` is that admitted binding."""
+    # Locals, never a subscript in return position (AGENTS.md, the 2026-11-12
+    # tail-call rule for borrowed PythonObject arguments).
+    if knn_fit_xn_eager():
+        var held = args[0]
+        return held
+    var admitted = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
+    var selected = admitted[0]
+    return selected
+
+
 def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`KNeighborsClassifier.fit(X, y)`: the index, then int32 label columns
     (POLICY 6: `n_outputs` contiguous columns) and the classes per column."""
     var b = _b()
-    var xn = args[0]
     _nn_fit(model, args[1], context, PythonObject(None))
     var fields = py_fields(model)
     var y = args[2]
@@ -825,6 +847,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + mc_dtype_name(y, context) + "; cuML converts to int32 "
                     + "(check_dtype=np.int32) and so does this surface -- cast "
                     + "your labels")
+    knn_door_clock_mark("fit_labels_kind")
     # `as_i64_c(y, ndim=len(shape), name="y")`: the labels as int64 in the
     # view's storage order (the input itself when it already is int64).
     var view = admit_c_view(y, "y", context)
@@ -861,6 +884,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
             _ = wide  # keep the Python object alive through the native call above
             _ = view  # keep the Python object alive through the native call above
         knn_check_int32_labels(low, high)
+    knn_door_clock_mark("fit_labels_range")
     var n = shape[0]
     var n_out = 1 if len(shape) == 1 else shape[1]
     py_setitem(fields, "outputs_2d_", PythonObject(len(shape) == 2 and shape[1] != 1))
@@ -875,6 +899,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = view  # keep the Python object alive through the native call above
         py_setitem(fields, "_y_cols", labels_reshape(y32, Python.tuple(1, n), context))
         py_setitem(fields, "_classes_list", Python.list(classical_encode_labels(y32, context).classes))
+        knn_door_clock_mark("fit_labels_cast_classes")
         return
     var yc = family_array(Python.tuple(n_out, n), "<i4", context)
     # admit_c_view hands the labels in C order (an F-ordered y is one
@@ -887,6 +912,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     if n:
+        var xn = _knn_xn(model, args, context)
         xn_execute(xn, "p2m_transpose_i", Python.list(classical_address(y32), classical_address(yc)),
                    Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
         _ = y32  # keep the Python object alive through the native call above
@@ -896,13 +922,13 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     for j in range(n_out):  # driver-loop: over output columns, one native encoding each
         _ = py_call(classes.append, _encode_column(yc, j, n, context))
     py_setitem(fields, "_classes_list", classes)
+    knn_door_clock_mark("fit_labels_cast_classes")
 
 
 def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`KNeighborsRegressor.fit(X, y)`: the index, then float32 target
     columns (POLICY 6)."""
     var b = _b()
-    var xn = args[0]
     _nn_fit(model, args[1], context, PythonObject(None))
     var fields = py_fields(model)
     var target_pin = ArrayPin()
@@ -921,6 +947,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         # same op on a CPU-only install).
         var yc = family_array(Python.tuple(n_out, n), "<f4", context)
         if n:
+            var xn = _knn_xn(model, args, context)
             xn_execute(xn, "p2m_transpose", Python.list(PythonObject(target.source.addr), classical_address(yc)),
                        Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
             _ = ya  # keep the Python object alive through the native call above
@@ -929,6 +956,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "outputs_2d_", PythonObject(len(shape) == 2 and shape[1] != 1))
     _ = target
     _ = target_pin
+    knn_door_clock_mark("fit_targets")
 
 
 # ------------------------------------------------------------------ predict
@@ -1032,10 +1060,12 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     (`_knn_fold`); any other X is admitted on the host (`_queries`)."""
     var dist = PythonObject(None)
     var fold = _knn_fold(model, binding, x_source, dist, context)
+    knn_door_clock_mark("predict_fold_check")
     if fold.active():
         return _classify_on(model, binding, 0, fold.rows, True, fold, want_proba, dist, context)
     var query_pin = ArrayPin()
     var query = _queries(model, x_source, dist, context, query_pin)
+    knn_door_clock_mark("predict_queries")
     var result = _classify_on(model, binding, query.source.addr, query.shape[0],
                               knn_x_tested(query, x_source, context), DoorRowsStore.none(), want_proba, dist,
                               context)
@@ -1076,8 +1106,10 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     # without that entry takes the per-call path.
     var ops = knn_ops_key(binding)
     var handle = Optional[PythonObject]()  # Optional, not a PythonObject(None) sentinel (modular/modular#7546)
+    knn_door_clock_mark("predict_outputs_alloc")
     if ops.vendor != 0:
         handle = Optional[PythonObject](_resident_handle(model, binding, idx))
+    knn_door_clock_mark("predict_resident_handle")
     # UNPACK: the plain words of the neighbors operations table's classify
     # request (core/neighbors_entry_table.mojo NB_OP_CLASSIFY[_RESIDENT]).
     var call = KnnCallWords(model, idx, nq, dist)
@@ -1112,6 +1144,7 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
                 nq, call.n_features, call.k, query_tile, want_proba, class_counts, call.metric, call.metric_arg,
                 call.weights)
     _ = class_counts^
+    knn_door_clock_mark("predict_classify_call")
     var used = PythonObject(used_word)
     if fold.active():
         door_rows_refuse(Int(status[0]), Int(status[1]), _class_name(model), fold.base_rows)
@@ -1124,6 +1157,7 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     _ = proba  # keep the Python object alive through the native call above
     _ = uniq  # keep the Python object alive through the native call above
     _report(fields, "used_query_tile_", used)
+    knn_door_clock_mark("predict_status_report")
     # p3-neighbors-cluster: `uniq` is the kernel's class set of the fitted
     # `_y_cols`, the same for every query, so POLICY 7's check runs once per
     # fitted state: skipped while `_y_cols` and `_classes_list` are the objects
@@ -1135,6 +1169,7 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
                 and checked[0] is y_cols and checked[1] is classes_list
                 and _knn_lists_unchanged(fields, Python.tuple("_classes_list", "_label_names"),
                                          py_get(class_holder, "admitted_lists"))):
+            knn_door_clock_mark("predict_class_set_skip")
             return Python.tuple(labels, proba, n_classes)
     # POLICY 7: the implementation's class set against ours, made visible:
     # `uniq` split at the running class counts.
@@ -1154,6 +1189,7 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
                         + "...; the two class sets disagree")
     if class_holder is not None and py_type(class_holder) is b.dict:
         py_setitem(class_holder, "class_set_checked", Python.tuple(y_cols, classes_list))
+    knn_door_clock_mark("predict_class_set_check")
     return Python.tuple(labels, proba, n_classes)
 
 
@@ -1178,7 +1214,10 @@ def _clf_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     _ = codes  # keep the Python object alive through the native call above
     var names = py_get(fields, PythonObject("_label_names"), PythonObject(None))
     if names is not None:
-        return classical_decode_labels(names, codes, context)
+        var decoded = classical_decode_labels(names, codes, context)
+        knn_door_clock_mark("predict_output_cast")
+        return decoded
+    knn_door_clock_mark("predict_output_cast")
     return codes
 
 
@@ -1218,10 +1257,12 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     the resident entry can gather stays on the device (`_knn_fold`)."""
     var dist = PythonObject(None)
     var fold = _knn_fold(model, binding, x_source, dist, context)
+    knn_door_clock_mark("predict_fold_check")
     if fold.active():
         return _reg_predict_on(model, binding, 0, fold.rows, True, fold, dist, context)
     var query_pin = ArrayPin()
     var query = _queries(model, x_source, dist, context, query_pin)
+    knn_door_clock_mark("predict_queries")
     var result = _reg_predict_on(model, binding, query.source.addr, query.shape[0],
                                  knn_x_tested(query, x_source, context), DoorRowsStore.none(), dist, context)
     _ = query
@@ -1241,8 +1282,10 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     # DEVIATION 3002: the regressor's resident door; see the classifier.
     var ops = knn_ops_key(binding)
     var handle = Optional[PythonObject]()  # Optional, not a PythonObject(None) sentinel (modular/modular#7546)
+    knn_door_clock_mark("predict_outputs_alloc")
     if ops.vendor != 0:
         handle = Optional[PythonObject](_resident_handle(model, binding, idx))
+    knn_door_clock_mark("predict_resident_handle")
     # UNPACK: the plain words of the neighbors operations table's regress
     # request (core/neighbors_entry_table.mojo NB_OP_REGRESS[_RESIDENT]).
     var call = KnnCallWords(model, idx, nq, dist)
@@ -1272,6 +1315,7 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
             used_word = nb_regress_call(
                 entry, call.index, q_addr, y_address, out_address, call.n_index, nq, call.n_features, call.k,
                 query_tile, n_out, call.metric, call.metric_arg, call.weights)
+    knn_door_clock_mark("predict_regress_call")
     var used = PythonObject(used_word)
     if fold.active():
         door_rows_refuse(Int(status[0]), Int(status[1]), _class_name(model), fold.base_rows)
@@ -1282,6 +1326,7 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     _ = y_cols  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _report(fields, "used_query_tile_", used)
+    knn_door_clock_mark("predict_status_report")
     if _truth(family_field(fields, "outputs_2d_")):
         return out
     return labels_reshape(out, Python.tuple(nq), context)
@@ -1319,10 +1364,18 @@ def _neighbors_knn_operation(model: PythonObject, operation: String, var args: P
     for i in range(data_start, min(len(args), 4)):  # small-loop(public data arguments; metrics binding is not data)
         if host_sparse_format(args[i]).byte_length() == 0:
             classical_admit_value(args[i], context)
+    knn_door_clock_mark("state_admission")
     if operation == "family_xn_knn_clf_fit" or operation == "family_xn_knn_reg_fit":
-        args = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
+        # fix-knn-door-fixed-cost (2026-11-14): the x_neighbors binding is
+        # resolved by its one consumer, the multi-output transpose (`_knn_xn`),
+        # as 0.8.55 did; `args[0]` stays as the caller passed it (None from
+        # every public fit). B arm -D MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER:
+        # resolved and admitted here, before every fit (b412ea02f4's form).
+        if knn_fit_xn_eager():
+            args = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
     elif operation != "family_xn_knn_nn_fit":
         args = estimator_arguments(model, "_mojolearn", args, context)
+    knn_door_clock_mark("binding_arguments")
     if operation == "family_xn_knn_nn_fit":
         # args = (X,)
         _nn_fit(model, args[0], context, PythonObject(None))
@@ -1394,7 +1447,9 @@ def neighbors_knn_operation(model: PythonObject, operation: String, args: Python
         _ = py_call(fields.update, state)
         py_setitem(fields, "_resident_holder", Python.dict())
         return PythonObject(None)
+    knn_door_clock_open(operation)
     var call = neighbors_public_begin(model, operation, args, context)
+    knn_door_clock_mark("public_begin")
     var result = PythonObject(None)
     try:
         result = _neighbors_knn_operation(model, operation, call.args, context)
@@ -1403,4 +1458,7 @@ def neighbors_knn_operation(model: PythonObject, operation: String, args: Python
         raise failure^
     finally:
         neighbors_public_end(model, call)
-    return neighbors_public_finish(model, operation, result, call, context)
+    var finished = neighbors_public_finish(model, operation, result, call, context)
+    knn_door_clock_mark("public_finish")
+    knn_door_clock_close()
+    return finished

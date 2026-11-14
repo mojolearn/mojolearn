@@ -11,6 +11,8 @@ and wording are unchanged. Nothing here imports Python.
 from std.math import isfinite
 from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
+from std.time import perf_counter_ns
+from core.shared_slot import SharedSlot
 from core.family_cast_impl import family_min_f32
 from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_finite_status
 
@@ -279,3 +281,80 @@ def knn_copy_proba_block(dst_address: Int, src_address: Int, offset: Int, rows: 
     of the flat probability buffer."""
     unsafe_memcpy(dest=_F32P(unsafe_from_address=dst_address),
                   src=_F32P(unsafe_from_address=src_address + 4 * offset), count=rows * classes)
+
+
+# ------------------------------------------------------------------ door switches and timers
+
+#: fix-knn-door-fixed-cost (2026-11-14): B arm of the owed A/B (row id
+#: fix-knn-door-fixed-cost). Defined, every KNeighborsClassifier /
+#: KNeighborsRegressor fit resolves and admits the x_neighbors binding up front
+#: (estimator_arguments + xn_admit_arguments, the form b412ea02f4 introduced
+#: with the native door), whether or not the fit uses it. Default (0.8.55's
+#: form, neighbors.py `self._bind(_XN)` only inside the multi-output branch):
+#: the binding is resolved only where a fit runs its one consumer, the
+#: multi-output label transpose (`n_outputs > 1`). Same kernels, same words:
+#: no bit change.
+comptime KNN_DOOR_FIT_XN_EAGER = is_defined["MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER"]()
+
+
+def knn_fit_xn_eager() -> Bool:
+    """True when the k-NN fit door resolves the x_neighbors binding before
+    its work (the B arm); False when only the multi-output transpose
+    resolves it (the default, 0.8.55's form)."""
+    return KNN_DOOR_FIT_XN_EAGER
+
+
+#: fix-knn-door-fixed-cost (2026-11-14): the door phases of the k-NN public
+#: operations under the existing `-D MOJOLEARN_KNN_PHASE_TIMERS=1`
+#: (neighbors/impl/detail/knn_brute_force.mojo KNN_PHASE_TIMERS, which times
+#: the device request's own phases). Defined, every public k-NN operation
+#: prints one line `KNN_PHASE_TIMERS door <operation> <phase>_ms <ms> ...
+#: total_ms <ms>`: host wall time between consecutive marks, in program order,
+#: so the segments sum to the total. Undefined, every call below is an empty
+#: body after `comptime if`: no clock read, no slot, no string.
+comptime KNN_DOOR_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
+
+
+struct KnnDoorClock(Defaultable, Movable):
+    var start: Int
+    var last: Int
+    var line: String
+
+    def __init__(out self):
+        self.start = 0
+        self.last = 0
+        self.line = String()
+
+
+comptime _KNN_DOOR_CLOCK = SharedSlot[KnnDoorClock, "MojolearnKnnDoorClockV1"]
+
+
+def knn_door_clock_open(operation: String) raises:
+    """Start one public operation's door line (timers on only)."""
+    comptime if KNN_DOOR_TIMERS:
+        var clock = _KNN_DOOR_CLOCK.get_or_create_ptr()
+        var now = Int(perf_counter_ns())
+        clock[].start = now
+        clock[].last = now
+        clock[].line = String("KNN_PHASE_TIMERS door ") + operation
+
+
+def knn_door_clock_mark(phase: StaticString) raises:
+    """Close the segment since the last mark under `phase` (timers on only)."""
+    comptime if KNN_DOOR_TIMERS:
+        var clock = _KNN_DOOR_CLOCK.get_or_create_ptr()
+        var now = Int(perf_counter_ns())
+        var ms = Float64(now - clock[].last) / 1000000.0
+        clock[].line += String(" ") + String(phase) + String("_ms ") + String(ms)
+        clock[].last = now
+
+
+def knn_door_clock_close() raises:
+    """Print the operation's door line (timers on only)."""
+    comptime if KNN_DOOR_TIMERS:
+        var clock = _KNN_DOOR_CLOCK.get_or_create_ptr()
+        var now = Int(perf_counter_ns())
+        var ms = Float64(now - clock[].start) / 1000000.0
+        clock[].line += String(" total_ms ") + String(ms)
+        print(clock[].line)
+        clock[].line = String()
