@@ -149,6 +149,10 @@
    "define": "MOJOLEARN_IDN_NV_FMA_ASM_OLD",
    "status": "define in code (checks/nv_fma_rn.mojo IDN_NV_FMA_ASM_OLD, nv_fma_rn_kernel; callers neighbors/checks/pinned_distance_tile.mojo _rt_step/_rt_step_exact, gemm/checks/gemm_identical.mojo _tuned_step/_admit_step, transformer/impl/llama/fused_attention.mojo _step x2): B = the NVIDIA rounded FMA as the inline-asm helper nv_fma_rn_f32 (62a6577b39, candidate 4c2340386abc's shape); A = the llvm.nvvm.fma.rn.f intrinsic (0.8.55's form). Same PTX fma.rn.f32, same fold order, same bits; NVIDIA identical column only (AMD is a no-change check); mul.rn/mul.rn.ftz stay asm in both arms"
   },
+  "nv-mul-rn-asm": {
+   "define": "MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD",
+   "status": "define in code (checks/numerics.mojo IDN_NV_MUL_RN_ASM_OLD; nv_mul_rn_kernel_f32/_f64, nv_flush_by_one_kernel; callers checks/numerics.mojo ftz (NVIDIA hardware flush) and pinned_mul_f32/_f64 (every identical_mul/identical_mul64), neighbors/checks/pinned_distance_tile.mojo _rt_step, gemm/checks/gemm_identical.mojo _tuned_step/_fold_flush, transformer/impl/llama/fused_attention.mojo _step/_step_preflushed): B = PTX mul.rn.f32/.f64 and mul.rn.ftz.f32 x,1 as inline asm (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f/.d(a, b, -0.0) and llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0), schedulable like 0.8.55's llvm.nvvm.mul.rn.* intrinsics. Same IEEE word for every input (exact product plus -0.0 rounded once; the by-one product is exact), same fold order; NVIDIA identical column only (AMD is a no-change check)"
+  },
   "lm-forward-zero-fill": {
    "define": "MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL",
    "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_ZERO_FILL, _pooled_logits): B = a fresh resident logits store made as array.array('f', bytes(count * 4)) (zero-filled bytes, then a copy into the array; 0.8.66 / candidate shape); A = an unfilled bytearray store (native_scratch_bytes, _wrap_pooled_unfilled), every byte written by the one logits download. Same bits"
@@ -1116,6 +1120,35 @@
     "gbdt-prebinned-infer-old"
    ],
    "decides": "keep the held pack (A, default) unless the per-call pack (B, -D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD) is faster on the NVIDIA+AMD average of infer test and large, arms ours, ours-prebinned (depthwise) and ours, ours-gain0 (lossguide), istella and taxi; same kernels, same arguments, same tree order: every infer hash must be equal between A and B"
+  },
+  {
+   "id": "fix-nv-mul-rn-via-fma",
+   "source": "fix-nv-mul-rn-via-fma (2026-11-14; best-ever history audit wave 2 row 3: HDBSCAN taxi NV best 407.71 ms at 0.8.44, 0.8.55 423, candidate ba08dac006 546; 0.8.55 ran the distance tile on llvm.nvvm.fma.rn.f + llvm.nvvm.mul.rn.ftz.f, fix-hdbscan-nv restored only the fma; the tile repair step, every NVIDIA ftz and every pinned product still issued opaque asm)",
+   "kind": "ab",
+   "lane": [
+    "hdbscan",
+    "knn-clf",
+    "knn-reg",
+    "knn",
+    "lm-train-step",
+    "lm-forward",
+    "transformer-forward",
+    "transformer-decode",
+    "transformer-infer",
+    "ols",
+    "ridge",
+    "pca",
+    "tsvd",
+    "kernel-ridge",
+    "gpr",
+    "logreg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "nv-mul-rn-asm"
+   ],
+   "decides": "keep the schedulable fma.rn spellings (A) unless the asm mul.rn / mul.rn.ftz (B) is at least as fast on NVIDIA; every NVIDIA identical kernel that calls ftz or identical_mul runs it, the lanes listed are the NV-only regressions on record. Digests must not move in either arm (neighbors/checks/knn_distance_fma_boundary_check.mojo and tools/probe_ftz_hw.mojo judge the words). If A does not compile (Mojo 1.2 rejecting llvm.nvvm.fma.rn.d or llvm.nvvm.fma.rn.ftz.f), build with the define on and record the row as not runnable"
   }
  ]
 }
