@@ -12,8 +12,34 @@ from mojolearn._buffer import addr, addr_ro, empty
 from mojolearn._lazy_out import _empty_out
 from mojolearn._expansion_neighbors import (
     NearestCentroid, KNNImputer, _f32, _i32, _f32_scalar,
-    _class_array, _argmax_labels, _accuracy, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
+    _accuracy, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
 )
+
+
+# Frozen copies of the former package helpers (python/mojolearn/_expansion_neighbors.py
+# before lane py-neighbors, 2026-11-14, deleted them: every public method is one
+# native call and decodes its labels in bindings/neighbors_local_native_door.mojo
+# `_class_array` / bindings/neighbors_semi_native_door.mojo `_semi_class_array`).
+def _argmax_labels(est, classes, M):
+    """The class of every row's first maximum: the argmax on the device
+    (`row_argmax`), the labels by `_class_array`."""
+    n, C = M.shape
+    codes = empty((n,), "<i4")
+    if n > 0:
+        est._op("row_argmax", [(M, 0), (codes, 1)], (n, C))
+    return _class_array(classes, codes)
+
+
+def _class_array(classes, codes):
+    """classes[codes] for int32 codes (an Array): int or bool classes an
+    int64 Array, real classes a float64 Array (the native gather of
+    `decode_labels`), other labels a list (`decode_labels`)."""
+    from mojolearn._labels import decode_labels
+    if all(isinstance(v, (bool, int)) for v in classes):  # glue: type check over the k class labels
+        return decode_labels([int(v) for v in classes], codes)   # glue: the k class values
+    if all(isinstance(v, (int, float)) for v in classes):  # glue: type check over the k class labels
+        return decode_labels([float(v) for v in classes], codes)  # glue: k class labels as floats
+    return decode_labels(classes, codes)
 
 
 class LegacyNearestCentroid(NearestCentroid):
