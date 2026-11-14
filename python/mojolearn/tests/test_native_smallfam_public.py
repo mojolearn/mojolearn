@@ -7,9 +7,10 @@ classifiers' `score`, PLS / CCA `score`, `FactorAnalysis.fit_transform`,
 Each migrated method equals, bit for bit, the composition of public steps it
 replaced (the same kernels in the same order): accuracy of `predict` through
 `accuracy_fraction`, R^2 of `predict` through `r2_score`, `fit` then
-`transform`. `lu_factor` / `lu_solve` keep their contract: the factor
-reconstructs P A, the solve answers A x = b (and A^T x = b), repeat calls
-return the same bits, and the refusals keep their words.
+`transform`. `lu_factor` / `lu_solve` keep their public contract here
+(dtypes, the plain-tuple pair, the refusals' words, the singular warning);
+the factor reconstructing P A, the solve answering A x = b and A^T x = b,
+and their repeats are native: checks/native_tests/metrics_smallfam_public_cpu.mojo.
 """
 import warnings
 
@@ -113,37 +114,10 @@ def _system(n=8, seed=5):
     return A, rng.random(n).astype(np.float32), rng.random((n, 3)).astype(np.float32)
 
 
-def _unpack(lu, piv):
-    lu, piv = np.asarray(lu, np.float64), np.asarray(piv)
-    n = lu.shape[0]
-    L, U = np.tril(lu, -1) + np.eye(n), np.triu(lu)
-    perm = np.arange(n)
-    for i, p in enumerate(piv):
-        perm[[i, p]] = perm[[p, i]]
-    return L, U, perm
-
-
-def test_lu_factor_reconstructs_and_repeats():
+def test_lu_factor_returns_float32_lu_and_int32_pivots():
     A, _, _ = _system()
-    pair = ml.lu_factor(A)
-    lu, piv = pair
+    lu, piv = ml.lu_factor(A)
     assert np.asarray(lu).dtype == np.float32 and np.asarray(piv).dtype == np.int32
-    L, U, perm = _unpack(lu, piv)
-    np.testing.assert_allclose(L @ U, A.astype(np.float64)[perm], rtol=1e-5, atol=1e-5)
-    lu2, piv2 = ml.lu_factor(A)
-    assert _bits(lu2) == _bits(lu) and _bits(piv2) == _bits(piv)
-
-
-@pytest.mark.parametrize("trans", [0, 1, 2])
-def test_lu_solve_answers_the_system(trans):
-    A, b, B = _system()
-    pair = ml.lu_factor(A)
-    M = A.astype(np.float64) if trans == 0 else A.astype(np.float64).T
-    for rhs in (b, B):
-        x = ml.lu_solve(pair, rhs, trans=trans)
-        assert np.asarray(x).shape == rhs.shape
-        np.testing.assert_allclose(M @ np.asarray(x, np.float64), rhs, rtol=1e-4, atol=1e-4)
-        assert _bits(ml.lu_solve(pair, rhs, trans=trans)) == _bits(x)
 
 
 def test_lu_solve_plain_tuple_pair():

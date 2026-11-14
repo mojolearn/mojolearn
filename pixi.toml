@@ -142,6 +142,7 @@ check-native-metrics-weighted-score-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTIC
 check-native-metrics-weighted-score-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/metrics_weighted_score_gpu.mojo"
 check-native-metrics-selection-host-p2-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/metrics_selection_host_p2_cpu.mojo"
 check-native-metrics-selection-host-p2-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/metrics_selection_host_p2_gpu.mojo"
+check-native-metrics-smallfam-public-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/metrics_smallfam_public_cpu.mojo"
 check-native-optimizer-descriptor-cpu = "mojo run -I . checks/native_tests/optimizer_descriptor_cpu.mojo"
 check-native-optimizer-descriptor-gpu = "mojo run -I . checks/native_tests/optimizer_descriptor_gpu.mojo"
 check-native-optimizer-device-cpu = "mojo run -I . checks/native_tests/optimizer_device_cpu.mojo"
