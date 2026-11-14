@@ -27,10 +27,10 @@ def test_program_methods_do_not_resolve_mutable_instance_callables():
 
 
 def test_native_request_retains_fields_and_routes_through_session_owner():
-    source = (PROVIDERS / 'autograd_program_public_request_pyapi.mojo').read_text()
+    source = (PROVIDERS / 'autograd_program_public_request_pyapi_pack.mojo').read_text()
     assert source.index('program_owner_fields(owner)') < source.index('snapshot["_s"]')
     assert 'Python.tuple(owner, snapshot, fields, operation, args)' in source
-    assert 'ops_session_public_call_py(' in source
+    assert 'ops_session_public_call_py[E, KIND](' in source
     assert all(word not in source for word in ('PyObject_Call', 'PyCFunction', '._session_native', '._execute_native'))
     dispatcher = (PROVIDERS / 'autograd_program_public_dispatch_pyapi.mojo').read_text()
     assert 'ops_program_save_fields_py[E, KIND](fields, state,' in dispatcher
@@ -39,7 +39,7 @@ def test_native_request_retains_fields_and_routes_through_session_owner():
 
 
 def test_constructor_admits_metadata_and_class_before_allocation():
-    source = (PROVIDERS / 'autograd_program_owner_pyapi.mojo').read_text()
+    source = (PROVIDERS / 'autograd_program_owner_pyapi_door.mojo').read_text()
     assert source.index('program_native_sequence(info)') < source.index('len(info)')
     constructor = source.split('def program_new_owner(', 1)[1]
     assert constructor.index('Program construction refuses changed Python storage hooks') < constructor.index('b.object.__new__')
