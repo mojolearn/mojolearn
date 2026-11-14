@@ -416,7 +416,7 @@ struct DKit(Movable):
     var sel_cap: Int
     var sel_u32: List[DeviceBuffer[DType.uint32]]
     var sel_i32: List[DeviceBuffer[DType.int32]]
-    # the drains this kit's `sync` ran (tests/checks/mcd_step_cost_check.mojo)
+    # the drains this kit's `sync` ran (checks/mcd_step_cost_check.mojo)
     var drains: Int
 
     def __init__(out self) raises:
