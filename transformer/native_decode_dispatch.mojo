@@ -5,6 +5,7 @@ from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, B
 from transformer.transformer_binding_impl import (
     TransformerDecodeSession, _require_session_open, _check_base_addrs,
     _session_open_run, _session_open_run_int15, _session_export_run, _session_load_run,
+    _session_step_run, _session_decode_run, _session_forward_run,
 )
 
 
@@ -75,6 +76,34 @@ def transformer_decode_operation(op: Int, a: List[Int], words: List[Int]) raises
         raise Error("transformer decode: the descriptor step and forward were removed; use the session entries")
     if len(a) != 2 or a[0] == 0 or a[1] == 0:
         raise Error("transformer decode: expected two nonnull buffer addresses")
+    if op == 10 or op == 11 or op == 12:
+        # Lane fix-transformer-decode-door (2026-11-13): the public decode
+        # session's step (10, p = [cached]), resident N-token decode (11,
+        # p = [N, cached]) and L-token forward (12, p = [L, cached]) on a
+        # registry session (CAUSAL_SESSION_DECODE_STEP / RUN / FORWARD), the
+        # bodies the binding entries transformer_decode_session_step / decode /
+        # forward ran (`_session_step_run`, `_session_decode_run`,
+        # `_session_forward_run`), with their refusals. Same kernels, same
+        # order: the bytes are those entries'. A failed run marks the session
+        # lost, as those entries did.
+        if (op == 10 and len(p) != 1) or (op != 10 and len(p) != 2):
+            raise Error("transformer decode: expected " + (String("cached_tokens") if op == 10 else String("a token count and cached_tokens")))
+        var claimed = p[len(p) - 1]
+        if owner[].cached() != claimed:
+            raise Error(
+                String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
+                + " but the resident cache holds " + String(owner[].cached()))
+        if op != 10 and p[0] < 1:
+            raise Error("transformer decode session: L must be positive")
+        try:
+            if op == 10:
+                return _session_step_run(owner[], a[0], a[1])
+            if op == 11:
+                return _session_decode_run(owner[], a[0], a[1], p[0])
+            return _session_forward_run(owner[], a[0], a[1], p[0])
+        except problem:
+            owner[].usable = False
+            raise problem
     if op == 8 and len(p) != 1:
         raise Error("transformer decode: expected cached_tokens")
     if op == 7 and len(p) != 0:
