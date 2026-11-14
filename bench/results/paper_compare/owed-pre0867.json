@@ -164,6 +164,10 @@
   "mamba-backward-generic": {
    "define": "MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC",
    "status": "define in code (autograd/rules_mamba.mojo IDN_MAMBA_BACKWARD_GENERIC): B = the tape graph (mamba{1,2}_step_backward_tape, _m{1,2}_record_backward) as the block step op's Mamba-1/2 VJP (main 5005c07e74's shape); A = the restored 10-19 hand chain (mamba{1,2}_step_backward_hand, deleted by 47582a7fb) over the same kept stages. Same kernels in the same order: same bits"
+  },
+  "gbdt-prebinned-infer-old": {
+   "define": "MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD",
+   "status": "define in code (gbdt/models/add_non_symmetric_tree_doc_parallel.mojo IDN_NS_RESIDENT_PACK): B = the resident Depthwise/Lossguide predict re-packing the ensemble every call through doc_parallel_boosting.predict (layout build, node staging, sixteen allocations, eight uploads, bins buffer); A = the pack held from the first predict (NsResidentPack), node offsets and bins buffer rewritten only when the row count changes (default). Same kernels, same arguments, same tree order: same bits"
   }
  },
  "rows": [
