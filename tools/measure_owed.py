@@ -214,20 +214,15 @@ def cmd_plan(a):
     for key in sorted(units, key=unit_order):
         arm, rows = key
         f = os.path.join(a.out_dir, "ids-%s-%s.txt" % (arm, rows))
-        with open(f, "w") as fh:
-            fh.write("".join(i + "\n" for i in units[key]))
+        PC.write_atomic(f, "".join(i + "\n" for i in units[key]))
         lines.append("%s\t%s\t%s\n" % (arm, rows, f))
-    with open(os.path.join(a.out_dir, "units.tsv"), "w") as fh:
-        fh.write("".join(lines))
-    with open(os.path.join(a.out_dir, "smoke-ids.txt"), "w") as fh:
-        fh.write("".join(i + "\n" for i in smoke))
-    with open(os.path.join(a.out_dir, "board-args.txt"), "w") as fh:
-        fh.write("".join(x + "\n" for x in bargs))
+    PC.write_atomic(os.path.join(a.out_dir, "units.tsv"), "".join(lines))
+    PC.write_atomic(os.path.join(a.out_dir, "smoke-ids.txt"), "".join(i + "\n" for i in smoke))
+    PC.write_atomic(os.path.join(a.out_dir, "board-args.txt"), "".join(x + "\n" for x in bargs))
     for name, obj in (("drivers.json", drivers), ("not-planned.json", missing), ("rowmap.json", rowmap)):
-        with open(os.path.join(a.out_dir, name), "w") as fh:
-            json.dump(obj, fh, indent=1, sort_keys=True)
-    with open(os.path.join(a.out_dir, PLAN_META), "w") as fh:
-        json.dump({"vendor": a.vendor, "b_arms": b_present}, fh, indent=1, sort_keys=True)
+        PC.write_atomic(os.path.join(a.out_dir, name), PC.json_text(obj))
+    # written last: plan-check reads it as "this plan is complete for these B sets"
+    PC.write_atomic(os.path.join(a.out_dir, PLAN_META), PC.json_text({"vendor": a.vendor, "b_arms": b_present}))
     print("OWED-PLAN vendor=%s rows=%d units=%d races=%d smoke=%d drivers=%d not_planned=%d b_arms=%s"
           % (a.vendor, len(doc["rows"]), len(units), sum(len(v) for v in units.values()), len(smoke),
              len(drivers), len(missing), ",".join(b_present) or "-"))
@@ -367,8 +362,17 @@ def report(doc, plan_dir, results, prior_rows, vendor):
     drivers = []
     path = os.path.join(results, "drivers", "drivers.jsonl")
     if os.path.isfile(path):
-        with open(path) as fh:
-            drivers = [json.loads(x) for x in fh if x.strip()]
+        # a line cut short by a full disk is reported as UNREADABLE, never a crash of the whole report (2026-11-14:
+        # the owed report died on `JSONDecodeError: line 1 column 87` after the L40S pod filled)
+        with open(path, errors="replace") as fh:
+            for n, x in enumerate(fh, 1):
+                if not x.strip():
+                    continue
+                try:
+                    drivers.append(json.loads(x))
+                except ValueError as exc:
+                    drivers.append({"status": "UNREADABLE", "line": n, "error": str(exc)[:200],
+                                    "file": os.path.relpath(path, results)})
     counts = {}
     for r in out:
         for f in r["flags"]:
@@ -433,9 +437,7 @@ def cmd_report(a):
     sm = a.summary or os.path.join(a.results, "OWED-SUMMARY-%s.txt" % a.vendor)
     text = render_summary(rep)
     for path, body in ((md, render_md(rep)), (js, json.dumps(rep, indent=1, sort_keys=True) + "\n"), (sm, text + "\n")):
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        with open(path, "w") as fh:
-            fh.write(body)
+        PC.write_atomic(path, body)
     print(text)
     return 0
 

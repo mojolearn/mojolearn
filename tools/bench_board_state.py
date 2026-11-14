@@ -320,7 +320,29 @@ def save_typed_state(path, value):
         raise TypeError("unsupported exported state type: " + type(obj).__name__)
 
     tree = json.dumps(pack(value), allow_nan=False, separators=(",", ":")).encode()
-    np.savez(path, structure=np.frombuffer(tree, dtype=np.uint8), **arrays)
+    savez_atomic(path, structure=np.frombuffer(tree, dtype=np.uint8), **arrays)
+
+
+def savez_atomic(path, **arrays):
+    """np.savez whole or not at all: a temp .npz beside the target, fsync, then rename over it.
+
+    ATOMIC-WRITE FIX (2026-11-14): receipts written while the L40S pod's disk was full were left truncated. A failed
+    write (ENOSPC) raises and leaves no partial receipt for seal to mistake for retained bytes."""
+    import numpy as np
+    path = Path(path)
+    tmp = path.with_name("%s.tmp-%d.npz" % (path.stem, os.getpid()))   # np.savez keeps a name ending in .npz
+    try:
+        with open(tmp, "wb") as fh:
+            np.savez(fh, **arrays)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def load_typed_state(path):
@@ -429,7 +451,7 @@ def scored_receipt(outputs, runner=None, model=None):
                 if all(isinstance(value, np.ndarray) for value in outputs.values()):
                     size = sum(int(value.nbytes) for value in outputs.values())
                     if size <= limit:
-                        np.savez(path, **outputs)
+                        savez_atomic(path, **outputs)
                     encoding = 'numpy output arrays'
                 else:
                     save_typed_state(path, outputs)

@@ -105,6 +105,33 @@ SMOKE_SHAPE = "small"
 # helpers
 # ---------------------------------------------------------------------------------------------------------------
 
+def write_atomic(path, text):
+    """Write a results file whole or not at all: a temp file beside it, fsync, then rename over the target.
+
+    ATOMIC-WRITE FIX (2026-11-14, L40S pod nvc1): the owed report died on a truncated JSON written while the disk
+    was full (JSONDecodeError line 1 col 87). A reader now sees the old file or the complete new one; a failed write
+    (ENOSPC) raises here and leaves the target untouched."""
+    path = os.path.abspath(str(path))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.tmp-%d" % (path, os.getpid())
+    try:
+        with open(tmp, "w") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def json_text(obj):
+    return json.dumps(obj, indent=1, sort_keys=True) + "\n"
+
+
 def load_json(path):
     path = str(path)  # callers pass str or Path (measure_candidate stage crashed on a PosixPath, 2026-11-13)
     opener = gzip.open if path.endswith(".gz") else open
@@ -305,10 +332,7 @@ def cmd_recipes(args):
     board_path = args.board or os.path.join(PAPER_ROOT, "board-%s.json.gz" % args.vendor)
     doc = extract_recipes(load_json(board_path), args.vendor, board_path, args.version)
     out = args.out or os.path.join(OUT_DIR, "recipes-%s.json" % args.vendor)
-    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    with open(out, "w") as fh:
-        json.dump(doc, fh, indent=1, sort_keys=True)
-        fh.write("\n")
+    write_atomic(out, json_text(doc))
     c = doc["counts"]
     print("PAPER-RECIPES vendor=%s races=%d recipes=%d fit=%d infer=%d gpu=%s out=%s"
           % (args.vendor, c["races"], c["recipes"], c["fit"], c["infer"], doc["source"]["gpu"], out))
@@ -394,14 +418,11 @@ def cmd_ids(args):
     planner = load_planner(args.planner)
     full, smoke, missing = plan_ids(doc, planner)
     os.makedirs(args.out_dir, exist_ok=True)
-    with open(os.path.join(args.out_dir, "race-ids-full.txt"), "w") as fh:
-        fh.write("".join(x + "\n" for x in full))
-    with open(os.path.join(args.out_dir, "race-ids-smoke.txt"), "w") as fh:
-        fh.write("".join(x + "\n" for x in smoke))
-    with open(os.path.join(args.out_dir, "board-args.txt"), "w") as fh:
-        fh.write("".join(x + "\n" for x in board_args(doc["bench_board_args"])))
-    with open(os.path.join(args.out_dir, "not-planned.json"), "w") as fh:
-        json.dump(missing, fh, indent=1, sort_keys=True)
+    write_atomic(os.path.join(args.out_dir, "race-ids-full.txt"), "".join(x + "\n" for x in full))
+    write_atomic(os.path.join(args.out_dir, "race-ids-smoke.txt"), "".join(x + "\n" for x in smoke))
+    write_atomic(os.path.join(args.out_dir, "board-args.txt"),
+                 "".join(x + "\n" for x in board_args(doc["bench_board_args"])))
+    write_atomic(os.path.join(args.out_dir, "not-planned.json"), json_text(missing))
     print("PAPER-IDS vendor=%s recipe_races=%d planned=%d not_planned=%d"
           % (doc["vendor"], len(doc["race_ids"]), len(full), len([k for k in missing if not k.endswith(" arms")])))
     return 0
@@ -440,13 +461,10 @@ def cmd_ids_all(args):
     full, smoke, missing, bargs, races = plan_all(planner, args.vendor)
     os.makedirs(args.out_dir, exist_ok=True)
     for name, lines in (("race-ids-full.txt", full), ("race-ids-smoke.txt", smoke), ("board-args.txt", bargs)):
-        with open(os.path.join(args.out_dir, name), "w") as fh:
-            fh.write("".join(x + "\n" for x in lines))
-    with open(os.path.join(args.out_dir, "not-planned.json"), "w") as fh:
-        json.dump(missing, fh, indent=1, sort_keys=True)
+        write_atomic(os.path.join(args.out_dir, name), "".join(x + "\n" for x in lines))
+    write_atomic(os.path.join(args.out_dir, "not-planned.json"), json_text(missing))
     # the shape tools/measure_owed.py data-keys reads as --paper-recipes (family, lane, dataset per race)
-    with open(os.path.join(args.out_dir, "races.json"), "w") as fh:
-        json.dump({"recipes": races}, fh, indent=1, sort_keys=True)
+    write_atomic(os.path.join(args.out_dir, "races.json"), json_text({"recipes": races}))
     print("PAPER-IDS-ALL vendor=%s planned=%d no_smoke=%d" % (args.vendor, len(full), len(missing)))
     return 0
 
@@ -494,10 +512,8 @@ def cmd_pass_ids(args):
         except (OSError, ValueError) as exc:
             print("PAPER-PASS-IDS unreadable smoke %s: %s" % (p, exc), file=sys.stderr)
     keep, failed = passed_full_ids(full, docs)
-    with open(args.out, "w") as fh:
-        fh.write("".join(x + "\n" for x in keep))
-    with open(os.path.join(os.path.dirname(os.path.abspath(args.out)), "smoke-failed.json"), "w") as fh:
-        json.dump(failed, fh, indent=1, sort_keys=True)
+    write_atomic(args.out, "".join(x + "\n" for x in keep))
+    write_atomic(os.path.join(os.path.dirname(os.path.abspath(args.out)), "smoke-failed.json"), json_text(failed))
     print("PAPER-PASS-IDS planned=%d smoke_passed=%d smoke_failed=%d" % (len(full), len(keep), len(failed)))
     return 0
 
@@ -974,9 +990,7 @@ def cmd_compare(args):
     for path, text in ((md, render_md(res)), (js, json.dumps(res, indent=1, sort_keys=True) + "\n"),
                        (args.summary or os.path.join(os.path.dirname(os.path.abspath(md)), "SUMMARY-%s.txt" % v),
                         summary + "\n")):
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        with open(path, "w") as fh:
-            fh.write(text)
+        write_atomic(path, text)
     print(summary)
     return 0
 
