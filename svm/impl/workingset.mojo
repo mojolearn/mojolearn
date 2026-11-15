@@ -80,33 +80,33 @@ comptime SAB_WS_TIE = is_defined["MOJOLEARN_SVM_SABOTAGE_WS_TIE"]()
 #: the working-set sort takes `core/fast_radix_sort.mojo`
 #: (8-bit digits, 12 launches) instead of the one-bit sort (128 launches).
 #: Both are stable sorts by the full key, so the order is the same.
-#: `-D MOJOLEARN_SVM_FAST_SORT_OFF` restores the one-bit sort.
 #: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA and AMD ran
 #: the one-bit sort (128 launches per working-set pick) and the host-counted
 #: gathers (a drain per gather). Same stable sort by the full key, same
 #: picks, so no bit moves. `fws_pick_kernel` ballots at the hardware wave
 #: width (AMD wave64).
+# TOMBSTONE: MOJOLEARN_SVM_FAST_SORT_OFF (unmeasured old path beside the Apple fast default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 7684b61797.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_FAST_SORT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime FAST_WS_SORT = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and not is_defined["MOJOLEARN_SVM_FAST_SORT_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 #: FAST on Apple: the three gathers keep their counts on the device
 #: (`svm/impl/fast_ws_select.mojo`), no drain per gather. Same working set.
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
+# TOMBSTONE: MOJOLEARN_SVM_WS1024 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a4bd9fe9ae.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_WS1024.patch; record in docs/TOMBSTONES.md.
 comptime SVM_WS_MAX = 2048 if (
     FAST_WS_SORT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
 """FAST on Apple: a working set of up to 2048 (the grid solve carries it
 over eight blocks of 256, `smoblocksolve.mojo`), half
 the SMO outer iterations of 1024 on a hard problem. Taken from
 SVM_WS_BIG_MIN training rows: the larger set needs at least SVM_WS_MAX rows
 to fill (kernel limit, not a board window)."""
-#: LEGACY, default OFF: the old floor 8192 rows sat just below the board's
-#: 10k kernel-fit rows. Removed as benchmark-tuned on 2026-10-04; the new
-#: floor (SVM_WS_MAX rows) is UNMEASURED.
-comptime SVM_WS_BIG_MIN = 8192 if is_defined["MOJOLEARN_LEGACY_NARROW_SVM_WS"]() else SVM_WS_MAX
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_SVM_WS (old path, EXP:1344 NEUTRAL, not merged; the SVM_WS_MAX floor is the default) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ab40e72f25.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SVM_WS.patch; record in docs/TOMBSTONES.md.
+comptime SVM_WS_BIG_MIN = SVM_WS_MAX
 
 
 def svm_ws_cap(n_train: Int) -> Int:

@@ -39,7 +39,6 @@ from x_linear.ops import (
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys.info import is_gpu
-from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.team import Team, team_at
@@ -968,11 +967,13 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
 # float-float explicit step (sample weights, or no intercept), 2 the
 # implicit step. New bits for the one-class minibatch on every column
 # (host `sgd_mb_one` and every device driver take the same `ocm`).
-# `-D MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores
-# the explicit single-word step. IDENTICAL only (FAST keeps its form).
+# IDENTICAL only (FAST keeps its form).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 561bfcf338.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_OC_MB_IMPLICIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 # fix-l1-linear (lane/neural-pass139's default): SGDOneClassSVM's default
@@ -980,12 +981,12 @@ comptime SGD_OC_MB_IMPLICIT = (
 # step on it resolves to the minibatch at MB_BATCH_DEFAULT (4096, the mean
 # step, like SGDClassifier / SGDRegressor), which runs on the device grid
 # in parallel instead of the per-sample chain (one sample after the next).
-# Elsewhere (FAST, or the arm off) auto is the per-sample fit, the old
-# default. `-D MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF` (or MOJOLEARN_IDN_ALL_OFF)
-# restores the per-sample default. An explicit batch_size is always kept.
+# Elsewhere (FAST) auto is the per-sample fit, the old
+# default. An explicit batch_size is always kept.
+# TOMBSTONE: MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 51028ea5eb.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_OC_IDN_MB_DEFAULT = (
     SGD_OC_MB_IMPLICIT
-    and not (is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 
@@ -1007,10 +1008,10 @@ comptime SGD_OC_IDN_MB_DEFAULT = (
 # floor). 32 steps an epoch: enough updates for the n_iter_no_change window
 # (5 epochs = 160 steps) to see the loss settle, while a batch still
 # averages >= 1 row and the launch count of a small fit stays below
-# scikit-learn's per-sample n steps. `-D MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF`
-# restores the fixed `cap` (the A/B arm B). New bits for every fit with
+# scikit-learn's per-sample n steps. New bits for every fit with
 # n < SGD_AUTO_STEPS * cap on the host column and every device together.
-comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]()
+# TOMBSTONE: MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF (unmeasured old path, EXP:16 PENDING) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5d8783f621.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
 # lane sgd-quality (2026-10-17): the step floor is 256 steps an epoch (was 32).
 # Quality: the live test of 0.8.50/0.8.51 (Apple M4, raw breast_cancer, 569
 # rows, 3-fold cv accuracy) had 'auto' at 32 steps trail per-sample updates
@@ -1030,10 +1031,11 @@ comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]
 # 2 * 256 rows trains on single rows (the
 # per-sample fit's steps); the cap binds from n >= 256 * cap (65,536 rows at
 # cap 256, 1,048,576 at cap 4096), a smooth rule with no shape threshold.
-# `-D MOJOLEARN_SGD_AUTO_STEPS_256_OFF` restores the 32-step floor (the A/B
-# arm B). New bits for 'auto' fits of every SGD-family estimator except
+# New bits for 'auto' fits of every SGD-family estimator except
 # SGDOneClassSVM, on the host column and every device together.
-comptime SGD_AUTO_STEPS = 32 if is_defined["MOJOLEARN_SGD_AUTO_STEPS_256_OFF"]() else 256
+# TOMBSTONE: MOJOLEARN_SGD_AUTO_STEPS_256_OFF (unmeasured old path, EXP:17 no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 735cd099cb.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_AUTO_STEPS_256_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SGD_AUTO_STEPS = 256
 
 
 @always_inline
@@ -1041,15 +1043,13 @@ def sgd_batch(ipb: Int, k: Int, n: Int) -> Int:
     """The minibatch size of a fit from ip[12]: positive is the caller's,
     0 the per-sample fit, -1 "auto" for SGDOneClassSVM (k == 1, see
     SGD_OC_IDN_MB_DEFAULT; the per-sample fit for any other k, as before),
-    and -cap (cap >= 2) the row-count default of the other SGD estimators
-    (SGD_ADAPTIVE_BATCH): n // SGD_AUTO_STEPS, at least 1, at most cap."""
+    and -cap (cap >= 2) the row-count default of the other SGD estimators:
+    n // SGD_AUTO_STEPS, at least 1, at most cap."""
     if ipb > 0:
         return ipb
     if ipb < -1 and k != 1:
         var cap = -ipb
-        comptime if SGD_ADAPTIVE_BATCH:
-            return max(1, min(cap, n // SGD_AUTO_STEPS))
-        return cap
+        return max(1, min(cap, n // SGD_AUTO_STEPS))
     if ipb < 0 and k == 1:
         comptime if SGD_OC_IDN_MB_DEFAULT:
             return MB_BATCH_DEFAULT

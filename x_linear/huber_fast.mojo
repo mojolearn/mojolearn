@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """HuberRegressor with the L-BFGS line search batched on the device
 (lane/apple-fast-robust@cfdb95e48, 2026-10-02; recovered onto main
-2026-10-04 by lane/apple-fast-rec-fa-robust; FAST + Apple only, behind
-the FAST + Apple default since 2026-10-04; rollback
-`-D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF`).
+2026-10-04 by lane/apple-fast-rec-fa-robust; FAST + Apple only, the
+FAST + Apple default since 2026-10-04).
 
 Main's x_linear/huber_grid.mojo now runs the minimizer on the device too
 (x_linear/lbfgs_device.mojo), but the host still drives the line search:
@@ -37,7 +36,6 @@ different fold order (FAST bits only).
 """
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -63,12 +61,12 @@ from x_linear.lbfgs import LBFGS_M
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab3 @ 0ca521cc5): huber taxi 219.8 -> 189.9 ms; r2/rmse
 #: identical, output digest identical. KEEP: the FAST + Apple default since
-#: then; rollback -D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF (the old -D name is
-#: harmless; HUBER_FAST_BLOCK512 still forces it on).
-comptime HUBER_DEVICE_LBFGS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and (not is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS_OFF"]() or is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"]())
-)
+#: then.
+# TOMBSTONE: MOJOLEARN_HUBER_DEVICE_LBFGS_OFF (old path of the FAST Apple default, EXP:1256; FAST is Apple only, so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a1003b0db5.
+# Restore: git apply experiments/removed/MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_HUBER_FAST_BLOCK512 (force-on knob of the FAST Apple default, EXP:1423 KEEP; the default is unchanged) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7c79bbf05.
+# Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512.patch; record in docs/TOMBSTONES.md.
+comptime HUBER_DEVICE_LBFGS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: (FAST + Apple, default ON since 2026-10-05; needs HUBER_DEVICE_LBFGS) the partials of
 #: the fast fit over 512-row blocks instead of FOLD_BLOCK: eight times the
 #: threads in the partials launch (taxi: 21 tasks x 366 blocks under
@@ -78,18 +76,13 @@ comptime HUBER_DEVICE_LBFGS = (
 #: No failure recorded.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
 #: rab19-huber512): huber taxi 192.0 -> 161.6 ms, r2 equal 0.900215. KEEP:
-#: the FAST + Apple default, the only form of the fast fit (the old -D name
-#: still forces HUBER_DEVICE_LBFGS on, harmless).
+#: the FAST + Apple default, the only form of the fast fit.
 # TOMBSTONE: MOJOLEARN_HUBER_FAST_BLOCK512_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 246a53ea57.
 # Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch; record in docs/TOMBSTONES.md.
-#: Rows per partial of the fast fit (HUBER_FAST_BLOCK512): 512, or 256 under AFCL_L04.
-# AFCL-L04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
-# 256 rows shorten each partial chain and expose twice the row parallelism
-# of the existing 512-row schedule; scratch and final folds grow accordingly.
-# Solver tolerance, line-search budget and stopping observations are unchanged.
-comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-                    and is_defined["MOJOLEARN_AFCL_L04"]())
-comptime HF_FOLD = 256 if AFCL_L04 else 512
+#: Rows per partial of the fast fit (HUBER_FAST_BLOCK512): 512.
+# TOMBSTONE: MOJOLEARN_AFCL_L04 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 91fed31806.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L04.patch; record in docs/TOMBSTONES.md.
+comptime HF_FOLD = 512
 #: Evaluation units enqueued between two reads of the stop word.
 comptime HF_BATCH = 16
 #: x_linear/lbfgs.mojo's line search: the step halved up to 40 times.

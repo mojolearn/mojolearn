@@ -33,7 +33,7 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 
 # lane/lars-grid-gram (2026-10-11), PROMOTED to the default (lane
 # i17-decide-nbr-lin-prep, 2026-10-11); `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`
-# (or MOJOLEARN_IDN_ALL_OFF) restores main's moments grid. A/B one run per arm,
+# restores main's moments grid. A/B one run per arm,
 # main@b2657cc89 (runs v0045/v0046, a1628/a1629), NV L40S / AMD MI325X ms:
 #   lars taxi          59.1 -> 3.1 (0.05)    / 126.1 -> 3.3 (0.03)
 #   lasso-lars taxi    58.9 -> 3.0 (0.05)    / 125.7 -> 3.3 (0.03)
@@ -59,9 +59,9 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 # `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple runs the same
 # blocked fold (lane/apple-lars, 2026-10-12; x_linear/device.mojo
 # `XL_IDN_LARS_GRID_GRAM`), so its column matches NVIDIA == AMD == host.
-comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]() and not is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]()
 
 
 def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, gg: Int, xty: Int) -> Float32:

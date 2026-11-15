@@ -20,8 +20,6 @@ Reference: scikit-learn `sklearn/linear_model/_bayes.py`:
 Centering (fit_intercept) is their `_preprocess_data`: column means and the
 target mean, rows ascending. float32 throughout.
 """
-from std.sys.compile import is_defined
-from experiments.classical_identical_ideas.linear_controls import C15_FACTOR_SOLVE
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
     cholesky, chol_solve, centered_gram, centered_xty, mean_of,
@@ -491,7 +489,7 @@ def bayes_finish(fw: FP, res: FP, d: Int, fi: Bool, ym: Float32, alpha: Float32,
     st(res, d + 3, i2f(iters))
 
 #: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), the FAST default on every
-#: vendor; `-D MOJOLEARN_ARD_SIGMA_QOLD` restores the old sigma. Audit
+#: vendor. Audit
 #: (board-quality-audit-2026-10-04, M3 0.8.34): ard istella r2 -0.1387
 #: (FAST) / -0.1249 (IDENTICAL) vs scikit-learn 0.3274; taxi (11 features)
 #: equal. Cause: `_ard_sigma` factors diag(lambda) + alpha G in float32 as
@@ -514,9 +512,9 @@ def bayes_finish(fw: FP, res: FP, d: Int, fi: Bool, ym: Float32, alpha: Float32,
 #: in every mode, on every vendor and in the host column (the device driver
 #: x_linear/ard_grid.mojo and the host `ard_fit` both reach it through
 #: `_t_ard_sigma`). Bits change for every ARD fit in identical, on all
-#: columns together. `-D MOJOLEARN_ARD_SIGMA_QOLD` (A arm) restores the old,
-#: failure-ignoring factor in both modes.
-comptime ARD_EQ = not is_defined["MOJOLEARN_ARD_SIGMA_QOLD"]()
+#: columns together.
+# TOMBSTONE: MOJOLEARN_ARD_SIGMA_QOLD (unmeasured old path, EXP:2124 owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 085dcde095.
+# Restore: git apply experiments/removed/MOJOLEARN_ARD_SIGMA_QOLD.patch; record in docs/TOMBSTONES.md.
 comptime ARD_EQ_TRIES = 8
 
 
@@ -609,27 +607,7 @@ def _t_ard_sigma_eq(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: In
 
 def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
     """sigma (dk x dk, over the kept features in ascending order) = inv(diag(lambda) + alpha G). Returns dk."""
-    comptime if ARD_EQ:
-        return _ard_sigma_eq(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-    var dk = 0
-    for j in range(d):
-        if ldi(iw, keep + j) != 0:
-            sti(iw, keep + d + dk, j)
-            dk += 1
-    for a in range(dk):
-        var ja = ldi(iw, keep + d + a)
-        for b in range(dk):
-            var jb = ldi(iw, keep + d + b)
-            var v = fm(alpha, ld(fw, gg + ja * d + jb))
-            if a == b:
-                v = fa(v, ld(fw, lamo + ja))
-            st(fw, aa + a * dk + b, v)
-    _ = cholesky(fw, aa, dk)
-    for c in range(dk):
-        for r in range(dk):
-            st(fw, sg + c * dk + r, Float32(1) if r == c else Float32(0))
-        chol_solve(fw, aa, dk, fw, sg + c * dk)
-    return dk
+    return _ard_sigma_eq(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
 
 
 comptime ARD_TEAM_MIN = 32
@@ -642,79 +620,25 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
     each its own `chol_solve` reading only the factor, split across the team.
     Every word is `_ard_sigma`'s. On the device the whole of it ran on the
     lead thread every iteration (ARD at 220 features: about 57 ms an
-    iteration on the M4's GPU). `-D MOJOLEARN_X_LINEAR_ARD_LEAD=1` restores
-    the lead-only call."""
-    comptime if is_defined["MOJOLEARN_X_LINEAR_ARD_LEAD"]():
-        var dk0 = 0
-        if t.lead():
-            dk0 = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-        t.sync()
-        return dk0
+    iteration on the M4's GPU)."""
+    # TOMBSTONE: MOJOLEARN_X_LINEAR_ARD_LEAD (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a33761f577.
+    # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_ARD_LEAD.patch; record in docs/TOMBSTONES.md.
     if t.nt <= 1:
         return _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-    comptime if ARD_EQ:
-        if d >= ARD_TEAM_MIN:
-            return _t_ard_sigma_eq(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+    if d >= ARD_TEAM_MIN:
+        return _t_ard_sigma_eq(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     # below ARD_TEAM_MIN features the column barriers of `t_cholesky` cost
     # more than the lead's serial factor (ARD taxi, 11 features: 32.6 to
     # 36.7 ms on the L40S); the lead runs `_ard_sigma`, the same words
-    if d < ARD_TEAM_MIN:
-        var dk1 = 0
-        if t.lead():
-            dk1 = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-        return t.bcast_int(dk1, 0)
-    var dk = 0
+    var dk1 = 0
     if t.lead():
-        for j in range(d):
-            if ldi(iw, keep + j) != 0:
-                sti(iw, keep + d + dk, j)
-                dk += 1
-    dk = t.bcast_int(dk, 0)
-    for a in range(t.tid, dk, t.nt):
-        var ja = ldi(iw, keep + d + a)
-        for b in range(dk):
-            var jb = ldi(iw, keep + d + b)
-            var v = fm(alpha, ld(fw, gg + ja * d + jb))
-            if a == b:
-                v = fa(v, ld(fw, lamo + ja))
-            st(fw, aa + a * dk + b, v)
-    t.sync()
-    _ = t_cholesky(t, fw, aa, dk)
-    for c in range(t.tid, dk, t.nt):
-        for r in range(dk):
-            st(fw, sg + c * dk + r, Float32(1) if r == c else Float32(0))
-        chol_solve(fw, aa, dk, fw, sg + c * dk)
-    t.sync()
-    return dk
-
-
-def _ard_factor_coef(d: Int, dk: Int, fw: FP, aa: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
-    """C15 direct coefficient solve. Required posterior sigma remains materialized.
-    aa is the immutable Cholesky produced in this same accepted ARD step.
-    res is temporary compact RHS until solved, then scatter descending so
-    ascending kept feature indices never overwrite an unread compact value.
-    """
-    for a in range(dk):
-        st(res, a, fm(alpha, ld(fw, xty + ldi(iw, keep + d + a))))
-    chol_solve(fw, aa, dk, res, 0)
-    for offset in range(dk):
-        var a = dk - 1 - offset
-        st(res, ldi(iw, keep + d + a), ld(res, a))
-    for j in range(d):
-        if ldi(iw, keep + j) == 0:
-            st(res, j, Float32(0))
+        dk1 = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+    return t.bcast_int(dk1, 0)
 
 
 def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
     """`_ard_coef` with its dk outputs split across the team (each its own
     chain over b ascending); the same words."""
-    # C15 solves on `aa` as the factor of diag(lambda) + alpha G; under ARD_EQ
-    # `aa` holds the equilibrated A~'s factor, so the sigma product is used
-    comptime if C15_FACTOR_SOLVE and not ARD_EQ:
-        if t.lead():
-            _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
-        t.sync()
-        return
     if t.nt <= 1:
         _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
         return
@@ -730,9 +654,6 @@ def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Floa
 
 
 def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
-    comptime if C15_FACTOR_SOLVE and not ARD_EQ:
-        _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
-        return
     fill(res, 0, d, Float32(0))
     for a in range(dk):
         var acc = Float32(0)

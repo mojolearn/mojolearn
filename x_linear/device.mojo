@@ -40,12 +40,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_SGD_CHUNK, C16_GLM_FUSED, RIDGECV_FF_BLOCKED
-from x_linear.ridge_ff_blocks import (
-    RFF_TPB, rff_blocks, rff_stats, rff_mcols, rff_part_words, rff_mean_part_kernel, rff_mean_fold_kernel, rff_untrusted_kernel,
-    rff_cell_part_kernel, rff_cell_fold_kernel, rff_kf_solve_kernel, rff_solve_kernel,
-)
-from x_linear.team import TEAM_SLOTS
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
 from core.admitted_finite_status import enqueue_finite_status
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
@@ -73,7 +68,7 @@ from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_p
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK
 from x_linear.glm import (
-    _unit, _unit_all, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
     glm_g_item, glm_h_item, glm_fwd_col, glm_back_col, glm_slope_part, glm_slope_blocks,
     _glm_cell_part, _glm_cell_store, glm_den, glm_start, glm_start_of,
 )
@@ -92,7 +87,6 @@ from x_linear.cls1_fast import (
     RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
 )
 from x_linear.dispatch import ALGO_LOGCV
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
 from x_linear.quantile_grid import quantile_fit_grid
@@ -133,13 +127,13 @@ def linear_ctx() raises -> DeviceContext:
 #: sse on the grid driver guarded by a reference row pass with an error
 #: bound (`bayes_step_guard_kernel`), the guard x_linear/bayes.mojo
 #: `bayes_ridge_fit` carries on the one-block fit. The FAST default since the
-#: M3 A/B 2026-10-02 (istella: NaN -> finite, r2 equal to the row-pass arm);
-#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` is main's unguarded Gram sse, the A/B
-#: arm. IDENTICAL and the other vendors never compile the branch.
+#: M3 A/B 2026-10-02 (istella: NaN -> finite, r2 equal to the row-pass arm).
+#: IDENTICAL and the other vendors never compile the branch.
+# TOMBSTONE: MOJOLEARN_BAYES_GRID_GUARD_OFF (old path of the FAST Apple default, EXP:249 KEPT 269ffa57a) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at f7077f3ddc.
+# Restore: git apply experiments/removed/MOJOLEARN_BAYES_GRID_GUARD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime BAYES_GRID_GUARD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_BAYES_GRID_GUARD_OFF"]()
 )
 
 
@@ -555,8 +549,7 @@ def bayes_step_gram_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, yyparts
             bayes_coef(fw, res, dd, r[0], r[1])
     witness_end(wf, woff, nonce)
 
-#: FAST on Apple, the default (`BAYES_GRID_GUARD`, lane/apple-fast-bayes;
-#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` turns it off):
+#: FAST on Apple, the default (`BAYES_GRID_GUARD`, lane/apple-fast-bayes):
 #: `bayes_step_gram_kernel`'s sse relative to a REFERENCE row pass, as
 #: x_linear/bayes.mojo `bayes_ridge_fit` guards the one-block fit. The plain yy - sum_k (2 z_k vty_k - ev_k z_k^2) cancelled
 #: to below zero on istella (220 features, near-null Gram directions with
@@ -743,14 +736,9 @@ def _ridge_fast_gram() -> Bool:
 # The epoch order (`sgd_perm_kernel`), the targets and the epoch end
 # (x_linear/sgd_end.mojo) are the device's; the host enqueues an epoch's
 # batches without a sync and reads two stop words.
-# AFCL-L14: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
-# Four SIMD groups per independent row-prediction block expose twice as
-# many schedulable blocks as the 256-thread baseline. Training examples,
-# minibatches, seeded order, gradient folds and update/stopping policy do
-# not change. Witness capacities/offsets use the same row-grid helper.
-comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-                    and is_defined["MOJOLEARN_AFCL_L14"]())
-comptime SGD_ROW_TPB = 128 if AFCL_L14 else XG_TPB
+# TOMBSTONE: MOJOLEARN_AFCL_L14 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 190fb2a092.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L14.patch; record in docs/TOMBSTONES.md.
+comptime SGD_ROW_TPB = XG_TPB
 
 
 @always_inline
@@ -942,10 +930,12 @@ comptime SGD_CHUNK_DEFAULT = 64
 # weight) writes its own slot and the kernel strides them over block_dim, so
 # the words do not depend on the width: at batch 256 and istella's 220
 # columns the 1,792 dots and 1,776 partials were 7 tasks a thread.
-# `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 2c034b8d40.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_CHUNK_WIDE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
-    and not (is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 
@@ -957,10 +947,11 @@ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 # w1; block 0 alone folds the objective. The weights alternate between two
 # buffers so no block reads a word another block is replacing. The same
 # helpers on the same operands in the same order: no bit moves.
-# `-D MOJOLEARN_SGD_IDN_MB_FUSE_OFF` restores three launches a batch.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_MB_FUSE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at f3550a03d5.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_MB_FUSE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_MB_FUSE = (
     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 
 # TOMBSTONE: MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS (removed: never measured, default off; a per-epoch
@@ -1044,45 +1035,8 @@ def sgd_mb_steprows_kernel(
     witness_end(wf, woff, nonce)
 
 
-# lane apple-fast-round2 (2026-10-07): MOJOLEARN_SGD_FAST_EPOCH_RESIDENT, a
-# FAST + Apple experiment, default off. SGDClassifier / SGDRegressor at
-# their large batch (sub-blocks of XG_TPB rows, so above MB_SMALL_BATCH) ran
-# three launches per minibatch on FAST (rows, partials, step): n / batch x 3
-# launches an epoch, each ~20 us of Metal encode + launch while the batch's
-# arithmetic is a few us across the GPU, so the launch stream is the epoch.
-# Here a minibatch is ONE launch (`sgd_mb_fast_batch_kernel`): every block
-# applies the previous batch's step from its partials (w0 -> w1, the same
-# word from every block, as SGD_IDN_MB_FUSE does), crosses `team_barrier`,
-# runs its XG_TPB rows on w1, crosses `team_barrier` again and writes the
-# partials of exactly those rows (block s = sub-block s, since sub ==
-# XG_TPB == the block's width) to the other parts buffer. The epoch's
-# launches are all enqueued with no host wait; the one sync per epoch (the
-# stop words) stays. The minibatch loop is not folded into a single launch
-# per epoch: that needs a grid-wide barrier between rows and step, and
-# Metal does not guarantee co-resident threadgroups (a spin barrier can
-# hang into the macOS long-launch abort), while one block per epoch would be
-# a serial one-block route over a runtime size. 3 launches a batch -> 1.
-# Update order: the same batches in the same order, the same helpers, the
-# same sub-block fold (sub = XG_TPB); FAST carries no bits requirement.
-comptime SGD_FAST_EPOCH_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and is_defined["MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"]()
-)
-
-
-def sgd_mb_fast_batch_kernel(
-    parts_prev: FP, parts_cur: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP,
-    dlv: FP, lv: FP, ci: IP, cf: FP, etp: FP, start: Int32, bs_prev: Int32, bs: Int32, eta: Float32,
-    dev_eta: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32,
-):
-    """SGD_FAST_EPOCH_RESIDENT, one launch per minibatch (ocm == 0 only; the
-    host gates it). ci / cf: `_sgd_mb_chunk_kernel_body`'s. bs_prev > 0: the
-    step of the previous batch from parts_prev (w0 -> w1); then the rows
-    [start, start + bs) on the stepped weights (w1, or w0 when bs_prev == 0)
-    and this block's sub-block partials into parts_cur. bs == 0 is the step
-    alone (one block; w1 may equal w0, each thread owning its words)."""
-    if ldi(gate, 0) != 0:
-        witness_end(wf, woff, nonce)
+# TOMBSTONE: MOJOLEARN_SGD_FAST_EPOCH_RESIDENT (unmeasured Apple FAST opt-in arm, EXP:1596 OPEN) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 639da56218.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch; record in docs/TOMBSTONES.md.
         return
     var dd = ldi(ci, 2)
     var loss = ldi(ci, 3)
@@ -1146,17 +1100,18 @@ def sgd_mb_fast_batch_kernel(
 # every fit (bindings/_mojolearn_x_linear.mojo `_finite`); here one thread
 # tests SGD_FIN_RUN words of the uploaded X (and of y) and a bad word raises
 # the flag: the same verdict (exponent all ones = NaN or infinity), the same
-# error. `-D MOJOLEARN_SGD_IDN_DEV_FINITE_OFF` restores the walk.
+# error.
 # Lane idn-all (2026-10-04): Apple runs the device check too. No Metal limit
 # prevents it; the one hazard (macOS cutting a command buffer would leave the
 # flag clear) is closed by the completion witness (x_linear/witness.mojo):
 # every block reports, the check is idempotent, a cut launch reruns and after
-# WITNESS_TRIES the fit raises. `-D MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF`
-# restores the host walk on Apple only.
+# WITNESS_TRIES the fit raises.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_DEV_FINITE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 2040a5c03e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 1d51928517.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_DEV_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-    and not (TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"]())
 )
 comptime SGD_FIN_RUN = 64
 
@@ -1373,12 +1328,11 @@ def sgd_mb_chunk_kernel(
 # launch a live problem, and ONE read brings every problem's stop words
 # home. Each problem's statements are the sequential driver's on its own
 # words: NO BIT MOVES, the host column is untouched.
-# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
-# the sequential problems.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_OVR_PAR_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 255a84c8ff.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_OVR_PAR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not (is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 #: `cf` words a problem (`_sgd_mb_chunk_kernel_body`'s nine)
 comptime SGD_OVR_CF = 9
@@ -1628,7 +1582,9 @@ struct _SgdOvrEpochs(LoopStep, Movable):
         """The launches of one epoch (chunk launches per class wave, the
         epoch ends, the activity kernel, the criterion, the order)."""
         var nb = (self.n + self.batch - 1) // max(self.batch, 1)
-        var wave = 4 if C17_OVR else self.problems
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_OVR (unmeasured opt-in arm; non-owner site) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e6671383da.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+        var wave = self.problems
         var waves = (self.problems + wave - 1) // wave
         return ((nb + self.chunk - 1) // max(self.chunk, 1)) * waves + self.problems + 3
 
@@ -1670,10 +1626,7 @@ struct _SgdOvrEpochs(LoopStep, Movable):
                     tt += bs1 if self.bsum else 1
                     s1 += bs1
                     nbt += 1
-                # C17: bounded class waves reduce simultaneously live model
-                # state. Four is a scheduling budget, never a dataset route.
-                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                var wave = 4 if C17_OVR else problems
+                var wave = problems
                 for first_problem in range(0, problems, wave):  # driver-loop: over class waves of the chunk launch
                     var active_problems = min(wave, problems - first_problem)
                     # a stopped problem's block returns at once (`act`), so the
@@ -1804,7 +1757,6 @@ def _sgd_chunk() -> Int:
 comptime SGD_LOOP_CHECK_EVERY_PIN = get_defined_int["MOJOLEARN_SGD_LOOP_CHECK_EVERY", 0]()
 
 #: The minibatch epoch's arms (`_SgdMbEpochs.arm`).
-comptime SGD_ARM_FAST_RESIDENT = 0
 comptime SGD_ARM_CHUNK = 1
 comptime SGD_ARM_FUSE = 2
 comptime SGD_ARM_THREE = 3
@@ -1862,7 +1814,6 @@ struct _SgdMbEpochs(LoopStep, Movable):
     var ddl: DeviceBuffer[DType.float32]
     var dlv: DeviceBuffer[DType.float32]
     var dparts: DeviceBuffer[DType.float32]
-    var dparts2: DeviceBuffer[DType.float32]
     var dw: DeviceBuffer[DType.float32]
     var dbias: DeviceBuffer[DType.float32]
     var dobj: DeviceBuffer[DType.float32]
@@ -1962,8 +1913,6 @@ struct _SgdMbEpochs(LoopStep, Movable):
         self.ddl = ctx.enqueue_create_buffer[DType.float32](batch)
         self.dlv = ctx.enqueue_create_buffer[DType.float32](batch)
         self.dparts = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
-        # SGD_FAST_EPOCH_RESIDENT: the second partials buffer (one word otherwise)
-        self.dparts2 = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub if SGD_FAST_EPOCH_RESIDENT else 1)
         self.dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
         # the intercept as (hi, lo): the one-class float-float (SGD_OC_MB_IMPLICIT;
         # the low word stays 0 and unread with ocm 0)
@@ -2043,9 +1992,7 @@ struct _SgdMbEpochs(LoopStep, Movable):
         self.dev_eta = 0 if (lr == LR_PA1 or lr == LR_PA2 or lr == LR_OPTIMAL or lr == LR_INVSCALING) else 1
         self.need_obj = tol > Float32(-3.0e38)
         var arm = SGD_ARM_THREE
-        if SGD_FAST_EPOCH_RESIDENT and ocm == 0 and sub == XG_TPB:
-            arm = SGD_ARM_FAST_RESIDENT
-        elif chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
+        if chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
             # TOMBSTONE: lane fg-linear S1 (MOJOLEARN_IDN_SGD_EPOCH_KERNEL, large batches through this chunk kernel)
             # deleted 2026-10-09 (lane postmerge-act-2): noise, sgd-clf istella NV 0.99x / AMD 1.00x, taxi 1.00x / 1.00x
             # (nv n0606->n0615, amd a1065->a1074), accuracy SAME, same digests; code recoverable at main 5c137b55e.
@@ -2103,8 +2050,6 @@ struct _SgdMbEpochs(LoopStep, Movable):
         enqueued past the stop: each returns at once)."""
         var nb = (self.n + self.batch - 1) // max(self.batch, 1)
         var tail = 3 + (1 if self.do_shuffle else 0)
-        if self.arm == SGD_ARM_FAST_RESIDENT:
-            return nb + 1 + tail
         if self.arm == SGD_ARM_CHUNK:
             return (nb + self.chunk - 1) // max(self.chunk, 1) + tail
         var per = 2 + (1 if self.ocm == 2 else 0)
@@ -2188,63 +2133,7 @@ struct _SgdMbEpochs(LoopStep, Movable):
             var etp = FP(unsafe_from_address=Int(self.dstt.unsafe_ptr())) + 4 * par + 2
             self.dobj.enqueue_fill(Float32(0))
             var start = 0
-            if self.arm == SGD_ARM_FAST_RESIDENT:
-                # one launch per minibatch (sgd_mb_fast_batch_kernel's
-                # comment); weights ping-pong dw/dbias <-> dw2/dbias2,
-                # partials dparts <-> dparts2. cur 0: weights in dw.
-                var cur = 0
-                var bs_prev = 0
-                var et_prev = eta0
-                var pp = 0
-                var wa = Int(self.dw.unsafe_ptr())
-                var wb = Int(self.dw2.unsafe_ptr())
-                var ba = Int(self.dbias.unsafe_ptr())
-                var bb = Int(self.dbias2.unsafe_ptr())
-                var pa = Int(self.dparts.unsafe_ptr())
-                var pb = Int(self.dparts2.unsafe_ptr())
-                while start < n:  # driver-loop: over the epoch's minibatches, one launch each
-                    var bs = min(batch, n - start)
-                    var et = mb_eta(lr, eta0, eta0, alpha, power_t, self.opt_init, t)
-                    var stepped = bs_prev > 0
-                    cx.enqueue_function[sgd_mb_fast_batch_kernel](
-                        FP(unsafe_from_address=pb if pp == 0 else pa),
-                        FP(unsafe_from_address=pa if pp == 0 else pb),
-                        FP(unsafe_from_address=wa if cur == 0 else wb),
-                        FP(unsafe_from_address=ba if cur == 0 else bb),
-                        FP(unsafe_from_address=wb if cur == 0 else wa),
-                        FP(unsafe_from_address=bb if cur == 0 else ba),
-                        self.dobj.unsafe_ptr(), self.dx.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(),
-                        self.dsw.unsafe_ptr(), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), self.dci.unsafe_ptr(),
-                        self.dcf.unsafe_ptr(), etp,
-                        Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(self.dev_eta),
-                        gate, self.wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(bs)
-                    if stepped:
-                        cur = 1 - cur
-                    # this batch's partials went to the buffer pp names
-                    pp = 1 - pp
-                    bs_prev = bs
-                    et_prev = et
-                    t += bs if bsum else 1
-                    start += bs
-                if bs_prev > 0:
-                    # the last batch's step into dw / dbias (in place
-                    # when cur == 0: one block, a thread per word)
-                    cx.enqueue_function[sgd_mb_fast_batch_kernel](
-                        FP(unsafe_from_address=pb if pp == 0 else pa),
-                        FP(unsafe_from_address=pa if pp == 0 else pb),
-                        FP(unsafe_from_address=wa if cur == 0 else wb),
-                        FP(unsafe_from_address=ba if cur == 0 else bb),
-                        FP(unsafe_from_address=wa), FP(unsafe_from_address=ba),
-                        self.dobj.unsafe_ptr(), self.dx.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(),
-                        self.dsw.unsafe_ptr(), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), self.dci.unsafe_ptr(),
-                        self.dcf.unsafe_ptr(), etp,
-                        Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(self.dev_eta),
-                        gate, self.wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
-                    )
-                    wo += 1
-            elif self.arm == SGD_ARM_CHUNK:
+            if self.arm == SGD_ARM_CHUNK:
                 # the PA rows' norms are the fit's (`_sgd_rowsq_once`), not
                 # recomputed an epoch
                 while start < n:  # driver-loop: over the epoch's chunks of `chunk` minibatches, one launch each
@@ -2493,10 +2382,10 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 # The epoch order (`sgd_perm_kernel`), the finite check, the stopping and
 # the adaptive rate are the device's (x_linear/sgd_end.mojo, sgd_one's
 # statements); the host reads the live problem count once an epoch.
-# C19: scheduling only; preserve sample order/time index and per-sample updates.
-# Fixed bounded launch budgets, independent of dataset dimensions.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime SGD_PS_CHUNK = C19_SGD_CHUNK
+# The per-sample launch budget: 2048 samples per ordered launch.
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C19_SGD_CHUNK (unmeasured opt-in arms 32/128; non-owner site) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 96b9d412f1.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+comptime SGD_PS_CHUNK = 2048
 # the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
 # the one-class intercept's low word, wscale hi, wscale lo
 comptime SGD_PS_ST = 6
@@ -2678,8 +2567,7 @@ def _sgd_ps_kernel_body(
 
 # lane/apple-fast-gap-clus3 (2026-10-03): SGD_FAST_PS_SIMD, FAST + Apple default
 # for d <= SPS_MAX_D = SPS_W * SPS_MAXC, the register bound (off:
-# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF; old d <= 32 gate behind
-# MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD). M3 A/Bs (n=1):
+# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF). M3 A/Bs (n=1):
 # sgd-ocsvm taxi (d 11) 58,334 -> 42,252 ms (-27.6%), fraction_flagged .05557
 # identical (clus3-sgdoc-simd-taxi); sgd-ocsvm istella (d 220) 75,506 ->
 # 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the old small-d gate. Cause: the per-sample fit above runs a
@@ -2694,8 +2582,8 @@ def _sgd_ps_kernel_body(
 # scalars in every lane, no barrier: a lane only touches its own columns),
 # and the weights go back to device memory once a launch. d <= SPS_W *
 # SPS_MAXC, else the block form. FAST: the predictor's fold order changes.
-# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (the `_OFF` rollback was deleted 2026-11-15;
-# -D MOJOLEARN_SGDOC_FAST_TAIL_LONG for the 4x tail). SGDOneClassSVM at
+# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (the `_OFF` rollback was deleted 2026-11-15).
+# SGDOneClassSVM at
 # learning_rate='optimal', tol=None on centered data: main's per-sample
 # kernels over the LAST SGDOC_TAIL_K steps of the real schedule from w = 0,
 # intercept = 1 (the 1/t schedule makes the final state a stationary chain's
@@ -2708,7 +2596,9 @@ def _sgd_ps_kernel_body(
 # TOMBSTONE: MOJOLEARN_SGDOC_FAST_TAIL_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 43214c2e1e.
 # Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGDOC_FAST_TAIL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-comptime SGDOC_TAIL_K = 262144 if is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]() else 65536
+# TOMBSTONE: MOJOLEARN_SGDOC_FAST_TAIL_LONG (unmeasured Apple FAST opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ea2d15591a.
+# Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_LONG.patch; record in docs/TOMBSTONES.md.
+comptime SGDOC_TAIL_K = 65536
 # The tail must exceed the (S, R) chain's mixing time, which grows with d
 # (x_linear/sgdoc_tail.mojo: tens of steps at d ~ 10, up to thousands at
 # d ~ 200, i.e. at most ~20 steps per feature). A fixed K was only checked at
@@ -2732,11 +2622,8 @@ comptime SPS_MAXC = 8
 #: Kernel limit (register footprint): each of the SPS_W lanes holds SPS_MAXC
 #: weights and their q in registers, so d <= SPS_W * SPS_MAXC.
 comptime SPS_MAX_D = SPS_W * SPS_MAXC
-#: LEGACY, default OFF: the old gate admitted only d <= 32, chosen between
-#: taxi (d 11, -27.6%) and istella (d 220, +41%). Removed as benchmark-tuned
-#: on 2026-10-04; the register-bound replacement is UNMEASURED.
-comptime SPS_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD"]()
-comptime SPS_LEGACY_MAX_D = 32
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD (unmeasured old benchmark-tuned d <= 32 gate, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 51a85b3df6.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -2935,7 +2822,7 @@ def _sgd_ps_simd_body(
 
 
 # lane/idn-sgd-multiblock (2026-10-04): SGD_IDN_PS_WARP, IDENTICAL on NVIDIA
-# and AMD for d <= SPS_W * MB_DBLK (off: -D MOJOLEARN_SGD_IDN_PS_WARP_OFF).
+# and AMD for d <= SPS_W * MB_DBLK.
 # The block form above pays, per SAMPLE, the partials' stores, two device-
 # ordering barriers and a device load and store of every weight. Here a
 # problem is ONE warp of SPS_W lanes: lane l keeps the weights (and q) of
@@ -2945,9 +2832,10 @@ def _sgd_ps_simd_body(
 # lane (`shuffle_idx`), so the scalars are uniform without a barrier, and
 # updates its own block's weights. The same chains folded in the same order
 # as the block form and the host's `sgd_one`: no bit moves.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_PS_WARP_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 29555cd114.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_PS_WARP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
-    and not (is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 
@@ -3260,8 +3148,6 @@ struct _SgdPsEpochs(LoopStep, Movable):
         var sps = False
         comptime if SGD_FAST_PS_SIMD:
             sps = d >= 1 and d <= SPS_MAX_D
-            comptime if SPS_LEGACY_NARROW:
-                sps = sps and d <= SPS_LEGACY_MAX_D
         var spw = False
         comptime if SGD_IDN_PS_WARP:
             spw = d >= 1 and nb <= SPS_W
@@ -3592,18 +3478,9 @@ def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float
         var e = fa(row_dot(x, i, dd, theta, 0), b)
         st(eta, i, e)
         var l = Float32(0)
-        comptime if C16_GLM_FUSED:
-            var values = _unit_all(power, Int(link), ld(y, i), e)
-            l = values[0]
-            var gi = values[1]
-            var hi = fmax(Float32(0), values[2])
-            if sw != 0:
-                gi = fm(ld(y, nn + i), gi)
-                hi = fm(ld(y, nn + i), hi)
-            st(gr, i, gi)
-            st(hr, i, hi)
-        else:
-            l = _unit(power, Int(link), ld(y, i), e, 0)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ff5b5b6e52.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+        l = _unit(power, Int(link), ld(y, i), e, 0)
         if sw != 0:
             l = fm(ld(y, nn + i), l)
         st(lt, i, l)
@@ -3967,18 +3844,17 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
     var stall = 0
     for it in range(max_iter):
-        comptime if not C16_GLM_FUSED:
-            var tries1 = 0
-            while True:
-                var nonce = wit.begin()
-                ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
-                                                       dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                       grid_dim=rows_grid, block_dim=XG_TPB)
-                if wit.ok(ctx, rows_grid, "GLM derivatives"):
-                    break
-                tries1 += 1
-                if tries1 >= WITNESS_TRIES:
-                    wit.fail()
+        var tries1 = 0
+        while True:
+            var nonce = wit.begin()
+            ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
+                                                   dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                   grid_dim=rows_grid, block_dim=XG_TPB)
+            if wit.ok(ctx, rows_grid, "GLM derivatives"):
+                break
+            tries1 += 1
+            if tries1 >= WITNESS_TRIES:
+                wit.fail()
         var b0 = 0
         while b0 < nb:
             var bc = min(blocks_slice, nb - b0)
@@ -4295,20 +4171,14 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var ff_units = ridge_ff_units(n, d, 1)
     var dsh = ctx.enqueue_create_buffer[DType.float32](ffw)
     var dsl = ctx.enqueue_create_buffer[DType.float32](ffw)
-    # RIDGECV_FF_BLOCKED (x_linear/ridge_ff_blocks.mojo): the float-float
-    # solve scratch per alpha (one block team per alpha in one launch) and
-    # the block partial table; one alpha's words otherwise
-    var ffa = na if RIDGECV_FF_BLOCKED else 1
-    var dbh = ctx.enqueue_create_buffer[DType.float32](max(ffa * d, 1))
-    var dbl = ctx.enqueue_create_buffer[DType.float32](max(ffa * d, 1))
-    var dfh = ctx.enqueue_create_buffer[DType.float32](max(ffa * d * d, 1))
-    var dfl = ctx.enqueue_create_buffer[DType.float32](max(ffa * d * d, 1))
-    var dtmp = ctx.enqueue_create_buffer[DType.float32](ffa * (d + 1))
-    var rff_pw = rff_part_words(n, d, 1) if RIDGECV_FF_BLOCKED else 1
-    var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dtw = ctx.enqueue_create_buffer[DType.float32](max(ffa * TEAM_SLOTS, 1))
-    var dgate = ctx.enqueue_create_buffer[DType.int32](1)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5ff76a71a1.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+    # the float-float solve scratch: one alpha's words
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dtmp = ctx.enqueue_create_buffer[DType.float32](d + 1)
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -4329,13 +4199,6 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
                    + _xg_blocks(kbm) + _xg_blocks(na * kbm))
     comptime if C13_FOLD_STATS:
         wcap = max(wcap, _xg_blocks(d + 1 + d * d + d) + _xg_blocks(na))
-    comptime if RIDGECV_FF_BLOCKED:
-        # unit B with the blocked float-float statistics: two partial passes,
-        # two folds, one solve block per alpha, then the predictions and scores
-        var nbw = fold_blocks(n)
-        wcap = max(wcap, rff_blocks(na) + rff_blocks(rff_mcols(d, 1) * nbw) + rff_blocks(d + 1)
-                   + rff_blocks(rff_stats(d, 1) * nbw) + rff_blocks(rff_stats(d, 1)) + na + _xg_blocks(nt_max * na)
-                   + _xg_blocks(kbm) + _xg_blocks(na * kbm) + _xg_blocks(na))
     # C13 fold cache fill. This block MUST sit under C13_FOLD_STATS: eeda2f55b
     # (RIDGECV_FF_BLOCKED, 2026-10-07) inserted its wcap lines above it and
     # captured it under the default-off FF_BLOCKED branch, so the default
@@ -4418,70 +4281,27 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         while True:
             var nonce = wit.begin()
             var wo = 0
-            comptime if RIDGECV_FF_BLOCKED:
-                # lane/classical-cv-folds: the fold's float-float statistics as
-                # FOLD_BLOCK-row block partials folded blocks ascending, then one
-                # solve block team per alpha. Whether the fold needs them is
-                # decided on the device: the trust flags set a gate word the
-                # statistics kernels read (idle when every alpha is trusted),
-                # and a trusted alpha's solve block does nothing.
-                var nbf = fold_blocks(n)
-                var mc = rff_mcols(d, 1)
-                var stats = rff_stats(d, 1)
-                ctx.enqueue_memset(dgate, Int32(0))
-                ctx.enqueue_function[rff_untrusted_kernel](dtr.unsafe_ptr(), Int32(na), dgate.unsafe_ptr(),
-                                                           wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(na), block_dim=RFF_TPB)
-                wo += rff_blocks(na)
-                ctx.enqueue_function[rff_mean_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
-                                                           Int32(0), Int32(n), s, e, dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                           dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
-                wo += rff_blocks(mc * nbf)
-                ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(1), Int32(fi), dph.unsafe_ptr(),
-                                                           dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                           dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(d + 1), block_dim=RFF_TPB)
-                wo += rff_blocks(d + 1)
-                ctx.enqueue_function[rff_cell_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
-                                                           Int32(0), Int32(n), s, e, dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                           dph.unsafe_ptr(), dpl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                           wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
-                wo += rff_blocks(stats * nbf)
-                ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(1), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                           dsh.unsafe_ptr(), dsl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                           wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
-                wo += rff_blocks(stats)
-                ctx.enqueue_function[rff_kf_solve_kernel](Int32(d), Int32(fi), dal.unsafe_ptr(), Int32(na), dtr.unsafe_ptr(),
-                                                          dsh.unsafe_ptr(), dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(),
-                                                          dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtmp.unsafe_ptr(), dtw.unsafe_ptr(),
-                                                          dw.unsafe_ptr(), db.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                          grid_dim=na, block_dim=RFF_TPB)
-                wo += na
-            else:
-                var have_ff = False
-                for a in range(na):
-                    if htr[a] == Float32(1):
-                        continue
-                    if not have_ff:
-                        ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
-                                                                Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                                wit.p(), Int32(wo), nonce,
-                                                                grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
-                        wo += _xg_blocks(d + 1)
-                        ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
-                                                                Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                                wit.p(), Int32(wo), nonce,
-                                                                grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
-                        wo += _xg_blocks(ff_units - (d + 1))
-                        have_ff = True
-                    ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                             dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
-                                                             dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
-                                                             wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
-                    wo += 1
+            var have_ff = False
+            for a in range(na):
+                if htr[a] == Float32(1):
+                    continue
+                if not have_ff:
+                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                            Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                            wit.p(), Int32(wo), nonce,
+                                                            grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+                    wo += _xg_blocks(d + 1)
+                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                            Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                            wit.p(), Int32(wo), nonce,
+                                                            grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
+                    wo += _xg_blocks(ff_units - (d + 1))
+                    have_ff = True
+                ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                         dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
+                                                         dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
+                                                         wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+                wo += 1
             var nt = Int(e) - Int(s)
             ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
                                                  dp.unsafe_ptr(), Int32(stride), wit.p(), Int32(wo), nonce,
@@ -4536,10 +4356,6 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = dfh^
     _ = dfl^
     _ = dtmp^
-    _ = dph^
-    _ = dpl^
-    _ = dtw^
-    _ = dgate^
 
 
 
@@ -4567,17 +4383,8 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var words = d + t_n + d * d + d * t_n
     var dsh = ctx.enqueue_create_buffer[DType.float32](words)
     var dsl = ctx.enqueue_create_buffer[DType.float32](words)
-    # RIDGECV_FF_BLOCKED (x_linear/ridge_ff_blocks.mojo): one target a thread
-    # in the solve team needs T*d words of b; the block partial table and the
-    # team's slots beside them (one word each otherwise)
-    var dbh = ctx.enqueue_create_buffer[DType.float32](max(t_n * d if RIDGECV_FF_BLOCKED else d, 1))
-    var dbl = ctx.enqueue_create_buffer[DType.float32](max(t_n * d if RIDGECV_FF_BLOCKED else d, 1))
-    var rff_pw = rff_part_words(n, d, t_n) if RIDGECV_FF_BLOCKED else 1
-    var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dtw = ctx.enqueue_create_buffer[DType.float32](TEAM_SLOTS if RIDGECV_FF_BLOCKED else 1)
-    var dgate = ctx.enqueue_create_buffer[DType.int32](1)
-    ctx.enqueue_memset(dgate, Int32(1))
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
     var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
     var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
@@ -4587,59 +4394,24 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var b1 = _xg_blocks(nm)
     var b2 = _xg_blocks(units - nm)
     var cap = b1 + b2 + 1
-    var nbf = fold_blocks(n)
-    var mc = rff_mcols(d, t_n)
-    var stats = rff_stats(d, t_n)
-    comptime if RIDGECV_FF_BLOCKED:
-        cap = rff_blocks(mc * nbf) + rff_blocks(nm) + rff_blocks(stats * nbf) + rff_blocks(stats) + 1
     var wit = Witness(ctx, cap)
     var tries = 0
     while True:
         var nonce = wit.begin()
         dsh.enqueue_fill(Float32(0))
         dsl.enqueue_fill(Float32(0))
-        comptime if RIDGECV_FF_BLOCKED:
-            # lane/classical-cv-folds: the statistics as block partials folded
-            # blocks ascending; the solve on one block team
-            var wo = 0
-            ctx.enqueue_function[rff_mean_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
-                                                       Int32(n * t_n), Int32(0), Int32(0), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                       dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
-            wo += rff_blocks(mc * nbf)
-            ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), dph.unsafe_ptr(),
-                                                       dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                       dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(nm), block_dim=RFF_TPB)
-            wo += rff_blocks(nm)
-            ctx.enqueue_function[rff_cell_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
-                                                       Int32(n * t_n), Int32(0), Int32(0), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                       dph.unsafe_ptr(), dpl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                       wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
-            wo += rff_blocks(stats * nbf)
-            ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(t_n), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                       dsh.unsafe_ptr(), dsl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                       wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
-            wo += rff_blocks(stats)
-            ctx.enqueue_function[rff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
-                                                   dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
-                                                   dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtw.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                   grid_dim=1, block_dim=RFF_TPB)
-        else:
-            ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
-                                                       Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
-                                                       dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                       grid_dim=b1, block_dim=XG_TPB)
-            ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
-                                                       Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
-                                                       dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
-                                                       grid_dim=b2, block_dim=XG_TPB)
-            ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
-                                                        dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
-                                                        dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
-                                                        grid_dim=1, block_dim=1)
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                   grid_dim=b1, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
+                                                   grid_dim=b2, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
+                                                    dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
+                                                    dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
+                                                    grid_dim=1, block_dim=1)
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
         if wit.ok(ctx, cap, "Ridge float-float refit"):
             break
@@ -4658,10 +4430,6 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     _ = dsl^
     _ = dbh^
     _ = dbl^
-    _ = dph^
-    _ = dpl^
-    _ = dtw^
-    _ = dgate^
     _ = dout^
     _ = dfh^
     _ = dfl^
@@ -5598,7 +5366,7 @@ def fit_device(
         return
     # HuberRegressor with the line search batched on the device
     # (x_linear/huber_fast.mojo, lane/apple-fast-robust recovered):
-    # -D MOJOLEARN_HUBER_DEVICE_LBFGS (or HUBER_FAST_BLOCK512), FAST + Apple only
+    # FAST + Apple only
     comptime if HUBER_DEVICE_LBFGS:
         if algo == ALGO_HUBER and n > 0:
             huber_fit_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
@@ -5697,11 +5465,8 @@ def fit_device(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
         xlin_finite_device(ctx, dx, n_x, y, n_y)
-    comptime if C13_LOGCV_WEIGHTS:
-        # the opt-in C13 weight sums assume disjoint folds; a non-partition cv
-        # marks every fold word -(n + 1) (x_linear/cv_roles.mojo)
-        if algo == ALGO_LOGCV and n > 0 and n_y > n and y[n] < Float32(0):
-            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
     if algo == ALGO_LOGCV and n > 0:
         # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo),
         # unless an explicit cv's fold ids came in y (ip[6] = 1)

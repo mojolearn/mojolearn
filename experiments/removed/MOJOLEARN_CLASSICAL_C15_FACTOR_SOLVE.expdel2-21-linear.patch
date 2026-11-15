@@ -1,0 +1,58 @@
+diff --git a/x_linear/bayes.mojo b/x_linear/bayes.mojo
+index cf8f59b4f5..153d21e0aa 100644
+--- a/x_linear/bayes.mojo
++++ b/x_linear/bayes.mojo
+@@ -21,6 +21,7 @@ Centering (fit_intercept) is their `_preprocess_data`: column means and the
+ target mean, rows ascending. float32 throughout.
+ """
+ from std.sys.compile import is_defined
++from experiments.classical_identical_ideas.linear_controls import C15_FACTOR_SOLVE
+ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
+     cholesky, chol_solve, centered_gram, centered_xty, mean_of,
+@@ -687,13 +688,33 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int,
+     return dk
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 65630c0c9f.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
++def _ard_factor_coef(d: Int, dk: Int, fw: FP, aa: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
++    """C15 direct coefficient solve. Required posterior sigma remains materialized.
++    aa is the immutable Cholesky produced in this same accepted ARD step.
++    res is temporary compact RHS until solved, then scatter descending so
++    ascending kept feature indices never overwrite an unread compact value.
++    """
++    for a in range(dk):
++        st(res, a, fm(alpha, ld(fw, xty + ldi(iw, keep + d + a))))
++    chol_solve(fw, aa, dk, res, 0)
++    for offset in range(dk):
++        var a = dk - 1 - offset
++        st(res, ldi(iw, keep + d + a), ld(res, a))
++    for j in range(d):
++        if ldi(iw, keep + j) == 0:
++            st(res, j, Float32(0))
+ 
+ 
+ def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
+     """`_ard_coef` with its dk outputs split across the team (each its own
+     chain over b ascending); the same words."""
++    # C15 solves on `aa` as the factor of diag(lambda) + alpha G; under ARD_EQ
++    # `aa` holds the equilibrated A~'s factor, so the sigma product is used
++    comptime if C15_FACTOR_SOLVE and not ARD_EQ:
++        if t.lead():
++            _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
++        t.sync()
++        return
+     if t.nt <= 1:
+         _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
+         return
+@@ -709,6 +730,9 @@ def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Floa
+ 
+ 
+ def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
++    comptime if C15_FACTOR_SOLVE and not ARD_EQ:
++        _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
++        return
+     fill(res, 0, d, Float32(0))
+     for a in range(dk):
+         var acc = Float32(0)

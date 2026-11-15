@@ -12,7 +12,6 @@ precedent). The device binding runs this fit on its grid driver
 (x_linear/device.mojo `fit_device`, `_glm_fit_grid`); the statements here are unchanged,
 so the host column's bits are unchanged.
 """
-from experiments.classical_identical_ideas.linear_controls import C16_GLM_FUSED
 from x_linear.tops import FOLD_BLOCK, fold_blocks, fold_fa_blocked
 from x_linear.ops_host import par_rows
 from x_linear.ops import (
@@ -45,7 +44,6 @@ from x_linear.glm import (
     _glm_step,
     _objective_team,
     _unit,
-    _unit_all,
     glm_den,
     glm_start,
 )
@@ -55,8 +53,7 @@ def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link
                theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32, ls: FP, hs: FP) -> Float32:
     """Map (eta and each row's loss term into `ls`), then fold rows ascending."""
     var b = ld(theta, toff + d) if fi else Float32(0)
-    var loss_words = List[Float32](length=n if C16_GLM_FUSED else 1, fill=Float32(0))
-    var losses = FP(unsafe_from_address=Int(loss_words.unsafe_ptr())) if C16_GLM_FUSED else ls
+    var losses = ls
 
     def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm power, imm link, imm theta,
                                      imm toff, imm eta, imm sw, imm ls, imm hs, imm losses, imm b}:
@@ -65,25 +62,15 @@ def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link
             var e = fa(ld(eta, i), b)
             st(eta, i, e)
             var l = Float32(0)
-            comptime if C16_GLM_FUSED:
-                var values = _unit_all(power, link, ld(y, i), e)
-                l = values[0]
-                var gi = values[1]
-                var hi_ = fmax(Float32(0), values[2])
-                if sw:
-                    gi = fm(ld(y, n + i), gi)
-                    hi_ = fm(ld(y, n + i), hi_)
-                st(ls, i, gi)
-                st(hs, i, hi_)
-            else:
-                l = _unit(power, link, ld(y, i), e, 0)
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ff5b5b6e52.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+            l = _unit(power, link, ld(y, i), e, 0)
             if sw:
                 l = fm(ld(y, n + i), l)
             st(losses, i, l)
 
     par_rows(rows_map, n)
     var acc = fold_fa_blocked(losses, 0, 1, n)
-    _ = loss_words^
     var reg = Float32(0)
     for j in range(d):
         var w = ld(theta, toff + j)
@@ -170,16 +157,14 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             # block's 90 cells: 107 ms a Newton step on the M4's GPU). The
             # slots are [Hessian rows j < d][pad][gradient][pad][Hessian row
             # d]; a slot maps to its cell and runs that cell's chain: the
-            # same words. `-D MOJOLEARN_GLM_CELLS_MIXED=1` restores cell order.
+            # same words.
+            # TOMBSTONE: MOJOLEARN_GLM_CELLS_MIXED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a602b53e45.
+            # Restore: git apply experiments/removed/MOJOLEARN_GLM_CELLS_MIXED.patch; record in docs/TOMBSTONES.md.
             var slots = _glm_slot_count(d, m)
-            comptime if is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
-                slots = cells
             for sl in range(t.tid, slots, t.nt):
-                var c = sl
-                comptime if not is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
-                    c = _glm_slot_cell(sl, d, m)
-                    if c < 0:
-                        continue
+                var c = _glm_slot_cell(sl, d, m)
+                if c < 0:
+                    continue
                 _glm_cell(c, x, gr, hr, n, d, m, g, h)
             t.sync()
         else:
@@ -200,8 +185,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     st(s1, i, gi)
                     st(s2, i, hi_)
 
-            comptime if not C16_GLM_FUSED:
-                par_rows(rows_gh, n)
+            par_rows(rows_gh, n)
             # every entry of g and of H's lower triangle is its own accumulator.
             # Units: 0..d-1 the Hessian rows, d the intercept's row, d+1 the
             # gradient; a unit owns its accumulators and folds rows ascending,

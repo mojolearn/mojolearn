@@ -1,0 +1,21 @@
+diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
+index b0f92de056..22fc624b82 100644
+--- a/x_linear/sgd.mojo
++++ b/x_linear/sgd.mojo
+@@ -982,12 +982,12 @@ comptime SGD_OC_MB_IMPLICIT = (
+ # step on it resolves to the minibatch at MB_BATCH_DEFAULT (4096, the mean
+ # step, like SGDClassifier / SGDRegressor), which runs on the device grid
+ # in parallel instead of the per-sample chain (one sample after the next).
+-# Elsewhere (FAST) auto is the per-sample fit, the old
+-# default. An explicit batch_size is always kept.
+-# TOMBSTONE: MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 51028ea5eb.
+-# Restore: git apply experiments/removed/MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch; record in docs/TOMBSTONES.md.
++# Elsewhere (FAST, or the arm off) auto is the per-sample fit, the old
++# default. `-D MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF` (or MOJOLEARN_IDN_ALL_OFF)
++# restores the per-sample default. An explicit batch_size is always kept.
+ comptime SGD_OC_IDN_MB_DEFAULT = (
+     SGD_OC_MB_IMPLICIT
++    and not is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]()
+ )
+ 
+ 

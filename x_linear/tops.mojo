@@ -8,7 +8,6 @@ bits. Each returns with its outputs visible to the whole team; a scalar
 result is the lead's fold, broadcast.
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, cholesky, fabs, fsign
-from std.sys.compile import is_defined
 from x_linear.team import Team
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -348,9 +347,10 @@ comptime STAGE_CH = 1024
 def t_fold_fa_staged(t: Team, v: FP, off: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
     """`fold_fa(v, off, 1, n, init)` on the team; the value is the lead's
     (other threads return their partial garbage: callers broadcast or use the
-    lead's). A team of one runs `fold_fa`. `-D MOJOLEARN_X_LINEAR_NO_STAGED_FOLD=1`
-    restores `fold_fa` on the lead."""
-    comptime if not (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) or is_defined["MOJOLEARN_X_LINEAR_NO_STAGED_FOLD"]():
+    lead's). A team of one runs `fold_fa`."""
+    # TOMBSTONE: MOJOLEARN_X_LINEAR_NO_STAGED_FOLD (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 51eabe26ef.
+    # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch; record in docs/TOMBSTONES.md.
+    comptime if not (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()):
         var r0 = Float32(0)
         if t.lead():
             r0 = fold_fa(v, off, 1, n, init)
