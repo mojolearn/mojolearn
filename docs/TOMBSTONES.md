@@ -663,6 +663,7 @@ in the tables after the sections.
 | [`MOJOLEARN_FA_TRANSFORM_FUSED`](#mojolearn_fa_transform_fused-loser-deleted-2026-11-15) | Decomp (FactorAnalysis.transform, FAST Apple opt-in) | NEUTRAL (rab7-fatransform istella +2.0%) | 2026-11-15 | [MOJOLEARN_FA_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch) |
 | [`MOJOLEARN_IPCA_FAST_DEV_OFF`](#mojolearn_ipca_fast_dev_off-old-path-deleted-2026-11-15) | Decomp (IncrementalPCA batch stack, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2k-ipca-dev) | 2026-11-15 | [MOJOLEARN_IPCA_FAST_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch) |
 | [`MOJOLEARN_PCA_FAST_GRAM_MMA_OFF`](#mojolearn_pca_fast_gram_mma_off-old-path-deleted-2026-11-15) | Decomp (PCA covariance Gram past the split-K capacity, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2p-pca-grammma) | 2026-11-15 | [MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch) |
+| [`MOJOLEARN_TSVD_FAST_POOL_OFF`](#mojolearn_tsvd_fast_pool_off-old-path-deleted-2026-11-15) | Decomp (TruncatedSVD explained variance / transform copy of X, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-tsvdpool) | 2026-11-15 | [MOJOLEARN_TSVD_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6440,4 +6441,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `PCA_FAST_GRAM_MMA`, gl2p-pca-grammma-istella-r, quality gl2p-pca-quality on the M2): M3 one run per arm, pca istella 606 -> 490 ms (-19%); explained_variance_ relative difference 3.4e-06, subspace angle 1.8e-06 rad (FAST, nondeterministic atomic sum). No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `d6f96dfe59`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch`, then delete the `MOJOLEARN_PCA_FAST_GRAM_MMA_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_TSVD_FAST_POOL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `TSVD_FAST_POOL` (`decomposition/estimator.mojo`, `tsvd_explained_host` and `tsvd_transform_host`): with `-D MOJOLEARN_TSVD_FAST_POOL_OFF` each call allocated its n x d device copy of X fresh instead of taking it from `_PCA_POOL`. Deleted: the define read; `TSVD_FAST_POOL` is `PCA_FAST_GRAM_MMA`. The fresh-allocation arms stay for every other build.
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `TSVD_FAST_POOL`, rab15-tsvdpool, M3 afc_ab_def, full board, one run per arm, 2026-10-05): tsvd istella 995.9 -> 921.0 ms, taxi 40.4 -> 32.3 ms, quality equal. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8d1352d8a6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch`, then delete the `MOJOLEARN_TSVD_FAST_POOL_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
