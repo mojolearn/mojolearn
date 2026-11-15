@@ -11,7 +11,7 @@ is unchanged. No order pruning or approximation is performed.
 lane/fam2-timeseries (2026-10-04), IDENTICAL on every vendor, each with its
 own `_OFF` (FAST builds unchanged):
 
-ARIMA_ORDER_CAP (`-D MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF=1`). The group's held
+ARIMA_ORDER_CAP (its `_OFF` deleted 2026-11-15). The group's held
 workspace was unbounded under IDENTICAL (members = batch x sum over the
 group's orders of N + 1, four float32 arrays of members x n_obs). A group is
 now split, in grid order, into chunks whose members x n_obs stay under
@@ -73,7 +73,9 @@ from glm.impl.qn.qn_util import LBFGSParam
 # this term folded by lane/expdel2-47-promote; code recoverable at 6f7dab47a2.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-47-promote.patch; record in docs/TOMBSTONES.md.
 comptime _ORDER_IDN = ARIMA_ORDER_BATCH and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime ARIMA_ORDER_CAP = _ORDER_IDN and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 7cbcdf1758.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ARIMA_ORDER_CAP = _ORDER_IDN
 comptime ARIMA_ORDER_DEVICE = _ORDER_IDN and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"]()
 comptime ARIMA_ORDER_SEASONAL = (
     ARIMA_ORDER_DEVICE and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF"]()
