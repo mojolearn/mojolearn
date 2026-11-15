@@ -51,10 +51,14 @@ def _linear_pos_target(X, yr):
     z = (yr - yr.mean()) / (yr.std() + np.float32(1e-6))
     # NumPy dispatches exp to different Arm/x86 SIMD approximations: the
     # same 2,000 float32 arguments differed in 791 target words on M4/EPYC.
-    # Use the repository's shared portable polynomial, then round to f32.
-    from mojolearn import _portable_math
+    # Use decimal's software exp at 40 digits (the same digits on every host,
+    # no libm), rounded to binary64 and then to f32. Before 2026-11-15 this
+    # was the product's `_portable_math.exp` polynomial; both are within a
+    # binary64 ulp of e^x, far inside one f32 rounding step on [-2, 2].
+    import decimal
+    ctx = decimal.Context(prec=40, rounding=decimal.ROUND_HALF_EVEN)
     arg = np.clip(z, -4, 4) * np.float32(0.5)
-    return np.asarray([_portable_math.exp(float(v)) for v in arg], dtype=np.float32)
+    return np.asarray([float(ctx.exp(decimal.Decimal(float(v)))) for v in arg], dtype=np.float32)
 
 
 @lane("x-glm-poisson")

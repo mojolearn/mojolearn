@@ -2084,6 +2084,63 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
     return f
 
 
+def _saved_fields(est, *keys):
+    """Arrays `keys` of the file the estimator's public `save` writes (an
+    `.npz`), copied out. Where a lane hashed a fitted value the estimator
+    keeps only as private state (a resolved gamma, normalize_y's mean and
+    scale), it reads the same float from the saved model, whose bytes are
+    the public record of that state."""
+    with tempfile.TemporaryDirectory(prefix="ib-saved-") as d:
+        path = os.path.join(d, "model.npz")
+        est.save(path)
+        with np.load(path, allow_pickle=False) as z:
+            return tuple(np.array(z[k]) for k in keys)
+
+
+def _synthetic_bpe(ml):
+    """The synthetic 512-rank vocabulary through the public constructor
+    `BpeTokenizer.from_token_bytes`, where the lanes called the private
+    `BpeTokenizer._synthetic()` (which is that call plus a source label; the
+    identity, ids and bytes do not depend on the label). The token list is the
+    verify fixture `_tokenizer_synthetic.vocabulary()`."""
+    from mojolearn._tokenizer_synthetic import vocabulary
+    return ml.tokenizer.BpeTokenizer.from_token_bytes(vocabulary())
+
+
+#: What each neural model was BUILT FROM, by object: id -> (object, arguments).
+#: A block or a LanguageModelInference copies its weights once at construction
+#: and exposes no public read of them, so the harness keeps the public
+#: arguments it gave the constructor. `_neural_inference` and `_long_byte_lm`
+#: rebuild a model from these (the inference classes take the same
+#: constructor arguments), where they read the private `_W_NAMES`/`_w`,
+#: `_parameters`, `_threaded` and `_threads`. The object is held so its id
+#: is never reused while the entry exists.
+_BUILT = {}
+
+
+def _built(obj, **args):
+    """Record the public constructor arguments of `obj`; return `obj`."""
+    _BUILT[id(obj)] = (obj, args)
+    return obj
+
+
+def _built_args(obj):
+    entry = _BUILT.get(id(obj))
+    if entry is None or entry[0] is not obj:
+        raise RuntimeError(f"identity_break: {type(obj).__name__} was not built through _built, so its "
+                           "constructor arguments are unknown (no private weight read)")
+    return entry[1]
+
+
+def _labels_and_proba(m, X):
+    """The two public classifier views, `predict` and `predict_proba`, in
+    that order. Two public calls (two forest traversals) where the harness
+    used the estimators' private one-traversal `_predict_with_proba`: verify
+    asks what a user can ask, and the labels are the same bytes (`predict`
+    is the first-max decode of `predict_proba`)."""
+    return m.predict(X), m.predict_proba(X)
+
+
 # ---------------------------------------------------------------- lanes
 # One per PUBLIC estimator, plus linalg and metrics. Each returns a hash of
 # the things a user would read back, plus the fitted estimator and what to
@@ -2094,9 +2151,9 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
 @lane("rf-clf")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba)),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("rf-reg")
@@ -2111,9 +2168,9 @@ def _(ml, X, yc, yr, Xh=None):
     # a float64 Fortran-order copy takes the column-major fit entry (et_classifier_fit_export)
     mf = ml.ExtraTreesClassifier(n_estimators=4, max_depth=8, random_state=7).fit(
         np.asfortranarray(X[:2000], dtype=np.float64), yc[:2000])
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba), colmajor=_h(mf.predict_proba(X))),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("et-reg")
@@ -2131,9 +2188,9 @@ def _(ml, X, yc, yr, Xh=None):
     sk-kernels): fixed-point row weights in the class tallies."""
     w = _hw((X.shape[0],), "et-clf-weighted:sample_weight", 0.5, 1.5)
     m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc, sample_weight=w)
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba)),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("et-reg-weighted")
@@ -3353,7 +3410,8 @@ def _(ml, X, yc, yr, Xh=None):
     measures whatever CPU the box has."""
     shape = ml.ByteLanguageModelConfig()
     _, flat = _byte_lm_params(shape)
-    m = ml.LanguageModelInference(flat, shape=shape, threaded=False)
+    m = _built(ml.LanguageModelInference(flat, shape=shape, threaded=False),
+               parameters=flat, threaded=False, threads=None)
     ids = _ids(X, shape.batch, shape.length + 1)
     return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
                      next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
@@ -3527,7 +3585,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
-    blk = ml.Mamba1Block(w)
+    blk = _built(ml.Mamba1Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
@@ -3541,7 +3599,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
-    blk = ml.Mamba2Block(w)
+    blk = _built(ml.Mamba2Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
@@ -3558,7 +3616,7 @@ def _(ml, X, yc, yr, Xh=None):
         # B_norm and C_norm are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("B_norm.weight", "C_norm.weight"))
-    blk = ml.Mamba3Block(w)
+    blk = _built(ml.Mamba3Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     # Mamba3Block.session_info -> mamba_public_native.mojo:mamba3_session_info ->
     # the session's info operation (op 45 on its registry handle): the counters of the device prefill session the
@@ -3583,7 +3641,7 @@ def _(ml, X, yc, yr, Xh=None):
         # the two layernorms are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
@@ -3608,7 +3666,8 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
             "down_proj.weight": (dm, it)},
             near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-        blk = ml.TransformerBlock(ml.lowbit.pack(w, fmt), n_heads=nh, n_kv_heads=nkv)
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.TransformerBlock(wp, n_heads=nh, n_kv_heads=nkv), weights=wp)
         state_kw = dict(max_tokens=32)
     elif base == "mamba1":
         dm, di, r = 32, 64, 2
@@ -3617,7 +3676,8 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
             "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
             ones=("norm.weight",))
-        blk = ml.Mamba1Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba1Block(wp), weights=wp)
         state_kw = {}
     elif base == "mamba2":
         dm, di, nh = 32, 64, 1                      # the mamba2 lane's dims
@@ -3627,14 +3687,16 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
             "out_proj.weight": (dm, di)},
             ones=("block_norm.weight", "norm.weight"))
-        blk = ml.Mamba2Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba2Block(wp), weights=wp)
         state_kw = {}
     else:
         dm = 32
         di = 2 * dm
         w = _block_weights(base, _mamba3_shapes(dm, di), ones=("block_norm.weight",),
                            near_one=("B_norm.weight", "C_norm.weight"))
-        blk = ml.Mamba3Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba3Block(wp), weights=wp)
         state_kw = {}
     assert blk.weight_format == fmt, (base, fmt, blk.weight_format)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), state_kw)
@@ -3967,13 +4029,22 @@ def _lowbit_operands(A):
 # host fallback until pyglue-sweep (2026-10-03) made the conversion Mojo only;
 # the oracle stays here, in the harness, so `lowbit-conversions` still checks
 # the compiled seam against an independent construction and never NumPy.
+# Infinity and its test without a math module (the wheel's audit refuses
+# platform math, and the product's `_portable_math` is not the harness's to
+# import): `x == x and x - x != 0.0` is true exactly for an infinity.
+_LB_INF = float("inf")
+
+
+def _lb_isinf(v):
+    return v == v and v - v != 0.0
+
+
 def _lbpy_f32(v):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     try:
         return struct.unpack("<f", struct.pack("<f", v))[0]
     except OverflowError:
-        return math.inf if v > 0 else -math.inf
+        return _LB_INF if v > 0 else -_LB_INF
 
 
 def _lbpy_ftz_bits(x):
@@ -3983,16 +4054,15 @@ def _lbpy_ftz_bits(x):
 
 
 def _lbpy_ftz(v):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
-    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not math.isinf(v) and v == v:
-        return math.copysign(0.0, v)
+    # v is a nonzero subnormal here, so its sign is `v < 0`
+    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not _lb_isinf(v) and v == v:
+        return -0.0 if v < 0.0 else 0.0
     return v
 
 
 def _lbpy_pow2_f32(e):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     if e > 127:
-        return math.inf
+        return _LB_INF
     if e < -126:
         return 0.0
     # Exact powers of two from Python ints (2**-126 is a normal double, so the
@@ -4022,7 +4092,6 @@ def _lbpy_from_bf16(bits):
 
 def _lbpy_quantize_int8(a):
     """`quantize_rows_int8` (DEVIATIONS 2902, 2903, 2905)."""
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     a = np.ascontiguousarray(a, dtype=np.float32)
     rows, cols = a.shape
@@ -4040,7 +4109,7 @@ def _lbpy_quantize_int8(a):
         if best == 0.0 or best != best:
             e = 0
         else:
-            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not math.isinf(best) else 0x7F800000
+            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not _lb_isinf(best) else 0x7F800000
             e = (((bits >> 23) & 0xFF) - 127) - 6
         exps[r] = e
         scale = _lbpy_pow2_f32(-e)
@@ -4051,7 +4120,7 @@ def _lbpy_quantize_int8(a):
             s = _lbpy_ftz(_lbpy_f32(x * scale))
             if s != s:
                 continue
-            if math.isinf(s):
+            if _lb_isinf(s):
                 rr = 127.0 if s > 0 else -127.0
             else:
                 rr = float(round(s))
@@ -4636,16 +4705,12 @@ def _ctr_saved_or_fit(ml, fit):
         if not path or not os.path.isfile(path):
             raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
                                f"directory of this lane's GPU-saved models (no {path})")
-        from mojolearn._forest_host import binary_path, host_model
-        est = host_model(path)
+        est = ml.host_model(path)
         # the train and batch cells predict through this object, so it takes
         # _probe_fit_host's guard: a forest binding loaded earlier under the
         # shared module name (host_record reads MOJOLEARN_HOST_DIR) is not the
         # MOJOLEARN_FOREST_HOST_BINARY asked for
-        bound = getattr(getattr(est, "_binding", None), "__file__", None)
-        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
-            raise RuntimeError(f"the forest binding in this process is {bound}, "
-                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        _require_named_forest_binding(ml)
         est.identity_saved_path = path
         return est
     est = fit()
@@ -4994,7 +5059,7 @@ def _(ml, X, yc, yr, Xh=None):
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
     seqlen = 8                                   # FLOORED, see @floor above
-    blk = ml.Mamba2Block(w, dt_limit=(0.5, 0.9))
+    blk = _built(ml.Mamba2Block(w, dt_limit=(0.5, 0.9)), weights=w)
     parts = _block_fit(blk, _seq(X, 2, seqlen, dm), _seq(X, 2, seqlen, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, seqlen, dm))),))
 
@@ -5012,7 +5077,7 @@ def _(ml, X, yc, yr, Xh=None):
         # the two layernorms are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer-window", e).forward(_seq(Xh, 2, 16, dm))),))
 
@@ -5085,7 +5150,8 @@ def _(ml, X, yc, yr, Xh=None):
     fold's combine is exercised on every box the same way."""
     shape = ml.ByteLanguageModelConfig()
     _, flat = _byte_lm_params(shape)
-    m = ml.LanguageModelInference(flat, shape=shape, threaded=True, threads=2)
+    m = _built(ml.LanguageModelInference(flat, shape=shape, threaded=True, threads=2),
+               parameters=flat, threaded=True, threads=2)
     ids = _ids(X, shape.batch, shape.length + 1)
     return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
                      next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
@@ -5730,7 +5796,7 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
     mean, std = m.predict(X[256:320, :4], return_std=True)
     return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
-                     y_stats=_h(np.float32([m._y_train_mean, m._y_train_std])),
+                     y_stats=_h(_saved_fields(m, "reals")[0][1:3].astype(np.float32)),
                      mean=_h(mean), std=_h(std)),
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
@@ -5772,7 +5838,7 @@ def _gp_optimize_lane(restarts):
         mean, std = m.predict(X[64:128, :4], return_std=True)
         runs = m._optimizer_runs
         return _fit(dict(theta=_h(np.array(m.kernel_.theta, dtype=np.float64)),
-                         params=_h(np.array(m.kernel_._free_values(), dtype=np.float64)),
+                         params=_h(*_saved_fields(m, "params", "ls")),
                          runs=_h(np.array([[r[0], r[1]] for r in runs], dtype=np.int64),
                                  np.array([r[3] for r in runs], dtype=np.float64)),
                          lml=_h(np.float64(m.log_marginal_likelihood_value_)),
@@ -6002,7 +6068,7 @@ def _(ml, X, yc, yr, Xh=None):
     of X viewed as bytes (the byte-lm lane's derivation without _ids'
     modulus), encoded with <|endoftext|> allowed, then decoded back; the
     held-out probe encodes Xh's first 4,096 bytes."""
-    tok = ml.tokenizer.BpeTokenizer._synthetic()
+    tok = _synthetic_bpe(ml)
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
@@ -6169,7 +6235,7 @@ def _(ml, X, yc, yr, Xh=None):
         schedule = json.dumps(b.data_schedule(), sort_keys=True).encode("ascii")
         ok = LC.tokenizer_for(b.data_schedule(), c.vocabulary_path)
         try:
-            LC.require_vocabulary(b.data_schedule(), ml.tokenizer.BpeTokenizer._synthetic())
+            LC.require_vocabulary(b.data_schedule(), _synthetic_bpe(ml))
             refused = 0
         except ValueError as exc:
             refused = int("vocabulary mismatch" in str(exc))
@@ -6923,7 +6989,12 @@ def _(ml, X, yc, yr, Xh=None):
             # `_default_fold_arrays` shim; verify calls the native owner's
             # `family_msel_default_folds` operation, the same function
             # msel_fold_source calls (the Python definition the fold tests
-            # hold it to stays mojolearn/tests/_fold_reference.py)
+            # hold it to stays mojolearn/tests/_fold_reference.py).
+            # KEPT PRIVATE (2026-11-15, verify-harness-decouple): the public
+            # `check_cv(...).split` reaches `msel_stratified_split`, which
+            # does not apply `msel_sabotage()`, so the msel sabotage arm could
+            # no longer move this cell. Needs a public route to the default
+            # folds (docs/plans/VERIFY_HARNESS_DECOUPLE_2026-11-15.md).
             folds = [(a.tolist(), b.tolist()) for a, b in ms._NATIVE(
                 None, "family_msel_default_folds", (labels, splits, clf), ms._NATIVE_CONTEXT)]
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
@@ -7468,6 +7539,17 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
+def _ivf_copy(ml, index):
+    """An independent IVFIndex holding the same index arrays: the public
+    `save` then `IVFIndex.load` (a loaded index searches and extends, as its
+    docstring says), where the lane used the private `_clone`. An extend on
+    the copy leaves `index` as it was."""
+    with tempfile.TemporaryDirectory(prefix="ib-ivf-copy-") as d:
+        path = os.path.join(d, "index.npz")
+        index.save(path)
+        return ml.IVFIndex.load(path)
+
+
 @lane("ivf-extend")
 def _(ml, X, yc, yr, Xh=None):
     """IVFIndex.extend (python/mojolearn/_ivf_impl.py; lane/inference-embedding-
@@ -7481,8 +7563,8 @@ def _(ml, X, yc, yr, Xh=None):
     model column saves the extended index; the probe searches 64 held-out
     rows."""
     base = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:3072])
-    one = base._clone().extend(X[3072:4096])
-    two = base._clone().extend(X[3072:3584])
+    one = _ivf_copy(ml, base).extend(X[3072:4096])
+    two = _ivf_copy(ml, base).extend(X[3072:3584])
     first = np.asarray(two.extend_labels_).copy()
     two.extend(X[3584:4096])
     for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
@@ -8030,7 +8112,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
-    blk = ml.Mamba1Block(w)
+    blk = _built(ml.Mamba1Block(w), weights=w)
     from mojolearn.mamba import Mamba1DecodeSession
     steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
     held = blk.allocate_state(2)
@@ -8145,7 +8227,7 @@ def _(ml, X, yc, yr, Xh=None):
         "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
         "down_proj.weight": (dm, it)},
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
 
     from mojolearn.transformer import TransformerDecodeSession
 
@@ -8210,7 +8292,7 @@ def _neural_inference(ml, lane_name, est):
         cls = dict(mamba1=ml.Mamba1BlockInference, mamba3=ml.Mamba3BlockInference).get(
             lane_name, ml.Mamba2BlockInference)
         kw = dict(dt_limit=est.dt_limit) if cls is ml.Mamba2BlockInference else {}
-        return cls(dict(zip(est._W_NAMES, est._w)), **kw)
+        return cls(_built_args(est)["weights"], **kw)
     if lane_name in ("samba", "samba-untied-dropout-accum"):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "samba.ckpt")
@@ -8220,8 +8302,12 @@ def _neural_inference(ml, lane_name, est):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "byte_lm.json")
             est.export_checkpoint(path)
-            return ml.LanguageModelInference.from_checkpoint(path)
-    return ml.TransformerBlockInference(dict(zip(est._W_NAMES, est._w)), n_heads=est.n_heads,
+            # from_checkpoint's defaults; the parameters are the trainer's
+            # public `parameters_`, held to the loaded model's
+            # parameters_sha256 where `_long_byte_lm` rebuilds from them
+            return _built(ml.LanguageModelInference.from_checkpoint(path),
+                          parameters=np.asarray(est.parameters_, dtype=np.float32), threaded=True, threads=None)
+    return ml.TransformerBlockInference(_built_args(est)["weights"], n_heads=est.n_heads,
                                         n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
 
 
@@ -9453,7 +9539,7 @@ def _batch_ivf_extend(ml, e, Xh):
     extends a fresh clone of the fitted index; the ids are not compared,
     because a row's id is its position in the extension by contract."""
     return [_BatchRows("extend (new-row lists)", Xh[:64],
-                       lambda r: (np.asarray(e._clone().extend(r).extend_labels_),))]
+                       lambda r: (np.asarray(_ivf_copy(ml, e).extend(r).extend_labels_),))]
 
 
 _batch_decl(_batch_ivf_extend, "ivf-extend")
@@ -10012,7 +10098,13 @@ def _long_byte_lm(ml, e):
     since 2026-09-16 byte-lm-resident runs one block at d_model 16."""
     shape = ml.ByteLanguageModelConfig(**dict(_byte_lm_shape(ml, e).to_dict(), length=SCALE_LONG_L))
     if isinstance(e, ml.LanguageModelInference):
-        return ml.LanguageModelInference(e._parameters, shape=shape, threaded=e._threaded, threads=e._threads)
+        a = _built_args(e)
+        long_m = ml.LanguageModelInference(a["parameters"], shape=shape, threaded=a["threaded"],
+                                           threads=a["threads"])
+        if long_m.parameters_sha256() != e.parameters_sha256():
+            raise RuntimeError("identity_break: the long byte LM's parameters are not the lane model's "
+                               f"({long_m.parameters_sha256()} != {e.parameters_sha256()})")
+        return long_m
     return ml.SmallByteLanguageModelTrainer(np.asarray(e.parameters_),
                                             data_schedule={"dataset": "identity_break", "order": "sequential"},
                                             shape=shape)
@@ -10849,7 +10941,7 @@ def _rlpair_byte_lm_host(ml, e, Xh):
     REFERENCE forward, `logits(threaded=False)`, the oracles as written; the
     samplers are the lane's own arm and the other arm."""
     shape = e.shape
-    other = not e._threaded
+    other = not _built_args(e)["threaded"]
     samplers = [_rl_prefix_sampler("lane arm prefix recompute", lambda ids: e.logits(ids)),
                 _rl_prefix_sampler(f"threaded={other} prefix recompute",
                                    lambda ids: e.logits(ids, threaded=other, threads=2 if other else None))]
@@ -10978,31 +11070,54 @@ def _host_infer_on(name):
     return lanes is True or (lanes is not None and name in lanes)
 
 
+#: The forest host binding's name in `mojolearn.runtime_report()["bindings"]`.
+FOREST_HOST_BINDING = "_mojolearn_forest_host"
+
+
+def _require_named_forest_binding(ml):
+    """Refuse when the loaded forest host binding is not the file
+    MOJOLEARN_FOREST_HOST_BINARY names (a sabotage build's binary must be the
+    one that predicts), and, when the variable is unset, when it is not this
+    install's own forest host binding (the old check, unchanged in scope).
+    The LOADED path comes from the public runtime report's binding table, not
+    the model object's private `_binding`. The EXPECTED path is still the
+    private `_forest_host.binary_path()` (the variable, else the install's
+    binding as `_backend.host_module_path` resolves it): the report as
+    specified carries only the loaded path, so this one read stays private
+    until it gains `bindings[name]["expected_path"]`
+    (docs/plans/VERIFY_HARNESS_DECOUPLE_2026-11-15.md, needs product entry).
+    A binding not loaded yet has answered nothing."""
+    from mojolearn._forest_host import binary_path
+    want = binary_path()
+    entry = (ml.runtime_report().get("bindings") or {}).get(FOREST_HOST_BINDING) or {}
+    bound = entry.get("path")
+    if entry.get("loaded") and bound and os.path.realpath(bound) != os.path.realpath(want):
+        raise RuntimeError(f"the forest binding in this process is {bound}, "
+                           f"not MOJOLEARN_FOREST_HOST_BINARY {want}")
+
+
 def _probe_fit_host(fit, name):
     """`_probe_fit` under HOST_INFER_ENV: save, then predict through
     `host_model`. Same return shape."""
     if not _has_save_load(fit.est):
         return None, None, None, "infer: host infer asked of an estimator with no save"
     save, load, suffix = _save_load(fit.est)
-    from mojolearn._forest_host import binary_path, host_model
+    ml = sys.modules["mojolearn"]
     try:
         with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
             path = os.path.join(tmp, f"{name}{suffix}")
             getattr(fit.est, save)(path)
             model = _hfile(path)
             try:
-                host = host_model(path)
+                host = ml.host_model(path)
                 # THE BINARY THAT PREDICTED IS THE ONE NAMED (2026-09-15): host_record
                 # loads MOJOLEARN_HOST_DIR's forest binding under the module name
                 # _forest_host reuses from sys.modules, so a MOJOLEARN_FOREST_HOST_BINARY
                 # pointing elsewhere (a sabotage build) was silently not the one asked,
                 # and a forest sabotage column read IDENTICAL on a RunPod x86 pod.
-                bound = getattr(getattr(host, "_binding", None), "__file__", None)
-                if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
-                        os.path.realpath(bound) != os.path.realpath(binary_path())):
-                    raise RuntimeError(f"the forest binding in this process is {bound}, "
-                                       f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
-                infer = _h(*fit.probe(host_model(path)))
+                if type(host).__name__ in ("HostGBDT", "HostForest"):
+                    _require_named_forest_binding(ml)
+                infer = _h(*fit.probe(ml.host_model(path)))
             except Exception as exc:
                 return None, None, None, _exc_text("infer (host_model)", exc)
             reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
@@ -11028,19 +11143,16 @@ def _probe_saved_host(fit, name):
     columns still hash the file they wrote. A second load that predicts
     differently from the first is refused (the model part reads REFUSED),
     because an n/a model part skips the RELOAD-MOVED comparison."""
-    from mojolearn._forest_host import binary_path, host_model
+    ml = sys.modules["mojolearn"]
     path = fit.est.identity_saved_path
     try:
-        host = host_model(path)
-        bound = getattr(getattr(host, "_binding", None), "__file__", None)
-        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
-            raise RuntimeError(f"the forest binding in this process is {bound}, "
-                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        host = ml.host_model(path)
+        _require_named_forest_binding(ml)
         infer = _h(*fit.probe(host))
     except Exception as exc:
         return None, None, None, _exc_text("infer (saved model)", exc)
     try:
-        reload = _h(*fit.probe(host_model(path)))
+        reload = _h(*fit.probe(ml.host_model(path)))
     except Exception as exc:
         return infer, None, None, _exc_text("model (saved model)", exc)
     if reload != infer:
@@ -11122,9 +11234,7 @@ def _shown(verdict, values):
 
 
 def run(args):
-    from mojolearn._cpu_reference import reference_training
-    with reference_training():
-        return _run_reference(args)
+    return _run_reference(args)
 
 
 def _run_reference(args):
@@ -11150,9 +11260,12 @@ def _run_reference(args):
     # PTX set must never stand for the native NVIDIA column, nor the reverse.
     gpu_arch = code_format = None
     if ml.vendor() == "cuda":
-        from mojolearn import _backend as _ml_backend
-        gpu_arch = _ml_backend.gpu_arch()
-        code_format = "ptx" if _ml_backend.baseline_selection_receipt() is not None else "native"
+        # mojolearn.runtime_report(): `gpu_arch`, and `code_mode` "ptx" exactly
+        # when the PTX baseline set was selected (before: _backend.gpu_arch()
+        # and _backend.baseline_selection_receipt() is not None)
+        report = ml.runtime_report()
+        gpu_arch = report["gpu_arch"]
+        code_format = "ptx" if str(report["code_mode"]).lower() == "ptx" else "native"
         if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
             raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
                              f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")

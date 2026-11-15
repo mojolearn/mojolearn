@@ -73,12 +73,16 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.TSNE(perplexity=10.0, max_iter=300, init="pca", random_state=5)
     # the scaled start TSNE builds in the binding (x_ann/tsne_init.mojo mode 2),
     # restated here because TSNE no longer exposes it: the first column's
-    # population std by math.fsum, then (pca / std) * 1e-4 in float32
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
+    # population std by an exact sum, then (pca / std) * 1e-4 in float32.
+    # The sums are exact rationals rounded once to binary64 (what math.fsum
+    # returns for finite values) and the square root is NumPy's IEEE sqrt,
+    # correctly rounded on every host: no math module (the wheel's audit
+    # refuses platform math) and no product `_portable_math`.
+    from fractions import Fraction
     p32 = np.ascontiguousarray(np.asarray(pca, dtype=np.float32))
     col = [float(v) for v in p32[:, 0]]
-    mean = math.fsum(col) / len(col)
-    std = math.sqrt(math.fsum((v - mean) * (v - mean) for v in col) / len(col))
+    mean = float(sum(Fraction(v) for v in col)) / len(col)
+    std = float(np.sqrt(np.float64(float(sum(Fraction((v - mean) * (v - mean)) for v in col)) / len(col))))
     y0 = np.ascontiguousarray((p32 / np.float32(std)) * np.float32(1e-4), dtype=np.float32)
     m.fit(X[:400])
     return _fit(dict(pca=_h(np.asarray(pca, dtype=np.float32)), init=_h(y0), embedding=_h(m.embedding_),

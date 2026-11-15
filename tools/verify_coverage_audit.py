@@ -1385,8 +1385,9 @@ NEW_LANE_PURPOSE = {
     "saved-model-host-infer-trees": "HostForest and host_predict on saved Extra Trees and default-engine random "
                                     "forest regressors: `forest_host_et_predict`, `forest_host_rf_predict_reg`",
     "hf-causal-lm-text": "CausalLM.generate_text, stream_text and _generate_resident with a tokenizer from "
-                         "`Tokenizer(...)`, `_from_json` and `_from_spelled`: `causal_lm_generate_text`, "
-                         "`causal_lm_text_stream`, `causal_lm_resident`, `vocab_json_public`, `vocab_spelled_public`",
+                         "`Tokenizer(...)` and `Tokenizer.from_pretrained` (file and directory): "
+                         "`causal_lm_generate_text`, `causal_lm_text_stream`, `causal_lm_resident`, "
+                         "`vocab_pretrained` -> `vocab_json_public` -> `vocab_spelled_public`",
     "hf-model-surface": "HFConfig, ModelPlan, TensorInfo, SafetensorsFile._map, Checkpoint._file and "
                         "CausalLM._read_weights: `model_config_*`, `model_plan_init`, `tensor_info_*`, "
                         "`safetensors_map`, `checkpoint_file`, `causal_model_read_weights`",
