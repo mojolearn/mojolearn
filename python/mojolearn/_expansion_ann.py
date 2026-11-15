@@ -259,32 +259,10 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def __getstate__(self):
         return _FAMILY(self, "family_xn_ann_getstate", (), _FAMILY_CONTEXT)
 
-    # IVFPQIndex's save is the shared native one: a resident fit's `codes_`,
+    # IVFPQIndex's save is _AnnSaved's shared native one: a resident fit's `codes_`,
     # held only on the device, is exported into the file by the binding's
-    # x_ann_index_export_codes, leaving the index unchanged.
-    def save(self, path):
-        """Write the fitted index to `path` as an ``.npz`` file.
-
-        The file holds the constructor parameters, the fitted sizes, the index
-        arrays exactly as `fit` left them, and the numeric mode. Reload it with
-        `load`; a loaded index searches without rebuilding.
-
-        Parameters
-        ----------
-        path : str or path-like
-            Destination file.
-
-        Returns
-        -------
-        path : str or path-like
-            The path written.
-
-        Raises
-        ------
-        RuntimeError
-            If the index has not been fitted.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
+    # x_ann_index_export_codes, leaving the index unchanged. (Its identical
+    # copy here was deleted by lane py-dedupe, 2026-11-15.)
 
     @_native_ann_method
     def fit(self, X, y=None):
