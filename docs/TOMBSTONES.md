@@ -653,6 +653,7 @@ in the tables after the sections.
 | [`MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF`](#mojolearn_bayes_fast_cls1_parts_off-old-path-deleted-2026-11-15) | Linear (BayesianRidge row-block partials, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-brparts-taxi) | 2026-11-15 | [MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch) |
 | [`MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF`](#mojolearn_bayes_fast_cls1_batch_off-old-path-deleted-2026-11-15) | Linear (BayesianRidge batched guarded iterations, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-brall-taxi) | 2026-11-15 | [MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch) |
 | [`MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF`](#mojolearn_ridge_fast_cls1_codes_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier device +-1 targets, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-rccodes-taxi) | 2026-11-15 | [MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch](../experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch) |
+| [`MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF`](#mojolearn_x_linear_lars_fast_gram_off-old-path-deleted-2026-11-15) | Linear (Lars / LassoLars grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-lars-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6346,4 +6347,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `RIDGE_FAST_CLS1_CODES`, gapcls1-rccodes-taxi): M3 one run per arm, ridge-clf taxi 120 -> 19.0 ms, board FAST value equals the B arm (19). No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `cb5f47564f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch`, then delete the `MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of Lars / LassoLars' means, centered Gram, X'y and y mean from the shared grid Gram (x_linear/fast_gram.mojo `fast_gram_into`) to the IDENTICAL moments (blocked moments / sliced `xg_gram_kernel`). Only the `and not is_defined` term of `XL_LARS_FAST_GRAM` (x_linear/device.mojo) is gone; the moments path stays the path of every non-FAST-Apple build.
+- **Verdict**: KEPT c5e1bbeb6 (EXPERIMENTS.md `X_LINEAR_LARS_FAST_GRAM`, gram-lars-taxi, gram-llars-taxi): M3 one run per arm, lars taxi 59.1 -> 15.1 ms, lasso-lars taxi 59.1 -> 14.2 ms, r2 the same (re-measured on c338b88dd). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8d8b814530`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch`, then delete the `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
