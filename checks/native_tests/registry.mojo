@@ -155,6 +155,7 @@ from checks.native_tests.svc_accuracy_native import register as register_svc_acc
 from checks.native_tests.svc_probability import register as register_svc_probability
 from checks.native_tests.svr_native import register as register_svr_native
 from checks.native_tests.theta_state import register as register_theta_state
+from checks.native_tests.tokenizer_pretokenize_cuts import register as register_tokenizer_pretokenize_cuts
 from checks.native_tests.training_autograd_model import register as register_training_autograd_model
 from checks.native_tests.training_autograd_save_resume import register as register_training_autograd_save_resume
 from checks.native_tests.training_autograd_usability import register as register_training_autograd_usability
@@ -327,6 +328,7 @@ def all_checks() -> List[Check]:
     checks.append(register_svc_probability())
     checks.append(register_svr_native())
     checks.append(register_theta_state())
+    checks.append(register_tokenizer_pretokenize_cuts())
     checks.append(register_training_autograd_model())
     checks.append(register_training_autograd_save_resume())
     checks.append(register_training_autograd_usability())
