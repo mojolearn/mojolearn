@@ -989,7 +989,9 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
 #: longer a switch (lane m1-followups-misc: every build opens it; bits 2 and
 #: 128 are always 0), only SHARE is.
 comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"]()
+# TOMBSTONE: MOJOLEARN_TE_NATIVE_SPLITS_OFF (old path of the FAST Apple default, EXP:124 KEPT ed49f2b11; promoted on Apple M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 6037d8cab6.
+# Restore: git apply experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF (escape from the AdaBoost data session) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
 comptime _XT_ADA_SESSION_SHARE = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"]()
