@@ -310,6 +310,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_LN_FAST_NOFILL_OFF (superseded (LN_FAST_NOFILL default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 3004379441.
     # Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_LN_FAST_NOFILL_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_LN_FAST_NOFILL_OFF rolled back LN_FAST_NOFILL, the FAST + Apple default that won M3 afc_ab_def (layernorm 48.2 -> 45.5 ms, digest identical); drop the define; recoverable at 3004379441; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_UP_OFF (superseded (SEQ_FAST_PIPE_UP default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at eff4ddd2d8.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_PIPE_UP_OFF rolled back SEQ_FAST_PIPE_UP, the FAST + Apple default KEPT f6a9e7c04 (M3 layernorm 76.0 -> 52.2 ms with PIPE_DOWN, digests identical); drop the define; recoverable at eff4ddd2d8; see docs/TOMBSTONES.md"
     # ---- end lane expdel-04-neural
     return True
 

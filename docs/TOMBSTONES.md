@@ -630,6 +630,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AFN_OPTIM_ALL`](#mojolearn_afn_optim_all) | Neural (Apple FAST optimizer candidates bundle) | NEUTRAL | 2026-11-15 | [MOJOLEARN_AFN_OPTIM_ALL.patch](../experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch) |
 | [`MOJOLEARN_AF_FAST_NOFILL_OFF`](#mojolearn_af_fast_nofill_off) | Neural (Apple FAST Adafactor step, x_sequence) | superseded (AF_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_AF_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch) |
 | [`MOJOLEARN_LN_FAST_NOFILL_OFF`](#mojolearn_ln_fast_nofill_off) | Neural (Apple FAST LayerNorm, x_sequence) | superseded (LN_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_LN_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_PIPE_UP_OFF`](#mojolearn_seq_fast_pipe_up_off) | Neural (Apple FAST x_sequence executor uploads) | superseded (SEQ_FAST_PIPE_UP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5935,3 +5936,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/ops_impl.mojo.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `3004379441`.
 - Restore: `git apply experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_PIPE_UP_OFF
+
+- Tried: the rollback of `SEQ_FAST_PIPE_UP` in `sequence/exec_device.mojo`: under FAST + Apple, serial upload copies instead of chunked copies whose DMA overlaps the next chunk's copy.
+- Verdict: the pipelined default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_PIPE_UP`, lane/apple-fast-regress @ 93951fafb, M3 regress-layernorm-pipe: layernorm 76.0 -> 52.2 ms with PIPE_DOWN, neutral elsewhere, digests identical). KEPT f6a9e7c04. Apple FAST only.
+- Removed: the `_OFF` term of `SEQ_PIPE_UP`'s FAST + Apple half (now `_SEQ_APPLE_FAST`). The serial upload stays: FAST off Apple and `MOJOLEARN_IDN_SEQ_PIPE_UP_OFF` / `IDN_ALL_OFF` compile it. No bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `eff4ddd2d8`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
