@@ -13,10 +13,10 @@ IVF_FAST_DEVICE_VALIDATE in ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
 and KMEANS_LAZY_SHIFT in cluster/impl/detail/kmeans.mojo (scoped to the IVF
 fits that set `KMeansParams.lazy_shift`) are FAST + Apple
 DEFAULTS since 2026-10-04 (M3 A/B, the `-D MOJOLEARN_VSEARCH_ALL` bundle at
-ad265a028: 9/9 rows faster, recall_at_10 identical); each has a rollback
-define `-D MOJOLEARN_<FLAG>_OFF`. `-D MOJOLEARN_VSEARCH_ALL` is kept as a
-no-op alias (every switch it bundled is a default now; IVF_REFINE_TEAM
-measured neutral and was deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
+ad265a028: 9/9 rows faster, recall_at_10 identical); the rollback defines
+of the two here and the `-D MOJOLEARN_VSEARCH_ALL` bundle were deleted
+2026-11-15 (docs/TOMBSTONES.md; IVF_REFINE_TEAM measured neutral and was
+deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
 they answer is docs/apple-fast/notes/vsearch.md; the record is
 docs/apple-fast/EXPERIMENTS.md."""
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
