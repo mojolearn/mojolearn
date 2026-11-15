@@ -57,8 +57,8 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
         op_ocsvm_alpha_init(cv, alpha, n, oci_nu_hi(nu), oci_nu_lo(nu))
         return 0
     if op == 1:
-        comptime if not XN_UNIT_DEV:
-            raise Error("AttributeError: x_neighbors_unit_ff is not exported by this binding")
+        # TOMBSTONE: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (old path; XN_UNIT_DEV is True; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at bf86b83ff3.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_UNIT_DEV_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
         var v = a[0]
         var res = a[1]
         var info = a[2]

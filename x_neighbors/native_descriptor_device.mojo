@@ -14,7 +14,7 @@ from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
+from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
 
 
