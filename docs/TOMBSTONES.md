@@ -705,6 +705,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C33_CHUNK_4`](#mojolearn_c33_chunk_4-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (dbscan, label-propagation) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C33_CHUNK_4.patch](../experiments/removed/MOJOLEARN_C33_CHUNK_4.patch) |
 | [`MOJOLEARN_C34_PARALLEL_EDGES`](#mojolearn_c34_parallel_edges-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (hdbscan, agglomerative) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C34_PARALLEL_EDGES.patch](../experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.patch) |
 | [`MOJOLEARN_C35_PACKED_LISTS`](#mojolearn_c35_packed_lists-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ivf) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C35_PACKED_LISTS.patch](../experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch) |
+| [`MOJOLEARN_C35_ROWS_128`](#mojolearn_c35_rows_128-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ivf) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C35_ROWS_128.patch](../experiments/removed/MOJOLEARN_C35_ROWS_128.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6820,4 +6821,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d391e6ab95`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch`, then delete the `MOJOLEARN_C35_PACKED_LISTS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C35_ROWS_128: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Knob of the C35 packed-list arm: 128 rows a task instead of 256. The alias `C35_TASK_ROWS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `256` so its readers (ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `54b5cb96f6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C35_ROWS_128.patch`, then delete the `MOJOLEARN_C35_ROWS_128` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

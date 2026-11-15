@@ -149,6 +149,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C34_PARALLEL_EDGES"](), "removed 2026-11-15 (lane/expdel2-05-base): C34_PARALLEL_EDGES (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch
     comptime assert not is_defined["MOJOLEARN_C35_PACKED_LISTS"](), "removed 2026-11-15 (lane/expdel2-05-base): C35_PACKED_LISTS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C35_ROWS_128.patch
+    comptime assert not is_defined["MOJOLEARN_C35_ROWS_128"](), "removed 2026-11-15 (lane/expdel2-05-base): C35_ROWS_128 (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     return True
 
 
