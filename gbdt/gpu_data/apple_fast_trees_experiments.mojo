@@ -25,7 +25,9 @@ comptime AFT_G01 = False
 comptime AFT_G02 = False
 # G03: one leader folds winners per block and broadcasts through shared memory.
 # No performance/quality evidence; preserve original record order and tie rules.
-comptime AFT_G03 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G03"]()
+# TOMBSTONE: MOJOLEARN_AFT_G03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 868b669683.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G03.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G03 = False
 # G04: 512-thread partition reduction, without chunk atomics or extra planes.
 # No performance/quality evidence; FAST reduction order may change.
 comptime AFT_G04 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G04"]()
