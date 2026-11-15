@@ -938,9 +938,11 @@ comptime SGD_CHUNK_DEFAULT = 64
 # the words do not depend on the width: at batch 256 and istella's 220
 # columns the 1,792 dots and 1,776 partials were 7 tasks a thread.
 # `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_CHUNK_WIDE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
-    and not (is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]()
 )
 comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 
@@ -955,7 +957,7 @@ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 # `-D MOJOLEARN_SGD_IDN_MB_FUSE_OFF` restores three launches a batch.
 comptime SGD_IDN_MB_FUSE = (
     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]()
 )
 
 # TOMBSTONE: MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS (removed: never measured, default off; a per-epoch
@@ -1150,7 +1152,7 @@ def sgd_mb_fast_batch_kernel(
 # restores the host walk on Apple only.
 comptime SGD_IDN_DEV_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]()
     and not (TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"]())
 )
 comptime SGD_FIN_RUN = 64
@@ -1368,12 +1370,12 @@ def sgd_mb_chunk_kernel(
 # launch a live problem, and ONE read brings every problem's stop words
 # home. Each problem's statements are the sequential driver's on its own
 # words: NO BIT MOVES, the host column is untouched.
-# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
+# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` restores
 # the sequential problems.
 comptime SGD_IDN_OVR_PAR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not (is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]()
 )
 #: `cf` words a problem (`_sgd_mb_chunk_kernel_body`'s nine)
 comptime SGD_OVR_CF = 9
@@ -2942,7 +2944,7 @@ def _sgd_ps_simd_body(
 # as the block form and the host's `sgd_one`: no bit moves.
 comptime SGD_IDN_PS_WARP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
-    and not (is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]()
 )
 
 

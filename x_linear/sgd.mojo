@@ -968,11 +968,13 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
 # float-float explicit step (sample weights, or no intercept), 2 the
 # implicit step. New bits for the one-class minibatch on every column
 # (host `sgd_mb_one` and every device driver take the same `ocm`).
-# `-D MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores
+# `-D MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF` restores
 # the explicit single-word step. IDENTICAL only (FAST keeps its form).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
 comptime SGD_OC_MB_IMPLICIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"]()
 )
 
 # fix-l1-linear (lane/neural-pass139's default): SGDOneClassSVM's default
@@ -985,7 +987,7 @@ comptime SGD_OC_MB_IMPLICIT = (
 # restores the per-sample default. An explicit batch_size is always kept.
 comptime SGD_OC_IDN_MB_DEFAULT = (
     SGD_OC_MB_IMPLICIT
-    and not (is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]()
 )
 
 

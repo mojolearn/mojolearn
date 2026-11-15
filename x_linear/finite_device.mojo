@@ -13,8 +13,7 @@ walk's (exponent all ones = NaN or infinity), the error text is the
 binding's, X is named before y. One witness-guarded unit: the flags are
 rebuilt from inputs the launches do not write, so a cut Apple launch reruns.
 
-`-D MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF` (or the master
-`MOJOLEARN_IDN_ALL_OFF`) restores the binding's host walk on every vendor.
+`-D MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF` restores the binding's host walk on every vendor.
 No bit moves: the check reads, it does not compute a fitted word.
 """
 
@@ -26,9 +25,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops import FP, IP, ld, sti
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
 comptime XLIN_IDN_DEV_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF"]()
 )
 comptime XF_TPB = 256
 #: words one thread tests
