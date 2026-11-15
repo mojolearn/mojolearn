@@ -49,7 +49,7 @@ def native_scalar_buffer(value: PythonObject) raises -> NativeScalarBuffer:
     return native_scalar_buffer_dtype(value, value.dtype)
 
 
-def native_scalar_buffer_bytes(value: PythonObject, width: Int) raises -> Array[UInt8, 32]:
+def native_scalar_buffer_bytes(value: PythonObject, width: Int) raises -> List[UInt8]:
     """Copy one exact admitted scalar's public buffer into fixed private bytes.
 
     Numeric and temporal metadata share this UNPACK. No element protocol or
@@ -63,10 +63,15 @@ def native_scalar_buffer_bytes(value: PythonObject, width: Int) raises -> Array[
     # strides but never requests the unsupported PEP3118 spelling.
     # Allocate both owners before acquisition. Every successful export is
     # released on all error paths; fixed private bytes outlive both decodes.
-    # Fixed-size stack storage (N197): ten Py_buffer words and at most 32
-    # scalar bytes (width is checked above), so no heap List per decode.
-    var view = Array[Int, 10](fill=0)
-    var bytes = Array[UInt8, 32](fill=UInt8(0))
+    # Native List storage, as every other Py_buffer caller and the
+    # py_cpython_table contract use (smoke-triage 2026-11-15): the N197
+    # `Array[Int, 10]` / `Array[UInt8, 32]` stack form made every exact NumPy
+    # scalar of every width fail the len/itemsize check below on the CPU wheel
+    # (19 test files, 487 cases, "numeric scalar decoding requires one primitive
+    # buffer element"): CPython's writes did not reach the words read back.
+    # Two small allocations per admitted scalar; no caller loops over rows.
+    var view = List[Int](length=10, fill=0)
+    var bytes = List[UInt8](length=32, fill=UInt8(0))
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()

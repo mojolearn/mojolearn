@@ -40,6 +40,21 @@ MEM_PER_WORKER_MB = 2048
 #: pytest: no test collected. A test file whose tests are all deselected is not a failure.
 PYTEST_NO_TESTS = 5
 
+#: ENVIRONMENT, not a fault (smoke-triage 2026-11-15): public modules that cannot import on this CPU-only Linux
+#: install by design, each with the EXACT refusal its log must carry. A unit is marked `env` (listed in SUMMARY.txt,
+#: not failed) only when it exits nonzero AND its log matches; any other failure of the same module stays a failure.
+#: - adapters.max / adapters.torch: optional dependencies (`mojolearn[max]`, `mojolearn[torch]`) that the smoke
+#:   venv does not install; the adapter refuses by name.
+#: - linalg_fast: the Apple `fast` BF16 face (AGENTS.md: `fast` is Apple only); no host binding exports
+#:   fast_bf16_available, so the import refuses with NoCpuEntry by name.
+IMPORT_ENVIRONMENT = {
+    "mojolearn.adapters.max": (r"ImportError: mojolearn\.adapters\.max needs MAX\.", "optional dependency MAX absent"),
+    "mojolearn.adapters.torch": (r"ImportError: mojolearn\.adapters\.torch needs (PyTorch|torch)",
+                                 "optional dependency torch absent"),
+    "mojolearn.linalg_fast": (r"NoCpuEntry: mojolearn: no CPU implementation of _mojolearn_linalg\.fast_bf16_available",
+                              "Apple fast only; no CPU column"),
+}
+
 
 def cores():
     try:
@@ -113,8 +128,10 @@ def run_unit(argv, log, cwd, env, timeout):
     return rc, None, seconds, peak
 
 
-def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=()):
-    """units: [(unit name, argv)]. Runs the parallel units across the planned workers, then `serial` ones alone."""
+def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=(), environment=None):
+    """units: [(unit name, argv)]. Runs the parallel units across the planned workers, then `serial` ones alone.
+    environment: {unit: (regex, reason)}; a failing unit whose log matches its regex is status `env`, not failed."""
+    environment = environment or {}
     out = Path(args.out) / name
     logs = out / "logs"
     logs.mkdir(parents=True, exist_ok=True)
@@ -128,6 +145,11 @@ def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=()):
         rc, status, seconds, peak = run_unit(argv, logs / f"{safe}.log", cwd, env, timeout)
         status = status or ("timeout" if rc == 124 else "ok" if rc in ok_codes else
                             "crash" if rc < 0 else "failed")
+        expected = environment.get(uname)
+        if status != "ok" and expected is not None:
+            text = (logs / f"{safe}.log").read_text(errors="replace")
+            if re.search(expected[0], text):
+                status = "env"
         results[uname] = (rc, status, seconds, peak, f"logs/{safe}.log")
         if status != "ok":
             print(f"  {status.upper()} {uname} rc={rc} ({seconds:.0f}s)", flush=True)
@@ -143,7 +165,8 @@ def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=()):
         for u in order:
             rc, status, seconds, peak, log = results[u]
             fh.write(f"{u}\t{rc}\t{status}\t{seconds:.1f}\t{'-' if peak is None else f'{peak:.0f}'}\t{log}\n")
-    failed = [u for u in order if results[u][1] != "ok"]
+    failed = [u for u in order if results[u][1] not in ("ok", "env")]
+    marked = [u for u in order if results[u][1] == "env"]
     (out / "FAILED.txt").write_text("".join(f"{u}\t{results[u][1]}\trc={results[u][0]}\t{results[u][4]}\n"
                                             for u in failed))
     peaks = [results[u][3] for u in order if results[u][3] is not None]
@@ -156,6 +179,9 @@ def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=()):
     if not order:
         line += " (NO UNITS: nothing ran, which is a failure)"
     summary(args.out, line)
+    if marked:
+        summary(args.out, f"  {name} environment (not failures): "
+                + ", ".join(f"{u} ({environment[u][1]})" for u in marked))
     if failed:
         summary(args.out, f"  {name} failed: " + ", ".join(failed[:200])
                 + (f" ... (+{len(failed) - 200}, see {name}/FAILED.txt)" if len(failed) > 200 else ""))
@@ -204,7 +230,7 @@ def cmd_imports(args):
     units = [(n, [args.python, "-I", "-c",
                   f"import importlib, mojolearn; importlib.import_module({n!r}); "
                   f"print({n!r}, 'ok', mojolearn.__version__, mojolearn.vendor())"]) for n in names]
-    return run_pool("imports", units, args, cwd, child_env(), args.timeout)
+    return run_pool("imports", units, args, cwd, child_env(), args.timeout, environment=IMPORT_ENVIRONMENT)
 
 
 def cmd_lanes(args):

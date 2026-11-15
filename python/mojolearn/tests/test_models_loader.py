@@ -41,7 +41,6 @@ from mojolearn.tests import _bpe_trainer
 from mojolearn import _tokenizer_synthetic as syn
 from mojolearn.models import (CausalLM, Checkpoint, HFConfig, SafetensorsFile, Tokenizer,
                               UnsupportedModel, plan_for)
-from mojolearn.models import causal_lm as _cl
 from mojolearn.models import tokenizer as _tk
 from mojolearn._causal_lm_fixtures import write_safetensors
 from mojolearn._tokenizer_synthetic import byte_to_char as _byte_to_char
@@ -358,11 +357,25 @@ def test_refusals_name_the_model_type_field_and_value(cfg, words):
 # product path called (bindings/causal_lm_construct_door.mojo builds the block options).
 
 
-def test_greedy_argmax_ties_go_to_the_lowest_index():
-    logits = Array.from_list([[[0.0, 1.0, 1.0, -1.0], [2.0, 2.0, 2.0, 2.0]],
-                              [[5.0, 5.0, 6.0, 6.0], [-1.0, -3.0, -1.0, -2.0]]], "<f4")
-    assert _cl._argmax_last(logits, 2, 2, 4).tolist() == [0, 0]
-    assert _cl._argmax_last(logits.reshape((4, 1, 4)), 4, 1, 4).tolist() == [1, 0, 2, 0]
+# test_greedy_argmax_ties_go_to_the_lowest_index DELETED (smoke-triage, 2026-11-15):
+# it exercised the Python `causal_lm._argmax_last`, deleted by 0e718fef73 (greedy
+# decoding is native, bindings/causal_lm_public_door.mojo). The loading test below
+# holds generate to the stateful path through the test-side oracle `_argmax_last`.
+
+
+def _argmax_last(logits, b, t, v):
+    """Test oracle: per batch row, the lowest index of the maximum logit at the
+    last position (a sequential strict-greater scan, the native greedy rule)."""
+    rows = logits.reshape((b, t, v)).tolist()
+    out = []
+    for row in rows:
+        last = row[t - 1]
+        best = 0
+        for i in range(1, v):
+            if last[i] > last[best]:
+                best = i
+        out.append(best)
+    return out
 
 
 # ------------------------------------------------------------- loading
@@ -392,11 +405,11 @@ def test_load_llama_checkpoint_shapes_names_and_greedy_generate_is_deterministic
         # and it is the stateful path token by token
         state = lm.allocate_state(2, 9)
         lg = lm.forward(ids, state)
-        nxt = _cl._argmax_last(lg, 2, 5, 64).tolist()  # an int32 (b,) Array since cpu4-python
+        nxt = _argmax_last(lg, 2, 5, 64)
         assert nxt == [row[5] for row in a.tolist()]
         step = lm.step(Array.from_list([[v] for v in nxt], "<i4"), state)
         assert step.shape == (2, 64) and state.positions == 6
-        assert _cl._argmax_last(step.reshape((2, 1, 64)), 2, 1, 64).tolist() == [row[6] for row in a.tolist()]
+        assert _argmax_last(step.reshape((2, 1, 64)), 2, 1, 64) == [row[6] for row in a.tolist()]
         with pytest.raises(ValueError, match="max_positions"):
             lm.generate(ids, 200)
         with pytest.raises(ValueError, match=r"\[0, 64\)"):

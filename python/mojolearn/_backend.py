@@ -1993,6 +1993,16 @@ def _select_cpu_only(pkg, mode, reason):
     return _SELECTED
 
 
+def exact_host_module(binding):
+    """The exact compiled module behind `binding`: on a CPU-only install the
+    host extension a `_HostBinding` facade forwards to, otherwise `binding`
+    itself. Import-time connection only (native provider admission takes an
+    exact module that owns its entries); never called per operation."""
+    if type(binding) is _HostBinding and _CPU_ONLY is not None:
+        return load_host_module(vars(binding)["_HostBinding__basename"])  # import-time: import connection of an explicitly selected CPU-only binding
+    return binding
+
+
 def _cpu_only_binding(name, requested):
     """`binding()` on a CPU-only install: the module `_select_cpu_only`
     installed under the canonical name, IDENTICAL only. A tier other than

@@ -3995,7 +3995,10 @@ def _lbpy_pow2_f32(e):
         return math.inf
     if e < -126:
         return 0.0
-    return math.ldexp(1.0, e)
+    # Exact powers of two from Python ints (2**-126 is a normal double, so the
+    # division is exact); `_portable_math.ldexp` was deleted by 3db84bb031 and
+    # the lowbit-conversions lane raised AttributeError (smoke-triage 2026-11-15).
+    return float(1 << e) if e >= 0 else 1.0 / float(1 << -e)
 
 
 def _lbpy_to_bf16(a):

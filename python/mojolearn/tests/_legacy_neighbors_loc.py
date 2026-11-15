@@ -6,6 +6,7 @@ as subclasses so the tests compare the native door with them bit for bit.
 Test-only oracle; never imported by the package."""
 import os
 
+import math as _stdmath  # test oracle: isclose (deleted from _portable_math by 3db84bb031)
 from mojolearn import _portable_math as math
 from mojolearn._array import Array
 from mojolearn._buffer import addr, addr_ro, empty
@@ -99,7 +100,7 @@ class LegacyNearestCentroid(NearestCentroid):
             if any(p < 0 for p in prior):  # glue: user priors argument checks
                 raise ValueError("priors must be non-negative")
             tot = math.fsum(prior)  # glue: the native fsum (core fsum_f64) of the user priors argument
-            if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
+            if not _stdmath.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
                 prior = [p / tot for p in prior]  # glue: the user priors argument rescaled to sum one (k sized)
         self.class_prior_ = Array.from_list(prior, "<f8")
         if self.metric == "euclidean":
@@ -170,7 +171,7 @@ class LegacyNearestCentroid(NearestCentroid):
 
     def _uniform(self):
         C = len(self.classes_)
-        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
+        return all(_stdmath.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
 
     def predict(self, X):
         """Predict the class of each sample.

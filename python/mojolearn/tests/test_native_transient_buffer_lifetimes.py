@@ -13,7 +13,7 @@ def _debug_process(body):
     # it exposes a lost owner even when the normal allocator reuses its bytes
     # in a way that happens to leave a plausible numeric value.
     env = dict(os.environ, PYTHONMALLOC="debug", MOJOLEARN_NUMERIC_MODE="identical")
-    source = str(Path(__file__).resolve().parents[2])
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT as source  # the runtime this process imported
     env["PYTHONPATH"] = source + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     result = subprocess.run(
         [sys.executable, "-X", "faulthandler", "-c", textwrap.dedent(body)],

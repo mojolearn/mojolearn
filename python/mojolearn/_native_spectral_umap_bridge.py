@@ -42,6 +42,17 @@ def _capture(binding, name, symbols):
         if type(entry) is not BuiltinFunctionType:
             raise TypeError(f"{name}.{symbol} must be a compiled entry")
         setattr(module, symbol, entry)
+    # The UMAP owner reads the image's UMAP table key from the module it is
+    # handed (bindings/mani_umap_native_door.mojo `_umap_check_mode`); the
+    # binding records it at PyInit. The captured route carries it too, or every
+    # UMAP fit/transform refused "publishes no native UMAP table"
+    # (smoke-triage 2026-11-15: lanes umap, x-decomp-umap-options; 5 test files).
+    try:
+        key = getattr(binding, "umap_native_key")
+    except (AttributeError, ImportError):
+        key = None
+    if type(key) is tuple:
+        module.umap_native_key = key
     return module
 
 
@@ -63,10 +74,7 @@ def _host_owner(binding):
     # refuses it. Resolve the facade to its exact host module at import, as
     # _native_family_bridge.connect_bindings does.
     from . import _backend
-    if type(binding) is _backend._HostBinding and _backend._CPU_ONLY is not None:
-        basename = vars(binding)["_HostBinding__basename"]
-        return _backend.load_host_module(basename)  # import-time: import connection of an explicitly selected CPU-only binding
-    return binding
+    return _backend.exact_host_module(binding)
 
 
 def connect():
