@@ -86,25 +86,25 @@ def _targets() -> Tuple[List[Float32], List[Float32], List[Float32]]:
     return (x^, yr^, codes_as_words(c3))
 
 
-def _case_model(case: Int) raises -> SeqModel:
+def _case_model(which: Int) raises -> SeqModel:
     var m = SeqModel()
-    if case == 0:
+    if which == 0:
         m.linear(8)
         m.act(L_TANH)
         m.linear(1)
         m.compile(LOSS_MSE, "adam", 0.02, sched=1, step_size=1, gamma=0.7)
-    elif case == 1 or case == 6:
+    elif which == 1 or which == 6:
         m.linear(8)
         m.act(L_RELU)
         m.linear(3)
         m.compile(LOSS_CROSS_ENTROPY, "momentum", 0.05, nesterov=True)
-    elif case == 2:
+    elif which == 2:
         m.linear(6)
         m.layer(L_LAYER_NORM, f=1e-5)
         m.act(L_RELU)
         m.linear(1)
         m.compile(LOSS_HUBER, "adamw", 0.01, weight_decay=0.01, sched=2, gamma=0.9)
-    elif case == 3:
+    elif which == 3:
         m.linear(4)
         m.act(L_SIGMOID)
         m.linear(1)
@@ -117,12 +117,12 @@ def _case_model(case: Int) raises -> SeqModel:
     return m^
 
 
-def _batch(case: Int) -> Int:
-    if case == 0:
+def _batch(which: Int) -> Int:
+    if which == 0:
         return 32
-    if case == 1 or case == 6:
+    if which == 1 or which == 6:
         return 25
-    if case == 2:
+    if which == 2:
         return 40
     return 30
 
@@ -157,7 +157,7 @@ def run_sequential_case[E: Exec](mut ex: E, column: String, unit: Int) raises:
         _ = straight.fit(ex, x, _N, _D, y, 1, target, 4, _batch(unit), shuffle, 7)
         var first = _case_model(unit)
         _ = first.fit(ex, x, _N, _D, y, 1, target, 2, _batch(unit), shuffle, 7)
-        var path = _path(column, "case" + String(unit))
+        var path = _path(column, "which" + String(unit))
         var again = _case_model(unit)
         try:
             _ = first.save(path, _D, False)
@@ -216,7 +216,7 @@ def run_sequential_case[E: Exec](mut ex: E, column: String, unit: Int) raises:
         require(rest.n_iter == straight.n_iter, "the resumed early stop ends where the straight one does")
         require(same_words(rest.params, straight.params), "the resumed early stop's parameters")
     else:
-        require(unit == 6, "unknown save/resume case")
+        require(unit == 6, "unknown save/resume which")
         var c = _case_model(6)
         _ = c.fit(ex, x, _N, _D, y3, 1, TARGET_CODES, 3, 25, -1, 0)
         var path = _path(column, "clf")
@@ -302,7 +302,7 @@ def run_session_case[E: Exec & Movable & Deinitable, KIND: Int](column: String, 
             raise error
         ops_session_close[E, KIND](lid)
         return
-    require(unit == 1, "unknown session case")
+    require(unit == 1, "unknown session which")
     var xv = normal(128, 80)
     var yv = normal(64, 81)
     var w0 = normal(8, 82)
@@ -371,7 +371,7 @@ def _run_cpu(mut report: Report) raises:
 
 
 # ---- The device column ----
-# Every case runs in order on the one device.
+# Every which runs in order on the one device.
 def _run_gpu(mut report: Report) raises:
     var ex = DeviceExec()
     var seq = report.cases(SEQ_CASES)
