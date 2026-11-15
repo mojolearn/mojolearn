@@ -200,7 +200,7 @@ comptime C19_SGD_CHUNK = 2048
 # (Sweep 2026-11-15: comptime C20_PAIR_LOAD removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C21_EXTREMA (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 9aca9aa819.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch; record in docs/TOMBSTONES.md.
-comptime C21_EXTREMA = False
+# (Sweep 2026-11-15: comptime C21_EXTREMA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C22_TRIANGLE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 45379ff055.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch; record in docs/TOMBSTONES.md.
 comptime C22_TRIANGLE = False
