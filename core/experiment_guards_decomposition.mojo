@@ -113,6 +113,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): XD_FAST_GRP_FUSED_OFF (FAST+Apple rollback to the two-wait DEVSCAN random projection fit with separate rand and scale launches) is gone; the one-call one-synchronize fit is the FAST+Apple path (gaussian-rp taxi 3.4 -> 2.1 ms, sparse-rp taxi -10.7%, istella -8.5%, distortion identical); restore: experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_JACOBI_ROUND_ROBIN_OFF (rollback of the linear models' eig routes to the one-block cyclic Jacobi) is gone; the round-robin Jacobi is the IDENTICAL path"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_COLVAR_FUSED_OFF (rollback of the TruncatedSVD column variance to the shift + square passes) is gone; the fused tile fold is the only form"
     return True
 
 
