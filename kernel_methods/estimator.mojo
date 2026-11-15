@@ -166,10 +166,9 @@ from x_decomp.jacobi_par import (
 # Restore: git apply experiments/removed/MOJOLEARN_RBF_FUSED.patch; record in docs/TOMBSTONES.md.
 
 
-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_RBF_FUSED_OFF` restores the GEMM on the device AND in
-#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED` reads the same
-#: define): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default (FAST keeps the GEMM;
+#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED`, follows the same
+#: gate): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
 #: the projection as ONE chain per cell over the features ascending
 #: (`identical_mul_add`, rounded each step) and, when no trace and no
 #: sabotage arm needs the projection as its own stage, the offset, cosine
@@ -182,9 +181,9 @@ from x_decomp.jacobi_par import (
 #: as accurate as the GEMM's fold at that length.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
-comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_RBF_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at f2f200fc1b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL
 
 
 def _rbf_idn_fused_launch(
