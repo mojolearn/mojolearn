@@ -291,6 +291,18 @@ comptime SYM_FUSED_SCAN = not is_defined["MOJOLEARN_GBDT_FUSED_SCAN_OFF"]()
 comptime SYM_FUSED_SPLIT = not is_defined["MOJOLEARN_GBDT_FUSED_SPLIT_OFF"]()
 comptime SYM_FUSED_COPY = not is_defined["MOJOLEARN_GBDT_FUSED_COPY_OFF"]()
 
+#: lane fix-lossguide-fit (2026-11-15), `-D MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF`
+#: (default OFF, every vendor and the host build): the B arm that restores the
+#: whole-buffer zero of the histogram scratch at every non-fixed-point block of
+#: every histogram build (`launch_histograms_for_blocks`). Default: the zero
+#: covers the block's own span `max_leaves x stat_count x total_folds`. Bits:
+#: none. NOT MEASURED; owed row `lg-block-scratch-fill` (NVIDIA L40S,
+#: gbdt-lossguide istella/taxi plus year and covtype, a non-board dataset and a
+#: neighbouring width); the loser goes.
+comptime BLOCK_SCRATCH_FILL_OFF = is_defined[
+    "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF"
+]()
+
 
 def compute_target_std_dev(
     ctx: DeviceContext,
@@ -3316,7 +3328,38 @@ def launch_histograms_for_blocks[
             run_fixed_bridge and blk.policy == POLICY_ONE_BYTE
         )
         if not scratch_dead:
-            enqueue_fill(ctx, block_hist, Float32(0.0))
+            # lane fix-lossguide-fit (2026-11-15): THE ZERO COVERS THIS
+            # BLOCK'S SPAN, NOT THE POOL. `block_hist` is allocated once per
+            # fit at (pool leaf slots) x stat_count x (WIDEST block's folds)
+            # (`TTreeWorkspace.block_cells`), so the whole-buffer zero cost
+            # every binary / half-byte block, at every histogram build, the
+            # one-byte block's width times the pool's slots: per build
+            # 4 x slots x stat_count x W_widest bytes for a block whose
+            # kernels touch slots x stat_count x W_block cells
+            # (`block_cells` above: the kernels stride by `max_leaves`, and
+            # `group_offset + group_size <= total_folds`). Their
+            # `ZeroBuffer` is a whole-buffer memset of a scratch SIZED BY
+            # THE BLOCK'S OWN MAPPING (`split_properties_helper.cpp:1157`),
+            # which is this span; the cells past it are never written and
+            # never read (the bridge and the writeback read
+            # `n_live x stat_count x total_folds <= block_cells`). Cost
+            # reasoning, no shape test: the saving is
+            # 4 x slots x stat_count x (W_widest - W_block) bytes per
+            # non-widest block per build, any width; nothing grows. Bits:
+            # none (every cell a kernel reads holds the same zero).
+            # `-D MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF` restores the
+            # whole-buffer zero (B arm, owed row `lg-block-scratch-fill`).
+            comptime if BLOCK_SCRATCH_FILL_OFF:
+                enqueue_fill(ctx, block_hist, Float32(0.0))
+            else:
+                var fill_cells = block_cells
+                if fill_cells > len(block_hist):
+                    fill_cells = len(block_hist)
+                if fill_cells > 0:
+                    var scratch_span = block_hist.create_sub_buffer[
+                        DType.float32
+                    ](0, fill_cells)
+                    enqueue_fill(ctx, scratch_span, Float32(0.0))
 
         if blk.policy == POLICY_BINARY:
             # ================= DEVIATION 1947 =================
