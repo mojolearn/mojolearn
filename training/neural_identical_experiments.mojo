@@ -71,8 +71,16 @@ comptime IDN_CE_DENOM_ROWFOLD = False
 # 2 = NN62 byte-LM lifetime arena (training/neural_ab_lifetime.mojo), 3 = both.
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH (arms 1-3, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch
-comptime IDN_TRAIN_SCRATCH_ARM = 0
-comptime IDN_TRAIN_BACKWARD_SCRATCH = False
+# Markers moved from the deleted training/neural_ab_lifetime.mojo (sweep 2026-11-15):
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH (arms 2 and 3, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN64_SESSION_PACK (removed: its only caller, the mlp_sessions entry, is deleted; the inference sessions run packed as one forward of the SmallMLPTrainer program) and nn_session_move_kernel / nn_session_move_into (no caller) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
+# (Sweep 2026-11-15: IDN_TRAIN_SCRATCH_ARM = 0 and IDN_TRAIN_BACKWARD_SCRATCH = False removed (no reader), and
+# training/neural_ab_lifetime.mojo deleted: NN62_LIFETIME_ARENA, NeuralLiveRange and the always-refusing
+# NeuralLifetimeArena had no importer.)
 # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # (NI35 256-token tree v2; bytes lm-forward NV/AMD 0.99x/1.01x, lm-train-step 1.01x/1.00x, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
