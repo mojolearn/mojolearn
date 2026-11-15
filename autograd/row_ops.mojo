@@ -23,9 +23,8 @@
 # Gated on IDENTICAL like SEQ_LN_COOP: an Apple FAST build keeps today's
 # rows until a FAST A/B decides.
 #
-# IDEA I, MOJOLEARN_IDN_AUC_BLOCK_SORT (default on, identical: same network,
-# same pairs, same stage order; -D MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF or
-# MOJOLEARN_IDN_ALL_OFF restores one launch per stage). roc_auc ran one
+# IDEA I, the AUC block sort (the only route; identical: same network,
+# same pairs, same stage order as one launch per stage). roc_auc ran one
 # OP_LS_BITONIC launch per (k, j) stage: 53 / 86 / 145 launches at n 512 /
 # 4096 / 65536, all at the launch floor (205 / 318 / 565 us NV, 192 / 361 /
 # 714 AMD). OP_ROW_BITONIC_BLOCK runs every stage whose partner distance is
@@ -54,9 +53,9 @@ comptime ROW_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (is_defined["MOJOLEARN_IDN_ROW_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
-comptime AUC_BLOCK_SORT = not (
-    is_defined["MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural; code recoverable at fe0b691d9b. The block sort is the only route (autograd/metrics.mojo).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch
 
 #: slots of a row fold (the coop cell's lanes; sequence/coop.mojo asserts
 #: COOP_W == ROW_L)

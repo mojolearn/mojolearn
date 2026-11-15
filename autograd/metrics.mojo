@@ -20,7 +20,7 @@ from autograd.loss_ops import (
 )
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr
-from autograd.row_ops import AUC_BLOCK_SORT, OP_ROW_BITONIC_BLOCK, ROW_SORT_BLOCK
+from autograd.row_ops import OP_ROW_BITONIC_BLOCK, ROW_SORT_BLOCK
 from checks.numerics import identical_div
 
 # Counts and indices travel as float values: exact below 2^24.
@@ -267,30 +267,24 @@ def roc_auc[E: Exec](mut ex: E, y_true: FP, scores: FP, n: Int) raises -> Float3
     a.p3 = labels
     a.i0 = n
     ex.launch[OP_LS_PACK](a, padded)
-    comptime if AUC_BLOCK_SORT:
-        # the stages with a partner distance below the block run inside
-        # blocks of `block` elements (autograd/row_ops.mojo idea I): one
-        # launch for every merge size up to the block, then per larger merge
-        # size its cross-block stages and one block launch; the same network
-        var block = min(padded, ROW_SORT_BLOCK)
-        var nblocks = padded // block
-        _sort_blocks(ex, keys, labels, 2, block, block, nblocks)
-        var k = 2 * block
-        while k <= padded:  # driver-loop: over sort network merge sizes
-            var j = k // 2
-            while j >= block:  # driver-loop: over the network's cross-block stages
-                _bitonic_stage(ex, keys, labels, padded, k, j)
-                j //= 2
-            _sort_blocks(ex, keys, labels, k, k, block, nblocks)
-            k *= 2
-    else:
-        var k = 2
-        while k <= padded:  # driver-loop: over sort network merge sizes
-            var j = k // 2
-            while j > 0:  # driver-loop: over sort network stages
-                _bitonic_stage(ex, keys, labels, padded, k, j)
-                j //= 2
-            k *= 2
+    # the stages with a partner distance below the block run inside
+    # blocks of `sort_block` elements (autograd/row_ops.mojo idea I): one
+    # launch for every merge size up to the block, then per larger merge
+    # size its cross-block stages and one block launch; the same network
+    # TOMBSTONE: MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF (one launch per stage, old path, no A/B recorded) deleted
+    # 2026-11-15 by lane/expdel2-24-neural; code recoverable at fe0b691d9b.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch
+    var sort_block = min(padded, ROW_SORT_BLOCK)
+    var nblocks = padded // sort_block
+    _sort_blocks(ex, keys, labels, 2, sort_block, sort_block, nblocks)
+    var k = 2 * sort_block
+    while k <= padded:  # driver-loop: over sort network merge sizes
+        var j = k // 2
+        while j >= sort_block:  # driver-loop: over the network's cross-block stages
+            _bitonic_stage(ex, keys, labels, padded, k, j)
+            j //= 2
+        _sort_blocks(ex, keys, labels, k, k, sort_block, nblocks)
+        k *= 2
     # exclusive positive counts in blocks of the fold's length rule
     var block = ag_fold_block(n)
     var blocks = (n + block - 1) // block
