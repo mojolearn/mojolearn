@@ -27,7 +27,6 @@ from core.multi_gpu import peer_clone
 from core.step_phase import STEP_PHASE_TIMERS
 from svm.impl.distance.kernel_matrices import (
     kernel_op,
-    kernel_op_takes_triangle,
     kernel_workspace_floats,
 )
 from svm.impl.svm_parameter import KERNEL_RBF, KernelParams
@@ -52,9 +51,10 @@ def kernel_matrix_dispatch(
     Same buffers and postcondition as `kernel_op`: `output[m x n] = K(a_i,
     b_j)`, row-major. ASYNCHRONOUS on one device; the sharded form
     synchronizes before it returns."""
-    # The old branch sat after kernel_op's empty-shape return and its C22
-    # triangle, so both still answer first whatever the plan says.
-    if plan.single() or m <= 0 or n <= 0 or kernel_op_takes_triangle(kp, a, b, m, n):
+    # The old branch sat after kernel_op's empty-shape return, so it still
+    # answers first whatever the plan says.
+    # (Sweep 2026-11-15: the always-False kernel_op_takes_triangle test (C22 triangle, MOJOLEARN_CLASSICAL_C22_TRIANGLE) removed.)
+    if plan.single() or m <= 0 or n <= 0:
         kernel_op(ctx, kp, output, a, b, m, n, k, norm_a, norm_b, ws)
         return
     var count = Int(plan.setting)
