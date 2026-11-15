@@ -52,7 +52,7 @@ from checks.vendor import COMPILED_VENDOR
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch
 from training.byte_lm_afn import BYTE_LM_FAST_APPLE, afn_upload_ids
 from training.checkpoint import Checkpoint
-from training.byte_lm_config import ByteConfig
+from training.byte_lm_config import ByteConfig, BYTE_LM_PROGRAM_STEP
 from training.checks.train_loop import (
     _zeros, _zeros_i32, _upload, _ones, _copy_into, download_f32,
 )
@@ -110,7 +110,15 @@ from autograd.kernels.transformer import (
 # The hand step's backward (loss, head, every layer, embedding) runs on one
 # autograd tape (autograd/rules_lm.mojo).
 from autograd.rules_lm import byte_backward_autograd, byte_lm_tape_eligible
+# Lane x7: the program step (the B arm, -D MOJOLEARN_BYTE_LM_PROGRAM_STEP):
+# every step, gradient, update and evaluation on the trainer's captured
+# program (embedding, OPS_ATTN_STEP per layer, head, cross-entropy;
+# Program.fit for the steps).
 from sequence.ops import FP
+from training.byte_lm_program import (
+    ByteDeviceProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
+    byte_program_eval, byte_program_gradient, byte_program_grad_out, byte_program_apply,
+)
 from transformer.impl.llama.fused_attention import (
     ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER,
 )
@@ -214,6 +222,12 @@ comptime BYTE_LM_RELEASE_EAGER = byte_lm_release_eager_for[TARGET_COLUMN]()
 # 2026-11-15 by lane/expdel2-31-neural; code recoverable at 578fb1af7e. The aliased buffers are the only spelling;
 # byte_lm_ce_aliased() stays as the witness the binding exports and returns True.
 # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_CE_UNALIASED.patch
+# lane restore-byte-lm-hand-step (2026-11-13): the B arm of the restored hand
+# step (see "the hand step (default)" below). A/B arm (default off): every
+# step, gradient, update and evaluation of the trainer on its captured program
+# (lane x7) instead of the hand step. The switch is defined once in
+# training/byte_lm_config.mojo (BYTE_LM_PROGRAM_STEP) so the CPU column reads
+# the same one (lane restore-byte-lm-host-step).
 """DEVIATION 3011: the five `[M, V]` cross-entropy buffers are aliased views
 (the unaliased B arm was deleted 2026-11-15, see the TOMBSTONE above)."""
 
@@ -933,6 +947,11 @@ struct ByteTrainer(Movable):
     var grad_step: Int
     # Diagnostic reach witness; counts successful live-status optimizer checks.
     var live_status_steps: Int
+    var program: Optional[ByteDeviceProgram]
+    """Lane x7: the trainer's captured program (training/byte_lm_program.mojo),
+    opened by the first step, gradient or evaluation."""
+    var program_synced: Bool
+    """Whether the program's tensors hold the committed flat state."""
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
                  initial_m: List[Float32], initial_v: List[Float32],
@@ -957,6 +976,8 @@ struct ByteTrainer(Movable):
         self.released_eager_cells = 0
         self.grad_step = -1
         self.live_status_steps = 0
+        self.program = Optional[ByteDeviceProgram]()
+        self.program_synced = False
         # lane/neural-pass43: the session's buffers carved from arena chunks
         # (core/device_arena.mojo) between here and `arena_end` below.
         self.arena_id = arena_begin()
@@ -969,12 +990,14 @@ struct ByteTrainer(Movable):
         self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
         for layer in range(config.n_layers):  # driver-loop: over decoder layers
             self.weights.append(_block_weights(ctx, initial_params, layer, config))
-            # The hand step's per-layer training stages. The trace-disabled
+            # The hand step's per-layer training stages (the program step, B
+            # arm, keeps its own in its attention steps). The trace-disabled
             # trainer uses the existing fused attention path. Allocate its
             # quadratic stages lazily; eager/diagnostic fallback still grows
             # them through ensure_*_attention_capacity.
-            self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
-            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
+            comptime if not BYTE_LM_PROGRAM_STEP:
+                self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
+                self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
         arena_end(self.arena_id)
         step_count_sync()
         ctx.synchronize()
@@ -1305,7 +1328,8 @@ def byte_train_steps_resident(ctx: DeviceContext, mut trainer: ByteTrainer, stac
     call's entry state, before the error propagates. The result's loss is
     the last step's.
 
-    k hand steps, step i the bits of the i-th of k single steps."""
+    Default: k hand steps, step i the bits of the i-th of k single steps.
+    Under MOJOLEARN_BYTE_LM_PROGRAM_STEP: ONE Program.fit (lane x7)."""
     _require_profile()
     byte_validate_optimizer(trainer.optimizer)
     if not trainer.healthy:
@@ -1313,6 +1337,21 @@ def byte_train_steps_resident(ctx: DeviceContext, mut trainer: ByteTrainer, stac
     if k < 1 or trainer.completed_steps < 0 or trainer.completed_steps + k > 999999:
         raise Error("byte LM: step bound reached")
     var loss_out = FP(unsafe_from_address=losses)
+    comptime if BYTE_LM_PROGRAM_STEP:
+        trainer.healthy = False
+        trainer.shadow_valid = False
+        trainer.grad_step = -1
+        var program_failed = False
+        var program_message = String("")
+        try:
+            _byte_program_steps(ctx, trainer, stack, k, losses)
+        except error:
+            program_failed = True
+            program_message = String(error)
+        if program_failed:
+            _byte_recover(ctx, trainer, program_message)
+        trainer.healthy = True
+        return ByteLeanResult(loss_out[k - 1], trainer.completed_steps, trainer.buffers.buf_initialized.copy())
     var config = trainer.config.copy()
     var n_ids = config.batch * (config.length + 1)
     if k == 1:
@@ -1398,6 +1437,8 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
     tr.buffers.buf_initialized = tr.buffers.flags_before.copy()
     tr.completed_steps = tr.shadow_step
     tr.grad_step = -1
+    # the program's tensors (B arm) no longer hold the committed state
+    tr.program_synced = False
     try:
         tr.validate_device_state(ctx, tr.completed_steps)
     except lost:
@@ -1414,14 +1455,16 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
 # the L40S and 50.5 ms on the MI325X against 35.5 / 43.9 ms for this step in
 # 0.8.55 / 0.8.66 (~/mojolearn-evidence/measure-candidate/*-4c2340386abc).
 # The hand step is the default again (the 0.8.55 route and its bits on every
-# GPU column). TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (the program step, opt-in
-# B arm, A/B owed and never run) deleted 2026-11-15 by lane/expdel2-31-neural;
-# code recoverable at f0bffede56.
+# GPU column); the program step is the B arm under
+# -D MOJOLEARN_BYTE_LM_PROGRAM_STEP until an A/B on NVIDIA and AMD shows it at
+# least as fast with equal quality (owed row in
+# bench/results/paper_compare/owed-pre0867.json, arm byte-lm-program-step).
 # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch
 # Not restored (their defines stay refused): the IDN_TRAIN_ONE_WAIT step,
 # the AFN_LM_NOSYNC and AFN_LM_HEAD_FUSE arms, IDN_LM_RESIDENT_TOKENS and
 # IDN_PARAM_GRAD_VIEWS; the binding's per-step driver stays deleted (the
 # k steps of one call loop here, `byte_train_steps_resident`).
+# (the switch: BYTE_LM_PROGRAM_STEP, at the top of this module)
 
 
 def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
@@ -1558,17 +1601,150 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
 
 def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
                       ids: List[Int32], resident: Bool = False) raises -> Float32:
-    """One training step: the hand step's gradient and update. `resident`
+    """One training step: the hand step's gradient and update (default),
+    or one Program.fit step under MOJOLEARN_BYTE_LM_PROGRAM_STEP. `resident`
     is kept for the callers' signature (both paths are the same step)."""
     _ = resident
+    comptime if BYTE_LM_PROGRAM_STEP:
+        var one = List[Float32](length=1, fill=Float32(0))
+        _byte_program_steps(ctx, tr, Int(ids.unsafe_ptr()), 1, Int(one.unsafe_ptr()))
+        return one[0]
     var loss = byte_gradient_device(ctx, tr, ids)
     byte_update_device(ctx, tr)
     return loss
 
+# ---------------------------------------------------------------- the program step (B arm)
+# Lane x7-byte-lm-on-executor (2026-11-09; plan EXECUTOR_CONSOLIDATION_AND_CLEANUP row X7),
+# compiled in only under -D MOJOLEARN_BYTE_LM_PROGRAM_STEP since 2026-11-13:
+# every step, gradient, update and evaluation of the trainer runs on the
+# trainer's captured program (training/byte_lm_program.mojo): the forward is
+# the embedding, one OPS_ATTN_STEP per decoder layer and the head on the
+# executor, the backward the tape's with the transformer stage rule for the
+# blocks, the update the session optimizer's AdamW, and `train_steps` ONE
+# Program.fit over its batches. The flat `ByteBuffers` stay the committed
+# state (export, logits and rollback read them); a call's result is copied
+# into them after the shadow point and re-scanned there, so a refused call
+# leaves them as they were.
 # TOMBSTONE: the byte LM's hand step (the per-layer forward `_byte_forward_loss` / `_byte_layer_forward_deferred` with its eight llama_decoder_layer_forward sites, the tape backward wrapper `_byte_backward_tape` over autograd/rules_lm.mojo byte_backward_autograd, the IDN_TRAIN_ONE_WAIT and AFN_LM_NOSYNC step variants, the step-glue update arms `_byte_glue_update` / `_byte_live_status_*`, the eager-scratch release helpers and the certified optimizer step of the trainer) deleted 2026-11-09 by lane x7-byte-lm-on-executor; code recoverable at the deletion commit's parent (docs/TOMBSTONES.md "BYTE_LM_HAND_STEP").
 # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
 # Restored 2026-11-09 by lane r1-restore-measured-winners as ops: the hand step's embedding backward (radix / scan plan pick) as OPS_LM_EMBEDDING (autograd/lm_embedding_op.mojo), its residual2 -> next norm1 fusion as the attention step op's ATTN_STEP_NEXT_NORM arm (autograd/block_step_ops.mojo); A/B -D MOJOLEARN_BYTE_LM_GENERIC_OPS.
 # Restored 2026-11-13 whole by lane restore-byte-lm-hand-step as the DEFAULT step (above): the measured winner (lm-train-step bytes NV 35.5 vs 48.9 ms, AMD 43.9 vs 50.5 ms) stays until an NV + AMD A/B decides; this program step is the B arm -D MOJOLEARN_BYTE_LM_PROGRAM_STEP.
+
+
+def _byte_program_ready(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+    """The trainer's program, opened on its first use and loaded from the
+    committed flat buffers whenever they were written outside it (open,
+    rollback, a refused call)."""
+    if tr.buffers.optimizer_pooled:
+        raise Error("byte LM: pooled optimizer requires its group update")
+    if not tr.program:
+        tr.program = byte_program_open(ctx, tr.config, tr.optimizer)
+        tr.program_synced = False
+    if not tr.program_synced:
+        byte_program_load(tr.program.value(), tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state,
+                          tr.completed_steps)
+        tr.program_synced = True
+
+
+def _byte_shadow_point(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+    """THE SHADOW POINT (design 4.2 item 2): the committed param, m, v and
+    flags are shadowed before a call's result overwrites them."""
+    var n = tr.config.n_total()
+    _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
+    _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
+    _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
+    tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
+    tr.shadow_step = tr.completed_steps
+    tr.shadow_valid = True
+
+
+def _byte_commit(ctx: DeviceContext, mut tr: ByteTrainer, k: Int) raises:
+    """After a finished program call of `k` steps: the shadow point, the
+    program's parameters, moments and last pre-update gradient into the flat
+    buffers, every momentum flag set (AdamW wrote every tensor's moments),
+    then the after-scans (finite param, m, v and v >= 0) at the new step.
+    A raise here is rolled back from the shadow by the caller."""
+    var next_step = tr.completed_steps + k
+    if next_step < 0 or next_step >= 1000000:
+        raise Error("byte LM: completed step must be in [0,1000000)")
+    _byte_shadow_point(ctx, tr)
+    byte_program_store(tr.program.value(), tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state,
+                       tr.buffers.grad)
+    tr.buffers.buf_initialized = List[Bool](length=len(tr.buffers.buf_initialized), fill=True)
+    _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", 3, _FAULT_INF)
+    _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
+    tr.validate_device_state(ctx, next_step)
+    tr.completed_steps = next_step
+    tr.grad_step = next_step
+
+
+def _byte_program_steps(ctx: DeviceContext, mut tr: ByteTrainer, stack: Int, k: Int, losses: Int) raises:
+    """`k` training steps as ONE Program.fit on the trainer's program.
+    `stack`: host address of k * batch rows of length + 1 int32 token ids
+    (the step batches in order, already admitted); `losses`: host address
+    of k float32 step losses. A non-finite loss, or a state that fails the
+    after-scans, refuses the whole call: nothing of it is committed (the
+    caller rolls back from the shadow when the commit had started)."""
+    _byte_program_ready(ctx, tr)
+    tr.program_synced = False
+    tr.grad_step = -1
+    var mean: List[Float32] = [byte_program_fit(tr.program.value(), stack, k, losses)]
+    # the call's mean step loss is non-finite when any step's is
+    _require_finite(mean, "loss")
+    _byte_commit(ctx, tr, k)
+    tr.program_synced = True
+
+
+def _byte_program_gradient(ctx: DeviceContext, mut tr: ByteTrainer,
+                           ids: List[Int32]) raises -> Float32:
+    """`byte_gradient_device` on the program (B arm): the training
+    forward of the trainer's program on `ids` and the tape backward (the
+    transformer stage rule for the blocks), with no update: the pre-update
+    gradient lands in the flat `buffers.grad`."""
+    tr.released_eager_cells = 0
+    if tr.buffers.optimizer_pooled:
+        # A pooled shard's update is the pool's group update on the flat
+        # buffers (training/byte_lm_optimizer_pool.mojo): the program takes
+        # the committed parameters at every gradient call.
+        if not tr.program:
+            tr.program = byte_program_open(ctx, tr.config, tr.optimizer)
+        byte_program_load_params(tr.program.value(), tr.buffers.param)
+        tr.program_synced = False
+    else:
+        _byte_program_ready(ctx, tr)
+    var loss = byte_program_gradient(tr.program.value(), Int(ids.unsafe_ptr()))
+    var losses: List[Float32] = [loss]
+    _require_finite(losses, "loss")
+    byte_program_grad_out(tr.program.value(), tr.buffers.grad)
+    return loss
+
+
+def _byte_program_update(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+    """`byte_update_device` on the program (B arm): the device scan of the
+    flat `buffers.grad`, one AdamW step of the program's tensors from it
+    (the update Program.fit takes), then the shadow point, the copy into
+    the flat buffers and the after-scans (`_byte_commit`)."""
+    if tr.buffers.optimizer_pooled:
+        raise Error("byte LM: pooled optimizer requires its group update")
+    var n = tr.config.n_total()
+    _byte_program_ready(ctx, tr)
+    _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
+    _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
+    tr.program_synced = False
+    byte_program_apply(tr.program.value(), tr.buffers.grad)
+    _byte_commit(ctx, tr, 1)
+    tr.program_synced = True
+
+
+def _byte_program_eval(ctx: DeviceContext, mut tr: ByteTrainer,
+                       ids: List[Int32]) raises -> Float32:
+    """The evaluation loss on the program (B arm): the training forward,
+    recorded, with no backward; writes no parameter, moment or flag."""
+    _byte_program_ready(ctx, tr)
+    var loss = byte_program_eval(tr.program.value(), Int(ids.unsafe_ptr()))
+    var losses: List[Float32] = [loss]
+    _require_finite(losses, "loss")
+    return loss
 
 
 def _byte_layer_sync() -> Bool:
@@ -1713,9 +1889,12 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     owns admission and transaction recovery.
 
     The hand step's forward and loss, then the backward half on the
-    autograd tape (`_byte_backward_tape`)."""
+    autograd tape (`_byte_backward_tape`); the program's gradient under
+    MOJOLEARN_BYTE_LM_PROGRAM_STEP."""
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime if BYTE_LM_PROGRAM_STEP:
+        return _byte_program_gradient(ctx, tr, ids)
     tr.released_eager_cells = 0
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss(ctx, tr, ids, trace)
@@ -1729,7 +1908,11 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
 
 
 def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
-    """Internal update half, including gradient scan, shadow and validation."""
+    """Internal update half, including gradient scan, shadow and validation
+    (the program's AdamW under MOJOLEARN_BYTE_LM_PROGRAM_STEP)."""
+    comptime if BYTE_LM_PROGRAM_STEP:
+        _byte_program_update(ctx, tr)
+        return
     if tr.buffers.optimizer_pooled:
         raise Error("byte LM: pooled optimizer requires its group update")
     var config = tr.config.copy()
@@ -2107,6 +2290,10 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
     byte_validate_state(p, m, v, trainer.buffers.buf_initialized, trainer.completed_steps, config)
     _byte_admit_tokens(ctx, trainer, token_ids)
     trainer.healthy = False
+    comptime if BYTE_LM_PROGRAM_STEP:
+        var program_loss = _byte_program_eval(ctx, trainer, token_ids)
+        trainer.healthy = True
+        return program_loss
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
     step_count_sync()
@@ -2139,9 +2326,12 @@ def byte_eval_loss_resident(ctx: DeviceContext, mut trainer: ByteTrainer,
     var failed = False
     var message = String("")
     try:
-        loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
-        step_count_sync()
-        ctx.synchronize()
+        comptime if BYTE_LM_PROGRAM_STEP:
+            loss = _byte_program_eval(ctx, trainer, token_ids)
+        else:
+            loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
+            step_count_sync()
+            ctx.synchronize()
     except error:
         failed = True
         message = String(error)

@@ -7,11 +7,20 @@ from gemm.contract import CONTRACT_K_LEAF_MIN
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-
 # TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (the trainer's captured program on every column, lane x7's B arm;
 # opt-in, its NV + AMD A/B owed and never run) deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at
 # f0bffede56. The hand step (GPU columns) and the composed host step (CPU column) are the only training steps.
 # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+from std.sys.compile import is_defined
+
+# lane restore-byte-lm-host-step (2026-11-13): the byte LM training step's one
+# switch, read by every column. Default (off): the hand step on the GPU columns
+# (training/byte_lm.mojo, the 0.8.55 route) and the composed host step on the
+# CPU column (training/byte_lm_host_backward.mojo), which give the same words.
+# Defined: the trainer's captured program on every column (lane x7, the B arm;
+# training/byte_lm_program.mojo, training/byte_lm_host_program.mojo).
+comptime BYTE_LM_PROGRAM_STEP = is_defined["MOJOLEARN_BYTE_LM_PROGRAM_STEP"]()
 
 comptime BYTE_CONFIG_LIMIT = 2147483647
 comptime BYTE_DEFAULT_PROFILE = "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"

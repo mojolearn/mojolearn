@@ -2171,6 +2171,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_SAMBA_PROGRAM_FORWARD`](#mojolearn_samba_program_forward) | Samba stateless forward route (training/neural_identical_experiments.mojo) | 2026-11-15 (`2ea7c618fc`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch](../experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch) |
 | [`MOJOLEARN_XD_FAST_SVD_ONE_BLOCK`](#mojolearn_xd_fast_svd_one_block) | Decomposition (dense SVD route) | 2026-11-15 (`f899386021`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch](../experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch) |
 | [`MOJOLEARN_IDN_MCD_CHOL`](#mojolearn_idn_mcd_chol-unmeasured-arm-deleted-2026-11-15) | MinCovDet / EllipticEnvelope IDENTICAL (x_decomp/mcd.mojo, x_decomp/kit_device.mojo) | 2026-11-15 (`c387c0b2c1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MCD_CHOL.patch](../experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch) |
+| [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step) | Neural (byte LM training step) | 2026-11-15 (`f105b7dcfb`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -16855,6 +16856,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-31-neural `f105b7dcfb` (2026-11-15); code recoverable at `f0bffede56`.
 - Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_IDN_NORM
 

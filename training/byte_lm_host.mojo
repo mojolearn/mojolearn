@@ -43,8 +43,10 @@ the comparison is not reaching the arithmetic. The threaded path reverses the
 fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 The default training loss (`byte_host_loss`, restored 2026-11-13) runs the
 same head (gemm_oracle or gemm_nt_rows), so the reversal reaches it too.
-(The program-step arm, -D MOJOLEARN_BYTE_LM_PROGRAM_STEP, where the same define
-scaled every training logit, was deleted 2026-11-15.)
+Under -D MOJOLEARN_BYTE_LM_PROGRAM_STEP the training loss runs the trainer's
+program on a host session, where the same define scales every training logit
+by 1 + 2^-20 (training/byte_lm_program.mojo, BYTE_LM_HOST_SABOTAGE), so the
+loss comparison fails under it too (lane m2-neural-leftovers, 2026-11-09).
 """
 
 from std.math import max, min
@@ -936,8 +938,8 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
 # TOMBSTONE: byte_host_loss (the host column's training loss: the composed oracle forward, its chunked-head and threaded arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm; the loss is the trainer's program on a host session (training/byte_lm_host_execution.mojo byte_host_loss_native). Code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch
 # Restored 2026-11-13 by lane restore-byte-lm-host-step: the CPU column's default training loss (the
-# composed forward, beside the GPU columns' hand step); the program-loss B arm
-# -D MOJOLEARN_BYTE_LM_PROGRAM_STEP was deleted 2026-11-15 (lane/expdel2-31-neural). Body unchanged from 5fff22515a.
+# composed forward, beside the GPU columns' hand step); the program loss is the B arm
+# -D MOJOLEARN_BYTE_LM_PROGRAM_STEP (training/byte_lm_host_execution.mojo). Body unchanged from 5fff22515a.
 
 
 def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
