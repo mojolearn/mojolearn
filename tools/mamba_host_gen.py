@@ -144,17 +144,9 @@ for _src in (*HOST_OPT_FUNCTIONS, *HOST_OPT_STRUCTS, HOST_OPT_DEFINES):
 SUBSTITUTIONS = (
     # 2026-11-15 (expdel2 deletion program): the M3_* switch lines are now plain
     # constants after their NAIVE defines were deleted; match the whole line.
-    # NN36 uses GPU shared memory only. Its host column retains the exact
-    # cell exp/dot expression; generation and all checks are still pending.
-    ("mamba/impl/modules/ssd_minimal.mojo",
-     r'comptime NN36_SHARED_DECAY = [^\n]+',
-     "comptime NN36_SHARED_DECAY = False"),
-    # lane nv-occupancy (2026-10-28): MOJOLEARN_IDN_SSD_OCCUPANCY's coalesced
-    # and shared-tile S10/S12/S18 arms are device-only; the host column keeps
-    # the cell kernels (the same chains, the same bits).
-    ("mamba/impl/modules/ssd_minimal.mojo",
-     r"comptime IDN_SSD_OCCUPANCY = \([\s\S]*?\n\)",
-     "comptime IDN_SSD_OCCUPANCY = False"),
+    # NN36_SHARED_DECAY and IDN_SSD_OCCUPANCY are False constants in
+    # ssd_minimal.mojo since their defines were deleted (expdel2-tooling): the
+    # source already takes the host arm, so their substitutions are gone.
     # IDN_M1_STATE_WINDOW and its window arm were deleted by expdel2-28 (2026-11-15).
     ("mamba/impl/ops/mamba3_siso.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),

@@ -702,7 +702,9 @@ comptime M2_CS_IC = 32
 # kernels) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 44ec9b2ec9.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch
 # The constant stays only for tools/mamba_host_gen.py's substitution (tooling lane drops it).
-comptime IDN_SSD_OCCUPANCY = False
+comptime IDN_SSD_OCCUPANCY = (
+    False
+)
 
 
 # I08 AMD MI325X NEUTRAL/MIXED (2026-10-06, sourcecbcc8dcd3303):
