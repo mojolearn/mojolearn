@@ -67,8 +67,8 @@ def _npz_shape_text(shape: List[Int]) -> String:
 def _npz_header(descr: String, fortran: Bool, shape: List[Int]) raises -> List[UInt8]:
     """The complete NPY v1.0 prefix `_serialize._header` wrote: magic,
     version, little-endian length, the dict and the 64-byte padding."""
-    var text = "{'descr': '" + descr + "', 'fortran_order': " + ("True" if fortran else "False") \
-        + ", 'shape': " + _npz_shape_text(shape) + ", }"
+    var text = ("{'descr': '" + descr + "', 'fortran_order': " + ("True" if fortran else "False")
+                + ", 'shape': " + _npz_shape_text(shape) + ", }")
     var body = text.as_bytes()
     var hlen = len(body) + 1
     var padlen = 64 - ((10 + hlen) % 64)
@@ -150,7 +150,7 @@ def _npz_scalar(name: String, dtype: String, var bytes: List[UInt8], c_order: Bo
 
 def _npz_int_word(value: PythonObject) raises -> UInt64:
     var word = cpython_table()[].PyLong_AsLongLong(value._obj_ptr)
-    if word == -1 and cpython_table()[].PyErr_Occurred():
+    if word == -1 and Bool(cpython_table()[].PyErr_Occurred()):
         var failure = stash_python_error()
         raise failure^
     return bitcast[DType.uint64](word)
@@ -158,7 +158,7 @@ def _npz_int_word(value: PythonObject) raises -> UInt64:
 
 def _npz_float_word(value: PythonObject) raises -> UInt64:
     var real = cpython_table()[].PyFloat_AsDouble(value._obj_ptr)
-    if real == -1.0 and cpython_table()[].PyErr_Occurred():
+    if real == -1.0 and Bool(cpython_table()[].PyErr_Occurred()):
         var failure = stash_python_error()
         raise failure^
     return bitcast[DType.uint64](real)
