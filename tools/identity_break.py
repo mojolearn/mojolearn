@@ -4652,16 +4652,12 @@ def _ctr_saved_or_fit(ml, fit):
         if not path or not os.path.isfile(path):
             raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
                                f"directory of this lane's GPU-saved models (no {path})")
-        from mojolearn._forest_host import binary_path, host_model
-        est = host_model(path)
+        est = ml.host_model(path)
         # the train and batch cells predict through this object, so it takes
         # _probe_fit_host's guard: a forest binding loaded earlier under the
         # shared module name (host_record reads MOJOLEARN_HOST_DIR) is not the
         # MOJOLEARN_FOREST_HOST_BINARY asked for
-        bound = getattr(getattr(est, "_binding", None), "__file__", None)
-        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
-            raise RuntimeError(f"the forest binding in this process is {bound}, "
-                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        _require_named_forest_binding(ml)
         est.identity_saved_path = path
         return est
     est = fit()
@@ -10994,31 +10990,49 @@ def _host_infer_on(name):
     return lanes is True or (lanes is not None and name in lanes)
 
 
+#: The forest host binding's name in `mojolearn.runtime_report()["bindings"]`.
+FOREST_HOST_BINDING = "_mojolearn_forest_host"
+
+
+def _require_named_forest_binding(ml):
+    """Refuse when the loaded forest host binding is not the file
+    MOJOLEARN_FOREST_HOST_BINARY names (a sabotage build's binary must be the
+    one that predicts). Read from the public runtime report's binding table,
+    not from the model object's private `_binding` or `_forest_host`'s
+    `binary_path`. Without the variable nothing was asked for and nothing is
+    compared; a binding not loaded yet has answered nothing."""
+    want = os.environ.get("MOJOLEARN_FOREST_HOST_BINARY", "").strip()
+    if not want:
+        return
+    entry = (ml.runtime_report().get("bindings") or {}).get(FOREST_HOST_BINDING) or {}
+    bound = entry.get("path")
+    if entry.get("loaded") and bound and os.path.realpath(bound) != os.path.realpath(want):
+        raise RuntimeError(f"the forest binding in this process is {bound}, "
+                           f"not MOJOLEARN_FOREST_HOST_BINARY {want}")
+
+
 def _probe_fit_host(fit, name):
     """`_probe_fit` under HOST_INFER_ENV: save, then predict through
     `host_model`. Same return shape."""
     if not _has_save_load(fit.est):
         return None, None, None, "infer: host infer asked of an estimator with no save"
     save, load, suffix = _save_load(fit.est)
-    from mojolearn._forest_host import binary_path, host_model
+    ml = sys.modules["mojolearn"]
     try:
         with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
             path = os.path.join(tmp, f"{name}{suffix}")
             getattr(fit.est, save)(path)
             model = _hfile(path)
             try:
-                host = host_model(path)
+                host = ml.host_model(path)
                 # THE BINARY THAT PREDICTED IS THE ONE NAMED (2026-09-15): host_record
                 # loads MOJOLEARN_HOST_DIR's forest binding under the module name
                 # _forest_host reuses from sys.modules, so a MOJOLEARN_FOREST_HOST_BINARY
                 # pointing elsewhere (a sabotage build) was silently not the one asked,
                 # and a forest sabotage column read IDENTICAL on a RunPod x86 pod.
-                bound = getattr(getattr(host, "_binding", None), "__file__", None)
-                if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
-                        os.path.realpath(bound) != os.path.realpath(binary_path())):
-                    raise RuntimeError(f"the forest binding in this process is {bound}, "
-                                       f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
-                infer = _h(*fit.probe(host_model(path)))
+                if type(host).__name__ in ("HostGBDT", "HostForest"):
+                    _require_named_forest_binding(ml)
+                infer = _h(*fit.probe(ml.host_model(path)))
             except Exception as exc:
                 return None, None, None, _exc_text("infer (host_model)", exc)
             reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
@@ -11044,19 +11058,16 @@ def _probe_saved_host(fit, name):
     columns still hash the file they wrote. A second load that predicts
     differently from the first is refused (the model part reads REFUSED),
     because an n/a model part skips the RELOAD-MOVED comparison."""
-    from mojolearn._forest_host import binary_path, host_model
+    ml = sys.modules["mojolearn"]
     path = fit.est.identity_saved_path
     try:
-        host = host_model(path)
-        bound = getattr(getattr(host, "_binding", None), "__file__", None)
-        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
-            raise RuntimeError(f"the forest binding in this process is {bound}, "
-                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        host = ml.host_model(path)
+        _require_named_forest_binding(ml)
         infer = _h(*fit.probe(host))
     except Exception as exc:
         return None, None, None, _exc_text("infer (saved model)", exc)
     try:
-        reload = _h(*fit.probe(host_model(path)))
+        reload = _h(*fit.probe(ml.host_model(path)))
     except Exception as exc:
         return infer, None, None, _exc_text("model (saved model)", exc)
     if reload != infer:
