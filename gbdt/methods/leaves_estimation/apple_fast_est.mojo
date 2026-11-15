@@ -50,7 +50,6 @@ from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
-from gbdt.apple_fast_classical import AFCL_T06
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G07
 from core.identity_trace import IdentityTrace
 from gbdt.gpu_util.kernel.transform import (
@@ -157,10 +156,8 @@ comptime EST_MIN_LEAF_WEIGHT = Float32(1e-20)
 
 @always_inline
 def _afcl_leaf_stats_sm(sm: Int) -> Int:
-    # Scheduling proxy only: halve the partial-grid budget, not the device's
-    # reported hardware. Allocation and both statistic launchers use this.
-    comptime if AFCL_T06:
-        return max(1, (sm + 1) // 2)
+    # TOMBSTONE: MOJOLEARN_AFCL_T06 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 7a4e69bdca.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T06.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
     return sm
 
 
