@@ -175,7 +175,7 @@ def run_sequential_case[E: Exec](mut ex: E, unit: Int) raises:
     _ = y^
 
 
-def _input(values: List[Float32], dims: List[Int]) -> ProgramInput:
+def _input(values: List[Float32], dims: List[Int]) raises -> ProgramInput:
     var cols = dims[len(dims) - 1]
     return ProgramInput(CastIn.f32_c(Int(values.unsafe_ptr()), len(values) // cols, cols), ShapeN.of(dims),
                         List[Float64](), List[Int64]())
