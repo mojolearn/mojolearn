@@ -1,0 +1,42 @@
+diff --git a/extratrees/estimator.mojo b/extratrees/estimator.mojo
+index c950d1bd04..80a113414a 100644
+--- a/extratrees/estimator.mojo
++++ b/extratrees/estimator.mojo
+@@ -146,6 +146,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
+ #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+ comptime _DEVCTX_SLOT = "MojolearnTreesContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTreesContextFastV3"
+ 
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+@@ -484,9 +485,11 @@ def _et_device_batch() -> Int:
+     constant at once, so the regression cells are flat (0.989) or slightly
+     negative (1.006), and the geometric mean carries them.
+ 
+-    The width is capped by `split_reduce_kernel`, which puts the node count on
++    The defines are the measurement arms: `-D MOJOLEARN_ET_DEVICE_BATCH_4096=1`
++    restores cuML's shipped width for an A/B and `_32768=1` takes the widest a
++    CUDA launch admits, because `split_reduce_kernel` puts the node count on
+     grid axis y (65535). The workspace grows as batch x n_cols cells
+-    (DEVIATION 205's survey reads every column).
++    (DEVIATION 205's survey reads every column). None is set by a build script.
+     """
+     # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_65536 (DROPPED-slower) deleted 2026-10-03 by e242fb001; code recoverable at e242fb001^.
+     # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch; record in docs/TOMBSTONES.md.
+@@ -494,12 +497,12 @@ def _et_device_batch() -> Int:
+     # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_32768.patch
+     # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_4096 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+     # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_4096.patch
+-    # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_16384 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch
++    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_16384"]():
++        return 16384
+     # APPLE FAST: 32768. Apple M4, 1M rows, alternating processes, same
+     # model hash in every arm (2026-09-25): taxi 16384 -> 32768 0.952,
+     # 32768 -> 65536 1.046, 16384 -> 4096 1.239; Istella-S 16384 -> 32768
+-    # 0.953.
++    # 0.953. `_16384=1` restores the previous width for an A/B.
+     # IDENTICAL on Apple too since 2026-09-28: the width is bit-inert by the
+     # argument above (keyed draws, integer cells, per-node reduction).
+     comptime if TARGET_HAS_APPLE_GPU:
