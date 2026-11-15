@@ -28,7 +28,14 @@ from gemm.checks.gemm_identical import (
     identical_gemm_fold_stack_kernel,
 )
 from gemm.contract import OP_NN, OP_TN
-from x_cnn.neural_col2im import NI14_TILED_COL2IM, neural_col2im_tiled
+# Markers moved from the deleted x_cnn/neural_col2im.mojo (sweep 2026-11-15):
+# TOMBSTONE: MOJOLEARN_NI14_COL2IM (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NI14_COL2IM.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 umbrella old path, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-35-neural.patch
+# (Sweep 2026-11-15: NI14_TILED_COL2IM, NI14_BOUNDED_COL2IM, NI15_BIAS_NO_ONES, NI16_CONV_RELU_FUSED (False) and
+# TILED_LAYOUT (True) folded here; neural_col2im_tiled with x_cnn/neural_col2im.mojo, bias_leaf_no_ones_kernel,
+# x_cnn/ops.mojo col2im_bounded_at and relu_rows_bwd_at removed. TILED_ROWS stays for tools/apple_speed_cnn.)
 # TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at f839bce651.
 # Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from x_cnn.ops import (
@@ -51,12 +58,10 @@ from x_cnn.ops import (
     CP_DW,
     dout_rows_at,
     col2im_at,
-    col2im_bounded_at,
     fill_one_at,
     pool_relu_rows_bwd_at,
     pool_relu_row_val,
     relu_bwd_at,
-    relu_rows_bwd_at,
 )
 from x_cnn.device import (
     BIAS_TPB,
@@ -71,13 +76,8 @@ from x_cnn.device import (
     NI12_TMP,
     NI12_TN,
     NI12_TNP,
-    NI14_BOUNDED_COL2IM,
-    NI15_BIAS_NO_ONES,
-    NI16_CONV_RELU_FUSED,
     ONES_CACHE,
     ONES_WS_SLOT,
-    TILED_LAYOUT,
-    TILED_ROWS,
     XCNN_BIAS_FOLD,
     _LR,
     _LT,
@@ -161,13 +161,7 @@ def _col2im(
     ctx: DeviceContext, mut dcols: DeviceBuffer[DType.float32],
     mut gx: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], nx: Int,
 ) raises:
-    comptime if NI14_TILED_COL2IM:
-        neural_col2im_tiled(ctx, dcols, gx, dp, nx)
-        return
-    comptime if NI14_BOUNDED_COL2IM:
-        launch[col2im_bounded_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
-    else:
-        launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+    launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
 
 
 def implicit_wgrad_leaf_kernel(
@@ -332,26 +326,6 @@ def bias_fold_kernel(part: FP, gb: FP, m_oc: Int32, p_count: Int32):
     gb.unsafe_store(oc, ftz(_fold_drain(stack, occ)))
 
 
-def bias_leaf_no_ones_kernel(g: FP, part: FP, m_oc: Int32, k_rows: Int32, leaf: Int32, p_count: Int32):
-    """NI15: the exact G^T*1 leaf without loading a ones operand.
-
-    Keep the explicit rtf FMA by +1 (not a freely contracted or reordered
-    add), the leaf FTZ and the existing canonical fold. Host GEMM remains
-    the reference spelling of the same arithmetic on every column.
-    """
-    var OC = Int(m_oc)
-    var t = Int(block_idx.x) * BIAS_TPB + Int(thread_idx.x)
-    if t >= OC * Int(p_count):
-        return
-    var l = t // OC; var oc = t - l * OC
-    var lo = l * Int(leaf)
-    var hi = min(lo + Int(leaf), Int(k_rows))
-    var acc = Float32(0)
-    for row in range(lo, hi):
-        acc = rtf_mul_add(ftz(g.unsafe_load(row * OC + oc)), Float32(1), acc)
-    part.unsafe_store(t, ftz(acc))
-
-
 def bias_grad_gemm(
     ctx: DeviceContext, mut gb: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
     mut ones: DeviceBuffer[DType.float32], OC: Int, rows: Int,
@@ -361,22 +335,16 @@ def bias_grad_gemm(
     comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
         device_gemm(ctx, gb, g, ones, OC, 1, rows, OP_TN)
         return
-    comptime if XCNN_BIAS_FOLD or NI15_BIAS_NO_ONES:
+    comptime if XCNN_BIAS_FOLD:
         if rows > 0 and OC > 0:
             var lp = contract_partition(rows)
             var leaf = lp[0]
             var P = lp[1]
             var part = ws(ctx, BIAS_WS_SLOT, OC * P)
-            comptime if NI15_BIAS_NO_ONES:
-                ctx.enqueue_function[bias_leaf_no_ones_kernel](
-                    fp(g), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
-                    grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[bias_leaf_kernel](
-                    fp(g), fp(ones), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
-                    grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
-                )
+            ctx.enqueue_function[bias_leaf_kernel](
+                fp(g), fp(ones), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
+                grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
+            )
             ctx.enqueue_function[bias_fold_kernel](
                 fp(part), fp(gb), Int32(OC), Int32(P),
                 grid_dim=((OC + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
@@ -391,10 +359,6 @@ def ones_buf(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType
     the resident ones (already 1.0f; filled here, in order, when the vector
     grows); without it they are workspace slot `slot`, which the caller
     fills as it always did."""
-    comptime if NI15_BIAS_NO_ONES:
-        # Only a valid placeholder address is required: the candidate leaf
-        # materializes +1 directly and never reads this allocation.
-        return ws(ctx, slot, 1)
     comptime if ONES_CACHE:
         var need = n if n > 0 else 1
         var b = ws(ctx, ONES_WS_SLOT, need)
@@ -431,15 +395,12 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
     comptime if not NI12_IMPLICIT_CONV:
         _im2col(ctx, dxin, cols, dp, rows, ckk, C)
-    comptime if TILED_LAYOUT:
-        var tg = _tiled_grid(N, rows // N, OC)
-        ctx.enqueue_function[dout_rows_tiled_kernel](
-            fp(ddout), fp(g), Int32(rows // N), Int32(OC),
-            grid_dim=(tg[0], tg[1], tg[2]), block_dim=(_LT, _LR, 1),
-        )
-    else:
-        launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
-    comptime if not ONES_CACHE and not NI15_BIAS_NO_ONES:
+    var tg = _tiled_grid(N, rows // N, OC)
+    ctx.enqueue_function[dout_rows_tiled_kernel](
+        fp(ddout), fp(g), Int32(rows // N), Int32(OC),
+        grid_dim=(tg[0], tg[1], tg[2]), block_dim=(_LT, _LR, 1),
+    )
+    comptime if not ONES_CACHE:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
@@ -502,7 +463,7 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
     var dg = m_in(ctx, 2, a[2], n * d_out, isdev(dev, 2))
     var dones = ones_buf(ctx, 3, n)
-    comptime if not ONES_CACHE and not NI15_BIAS_NO_ONES:
+    comptime if not ONES_CACHE:
         dones.enqueue_fill(Float32(1))
     var gx = m_out(ctx, 4, a[3], n * d_in, isdev(dev, 3))
     var gw = m_out(ctx, 5, a[4], d_out * d_in, isdev(dev, 4))
@@ -570,27 +531,16 @@ def conv_block_backward_into[resident: Bool = False](
         # layout in one launch (the same values)
         var di = put_i[resident](ctx, 4, idx, no)
         var dpb = put_prm(ctx, 6, both)
-        comptime if TILED_ROWS:
-            var S = rows // N
-            var g = _tiled_grid(N, S, OC)
-            ctx.enqueue_function[rows_bwd_tiled_kernel](
-                fp(dgo), fp(yconv), fp(grow), ip(di), ip(dpb), Int32(S), Int32(OC),
-                grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
-            )
-        else:
-            launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
+        launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
         _ = di^
         _ = dpb^
     else:
-        comptime if NI16_CONV_RELU_FUSED:
-            launch[relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(dp), ip(dp), ny)
-        else:
-            launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
-            launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
+        launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
+        launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
     var ones = ones_buf(ctx, 13, rows)
     var gw = outb[resident](ctx, 14, gw_out, OC * ckk)
     var gb = outb[resident](ctx, 15, gb_out, OC)
-    comptime if not ONES_CACHE and not NI15_BIAS_NO_ONES:
+    comptime if not ONES_CACHE:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     comptime if NI12_IMPLICIT_CONV:

@@ -36,7 +36,6 @@ from sequence.exec_trait import Exec
 from sequence.ops import (
     FP,
     Args,
-    NN42_INPUT_BIAS_FUSED,
     OP_CELL_BWD_H,
     OP_CELL_FWD_H,
     OP_COPY,
@@ -68,7 +67,9 @@ comptime RNN_LAST_STEP = 18
 # The input projection adds b_ih to GX in its own launch unless the per-step
 # kernel adds it (NN42 fused, per-step path only); the deleted hand forward
 # (sequence/recurrent.mojo::forward, lane X3) used the same rule.
-comptime RNN_INPUT_BIAS_IN_GX = not NN42_INPUT_BIAS_FUSED or SEQ_LSTM_SCAN
+# (Sweep 2026-11-15: NN42_INPUT_BIAS_FUSED is gone, so the input bias is always in GX; the name stays for
+# sequence/checks/seams_check.mojo.)
+comptime RNN_INPUT_BIAS_IN_GX = True
 
 
 def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
@@ -196,7 +197,7 @@ def rnn_layer[E: Exec](
             a.p7 = whh
             a.p8 = bhh
             a.p9 = b_ih
-            a.i5 = 0 if RNN_INPUT_BIAS_IN_GX else 1
+            a.i5 = 0
             a.i0 = cell
             a.i1 = B
             a.i2 = H

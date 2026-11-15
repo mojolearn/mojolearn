@@ -39,8 +39,7 @@ from std.memory import bitcast
 
 # TOMBSTONE: MOJOLEARN_NN42_INPUT_BIAS_FUSED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at c906dcaf57.
 # Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
-# Kept False for autograd/rules_recurrent.mojo (the input bias stays in GX).
-comptime NN42_INPUT_BIAS_FUSED = False
+# (Sweep 2026-11-15: NN42_INPUT_BIAS_FUSED = False removed; autograd/rules_recurrent.mojo keeps the bias in GX.)
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -223,7 +222,7 @@ comptime OP_MLP_L2PART = 90
 comptime OP_MLP_L2FOLD = 91
 comptime OP_MLP_ROWPART = 92
 comptime OP_MLP_PERM = 93
-comptime OP_MLP_EPOCH_LOSS = 94
+# (Sweep 2026-11-15: OP_MLP_EPOCH_LOSS (94) removed: no caller emits it since lane/expdel2-29-neural.)
 # lane ag-pass3-lossblock (2026-10-19), sequence/mlp.mojo MLP_LOSSBLOCK: the
 # MLP fit's per-batch loss block (seed, row-loss and L2 block partials in one
 # launch, one fold) and the blocked epoch loss; a range of its own (1600..),
@@ -410,7 +409,7 @@ comptime SUMSQ_STAGE = 64
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE_OFF (force-off of the deleted arm, EXP:2164 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch
-comptime GEMM_STAGE_V2 = False
+# (Sweep 2026-11-15: the unread GEMM_STAGE_V2 = False constant removed.)
 comptime GEMM_STAGE = 16
 #: lane ag-pass5-recurrent (2026-10-19, orchestrator p6-01 AMD bisect): the
 #: recurrent trainers ran 2.7x slower on the AMD MI325X after GEMM_STAGE_V2

@@ -58,7 +58,7 @@ comptime MLP_EPOCH_DEV = _MLP_IDN
 # TOMBSTONE: MOJOLEARN_MLP_LOSSBLOCK_OFF (old path; EXP:2159 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at e06ff6f0f3.
 # Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch
 # The trainer no longer launches the MLP_BLOCKED_FOLDS-only loss kernels (op_mlp_l2part / l2fold via _l2_blocked,
-# op_mlp_rowpart, OP_MLP_EPOCH_LOSS); they stay registered (sequence/dispatch.mojo, another lane's file) and
+# op_mlp_rowpart; OP_MLP_EPOCH_LOSS went in the 2026-11-15 sweep); they stay registered (sequence/dispatch.mojo, another lane's file) and
 # autograd/checks/lossblock_cases.mojo still runs _l2_blocked and op_mlp_rowpart as its reference.
 comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS
 #: MLP_LB_ROWS (lane ag-pass5-loss, 2026-10-19; PASS5_IDEAS idea 2): the
@@ -578,18 +578,6 @@ def op_mlp_perm(t: Int, a: Args):
         if x < n:
             break
     a.p0.unsafe_store(t, Float32(Int(x)))
-
-
-def op_mlp_epoch_loss(t: Int, a: Args):
-    """One thread: p1[i3] = (sum over batches bi ascending of p0[bi] * B_bi,
-    one fma each from zero) / i2, B_bi = min(i1, i2 - bi i1); i0 batches,
-    i1 batch rows, i2 = N rows."""
-    var acc = Float32(0.0)
-    for bi in range(a.i0):
-        var off = bi * a.i1
-        var B = a.i1 if off + a.i1 <= a.i2 else a.i2 - off
-        acc = fma3(ld(a.p0, bi), Float32(B), acc)
-    st(a.p1, a.i3, div(acc, Float32(a.i2)))
 
 
 # ------------------------------------------------------------------ pass-3 loss block (MLP_LOSSBLOCK)

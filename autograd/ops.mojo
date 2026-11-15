@@ -274,9 +274,9 @@ comptime AXIS_COLS = 1
 # ---------------------------------------------------------------------------
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (v1: the sqrt block rule, two launches, one load a term; old path,
 # no A/B recorded) deleted 2026-11-15 by lane/expdel2-24-neural with _agk_bin_vjp_part_v1, _ag_reduce_part_v1 and
-# _ag_reduce_fold_v1; code recoverable at 01ab3e0d37. AUTOGRAD_FOLD_V2 stays as the constant other files import.
+# _ag_reduce_fold_v1; code recoverable at 01ab3e0d37.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.patch
-comptime AUTOGRAD_FOLD_V2 = True
+# (Sweep 2026-11-15: the AUTOGRAD_FOLD_V2 = True constant removed; nothing imports it.)
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF (old path, no A/B recorded) deleted 2026-11-15 by
 # lane/expdel2-24-neural with the AUTOGRAD_LOSS_REDUCED alias; code recoverable at 56d165c105.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch

@@ -8,10 +8,11 @@ from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from core.device_scan import device_first_nonfinite
 from checks.numerics import ftz
-from training.residual_dropout_contract import (
-    NN59_DROPOUT_RESIDUAL,nn_dropout_cell,residual_dropout_admit,
-)
-from training.neural_ab_pointwise import nn_dropout_residual_into
+from training.residual_dropout_contract import nn_dropout_cell,residual_dropout_admit
+# TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in accumulate-with-status kernel, no A/B recorded), MOJOLEARN_NN59_DROPOUT_RESIDUAL (opt-in fused residual-dropout kernels, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at f75eb67b37.
+# Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch and experiments/removed/MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch
+# (Sweep 2026-11-15: training/neural_ab_pointwise.mojo deleted (NN58_ACCUMULATE_STATUS, the always-refusing
+# nn_dropout_residual_into); the NN59 arm here, in residual_dropout_host.mojo and nn_dropout_residual_cell removed.)
 
 comptime _FP = MutPointer[Float32,MutAnyOrigin]
 comptime _HP = MutPointer[Float32,MutUntrackedOrigin]
@@ -52,26 +53,22 @@ def residual_dropout_into[BACKWARD: Bool](ctx: DeviceContext,
     comptime if not BACKWARD:
         if device_first_nonfinite(ctx,side,n)>=0:
             raise Error("residual_dropout refuses nonfinite residual")
-    comptime if NN59_DROPOUT_RESIDUAL:
-        nn_dropout_residual_into[BACKWARD](ctx,output,dside,input,side,n,offset,p,scale,
-            UInt32(seed_lo),UInt32(seed_hi),UInt32(stream))
+    comptime if BACKWARD:
+        ctx.enqueue_function[_dropout_only](output,input,Int32(n),Int64(offset),p,scale,
+            UInt32(seed_lo),UInt32(seed_hi),UInt32(stream),grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
+        ctx.enqueue_function[_gradient_copy](dside,input,Int32(n),
+            grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
     else:
-        comptime if BACKWARD:
-            ctx.enqueue_function[_dropout_only](output,input,Int32(n),Int64(offset),p,scale,
-                UInt32(seed_lo),UInt32(seed_hi),UInt32(stream),grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
-            ctx.enqueue_function[_gradient_copy](dside,input,Int32(n),
-                grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
-        else:
-            var temporary = ctx.enqueue_create_buffer[DType.float32](n)
-            ctx.enqueue_function[_dropout_only](temporary,input,Int32(n),Int64(offset),p,scale,
-                UInt32(seed_lo),UInt32(seed_hi),UInt32(stream),grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
-            ctx.enqueue_function[_residual_add](output,temporary,side,Int32(n),
-                grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
-            # The scan below synchronizes before `temporary` goes.
-            if device_first_nonfinite(ctx,output,n)>=0:
-                raise Error("residual_dropout produced a nonfinite output")
-            _ = temporary^
-            return
+        var temporary = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.enqueue_function[_dropout_only](temporary,input,Int32(n),Int64(offset),p,scale,
+            UInt32(seed_lo),UInt32(seed_hi),UInt32(stream),grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
+        ctx.enqueue_function[_residual_add](output,temporary,side,Int32(n),
+            grid_dim=((n+127)//128,1,1),block_dim=(128,1,1))
+        # The scan below synchronizes before `temporary` goes.
+        if device_first_nonfinite(ctx,output,n)>=0:
+            raise Error("residual_dropout produced a nonfinite output")
+        _ = temporary^
+        return
     if device_first_nonfinite(ctx,output,n)>=0:
         raise Error("residual_dropout produced a nonfinite output")
 

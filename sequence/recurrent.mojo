@@ -93,8 +93,7 @@ comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # -D MOJOLEARN_IDN_SEQ_WGRAD; arm 0 (sqrt(K) blocks from 512 rows) is the one form.
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD (opt-in arms 1 and 2, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.expdel2-30-neural.patch
-#: imported by autograd/kernels/recurrent.mojo; False on every build.
-comptime NN43_WGRAD_FIXED128 = False
+# (Sweep 2026-11-15: NN43_WGRAD_FIXED128 = False removed with its reader's dead arm in autograd/kernels/recurrent.mojo.)
 
 # NI51 V subarm: a smaller minimum leaf trades more independent gradient
 # work for partial storage. Above that minimum the existing sqrt(K) growth

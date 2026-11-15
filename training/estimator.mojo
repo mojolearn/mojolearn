@@ -107,7 +107,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # every other build, so IDENTICAL compiles this file's code unchanged).
 from training.afn_optim import (
     AFN_APPLE_FAST,
-    AFN_LOSS_FUSED,
     AFN_SF_DENOM,
     AFN_SF_NORMS,
     AFN_SF_OUT2,
@@ -116,7 +115,6 @@ from training.afn_optim import (
     AFN_SF_SUMSQ,
     AFN_SF_TOTAL,
     AFN_SF_WS,
-    afn_ce_loss_resident,
     afn_scratch_view,
 )
 from training.checks.loss import (
@@ -1580,13 +1578,6 @@ def identical_ce_loss_resident[pool: StaticString = ""](
     # `row_ptr` is None when the caller has no use for the per-row losses
     # (SUM or MEAN, row N118); the fused form always writes them, so that
     # call takes the code below.
-    comptime if AFN_LOSS_FUSED:
-        if row_ptr:
-            afn_ce_loss_resident(
-                ctx, loss_ptr, row_ptr.value(), dlogits, logits, targets, n_rows, count,
-                reduction, want_grad, cfg,
-            )
-            return
     var vocab = cfg.vocab
     var cells = n_rows * vocab
     var smoothing = cfg.smoothing_is_spelled()
