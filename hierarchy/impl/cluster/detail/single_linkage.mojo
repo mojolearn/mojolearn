@@ -50,11 +50,9 @@ from std.sys.defines import get_defined_int
 from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst_device
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
-comptime SL_FAST_BORUVKA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SL_FAST_BORUVKA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SL_FAST_BORUVKA_OFF (old path: the dense m * m graph on FAST Apple; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at da90a32538.
+# Restore: git apply experiments/removed/MOJOLEARN_SL_FAST_BORUVKA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SL_FAST_BORUVKA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 """FAST on Apple: the PAIRWISE Euclidean MST from Boruvka rounds with the
 distances computed on the fly (`fast_boruvka.mojo`) instead of the dense
 `m * m` graph, which the M4 cannot allocate from ~38k rows up."""
