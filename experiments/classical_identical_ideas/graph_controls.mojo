@@ -98,6 +98,7 @@ comptime C35_TASK_ROWS = 256
 # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: comptime XCLUSTER_ROW_ASSIGN_ROWS removed; nothing read it.)
 # (Sweep 2026-11-15: comptime XCLUSTER_ROW_ASSIGN removed; nothing read it.)
+
 # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): the C37 rewrite fused the
 # Lloyd assignment with the Int32 row-block centroid accumulation in shared memory (cluster/impl/detail/kmeans_fused_accumulate.mojo).
 # NV/AMD kmeans istella 104.8x/0.841x, taxi 68.6x/0.895x (vendor split: AMD faster, NVIDIA collapses); combined 9.4x/7.8x
