@@ -231,15 +231,14 @@ comptime IDN_DBSCAN_KEEP_COUNTS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not TARGET_HAS_APPLE_GPU
 )
+# TOMBSTONE: MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at e713eb2d5c.
+# Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime DBSCAN_RBC_KEEP_COUNTS = (
     (
-        (
-            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and TARGET_HAS_APPLE_GPU
-        )
-        or IDN_DBSCAN_KEEP_COUNTS
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+        and TARGET_HAS_APPLE_GPU
     )
-    and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
+    or IDN_DBSCAN_KEEP_COUNTS
 )
 
 #: fam-cluster (2026-10-04), IDENTICAL: on the ball-cover arm loop 1 no
