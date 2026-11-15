@@ -63,8 +63,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_HPDEV_INIT_OFF (old path, never measured) is gone; the default is kept; code at 2136ab3bb0; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_HPDEV_NORMAL_OFF (old path, never measured) is gone; the default is kept; code at 31aef6de0f; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_IF_FIT_OWN_X"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_IF_FIT_OWN_X (opt-in arm, never measured) is gone; the default is kept; code at 0a98ac1ae9; restore: experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch"
+    # MOJOLEARN_IDN_IF_FIT_OWN_X: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch
     comptime assert not is_defined["MOJOLEARN_IDN_IF_FIT_EXPORT"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_IF_FIT_EXPORT (opt-in arm, never measured) is gone; the default is kept; code at cfce0d30ce; restore: experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch
