@@ -3274,7 +3274,7 @@ def bwd_refuse_nonfinite_d_out(ctx: DeviceContext, mut d_out: DeviceBuffer[DType
     the one offending word read back to name NaN or infinity). Raises
     before any launch of the backward; returns when `d_out` is finite.
     The autograd decoder-layer entry calls it on traced and materialized
-    calls (and under -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF)."""
+    calls."""
     var bad = device_first_nonfinite(ctx, d_out, len(d_out))
     if bad >= 0:
         var bad_view = d_out.create_sub_buffer[DType.float32](bad, 1)

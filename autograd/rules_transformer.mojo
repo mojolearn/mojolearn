@@ -123,9 +123,12 @@ from gemm.contract import OP_NT
 # + bubble, AMD ~18 us + bubble of ~3.4 ms). The verdict is the same index
 # from the same kernels; the refusal is still raised by this call, after the
 # layer's gradients are written. Bits of an accepted call: unchanged (no
-# kernel or order moves). -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps the
-# synchronous scan before the first launch (arm A).
-comptime AUTOGRAD_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
+# kernel or order moves).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF (the synchronous scan, arm A; old path, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 2266129859. AUTOGRAD_REFUSE_DEFER = True stays for
+# autograd/rules_samba.mojo and training/samba_resident.mojo; traced and materialized calls keep the synchronous scan.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch
+comptime AUTOGRAD_REFUSE_DEFER = True
 
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -848,7 +851,7 @@ def llama_decoder_layer_backward_autograd(
     var plain = not (traced or materialize)
     var alias_in = IDN_BWD_ENTRY_ALIAS and plain
     var trace_addr = Int(MutPointer(to=trace)) if traced else 0
-    if AUTOGRAD_REFUSE_DEFER and plain:
+    if plain:
         # idea J: the verdict is queued now and read at the closing wait
         var scan = DeferredNonfiniteScan(ctx, d_out, len(d_out))
         var ex = DeviceExec(ctx)
