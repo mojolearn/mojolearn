@@ -60,6 +60,7 @@ from checks.native_tests.fresh_state_zeros import register as register_fresh_sta
 from checks.native_tests.gbdt_ova_link import register as register_gbdt_ova_link
 from checks.native_tests.gbdt_public_fits import register as register_gbdt_public_fits
 from checks.native_tests.gbdt_resident_ns_predict import register as register_gbdt_resident_ns_predict
+from checks.native_tests.gbdt_tree_metadata import register as register_gbdt_tree_metadata
 from checks.native_tests.gp_entry_table import register as register_gp_entry_table
 from checks.native_tests.gp_native import register as register_gp_native
 from checks.native_tests.gp_normalization import register as register_gp_normalization
@@ -232,6 +233,7 @@ def all_checks() -> List[Check]:
     checks.append(register_gbdt_ova_link())
     checks.append(register_gbdt_public_fits())
     checks.append(register_gbdt_resident_ns_predict())
+    checks.append(register_gbdt_tree_metadata())
     checks.append(register_gp_entry_table())
     checks.append(register_gp_native())
     checks.append(register_gp_normalization())
