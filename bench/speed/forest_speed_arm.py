@@ -923,9 +923,12 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
         specs[arm.name] = (call, post)
         emit_infer("FSPEED-INFER-PATH", lane, [("arm", arm.name), ("call", _one_line(text, 400))])
     spent = {name: 0.0 for name in specs}
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our arm's warm-up call on a batch
+    # decides how many consecutive calls its one scored run makes (20 under 10 ms, else 1); opponents make one
+    small = spec._small_rows()
     for batch, x_ours, x_them in batches:
         rows = int(x_ours.shape[0])
-        live, last = [], {}
+        live, last, warm_ms = [], {}, {}
         for name, (call, post) in specs.items():
             x = x_ours if name.startswith("ours") else x_them
             x = own_inputs.get(name, {}).get(batch, x)
@@ -942,6 +945,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                            ("reason", "%s during warm-up: %s" % (exc.__class__.__name__, _one_line(exc)))])
                 continue
             spent[name] += ms / 1000.0
+            warm_ms[name] = ms
             emit_infer("FSPEED-INFER-WARMUP", lane, [("arm", name), ("batch", batch),
                                                      ("rows", rows), ("ms", "%.3f" % ms)])
             live.append(name)
@@ -961,17 +965,28 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                     raw = call(x)
                     ms = (time.perf_counter() - t0) * 1000.0
                     vec = post(raw)
+                    # SMALL ROWS: the rest of the scored run's calls; the hash, the accuracy and the receipt
+                    # are the first call's output (same bits every call)
+                    calls = [ms]
+                    for _ in range(1, small.calls_for(warm_ms.get(name), name.startswith("ours"))):
+                        t0 = time.perf_counter()
+                        call(x)
+                        calls.append((time.perf_counter() - t0) * 1000.0)
+                    calls_rec = small.spread(calls)
+                    ms = calls_rec["ms"]
                 except Exception as exc:           # noqa: BLE001
                     emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                                ("reason", "%s at round %d: %s" % (exc.__class__.__name__, r,
                                                                   _one_line(exc)))])
                     live.remove(name)
                     continue
-                spent[name] += ms / 1000.0
+                spent[name] += sum(calls) / 1000.0
                 last[name] = vec
                 emit_infer("FSPEED-INFER", lane, [("arm", name), ("batch", batch), ("rows", rows),
                                                   ("round", r), ("ms", "%.3f" % ms),
-                                                  ("hash", spec.hash_predictions(vec))])
+                                                  ("hash", spec.hash_predictions(vec))]
+                           + ([("calls", calls_rec["calls"]), ("min_ms", "%.6f" % calls_rec["min_ms"]),
+                               ("max_ms", "%.6f" % calls_rec["max_ms"])] if calls_rec["calls"] > 1 else []))
                 # FAIRNESS FIX (2026-10-13 audit): inference retained only
                 # a short digest. Save the exact already-consumed output
                 # after its clock, separately for each batch and scored round.
