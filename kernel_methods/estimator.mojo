@@ -426,7 +426,7 @@ def krr_weight_kernel(
 #: CPU work on a GPU route.
 # TOMBSTONE: MOJOLEARN_IDN_KRR_DEV_SCALE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0765c7997d.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KRR_DEV_SCALE_OFF.patch; record in docs/TOMBSTONES.md.
-comptime KRR_IDN_DEV_SCALE = True
+# (Sweep 2026-11-15: comptime KRR_IDN_DEV_SCALE removed; always True, nothing read it.)
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default: KernelRidge fit and
 #: predict read X, y, X_fit and the dual from the caller's memory straight
