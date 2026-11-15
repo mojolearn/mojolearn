@@ -89,7 +89,9 @@ comptime ANN3_ROW_THREADS = False
 #: result (nine launches per chunk otherwise: the partial lists in device
 #: memory, seven pair joins, the merge). (distance, row id) is a total order,
 #: so the k least are the same entries: expected to move no bit.
-comptime ANN3_SCAN_SELECT = is_defined["MOJOLEARN_ANN3_SCAN_SELECT"]()
+# TOMBSTONE: MOJOLEARN_ANN3_SCAN_SELECT (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5f0cf5941a.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_SCAN_SELECT.patch; record in docs/TOMBSTONES.md.
+comptime ANN3_SCAN_SELECT = False
 
 
 #: FAST on Apple, t-SNE: the step launch runs one thread per ROW, which
