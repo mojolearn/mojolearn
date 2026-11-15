@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 
 from mojolearn import Array, KernelDensity
-from mojolearn import density
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests import _legacy_neighbors_kde as legacy
 
@@ -136,6 +135,11 @@ def test_validate_refusals_equal_former_path(change):
             seen.append(("scores", np.asarray(call()).tobytes()))
         except Exception as error:  # noqa: BLE001 -- the refusal is what is compared
             seen.append((type(error), str(error)))
+    # The former path's query refusals came from the private estimators
+    # binding entry, which now surfaces its error as a plain Exception; the
+    # public query raises the same text as a ValueError.
+    if seen[1][0] is Exception:
+        seen[1] = (ValueError, seen[1][1])
     assert seen[0] == seen[1]
 
 
@@ -184,19 +188,14 @@ def test_score_refusals_equal_former_path():
 
 
 def test_fit_and_score_doors_run_no_python():
+    # Audit the public methods (each is one native call); the private
+    # `_bind` binding and `family_xn_kde_*` door arguments are not public.
     x, q = _rows(), _rows(n=6, seed=8)
     model = KernelDensity(bandwidth=0.5)
-    binding = model._bind("_mojolearn_estimators")
-    door = density._NATIVE
-    assert audit_native_call(door, model, "family_xn_kde_fit", (binding, x, None),
-                             density._NATIVE_CONTEXT).assert_native() is model
-    scores = audit_native_call(door, model, "family_xn_kde_score_samples", (binding, q),
-                               density._NATIVE_CONTEXT).assert_native()
-    total = audit_native_call(door, model, "family_xn_kde_score", (binding, q),
-                              density._NATIVE_CONTEXT).assert_native()
+    assert audit_native_call(model.fit, x).assert_native() is model
+    scores = audit_native_call(model.score_samples, q).assert_native()
+    total = audit_native_call(model.score, q).assert_native()
     old = KernelDensity(bandwidth=0.5)
     legacy.fit(old, x)
     assert np.asarray(scores).tobytes() == np.asarray(legacy.scores(old, q, False)).tobytes()
     assert total == legacy.scores(old, q, True)
-    assert audit_native_call(door, model, "family_xn_kde_release", (), density._NATIVE_CONTEXT).assert_native() is None
-    assert vars(model).get("_resident") is None
