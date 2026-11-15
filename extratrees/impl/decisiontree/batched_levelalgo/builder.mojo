@@ -3587,6 +3587,19 @@ def _device_tpb() -> Int:
     """
     # TOMBSTONE: MOJOLEARN_AFT_F06, MOJOLEARN_ET_TPB_1024, MOJOLEARN_ET_TPB_512, MOJOLEARN_ET_TPB_128 (unmeasured opt-in arms; the width arms above are history) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
     # Restore: git apply experiments/removed/MOJOLEARN_AFT_F06.patch; experiments/removed/MOJOLEARN_ET_TPB_1024.patch; experiments/removed/MOJOLEARN_ET_TPB_512.patch; experiments/removed/MOJOLEARN_ET_TPB_128.patch
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F06 (Apple fast opt-in arm; the ET_TPB_* width arms stay deleted) back as it was, default off; default path unchanged.
+    # AFT F06: two 32-lane SIMD groups per block reduces the live score
+    # reduction footprint. Keep range/partition work-map geometry coupled
+    # through DEVICE_TPB, as the stable scatter consumes that same map.
+    # This is a new 64-thread arm, not the rejected Apple 256-thread retry
+    # recorded above. experiments/apple_fast_trees/IDEAS.md; no quality or
+    # speed evidence; opt-in and uncompiled/unverified/unmeasured.
+    if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and TARGET_HAS_APPLE_GPU
+        and is_defined["MOJOLEARN_AFT_F06"]()
+    ):
+        return 64
     return 128 if WARP_SIZE <= 32 else 512
 
 comptime DEVICE_MAX_ACC = _device_max_acc()
@@ -3717,7 +3730,17 @@ comptime ET_RANGE_TILED = (
 
 # TOMBSTONE: MOJOLEARN_AFCL_T09 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T09.patch
-comptime ET_FEATURE_TILE = 16
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFCL_T09 (Apple fast opt-in arm) back as it was, default off; default path unchanged.
+# AFCL-T09: eight sampled features per task halves the private range/score
+# tile footprint and admits more independent tasks on Apple. Every selected
+# feature keeps its RNG identity and full row set; this changes no threshold.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T09 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFCL_T09"]()
+)
+comptime ET_FEATURE_TILE = 8 if AFCL_T09 else 16
 
 comptime ET_SPLIT_REDUCE_ONE_BLOCK = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 comptime ET_REDUCE_TPB = DEVICE_TPB
@@ -3749,7 +3772,10 @@ one row chunk's features run together and share its cache lines."""
 
 # TOMBSTONE: MOJOLEARN_ET_RM_NARROW, MOJOLEARN_ET_RM_NARROW_OFF (unmeasured opt-in arm and its old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_ET_RM_NARROW.patch; experiments/removed/MOJOLEARN_ET_RM_NARROW_OFF.patch
-comptime ET_RM_NARROW = TARGET_HAS_APPLE_GPU
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_ET_RM_NARROW (force-on knob off Apple; its _OFF rollback stays deleted) back as it was, default off; default path unchanged.
+comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]() or (
+    TARGET_HAS_APPLE_GPU
+)
 """Apple, both modes (trees-apple2, 2026-09-28): `ensure_row_major` also
 builds the row-major copy when one row's floats fit a 64-byte line
 (`n_cols <= 16`) and the fit samples at least a quarter of the features,
@@ -3796,8 +3822,22 @@ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_PART_ROWS_OFF.patch
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
-comptime PART_ROWS_PER_THREAD = SEARCH_ROWS_PER_THREAD if (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F07 (Apple fast) and MOJOLEARN_ET_PART_ROWS (force-on knob off Apple; ET_PART_ROWS_OFF and IDN_ET_PART_ROWS_OFF stay deleted) back as it was, default off; default path unchanged.
+# AFT F07: double the partition's rows/lane relative to the search work
+# budget. At the shipped Apple geometry this is 4096 rows/block, reducing
+# count/scan/scatter workgroup count without changing stable row order.
+# The existing separate search/partition workload maps handle unequal tiles.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F07 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F07"]()
+)
+comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (SEARCH_ROWS_PER_THREAD if (
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and (is_defined["MOJOLEARN_ET_PART_ROWS"]() or TARGET_HAS_APPLE_GPU)
+    )
     or (
         # fam-forests (2026-10-04), `IDN_ET_PART_ROWS`: IDENTICAL on NVIDIA
         # and AMD. Those vendors search at 64 rows per thread and partitioned
@@ -3812,7 +3852,7 @@ comptime PART_ROWS_PER_THREAD = SEARCH_ROWS_PER_THREAD if (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and not TARGET_HAS_APPLE_GPU
     )
-) else 1
+) else 1)
 """FAST: the partition's four kernels fold the search's rows per thread
 too, on the SAME `TPB * R` workload tile the search staged, so a plain cycle
 no longer restages `d_wl` and drains before partitioning, and each block
@@ -3990,7 +4030,18 @@ def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
 
 # TOMBSTONE: MOJOLEARN_AFT_F08 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F08.patch
-comptime FOREST_ROW_SLOT_CAP = 1 << 26
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F08 (Apple fast opt-in arm) back as it was, default off; default path unchanged.
+# AFT F08: permit 1 GiB total for the two Int32 row-slot planes, versus
+# the default 512 MiB. More whole trees then expose independent nodes in
+# one frontier; each tree retains its feature RNG and node growth policy.
+# This is a byte budget, unrelated to any dataset dimension. Other per-tree
+# scratch adds to this budget, so peak memory is a later qualification gate.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime FOREST_ROW_SLOT_CAP = (1 << 27) if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F08"]()
+) else (1 << 26)
 """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched
 forest trainer (DEVIATION 211) may hold: 2^26 slots = 256 MB in `d_row_ids`
 plus the same again in the partition's alternate buffer. Trees beyond the cap
