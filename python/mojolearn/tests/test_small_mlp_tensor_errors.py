@@ -5,7 +5,7 @@ is a failure, not a skipped qualification. No GPU computation is needed: these
 cases fail at native iteration before training/prediction.
 """
 import pytest
-import torch
+torch = pytest.importorskip("torch")
 from mojolearn import SmallMLPTrainer
 import numpy as np
 

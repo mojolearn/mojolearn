@@ -51,7 +51,7 @@ def test_save_after_in_place_edit_scores_the_fitted_forest(tmp_path, contaminati
     # The saved file holds the trees, not the training matrix.
     with np.load(str(path)) as members:
         assert "x" not in members.files
-        assert str(members["format"]) == "mojolearn-iforest-2"
+        assert members["format"].item() == "mojolearn-iforest-2"  # native writer: one-element text member (7f13804b25)
         assert members["tree_offsets"].shape == (9,)
 
 
@@ -114,7 +114,7 @@ def test_host_column_loads_scores_and_resaves_a_saved_forest(tmp_path):
     again = tmp_path / "again.npz"
     loaded.save(str(again))
     with np.load(str(again)) as members:
-        assert str(members["format"]) == "mojolearn-iforest-2"
+        assert members["format"].item() == "mojolearn-iforest-2"  # native writer: one-element text member (7f13804b25)
         assert "x" not in members.files
     _assert_same(_scores(host.HostIsolationForest.load(str(again)), query), before)
 

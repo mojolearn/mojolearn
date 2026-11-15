@@ -128,13 +128,8 @@ def test_oracle_spells_the_device_kernel():
     for statement in KERNEL_STATEMENTS:
         assert statement in device, f"the device kernel no longer spells {statement!r}; restate the oracle"
         assert statement in oracle, f"the oracle does not spell {statement!r}"
-    # `_c44_epoch_kernel` is the C44_SAMPLING_DESCRIPTORS experiment's copy of
-    # the epoch kernel (same edge/draw visit order, default off); the host
-    # restates the two shipped kernels.
-    start = device.index("def _c44_epoch_kernel(")
-    end = device.index("\ndef ", start + 1)
-    shipped = device[:start] + device[end:]
-    assert oracle.count("acc[c] = ftz(acc[c] + g)") == shipped.count("acc[c] = ftz(acc[c] + g)")
+    # The per-kernel count check that cut out `_c44_epoch_kernel` is deleted:
+    # 1ff002b526 folded MOJOLEARN_C44_SAMPLING_DESCRIPTORS and deleted that kernel.
     assert "ftz(Float32(Float64(weight) / Float64(max_weight)))" in oracle
     assert "first.append(ftz(initial[i]))" in oracle, "the initial upload is flushed"
     assert "oracle_embedding[DType.float32](\n        coo, n_components + 1, True, True, Float32(1e-5), seed" in oracle

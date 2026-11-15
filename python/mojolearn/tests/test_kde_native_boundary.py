@@ -28,7 +28,7 @@ def test_kde_public_calls_do_not_dispatch_legacy_argument_lists(monkeypatch):
         calls.append(True)
         raise AssertionError("legacy KDE entry was called")
 
-    binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
+    binding = _backend.binding("_mojolearn_estimators", "identical")
     for name in ("kde_fit_prepare", "kde_fit_release", "kde_fast_immutable_fit", "kde_score_samples", "kde_score_samples_resident"):
         monkeypatch.setattr(binding, name, forbidden, raising=False)
     model = _model().fit(_x(), sample_weight=np.array([1, 2, 1], dtype=np.float32))
@@ -50,9 +50,12 @@ def test_kde_python_descriptor_factory_is_refused_before_invocation(operation, m
         calls.append(True)
         raise AssertionError("Python KDE descriptor factory was called")
 
+    # The operation reads the exact compiled module connected at import
+    # (`_backend.exact_host_module`: the host extension on a CPU-only install,
+    # never its `_HostBinding` facade), so the replacement goes there.
     binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
     monkeypatch.setattr(binding, "kde_native_api_v1", forbidden)
-    with pytest.raises(TypeError, match="compiled extension entry"):
+    with pytest.raises(TypeError, match="requires compiled entry kde_native_api_v1"):
         getattr(model, operation)(_x())
     assert calls == []
 

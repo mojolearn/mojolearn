@@ -115,7 +115,9 @@ def test_runtime_failure_does_not_cancel_other_independent_probes(tmp_path, monk
     def execute(command, log, cwd, env, timeout):
         config = json.loads(Path(command[-1]).read_text())
         calls.append(config['path'])
-        assert env['MOJOLEARN_NEURAL_NATIVE_DISPATCH'] == ('1' if config['kind'] == 'pytest' else '0')
+        # Native dispatch is a build constant: verify never sets the retired switch.
+        assert 'MOJOLEARN_NEURAL_NATIVE_DISPATCH' not in env
+        assert 'MOJOLEARN_GENERATION_NATIVE_SESSION' not in env
         # Simulate a missing API in the first process; no product module is
         # imported and no native/GPU work occurs in this verifier control test.
         failed = len(calls) == 1

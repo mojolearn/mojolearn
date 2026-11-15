@@ -668,6 +668,17 @@ def _load(name):
 _SMALL_ROWS = []
 
 
+def _classical_route():
+    """tools/classical_route.py, loaded once per process (lane
+    flag-classical-dispatch-gate: the route beside each round's time)."""
+    if not _CLASSICAL_ROUTE:
+        _CLASSICAL_ROUTE.append(_load("classical_route"))
+    return _CLASSICAL_ROUTE[0]
+
+
+_CLASSICAL_ROUTE = []
+
+
 def _small_rows():
     """tools/bench_board_small_rows.py, loaded once per process."""
     if not _SMALL_ROWS:
@@ -1874,6 +1885,7 @@ def worker(args):
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(last, runner) if r > 0 else None
                 fitted_readback = runner.fitted_readback()
+                route = _classical_route().classical_route(runner)   # after the clock; None for opponents
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -1881,7 +1893,7 @@ def worker(args):
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "scored_calls": calls_rec,
-                 "iterations": fitted_readback["iterations"],
+                 "iterations": fitted_readback["iterations"], "classical_route": route,
                  "fitted_parameters": fitted_readback["parameters"],
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
@@ -2282,10 +2294,13 @@ def race(args):
             if r > 0:
                 result["arms"][arm].setdefault("iteration_receipts", []).append(msg.get("iterations"))
                 result["arms"][arm].setdefault("fitted_parameters", []).append(msg.get("fitted_parameters"))
+            if msg.get("classical_route") is not None:   # the route beside the time, read outside the clock
+                result["arms"][arm].setdefault("classical_routes", []).append(dict(msg["classical_route"], round=r))
             result["arms"][arm]["mem"].append(msg.get("mem"))
-            print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s"
+            print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"],
-                     _small_rows().line_suffix(msg.get("scored_calls"))), flush=True)
+                     _small_rows().line_suffix(msg.get("scored_calls")),
+                     _classical_route().route_suffix(msg.get("classical_route"))), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]

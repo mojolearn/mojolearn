@@ -268,7 +268,7 @@ def test_kde_bandwidth_warning_has_native_attribution_and_no_frame_callbacks(tmp
     # Process isolation keeps the permanent Python audit hook out of pytest.
     archive = _archive(tmp_path, 'KernelDensity')
     env = dict(os.environ)
-    package_root = str(Path(__file__).resolve().parents[2])
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT as package_root  # the runtime this process imported
     env['PYTHONPATH'] = package_root + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
     result = subprocess.run([sys.executable, '-c', _BANDWIDTH_WARNING_CHILD, method, str(archive), module_mode],
                             env=env, capture_output=True, text=True, timeout=180)
@@ -623,7 +623,8 @@ def test_kde_ordinary_subclass_keeps_native_attributes_and_scores(tmp_path):
     for method in METHODS:
         audit_native_call(getattr, model, method).assert_native()
         _check(model, _input(2, "float32"), method)
-    audit_native_call(cls.__del__, model).assert_native()
+    # The class-level native finalizer (`cls.__del__`) was removed by
+    # dfba3d8b00: the typed resident owner's native destructor releases the fit.
 
 
 @pytest.mark.parametrize("field", ["bandwidth", "kernel", "metric"])
@@ -733,15 +734,11 @@ def test_kde_option_string_subclass_conversion_hooks_are_never_called(tmp_path, 
     assert touched == []
 
 
-def test_kde_native_finalizer_masks_device_base_python_finalizer(tmp_path, monkeypatch):
-    model = _model(tmp_path)
-    touched = []
-    def finalizer(self):
-        touched.append("del")
-    monkeypatch.setattr(host.KernelDensity, "__del__", finalizer)
-    _check(model, _input(2, "float32"), "score_samples")
-    audit_native_call(host.HostKernelDensity.__del__, model).assert_native()
-    assert touched == []
+# Deleted test_kde_native_finalizer_masks_device_base_python_finalizer: it
+# called the native class finalizer `HostKernelDensity.__del__` over a Python
+# `__del__` patched on the device base; dfba3d8b00 removed that class
+# finalizer (resident teardown is the typed native owner's destructor), so
+# there is nothing left to mask. Mojo coverage: none.
 
 
 @pytest.mark.parametrize("name", ["KernelDensity", "ElasticNet", "KMeans", "KernelRidge"])
@@ -751,6 +748,9 @@ def test_resolved_model_python_finalizer_is_refused_before_attribute_binding(tmp
     touched = []
     def finalizer(self):
         touched.append("del")
+    # Drain earlier tests' unreachable instances first: the audit's own
+    # gc.collect() would otherwise finalize them with the patched finalizer.
+    gc.collect()
     with monkeypatch.context() as patch:
         patch.setattr(cls, "__del__", finalizer, raising=False)
         _refused(audit_native_call(getattr, model, "score_samples" if name == "KernelDensity" else "predict"), TypeError)

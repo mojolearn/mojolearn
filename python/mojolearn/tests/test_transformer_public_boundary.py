@@ -149,8 +149,13 @@ def test_decode_session_kept_steps_match_single_forwards():
 
 def test_decode_session_sees_a_foreign_cached_tokens_write():
     # A write to the state between steps is seen by the kept (row N177) step
-    # path: the session refuses a cached_tokens that differs from the
-    # resident cache, and steps on once the caller's word matches again.
+    # path. On a GPU the resident session refuses a cached_tokens that differs
+    # from its resident cache, and steps on once the caller's word matches
+    # again. A CPU-only install has no resident cache: the host route's kept
+    # step reads the state's word as the cache position
+    # (providers/python/transformer_decode_pyapi_door.mojo, `live["cached_tokens"]`
+    # when kept), so a rewound word is where the next token goes.
+    from mojolearn import _backend
     block = _block()
     x = np.full((1, 1, 16), .02, dtype=np.float32)
     state = block.allocate_state(1, 6)
@@ -159,6 +164,10 @@ def test_decode_session_sees_a_foreign_cached_tokens_write():
         session.step(x)
         assert state.cached_tokens == 2
         state.cached_tokens = 0
+        if _backend.vendor() == "cpu":
+            session.step(x)
+            assert state.cached_tokens == 1
+            return
         with pytest.raises(ValueError, match="cached_tokens = 0"):
             session.step(x)
         state.cached_tokens = 2

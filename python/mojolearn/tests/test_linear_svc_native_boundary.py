@@ -107,8 +107,11 @@ def test_linear_svc_native_factory_refuses_python_replacement(operation, monkeyp
         calls.append(True)
         raise AssertionError("Python LinearSVC provider invoked")
 
+    # The operation reads the exact compiled module connected at import
+    # (`_backend.exact_host_module`: the host extension on a CPU-only install,
+    # never its `_HostBinding` facade), so the replacement goes there.
     monkeypatch.setattr(_backend.exact_host_module(model._bind()), "linear_svc_native_api_v1", forbidden)
-    with pytest.raises(TypeError, match="compiled extension entry"):
+    with pytest.raises(TypeError, match="requires compiled entry linear_svc_native_api_v1"):
         if operation == "fit":
             model.fit(_points(), [-5, 9] * 4)
         else:

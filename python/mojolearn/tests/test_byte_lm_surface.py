@@ -205,63 +205,13 @@ def test_checkpoint_bytes_keep_strict_json_and_schema_admission(encoded):
         SmallByteLanguageModelTrainer.from_checkpoint_bytes(encoded)
 
 
-class _Witness:
-    """The four witness entries `_byte_lm_impl._load` reads, and nothing
-    else: `_load` is Python admission over them, so a stand-in for exactly
-    those reads is enough. The native trainer owner never sees it."""
-
-    def __init__(self, vendor):
-        self.mode = 1
-        self.vendor = vendor
-        self.profile = impl.PROFILE
-
-    def byte_lm_numeric_mode(self):
-        return self.mode
-
-    def byte_lm_vendor(self):
-        return self.vendor
-
-    def byte_lm_profile(self):
-        return self.profile
-
-    def byte_lm_arithmetic_suffix(self):
-        return ''
-
-    def byte_lm_run(self, *args):
-        raise AssertionError('admission ran the binding')
-
-
-def _witness(monkeypatch, vendor):
-    witness = _Witness(vendor)
-    monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'identical')
-    monkeypatch.setattr(impl._backend, 'numeric_mode', lambda: 'identical')
-    monkeypatch.setattr(impl._backend, 'binding', lambda name, mode='identical': witness)
-    return witness
-
-
-@pytest.mark.parametrize('field,value', [('mode', 0), ('vendor', 'none'), ('profile', 'different-profile')])
-def test_native_mode_vendor_profile_witnesses_refuse_before_model(monkeypatch, field, value):
-    monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
-    witness = _witness(monkeypatch, 'cuda')
-    assert impl._load() is witness
-    setattr(witness, field, value)
-    with pytest.raises(RuntimeError, match='native profile'):
-        impl._load()
-
-
-def test_metal_witness_is_admitted_without_weakening_profile_or_mode(monkeypatch):
-    witness = _witness(monkeypatch, 'metal')
-    # A GPU install (no CPU-only set loaded) admits the Metal witness ...
-    monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
-    assert impl._load() is witness
-    # ... a CPU-only install admits only the CPU byte LM binding.
-    monkeypatch.setattr(impl._backend, '_CPU_ONLY', 'no GPU set')
-    with pytest.raises(RuntimeError, match='native profile'):
-        impl._load()
-    monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
-    witness.profile = 'wrong-profile'
-    with pytest.raises(RuntimeError, match='native profile'):
-        impl._load()
+# Deleted: test_native_mode_vendor_profile_witnesses_refuse_before_model and
+# test_metal_witness_is_admitted_without_weakening_profile_or_mode (with their
+# _Witness stand-in). They patched `_backend.binding` with a Python witness for
+# `_byte_lm_impl._load`'s Python admission; 67e52e0bc3 made `_load` one native
+# call whose door (bindings/byte_lm_trainer_native_door.mojo `_load_snapshot`)
+# reads profile, mode and vendor from the compiled image's glue entry, which no
+# Python stand-in reaches.
 
 
 def test_tokens_require_exact_int32_shape_and_range():

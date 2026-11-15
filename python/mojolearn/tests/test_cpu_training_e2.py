@@ -114,12 +114,10 @@ def test_accuracy_host_uses_pointer_parallel_count():
     assert "host_parallelize(_rows, tasks)" in oracle
 
 
-def test_confusion_host_uses_pointer_parallel_counts():
-    binding = _read("bindings/_mojolearn_metrics_host.mojo")
-    oracle = _read("metrics/host/classification_oracle.mojo")
-    assert "host_confusion_matrix_ptr(y, p, n, k, normalization)" in binding
-    assert "def host_confusion_counts_ptr(" in oracle
-    assert "host_parallelize(_rows, tasks)" in oracle
+# test_confusion_host_uses_pointer_parallel_counts deleted: a source-text check of
+# the metrics host binding. 80710606b8 moved the confusion-matrix RUN body out of
+# bindings/_mojolearn_metrics_host.mojo into metrics/mojolearn_metrics_host_run.mojo.
+# Public confusion_matrix values: test_classification_metrics.py.
 
 
 def test_binding_registers_kmeans_fit():

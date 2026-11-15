@@ -63,4 +63,14 @@ def test_connection_carries_named_factory_and_checked_session_admission():
     causal = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
     assert 'py_setitem(entries, "native_block_operations", block_provider)' in causal
     # The provider connects in identical mode on every vendor, CPU included since b1c97898f5.
-    assert PUBLIC.count('if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":') == 2
+    # Native dispatch is the build constant NEURAL_NATIVE_DISPATCH (lane
+    # flag-native-dispatch-gate, 2026-11-15); no neural door reads it from the
+    # environment, and its by-name arm is the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF build.
+    assert PUBLIC.count('if code == 1 and NEURAL_NATIVE_DISPATCH:') == 2
+    descriptor = (ROOT / 'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
+    assert 'comptime NEURAL_NATIVE_DISPATCH = not is_defined["MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF"]()' in descriptor
+    for door in ('bindings/neural_block_public_door.mojo', 'bindings/mamba_public_native_door.mojo',
+                 'bindings/causal_lm_public_door.mojo', 'bindings/causal_lm_construct_door.mojo',
+                 'providers/python/transformer_decode_pyapi_door.mojo',
+                 'providers/python/neural_descriptor_pyapi_door.mojo'):
+        assert 'getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH' not in (ROOT / door).read_text(), door

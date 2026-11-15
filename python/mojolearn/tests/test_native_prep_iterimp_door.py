@@ -492,6 +492,14 @@ class _Former(ml.IterativeImputer if ml is not None else object):
         self._rng = (int(hi_lo[0]) << 32) | int(hi_lo[1])
         return Array._owned(out, (k,), "<f8", "C")
 
+    def _check_width(self, arr):
+        # Test-side copy of the former `_PrepBase._check_width`, which
+        # 07359f4b53 removed from the product (the prep doors own the width
+        # check now); the oracle keeps the former route's refusal.
+        if arr.shape[1] != self.n_features_in_:
+            raise ValueError(f"mojolearn: X has {arr.shape[1]} features, {type(self).__name__} "
+                             f"was fitted with {self.n_features_in_}")
+
     def fit(self, X, y=None):
         self.fit_transform(X)
         return self

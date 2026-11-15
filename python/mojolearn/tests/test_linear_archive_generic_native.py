@@ -56,9 +56,17 @@ def test_generic_linear_keeps_writable_and_rebound_coefficient_owners(estimator,
     assert type(model) is cls
     assert not source.closed
     source.close()
-    assert type(model.coef_) is Array
-    assert model.coef_.shape == (2,) and model.coef_.order == order
-    assert np.asarray(model.coef_).flags.writeable
+    # The classical owner publishes a mojolearn Array, or an ndarray once NumPy
+    # is connected (bindings/classical_archive_output_door.mojo
+    # archive_numeric_pack); either way a writable owner in the saved layout.
+    coef = model.coef_
+    assert type(coef) in (Array, np.ndarray)
+    assert coef.shape == (2,)
+    if type(coef) is Array:
+        assert coef.order == order and coef.flags["WRITEABLE"]
+    view = np.asarray(coef)
+    assert view.flags.writeable
+    assert view.flags["F_CONTIGUOUS" if order == "F" else "C_CONTIGUOUS"]
     np.testing.assert_array_equal(np.asarray(model.coef_), [1.0, -2.0])
     assert model.fit_intercept and model.intercept_ == 0.5 and model.n_features_in_ == 2
     if estimator == "Ridge":
@@ -66,7 +74,7 @@ def test_generic_linear_keeps_writable_and_rebound_coefficient_owners(estimator,
     # This exercises reconciliation of a published writable owner with native
     # fitted state, followed by public rebinding and release of the old owner.
     x = np.array([[1.0, 0.0]], dtype="<f4")
-    model.coef_[0] = 3.0
+    np.asarray(model.coef_)[0] = 3.0  # write through the zero-copy view
     np.testing.assert_array_equal(audit_native_call(model.predict, x).assert_native(), [3.5])
     model.coef_ = np.array([4.0, -5.0], dtype="<f4")
     np.testing.assert_array_equal(audit_native_call(model.predict, x).assert_native(), [4.5])

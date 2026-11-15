@@ -47,7 +47,6 @@ PENDING = [
     'Resident, fixed15, distributed and optional training paths beyond selected probes',
 ]
 ENV_KEYS = ('MOJOLEARN_VENDOR', 'MOJOLEARN_GENERATION_DEVICE',
-            'MOJOLEARN_NEURAL_NATIVE_DISPATCH', 'MOJOLEARN_GENERATION_NATIVE_SESSION',
             'MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD', 'MOJOLEARN_TRANSFORMER_LEGACY_SETUP',
             'MOJOLEARN_BUILD_ROOT', 'MOJOLEARN_NATIVE_ROOT', 'DYLD_LIBRARY_PATH',
             'LD_LIBRARY_PATH', 'PYTHONPATH')
@@ -333,8 +332,17 @@ def verify(args):
                                          exception=problem, log=str(admission_log)))
             config_base = None
         if config_base is not None:
-            env.update(MOJOLEARN_GENERATION_DEVICE='gpu', MOJOLEARN_NEURAL_NATIVE_DISPATCH='1',
-                       MOJOLEARN_GENERATION_NATIVE_SESSION='0', MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD='0')
+            # Native neural dispatch is the build default (lane
+            # flag-native-dispatch-gate, 2026-11-15): the former
+            # MOJOLEARN_NEURAL_NATIVE_DISPATCH=1 here (and =0 for the probes)
+            # chose a route the product no longer reads from the environment,
+            # so every check runs the shipped default. The by-name CPython arm
+            # is the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF build; verify it by
+            # pointing --package/--binary-root at that build.
+            # MOJOLEARN_GENERATION_NATIVE_SESSION was deleted 2026-11-12.
+            for retired in ('MOJOLEARN_NEURAL_NATIVE_DISPATCH', 'MOJOLEARN_GENERATION_NATIVE_SESSION'):
+                env.pop(retired, None)
+            env.update(MOJOLEARN_GENERATION_DEVICE='gpu', MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD='0')
             env.pop('MOJOLEARN_TRANSFORMER_LEGACY_SETUP', None)
             for index, relative in enumerate(tuple('python/mojolearn/tests/' + name for name in RUNTIME_SUITES) + RUNTIME_PROBES):
                 name = f'runtime-{index}-{Path(relative).stem}'
@@ -344,10 +352,6 @@ def verify(args):
                 config_path = out / (name + '-config.json')
                 write(config_path, config)
                 check_env = env.copy()
-                # Each A/B probe owns its switches; the older session-only
-                # probe requires an unmodified baseline before enabling itself.
-                if config['kind'] == 'probe':
-                    check_env['MOJOLEARN_NEURAL_NATIVE_DISPATCH'] = '0'
                 result = execute([str(args.python), '-I', str(Path(__file__).resolve()), '--worker', str(config_path)],
                                  out / (name + '.log'), out, check_env, args.timeout)
                 result.update(name=name, phase='runtime', result=config['result'])

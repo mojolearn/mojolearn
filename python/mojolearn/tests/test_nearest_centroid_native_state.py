@@ -48,9 +48,10 @@ def test_centroid_native_plan_observes_live_fitted_buffers(field, mutation):
 
 
 @pytest.mark.parametrize("method", ["predict", "decision_function", "predict_proba", "predict_log_proba"])
-def test_centroid_empty_query_keeps_native_null_buffer_refusal(method):
+def test_centroid_empty_query_is_refused(method):
     model = _model()
-    with pytest.raises(ValueError, match="x_neighbors: null buffer address"):
+    # Input admission refuses the empty query before any kernel call.
+    with pytest.raises(ValueError, match="X is empty"):
         getattr(model, method)(np.empty((0, 2), dtype="f4"))
 
 

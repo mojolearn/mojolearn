@@ -193,8 +193,9 @@ def test_sharded_drivers_keep_the_partition_and_the_negative_control():
                                  (forecast, "_fit_hw", "shard_rows(data, lo - shift, hi - shift, context)"),
                                  (shard, "_transform_rbf_sampler", "shard_rows(x, lo - shift, hi - shift, context)"),
                                  (shard, "_fit_scaler", "_columns(data, lo - shift, hi - shift, context)"),
-                                 (shard, "_transform_scaler", "_columns(data, lo - shift, hi - shift, context)"),
-                                 (shard, "_fit_forest", "Python.tuple(x, y, lo - shift)")):
+                                 (shard, "_transform_scaler", "_columns(data, lo - shift, hi - shift, context)")):
+        # The `_fit_forest` row is deleted: e46dc582da (forest-typed-fit) replaced the
+        # worker's `Python.tuple(x, y, lo - shift)` with the typed forest fit request.
         body = source[source.index("def " + driver + "("):]
         body = body[:body.index("\n\ndef ")]
         # every shard reads from its shifted start and is placed at its true offset

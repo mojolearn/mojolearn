@@ -41,7 +41,6 @@ ROOT = Path(__file__).resolve().parents[3]
 
 ORACLE = "gbdt/host/gbdt_oracle_rmse.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
-REFUSAL = "no CPU implementation of _mojolearn_gbdt.gbdt_fit for "
 
 
 def _read(rel):
@@ -56,18 +55,10 @@ def test_manifest_declares_gbdt_rmse():
     assert "RMSE" in host_surface.TRAINING_LANE_NAMES["gbdt-rmse"]
 
 
-def test_binding_dispatches_rmse_and_lifts_only_its_refusals():
-    src = _read(host_surface.binding_source("gbdt"))
-    assert "from gbdt.host.gbdt_oracle_rmse import" in src
-    assert 'var is_rmse = loss == String("RMSE")' in src
-    assert 'if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:' in src
-    # lane/catboost-parity: MAE, Quantile and MAPE joined RMSE's seeded
-    # cursor (their CalcSampleQuantile constant)
-    assert "if boost_from_average == 1 and not is_rmse and not quantile_family:" in src
-    assert "if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:" in src
-    assert "gbdt_rmse_host_fit(" in src and "gbdt_rmse_host_model_text(fit)" in src
-    assert "boost_from_average != 0" in src, "unset and True must resolve the seeded cursor"
-    assert f'"{REFUSAL}"' in src
+# test_binding_dispatches_rmse_and_lifts_only_its_refusals deleted: a source-text check of
+# bindings/_mojolearn_gbdt_host.mojo. 285ac89b42 moved the host binding's RUN (the RMSE
+# dispatch and its refusals) into gbdt/mojolearn_gbdt_host_run.mojo. RMSE/MAE/Quantile/MAPE
+# host fits and their refusals run natively: checks/native_tests/gbdt_public_fits.mojo.
 
 
 def test_oracle_imports_no_gpu_module():

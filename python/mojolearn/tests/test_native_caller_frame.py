@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native caller inspection must preserve output boundaries without audit hooks."""
 import os
-from pathlib import Path
 import subprocess
 import sys
 import textwrap
@@ -101,7 +100,7 @@ def test_public_outputs_inspect_callers_without_python_audit_callbacks(family):
                               retained_pointer_calls=retained_calls)))
     ''')
     env = dict(os.environ)
-    package_root = str(Path(__file__).resolve().parents[2])
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT as package_root  # the runtime this process imported
     env["PYTHONPATH"] = package_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     result = subprocess.run([sys.executable, "-c", script, family], env=env,
                             capture_output=True, text=True, timeout=180)
@@ -173,7 +172,7 @@ def test_host_feature_warning_preserves_attribution_without_frame_callbacks(tmp_
                           'warning_line': caught[0].lineno}))
     ''')
     env = dict(os.environ)
-    package_root = str(Path(__file__).resolve().parents[2])
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT as package_root  # the runtime this process imported
     env['PYTHONPATH'] = package_root + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
     result = subprocess.run([sys.executable, '-c', script, name, str(archive)], env=env,
                             capture_output=True, text=True, timeout=180)

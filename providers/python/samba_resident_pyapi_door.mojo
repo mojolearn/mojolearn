@@ -83,7 +83,13 @@ def samba_resident_native_forward(fields: PythonObject, config: PythonObject, en
     to `_samba_resident_uploads`."""
     var provider = samba_resident_provider(fields, entries)
     if provider is None:
-        # lane flag-neural-small-rows (2026-11-15): `_native_primitives` is
+        # lane flag-native-dispatch-gate (2026-11-15): `_native_primitives` is
+        # now connected at construction in the default build (the build
+        # constant NEURAL_NATIVE_DISPATCH, neural_descriptor_cached); it is
+        # None here only for a non-identical image or the B arm
+        # -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF, which keeps this fallback so
+        # the resident forward stays that build's default too.
+        # lane flag-neural-small-rows (2026-11-15): `_native_primitives` was
         # connected only under MOJOLEARN_NEURAL_NATIVE_DISPATCH=1
         # (neural_descriptor_cached, c295db1c56, default "0"), so on every
         # default install this forward returned None here and SambaStack.forward

@@ -95,7 +95,6 @@ def test_ocsvm_precomputed_index_conversion_does_not_call_array_tolist(monkeypat
 
 @pytest.mark.parametrize("entry", ["x_neighbors_native_api_v1", "ocsvm_resident_native_api_v1"])
 def test_ocsvm_rebound_factory_is_refused_without_python_call(monkeypatch, entry):
-    monkeypatch.setenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0")
     model = _model(gamma="auto")
     calls = []
 
@@ -112,16 +111,21 @@ def test_ocsvm_rebound_factory_is_refused_without_python_call(monkeypatch, entry
 
 
 @pytest.mark.parametrize("boxed", [False, True])
-def test_ocsvm_path_scalar_is_refused_before_comparison_hook(monkeypatch, boxed):
-    value = pathlib.PosixPath("not-a-gamma")
-    value = np.array(value, dtype=object) if boxed else value
+def test_ocsvm_path_scalar_is_refused_before_comparison_hook(boxed):
     calls = []
 
-    def hook(*args):
-        calls.append(args)
-        raise AssertionError("Python parameter comparison invoked")
+    # A path type of its own with the comparison hook: patching the global
+    # pathlib.PosixPath.__eq__ also trapped pytest's own conftest lookups
+    # (INTERNALERROR in the 91d5fdea4e smoke), which are not product calls.
+    class HookedPath(pathlib.PurePosixPath):
+        def __eq__(self, other):
+            calls.append((self, other))
+            raise AssertionError("Python parameter comparison invoked")
 
-    monkeypatch.setattr(pathlib.PosixPath, "__eq__", hook)
+        __hash__ = pathlib.PurePosixPath.__hash__
+
+    value = HookedPath("not-a-gamma")
+    value = np.array(value, dtype=object) if boxed else value
     with pytest.raises(TypeError, match="native|scalar|protocol|owner"):
         _model(gamma=value).fit(_train())
     assert calls == []

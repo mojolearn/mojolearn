@@ -7,7 +7,6 @@ from mojolearn.tests.test_generation_native import load_fixture, DEVICE
 
 @pytest.mark.parametrize("engine", ["auto", "1"])
 def test_default_dispatch_constructs_native_engine_owners(tmp_path, monkeypatch, engine):
-    monkeypatch.delenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", raising=False)
     monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
     monkeypatch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", engine)
     model = load_fixture(tmp_path, "llama")
@@ -27,22 +26,9 @@ def test_default_dispatch_constructs_native_engine_owners(tmp_path, monkeypatch,
     assert stream.info()["generated_tokens"] == 2
 
 
-def test_explicit_dispatch_opt_out_keeps_auto_legacy_route(tmp_path, monkeypatch):
-    monkeypatch.setenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0")
-    monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
-    monkeypatch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "auto")
-    model = load_fixture(tmp_path, "llama", uniform=True)
-    prompt = np.array([[1, 3]], dtype="i4")
-    state = model.allocate_state(1, 5)
-    assert np.asarray(model.forward(prompt, state)).shape == (1, 2, model.vocab_size)
-    assert state.positions == 2
-    assert np.asarray(model.stream(prompt, 2).read(2)).tolist() == [[0, 0]]
-
-
-def test_forced_engine_does_not_swallow_explicit_opt_out(tmp_path, monkeypatch):
-    monkeypatch.setenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0")
-    monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
-    monkeypatch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "1")
-    model = load_fixture(tmp_path, "llama", uniform=True)
-    with pytest.raises(Exception, match="native|session|lock"):
-        model.forward(np.array([[1]], dtype="i4"))
+# test_explicit_dispatch_opt_out_keeps_auto_legacy_route and
+# test_forced_engine_does_not_swallow_explicit_opt_out set
+# MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 at run time. Native dispatch is now a build
+# constant (lane flag-native-dispatch-gate, 2026-11-15): their opt-out arm is
+# the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF build, an A/B arm, not a runtime
+# route, so no process of the default build can reach it.

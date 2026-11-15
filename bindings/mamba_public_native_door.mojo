@@ -19,7 +19,6 @@ the temporary tuple is released.
 """
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from std.python import Python, PythonObject
-from std.os import getenv
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -38,7 +37,7 @@ from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_ex
 from bindings.neural_prefill_native_door import _prefill_mamba3_reports, _m3_output_array
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_handle, neural_descriptor_reserved_execute,
-    neural_descriptor_execute, neural_descriptor_reuse,
+    neural_descriptor_execute, neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH,
 )
 from bindings.samba_inference_native_door import _m3_state_call
 from training.samba_inference_run import _m3_shapes, _m3_names
@@ -211,7 +210,7 @@ def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObje
         var entries = _model_bindings(mods, PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
         var block_provider = PythonObject(None)
         var state_provider = PythonObject(None)
-        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if NEURAL_NATIVE_DISPATCH:
             block_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
             mods.released()
@@ -508,7 +507,7 @@ def mamba3_setstate(mut mods: NativeModules, block: PythonObject, state: PythonO
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
     py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
-    if String(fields["_native_route"]) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+    if String(fields["_native_route"]) == "gpu" and String(fields["numeric_mode"]) == "identical" and NEURAL_NATIVE_DISPATCH:
         # A native registry handle of the block's training image (the former
         # Python entry mamba3_prefill_session_create and its binding field).
         var route = Mamba3StateRoute(1, 0, False)
@@ -715,7 +714,7 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             _ = py_call(params.append, 1 if handle.plan.pending else 0)
         handle.device = _native_function(mods, binding, kind_name + "_session_create")()
         mods.released()
-        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
+        if NEURAL_NATIVE_DISPATCH and String(fields["numeric_mode"]) == "identical":
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, binding, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
             mods.released()
@@ -741,7 +740,7 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             _ = py_call(_native_function(mods, binding, kind_name + "_session_open"), handle.device, addresses, params)
             mods.released()
     else:
-        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if NEURAL_NATIVE_DISPATCH:
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
                 _native_function(mods, binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
             mods.released()

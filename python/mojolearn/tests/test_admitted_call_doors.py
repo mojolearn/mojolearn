@@ -68,15 +68,10 @@ def test_attribute_helpers_share_the_door_modules():
     assert "AdmittedCall()" in door and "NativeModules()" not in door
 
 
-def test_bindings_resolve_once_per_call():
-    text = _read("providers/python/estimator_binding_pyapi_door.mojo")
-    assert "def estimator_binding_mode(mut call: AdmittedCall" in text
-    assert "def estimator_arguments(mut call: AdmittedCall" in text
-    gp = _read("providers/python/gp_public_lifecycle_pyapi_door.mojo")
-    door = _function(gp, "def gp_public_operation(")
-    assert door.count("AdmittedCall()") == 1
-    assert 'estimator_binding_mode(call, PythonObject("identical"), "_mojolearn", context)' in door
-    assert "estimator_arguments(call, model," in _function(gp, "def _gp_public_arguments(")
+# test_bindings_resolve_once_per_call deleted: a source-text check of the GP door.
+# 096e9f1b4f replaced the GP door's `estimator_arguments(call, model, ...)` with
+# native `GPArgumentPins` (bindings/gp_argument_pins.mojo); GP fit/predict answers
+# stay covered by test_gp_classifier_resolves_its_bindings_once below.
 
 
 def test_second_admissions_removed():

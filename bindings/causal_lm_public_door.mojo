@@ -26,7 +26,7 @@ from bindings.native_prepared_owner_unpack import prepared_namespace_admitted, p
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH
 from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open, transformer_block_session_run
 from core.neural_entry_table import (
     NeuralEntryKey, neural_ref, neural_table_entry, NEURAL_TABLE_BLOCK_FORWARD,
@@ -335,16 +335,16 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         var program_family = CAUSAL_SESSIONS_TRANSFORMER if kind == "transformer" else CAUSAL_SESSIONS_MAMBA
         causal_sessions_tables_admit(key, program_family)
         py_setitem(entries, CAUSAL_ENTRY_PROGRAM_READ, PythonObject(program_family))
-    # Native ownership migration: resolve descriptor tables at admission by
-    # default, so supported local operations enter the native execution engine.
-    # Explicit MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 retains the compatibility route.
-    # This is an orchestration change, not a measured speedup/default tuning claim.
+    # Native ownership migration: resolve descriptor tables at admission, so
+    # supported local operations enter the native execution engine. The build
+    # constant NEURAL_NATIVE_DISPATCH (B arm -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF)
+    # replaced the per-admission getenv (lane flag-native-dispatch-gate).
     # Lane transformer-session-native (2026-11-12): the generation session
     # provider (`native_session_provider`, `_native_session_provider_cache`,
     # MOJOLEARN_GENERATION_NATIVE_SESSION) is deleted: a layer's session
     # forward is the block table's op 11 on the session handle, the same
     # transformer_session_forward_native body with the same words.
-    if mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1")) == "1":
+    if mode == NUMERIC_IDENTICAL and NEURAL_NATIVE_DISPATCH:
         var owner_fields = neural_block_fields(mods, model._blocks[0], _causal_context_for(mods, model))
         var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
             _native_function(mods, primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
@@ -1493,9 +1493,9 @@ def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, 
         return True
     if setting != "auto":
         return False
-    # Explicit dispatch opt-out keeps automatic selection on its supported
+    # A build without native dispatch keeps automatic selection on its
     # compatibility route. A forced engine still reports admission failures.
-    if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") != "1":
+    if not NEURAL_NATIVE_DISPATCH:
         return False
     var entries = model._native_entries
     if py_get(entries, "parallel_call") is not None or model._head_int15 is not None:

@@ -16,8 +16,11 @@ import pytest
 os.environ.setdefault("MOJOLEARN_NUMERIC_MODE", "identical")
 
 import mojolearn as ml  # noqa: E402
-from mojolearn.tests.test_decode_n_tokens import _tokens, _transformer_block  # noqa: E402
-from mojolearn.tests.test_mamba23_decode_sessions import _mamba2_block, _weights  # noqa: E402
+# _mamba2_block and _weights moved here from test_mamba23_decode_sessions.py
+# when 3fe4f407d6 deleted them there.
+from mojolearn.tests.test_decode_n_tokens import (  # noqa: E402
+    _mamba2_block, _tokens, _transformer_block, _weights,
+)
 
 
 def _mamba1_block():

@@ -6,7 +6,6 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.os import getenv
 from std.memory import unsafe_memcpy
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains, py_fields
@@ -19,7 +18,7 @@ from bindings.neural_block_admission_door import neural_record_fields, neural_bl
 from bindings.transformer_public_native_door import _transformer_fields, _transformer_state_words, _transformer_configuration, _transformer_same_words
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.generation_metadata_pyapi_door import GenerationLayerSnapshot
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields, NEURAL_NATIVE_DISPATCH
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
@@ -857,7 +856,7 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
             # None` selects the device route below): the handle word.
             handle.device = PythonObject(handle.word)
     else:
-        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if NEURAL_NATIVE_DISPATCH:
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
                 _transformer_decode_entry(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
         var weights = fields["_w"]

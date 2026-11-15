@@ -26,7 +26,7 @@ def test_pcs_public_paths_do_not_call_legacy_python_entries(old_items, monkeypat
         calls.append(True)
         raise AssertionError("legacy PCS argument-list dispatch called")
 
-    binding = _backend.exact_host_module(_backend.binding("_mojolearn_x_neighbors", "identical"))
+    binding = _backend.binding("_mojolearn_x_neighbors", "identical")
     for name in ("xn_pcs", "xn_pcs_resident", "x_neighbors_kfeat_pcs_draw_idn"):
         monkeypatch.setattr(binding, name, forbidden, raising=False)
     model = _model()
@@ -83,9 +83,12 @@ def test_pcs_replaced_descriptor_refuses_python_factory(operation, monkeypatch):
         calls.append(True)
         raise AssertionError("Python descriptor factory called")
 
+    # The operation reads the exact compiled module connected at import
+    # (`_backend.exact_host_module`: the host extension on a CPU-only install,
+    # never its `_HostBinding` facade), so the replacement goes there.
     binding = _backend.exact_host_module(_backend.binding("_mojolearn_x_neighbors", "identical"))
     monkeypatch.setattr(binding, "x_neighbors_native_api_v1", forbidden)
-    with pytest.raises(TypeError, match="compiled extension entry"):
+    with pytest.raises(TypeError, match="requires compiled entry x_neighbors_native_api_v1"):
         getattr(model, operation)(_data())
     assert calls == []
 
