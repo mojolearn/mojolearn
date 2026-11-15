@@ -1491,15 +1491,11 @@ def qn_tile_sum(
     is_mean: Bool,
 ) raises:
     """out_v[0] = sum(v[0:n]) (or its mean) in the tile order; partials in
-    ws[0, qnt_tiles(n)), which the caller sizes. FAST A/B arm: `-D
-    MOJOLEARN_PURITY2_2_OFF` folds the n rows as ONE tile (one chain, the
-    old one-block cost class); IDENTICAL ignores it (the host column folds
-    QNT_ROWS tiles)."""
+    ws[0, qnt_tiles(n)), which the caller sizes."""
+    # TOMBSTONE: MOJOLEARN_PURITY2_2_OFF (old path, no A/B recorded; EXP:721 OPEN) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at eb10315ddd.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY2_2_OFF.patch; record in docs/TOMBSTONES.md.
     var tiles = qnt_tiles(n)
     var rows = QNT_ROWS
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_PURITY2_2_OFF"]():
-        tiles = 1
-        rows = max(n, 1)
     ctx.enqueue_function[qn_tile_sum_partial_kernel](
         ws.unsafe_ptr(), v, Int32(n), Int32(tiles), Int32(rows),
         grid_dim=((tiles + QNT_TPB - 1) // QNT_TPB, 1, 1),
