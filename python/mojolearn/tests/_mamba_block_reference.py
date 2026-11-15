@@ -17,7 +17,6 @@ back to the block's own `_call` (the transformer block).
 import ctypes
 
 from mojolearn import _buffer as _buffers
-from mojolearn._arrays import _addr, _addr_ro
 from mojolearn._buffer import addr, addr_ro, empty
 from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._bufcheck import dtype_name, is_native_f32, probe
@@ -26,6 +25,16 @@ from mojolearn._mamba_impl import (
     _M1_D_CONV, _M1_D_STATE, _M2_CHUNK_SIZE, _M2_D_CONV, _M2_D_STATE, _M2_HEADDIM,
     _M3_CHUNK_SIZE, _M3_D_STATE, _M3_HEADDIM, _M3_NUM_ROPE_ANGLES,
 )
+
+
+# `mojolearn._arrays` (the `_addr`/`_addr_ro` shim) was deleted by ec78e70324 (lane py-buffer); these are its two
+# one-line forms over `_buffer`, kept test-side.
+def _addr(a):
+    return addr(a, name="output buffer")
+
+
+def _addr_ro(a):
+    return addr_ro(a, name="input buffer")
 
 
 def _f32_strict(a, what, name):
