@@ -16,6 +16,14 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 
 
+def _take_cols(self, X, cols):
+    # oracle copy of the model helper deleted by ec78e70324 (product has no caller; recoverable at 8579360a2e)
+    cols = _i32(cols, "cols")
+    out = _empty_out((X.shape[0], len(cols)), "<f4")
+    self._op("take_cols", [(X, 0), (cols, 0), (out, 1)], (X.shape[0], X.shape[1], len(cols)))
+    return out
+
+
 def _f32_scalar(v):
     """A Python double rounded once to float32, as a Python float (copy of `_expansion_neighbors._f32_scalar`)."""
     return Array.from_list([float(v)], "<f4").tolist()[0]
@@ -390,7 +398,7 @@ class LegacyKNNImputer(KNNImputer):
                 self._op("p2m_zero_cols", [(out, 0), (flags, 0), (z, 1)], (n, d))
                 out = z
         elif len(keep) != d:
-            out = self._take_cols(out, keep)
+            out = _take_cols(self, out, keep)
         if self.add_indicator and self._miss_cols and n:
             c = out.shape[1]
             q = len(self._miss_cols)

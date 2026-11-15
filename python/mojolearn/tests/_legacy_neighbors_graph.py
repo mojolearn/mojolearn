@@ -16,6 +16,14 @@ _U_IDENTITY = 6  # position 6 of `_U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_S
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 
 
+def _take_rows(self, X, rows):
+    # oracle copy of the model helper deleted by ec78e70324 (product has no caller; recoverable at 8579360a2e)
+    rows = _i32(rows, "rows")
+    out = _empty_out((len(rows), X.shape[1]), "<f4")
+    self._op("take_rows", [(X, 0), (rows, 0), (out, 1)], (len(rows), X.shape[1], X.shape[0]))
+    return out
+
+
 def _f32_scalar(v):
     """A Python double rounded once to float32, as a Python float."""
     return Array.from_list([float(v)], "<f4").tolist()[0]
@@ -410,7 +418,7 @@ def svgp_fit(self, X, y):
         Z = _f32(self.inducing_points, "inducing_points")
     else:
         M = min(int(self.n_inducing), n)
-        Z = self._take_rows(X, [i * n // M for i in range(M)])  # glue: evenly spaced inducing row indices (M sized)
+        Z = _take_rows(self, X, [i * n // M for i in range(M)])  # glue: evenly spaced inducing row indices (M sized)
     M = Z.shape[0]
     # one resident device chain (lane/cgr-kernel, `xn_svgp_fit_ff`):
     # Kuu, then B = Kuf Kfu and b = Kuf y in float-float per Kfu row tile

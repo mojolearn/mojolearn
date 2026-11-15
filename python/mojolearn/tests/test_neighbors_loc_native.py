@@ -73,7 +73,7 @@ def test_lof_novelty_methods_preserve_public_outputs(contamination):
 @pytest.mark.parametrize("kwargs, kind, text", [
     (dict(metric="manhattan"), NotImplementedError, "LocalOutlierFactor: metric='manhattan' (p=2) is not implemented; euclidean (or minkowski with p=2) only"),
     (dict(metric="minkowski", p=3), NotImplementedError, "LocalOutlierFactor: metric='minkowski' (p=3) is not implemented; euclidean (or minkowski with p=2) only"),
-    (dict(metric_params={"a": 1}), NotImplementedError, "metric_params is not implemented"),
+    (dict(metric_params={"a": 1}), NotImplementedError, "LocalOutlierFactor: metric_params is not implemented"),
     (dict(contamination=0.7), ValueError, "contamination must be 'auto' or in (0, 0.5]"),
     (dict(n_neighbors=0), ValueError, "n_neighbors must be >= 1"),
 ])
