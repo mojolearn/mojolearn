@@ -30,15 +30,16 @@ layout, not an arithmetic, and.
 
 from std.builtin.sort import sort
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from max.gpu import block_dim, block_idx, thread_idx
-from std.memory import stack_allocation
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
-from svm.checks.device_select import SEL_TPB, read_f32, upload_f32
+from svm.checks.device_select import SEL_TPB, upload_f32
+from core.device_zero import enqueue_fill
 from core.device_query_x import DeviceQueryX, QueryFold
 from core.scale_gamma_exact import scale_gamma_from_limbs
 from svm.impl.scale_gamma_device import scale_gamma_limbs_resident
@@ -606,7 +607,85 @@ def svc_predict(
     return decided^
 
 
-def svc_predict_dev(
+# The NaN test of a predict's decisions (DEVIATION 637) on the device (lane
+# flag-svc-infer, 2026-11-15). Before, svc_predict_dev synchronised after its
+# allocations, after the row norms and after every batch, then downloaded the
+# decisions through a pinned host buffer created and freed per call, appended
+# them one by one to a host List, scanned every row for a NaN on the host, and
+# the resident caller copied the List into its output: five synchronisations,
+# a page-lock allocation, two host passes over the rows and a host copy per
+# predict. One device stream orders every launch, so the single-device form
+# now enqueues the batches with no wait between them, tests the decisions on
+# the device into a status word, and copies the decisions straight into the
+# caller's memory behind ONE synchronisation. A plan over several devices
+# keeps the original waits (its shards read this context's buffers from other
+# contexts). Numerics: none; the same kernels in the same order write the
+# same words; only waits, the download route and the host scan change.
+comptime _SVC_NAN_BLOCKS = 1024
+
+
+def svc_nan_status_kernel(src: MutPointer[Float32, MutAnyOrigin], n_: Int32,
+                          status: MutPointer[Int32, MutAnyOrigin], slot_: Int32, mark: Int32):
+    """status[slot] = mark when any of src[0:n] is a NaN (by bits: an
+    infinity passes, exactly as the host test `v != v` it replaces)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var n = Int(n_)
+    var hit = False
+    while i < n:
+        if (bitcast[DType.uint32](src.unsafe_load(i)) & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+            hit = True
+            break
+        i += stride
+    if hit:
+        status.unsafe_store(Int(slot_), mark)
+
+
+def svc_nan_decision_error(addr: Int, n_rows: Int) -> Error:
+    """DEVIATION 637's refusal, naming the first NaN row of the decisions
+    already copied to host memory at `addr`. Error path only (after the
+    device test flagged them): never run on a finite prediction."""
+    var p = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=addr)
+    for i in range(n_rows):  # error path only: the first flagged row for the message
+        if p[i] != p[i]:
+            return Error(
+                "svm predict: NaN decision value at row " + String(i)
+                + " (floating point overflow; DEVIATION 637)"
+            )
+    return Error("svm predict: NaN decision value (floating point overflow; DEVIATION 637)")
+
+
+def _svc_preds_out(
+    ctx: DeviceContext,
+    mut d_preds: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    dst_addr: Int,
+    mut status: DeviceBuffer[DType.int32],
+    words_addr: Int,
+    slot: Int,
+    mark: Int32,
+    mut card: IdentityTrace,
+    tag: String,
+) raises -> Bool:
+    """The predict's tail: the NaN test into `status[slot]`, the status
+    words to pinned `words_addr`, the decisions to `dst_addr` (any host
+    memory), then the call's one synchronisation. True: a NaN decision
+    (the caller refuses; `dst_addr` holds the decisions for the message)."""
+    var grid = max(1, min(_SVC_NAN_BLOCKS, _grid(n_rows)))
+    ctx.enqueue_function[svc_nan_status_kernel](
+        d_preds.unsafe_ptr(), Int32(n_rows), status.unsafe_ptr(), Int32(slot), mark,
+        grid_dim=grid, block_dim=SEL_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=words_addr), src_buf=status)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr), src_buf=d_preds)
+    ctx.synchronize()
+    if MutPointer[Int32, MutAnyOrigin](unsafe_from_address=words_addr)[slot] == mark:
+        return True
+    card.record_device[DType.float32](ctx, tag + "out", d_preds, n_rows)
+    return False
+
+
+def svc_predict_dev_into(
     ctx: DeviceContext,
     model: SvmModel,
     mut x: DeviceBuffer[DType.float32],
@@ -619,17 +698,32 @@ def svc_predict_dev(
     predict_class: Bool,
     mut card: IdentityTrace,
     plan: DevicePlan,
-) raises -> List[Float32]:
+    dst_addr: Int,
+    mut status: DeviceBuffer[DType.int32],
+    words_addr: Int,
+    slot: Int,
+    mark: Int32,
+) raises -> Bool:
     """The decision launches of `svc_predict` over device copies of the
     checked query `x` (n_rows x n_cols; for kernel='precomputed' the flushed
     cross-kernel), the support rows `sv` and the dual coefficients `dual`,
-    with `model`'s scalars (n_support, b, the label pair). `svc_predict`
-    runs it after its own uploads and the resident predicts
-    (svm/svm_resident_state.mojo) over the kept copies of the same bytes, so
-    both give the same bits. The caller keeps the three buffers."""
+    with `model`'s scalars (n_support, b, the label pair), written as
+    n_rows float32 at host address `dst_addr`. `status[slot]` (filled with 0
+    by its owner, or a held word compared with this call's `mark`) receives
+    `mark` on a NaN decision; the whole `status` buffer is copied to the
+    pinned words at `words_addr` behind the call's one synchronisation, so a
+    caller's other status words (a DeviceQueryX's) are valid on return.
+    Returns True on a NaN decision (DEVIATION 637: the caller refuses with
+    `svc_nan_decision_error`). `svc_predict` runs it after its own uploads
+    and the resident predicts (svm/svm_resident_state.mojo) over the kept
+    copies of the same bytes, so both give the same bits. The caller keeps
+    the buffers."""
     var n_support = model.n_support
     var precomputed = kp.kernel == KERNEL_PRECOMPUTED
-    var preds = List[Float32]()
+    # Several devices: their shards read this context's buffers, so the
+    # original waits stay (see the note above _SVC_NAN_BLOCKS).
+    var wait = not plan.single()
+    var ptag = String("svm.predict.class.") if predict_class else String("svm.predict.decision.")
     var d_preds = ctx.enqueue_create_buffer[DType.float32](n_rows)
     # DEVIATION 2493: FAST with no card recording folds the decision inside
     # the kernel evaluation; no tile, no batch loop. Apple only, like the
@@ -645,16 +739,10 @@ def svc_predict_dev(
                 kp.kernel == KERNEL_RBF, Float32(kp.gamma), model.b,
                 model.unique_labels[0], model.unique_labels[1], predict_class,
             ):
-                ctx.synchronize()
-                preds = read_f32(ctx, d_preds, n_rows)
-                for i in range(n_rows):
-                    if preds[i] != preds[i]:
-                        raise Error(
-                            "svm predict: NaN decision value at row " + String(i)
-                            + " (floating point overflow; DEVIATION 637)"
-                        )
+                var fused_nan = _svc_preds_out(ctx, d_preds, n_rows, dst_addr, status, words_addr, slot, mark,
+                                               card, ptag)
                 _ = d_preds^
-                return preds^
+                return fused_nan
     var K = ctx.enqueue_create_buffer[DType.float32](n_batch * n_support)
     var nl2 = n_rows if kp.kernel == KERNEL_RBF else 1
     var l2_input = ctx.enqueue_create_buffer[DType.float32](nl2)
@@ -665,17 +753,18 @@ def svc_predict_dev(
     if wsf < 1:
         wsf = 1
     var ws = ctx.enqueue_create_buffer[DType.float32](wsf)
-    ctx.synchronize()
+    if wait:
+        ctx.synchronize()
     if kp.kernel == KERNEL_RBF:
         row_norms_l2sq(ctx, l2_input, x, n_rows, n_cols)
         row_norms_l2sq(ctx, l2_support, sv, n_support, n_cols)
-        ctx.synchronize()
-    var ptag = String("svm.predict.class.") if predict_class else String("svm.predict.decision.")
+        if wait:
+            ctx.synchronize()
     card.record_device[DType.float32](ctx, ptag + "x", x, n_rows * n_cols)
 
     var i = 0
     var nb = n_batch
-    while i < n_rows:
+    while i < n_rows:  # driver-loop: over the query's row batches (the cache_size buffer knob)
         if i + nb >= n_rows:
             nb = n_rows - i
         var xb = x.create_sub_buffer[DType.float32](i * n_cols, nb * n_cols)
@@ -693,26 +782,53 @@ def svc_predict_dev(
             Int32(1) if predict_class else Int32(0),
             grid_dim=_grid(nb), block_dim=SEL_TPB,
         )
-        ctx.synchronize()
+        # One stream orders the next batch's kernel matrix (it rewrites K)
+        # after this decision launch; the views are handles of buffers this
+        # call keeps until its final synchronisation.
+        if wait:
+            ctx.synchronize()
         _ = xb^
         _ = l2b^
         _ = pb^
         i += nb
-    ctx.synchronize()
-    preds = read_f32(ctx, d_preds, n_rows)
-    # DEVIATION 637 (row 39, FACT 2): a NaN decision value (float overflow
-    # of `sum K * dual` with finite inputs) carries a vendor payload and
-    # must not be recorded; raise before the record, as the solver does.
-    for i in range(n_rows):
-        if preds[i] != preds[i]:
-            raise Error(
-                "svm predict: NaN decision value at row " + String(i)
-                + " (floating point overflow; DEVIATION 637)"
-            )
-    card.record_device[DType.float32](ctx, ptag + "out", d_preds, n_rows)
+    var nan = _svc_preds_out(ctx, d_preds, n_rows, dst_addr, status, words_addr, slot, mark, card, ptag)
+    # Named after the call's synchronisation (_svc_preds_out): the launches
+    # above read every one of them.
     _ = K^
     _ = l2_input^
     _ = l2_support^
     _ = ws^
     _ = d_preds^
+    return nan
+
+
+def svc_predict_dev(
+    ctx: DeviceContext,
+    model: SvmModel,
+    mut x: DeviceBuffer[DType.float32],
+    mut sv: DeviceBuffer[DType.float32],
+    mut dual: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    n_batch: Int,
+    kp: KernelParams,
+    predict_class: Bool,
+    mut card: IdentityTrace,
+    plan: DevicePlan,
+) raises -> List[Float32]:
+    """`svc_predict_dev_into` as a host List (the per-call `svc_predict`
+    route): the decisions are copied straight into the List's storage and
+    a NaN decision raises DEVIATION 637's refusal."""
+    var preds = List[Float32](length=n_rows, fill=Float32(0.0))
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    var words = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var nan = svc_predict_dev_into(
+        ctx, model, x, sv, dual, n_rows, n_cols, n_batch, kp, predict_class, card, plan,
+        Int(preds.unsafe_ptr()), status, Int(words.unsafe_ptr()), 0, Int32(1),
+    )
+    _ = status^
+    _ = words^
+    if nan:
+        raise svc_nan_decision_error(Int(preds.unsafe_ptr()), n_rows)
     return preds^

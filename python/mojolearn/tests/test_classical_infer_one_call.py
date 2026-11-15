@@ -115,3 +115,28 @@ def test_svc_resident_predict_holds_its_query_between_calls():
     del model
     gc.collect()
     assert binding.svm_resident_stats()[5] == before[5]
+
+
+def test_svc_resident_predict_keeps_its_lease_between_calls():
+    """Lane flag-svc-infer: repeated predicts of one fitted SVC reuse the
+    lease taken by the first one (no second upload of the support rows and
+    duals, no new held query), and give the same decisions, now copied
+    straight from the device into the output after the device NaN test."""
+    import gc
+    from mojolearn import _backend
+
+    binding = _backend.binding("_mojolearn_svm", "identical")
+    if not hasattr(binding, "svm_resident_stats"):
+        pytest.skip("CPU provider has no device-resident SVM store")
+    gc.collect()
+    x = _x(rows=80)
+    y = (x[:, 0] + 0.25 * x[:, 1] > 0).astype(np.float32)
+    model = ml.SVC(C=1.0, kernel="rbf", gamma=0.2).fit(x, y)
+    first = np.asarray(model.decision_function(x))
+    after_first = binding.svm_resident_stats()
+    for _ in range(3):
+        np.testing.assert_array_equal(np.asarray(model.decision_function(x)), first)
+    later = binding.svm_resident_stats()
+    assert later[3] == after_first[3], "a repeated predict uploaded the fitted arrays again"
+    assert later[0] == after_first[0], "a repeated predict opened another lease"
+    assert later[5] == after_first[5]
