@@ -13,7 +13,7 @@ same entry arithmetic on a retained context and is not repeated here.
 """
 import numpy as np
 
-from mojolearn._buffer import addr, addr_ro, empty
+from mojolearn.tests._oracle_support import addr, addr_ro, empty
 
 
 def _batch_tokens(x, what, d_model, step):

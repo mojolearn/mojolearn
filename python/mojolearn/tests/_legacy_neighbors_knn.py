@@ -4,11 +4,11 @@ classifier/regressor fit, predict, predict_proba and score, used only as an
 independent test oracle for their one-call native doors
 (bindings/neighbors_knn_native_door.mojo). Each function takes the estimator as
 `self` and runs the former statements in the former order."""
-from mojolearn._buffer import addr, addr_ro, empty
+from mojolearn import Array
+from mojolearn.tests._oracle_support import addr, addr_ro, base_format, empty, probe, require_numpy, view
 from mojolearn.tests._typed_input import as_f32_c, as_f32_dense_c, as_i64_c
-from mojolearn._labels import decode_labels, encode_labels
-from mojolearn._array import Array
-from mojolearn._buffer import view
+from mojolearn.tests._legacy_host_inference import decode_labels
+from mojolearn._labels import encode_labels  # oracle subject: the native ORDER RULE encoder (classical_encode_labels: buffers, Series, lists, '<U' and object labels, its refusals); no exact copy, no public route
 
 
 def _shape_of(obj):
@@ -24,7 +24,7 @@ def _shape_of(obj):
     if hasattr(obj, "__len__"):
         return (len(obj),)
     return ()
-from mojolearn.neighbors import _XN
+_XN = "_mojolearn_x_neighbors"  # copy of `mojolearn.neighbors._XN`
 
 
 # Frozen copies of the former linear_model label helpers (deleted from the
@@ -47,9 +47,25 @@ def _is_integer_labels(y):
     fmt = _buffer_format(y)
     if fmt is not None:
         return fmt in _INT_FORMATS
-    from mojolearn import _user_objects
-    leaves = _user_objects.call("flatten", y)
-    return bool(leaves) and _user_objects.kinds(leaves)[_user_objects.KIND_EXACT_INT] == len(leaves)
+    leaves = _flatten_leaves(y)
+    # `_user_objects.kinds(leaves)[KIND_EXACT_INT]` counts `type(v) is int`
+    return bool(leaves) and sum(1 for v in leaves if type(v) is int) == len(leaves)
+
+
+def _flatten_leaves(y):
+    """The leaves of nested lists and tuples, depth first (the product's `_user_objects` "flatten" read);
+    anything else with `tolist()` is unpacked through it."""
+    if not isinstance(y, (list, tuple)):
+        y = y.tolist() if hasattr(y, "tolist") else list(y)
+        if not isinstance(y, list):
+            return [y]
+    out = []
+    for v in y:
+        if isinstance(v, (list, tuple)):
+            out.extend(_flatten_leaves(v))
+        else:
+            out.append(v)
+    return out
 
 
 def _dtype_name(y):
@@ -240,14 +256,21 @@ def whole_float_labels(y):
     """Frozen copy of the former `_sk_validate.whole_float_labels` (deleted from
     the package 2026-11-14 by lane py-admission): True when `y` is a float
     buffer whose every value is a finite whole number."""
-    from mojolearn._sk_validate import describe
-    from mojolearn._buffer import _native, addr_ro, all_finite
+    from mojolearn.tests._oracle_support import all_finite
     from mojolearn.tests._typed_input import materialize as _materialize
-    from mojolearn._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from mojolearn._labels import unique_inverse
-    info = describe(y)
-    if info is None or info[0] != "buffer" or info[2] != "float":
+    # `_sk_validate.describe(y)` == ("buffer", _, "float"): y exports a buffer of a float format
+    if y is None:
         return False
+    if isinstance(y, Array):
+        if y.dtype not in ("<f4", "<f8", "<f2"):
+            return False
+    else:
+        try:
+            pb = probe(y)
+        except (TypeError, ValueError, BufferError):
+            return False
+        if base_format(pb.format) not in ("f", "d", "e"):
+            return False
     a, _ = _materialize(y, "y")
     if a.dtype not in ("<f4", "<f8"):
         return True
@@ -255,9 +278,11 @@ def whole_float_labels(y):
         return False
     if a.size == 0 or a.size != max(a.shape):
         return True
-    classes, _ = unique_inverse(a._as_c().reshape((a.size,)))
-    return bool(_native("reduce_stat")(addr_ro(classes, name="classes"), _NATIVE_CODE[classes.dtype],
-                                       int(classes.size), _REDUCE_INTEGRAL))
+    # the distinct values (`unique_inverse`) are all whole (`reduce_stat` REDUCE_INTEGRAL) exactly when
+    # every finite value is whole
+    np = require_numpy("the oracle integral scan")
+    v = np.asarray(a).reshape(-1)
+    return bool((np.trunc(v) == v).all())
 
 
 def _holder(self):
@@ -419,7 +444,7 @@ def clf_predict_proba(self, X):
 
 
 def clf_score(self, X, y, sample_weight=None):
-    from mojolearn._expansion_metrics import accuracy_fraction
+    from mojolearn._expansion_metrics import accuracy_fraction  # oracle subject: the native x_metrics accuracy op over labels of any kind; the public accuracy_score refuses str labels under normalize=True
     return accuracy_fraction(y, clf_predict(self, X), sample_weight, getattr(self, "numeric_mode", None))
 
 
@@ -477,7 +502,7 @@ def reg_predict(self, X):
 
 
 def reg_score(self, X, y, sample_weight=None):
-    from mojolearn._metrics_impl import r2_score
+    from mojolearn.metrics import r2_score
     truth, _ = as_f32_c(y, ndim=None, name="y")
     pred, _ = as_f32_c(reg_predict(self, X), ndim=None, name="prediction")
     return r2_score(truth, pred, sample_weight=sample_weight, numeric_mode=getattr(self, "numeric_mode", None))

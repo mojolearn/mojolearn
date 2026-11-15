@@ -21,9 +21,22 @@ input is not copied). A caller that writes into the weights must pass
 `copy=True`, so the caller's array is never changed.
 """
 
-from mojolearn._buffer import full
+from mojolearn.tests._oracle_support import full, require_numpy
 from mojolearn.tests._typed_input import as_f32_c, as_f64_c
-from mojolearn._labels import prepare_targets
+
+
+def _check_weights(w, *, allow_negative, allow_all_zero):
+    """The weight refusals of the product's `_labels.prepare_targets(None, w, n, ...)`
+    (bindings/labels_admission_unpack.mojo `labels_prepare_arrays`), in its order and wording, computed with
+    NumPy: non-finite, then negative (unless `allow_negative`), then all-zero (unless `allow_all_zero`)."""
+    np = require_numpy("the oracle sample_weight check")
+    v = np.asarray(w)
+    if not np.isfinite(v).all():
+        raise ValueError("Input sample_weight contains NaN or infinity.")
+    if not allow_negative and (v < 0).any():
+        raise ValueError("Negative values in data passed to `sample_weight`")
+    if not allow_all_zero and not (v != 0).any():
+        raise ValueError("Sample weights must contain at least one non-zero number.")
 
 
 def check_sample_weight(sample_weight, n_samples, *, dtype="<f4", copy=False,
@@ -79,6 +92,6 @@ def check_sample_weight(sample_weight, n_samples, *, dtype="<f4", copy=False,
                 w = w.copy()
     if n == 0:
         return w
-    prepare_targets(None, w, n, allow_negative=allow_negative, allow_all_zero=allow_all_zero)
+    _check_weights(w, allow_negative=allow_negative, allow_all_zero=allow_all_zero)
     return w
 

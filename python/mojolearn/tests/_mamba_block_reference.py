@@ -16,19 +16,26 @@ back to the block's own `_call` (the transformer block).
 """
 import ctypes
 
-from mojolearn import _buffer as _buffers
-from mojolearn._buffer import addr, addr_ro, empty
+from mojolearn import Mamba1Block, Mamba2Block, Mamba3Block
+from mojolearn.tests import _oracle_support as _buffers
+from mojolearn.tests._oracle_support import addr, addr_ro, dtype_name, empty, is_native_f32, probe
 from mojolearn.tests._typed_input import as_f32_c
-from mojolearn._bufcheck import dtype_name, is_native_f32, probe
-from mojolearn._mamba_impl import (
-    Mamba1Block, Mamba2Block, Mamba3Block,
-    _M1_D_CONV, _M1_D_STATE, _M2_CHUNK_SIZE, _M2_D_CONV, _M2_D_STATE, _M2_HEADDIM,
-    _M3_CHUNK_SIZE, _M3_D_STATE, _M3_HEADDIM, _M3_NUM_ROPE_ANGLES,
-)
+
+# the blocks' fixed geometry: local copies of python/mojolearn/_mamba_impl.py's module constants (2026-11-15)
+_M1_D_STATE = 16
+_M1_D_CONV = 4
+_M2_D_STATE = 128
+_M2_D_CONV = 4
+_M2_HEADDIM = 64
+_M2_CHUNK_SIZE = 256
+_M3_D_STATE = 128
+_M3_HEADDIM = 64
+_M3_CHUNK_SIZE = 64
+_M3_NUM_ROPE_ANGLES = 32
 
 
 # `mojolearn._arrays` (the `_addr`/`_addr_ro` shim) was deleted by ec78e70324 (lane py-buffer); these are its two
-# one-line forms over `_buffer`, kept test-side.
+# one-line forms over the oracle support copies, kept test-side.
 def _addr(a):
     return addr(a, name="output buffer")
 
@@ -439,7 +446,7 @@ def block_call(block, x, state, step):
     if isinstance(block, Mamba3Block):
         return mamba3_call(block, x, state, step)
     from mojolearn.tests._transformer_block_reference import transformer_call
-    from mojolearn._transformer_impl import TransformerBlock
+    from mojolearn import TransformerBlock
     if isinstance(block, TransformerBlock):
         return transformer_call(block, x, state, step)
     return block._call(x, state, step)

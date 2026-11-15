@@ -3,9 +3,9 @@
 This is the previous Python orchestration, deliberately outside native-call
 audits. It qualifies parity with that behavior, not runtime compliance.
 """
-from mojolearn._buffer import empty
+from mojolearn.tests._oracle_support import empty
 from mojolearn.tests._typed_input import as_f32_c
-from mojolearn._buffer import addr as _buffer_addr, addr_ro as _buffer_addr_ro
+from mojolearn.tests._oracle_support import addr as _buffer_addr, addr_ro as _buffer_addr_ro
 
 
 def _addr(a):

@@ -14,17 +14,142 @@ reference arm: the Python definitions answer there and nowhere else.
 """
 import array
 import copyreg
+import ctypes
+import itertools
+from itertools import chain
 
-from mojolearn._array import (
-    Array, _ArrayInterface, _EMPTY_ARRAY_STORAGE, _CODE, _NATIVE_CODE, _NATIVE_MIN, _EQ_I64_F64,
-    _REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_ISUM, _NOT,
-    _INT_BOUNDS, normalize_dtype, _ITEMSIZE,
-    _nest, _to_py_values, _flatten,
-)
+from mojolearn import Array
+# The address the product's `__array_interface__` reports for an empty Array; the reference must report the same one.
+from mojolearn._array import _EMPTY_ARRAY_STORAGE  # oracle subject: the product's empty-export storage, whose address no public route gives
 import struct
 import sys
 
 from mojolearn.tests import _typed_input
+from mojolearn.tests._oracle_support import CODE as _CODE
+
+
+# Local copies of `mojolearn._array`'s tables and small helpers (the product's values and wording), so an internal
+# rename does not break this oracle.
+_ITEMSIZE = {"<f4": 4, "<f8": 8, "<i4": 4, "<i8": 8, "<u4": 4, "<u1": 1, "<f2": 2,
+             "<u2": 2, "<i1": 1}
+SUPPORTED_DTYPES = tuple(_CODE)
+_NATIVE_CODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5,
+                "<u2": 6, "<i1": 7, "<f2": 8}
+#: equal_elements' exact int64-against-float64 code
+_EQ_I64_F64 = 9
+_NATIVE_MIN = 256
+_REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_INTEGRAL, _REDUCE_ISUM = range(6)
+_SCALAR_TYPES = frozenset((float, int, bool))
+_ROW_TYPES = frozenset((list, tuple))
+_NOT = bytes((1, 0)) + bytes(range(2, 256))
+_INT_BOUNDS = {"<i4": (-(1 << 31), (1 << 31) - 1), "<i8": (-(1 << 63), (1 << 63) - 1),
+               "<u4": (0, (1 << 32) - 1), "<u1": (0, 255), "<u2": (0, 65535), "<i1": (-128, 127)}
+_ALIAS = {
+    "float32": "<f4", "float64": "<f8", "int32": "<i4", "int64": "<i8",
+    "uint32": "<u4", "uint8": "<u1", "float16": "<f2",
+    "uint16": "<u2", "int8": "<i1", "|i1": "<i1", "=u2": "<u2", "u2": "<u2", "i1": "<i1",
+    "|u1": "<u1", "=f4": "<f4", "=f8": "<f8", "=i4": "<i4", "=i8": "<i8",
+    "=u4": "<u4", "=f2": "<f2", "f4": "<f4", "f8": "<f8", "i4": "<i4",
+    "i8": "<i8", "u4": "<u4", "u1": "<u1", "f2": "<f2",
+    "float": "<f8", "int": "<i8", "bool": "<u1", "bool_": "<u1",
+}
+
+
+def normalize_dtype(dtype):
+    """A typestr in `SUPPORTED_DTYPES` from a typestr, a NumPy dtype or
+    scalar type or a Python `float` / `int` / `bool` type. Unknown -> ValueError."""
+    if isinstance(dtype, str):
+        ts = _ALIAS.get(dtype, dtype)
+        if ts in _CODE:
+            return ts
+        raise ValueError(
+            f"mojolearn: unsupported dtype {dtype!r}; supported: "
+            f"{', '.join(SUPPORTED_DTYPES)}"
+        )
+    if dtype is float:
+        return "<f8"
+    if dtype is int:
+        return "<i8"
+    if dtype is bool:
+        return "<u1"
+    s = getattr(dtype, "str", None)
+    if isinstance(s, str):
+        return normalize_dtype(s)
+    n = getattr(dtype, "__name__", None)
+    if isinstance(n, str) and n in _ALIAS:
+        return _ALIAS[n]
+    raise ValueError(f"mojolearn: unsupported dtype {dtype!r}")
+
+
+def _to_py_values(mv, dtype):
+    """Python scalars for a flat store memoryview."""
+    if dtype == "<f2":
+        n = len(mv)
+        return list(struct.unpack("<%de" % n, mv.tobytes())) if n else []
+    return mv.tolist()
+
+
+class _ArrayInterface:
+    """Carries only an Array's `__array_interface__`, so `__array__` can hand
+    NumPy a zero-copy view without recursing into itself. NumPy keeps this
+    object (and through it the Array) alive as the view's base."""
+
+    __slots__ = ("_owner", "__array_interface__")
+
+    def __init__(self, owner):
+        self._owner = owner
+        self.__array_interface__ = owner.__array_interface__
+
+
+def _flatten_fast(nested):
+    """`_flatten` for a flat list of Python scalars and a list of equal-length
+    rows of them; None for anything else."""
+    if type(nested) not in _ROW_TYPES or not nested:
+        return None
+    kinds = set(map(type, nested))
+    if kinds <= _SCALAR_TYPES:
+        return (len(nested),), list(nested)
+    if not kinds <= _ROW_TYPES:
+        return None
+    widths = set(map(len, nested))
+    if len(widths) != 1:
+        return None
+    flat = list(chain.from_iterable(nested))
+    if not set(map(type, flat)) <= _SCALAR_TYPES:
+        return None
+    return (len(nested), widths.pop()), flat
+
+
+def _flatten(nested):
+    """`(shape, flat_list)` for a rectangular nested sequence; a scalar
+    gives shape ()."""
+    if isinstance(nested, Array):
+        return nested.shape, nested._as_c()._values()
+    fast = _flatten_fast(nested)
+    if fast is not None:
+        return fast
+    # the general walk (a ragged or mixed nested list, Arrays inside it) is the product's native nested-list read
+    from mojolearn import _user_objects  # oracle subject: the native nested-list reader (user_objects "nested"), no public route returns its raw flat values
+    shape, flat = _user_objects.call("nested", nested, Array)
+    return tuple(shape), flat
+
+
+def _empty_nest(shape):
+    """The nested lists of an empty block: the list structure up to the first zero dimension."""
+    if not shape or shape[0] == 0:
+        return []
+    return [_empty_nest(shape[1:]) for _ in range(shape[0])]
+
+
+def _nest(a):
+    """Nested Python lists of a C-order Array, built by `memoryview.tolist`
+    (a float16 block goes through its exact float64 values first)."""
+    if a.size == 0:
+        return _empty_nest(a.shape)
+    if a.dtype == "<f2":
+        flat = array.array("d", a._values())
+        return memoryview(flat).cast("B").cast("d", a.shape).tolist()
+    return a._mv.cast("B").cast(_CODE[a.dtype], a.shape).tolist()
 
 
 # The Python definitions of the shape, stride and layout helpers whose product
@@ -73,12 +198,39 @@ def _new_store(code, size):
     return array.array(code, [0]) * size
 
 
+_WORD = {1: ctypes.c_uint8, 2: ctypes.c_uint16, 4: ctypes.c_uint32, 8: ctypes.c_uint64}
+
+
+def _span(base, shape, strides):
+    """The lowest and highest element offset a strided walk touches."""
+    lo = hi = base
+    for n, s in zip(shape, strides):
+        if s >= 0:
+            hi += (n - 1) * s
+        else:
+            lo += (n - 1) * s
+    return lo, hi
+
+
 def _strided_copy(src_addr, dst_addr, itemsize, shape, src_strides, dst_strides,
                   src_base=0, dst_base=0):
-    from mojolearn import _buffer
-    dims = array.array("q", (*shape, *src_strides, *dst_strides, src_base, dst_base))
-    _buffer._native("strided_copy_bytes")(src_addr, dst_addr, dims.buffer_info()[0],
-                                          len(shape), itemsize)
+    """The core helper `strided_copy_bytes` (core/array_helpers_impl.mojo `_strided_copy`) in the standard library:
+    walking `shape` in C order, element (i_0..i_k) moves from src[src_base + sum i_j * s_j] to
+    dst[dst_base + sum i_j * d_j] (offsets and strides in elements), as an unsigned word of `itemsize` bytes."""
+    if _prod(shape) == 0:
+        return
+    word = _WORD[itemsize]
+    slo, shi = _span(src_base, shape, src_strides)
+    dlo, dhi = _span(dst_base, shape, dst_strides)
+    src = (word * (shi - slo + 1)).from_address(src_addr + slo * itemsize)
+    dst = (word * (dhi - dlo + 1)).from_address(dst_addr + dlo * itemsize)
+    for idx in itertools.product(*(range(n) for n in shape)):
+        so = src_base - slo
+        do = dst_base - dlo
+        for i, s, d in zip(idx, src_strides, dst_strides):
+            so += i * s
+            do += i * d
+        dst[do] = src[so]
 
 
 def _set_meta(a, shape, dtype, order):
@@ -148,7 +300,7 @@ def _helper(key, size):
     binary that lacks the helper."""
     if size <= 0:
         return None
-    from mojolearn import _buffer
+    from mojolearn import _buffer  # oracle subject: `_buffer._native_optional`, the helper seam tests/test_hotpath_native.py plants and removes (`_buffer._NATIVE`) for its reference arm; the native core helpers have no public route
     return _buffer._native_optional(key)
 
 
@@ -590,14 +742,11 @@ class _ArrayReference:
                 if a.dtype == "<f4":
                     # The contiguous block above (`_typed_input.same_dtype_store`)
                     # quiets a float32 signaling NaN, as the item setter does;
-                    # a strided selection gets the same in-place
-                    # `cast_elements` float32 -> float32 so a copy's bits do
-                    # not depend on the selection's layout.
-                    from mojolearn import _buffer
-                    fn = _buffer._native_optional("cast_elements")
-                    if fn is not None:
-                        at = store.buffer_info()[0]
-                        fn(at, 0, at, 0, total)  # in place: slot i reads and writes slot i only
+                    # a strided selection gets the same float32 round trip
+                    # (the in-place `cast_elements` float32 -> float32 it
+                    # stands for) so a copy's bits do not depend on the
+                    # selection's layout.
+                    store = array.array("f", store.tolist())
         return Array._owned(store, out_shape, a.dtype, "C")
 
     def min(self):
@@ -796,8 +945,7 @@ def _contiguous_block(dims, shape, cs):
 def _block_store(a, offset, length):
     """DEVIATION 3105: an owned store holding `length` elements of `a` from
     `offset`, equal byte for byte to the per-run `array.array(code,
-    <memoryview slice>)` copies it replaces, or None when that needs the
-    helper and the helper is absent. One memcpy instead of one Python object
+    <memoryview slice>)` copies it replaces, or None for a short run. One memcpy instead of one Python object
     per element (0.2 ns against 22); see `_typed_input.same_dtype_store` for the
     one float32 subtlety."""
     if length < _NATIVE_MIN:
