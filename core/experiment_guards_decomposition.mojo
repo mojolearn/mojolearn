@@ -103,6 +103,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_FA_FAST_QRR_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): FA_FAST_QRR_OFF (FAST+Apple rollback to the host List staging of DevExec.qr_r) is gone with FA_FAST_QRR; the direct upload is the qr_r path in every mode (factor-analysis istella 10391.5 -> 10254.8 ms, digest identical); restore: experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch
     comptime assert not is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): FA_TRANSFORM_FUSED (FAST+Apple opt-in FactorAnalysis.transform as one fa_transform_kernel launch) was NEUTRAL: rab7-fatransform istella 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical; the kit's sub + two GEMMs are the only transform; restore: experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IPCA_FAST_DEV_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): IPCA_FAST_DEV_OFF (FAST+Apple rollback to IncrementalPCA's host batch stack) is gone with IPCA_FAST_DEV, which nothing read any more; the device stack is the FAST+Apple path (incremental-pca taxi 159 -> 136 ms, digest bit-identical); restore: experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch"
     return True
 
 

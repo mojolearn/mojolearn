@@ -661,6 +661,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`](#mojolearn_idn_lu_resident_pair_off-old-path-deleted-2026-11-15) | Decomp (lu_factor / lu_solve resident pair, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED, NV 0.45x / AMD 0.56x) | 2026-11-15 | [MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch) |
 | [`MOJOLEARN_FA_FAST_QRR_OFF`](#mojolearn_fa_fast_qrr_off-old-path-deleted-2026-11-15) | Decomp (FactorAnalysis DevExec.qr_r upload, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_FA_FAST_QRR_OFF.patch](../experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch) |
 | [`MOJOLEARN_FA_TRANSFORM_FUSED`](#mojolearn_fa_transform_fused-loser-deleted-2026-11-15) | Decomp (FactorAnalysis.transform, FAST Apple opt-in) | NEUTRAL (rab7-fatransform istella +2.0%) | 2026-11-15 | [MOJOLEARN_FA_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch) |
+| [`MOJOLEARN_IPCA_FAST_DEV_OFF`](#mojolearn_ipca_fast_dev_off-old-path-deleted-2026-11-15) | Decomp (IncrementalPCA batch stack, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2k-ipca-dev) | 2026-11-15 | [MOJOLEARN_IPCA_FAST_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6422,4 +6423,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: NEUTRAL (EXPERIMENTS.md `FA_TRANSFORM_FUSED`, reconciled 2026-10-05, Verdicts batch 4): rab7-fatransform M3 one run per arm, factor-analysis istella 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical; stayed off. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7e904cf531`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch`, then delete the `MOJOLEARN_FA_TRANSFORM_FUSED` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_IPCA_FAST_DEV_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `IPCA_FAST_DEV` (`x_decomp/lanczos_dev.mojo`), a constant with no kernel of its own that the old Python `IncrementalPCA.fit` read to stack each batch on the device; that reader is gone (IncrementalPCA is one call into the compiled owner), so the constant and `-D MOJOLEARN_IPCA_FAST_DEV_OFF` did nothing. Deleted: the define read, `IPCA_FAST_DEV` and the four imports only it used.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `IPCA_FAST_DEV`, gl2k-ipca-dev-taxi): M3 one run per arm, incremental-pca taxi 159 -> 136 ms (-14.5%), output digest bit-identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `91dc329408`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch`, then delete the `MOJOLEARN_IPCA_FAST_DEV_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
