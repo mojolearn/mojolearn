@@ -42,7 +42,7 @@ comptime ANN3_HOST_PASSES = True
 #: paired recall check.
 # TOMBSTONE: MOJOLEARN_ANN3_PQ_SEED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at fa411f5da5.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PQ_SEED.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_PQ_SEED = False
+# (Sweep 2026-11-15: comptime ANN3_PQ_SEED removed; its PQ_FAST_SEED reader folded.)
 
 #: FAST on Apple: the same for the IVF coarse quantizer (all four IVF
 #: indexes). Moves FAST bits: paired recall check. ON by default (consumer

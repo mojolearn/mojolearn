@@ -12,19 +12,21 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
-    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS, IDN_PQ_DEVICE_CODEBOOKS,
-    IDN_PQ_TRAINSET_STRIDED, IDN_PQ_TRAIN_ROWS_PER_CODE,
+    ANN3_DIRECT_OUT,
+    ANN3_HOST_PASSES,
+    ANN3_ROW_THREADS,
+    IDN_PQ_DEVICE_CODEBOOKS,
+    IDN_PQ_TRAINSET_STRIDED,
+    IDN_PQ_TRAIN_ROWS_PER_CODE,
     IVF_PQ_ONE_UPLOAD,
 )
-from x_ann.kpp_seed import kpp_seed
 from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
 from x_ann.pq_kmeans_device import pq_codebooks_device
 from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit_rows
-from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
+from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host, ivf_flat_build_resident_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_trainset_rows
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
@@ -52,12 +54,7 @@ row is still encoded against the trained codebooks. IDENTICAL trains on every
 row. Quality: bench/speed/ann_fast_quality.py."""
 comptime PQ_FAST_ROWS_PER_CODE = 256
 
-comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_PQ_SEED`): each
-subspace codebook is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over a
-stride sample of its training rows, its own stream per subspace) and
-cluster/'s k-means starts from those seeds (`INIT_ARRAY`), so it runs its
-Lloyd iterations without its own seeding rounds."""
+# (Sweep 2026-11-15: comptime PQ_FAST_SEED (always False: ANN3_PQ_SEED) and its kpp_seed branch removed.)
 
 
 def _tid() -> Int:
@@ -277,25 +274,10 @@ def _codebooks(
         )
         cbs.host(String("gather.") + String(j))
         var cb_ptr = codebooks.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_offset(j * cb_len)
-        var init_kind: Int = INIT_KMEANS_PLUS_PLUS
-        comptime if PQ_FAST_SEED:
-            # FAST on Apple, OPT-IN (`-D MOJOLEARN_ANN3_PQ_SEED`): the host
-            # k-means++ seed reads the sample, so this opt-in arm alone
-            # downloads it
-            if n_train >= n_codes:
-                var sub = download_f32(ctx, dsub, n_train * pq_len)
-                var cb = List[Float32](length=cb_len, fill=Float32(0.0))
-                kpp_seed(
-                    sub, n_train, pq_len, n_codes,
-                    UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), 16, cb,
-                )
-                unsafe_memcpy(dest=cb_ptr, src=cb.unsafe_ptr(), count=cb_len)
-                init_kind = INIT_ARRAY
-                cbs.host("seed")
         _ = kmeans_fit_rows(
             ctx, dsub, cb_ptr, rows, pq_len, n_codes, cb_ptr,
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            pq_iters, Float64(1e-4), UInt64(seed), 1, init_kind, METRIC_L2_EXPANDED, Float64(2.0),
+            pq_iters, Float64(1e-4), UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, Float64(2.0),
             lazy_shift=True,  # KMEANS_LAZY_SHIFT (FAST on Apple default, 2026-10-04): IVF-PQ codebooks
         )
         ctx.synchronize()
