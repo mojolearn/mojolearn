@@ -61,6 +61,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C04_LDA"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C04_LDA (Prep (LDA transform centered_matmul, IDENTICAL)) was opt-in arm; EXP:1532 DROPPED-serial record for its PCA half, no A/B for the LDA arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 1c0b13a0e4; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C05_PHASE_SCRATCH (Metrics (x_metrics plan phase scratch, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 1ebc49831d; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C07_RADIX_BITS"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C07_RADIX_BITS (Prep (device radix sort digit bits 4/6, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at f93f4dcaa3; see docs/TOMBSTONES.md"
     return True
 
 

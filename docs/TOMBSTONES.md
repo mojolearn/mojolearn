@@ -733,6 +733,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH`](#mojolearn_classical_c05_phase_scratch-unmeasured-arm-deleted-2026-11-15) | Metrics (x_metrics plan phase scratch, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch) |
 | [`MOJOLEARN_CLASSICAL_C06_NORM_ROWS`](#mojolearn_classical_c06_norm_rows-unmeasured-arm-deleted-2026-11-15) | Row norms (rows per norm block 2/4 for KNN / KDE / KMeans, IDENTICAL) | removed (opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch) |
 | [`MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD`](#mojolearn_classical_c06_small_d_thread-unmeasured-arm-deleted-2026-11-15) | Row norms (one thread per row at d <= 32, IDENTICAL) | removed (opt-in arm; EXP:1519 A/B owed and never run) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch) |
+| [`MOJOLEARN_CLASSICAL_C07_RADIX_BITS`](#mojolearn_classical_c07_radix_bits-unmeasured-arm-deleted-2026-11-15) | Prep (device radix sort digit bits 4/6, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7122,3 +7123,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6a40fe1b92`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch`, then delete the `MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD` refusal in `core/six_lane_experiment_guards.mojo`.
 - **Records**: refusal in `core/six_lane_experiment_guards.mojo`; `classical-kmeans.json` control `c06_norms`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C07_RADIX_BITS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C07_RADIX_BITS` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `f93f4dcaa3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch`, then delete the `MOJOLEARN_CLASSICAL_C07_RADIX_BITS` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c07_radix_bits`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
