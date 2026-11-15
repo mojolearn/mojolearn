@@ -77,15 +77,16 @@ comptime MBF_GROUP = 32
 # (x_cluster/minibatch_ptr.mojo): X's device buffer from a pool kept between
 # fits, not a fresh 880 MB allocation per fit at Istella's shape. FAST + Apple
 # default since the M3 A/B (n=1, quality identical): minibatch-kmeans istella
-# 256.7 -> 170.7 ms, taxi 42.5 -> 38.1 ms. -D MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF
-# turns it off; the old -D name stays harmless.
+# 256.7 -> 170.7 ms, taxi 42.5 -> 38.1 ms. The old -D name stays harmless.
 # F15/scratch-reuse M3 2026-10-06: 6 scored caller times; B/A
 # 0.9673..1.0293 (mixed/regressing); existing default retained.
 # Scored FAST quality 3/3 within existing bands; PASS.
 # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/scratch-reuse.
 # Compilation/identity reused. No combined-toggle/full-board claim.
-comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"]()
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF (old path: a fresh X buffer per FAST Apple MiniBatchKMeans fit; EXP:520 KEEP pool default) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 0c46943130.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV
 
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 

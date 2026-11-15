@@ -36,7 +36,7 @@ from x_cluster.common import nearest_all, sum_f64
 from x_cluster.post_bodies import FM_VAL
 from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch import MiniBatchParams, minibatch_fit
-from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 from x_cluster.out import ClusterOut
@@ -194,20 +194,18 @@ def minibatch_entry_ptr(
         # X straight from the caller's array: no host list, no synchronize
         # here (the stream orders every later kernel behind the copy; the
         # first read below synchronizes, and `xp` outlives the call)
-        var xbuf: DeviceBuffer[DType.float32]
-        comptime if MBK_CLS2_POOL:
-            # lane/apple-fast-gap-cls2: a pooled buffer, returned below
-            xbuf = pool_take["MojolearnXClusterCls2MbkXV2"](ops.ctx, nx)
-        else:
-            xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
+        # lane/apple-fast-gap-cls2: a pooled buffer, returned below
+        # (MBK_CLS2_POOL is MINIBATCH_FAST_DEV, which the enclosing switch requires)
+        # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF (old path: a fresh X buffer per FAST Apple MiniBatchKMeans fit; EXP:520 KEEP pool default) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 0c46943130.
+        # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+        var xbuf: DeviceBuffer[DType.float32] = pool_take["MojolearnXClusterCls2MbkXV2"](ops.ctx, nx)
         ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
         # Python skipped its host scan (ip[12] = 1): scan the device copy
         # (MBK_FAST_DEVSCAN is MBK_ZEROCOPY, the enclosing switch)
         if len(ip) > 12 and ip[12] != 0:
             if device_first_nonfinite(ops.ctx, xbuf, nx) >= 0:
                 ops.ctx.synchronize()
-                comptime if MBK_CLS2_POOL:
-                    pool_give["MojolearnXClusterCls2MbkXV2"](xbuf^)
+                pool_give["MojolearnXClusterCls2MbkXV2"](xbuf^)
                 raise Error(MBK_NONFINITE_MSG)
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
@@ -286,11 +284,10 @@ def minibatch_entry_ptr(
         # Tried: the row-group all-rows labelling here.
         # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch; record in docs/TOMBSTONES.md.
         nearest_all(ops, xs, n, c, k, d, labels, dist)
-        comptime if MBK_CLS2_POOL:
-            # nearest_all read its labels back (a synchronize): no launch
-            # still reads X; the slot's later entries are not used again
-            ops.ctx.synchronize()
-            pool_give["MojolearnXClusterCls2MbkXV2"](ops.f.pop(xs))
+        # nearest_all read its labels back (a synchronize): no launch
+        # still reads X; the slot's later entries are not used again
+        ops.ctx.synchronize()
+        pool_give["MojolearnXClusterCls2MbkXV2"](ops.f.pop(xs))
         var n_iter = (steps_done * batch + n - 1) // n
         var inertia = sum_f64(dist, n)
         out.f.append(c^)
