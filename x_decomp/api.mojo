@@ -270,9 +270,9 @@ comptime IDN_LU_GESV = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 # takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and
 # host binding alike, so the four agree), instead of downloading F, slicing
 # its columns in Python and uploading F^ again.
-# -D MOJOLEARN_IDN_LLE_DEV_F0_OFF clears the bit: Python keeps the host
-# F.cols + _hstack route.
-comptime IDN_LLE_DEV_F0 = _API_IDN and not (is_defined["MOJOLEARN_IDN_LLE_DEV_F0_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_LLE_DEV_F0_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 79f4ad1e97.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LLE_DEV_F0_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LLE_DEV_F0 = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 # lane fam-decomp (2026-10-04): the kit's `rand` draws into a device matrix
 # on the GPU binding (`dev_rand_py`, the kernel `DevExec.rand` launches: the
 # same Philox words) and downloads it only if Python reads it, instead of
