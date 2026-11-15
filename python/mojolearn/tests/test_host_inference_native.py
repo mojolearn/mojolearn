@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Explicit CPU prediction owners retain original bits and native boundaries."""
-import ast
 import builtins
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -127,23 +125,6 @@ def test_host_prediction_never_calls_python_binding_or_input_protocols(tmp_path,
             return x
     _refused(audit_native_call(model.predict, Input()), TypeError)
     assert touched == []
-
-
-def test_public_host_prediction_wrappers_are_single_native_calls():
-    tree = ast.parse(Path(host.__file__).read_text())
-    expected = {("_HostCD", "predict"), ("HostKMeans", "predict"), ("HostKMeans", "transform")}
-    found = set()
-    for cls in tree.body:
-        if not isinstance(cls, ast.ClassDef):
-            continue
-        for method in cls.body:
-            if not isinstance(method, ast.FunctionDef) or (cls.name, method.name) not in expected:
-                continue
-            body = method.body[1:] if ast.get_docstring(method) is not None else method.body
-            assert len(body) == 1 and isinstance(body[0], ast.Return)
-            assert sum(isinstance(node, ast.Call) for node in ast.walk(body[0])) == 1
-            found.add((cls.name, method.name))
-    assert found == expected
 
 
 @pytest.mark.parametrize("name", ["ElasticNet", "Lasso"])

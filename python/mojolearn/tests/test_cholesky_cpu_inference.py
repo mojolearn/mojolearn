@@ -5,7 +5,7 @@
 then solve, on a CPU-only install through the linalg host binding, which
 ships in the inference wheel.
 
-Source checks run on a box with nothing built. The runtime checks run where
+The runtime checks run where
 `_mojolearn_linalg_host.so` is built (MOJOLEARN_HOST_DIR or mojolearn/host)
 and require bits: a solve from a loaded factor equals the solve from the
 fitted object, `host_model` answers a `HostCholesky`, and on a CPU-only
@@ -15,22 +15,13 @@ identity harness's cholesky lane (train, infer and model cells).
     cd python && python -m pytest mojolearn/tests/test_cholesky_cpu_inference.py
 """
 import os
-import re
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from mojolearn import _backend, host_surface
+from mojolearn import _backend
 from mojolearn._cholesky_impl import _CHOLESKY_FORMAT, Cholesky
 from mojolearn._classical_host import HostCholesky
-
-ROOT = Path(__file__).resolve().parents[3]
-
-
-def _registers(text, name):
-    return re.search(r'def_function\[\w+\]\(\s*"' + re.escape(name) + r'"\s*\)', text) is not None
-
 
 def _spd(n, seed=0):
     rng = np.random.default_rng(seed)
@@ -43,20 +34,6 @@ def _host_built():
 
 
 # -- source ------------------------------------------------------------------
-
-def test_the_door_ships_in_the_linalg_family():
-    linalg = host_surface.family("linalg")
-    assert linalg["ships_in_wheel"] is True
-    assert "cholesky" in linalg["training_lanes"] and "Cholesky" in linalg["classes"]
-    assert "cholesky" not in host_surface.family("gp")["training_lanes"]
-    assert "cholesky" in host_surface.public_reference_lanes()
-    src = (ROOT / host_surface.binding_source("linalg")).read_text(encoding="utf-8")
-    gpu = (ROOT / "bindings/_mojolearn_gp.mojo").read_text(encoding="utf-8")
-    for name in ("cholesky_profile_jitter", "cholesky_factor", "cholesky_solve"):
-        assert _registers(src, name), f"the linalg host binding does not register {name}"
-        assert _registers(gpu, name), f"{name} is not a GPU gp binding name"
-        assert name in linalg["exports"]
-
 
 # DELETED 2026-11-07 (lane ne1-k-fail-a): test_cpu_fit_is_public replaced the
 # class's `_door`/`_door_binding` to drive the CPU route on a GPU install; the

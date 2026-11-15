@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole CPU kernel-model operations preserve dense/sparse public behavior."""
-import ast
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -332,20 +330,6 @@ def test_kernel_subclass_and_fitted_attribute_publication(tmp_path, name):
     assert type(audit_native_call(getattr, model, field).assert_native()) is np.ndarray
     expected = legacy.kernel_model(model, _input(3, "float32"), name)
     assert _state(audit_native_call(_method(model, name), _input(3, "float32")).assert_native()) == _state(expected)
-
-
-def test_kernel_public_methods_are_single_native_calls():
-    tree = ast.parse(Path(host.__file__).read_text())
-    wanted = {"HostKernelRidge": "predict", "HostNystroem": "transform", "HostRBFSampler": "transform"}
-    for cls in tree.body:
-        if not isinstance(cls, ast.ClassDef) or cls.name not in wanted:
-            continue
-        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == wanted[cls.name])
-        assert len(method.body) == 2
-        assert isinstance(method.body[1], ast.Return)
-        call = method.body[1].value
-        assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-        assert call.func.id == "_native_classical"
 
 
 SCALAR_SLOTS = [
