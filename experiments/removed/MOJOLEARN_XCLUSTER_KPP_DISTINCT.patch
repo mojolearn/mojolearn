@@ -1,0 +1,15 @@
+diff --git a/experiments/classical_identical_ideas/graph_controls.mojo b/experiments/classical_identical_ideas/graph_controls.mojo
+index 4a74dc0231..a612f194ca 100644
+--- a/experiments/classical_identical_ideas/graph_controls.mojo
++++ b/experiments/classical_identical_ideas/graph_controls.mojo
+@@ -115,9 +115,7 @@ comptime XCLUSTER_ROW_ASSIGN = False
+ # incumbent already sets) and is deleted. Its x_cluster half (k-means++ trial
+ # distances computed once per distinct candidate) is real and keeps its
+ # behavior under this name.
+-# TOMBSTONE: MOJOLEARN_XCLUSTER_KPP_DISTINCT (dropped / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at c3dc42fd2c.
+-# Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch; record in docs/TOMBSTONES.md.
+-comptime XCLUSTER_KPP_DISTINCT = False
++comptime XCLUSTER_KPP_DISTINCT = GRAPH_IDENTICAL and is_defined["MOJOLEARN_XCLUSTER_KPP_DISTINCT"]()
+ comptime C39_RETAIN_STATE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C39_RETAIN_STATE"]()
+ comptime C40_SEED_TILES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C40_SEED_TILES"]()
+ comptime C40_ACTIVE_SEEDS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C40_ACTIVE_SEEDS"]()

@@ -153,6 +153,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C35_ROWS_128"](), "removed 2026-11-15 (lane/expdel2-05-base): C35_ROWS_128 (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch
     comptime assert not is_defined["MOJOLEARN_XCLUSTER_ROW_ASSIGN"](), "removed 2026-11-15 (lane/expdel2-05-base): XCLUSTER_ROW_ASSIGN (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch
+    comptime assert not is_defined["MOJOLEARN_XCLUSTER_KPP_DISTINCT"](), "removed 2026-11-15 (lane/expdel2-05-base): XCLUSTER_KPP_DISTINCT (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     return True
 
 

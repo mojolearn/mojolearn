@@ -115,7 +115,9 @@ comptime XCLUSTER_ROW_ASSIGN = False
 # incumbent already sets) and is deleted. Its x_cluster half (k-means++ trial
 # distances computed once per distinct candidate) is real and keeps its
 # behavior under this name.
-comptime XCLUSTER_KPP_DISTINCT = GRAPH_IDENTICAL and is_defined["MOJOLEARN_XCLUSTER_KPP_DISTINCT"]()
+# TOMBSTONE: MOJOLEARN_XCLUSTER_KPP_DISTINCT (dropped / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at c3dc42fd2c.
+# Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch; record in docs/TOMBSTONES.md.
+comptime XCLUSTER_KPP_DISTINCT = False
 comptime C39_RETAIN_STATE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C39_RETAIN_STATE"]()
 comptime C40_SEED_TILES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C40_SEED_TILES"]()
 comptime C40_ACTIVE_SEEDS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C40_ACTIVE_SEEDS"]()

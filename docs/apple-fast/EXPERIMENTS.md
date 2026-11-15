@@ -2555,3 +2555,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_C35_PACKED_LISTS` | ivf | lane/expdel2-05-base (recoverable at d391e6ab95) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C35_ROWS_128` | ivf | lane/expdel2-05-base (recoverable at 54b5cb96f6) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `256` |
 | `MOJOLEARN_XCLUSTER_ROW_ASSIGN` | minibatch-kmeans, bisecting-kmeans | lane/expdel2-05-base (recoverable at b1f48f8126) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `0` |
+| `MOJOLEARN_XCLUSTER_KPP_DISTINCT` | minibatch-kmeans, bisecting-kmeans | lane/expdel2-05-base (recoverable at c3dc42fd2c) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
