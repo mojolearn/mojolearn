@@ -652,6 +652,7 @@ in the tables after the sections.
 | [`MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF`](#mojolearn_arima_fast_eval_ws_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA fit evaluation workspace, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch) |
 | [`MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF`](#mojolearn_resample_fast_idx_direct_off-old-path-deleted-2026-11-15) | Resample (resample(replace=True) row indices, FAST Apple) | removed (old path; FAST+Apple default KEPT, gmp-rs-idx) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch) |
 | [`MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF`](#mojolearn_resample_fast_perm_select_off-old-path-deleted-2026-11-15) | Resample (permutation_test null select, FAST Apple) | removed (old path; FAST+Apple default KEEP, ab1 d51f4b4bf) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch) |
+| [`MOJOLEARN_CV_FAST_SLICE_OFF`](#mojolearn_cv_fast_slice_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold rows, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvslice) | 2026-11-15 | [MOJOLEARN_CV_FAST_SLICE_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6341,4 +6342,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `RESAMPLE_FAST_PERM_SELECT`, M3 afc_ab_def, full board, one run per arm, 2026-10-04, ab1 d51f4b4bf): permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms, pvalue identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1b6a31e9a1`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch`, then delete the `MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_CV_FAST_SLICE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `CV_FAST_SLICE` (`resample/estimator.mojo`, bit 32 of `resample_fast_defines`, read by `python/mojolearn/model_selection.py`): with `-D MOJOLEARN_CV_FAST_SLICE_OFF` the bit was 0 and each default fold gathered its rows. Deleted: the define read; `CV_FAST_SLICE` is `RESAMPLE_FAST_APPLE`, so the mask is unchanged in every default build.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `CV_FAST_SLICE`, rab1d-cvslice): M3 one run per arm, cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella 3114.45 -> 2920.08 ms (-6.2%), mean_r2 and digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `289e8ff918`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch`, then delete the `MOJOLEARN_CV_FAST_SLICE_OFF` refusal in `core/experiment_guards_series.mojo`.
 - **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).

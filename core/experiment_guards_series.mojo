@@ -47,6 +47,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): RESAMPLE_FAST_IDX_DIRECT_OFF (FAST+Apple rollback to the host buffer -> List -> store-loop index route) is gone with RESAMPLE_IDX_DIRECT and the binding's List route; every tier copies the drawn indices straight into the caller's buffer (resample taxi 71.7 -> 62.8 ms, same integers); restore: experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): RESAMPLE_FAST_PERM_SELECT_OFF (FAST+Apple rollback to perm_select_stat_kernel for the mean / diff_means permutation null) is gone; the 4-bit radix select is the FAST+Apple path (permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms, pvalue identical); restore: experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CV_FAST_SLICE_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): CV_FAST_SLICE_OFF (FAST+Apple rollback to four _take_rows byte gathers per KFold fold) is gone; the row-range views are the FAST+Apple path (cross-val-score taxi 157.93 -> 126.18 ms, istella 3114.45 -> 2920.08 ms, mean_r2 identical); restore: experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch"
     return True
 
 
