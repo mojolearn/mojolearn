@@ -100,6 +100,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): X_LINEAR_RIDGE_FAST_GRAM_OFF (FAST+Apple rollback to main's Ridge moments and kf_cells_kernel) is gone; the grid Gram is the FAST+Apple path (ridge-cv taxi 3,614 -> 37 ms, KEPT c5e1bbeb6); code recoverable at 9eb96f91e6"
     # Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch
     comptime assert not is_defined["MOJOLEARN_SGD_PERC_AVG"](), "removed 2026-11-15 (lane/expdel-03-linear): SGD_PERC_AVG (minibatch Perceptron epoch-end averaging) is gone; it lost on quality (rab5-perc perceptron taxi accuracy 0.76219 -> 0.74097); the last iterate is the only form; code recoverable at 8b2e35c54e"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): SGDOC_FAST_TAIL_OFF (FAST+Apple rollback to the full SGDOneClassSVM per-sample run) is gone; the tail replay is the FAST+Apple path (taxi 42142.4 -> 153.7 ms, istella 75533.9 -> 407.0 ms, w2-sgdoc-q PASS); code recoverable at 43214c2e1e"
     return True
 
 

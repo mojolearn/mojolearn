@@ -2694,7 +2694,7 @@ def _sgd_ps_kernel_body(
 # scalars in every lane, no barrier: a lane only touches its own columns),
 # and the weights go back to device memory once a launch. d <= SPS_W *
 # SPS_MAXC, else the block form. FAST: the predictor's fold order changes.
-# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (rollback -D MOJOLEARN_SGDOC_FAST_TAIL_OFF;
+# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (the `_OFF` rollback was deleted 2026-11-15;
 # -D MOJOLEARN_SGDOC_FAST_TAIL_LONG for the 4x tail). SGDOneClassSVM at
 # learning_rate='optimal', tol=None on centered data: main's per-sample
 # kernels over the LAST SGDOC_TAIL_K steps of the real schedule from w = 0,
@@ -2705,10 +2705,9 @@ def _sgd_ps_kernel_body(
 # w2-sgdoc-q PASS (flag fraction, objective, |w|, score spread, Jaccard vs
 # main's own seed spread). Still main's serial per-sample chain, 300x
 # shorter: a parallel SGD one-class algorithm remains owed.
-comptime SGDOC_FAST_TAIL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SGDOC_FAST_TAIL_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 43214c2e1e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SGDOC_FAST_TAIL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime SGDOC_TAIL_K = 262144 if is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]() else 65536
 # The tail must exceed the (S, R) chain's mixing time, which grows with d
 # (x_linear/sgdoc_tail.mojo: tens of steps at d ~ 10, up to thousands at

@@ -656,6 +656,7 @@ in the tables after the sections.
 | [`MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF`](#mojolearn_x_linear_lars_fast_gram_off-old-path-deleted-2026-11-15) | Linear (Lars / LassoLars grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-lars-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch) |
 | [`MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF`](#mojolearn_x_linear_ridge_fast_gram_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier / RidgeCV grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-ridgeclf-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch) |
 | [`MOJOLEARN_SGD_PERC_AVG`](#mojolearn_sgd_perc_avg-loser-deleted-2026-11-15) | Linear (minibatch Perceptron epoch-end averaging, FAST) | removed (loser; REVERTED rab5-perc, accuracy worse) | 2026-11-15 | [MOJOLEARN_SGD_PERC_AVG.patch](../experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch) |
+| [`MOJOLEARN_SGDOC_FAST_TAIL_OFF`](#mojolearn_sgdoc_fast_tail_off-old-path-deleted-2026-11-15) | Linear (SGDOneClassSVM tail replay, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-sgdoc-q PASS) | 2026-11-15 | [MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch](../experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6373,4 +6374,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: REVERTED (EXPERIMENTS.md `SGD_PERC_AVG`, rab5-perc): M3 afc_ab_def one run per arm, perceptron taxi accuracy 0.76219 (last iterate) -> 0.74097 (averaged), worse; 1401.1 -> 1400.3 ms. No bit change on any column (the arm was default off).
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8b2e35c54e`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch`, then delete the `MOJOLEARN_SGD_PERC_AVG` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_SGDOC_FAST_TAIL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SGDOneClassSVM (learning_rate='optimal', tol=None, centered data) from replaying only the last `sgdoc_tail_k(d)` steps of the real schedule (x_linear/sgdoc_tail.mojo) to main's full per-sample run. Only the `and not is_defined` term of `SGDOC_FAST_TAIL` (x_linear/device.mojo) is gone; the full run stays the path of every non-FAST-Apple build and of non-centered data. tools/sgdoc_tail_pair.py keeps only the `_LONG` arm.
+- **Verdict**: DEFAULT (FAST+Apple) (EXPERIMENTS.md `SGDOC_FAST_TAIL`, w2-sgdoc-q quality PASS, w2-sgdoc-tail-taxi / -istella): M3 one run per arm, taxi 42142.4 -> 153.7 ms, istella 75533.9 -> 407.0 ms. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `43214c2e1e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch`, then delete the `MOJOLEARN_SGDOC_FAST_TAIL_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
