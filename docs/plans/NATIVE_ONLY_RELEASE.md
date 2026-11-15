@@ -132,19 +132,13 @@ Native execution accepts typed values; the explicit boundary owns Python
 admission, output wrapping and lifetime pins. Use native correctness tests and
 real API admission/ownership checks to validate that split.
 
-## The kernel closure compile check
+## The kernel closure compile check (retired 2026-11-15)
 
-`tools/kernel_closure_check.py` is the compile proof that kernel code needs no
-Python. It writes `checks/kernel_closure_main.mojo` (git-ignored), a program
-that imports every kernel module, and builds it for the CPU target in a copy of
-the tree where every shell that imports or reaches Python is deleted and every
-Python import line is removed. A kernel module that uses a Python name, or
-imports a Python shell directly or through other modules, fails to compile.
-The binary must have no undefined CPython symbol and no libpython dependency,
-and it runs once. A static pass first lists kernel imports of Python shells
-(failures) and of Python-free helpers that still live under `bindings/`
-(to move out). `--emit-only` writes the program and the stripped tree and
-prints the program path and the build command. The GitHub workflow
-`.github/workflows/kernel-closure.yml` runs it on every push to main and on
-dispatch, with a 45-minute compile budget, and keeps the generated program, the
-build log and `summary.json`.
+Andrew, 2026-11-15: no redundant enforcement. A Mojo file that imports no
+Python cannot use Python; the compiler guarantees it. `tools/python_free_dirs.sh`
+(the import grep before every build and push) is the one guard. The kernel
+closure compile proof (`tools/kernel_closure_check.py`, its test and
+`.github/workflows/kernel-closure.yml`) checked the same property a second,
+expensive way and was removed; it is recoverable at the parent of its deletion
+commit. The size of the boundary is reported, never gated, by
+`tools/python_boundary_report.py`.
