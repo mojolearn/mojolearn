@@ -517,12 +517,14 @@ comptime SYM_RIDX_MAX_FEATURES = 64
 ridx schedule was taken only when the layout had at most this many features,
 a cut placed between the two board widths it was measured at (16 and 220)."""
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, IDENTICAL master rollback, EXP:2438 DELETED; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at e2e7e7425f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 comptime RIDX_FEATURE_CUT_OFF = is_defined[
     "MOJOLEARN_GBDT_RIDX_COST_RULE_OFF"
-]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+]()
 """lane/no-dim-idn (2026-10-04): `-D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF`
 restores the old 64-feature cut in the symmetric and the depthwise drivers
-(A/B arm B; also under `MOJOLEARN_IDN_ALL_OFF`). Bit-inert either way: both schedules give the same digests."""
+(A/B arm B). Bit-inert either way: both schedules give the same digests."""
 
 # TOMBSTONE: MOJOLEARN_GBDT_RIDX_GATHER_COST (DELETE-ARM, gather cost sweep knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 5ee0e727f3.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_RIDX_GATHER_COST.patch; record in docs/TOMBSTONES.md.

@@ -265,13 +265,13 @@ from gbdt.overfitting_detector.od_device import (
 #: permutation's task launches the kernels of its serial run on the same
 #: inputs in the same order (the paragraph above), and only the drains are
 #: shared, so the bits are the serial loop's on every column and the host
-#: column is untouched. The master `-D MOJOLEARN_IDN_ALL_OFF` restores the
-#: serial loop under IDENTICAL.
+#: column is untouched.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, IDENTICAL master rollback, EXP:2438 DELETED; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at e2e7e7425f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF (DELETE-OLD-PATH, IDENTICAL serial permutation loop, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 4fc6907fab.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST

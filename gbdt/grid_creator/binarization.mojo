@@ -68,7 +68,7 @@ from checks.numerics import (
 #: and the host column move together. Defined here because this module is
 #: GPU-free and both sides import it.
 #: `-D MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host `best_split` on both sides.
+#: `-D MOJOLEARN_IDN_ALL_OFF`, deleted 2026-11-15) restored the host `best_split` on both sides.
 #: lane/cpu3-gbdt-b (2026-10-04): ALWAYS ON, every mode. The host-grid arm
 #: was CPU work inside the GPU fit, so `train_ordered_rmse` no longer has it
 #: (no `_OFF`); the host column keeps reading this constant so it builds the
