@@ -2151,6 +2151,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC`](#mojolearn_idn_mamba_backward_generic) | Neural (Mamba-1/2 block step backward) | 2026-11-15 (`e9b44b3e5b`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch) |
 | [`MOJOLEARN_IDN_OLS_PREDICT_TILED`](#mojolearn_idn_ols_predict_tiled-opt-in-arm-deleted-2026-11-15) | OLS predict gemv (IDENTICAL) | 2026-11-15 (`1900f1d297`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_OLS_PREDICT_TILED.patch](../experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch) |
 | [`MOJOLEARN_IDN_TSQR_TREE_PAR_OFF`](#mojolearn_idn_tsqr_tree_par_off) | Decomposition (TSQR tree combine, IDENTICAL) | 2026-11-15 (`77c81ac782`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch) |
+| [`MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL`](#mojolearn_mamba3_forward_zero_fill) | Neural (Mamba-3 outputs) | 2026-11-15 (`1c0608ab17`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -8911,6 +8912,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Files: bindings/neural_prefill_native_door.mojo.
 - Deleted by: lane/expdel2-02-base `1c0608ab17` (2026-11-15); code recoverable at `54f0ca8d71`.
 - Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_MLP_SESSIONS_PACKED
 

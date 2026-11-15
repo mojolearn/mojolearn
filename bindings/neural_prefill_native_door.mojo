@@ -4,7 +4,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.os import getenv
-from bindings.generation_buffers_door import generation_initialize_binding, generation_array_unfilled, py_ints
+from std.sys import is_defined
+from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, py_ints
 from bindings.neural_block_public_door import neural_training_selection, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words
 from core.entry_table import entry_ref_unresolved
 from core.mamba_state_entry_table import Mamba3StateRoute
@@ -86,8 +87,10 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
 #: passes over 4 * (B*L*d_model + B*H*(64*128 + 128 + 64 + 32)) bytes; the
 #: five allocations stay (the arrays escape to the caller). Board on record
 #: (NV L40S, 0.8.55 -> candidate 4c2340386abc): mamba3-forward 3.95 -> 6.75
-#: ms.
-#: lane fix-mamba3-unfilled-rest (2026-11-13): the same rule covers every
+#: ms. `-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL` keeps the zero-filled arrays
+#: (B arm of the owed A/B, bench/results/paper_compare/owed-pre0867.json row
+#: restore-mamba3-forward-unfilled, b arm mamba3-forward-zero-fill).
+#: lane fix-mamba3-unfilled-rest (2026-11-13): the same switch decides every
 #: other Mamba-3 output a native call writes whole, one decision: the
 #: carried-state forward and decode step (y + four reports,
 #: bindings/samba_inference_native_door.mojo `_m3_state_call`: the GPU
@@ -105,12 +108,18 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
 #: fix-mamba3-unfilled-rest/fill_table.md.
 # TOMBSTONE: MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 54f0ca8d71.
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime MAMBA3_FORWARD_ZERO_FILL = is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"]()
 
 
 def _m3_output_array(dims: List[Int]) raises -> PythonObject:
     """A Mamba-3 output (forward, carried-state forward, step, session
-    step/decode, tape prefill) the native call overwrites whole: unfilled."""
-    return generation_array_unfilled(dims)
+    step/decode, tape prefill) the native call overwrites whole: unfilled by
+    default, zero-filled under MAMBA3_FORWARD_ZERO_FILL (the B arm)."""
+    comptime if MAMBA3_FORWARD_ZERO_FILL:
+        return generation_array(dims)
+    else:
+        return generation_array_unfilled(dims)
 
 
 def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject,

@@ -69,8 +69,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_IF_FIT_EXPORT"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_IF_FIT_EXPORT (opt-in arm, never measured) is gone; the default is kept; code at cfce0d30ce; restore: experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch
     comptime assert not is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_LM_RESIDENT_GENERATE (opt-in arm, never measured) is gone; the default is kept; code at 29fe2d5748; restore: experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch
-    comptime assert not is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"](), "removed 2026-11-15 (lane/expdel2-02-base): MAMBA3_FORWARD_ZERO_FILL (opt-in arm, never measured) is gone; the default is kept; code at 54f0ca8d71; restore: experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch"
+    # MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch
     comptime assert not is_defined["MOJOLEARN_MLP_SESSIONS_PACKED"](), "removed 2026-11-15 (lane/expdel2-02-base): MLP_SESSIONS_PACKED (opt-in arm, never measured) is gone; the default is kept; code at 1c0608ab17; restore: experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch
