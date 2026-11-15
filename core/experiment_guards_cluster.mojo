@@ -137,6 +137,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): XN_FAST_NAN_COLMISS_ONLY_OFF (FAST+Apple rollback of KNNImputer.fit to the full NaN cell-list pass) is gone; the column-count kernel is the FAST+Apple fit path (KEPT with TIE_MEAN, gmp-imp-taxi); restore: experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch
     comptime assert not is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"](), "removed 2026-11-15 (lane/expdel2-05-base): C31_DEVICE_BUCKETS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch
+    comptime assert not is_defined["MOJOLEARN_C32_COUNT_FUSION"](), "removed 2026-11-15 (lane/expdel2-05-base): C32_COUNT_FUSION (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     return True
 
 
