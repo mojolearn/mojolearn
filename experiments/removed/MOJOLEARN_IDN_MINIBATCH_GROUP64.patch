@@ -1,0 +1,25 @@
+diff --git b/x_cluster/minibatch.mojo a/x_cluster/minibatch.mojo
+index 2b132d6947..c055416366 100644
+--- b/x_cluster/minibatch.mojo
++++ a/x_cluster/minibatch.mojo
+@@ -37,9 +37,8 @@ from x_cluster.ops import ClusterOps
+ # fam2-cluster (2026-10-04): THE STEP LOOP IN GROUPS of MB_GROUP steps
+ # between two waits (`minibatch_fit`'s loop comment; since lane n3,
+ # 2026-11-09, the one loop in every mode and column).
+-# The group is 16 steps (the candidate arms 8, 32 and 64 were never measured).
+-# TOMBSTONE: MOJOLEARN_IDN_MINIBATCH_GROUP64 (unmeasured opt-in arm: 64 steps per group) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 088188b08f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP64.patch; record in docs/TOMBSTONES.md.
++# CANDIDATE ARMS for the group (default 16):
++# `-D MOJOLEARN_IDN_MINIBATCH_GROUP64=1`.
+ # TOMBSTONE: MOJOLEARN_IDN_MINIBATCH_GROUP32 (unmeasured opt-in arm: 32 steps per group) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at dc50e0b2ed.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP32.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IDN_MINIBATCH_GROUP8 (unmeasured opt-in arm: 8 steps per group) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at e71076ddae.
+@@ -48,7 +47,7 @@ from x_cluster.ops import ClusterOps
+ # group loop) deleted 2026-11-09 by lane n3-sgd-minibatch-loops; code
+ # recoverable at integ/pre-0867-w2 f59d913b0b.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch
+-comptime MB_GROUP = 16
++comptime MB_GROUP = 64 if is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP64"]() else 16
+ 
+ 
+ def mb_fold_scratch(n: Int) -> Int:
