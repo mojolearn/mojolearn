@@ -341,8 +341,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch
     comptime assert not is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"](), "removed 2026-11-15 (lane/expdel2-05-base): SAMBA_WEIGHT_EPOCH_GLOBAL (Samba resident copies keyed by the process weight epoch, never measured) is gone; the per-registry key is the only one"
     # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD"](), "removed 2026-11-15 (lane/expdel2-04-base): IDN_MAMBA3_FORWARD_DOOR_OLD (old path, Mamba-3 prefill forward door (IDENTICAL); EXPERIMENTS.md PENDING row (owed row fix-mamba-forward-doors, never run)) is gone; the default stays; code recoverable at 39aa5d2695; restore: experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch"
+    # MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch
     comptime assert not is_defined["MOJOLEARN_STEP_GLUE_TRIAL"](), "removed 2026-11-15 (lane/expdel2-04-base): STEP_GLUE_TRIAL (opt-in arm, Byte LM step glue (trial build); no A/B recorded for the opt-in arm (rule a, 'NEVER RUN, PENDING MEASUREMENT')) is gone; the default stays; code recoverable at 6027e14ec1; restore: experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch"
     # ---- end lane expdel2-04-base
