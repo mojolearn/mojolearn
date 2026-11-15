@@ -1,0 +1,59 @@
+diff --git a/arima/impl/fast_eval_ws.mojo b/arima/impl/fast_eval_ws.mojo
+index 6207f68b03..8a78c9c87e 100644
+--- a/arima/impl/fast_eval_ws.mojo
++++ b/arima/impl/fast_eval_ws.mojo
+@@ -33,12 +33,14 @@ composition and launch geometry are unchanged.
+ FAST on Apple only; nothing here is launched or instantiated in any other
+ build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
+ 
++from experiments.classical_identical_ideas.stats_controls import C59_TRIAL_STATE
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ # TOMBSTONE: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL (never measured, deleted) deleted 2026-11-09 by eff59d1b88; code
+ # recoverable at f59d913b0b (arima/impl/fast_eval_df.mojo, the compensated likelihood + finite-difference tail).
+ # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.math import inf, isinf
++from std.sys.compile import is_defined
+ 
+ from arima.impl.batched_kalman import (
+     KALMAN_TPB,
+@@ -62,13 +64,20 @@ comptime EW_TPB = 128
+ # 14498.225 -> 13569.230 ms and 24231.028 -> 22705.348 ms (one run/arm).
+ # Forecast RMSE/digests unchanged; gap26-arima-quality-fixed checks 44
+ # selected-order, parameter, likelihood and forecast arrays unchanged.
++# MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF restores the separate launches.
+ # See docs/apple-fast/EXPERIMENTS.md; IDENTICAL/other vendors unchanged.
+ # IDENTICAL on every vendor since lane/fam-timeseries (2026-10-04), with the
+ # held workspace: one tail launch per evaluation instead of four, the same
+ # finite differences and FTZ sites (`ew_finish_kernel`).
+-# TOMBSTONE: MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF (old path; promoted on Apple M3 only, NVIDIA/AMD A/B owed) and MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
+-# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF.patch and experiments/removed/MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime ARIMA_FUSED_EVAL_TAIL = KALMAN_FAST_EVAL_WS
++# -D MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF=1 restores the separate launches
++# under IDENTICAL.
++comptime ARIMA_FUSED_EVAL_TAIL = (
++    KALMAN_FAST_EVAL_WS and not is_defined["MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF"]()
++    and not (
++        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++        and is_defined["MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF"]()
++    )
++)
+ 
+ 
+ def ew_finish_kernel(
+@@ -240,10 +249,11 @@ struct FastEvalWS(Movable):
+         var M1 = N + 1
+         var eb = M1 * nb
+         var nb_y = nb * n_obs
+-        # TOMBSTONE: MOJOLEARN_C59_TRIAL_STATE (opt-in arm, no A/B recorded; non-owner site, owner expdel2-07-base) folded to False 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
+-        # Restore: git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
+-        self.observation_batch = 0
+-        var copies = M1
++        # C59 owns one immutable copy instead of N+1 replicated observations.
++        # Each trial still has private Kalman/filter/optimizer state.
++        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++        self.observation_batch = nb if C59_TRIAL_STATE else 0
++        var copies = 1 if C59_TRIAL_STATE else M1
+         var y_ext = ctx.enqueue_create_buffer[DType.float32](max(1, copies*nb_y))
+         for m in range(copies):
+             ctx.enqueue_copy(

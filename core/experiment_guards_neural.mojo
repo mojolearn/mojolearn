@@ -871,6 +871,10 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch
     comptime assert not is_defined["MOJOLEARN_OPT_TRUST_INPUTS"](), "removed 2026-11-15 (lane/expdel2-31-neural): OPT_TRUST_INPUTS (opt-in arm, Neural (optimizer input refusal scans); no A/B recorded) is gone; the default path is the only one; code recoverable at 943c1ff5fe; restore: experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch"
     # ---- end lane expdel2-31-neural
+    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_LEAF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_GEMM_LEAF (opt-in arm, Neural (build-wide GEMM leaf arms 1-3); no A/B recorded) is gone; the default path is the only one; code recoverable at 27caa1d5fe; restore: experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch"
+    # ---- end lane expdel2-37-series
     return True
 
 
