@@ -39,6 +39,9 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_LAB_ONE_ENTRY"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, de9ce7b39): IDN_LAB_ONE_ENTRY (G3 one-entry LabelBinarizer.fit_transform) was SLOWER: label-binarizer istella 1.15-1.39x, taxi ~1.0 (v0041-v0044, a1624-a1627); code at de9ce7b39^, patch experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch"
     # wave-2 w2-decide-algos (2026-10-11): promoted (absent = new path; _OFF the old path) and removed switches.
     comptime assert not is_defined["MOJOLEARN_IDN_DRADIX_RANGE_PASSES"](), "promoted 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d): range-pass radix sort is the IDENTICAL default (prep mean 0.945, ordinal/onehot AMD 0.59-0.69); drop -D MOJOLEARN_IDN_DRADIX_RANGE_PASSES, use -D MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF for the old path"
+    # Lane expdel-01-cluster (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): XN_FAST_SCHI2_LAZYW_OFF (FAST+Apple rollback to SkewedChi2Sampler's eager weights) is gone; the lazy weights are the FAST+Apple path (taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms, same words); restore: experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch"
     return True
 
 

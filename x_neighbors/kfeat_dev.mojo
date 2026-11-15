@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane apple-fast-w2-kfeat (2026-10-04): the chi2 samplers' fit entries on
 the GPU binding, FAST + Apple. SCHI2_MOJO_MT, ACHI2_DEVSCAN (with its size
-gate) and SCHI2_LAZYW are DEFAULT, each with an `_OFF` rollback.
+gate) and SCHI2_LAZYW are the FAST + Apple path (their `_OFF` rollbacks are
+deleted, docs/TOMBSTONES.md).
 
 ACHI2_DEVSCAN, DEFAULT in FAST + Apple (bit 1 of `x_neighbors_kfeat_flags`):
 AdditiveChi2Sampler.fit's negative check (main: `X.min() < 0`, one
@@ -42,8 +43,7 @@ directly, ONE synchronize. Bit-identical to main by construction. The
 stream itself is sequential by its definition (sklearn's numbers); it is
 the parameter draw, not a pass over X, and main draws it on the host too.
 
-SCHI2_LAZYW, DEFAULT in FAST + Apple (bit 4; rollback
-`-D MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`; needs SCHI2_MOJO_MT): fit without device work, the weights made inside
+SCHI2_LAZYW, DEFAULT in FAST + Apple (bit 4; with SCHI2_MOJO_MT): fit without device work, the weights made inside
 the first transform's single call (section at the end of this file).
 """
 from std.memory import bitcast
@@ -70,10 +70,12 @@ comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 0d5b3201e0.
 # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE
-# SCHI2_LAZYW: DEFAULT (rollback _OFF; needs SCHI2_MOJO_MT, i.e. not its _OFF):
+# SCHI2_LAZYW: DEFAULT (with SCHI2_MOJO_MT):
 # skewed-chi2 taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms, w2-w3kf-xn-q PASS
 # (M3, ea6b2035e). See `kfeat_schi2_draw`.
-comptime XN_FAST_SCHI2_LAZYW = XN_FAST_SCHI2_MOJO_MT and not is_defined["MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"]()
+# TOMBSTONE: MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 4cb9cbfa18.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_FAST_SCHI2_LAZYW = XN_FAST_SCHI2_MOJO_MT
 comptime XN_KFEAT_ANY = XN_FAST_ACHI2_DEVSCAN or XN_FAST_SCHI2_MOJO_MT
 
 
@@ -267,8 +269,8 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
 
 
 # ---------------------------------------------------------------- SCHI2_LAZYW
-# lane apple-fast-w3-kfeat (2026-10-04), DEFAULT, rollback `-D MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`
-# (bit 4; needs SCHI2_MOJO_MT). After SCHI2_MOJO_MT the board's skewed-chi2
+# lane apple-fast-w3-kfeat (2026-10-04), DEFAULT
+# (bit 4; with SCHI2_MOJO_MT). After SCHI2_MOJO_MT the board's skewed-chi2
 # taxi fit (d = 11, 256 components: 2,816 weights) is 1.5 ms against
 # sklearn's 0.6; what is left is not the draw (microseconds) but the one
 # GPU round trip that turns 11 KB of uniforms into the weights (upload,

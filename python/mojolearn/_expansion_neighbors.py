@@ -130,9 +130,8 @@ _native_family_bridge.tables(**_label_context())
 
 def _kfeat_flags(est):
     """lane apple-fast-w2-kfeat: the chi2 samplers' FAST + Apple fit entries
-    compiled into the bound binary (x_neighbors/kfeat_dev.mojo, all default,
-    each off under its _OFF define: bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT,
-    bit 4 SCHI2_LAZYW);
+    compiled into the bound binary (x_neighbors/kfeat_dev.mojo, all default:
+    bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, bit 4 SCHI2_LAZYW);
     0 on the FAST tier without them, on IDENTICAL and on the host column."""
     if not est._fast_tier():
         return 0
