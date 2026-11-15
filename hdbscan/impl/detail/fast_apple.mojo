@@ -9,7 +9,6 @@ define compile main's code unchanged. docs/apple-fast/notes/hdbscan.md has the p
 answers; docs/apple-fast/ab/hdbscan2.md the mechanism and the risk.
 """
 
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -57,10 +56,10 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
 # One excluded warmup+one scored task; three planned cases, no universal
 # dataset claim. Caller67d0efb29; unchanged reused build/hash provenance:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/
-# hdbscan-linkage. No identity/compile rerun. OFF is the baseline/rollback.
-comptime HDB_LINKAGE_DEVICE = HDB_FAST_APPLE and (
-    not is_defined["MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"]()
-)
+# hdbscan-linkage. No identity/compile rerun.
+# TOMBSTONE: MOJOLEARN_HDB_LINKAGE_DEVICE_OFF (old path: the per-level hook loop on FAST Apple; the device linkage is the recorded winner, EXP:509) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at f23100a40e.
+# Restore: git apply experiments/removed/MOJOLEARN_HDB_LINKAGE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime HDB_LINKAGE_DEVICE = HDB_FAST_APPLE
 """The dendrogram's per-level hook loop as one lock-free union launch (no
 flag readback, dendrogram_union.mojo) and the condense with two status
 readbacks instead of eight waits (tree_device.mojo `_condensed_two_reads`)."""
