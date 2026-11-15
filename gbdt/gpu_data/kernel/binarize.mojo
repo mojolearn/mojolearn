@@ -40,7 +40,6 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from gbdt.apple_fast_classical import AFCL_T03
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G06
 
 
@@ -82,7 +81,9 @@ def write_compressed_index_kernel(
 # Uncompiled/unverified/unmeasured; A/B uses the same quantization route.
 # TOMBSTONE: MOJOLEARN_AFT_G05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a2d4deb701.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_G05.patch; record in docs/TOMBSTONES.md.
-comptime BINARIZE_BLOCK_SIZE = 512 if AFCL_T03 else 1024
+# TOMBSTONE: MOJOLEARN_AFCL_T03 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 10b9a4c50c.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T03.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+comptime BINARIZE_BLOCK_SIZE = 1024
 comptime BINARIZE_DOCS_PER_THREAD = 8
 
 
