@@ -18,7 +18,6 @@ from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
 from sequence.fold32 import FOLD_L, tree32
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane/apple-fast-seq (2026-10-02). `GarchObj.eval` writes the n residuals
@@ -82,11 +81,9 @@ comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: only (the board's GARCH(1, 1)); other orders keep the stored recursion.
 #: CHANGES THE BITS (the composed maps round differently from the step by
 #: step recursion), on NVIDIA, AMD, Apple and the host column together.
-#: -D MOJOLEARN_IDN_GARCH_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-#: lead thread's recursion everywhere.
-comptime GARCH_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GARCH_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GARCH_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 02b0c1f6db.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch
+comptime GARCH_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the chunks of garch_nll_coop: the team's threads (fit_team.mojo
 #: SEQ_TEAM_TPB, asserted equal in fit_team_py.mojo garch_team_py)
 comptime GARCH_CHUNKS = 64
