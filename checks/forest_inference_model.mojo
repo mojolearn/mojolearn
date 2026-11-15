@@ -5,7 +5,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from core.forest_inference import forest_predict_gpu, FOREST_PACKED_NODES
+from core.forest_inference import forest_predict_gpu
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into, FOREST_ORDERED_RESIDENT
 
 
@@ -123,27 +123,28 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
                 raise Error("resident layout/direct GPU bit mismatch")
             if bitcast[DType.uint32](actual[i]) != bitcast[DType.uint32](staged[i]):
                 raise Error("WP3 List/pointer boundary bit mismatch")
-    comptime if FOREST_PACKED_NODES:
-        # Sabotage actual packed device leaf data, then require prediction to
-        # change. This proves the candidate buffer is reached, not just built.
-        var leaf_count = 0
-        for child in left:
-            if child == -1:
-                leaf_count += 1
-        var poison = ctx.enqueue_create_host_buffer[DType.float32](leaf_count * outputs)
-        for i in range(leaf_count * outputs):
-            poison.unsafe_ptr().unsafe_store(i, Float32(10000))
-        model.ctx.value().enqueue_copy(dst_buf=model.leaves.value(), src_ptr=poison.unsafe_ptr())
-        model.ctx.value().synchronize()
-        var changed = model.predict[RF_INPUT](x, 5, 2, outputs)
-        if bitcast[DType.uint32](changed[0]) == bitcast[DType.uint32](expected[0]):
-            raise Error("packed leaf sabotage did not change prediction")
+    # TOMBSTONE: MOJOLEARN_FOREST_SEPARATE_NODES (opt-in arm, EXP:1504 DROP) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at cee5698695.
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    # Sabotage actual packed device leaf data, then require prediction to
+    # change. This proves the candidate buffer is reached, not just built.
+    var leaf_count = 0
+    for child in left:
+        if child == -1:
+            leaf_count += 1
+    var poison = ctx.enqueue_create_host_buffer[DType.float32](leaf_count * outputs)
+    for i in range(leaf_count * outputs):
+        poison.unsafe_ptr().unsafe_store(i, Float32(10000))
+    model.ctx.value().enqueue_copy(dst_buf=model.leaves.value(), src_ptr=poison.unsafe_ptr())
+    model.ctx.value().synchronize()
+    var changed = model.predict[RF_INPUT](x, 5, 2, outputs)
+    if bitcast[DType.uint32](changed[0]) == bitcast[DType.uint32](expected[0]):
+        raise Error("packed leaf sabotage did not change prediction")
     model.close()
     print("LAYOUT_PASS RF_INPUT", RF_INPUT, "outputs", outputs)
 
 
 def main() raises:
-    print("RESIDENT_LAYOUT_PACKED", FOREST_PACKED_NODES)
+    print("RESIDENT_LAYOUT_PACKED", True)
     print("RESIDENT_ORDERED", FOREST_ORDERED_RESIDENT)
     var output_counts: List[Int] = [1, 2, 3, 5, 8, 9]
     for outputs in output_counts:

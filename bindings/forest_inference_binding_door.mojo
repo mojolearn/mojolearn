@@ -5,7 +5,6 @@ The calling extension holds the GIL throughout prepare/predict/release, so no
 native handle can be released while another call is using it.
 """
 from std.python import PythonObject
-from core.forest_inference import FOREST_PACKED_NODES
 from core.forest_inference_model import resident_release, resident_stage_input, resident_unstage_input, FOREST_ORDERED_RESIDENT
 from core.forest_inference_run import (
     _f32_ptr,
@@ -97,9 +96,9 @@ def forest_unstage_input_gpu_binding[RF_INPUT: Bool]() raises -> PythonObject:
 
 
 def forest_resident_layout_binding() raises -> PythonObject:
-    comptime if FOREST_PACKED_NODES:
-        return PythonObject("packed_siblings")
-    return PythonObject("separate_arrays")
+    # TOMBSTONE: MOJOLEARN_FOREST_SEPARATE_NODES (opt-in arm, EXP:1504 DROP) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at cee5698695.
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    return PythonObject("packed_siblings")
 
 
 def forest_identical_fused_labels_binding() raises -> PythonObject:
