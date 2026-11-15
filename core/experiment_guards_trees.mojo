@@ -173,6 +173,73 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_NATIVE_SPLITS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 6037d8cab6; restore: experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_ADA_SESSION_SHARE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 1eebdbdc8f; restore: experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch"
+    # Lane expdel2-38-trees (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch
+    comptime assert not is_defined["MOJOLEARN_2011_HIST_ITEMS1"](), "removed 2026-11-15 (lane/expdel2-38-trees): 2011_HIST_ITEMS1 (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_2012_SMEM_COPIES4.patch
+    comptime assert not is_defined["MOJOLEARN_2012_SMEM_COPIES4"](), "removed 2026-11-15 (lane/expdel2-38-trees): 2012_SMEM_COPIES4 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_2012_SMEM_COPIES4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_2502_RETRY_PURE.patch
+    comptime assert not is_defined["MOJOLEARN_2502_RETRY_PURE"](), "removed 2026-11-15 (lane/expdel2-38-trees): 2502_RETRY_PURE (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_2502_RETRY_PURE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F01.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_F01"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F01 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F01.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F02.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_F02"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F02 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F02.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F03.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_F03"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F03 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F03.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F04.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_F04"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F04 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F04.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F05.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_F05"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F05 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F05.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_COLS40_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RF_COLS40_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_COLS40_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_COLS40_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_FUSED_PARTITION_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_HIST_SIMD_AGG_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_HIST_ZERO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RF_HIST_ZERO_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_HIST_ZERO_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_HIST_ZERO_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_QBIN_DEVICE_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_SAMPLE_PER_NODE_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch
+    comptime assert not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_BINS_COLUMN_MAJOR (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_COLS10.patch
+    comptime assert not is_defined["MOJOLEARN_RF_COLS10"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_COLS10 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_COLS10.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_FAST_HIST_ZERO_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch
+    comptime assert not is_defined["MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_FAST_SAMPLE_PER_COLUMN (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_FBS_WARP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_FBS_WARP_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_FBS_WARP_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_FBS_WARP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch
+    comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS2"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS2 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch
+    comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS4"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS4 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS4_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS4_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch
+    comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS8"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS8 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS8_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS8_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_SIMD_AGG_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_RF_SMALL_NODE_FUSED"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_SMALL_NODE_FUSED (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch
+    comptime assert not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_SPLIT_CANDIDATES (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_SPLIT_CANDIDATES_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS20.patch
+    comptime assert not is_defined["MOJOLEARN_RF_TRIAL_COLS20"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_TRIAL_COLS20 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_TRIAL_COLS20.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS40.patch
+    comptime assert not is_defined["MOJOLEARN_RF_TRIAL_COLS40"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_TRIAL_COLS40 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_TRIAL_COLS40.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch
+    comptime assert not is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"](), "removed 2026-11-15 (lane/expdel2-38-trees): TREE_EXACT_SIBLING_HIST (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch
+    comptime assert not is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"](), "removed 2026-11-15 (lane/expdel2-38-trees): TREE_EXACT_SIBLING_HIST_AUDIT (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch
+    comptime assert not is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES"](), "removed 2026-11-15 (lane/expdel2-38-trees): TREE_EXACT_SIBLING_HIST_BYTES (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch"
     return True
 
 
