@@ -330,6 +330,12 @@ above or below a board row (rows, features, classes, k, vocabulary), or a board 
 `identical`, on any vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes,
 stated in a comment. Removing such a rule may change bits: change all columns together. Each removal gets an A/B
 with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
+- **No knowledge of a board dataset in the product (Andrew, 2026-11-15).** No algorithm, kernel, default, threshold or
+  route is written, chosen or tuned from what we know about a benchmark dataset: its name, its rows, columns, classes
+  or features, its value distribution, sparsity, label balance, duplicates or ordering, or the parameters a board row
+  happens to use. A change is justified from the algorithm, the hardware and the sizes of the input in front of it,
+  so that it holds for data we have never seen. A fix found on a board row states the general cause and names a
+  neighboring shape and a non-board dataset on which it is timed. "It cannot happen on the board" is never a reason.
 
 ## 4. Releases
 
@@ -506,6 +512,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   at its sha). The default path stays byte-identical. An arm recorded as promoted but still opt-in in the code becomes the
   default (bits change on every column together) and its switch goes. The 1,300 undecided defines of
   `docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md` go under this rule.
+- **A paused programme's arms are not unmeasured (Andrew, 2026-11-15).** The four-week clock does not run for a
+  programme Andrew has paused: while Apple `fast` investment is stopped, its opt-in arms and its never-run experiment
+  cards stay in the code, opt-in and default off, to be run when he reopens it. Deleting on a calendar rule is for
+  arms that could have been run and were not; nothing is classed as waste because its programme is paused.
 
 #### Deleting an experiment
 
