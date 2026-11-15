@@ -76,14 +76,12 @@ comptime IDN_DENDRO_RADIX_SORT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: union's root is each component's smallest label, the root the converged
 #: hook loop ends at, so `par`, and with it the three outputs, are the same
 #: integers. Callers switch on this (`single_linkage.mojo` here and in
-#: hdbscan). `-D MOJOLEARN_IDN_DENDRO_UNION_OFF=1` restores the hook loop.
-comptime IDN_DENDRO_UNION = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DENDRO_UNION_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: hdbscan). FAST keeps the hook loop.
+# TOMBSTONE: MOJOLEARN_IDN_DENDRO_UNION_OFF (old path: the per-level hook loop under IDENTICAL; EXP:1715 owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3922ce7ff9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_UNION_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3922ce7ff9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_DENDRO_UNION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL (the route when IDN_DENDRO_UNION is
 #: off): the dendrogram's hook + jump loop
