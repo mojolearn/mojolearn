@@ -83,6 +83,9 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS"](), "removed 2026-11-09 (lane n3-sgd-minibatch-loops): CLASSICAL_SGD_EPOCH_CONTIGUOUS (a per-epoch n x d re-gather of X, y, sw into permuted copies) was default off and never measured on its own; the batch kernels read the rows through the epoch's order (docs/TOMBSTONES.md)"
     comptime assert not is_defined["MOJOLEARN_X_LINEAR_JACOBI_LEAD"](), "removed 2026-11-09 (lane n9b-device-svd-qr): MOJOLEARN_X_LINEAR_JACOBI_LEAD restored the lead-only cyclic Jacobi of the team eigh `t_jacobi_eig`, deleted with it; BayesianRidge takes the executor eigh op (x_decomp/eigh_ops.mojo eigh_op_dense); code at 5b5490960d; see docs/TOMBSTONES.md"
+    # Lane expdel-03-linear (2026-11-15, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md): old paths of measured defaults.
+    # Restore: git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): ARD_FAST_CLS1_PARTS_OFF (FAST+Apple rollback to the one-thread ARD partials) is gone; the block partials are the FAST+Apple path (ard taxi 14.3 -> 12.0 ms, KEPT 9decae29f); code recoverable at a656258c20"
     return True
 
 

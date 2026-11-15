@@ -648,6 +648,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_MULTI_ALL`](#mojolearn_sym_multi_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_MULTI_ALL.patch](../experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch) |
 | [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
+| [`MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF`](#mojolearn_ard_fast_cls1_parts_off-old-path-deleted-2026-11-15) | Linear (ARD row-block partials, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-ardparts-taxi) | 2026-11-15 | [MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch](../experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6302,3 +6303,11 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6d5bdfc57a`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_BSPLIT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of ARDRegression's target sum, target variance and squared-residual partials from a whole block per row block (`c1_sum_parts_kernel`, `c1_dev_parts_kernel`, `c1_sq_parts_kernel`) to the one-thread-per-4096-rows partials (`ard_yparts_kernel`, `ard_vparts_kernel`, `ard_part_kernel`). Only the `and not is_defined` term of `ARD_CLS1_PARTS` (x_linear/cls1_fast.mojo) is gone; the one-thread partials stay the path of every non-FAST-Apple build.
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `ARD_FAST_CLS1_PARTS`, gapcls1-ardparts-taxi): M3 one run per arm, ard taxi 14.3 -> 12.0 ms (all three ARD switches 14.4 -> 8.3 ms), board FAST value equals the B arm. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a656258c20`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch`, then delete the `MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
