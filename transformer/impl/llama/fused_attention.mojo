@@ -2189,8 +2189,10 @@ def _absmax_blocks(n: Int) -> Int:
     return blocks
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at f8340c9fd3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF.patch
 comptime IDN_ATTN_SCAN_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 """lane/fam-lm (2026-10-04), default ON under IDENTICAL: the fused
 attention's regime scan (`device_absmax4`) and corner flag (`_zero_flag`,
@@ -2201,8 +2203,7 @@ pinned host allocation for the scan and another pair for the flag. Each
 call still writes every partial and zero-fills the flag before it reads
 them, and waits before the host reads, so the values read are the same: no
 bit moves (a regime BOUND and a flag; nothing reaches a card). One cache
-per process, as the other process workspaces are.
-`-D MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF` restores the per-call allocations."""
+per process, as the other process workspaces are."""
 
 comptime _SCAN_CACHE_PART = 4 * ABSMAX_BLOCKS
 comptime _SCAN_CACHE_FLAGS = 4
