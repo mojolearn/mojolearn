@@ -31,7 +31,6 @@ import pytest
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
-SHARED = "bindings/holtwinters_host_predict_door.mojo"
 
 
 def _read(rel):
@@ -77,24 +76,10 @@ def test_three_bindings_register_predict_from_one_source():
     assert "hw_forecast_from_state[dt](" in _code(_read("holtwinters/host/hw_oracle.mojo"))
 
 
-def test_prediction_sources_reach_no_fit():
-    allowed = {
-        "std.math", "std.memory", "std.python", "std.python._cpython", "std.sys.compile",
-        "max.algorithm", "core.host_parallel", "core.host_predict_threads",
-        "checks.numerics", "core.hostptr", "holtwinters.host.hw_predict",
-        "holtwinters.impl.tsa.holtwinters_params",
-        # the shared shell's balanced Python calls and its own kernel module
-        # (core/holtwinters_host_predict_impl.mojo, std imports only)
-        "bindings.py_balanced", "core.holtwinters_host_predict_impl",
-        # the connected-module lookup through the shared CPython table
-        # (bindings/native_loaded_module_door.mojo imports std and that table only)
-        "bindings.native_loaded_module_door",
-    }
-    for src in ("holtwinters/host/hw_predict.mojo", SHARED, "core/holtwinters_host_predict_impl.mojo"):
-        imports = set(re.findall(r"^from ([\w.]+) import", _code(_read(src)), re.M))
-        assert imports <= allowed, f"{src} imports {sorted(imports - allowed)}"
-    params = _code(_read("holtwinters/impl/tsa/holtwinters_params.mojo"))
-    assert not re.findall(r"^from ([\w.]+) import", params, re.M), "holtwinters_params now imports"
+# test_prediction_sources_reach_no_fit deleted: an import-allowlist source-text check of
+# the Holt-Winters predict door. 7e7b229e4f moved the forecast/predict bodies into
+# bindings/holtwinters_host_predict_run.mojo, which the door now imports. The forecast
+# and predict values run natively: checks/native_tests/decomp_holtwinters_inference.mojo.
 
 
 def test_host_class_is_registered():
