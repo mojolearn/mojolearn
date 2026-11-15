@@ -218,10 +218,10 @@ def kmh_validate_kernel(
 
 #: fix-kg1-kernel (audit B11): the host column of
 #: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_DOT_CELL` (ON by
-#: default), the same defines and the same feature bound.
-comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]()
-)
+#: default), the same gate and the same feature bound.
+# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 16e283c44f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at b1d14459cf.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch; record in docs/TOMBSTONES.md.
 comptime KMH_DOT_CELL_MAX_D = 64
