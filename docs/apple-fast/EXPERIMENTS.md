@@ -2478,3 +2478,9 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_SVGP_FAST_SYMTILE_OFF` | svgp / taxi (FAST Apple; IDENTICAL default) | lane/expdel-01-cluster (code at 614ccc0790) | kap2-svgp-symtile-taxi | - | DELETED (old path) | old path of the KEPT default (611 -> 463 ms, r2/rmse identical); define read removed, IDN_GATES_OFF stays the IDENTICAL rollback; no bit change |
 | `MOJOLEARN_SVGP_FAST_COLSPLIT_OFF` | svgp / taxi (FAST Apple; IDENTICAL default) | lane/expdel-01-cluster (code at 2391fda738) | kap2-svgp-colsplit-taxi | - | DELETED (old path) | old path of the KEPT default (613 -> 438 ms, r2/rmse identical); define read removed, IDN_GATES_OFF stays the IDENTICAL rollback; no bit change |
 | `MOJOLEARN_SVGP_FAST_BSPLIT_OFF` | svgp / istella, taxi (FAST Apple) | lane/expdel-01-cluster (code at 6d5bdfc57a) | rab19-svgpbsplit | - | DELETED (old path) | old path of the KEEP FAST+Apple default (istella 224.6 -> 167.1 ms, r2 equal); define read removed, tools/svgp_fast_pair.py left with no B arm; no bit change |
+
+## Owed deletions, decomposition and series (lane expdel-02-decomposition-series, 2026-11-15)
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_ARIMA_FAST_LLONLY_OFF` | autoarima / taxi-hourly (FAST Apple) | lane/expdel-02-decomposition-series (code at a656258c20) | tsa-llonly-autoarima | - | DELETED (old path) | old path of the KEPT FAST+Apple LL_ONLY Kalman loop (50,459 -> 47,023 ms); define read removed; no bit change |

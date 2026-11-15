@@ -38,6 +38,9 @@ def _check_configuration() -> Bool:
 
     comptime assert not is_defined["MOJOLEARN_IDN_ARIMA_ASYNC_OFF"](), "removed 2026-11-09 (lane/n10-dictl-arima-loops): the lock-step ARIMA L-BFGS this kept under IDENTICAL is deleted; the per-series solver (fast_lbfgs_async.mojo, same bits per series) is the device's only arm; code at f59d913b0b; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_ASYNC_OFF"](), "removed 2026-11-09 (lane/n10-dictl-arima-loops): the lock-step ARIMA L-BFGS this restored is deleted (M3 A/B autoarima taxi-hourly 39,639 -> 24,563 ms, synthetic 28,511 -> 14,918 ms for the per-series solver); code at f59d913b0b; see docs/TOMBSTONES.md"
+    # Lane expdel-02-decomposition-series (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_LLONLY_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): ARIMA_FAST_LLONLY_OFF (FAST+Apple rollback to the storing Kalman loop kernel inside the fit evaluations) is gone; the LL_ONLY loop is the FAST+Apple path (autoarima taxi-hourly 50,459 -> 47,023 ms, rmse identical, KEPT 6c54b7e87); restore: experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch"
     return True
 
 

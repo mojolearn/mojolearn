@@ -648,6 +648,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_MULTI_ALL`](#mojolearn_sym_multi_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_MULTI_ALL.patch](../experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch) |
 | [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
+| [`MOJOLEARN_ARIMA_FAST_LLONLY_OFF`](#mojolearn_arima_fast_llonly_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA Kalman loop, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6302,3 +6303,15 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6d5bdfc57a`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_BSPLIT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## Experiment deletions: lane expdel-02-decomposition-series (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-decomposition-series); each evidence row was read before the deletion. No bit changes: every deletion removes a non-default arm.
+
+### MOJOLEARN_ARIMA_FAST_LLONLY_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `KALMAN_LL_ONLY` (`arima/impl/batched_kalman.mojo`): with `-D MOJOLEARN_ARIMA_FAST_LLONLY_OFF` the fit's evaluations instantiated `batched_kalman_loop_kernel` with `LL_ONLY = False`, storing pred / vs / Fs at every step that nobody reads. Deleted: the define read; `KALMAN_LL_ONLY` is FAST and Apple, or IDN_ARIMA_LLONLY, as before.
+- **Verdict**: KEPT 6c54b7e87 (EXPERIMENTS.md `ARIMA_FAST_LLONLY`, tsa-llonly-autoarima): M3 one run per arm, autoarima taxi-hourly 50,459 -> 47,023 ms (-6.8%), forecast rmse identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a656258c20`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch`, then delete the `MOJOLEARN_ARIMA_FAST_LLONLY_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
