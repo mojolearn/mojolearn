@@ -111,6 +111,28 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TSVD_FAST_POOL_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): TSVD_FAST_POOL_OFF (FAST+Apple rollback to a fresh n x d device allocation per TruncatedSVD fit / transform) is gone; the pooled copy of X is the FAST+Apple path (tsvd istella 995.9 -> 921.0 ms, taxi 40.4 -> 32.3 ms, quality equal); restore: experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): XD_FAST_GRP_FUSED_OFF (FAST+Apple rollback to the two-wait DEVSCAN random projection fit with separate rand and scale launches) is gone; the one-call one-synchronize fit is the FAST+Apple path (gaussian-rp taxi 3.4 -> 2.1 ms, sparse-rp taxi -10.7%, istella -8.5%, distortion identical); restore: experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch"
+    # Lane expdel2-06-base (2026-11-15): the C13-C28 classical arms with no recorded A/B and the _OFF rollbacks of measured
+    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C23_MCD"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C23_MCD (Decomposition (MinCovDet centered Gram row-parallel, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 4ab2967a7e; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C24_PANEL8 (Decomposition (TSQR eight-column panels, IDENTICAL)) was measured arm not promoted; the opt-in arm is gone and the default path is unchanged; code recoverable at 2d9d6f1bd4; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C24_TREE4 (Decomposition (TSQR / sliced-QR four-way merge tree, IDENTICAL)) was measured arm not promoted; the opt-in arm is gone and the default path is unchanged; code recoverable at ba795517d7; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C24_ROWS2048_OFF (Decomposition (TSQR 4096-row leaves, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the measured IDENTICAL default is the only path; code recoverable at b4348c8a12; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C26_PRODUCTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C26_PRODUCTS (Decomposition (NMF fixed H products reuse, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 5f3b85c06c; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C26_UPDATE_FUSED (Decomposition (NMF fused pointwise MU update, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 749e439c5c; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C27_COMPONENTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C27_COMPONENTS (Decomposition (FastICA shared score / nonlinearity values, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 82b2284405; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C27_FA_COMPONENTS (Decomposition (FactorAnalysis fused loading map, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at f0d29c7b95; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C27_NORM_VECTOR (Decomposition (PLS / CCA fused component normalization, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 5bdab7e3c8; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C28_BUCKET_SOLVES (Decomposition (ALS / sparse-code bucketed row solves, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 272ae35230; see docs/TOMBSTONES.md"
     return True
 
 

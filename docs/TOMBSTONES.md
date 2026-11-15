@@ -698,6 +698,34 @@ in the tables after the sections.
 | [`MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF`](#mojolearn_prep2_fast_eigh_block_off-old-path-deleted-2026-11-15) | Preprocessing (IterativeImputer eigh on a threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch) |
 | [`MOJOLEARN_CD_FAST_GRID_GRAM_OFF`](#mojolearn_cd_fast_grid_gram_off-old-path-deleted-2026-11-15) | Solver (CD Gram on the grid, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch) |
 | [`MOJOLEARN_CD_FAST_ROWMAJOR_OFF`](#mojolearn_cd_fast_rowmajor_off-old-path-deleted-2026-11-15) | Solver (CD row-major grid Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS`](#mojolearn_classical_c13_logcv_weights-unmeasured-arm-deleted-2026-11-15) | Linear (weighted LogisticRegressionCV fold weight sums, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch) |
+| [`MOJOLEARN_CLASSICAL_C14_GROUP_RHS`](#mojolearn_classical_c14_group_rhs-unmeasured-arm-deleted-2026-11-15) | Linear / decomposition (triangular solves in groups of four RHS, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch) |
+| [`MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE`](#mojolearn_classical_c15_factor_solve-unmeasured-arm-deleted-2026-11-15) | Linear (ARD posterior mean from the Cholesky factor, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch) |
+| [`MOJOLEARN_CLASSICAL_C16_GLM_FUSED`](#mojolearn_classical_c16_glm_fused-unmeasured-arm-deleted-2026-11-15) | Linear (GLM loss, gradient and Hessian in one pass, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch) |
+| [`MOJOLEARN_CLASSICAL_C17_LS_TRIALS`](#mojolearn_classical_c17_ls_trials-unmeasured-arm-deleted-2026-11-15) | Linear (quasi-Newton line search with two speculative trials, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch) |
+| [`MOJOLEARN_CLASSICAL_C17_OVR`](#mojolearn_classical_c17_ovr-unmeasured-arm-deleted-2026-11-15) | Linear (SGD one-vs-rest in waves of four, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C17_OVR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch) |
+| [`MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT`](#mojolearn_classical_c18_residual_next-arm-deleted-2026-11-15) | Linear (CD next-coordinate residual forwarding, IDENTICAL) | removed (opt-in arm; unqualified opt-in arm, neutral) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch) |
+| [`MOJOLEARN_CLASSICAL_C19_SGD_CHUNK`](#mojolearn_classical_c19_sgd_chunk-unmeasured-arm-deleted-2026-11-15) | Linear (SGD ordered samples per launch sweep, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch) |
+| [`MOJOLEARN_CLASSICAL_C20_PAIR_LOAD`](#mojolearn_classical_c20_pair_load-unmeasured-arm-deleted-2026-11-15) | Kernel (SVM working-set row + norm gather, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch) |
+| [`MOJOLEARN_CLASSICAL_C21_EXTREMA`](#mojolearn_classical_c21_extrema-unmeasured-arm-deleted-2026-11-15) | Kernel (SMO four-way extrema tree, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C21_EXTREMA.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch) |
+| [`MOJOLEARN_CLASSICAL_C22_TRIANGLE`](#mojolearn_classical_c22_triangle-unmeasured-arm-deleted-2026-11-15) | Kernel (SMO square tile upper triangle mirrored, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch) |
+| [`MOJOLEARN_CLASSICAL_C23_MCD`](#mojolearn_classical_c23_mcd-unmeasured-arm-deleted-2026-11-15) | Decomposition (MinCovDet centered Gram row-parallel, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C23_MCD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch) |
+| [`MOJOLEARN_CLASSICAL_C24_PANEL8`](#mojolearn_classical_c24_panel8-arm-deleted-2026-11-15) | Decomposition (TSQR eight-column panels, IDENTICAL) | removed (opt-in arm; measured arm not promoted) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_PANEL8.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch) |
+| [`MOJOLEARN_CLASSICAL_C24_TREE4`](#mojolearn_classical_c24_tree4-arm-deleted-2026-11-15) | Decomposition (TSQR / sliced-QR four-way merge tree, IDENTICAL) | removed (opt-in arm; measured arm not promoted) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_TREE4.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch) |
+| [`MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF`](#mojolearn_classical_c24_rows2048_off-old-path-deleted-2026-11-15) | Decomposition (TSQR 4096-row leaves, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF`](#mojolearn_classical_c25_projection_reuse_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler projection old path, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_C26_PRODUCTS`](#mojolearn_classical_c26_products-unmeasured-arm-deleted-2026-11-15) | Decomposition (NMF fixed H products reuse, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch) |
+| [`MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED`](#mojolearn_classical_c26_update_fused-unmeasured-arm-deleted-2026-11-15) | Decomposition (NMF fused pointwise MU update, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch) |
+| [`MOJOLEARN_CLASSICAL_C27_COMPONENTS`](#mojolearn_classical_c27_components-unmeasured-arm-deleted-2026-11-15) | Decomposition (FastICA shared score / nonlinearity values, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch) |
+| [`MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS`](#mojolearn_classical_c27_fa_components-unmeasured-arm-deleted-2026-11-15) | Decomposition (FactorAnalysis fused loading map, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch) |
+| [`MOJOLEARN_CLASSICAL_C27_NORM_VECTOR`](#mojolearn_classical_c27_norm_vector-unmeasured-arm-deleted-2026-11-15) | Decomposition (PLS / CCA fused component normalization, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch) |
+| [`MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES`](#mojolearn_classical_c28_bucket_solves-unmeasured-arm-deleted-2026-11-15) | Decomposition (ALS / sparse-code bucketed row solves, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch) |
+| [`MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS`](#mojolearn_classical_enetcv_fold_blocks-arm-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV fold-block chunk count arms, IDENTICAL) | removed (opt-in arm; losing arms =16 / =32) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.patch) |
+| [`MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF`](#mojolearn_classical_enetcv_fold_blocks_off-old-path-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV staged means + Gram, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS`](#mojolearn_classical_enetcv_score_blocks-arm-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV score rows per block arm, IDENTICAL) | removed (opt-in arm; losing arm =4096) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch) |
+| [`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF`](#mojolearn_classical_enetcv_score_blocks_off-old-path-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV 4096-row score blocks, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF`](#mojolearn_classical_linear_gram_solve_off-old-path-deleted-2026-11-15) | Linear (OLS / Ridge incumbent routes beside the resident Gram, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED`](#mojolearn_classical_ridgecv_ff_blocked-unmeasured-arm-deleted-2026-11-15) | Linear (RidgeCV float-float fallback in block partials, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6808,3 +6836,226 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3f08712c53`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch`, then delete the `MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+## MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which weighted LogisticRegressionCV kept immutable disjoint-fold training-weight sums and combined the retained fold IDs ascending for every objective (x_linear/logcv.mojo, logcv_grid.mojo, logcv_host.mojo, x_linear_host_impl.mojo, x_linear/device.mojo read `C13_LOGCV_WEIGHTS`). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C13_LOGCV_WEIGHTS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); it only reached fits with sample weights. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv.json` control `c13_logcv_weights`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C14_GROUP_RHS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which reused each triangular factor word across a bounded group of four right-hand sides (`trs_group_kernel` for lu-solve in x_decomp/cells.mojo and x_decomp/device.mojo, t_ridge_solve_best in x_linear/ridge.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C14_GROUP_RHS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); the grid note called the lu-solve form an expected loser. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9b13c93ee0`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch`, then delete the `MOJOLEARN_CLASSICAL_C14_GROUP_RHS` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c14_group_rhs`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which ARD's posterior mean solved directly on the existing Cholesky factor (x_linear/bayes.mojo), the covariance kept for the posterior / gamma diagnostics. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C15_FACTOR_SOLVE` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `72270680f8`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch`, then delete the `MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c15_factor_solve`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C16_GLM_FUSED: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the Poisson / Gamma / Tweedie GLM produced the accepted and trial loss, gradient and Hessian together with shared link terms, one launch fewer per iteration (x_linear/glm.mojo, glm_host.mojo, x_linear/device.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C16_GLM_FUSED` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `2a301a3aa3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch`, then delete the `MOJOLEARN_CLASSICAL_C16_GLM_FUSED` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c16_glm_fused`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C17_LS_TRIALS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the qn line search evaluated two exact speculative trials accepted in original order (glm/impl/qn/qn_linesearch.mojo), paying two n-float buffers and two synchronizations per search. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C17_LS_TRIALS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `10e3cad6a6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch`, then delete the `MOJOLEARN_CLASSICAL_C17_LS_TRIALS` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c17_ls_trials`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C17_OVR: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the SGD minibatch one-vs-rest route grouped up to four independent OVR models per ordered wave (x_linear/device.mojo); unreached on the board (sgd-clf is binary). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C17_OVR` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `8c1b568a83`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch`, then delete the `MOJOLEARN_CLASSICAL_C17_OVR` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c17_ovr`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT: arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which coordinate descent forwarded the next coordinate's residual from the preceding residual update under the unchanged coordinate order (x_linear/cd.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C18_RESIDUAL_NEXT` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: T.C18.residual-only (source 6fe3cfce38fd) read mixed / neutral, NV 1.009/1.006/0.970/1.007, AMD 1.004/1.034/0.946/0.974 (lasso-cv taxi/istella, enet-cv taxi/istella), quality equal; never qualified or promoted, so the opt-in arm goes (plan rule a). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7ca2a3400c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch`, then delete the `MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv.json` control `c18_residual_next`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C19_SGD_CHUNK: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the integer sweep of SGD_PS samples per ordered launch (=32 | =128; absent 2048) on the batch_size=0 SGD route (x_linear/device.mojo); unreached on the board (every SGD estimator defaults to the minibatch route). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C19_SGD_CHUNK` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); 2048 (the incumbent) is the only chunk now. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6690c70fa8`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch`, then delete the `MOJOLEARN_CLASSICAL_C19_SGD_CHUNK` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c19_sgd_chunk`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C20_PAIR_LOAD: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the SVM kernel cache gathered each working-set row and its norm together, parallel over n_ws * n_cols (svm/impl/kernelcache.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C20_PAIR_LOAD` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); the grid note says the square-tile half owed its own A/B. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `911bf993d5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch`, then delete the `MOJOLEARN_CLASSICAL_C20_PAIR_LOAD` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-misc.json` control `c20_pair_load`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C21_EXTREMA: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the SMO block solver's four-way canonical (value, row, key) extrema tree instead of the incumbent binary tree (svm/impl/smoblocksolve.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C21_EXTREMA` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9aca9aa819`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch`, then delete the `MOJOLEARN_CLASSICAL_C21_EXTREMA` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-misc.json` control `c21_extrema`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C22_TRIANGLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the same-buffer square kernel tile computed its upper triangle once with the GEMM-v1 dot fold and mirrored the words (svm/impl/distance/kernel_matrices.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C22_TRIANGLE` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); the grid note says it owed its own A/B and changes bits. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45379ff055`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch`, then delete the `MOJOLEARN_CLASSICAL_C22_TRIANGLE` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-misc.json` control `c22_triangle`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C23_MCD: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which MinCovDet / EllipticEnvelope `emp_cov_at` as the centered Gram around the candidate location from 256-row leaves folded by the binary counter (x_decomp/mcd.mojo, kit_device.mojo, device.mojo, core/blocked_moments_ops.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C23_MCD` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:1533 (`C23_CENTERED_PANELS` split, REWRITTEN) says not measured alone; no A/B was ever recorded for `C23_MCD` (plan rule a). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4ab2967a7e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch`, then delete the `MOJOLEARN_CLASSICAL_C23_MCD` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C23_MCD`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C24_PANEL8: arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which eight-column TSQR panels (x_decomp/tsqr_core.mojo), a fixed shared host/device profile. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C24_PANEL8` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; panel8 was a measured arm that was not promoted (plan rule e). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `2d9d6f1bd4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch`, then delete the `MOJOLEARN_CLASSICAL_C24_PANEL8` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C24_TSQR`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C24_TREE4: arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which a four-way TSQR and sliced-QR merge tree, ascending factor children and reverse Q application (x_decomp/tsqr_core.mojo, x_decomp/qr_sliced.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C24_TREE4` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; tree4 was a measured arm that was not promoted (plan rule e). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `ba795517d7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch`, then delete the `MOJOLEARN_CLASSICAL_C24_TREE4` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C24_TSQR`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the promoted 2048-row TSQR leaves to 4096-row leaves (the grid's rows4096 arm; x_decomp/tsqr_core.mojo TS_ROWS). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C24_ROWS2048` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:1638 PROMOTED (grid ge123e6f9, lane/grid-flips-1): OLS taxi NV 34.0 -> 21.5 ms (0.632), AMD 14.5 -> 13.8 (0.953); istella NV 816.2 -> 733.8 (0.899), AMD 468.9 -> 432.2 (0.922); GM 0.84x, quality SAME, NV == AMD hashes; the default is the recorded winner. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b4348c8a12`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C24_TSQR`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the promoted four-rows-per-thread `classical_projection_kernel` to the old d <= 64 chain under RBF_IDN_FUSED and the identical GEMM above it (kernel_methods/estimator.mojo, rbf_fused.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C25_PROJECTION_REUSE` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:1984 PROMOTED (restored; IDENTICAL default; grid ge123e6f9 + ge123e6f9r2): geo-mean 0.903x over 8 vendor cells, worst 0.983x, kernel_rel_error SAME; the default is the recorded winner. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `935328056e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-decomp.json` control `C25_PROJECTION_REUSE`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C26_PRODUCTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which NMF reused the fixed H products for transform / immutable-H MU beta2 and CD updates (x_decomp/nmf.mojo, nmf_dev.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C26_PRODUCTS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5f3b85c06c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C26_PRODUCTS` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which NMF fused the beta1 / beta0 denominator guard, division, sqrt and multiply of the pointwise update (x_decomp/nmf.mojo, nmf_dev.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C26_UPDATE_FUSED` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `749e439c5c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch`, then delete the `MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C27_COMPONENTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which FastICA shared the independent score, nonlinearity and derivative values while keeping the derivative reduction and deflation order (x_decomp/ica.mojo, ica_dev.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C27_COMPONENTS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `82b2284405`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C27_COMPONENTS` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which FactorAnalysis EM fused the independent factor loading map with preserved add / max / sqrt / multiply seams (x_decomp/fa_em.mojo, fa_em_dev.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C27_FA_COMPONENTS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `f0d29c7b95`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C27_NORM_VECTOR: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which PLS / CCA fused the component normalization with preserved sqrt / add / divide seams (x_decomp/pls.mojo, pls_dev.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C27_NORM_VECTOR` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bdab7e3c8`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch`, then delete the `MOJOLEARN_CLASSICAL_C27_NORM_VECTOR` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which stable radix grouping of row solves by ALS nnz or sparse-code active-workspace bit length, original row IDs and the same immutable Gram (x_decomp/kit_device.mojo, x_decomp/device.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C28_BUCKET_SOLVES` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `272ae35230`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch`, then delete the `MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS: arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the =16 | =32 chunks-per-fold arms of the promoted fold-aligned compensated block partials (x_linear/enetcv_blocks.mojo reads `ENETCV_FB_CHUNKS`); absent = 64. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `ENETCV_FB_CHUNKS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:1992 PROMOTED the 64 arm (IDENTICAL default, grid g50ebe26a5): 64 won three of four cells and the geo-mean (0.565 vs 0.582 for 16 and 0.604 for 32); the 16 / 32 arms lost, so only 64 stays. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4eb80b4abf`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.patch`, then delete the `MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv.json` control `enetcv_fold_blocks`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the promoted fold-block statistics to the old staged means + Gram path in IDENTICAL (x_linear/cd_grid.mojo, cd.mojo, x_linear_host_impl.mojo read `ENETCV_FOLD_BLOCKS`); FAST keeps the old path. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `ENETCV_FOLD_BLOCKS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:1992 PROMOTED (IDENTICAL default, arm 64; grid g50ebe26a5): enet-cv istella 0.909x, taxi 0.377x; lasso-cv istella 0.847x, taxi 0.350x combined; the default is the recorded winner. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a483990d2f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv.json` control `enetcv_fold_blocks`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS: arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the =4096 rows-per-score-block arm of the promoted blocked held-out scoring (x_linear/cd_grid.mojo, cd.mojo read `ENETCV_SCORE_BLOCKS`); absent = 1024. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `ENETCV_SCORE_BLOCKS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:2068 KEEP (1024 promoted IDENTICAL default, lane/owed-decide, NV v0063/v0064, AMD a1645/a1646): 4096 -> 1024 average B/A 0.935, quality identical; the 4096 arm lost. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7d1eee8179`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch`, then delete the `MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv-folds.json` control `enetcv_score_blocks`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the promoted 1024-row score blocks to the old 4096 default (`_ESB_RAW`, `ENETCV_SCORE_BLOCKS_OFF` and the unread `ENETCV_SCORE_BLOCKS_LEGAL` in this file go with it). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `ENETCV_SCORE_BLOCKS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:2068 KEEP (promoted IDENTICAL default 1024): average B/A 0.935, quality identical, NV digest == AMD digest; the default is the recorded winner. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6ac3a7434d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv-folds.json` control `enetcv_score_blocks`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the promoted resident centered-Gram fit to the incumbent OLS TSQR / Ridge routes in IDENTICAL (glm/linear_fit_device.mojo, glm/host/linear_fit_native.mojo, bindings/_mojolearn_estimators.mojo, _mojolearn_estimators_host.mojo read `LINEAR_GRAM_SOLVE`). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `LINEAR_GRAM_SOLVE` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:2015 SPLIT (grid g50ebe26a5): OLS takes the centered TSQR (Gram off faster, taxi avg 0.762, istella 0.665), ridge keeps the Gram (5.76x slower off), NV == AMD hashes; the per-estimator split stays in the default, so the global define goes. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `439c466840`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-structural.json` control `linear_gram_solve`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which RidgeCV's float-float fallback as FOLD_BLOCK-row block partials and one block team per alpha for the float-float Cholesky (x_linear/ridge_ff_blocks.mojo via x_linear/ridgecv.mojo, ridge.mojo, device.mojo); `x_linear/ridge_ff_blocks.mojo` is left to the importer lane. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `RIDGECV_FF_BLOCKED` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `49c61a4093`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch`, then delete the `MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv-folds.json` control `ridgecv_ff_blocked`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).

@@ -36,6 +36,16 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KM_FAST_RBF_PIPE_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_RBF_PIPE_OFF (FAST+Apple rollback of RBFSampler fit_transform to the unpiped STAGED sequence) is gone; the row-block pipeline is the FAST+Apple path (rbf-sampler istella 56.7 -> 43.0 ms, rab12-rbfpipe); restore: experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_RBF_STAGED_OFF (FAST+Apple rollback of the RBFSampler projection to one raw host-pointer copy) is gone; the staged download is the path wherever KM_FAST_RBF_RESIDENT is (rbf-sampler istella 77.6 -> 57.1 ms, w2-w3kf-rbf-q PASS); restore: experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch"
+    # Lane expdel2-06-base (2026-11-15): the C13-C28 classical arms with no recorded A/B and the _OFF rollbacks of measured
+    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C20_PAIR_LOAD (Kernel (SVM working-set row + norm gather, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 911bf993d5; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C21_EXTREMA (Kernel (SMO four-way extrema tree, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 9aca9aa819; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C22_TRIANGLE (Kernel (SMO square tile upper triangle mirrored, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 45379ff055; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C25_PROJECTION_REUSE_OFF (Kernel (RBFSampler projection old path, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the measured IDENTICAL default is the only path; code recoverable at 935328056e; see docs/TOMBSTONES.md"
     return True
 
 

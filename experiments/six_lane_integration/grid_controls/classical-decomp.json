@@ -62,77 +62,6 @@
    "binding": "_mojolearn_x_prep",
    "bits_change": true,
    "status": "split_from:C04_LOAD_CENTER (renamed, behavior unchanged; lane L4 owns LDA logic)"
-  },
-  "C23_MCD": {
-   "define": "MOJOLEARN_CLASSICAL_C23_MCD",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C23_MCD"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_decomp/mcd.mojo:196",
-    "x_decomp/kit_device.mojo:991",
-    "x_decomp/device.mojo:2630",
-    "x_decomp/kit_device.mojo:474"
-   ],
-   "binding": "_mojolearn_x_decomp",
-   "bits_change": true,
-   "status": "split_from:C23_CENTERED_PANELS (rewritten row-parallel, same panel-256 cell values)"
-  },
-  "C24_TSQR": {
-   "define": "MOJOLEARN_CLASSICAL_C24_PANEL8,MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF,MOJOLEARN_CLASSICAL_C24_TREE4",
-   "kind": "switch",
-   "arms": {
-    "rows2048": [],
-    "rows4096": [
-     "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"
-    ],
-    "panel8": [
-     "MOJOLEARN_CLASSICAL_C24_PANEL8"
-    ],
-    "tree4": [
-     "MOJOLEARN_CLASSICAL_C24_TREE4"
-    ]
-   },
-   "default": "rows2048",
-   "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:157",
-    "experiments/classical_identical_ideas/linear_controls.mojo:174",
-    "experiments/classical_identical_ideas/linear_controls.mojo:175",
-    "x_decomp/tsqr_core.mojo:55",
-    "x_decomp/qr_sliced.mojo:82"
-   ],
-   "binding": "_mojolearn_x_decomp",
-   "bits_change": true,
-   "status": "promoted:ge123e6f9",
-   "note": "Default rows2048 (2048-row leaves) in IDENTICAL; arm rows4096 (`_ROWS2048_OFF`) is the old leaf size; panel8 and tree4 now run on top of 2048-row leaves. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
-  },
-  "C25_PROJECTION_REUSE": {
-   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:213",
-    "kernel_methods/estimator.mojo:212",
-    "kernel_methods/estimator.mojo:2646",
-    "kernel_methods/estimator.mojo:2749",
-    "kernel_methods/rbf_fused.mojo:76",
-    "core/six_lane_experiment_guards.mojo:182"
-   ],
-   "binding": "_mojolearn_kernel_methods",
-   "bits_change": false,
-   "status": "promoted 2026-10-10 (lane/c25-restore-promote; restored from the tombstone patch after grid pass 2 ge123e6f9r2): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "Deleted 2026-10-08 (lane grid-losers-1, ab4e8e543) as noise on pass 1 alone (NV 1.00-1.04x / AMD 0.88-0.98x). Grid pass 2 (NVIDIA) with pass 1, vendor-averaged scored ms on/off: nystroem istella 0.890x, taxi 0.937x; rbf-sampler istella 0.891x, taxi 0.895x; 8 vendor cells, geo-mean 0.903x, worst 0.983x, kernel_rel_error SAME -> PROMOTE (~/mojolearn-evidence/grid-lq/decisions_act_0600_c25.json). _OFF restores the d <= 64 chain (RBF_IDN_FUSED) and the identical GEMM above it. Bits expected unchanged: one leaf (the same ascending chain) at d <= CONTRACT_K_LEAF_MIN, the GEMM-v1 leaves and balanced tree above it. Reach: RBFSampler.transform only (rbf_sampler_transform_host, _rbf_transform_dev); Nystroem's transform does not call _rbf_idn_fused_launch."
   }
  },
  "algorithms": {
@@ -166,9 +95,7 @@
   "expanded:min-cov-det": {
    "binding": "_mojolearn_x_decomp",
    "route": "fit: MinCovDet._fast_mcd_native -> x_decomp_mcd -> mcd.mojo emp_cov_at [C23_MCD] -> Kit.classical_centered_gram (device.mojo bm_centered_gram_panels)",
-   "controls": [
-    "C23_MCD"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
      "C23_MCD",
@@ -180,9 +107,7 @@
   "expanded:elliptic-envelope": {
    "binding": "_mojolearn_x_decomp",
    "route": "as min-cov-det",
-   "controls": [
-    "C23_MCD"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
      "C23_MCD",
@@ -200,9 +125,7 @@
   "expanded:randomized-svd": {
    "binding": "_mojolearn_x_decomp",
    "route": "_randomized_decompose -> _rsvd_core (Kit.mm, Kit.orth -> qr_sliced [C24_TREE4], Kit.svd)",
-   "controls": [
-    "C24_TSQR"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "note": "C25 does not reach it; C24 reach via Kit.orth is read from source, not traced"
   },
@@ -226,9 +149,7 @@
   "classical:ols": {
    "binding": "_mojolearn_x_decomp / _mojolearn_linalg",
    "route": "TSQR least squares (tsqr_core) [C24]",
-   "controls": [
-    "C24_TSQR"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "more:nystroem": {
@@ -240,9 +161,7 @@
   "more:rbf-sampler": {
    "binding": "_mojolearn_kernel_methods",
    "route": "kernel_methods/estimator.mojo:212 [C25]",
-   "controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },
@@ -279,6 +198,31 @@
    "control": "PCA_COV",
    "arm": "c04",
    "reason": "DELETED 2026-10-10 (lane grid-act-6, deletion commit 487a428ad): arm c04 (=4) IDENTICAL grid g50ebe26a5, one run per arm: c04/off ms ratio NV/AMD on classical:pca: istella 1.308/1.254 (106.4 -> 139.2 NV, 52.9 -> 66.3 AMD), 1.281x combined SLOWER; taxi 0.941/0.820 (9.5 -> 8.9 NV, 8.3 -> 6.8 AMD), 0.878x; geo-mean ~1.06x: noise/slower. With c23 deleted 2026-10-08 no arm remains: the control is gone and any -D MOJOLEARN_CLASSICAL_PCA_COV is refused in core/six_lane_experiment_guards.mojo. Deleted the c04 branch in decomposition/impl/linalg/detail/pca.mojo compute_covariance and decomposition/host/pca_oracle.mojo host_pca_fit, and PCA_COV_C04 / PCA_COV_LEGAL in linear_controls.mojo; code recoverable at main 328b0ae58; patch experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C23_MCD",
+   "control": "C23_MCD",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 4ab2967a7e; patch experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch): unmeasured opt-in arm. EXP:1533 (`C23_CENTERED_PANELS` split, REWRITTEN) says not measured alone; no A/B was ever recorded for `C23_MCD` (plan rule a). Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C24_PANEL8",
+   "control": "C24_TSQR",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 2d9d6f1bd4; patch experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch): measured arm not promoted. grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; panel8 was a measured arm that was not promoted (plan rule e). Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C24_TREE4",
+   "control": "C24_TSQR",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at ba795517d7; patch experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch): measured arm not promoted. grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; tree4 was a measured arm that was not promoted (plan rule e). Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF",
+   "control": "C24_TSQR",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at b4348c8a12; patch experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch): old path, superseded by the measured IDENTICAL default. EXP:1638 PROMOTED (grid ge123e6f9, lane/grid-flips-1): OLS taxi NV 34.0 -> 21.5 ms (0.632), AMD 14.5 -> 13.8 (0.953); istella NV 816.2 -> 733.8 (0.899), AMD 468.9 -> 432.2 (0.922); GM 0.84x, quality SAME, NV == AMD hashes; the default is the recorded winner. Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF",
+   "control": "C25_PROJECTION_REUSE",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 935328056e; patch experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch): old path, superseded by the measured IDENTICAL default. EXP:1984 PROMOTED (restored; IDENTICAL default; grid ge123e6f9 + ge123e6f9r2): geo-mean 0.903x over 8 vendor cells, worst 0.983x, kernel_rel_error SAME; the default is the recorded winner. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": [
