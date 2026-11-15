@@ -1,0 +1,19 @@
+diff --git a/gbdt/methods/kernel/pointwise_split_resolve.mojo b/gbdt/methods/kernel/pointwise_split_resolve.mojo
+index f3d4c2b76c..5b5bd2eead 100644
+--- a/gbdt/methods/kernel/pointwise_split_resolve.mojo
++++ b/gbdt/methods/kernel/pointwise_split_resolve.mojo
+@@ -305,11 +305,10 @@ def launch_pw_pack_winner(
+ # keep the incumbent), block (0, 0) thread 0 makes the chain's stores
+ # (`best_*`, `winners_*`, `score_before`, `split_desc`), and every thread
+ # takes the descriptor from its registers. Integer and compare work only;
+-# the bins written are the unfused kernel's.
++# the bins written are the unfused kernel's. `-D
++# MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the chain.
+ # ====================================================================
+-# TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold, PW_FUSED_LEVEL kept as the constant True for its importers) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c91aa521d9.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+-comptime PW_FUSED_LEVEL = True
++comptime PW_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+ # the searcher's fused launch alone, for bisecting
+ comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
+     "MOJOLEARN_GBDT_FUSED_PW_OFF"

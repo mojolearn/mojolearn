@@ -1,0 +1,35 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo b/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo
+index ad25e3d28a..2ab324f195 100644
+--- a/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo
+@@ -48,6 +48,7 @@ from checks.kernel_matrix import (
+     greedy_quantized_hist_for,
+ )
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ 
+ #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
+diff --git a/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo b/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo
+index 2ab324f195..2819afb77d 100644
+--- a/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo
+@@ -66,16 +66,14 @@ comptime QUANTIZED_HIST_LIVE = greedy_quantized_hist_for[
+ #: and Lossguide). Default since the M3 A/B (lane/apple-fast-dwgap
+ #: 23cbc3195, n=2, both SEP): depthwise taxi 13,744 -> 12,930 ms (-5.9%),
+ #: auc .6325 -> .6324; istella 17,297 -> 16,975 ms (-1.9%), auc .9832 same.
+-#: The old opt-in define
++#: Off: `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`. The old opt-in define
+ #: `-D MOJOLEARN_GBDT_DW_MODE_SKIP` is harmless (no longer read).
+ comptime QH_MODE_SKIP = (
+     QUANTIZED_HIST_LIVE
+     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_GBDT_DW_MODE_SKIP_OFF (DELETE-OLD-PATH, EXP:112 KEPT 7736fa5b8 on Apple M3; one-vendor promotion, rule d) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 2c8d6bbc8e.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_DW_MODE_SKIP_OFF.patch; record in docs/TOMBSTONES.md.
+-
+ 
+ 
+ def quantized_hist_shape_ok(

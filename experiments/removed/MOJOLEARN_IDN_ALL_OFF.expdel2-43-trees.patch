@@ -1,0 +1,32 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 9d8f57eb34..40f9896524 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -331,10 +331,9 @@ comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
+ #: floats back. Same bits: the kernel is the host `choose_scale` as an exact
+ #: integer search (its docstring), reading the same two magnitudes.
+ #: FAST keeps the per-tree drain and host scale.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH master switch, EXP:2438 DELETED, resident defaults kept, rule e; non-owner fold to False at IDN_NS_SCALE_DEVICE, LG_EXACT_ID, NS_INHERIT_ID and DEFER_HIST_COPY_1903) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 1d37619083.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_NS_SCALE_DEVICE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ # TOMBSTONE: MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 608bbc1936.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+@@ -1253,6 +1252,7 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_ID_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime LG_EXACT_ID = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ #: LG_EXACT_ID memory gate: the most histogram cells (leaf slots x stat
+ #: planes x cells per leaf) a batched IDENTICAL Lossguide fit may address.
+@@ -1354,6 +1354,7 @@ comptime LG_EXACT_BATCH_WIDTH = (
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_ID_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime NS_INHERIT_ID = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ comptime NS_INHERIT_PARTITION = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST

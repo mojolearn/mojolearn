@@ -1,0 +1,24 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 9369e52904..bb0ecf5919 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -62,7 +62,7 @@ from checks.soft_f64 import (
+     sf64_to_f32,
+ )
+ from std.sys.compile import is_defined
+-from gbdt.trees_identical_switches import T17_BATCH, T18, T21, C45_GBDT, LG_LEVEL_ROUNDS
++from gbdt.trees_identical_switches import T17_BATCH, T18, T19_DEFER, T21, C45_GBDT, LG_LEVEL_ROUNDS
+ 
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from std.builtin.sort import sort
+@@ -171,9 +171,7 @@ from gbdt.options.catboost_options import (
+ # cache reduces repeated work without changing any leaf's arithmetic.
+ comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ 
+-# TOMBSTONE: MOJOLEARN_TREES_T19_DEFER (DELETE-ARM, EXP:1627 force knob, never measured alone, rule e; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 931e7ca76a.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T19_DEFER.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+-comptime DEFER_HIST_COPY_1903 = not SPLIT_COST_IDENTICAL or (
++comptime DEFER_HIST_COPY_1903 = T19_DEFER or not SPLIT_COST_IDENTICAL or (
+     (
+         TARGET_HAS_APPLE_GPU
+         or (

@@ -1,0 +1,28 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 35997373e2..98bffc7ff3 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -1338,7 +1338,9 @@ comptime LG_EXACT_BATCH_WIDTH = (
+ #: any folded-back result leaf leaves the record unset and the caller
+ #: rebuilds the partition from the model (`NS_INHERIT_ID_GUARD` below), so
+ #: bits move nowhere: T1+T2 together inherit only trees where every result
+-#: leaf is one searcher slot, whose rows ascend. The old opt-in `-D
++#: leaf is one searcher slot, whose rows ascend. `-D
++#: MOJOLEARN_GBDT_NS_INHERIT_ID_OFF` (or the master `-D
++#: MOJOLEARN_IDN_ALL_OFF`) is the A/B arm; the old opt-in `-D
+ #: MOJOLEARN_GBDT_NS_INHERIT_ID` stays harmless.
+ # I17 inherited-partition control, source5b467815b (2026-10-06): OFF/ON
+ # at rows/features10000/17,10001/18,32769/9, complete10-tree fits:
+@@ -1350,10 +1352,10 @@ comptime LG_EXACT_BATCH_WIDTH = (
+ # representative mixed results do not qualify a cross-vendor default change.
+ # Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements,
+ # I17 inherit_off (NVIDIA raw recovery: i17-inherit-depthwise-recovery.json).
+-# TOMBSTONE: MOJOLEARN_GBDT_NS_INHERIT_ID_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at cb4478ec40.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_ID_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime NS_INHERIT_ID = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    # Scoped inheritance controls above retain the existing default.
++    and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ comptime NS_INHERIT_PARTITION = (

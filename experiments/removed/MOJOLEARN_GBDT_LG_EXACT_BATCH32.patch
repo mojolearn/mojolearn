@@ -1,0 +1,38 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index a5d05030c9..2f4006c8cf 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -1282,22 +1282,26 @@ comptime LG_EXACT_BATCH = (
+ #: FAST on Apple: width 128, THE DEFAULT since lane apple-fast-lgw128
+ #: (2026-10-03): M3 Ultra A/B aft-ab-lgw128 on main 5f5eadcde, lossguide taxi,
+ #: n=2: 13,148 -> 12,921 ms (-1.7%), AUC .6320 unchanged.
+-#: FAST elsewhere: width 64. IDENTICAL (`LG_EXACT_ID`): width 128 (T17 below).
+-#: The width arms were deleted 2026-11-15. Lossguide only; depthwise never
+-#: reads the width.
++#: `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF` is the A/B arm (back to 64); the
++#: old `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128` stays harmless. FAST elsewhere:
++#: width 64 (arms 32|128). IDENTICAL (`LG_EXACT_ID`) keeps main's width 32
++#: (arm 64). Lossguide only; depthwise never reads the width.
+ # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH128 (DELETE-ARM, EXP:113 force-on knob of the FAST Apple default, rule e) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 25eeaf016e.
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF (DELETE-OLD-PATH, EXP:113 KEPT 9722e5a2b on Apple M3; one-vendor promotion, rule d) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e50ac0e432.
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH32 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c9cb94022d.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch; record in docs/TOMBSTONES.md.
+-comptime _LG_EXACT_BATCH128 = TARGET_HAS_APPLE_GPU
++comptime _LG_EXACT_BATCH128 = (
++    TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
++)
+ # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH16 (DROPPED-slower) deleted 2026-10-03 by dc23f13c8; code recoverable at dc23f13c8^.
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH16.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_AFT_N01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 74a26fca92.
+ # Restore: git apply experiments/removed/MOJOLEARN_AFT_N01.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+ comptime LG_EXACT_BATCH_WIDTH = (
+-    128 if _LG_EXACT_BATCH128 else 64
++    128 if _LG_EXACT_BATCH128 else (
++        32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
++    )
+ ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else 128
+ # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH64 (DELETE-ARM, EXP:114 KEPT is the FAST width (superseded by 128); the IDENTICAL arm 64 was never measured, rule e) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at d61b232e98.
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH64.patch; record in docs/TOMBSTONES.md.

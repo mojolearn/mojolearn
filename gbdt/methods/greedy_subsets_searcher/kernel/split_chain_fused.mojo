@@ -1,7 +1,6 @@
 """The non-symmetric split chain in four launches (FAST Apple default).
 
-Depthwise only; off with `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` (lane
-apple-fast-depthwise). The chain
+Depthwise only (lane apple-fast-depthwise). The chain
 `greedy_search_helper_depthwise.mojo` runs per level on the row-index-only
 schedule (DEVIATION 1902) is eight launches:
 
