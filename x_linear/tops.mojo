@@ -8,7 +8,6 @@ bits. Each returns with its outputs visible to the whole team; a scalar
 result is the lead's fold, broadcast.
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, cholesky, fabs, fsign
-from std.sys.compile import is_defined
 from x_linear.team import Team
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace

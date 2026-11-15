@@ -5366,7 +5366,7 @@ def fit_device(
         return
     # HuberRegressor with the line search batched on the device
     # (x_linear/huber_fast.mojo, lane/apple-fast-robust recovered):
-    # -D MOJOLEARN_HUBER_DEVICE_LBFGS (or HUBER_FAST_BLOCK512), FAST + Apple only
+    # FAST + Apple only
     comptime if HUBER_DEVICE_LBFGS:
         if algo == ALGO_HUBER and n > 0:
             huber_fit_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)

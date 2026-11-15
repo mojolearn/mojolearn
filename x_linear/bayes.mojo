@@ -20,7 +20,6 @@ Reference: scikit-learn `sklearn/linear_model/_bayes.py`:
 Centering (fit_intercept) is their `_preprocess_data`: column means and the
 target mean, rows ascending. float32 throughout.
 """
-from std.sys.compile import is_defined
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
     cholesky, chol_solve, centered_gram, centered_xty, mean_of,

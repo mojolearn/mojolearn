@@ -36,7 +36,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from x_linear.ops import FP, IP, ld, st
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 

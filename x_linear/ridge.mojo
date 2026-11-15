@@ -22,7 +22,6 @@ from x_linear.ops import (
 from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.ff import FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_f32, ff_ld, ff_st, ff_cholesky, ff_chol_solve, ff_col_mean, ff_cross
-from std.sys.compile import is_defined
 from x_linear.tops import upper_cell, t_centered_gram, t_sum, fold_fa, fold_sq, chain_fmad, chain_cfmad, t_cholesky, fold_fa_blocked, FOLD_BLOCK
 
 

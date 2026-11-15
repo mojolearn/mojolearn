@@ -35,9 +35,6 @@ A/B arm (the team fit in the same build).
 """
 from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

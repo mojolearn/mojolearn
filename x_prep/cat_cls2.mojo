@@ -28,7 +28,6 @@ values come from a 4-pass radix sort of every column (x_prep/dradix.mojo).
 Op 157 `cat_zero` clears the scratch the flags live in (scratch starts
 undefined)."""
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, raw, st, sti, ldi

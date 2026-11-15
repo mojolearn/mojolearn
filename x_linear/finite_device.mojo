@@ -18,7 +18,6 @@ No bit moves: the check reads, it does not compute a fitted word.
 
 from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops import FP, IP, ld, sti

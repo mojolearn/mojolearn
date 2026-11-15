@@ -41,7 +41,6 @@ once per program:
 Integer words (codes, folds, ranks, counts) are read and written with
 ldi / sti; the statistics are float32 through the lane's add/sub/mul/div.
 """
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, ld, st, ldi, sti

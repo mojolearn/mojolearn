@@ -39,7 +39,6 @@ from x_linear.ops import (
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys.info import is_gpu
-from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.team import Team, team_at

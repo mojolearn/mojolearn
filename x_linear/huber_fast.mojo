@@ -36,7 +36,6 @@ different fold order (FAST bits only).
 """
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
