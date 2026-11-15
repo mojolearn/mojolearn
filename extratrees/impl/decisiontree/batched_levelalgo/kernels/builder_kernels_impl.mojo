@@ -288,11 +288,10 @@ from checks.numerics import (
 @always_inline
 def _search_barrier():
     """The explicit barrier after each block reduction of the range and score
-    passes. `-D MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER=1` is a MEASUREMENT ARM that
-    drops it, to price the barrier per block on one vendor; it is never set by
-    a build script and never a default (Metal needs the barrier)."""
-    comptime if not is_defined["MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER"]():
-        barrier()
+    passes (Metal needs it)."""
+    # TOMBSTONE: MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER (DELETE-ARM, measurement arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at c989276b4b.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER.patch; record in docs/TOMBSTONES.md.
+    barrier()
 
 
 comptime SINGLE_WRITER_PLAIN_PUBLISH = is_defined[
