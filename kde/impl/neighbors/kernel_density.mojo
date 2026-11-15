@@ -107,8 +107,8 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 # TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-07-base); code recoverable at c48de5dbfd.
 # Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
-from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
-from core.classical_distance import direct_distance_step
+# TOMBSTONE: MOJOLEARN_KDE_DIRECT_DISTANCE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-05-base); code recoverable at 8ea09dd4a4.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -1831,7 +1831,7 @@ def kde_tiled_logk_kernel(
                         )
                         var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
                         var diff = ftz_simd[KDE_TILED_CELL](qv - row)
-                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if KDE_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
+                        acc = ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc))
                 elif metric == DIST_L1:
                     for feat in range(feats):
                         var qv = SIMD[DType.float32, KDE_TILED_CELL](
@@ -3536,7 +3536,7 @@ def kde_chunk_lse_kernel(
                         )
                         var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
                         var diff = ftz_simd[KDE_TILED_CELL](qv - row)
-                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if KDE_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
+                        acc = ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc))
                 elif metric == DIST_L1:
                     for feat in range(feats):
                         var qv = SIMD[DType.float32, KDE_TILED_CELL](
@@ -3651,10 +3651,7 @@ def _kde_qt_step(
     var qv = SIMD[DType.float32, KDE_QT_CELL](ftz(qs))
     if metric == DIST_L2_SQRT_UNEXPANDED:
         var diff = ftz_simd[KDE_QT_CELL](qv - row)
-        comptime if KDE_DIRECT_DISTANCE:
-            return direct_distance_step[KDE_QT_CELL](acc, diff, SIMD[DType.float32, KDE_QT_CELL](0))
-        else:
-            return ftz_simd[KDE_QT_CELL](identical_mul_add_simd[KDE_QT_CELL](diff, diff, acc))
+        return ftz_simd[KDE_QT_CELL](identical_mul_add_simd[KDE_QT_CELL](diff, diff, acc))
     elif metric == DIST_L1:
         return ftz_simd[KDE_QT_CELL](acc + abs(ftz_simd[KDE_QT_CELL](qv - row)))
     var diff = abs(ftz_simd[KDE_QT_CELL](qv - row))

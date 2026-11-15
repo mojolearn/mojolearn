@@ -43,8 +43,8 @@ comparison is a REPORT.
 
 # TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-07-base); code recoverable at c48de5dbfd.
 # Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
-from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
-from core.classical_distance import direct_squared_distance, direct_distance_step
+# TOMBSTONE: MOJOLEARN_KDE_DIRECT_DISTANCE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-05-base); code recoverable at 8ea09dd4a4.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 from std.math import cos, exp, lgamma, log, pi, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -205,15 +205,6 @@ def oracle_distance_ptr(
     That is this file's whole contract (see its header): if the device
     kernel and this function ever disagree, one of them is wrong and the
     gate says which cell."""
-    comptime if KDE_DIRECT_DISTANCE:
-        if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
-            # These synchronous helpers borrow the caller-owned buffers; use
-            # their shared raw pointer origin without changing arithmetic.
-            var direct = direct_squared_distance(
-                (query + q * d).unsafe_origin_cast[MutAnyOrigin](),
-                (train + j * d).unsafe_origin_cast[MutAnyOrigin](), d,
-            )
-            return ftz(identical_sqrt(direct)) if metric == DIST_L2_SQRT_UNEXPANDED else direct
     var acc = Float32(0.0)
     if metric == DIST_COSINE_EXPANDED:
         # `cosine.cuh:68` core, then `:86` epilog.
@@ -436,8 +427,6 @@ comptime KdeV = SIMD[DType.float32, KDE_W]
 def _kde_step[M: Int](acc: KdeV, qv: Float32, t: KdeV, metric_arg: Float32) -> KdeV:
     """One feature step of W cells of `oracle_distance_ptr`, the metric
     fixed at compile time (see `_kde_tile`)."""
-    comptime if KDE_DIRECT_DISTANCE and (M == DIST_L2_EXPANDED or M == DIST_L2_SQRT_UNEXPANDED):
-        return direct_distance_step[KDE_W](acc, KdeV(qv), t)
     comptime if M == DIST_COSINE_EXPANDED or M == DIST_L2_EXPANDED:
         return ftz_v[KDE_W](identical_mul_add_simd[KDE_W](KdeV(qv), t, acc))
     elif M == DIST_L2_SQRT_UNEXPANDED:
@@ -493,9 +482,6 @@ def _kde_tile(
 @always_inline
 def _kde_epilogue(acc: KdeV, qn: Float32, tn: KdeV, metric: Int, metric_arg: Float32) -> KdeV:
     """The epilogues of `oracle_distance_ptr`, W cells of one query row."""
-    comptime if KDE_DIRECT_DISTANCE:
-        if metric == DIST_L2_EXPANDED:
-            return acc
     if metric == DIST_COSINE_EXPANDED:
         var denom = ftz_v[KDE_W](KdeV(qn) * tn)
         var ratio = ftz_v[KDE_W](ftz_v[KDE_W](acc) / ftz_v[KDE_W](denom))
