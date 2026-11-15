@@ -665,6 +665,16 @@ def _load(name):
     return mod
 
 
+_SMALL_ROWS = []
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py, loaded once per process."""
+    if not _SMALL_ROWS:
+        _SMALL_ROWS.append(_load("bench_board_small_rows"))
+    return _SMALL_ROWS[0]
+
+
 def _smoke_staging():
     """tools/smoke_inproc.py when this process is the campaign smoke's worker or one of its arm servers (they serve
     the --params-only parameter probe only), else None: a timed worker returns None here without importing
@@ -1810,6 +1820,10 @@ def worker(args):
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our warmup call's time decides how
+    # many consecutive calls the one scored run makes (20 under 10 ms, else 1)
+    small = _small_rows()
+    warm_ms = None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -1836,6 +1850,21 @@ def worker(args):
                 last = runner.outputs()
                 runner.sync()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
+                # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
+                # (the hash, the saved outputs and the receipt are the first call's; same bits every call).
+                # Opponents and rows at or above 10 ms make one call.
+                n_calls = small.calls_for(warm_ms, (runner.info or {}).get("library") == "mojolearn") if r > 0 else 1
+                calls = [ms]
+                for _ in range(1, n_calls):
+                    t0 = time.perf_counter()
+                    runner.call()
+                    runner.sync()
+                    calls.append((time.perf_counter() - t0) * 1000.0)
+                if r == 0:
+                    warm_ms = ms
+                calls_rec = small.spread(calls) if r > 0 else None
+                if calls_rec is not None:
+                    ms = calls_rec["ms"]
                 m = mem.stop()
                 h = hashlib.sha256()
                 for k in sorted(last):
@@ -1851,6 +1880,7 @@ def worker(args):
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "scored_calls": calls_rec,
                  "iterations": fitted_readback["iterations"],
                  "fitted_parameters": fitted_readback["parameters"],
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
@@ -2241,6 +2271,9 @@ def race(args):
                 result["arms"][arm]["warmup_ms"] = msg["ms"]
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
+                # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
+                if msg.get("scored_calls") is not None:
+                    result["arms"][arm].setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
             result["arms"][arm]["digests"].append(msg["digest"])
             if msg.get("operation") is not None:
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
@@ -2250,8 +2283,9 @@ def race(args):
                 result["arms"][arm].setdefault("iteration_receipts", []).append(msg.get("iterations"))
                 result["arms"][arm].setdefault("fitted_parameters", []).append(msg.get("fitted_parameters"))
             result["arms"][arm]["mem"].append(msg.get("mem"))
-            print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
-                  % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
+            print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s"
+                  % (lane, ds, arm, r, msg["ms"], msg["digest"],
+                     _small_rows().line_suffix(msg.get("scored_calls"))), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]
