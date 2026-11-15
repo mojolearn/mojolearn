@@ -6347,7 +6347,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 
 ### MOJOLEARN_CV_FAST_SLICE_OFF: old path deleted (2026-11-15)
 
-- **What it was**: the FAST+Apple rollback of `CV_FAST_SLICE` (`resample/estimator.mojo`, bit 32 of `resample_fast_defines`, read by `python/mojolearn/model_selection.py`): with `-D MOJOLEARN_CV_FAST_SLICE_OFF` the bit was 0 and each default fold gathered its rows. Deleted: the define read; `CV_FAST_SLICE` is `RESAMPLE_FAST_APPLE`, so the mask is unchanged in every default build.
+- **What it was**: the FAST+Apple rollback of `CV_FAST_SLICE` (`resample/estimator.mojo`, bit 32 of `resample_fast_defines`; its Python reader in `model_selection.py` was deleted earlier, so the bit is published but read by nothing today): with `-D MOJOLEARN_CV_FAST_SLICE_OFF` the bit was 0 and each default fold gathered its rows. Deleted: the define read; `CV_FAST_SLICE` is `RESAMPLE_FAST_APPLE`, so the mask is unchanged in every default build.
 - **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `CV_FAST_SLICE`, rab1d-cvslice): M3 one run per arm, cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella 3114.45 -> 2920.08 ms (-6.2%), mean_r2 and digest identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `289e8ff918`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch`, then delete the `MOJOLEARN_CV_FAST_SLICE_OFF` refusal in `core/experiment_guards_series.mojo`.
@@ -6355,7 +6355,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 
 ### MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF: old path deleted (2026-11-15)
 
-- **What it was**: the FAST+Apple rollback of `CV_FAST_TRUST_FOLDS` (`resample/estimator.mojo`, bit 64 of `resample_fast_defines`, read by `python/mojolearn/model_selection.py` `_prepare_folds`): with `-D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF` the bit was 0 and the native default folds went through `_indices` and `_overlap`. Deleted: the define read; `CV_FAST_TRUST_FOLDS` is `RESAMPLE_FAST_APPLE`, so the mask is unchanged in every default build.
+- **What it was**: the FAST+Apple rollback of `CV_FAST_TRUST_FOLDS` (`resample/estimator.mojo`, bit 64 of `resample_fast_defines`; its reader `_prepare_folds` was deleted earlier, so the bit is published but read by nothing today): with `-D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF` the bit was 0 and the native default folds went through `_indices` and `_overlap`. Deleted: the define read; `CV_FAST_TRUST_FOLDS` is `RESAMPLE_FAST_APPLE`, so the mask is unchanged in every default build.
 - **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `CV_FAST_TRUST_FOLDS`, rab1d-cvtrust): M3 one run per arm, cross-val-score taxi 161.86 -> 142.47 ms (-12.0%), istella 3099.08 -> 3089.22 ms (-0.3%), mean_r2 and digest identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8258512ade`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch`, then delete the `MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF` refusal in `core/experiment_guards_series.mojo`.
