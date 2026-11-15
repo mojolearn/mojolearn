@@ -265,7 +265,7 @@ def _upload(
 
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
 #: its M3 A/B kap2-km-ptrin-rbf-istella (rbf-sampler istella 121 -> 94 ms,
-#: kernel_rel_error identical; `-D MOJOLEARN_KM_FAST_PTR_IN_OFF` reverts):
+#: kernel_rel_error identical):
 #: the transforms' X goes to the
 #: device straight from the caller's memory (one raw host-pointer copy,
 #: 1.6-2.4 ms per 64 MB on Apple) and its finiteness is scanned there
@@ -282,11 +282,9 @@ def _upload(
 comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_KM_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (
-    _CTX_MODE == _NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_KM_FAST_PTR_IN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_KM_FAST_PTR_IN_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 484c3ee4ab.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (_CTX_MODE == _NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
 #: (`-D MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF` restores the appends):
@@ -1315,8 +1313,7 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
 
 #: lane/apple-fast-kernel (2026-10-02), FAST on Apple only, the default since
 #: the M3 A/B kap2-km-nysrr-taxi (lane apple-fast-gap-kapprox2: nystroem taxi
-#: 533 -> 190 ms, kernel_rel_error .04561 -> .04503; `-D
-#: MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF` reverts): it solves the q x q basis kernel's
+#: 533 -> 190 ms, kernel_rel_error .04561 -> .04503): it solves the q x q basis kernel's
 #: eigenproblem with x_decomp/jacobi_par.mojo's round-robin Jacobi (every
 #: round's q / 2 disjoint rotations across the grid, two launches a round,
 #: the cyclic kernel's convergence test folded on the grid once a sweep,
@@ -1326,8 +1323,9 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
 #: board's q = 256: 32,640 serial rotations a sweep, up to 15 sweeps) while
 #: the rest of the GPU idles. A solve that does not converge in
 #: NYS_RR_SWEEPS sweeps leaves `dk` untouched and the cyclic kernel runs.
-comptime NYS_RR_EIGH = (_CTX_MODE != _CTX_IDENTICAL and TARGET_HAS_APPLE_GPU
-                        and not is_defined["MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF"]())
+# TOMBSTONE: MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 31c2734614.
+# Restore: git apply experiments/removed/MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_RR_EIGH = _CTX_MODE != _CTX_IDENTICAL and TARGET_HAS_APPLE_GPU
 comptime NYS_RR_SWEEPS = 30
 
 

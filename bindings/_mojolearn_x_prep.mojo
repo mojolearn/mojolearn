@@ -190,28 +190,24 @@ def vendor_binding() raises -> PythonObject:
 #: n=1, output digests identical: onehot taxi 69.7 -> 30.4 ms, ordinal taxi
 #: 67.2 -> 25.3 ms). It was the env switch MOJOLEARN_X_PREP_FAST_UNIQUE=1;
 #: now `x_prep_fast_unique` is registered only when this is on, the Python
-#: side probes it once per binding (no env read), and
-#: `-D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF` restores main's path. The old env
-#: name stays harmless.
-comptime X_PREP_FAST_UNIQUE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_X_PREP_FAST_UNIQUE_OFF"]()
-)
+#: side probes it once per binding (no env read). The old env name stays
+#: harmless; `unique_cols` stays the path of every other build.
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_UNIQUE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at c370817612.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime X_PREP_FAST_UNIQUE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
 #: the M3 A/B kap2-spl-fused-{istella,taxi} (spline istella 48.1 -> 11.6 ms,
-#: taxi 34.2 -> 10.8 ms, output digests identical; `-D
-#: MOJOLEARN_SPLINE_FAST_FUSED_OFF` reverts): MOJOLEARN_SPLINE_FAST_FUSED registers `x_prep_spline_fused`
+#: taxi 34.2 -> 10.8 ms, output digests identical): MOJOLEARN_SPLINE_FAST_FUSED registers `x_prep_spline_fused`
 #: in the FAST + Apple build only. SplineTransformer.fit then allocates no
 #: n*d arena block when nothing sorts (main's is never written and comes back
 #: from the device unread: 64 MB at the board's 1M x 16) and takes the count /
 #: min / max rows from the blocked units; fit_transform runs ONE program (X up
 #: once, stats, knots, apply). Same knots, same output words.
-comptime SPLINE_FAST_FUSED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SPLINE_FAST_FUSED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SPLINE_FAST_FUSED_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at a9826a67a5.
+# Restore: git apply experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SPLINE_FAST_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 def spline_fused_binding() raises -> PythonObject:

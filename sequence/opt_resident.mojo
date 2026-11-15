@@ -100,14 +100,15 @@ comptime OPT_PIPE_CH = 1 << 21
 #:    (`sequence/ops_impl.mojo::adafactor_core`) on the same values.
 #: AF_FAST_RESIDENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab10-afresident): adafactor 392.8 -> 205.2 ms, digest
-#: identical A == B. KEEP: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_AF_FAST_RESIDENT_OFF (the old -D name is harmless).
+#: identical A == B. KEEP: the FAST + Apple default since then.
+# TOMBSTONE: MOJOLEARN_AF_FAST_RESIDENT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at a656258c20.
+# Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 #: lane idn-opt-resident (2026-10-04): the IDENTICAL default on every
 #: vendor (the per-call entry moved P, G and the moment up and two of them
 #: down each step); -D MOJOLEARN_IDN_AF_RESIDENT_OFF restores the per-call
 #: entry (the Python side falls back when the entry points are absent).
 #: The same `adafactor_core` launches on the same values: no bit moves.
-comptime AF_RESIDENT = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_RESIDENT_OFF"]()) or (
+comptime AF_RESIDENT = _OPT_APPLE_FAST or (
     _OPT_IDN and not (is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
@@ -701,7 +702,7 @@ def adafactor_resident_open(ip: List[Int]) raises -> List[Int]:
     col_var (C, matrices only), zero filled. Returns [handle, used mask]
     (and 1 under OPT_ZERO_OPEN)."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_open: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_open: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default)")
     if len(ip) != 2:
         raise Error("adafactor_resident_open: requires [R, C]")
     var R = ip[0]
@@ -723,7 +724,7 @@ def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
     fp = `adafactor_step`'s six. The parameter is updated in place.
     Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_step: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(addrs) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step: requires 2 addresses, 3 integer and 6 float parameters")
@@ -932,7 +933,7 @@ def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
     `adafactor_step`'s six. The parameter is updated where it lives (the
     same `adafactor_core` launches). Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step_dev: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_step_dev: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(handles) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step_dev: requires 2 handles, 3 integer and 6 float parameters")

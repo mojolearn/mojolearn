@@ -126,13 +126,11 @@ def _k64_on() -> Bool:
     for `K <= 32`).
 
     DEFAULT ON (FAST + Apple) since the M3 A/B core-knn-k64-istella: knn
-    1,581 -> 352 ms, recall .9766 same. -D MOJOLEARN_KNN_FAST_MMA_K64_OFF
-    turns it off; the old -D MOJOLEARN_KNN_FAST_MMA_K64 name is accepted and
-    changes nothing."""
-    comptime if not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-        and not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"]()
-    ):
+    1,581 -> 352 ms, recall .9766 same. The old -D MOJOLEARN_KNN_FAST_MMA_K64
+    name is accepted and changes nothing."""
+    # TOMBSTONE: MOJOLEARN_KNN_FAST_MMA_K64_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 66ff49e5d5.
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU):
         return False
     else:
         return True

@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane apple-fast-w2-kfeat (2026-10-04): RBFSampler.fit_transform in ONE
-binding call, DEFAULT in FAST + Apple (rollback
-`-D MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`).
+binding call, DEFAULT in FAST + Apple.
 
 Main's fit_transform is two binding calls. `fit` makes two fresh device
 buffers, waits, draws W and b, waits, and downloads each through a fresh
@@ -63,18 +62,19 @@ from core.shared_slot import SharedSlot
 
 # KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
 # M3, one run per arm: rbf-sampler istella 93.4 -> 76.3 ms; w2-kfeat-rbf-q-r1
-# PASS (byte-identical outputs). MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF restores
-# main's two-call fit + transform.
+# PASS (byte-identical outputs). Main's two-call fit + transform stays the
+# path of every other build.
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at fd51cb8d40.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KM_FAST_RBF_RESIDENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"]()
     and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
 )
 
 
-# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (rollback -D MOJOLEARN_KM_FAST_RBF_STAGED_OFF;
-# needs KM_FAST_RBF_RESIDENT). M3, source ea6b2035e, one run per arm:
+# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (wherever KM_FAST_RBF_RESIDENT is).
+# M3, source ea6b2035e, one run per arm:
 # rbf-sampler istella 77.6 -> 57.1 ms; w2-w3kf-rbf-q PASS (byte-identical).
 # Lane apple-fast-w3-kfeat, 2026-10-04: the
 # projection (m x q; 100,000 x 256 = 102 MB at the board's istella shape)
@@ -91,12 +91,15 @@ comptime KM_FAST_RBF_RESIDENT = (
 # first wait (which therefore also covers the GEMM and the epilogue).
 # The output stays the caller's ordinary (mapped) memory: handing out the
 # pinned stage itself would leave the caller reading write-combined memory.
-comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"]()
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_STAGED_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1c52d8514e.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch; record in docs/TOMBSTONES.md.
+# The raw one-copy projection download in `_rbf_unpiped` went with it.
+comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT
 comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
 
 
 #: MOJOLEARN_KM_FAST_RBF_PIPE (lane apple-fast-s-small, 2026-10-05), FAST +
-#: Apple default (needs KM_FAST_RBF_STAGED); rollback -D MOJOLEARN_KM_FAST_RBF_PIPE_OFF.
+#: Apple default (needs KM_FAST_RBF_STAGED).
 #: What: fit_transform as a pipeline over row blocks of ~8 MiB of output
 #: (`_rbf_pipe_rows`): block k's X rows go up, its GEMM and epilogue run, its
 #: projection goes into a pinned stage; while the GPU does block k + 1 the one
@@ -115,7 +118,10 @@ comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
 #: rab12-rbfpipe): rbf-sampler istella 56.7 -> 43.0 ms, taxi 35.6 -> 31.1 ms,
 #: kernel_rel_error identical. KEEP: the FAST + Apple default since then
 #: (the old -D name is harmless).
-comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED and not is_defined["MOJOLEARN_KM_FAST_RBF_PIPE_OFF"]()
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_PIPE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at e6a4e9f1a7.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch; record in docs/TOMBSTONES.md.
+# `_rbf_unpiped` stays: it serves outputs too small for two pipeline blocks.
+comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED
 
 
 def _rbf_pipe_rows(m: Int, q: Int) -> Int:
@@ -229,12 +235,8 @@ def _rbf_unpiped(
     ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
-    comptime if KM_FAST_RBF_STAGED:
-        # waits inside (its first wait covers everything queued above)
-        download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
-    else:
-        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=z_addr), src_buf=dz)
-        ctx.synchronize()
+    # waits inside (its first wait covers everything queued above)
+    download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
     _ = psub^
 
 

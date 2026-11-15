@@ -126,6 +126,15 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_COLSPLIT_OFF (rollback to the m serial SVGP column threads) is gone; the split column solves are the path wherever _SVGP_GATE_ON is (taxi 613 -> 438 ms, r2/rmse identical); IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF; restore: experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_BSPLIT_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_BSPLIT_OFF (FAST+Apple rollback to SYMTILE's single-partial SVGP B and b) is gone; the row-slice partials are the FAST+Apple path (istella 224.6 -> 167.1 ms, r2 equal, rab19-svgpbsplit); restore: experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch"
+    # Lane expdel-06-base-cluster-kernel (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): IVF_FAST_SEED_DEVICE_OFF (FAST+Apple rollback of the IVF coarse k-means++ seeding to the host) is gone; the device seeding is the FAST+Apple path (ivf-pq istella 5,516 -> 5,243 ms, recall .6017 -> .6071, fastonly2-3-ivf-pq-istella-m3); restore: experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KNN_FAST_MMA_K64_OFF (FAST+Apple rollback of k <= 64 k-NN to the generic tiled arm) is gone; the K = 64 matrix-unit kernels are the FAST+Apple path (knn istella 1,581 -> 352 ms, core-knn-k64-istella); restore: experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_REFINE"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KNN_FAST_REFINE (FAST opt-in k-NN pool + exact re-rank) is gone: NEUTRAL, rab5-knnref istella +3.7%, taxi -1.5%, recall identical; restore: experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): XN_FAST_NAN_COLMISS_ONLY_OFF (FAST+Apple rollback of KNNImputer.fit to the full NaN cell-list pass) is gone; the column-count kernel is the FAST+Apple fit path (KEPT with TIE_MEAN, gmp-imp-taxi); restore: experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch"
     return True
 
 

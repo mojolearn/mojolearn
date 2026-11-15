@@ -1,0 +1,25 @@
+diff --git a/kernel_methods/rbf_resident.mojo b/kernel_methods/rbf_resident.mojo
+index eea1802831..b8b1a2ae43 100644
+--- a/kernel_methods/rbf_resident.mojo
++++ b/kernel_methods/rbf_resident.mojo
+@@ -96,7 +96,7 @@ comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
+ 
+ 
+ #: MOJOLEARN_KM_FAST_RBF_PIPE (lane apple-fast-s-small, 2026-10-05), FAST +
+-#: Apple default (needs KM_FAST_RBF_STAGED).
++#: Apple default (needs KM_FAST_RBF_STAGED); rollback -D MOJOLEARN_KM_FAST_RBF_PIPE_OFF.
+ #: What: fit_transform as a pipeline over row blocks of ~8 MiB of output
+ #: (`_rbf_pipe_rows`): block k's X rows go up, its GEMM and epilogue run, its
+ #: projection goes into a pinned stage; while the GPU does block k + 1 the one
+@@ -115,10 +115,7 @@ comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
+ #: rab12-rbfpipe): rbf-sampler istella 56.7 -> 43.0 ms, taxi 35.6 -> 31.1 ms,
+ #: kernel_rel_error identical. KEEP: the FAST + Apple default since then
+ #: (the old -D name is harmless).
+-# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_PIPE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at e6a4e9f1a7.
+-# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch; record in docs/TOMBSTONES.md.
+-# `_rbf_unpiped` stays: it serves outputs too small for two pipeline blocks.
+-comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED
++comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED and not is_defined["MOJOLEARN_KM_FAST_RBF_PIPE_OFF"]()
+ 
+ 
+ def _rbf_pipe_rows(m: Int, q: Int) -> Int:

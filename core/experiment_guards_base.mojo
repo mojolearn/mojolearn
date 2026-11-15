@@ -42,6 +42,17 @@ def _check_configuration() -> Bool:
     # Lane expdel-01-cluster (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): XN_FAST_SCHI2_LAZYW_OFF (FAST+Apple rollback to SkewedChi2Sampler's eager weights) is gone; the lazy weights are the FAST+Apple path (taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms, same words); restore: experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch"
+    # Lane expdel-06-base-cluster-kernel (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AF_FAST_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): AF_FAST_RESIDENT_OFF (FAST+Apple rollback to Adafactor's per-call entry) is gone; the resident second moment is the FAST+Apple path (adafactor 392.8 -> 205.2 ms, digest identical, rab10-afresident); IDENTICAL keeps MOJOLEARN_IDN_AF_RESIDENT_OFF; restore: experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): APPLE_FAST_GEMM_TN_V1_OFF (FAST+Apple rollback of square gemm_tn past split-K to the vendor matmul) is gone; IDENTICAL's gemm_tn_identical_v1 arm is the FAST+Apple path (ols istella 2,219 -> 935 ms, tier-ols-tnv1b); restore: experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_RBF_RESIDENT_OFF (FAST+Apple rollback of RBFSampler fit_transform to main's two binding calls) is gone; the one-call resident fit_transform is the FAST+Apple path (rbf-sampler istella 93.4 -> 76.3 ms, w2-kfeat-rbf-q-r1 PASS); restore: experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_UNIQUE_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): X_PREP_FAST_UNIQUE_OFF (FAST+Apple rollback of the encoders' category fit to one thread per column) is gone; the chunked run scan is the FAST+Apple path (onehot taxi 69.7 -> 30.4 ms, ordinal 67.2 -> 25.3 ms, prep-onehot-uniq-taxi); restore: experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SPLINE_FAST_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): SPLINE_FAST_FUSED_OFF (FAST+Apple rollback of SplineTransformer to main's unfused fit and transform) is gone; the fused program is the FAST+Apple path (spline istella 48.1 -> 11.6 ms, taxi 34.2 -> 10.8 ms, kap2-spl-fused); restore: experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch"
     return True
 
 

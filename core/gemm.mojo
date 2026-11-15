@@ -121,14 +121,11 @@ Only which thread owns a chain and where its operands are read from move."""
 #:   lane/apple-fast-tier @ 95a09d1fd (docs/apple-fast/EXPERIMENTS.md).
 #: Default since the M3 A/B tier-ols-tnv1b (lane/apple-fast-tier 0a2048a44,
 #: ols istella, n=1): 2,219 -> 935 ms (-58%), r2 0.3211 -> 0.3319 (square
-#: gemm_tn past split-K takes IDENTICAL's kernel). FAST + Apple only;
-#: -D MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF restores the vendor-matmul arm.
+#: gemm_tn past split-K takes IDENTICAL's kernel). FAST + Apple only.
 #: IDENTICAL never reads it (its branch returns before this point).
-comptime APPLE_FAST_GEMM_TN_V1 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1005624c27.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_FAST_GEMM_TN_V1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 comptime GNT_KT = 16

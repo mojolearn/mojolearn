@@ -7,8 +7,8 @@
   compare kernel_methods|x_neighbors|x_decomp A.npz B.npz
 
 Tolerances, fixed before any result:
-- kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, old arm =
-  MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF) and x_neighbors
+- kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, its _OFF arm
+  deleted 2026-11-15, docs/TOMBSTONES.md) and x_neighbors
   (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, default now, old arm =
   MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF; MOJOLEARN_XN_FAST_SCHI2_MOJO_MT, default
   now, old arm = MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF): the
