@@ -15,7 +15,6 @@ way. The operations the GPU binding has always served from the host helpers
 No Python object crosses; the entry is called with the GIL released by its
 caller (the Python exports release it around the same runs).
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.base_entry_table import (
@@ -38,10 +37,11 @@ from core.native_descriptor_call import native_descriptor_report
 from core.neural_context import process_ctx
 from core.shared_slot import SharedSlot
 
-#: IDN_HPDEV_FOLDS (`-D MOJOLEARN_IDN_HPDEV_FOLDS_OFF`): the fold and index
-#: helpers on the device (see `bindings/hotpath_device.mojo`, which imports
-#: it from here).
-comptime IDN_HPDEV_FOLDS = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"]()
+#: IDN_HPDEV_FOLDS: the fold and index helpers on the device (see
+#: `bindings/hotpath_device.mojo`, which imports it from here).
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_FOLDS_OFF (old path: the host fold and index helpers; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at b24fd9c2c3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HPDEV_FOLDS = LABELS_DEVICE_BASE
 
 
 def check_indices_i64_device_run(a: Int, count: Int, limit: Int) raises -> Int:
