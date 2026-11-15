@@ -488,8 +488,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_LANCZOS_FAST_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): LANCZOS_FAST_OFF (old path, no A/B recorded) is gone; the default is kept; code at 06b1ed7060; restore: experiments/removed/MOJOLEARN_LANCZOS_FAST_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SPMV_WARP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SPMV_WARP_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): SPMV_WARP_OFF (old path, no A/B recorded) is gone; the default is kept; code at 07958a8a2f; restore: experiments/removed/MOJOLEARN_SPMV_WARP_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G11.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_G11"](), "removed 2026-11-15 (lane/expdel2-13-cluster): AFCL_G11 (never-run Apple FAST programme card) is gone; the default is kept; code at cb24771468; restore: experiments/removed/MOJOLEARN_AFCL_G11.patch"
+    # MOJOLEARN_AFCL_G11: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_LANCZOS_RESTART_FAST_OFF.patch
     comptime assert not is_defined["MOJOLEARN_LANCZOS_RESTART_FAST_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): LANCZOS_RESTART_FAST_OFF (old path, no A/B recorded) is gone; the default is kept; code at d4b9009922; restore: experiments/removed/MOJOLEARN_LANCZOS_RESTART_FAST_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_LANCZOS_ID_DEV_OFF.patch
@@ -502,8 +501,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): IDN_SPECTRAL_VECS_DEVICE_OFF (old path, no A/B recorded) is gone; the default is kept; code at f32202b277; restore: experiments/removed/MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SPECTRAL_NCV_FAST_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SPECTRAL_NCV_FAST_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): SPECTRAL_NCV_FAST_OFF (old path, no A/B recorded) is gone; the default is kept; code at 10d6718946; restore: experiments/removed/MOJOLEARN_SPECTRAL_NCV_FAST_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G10.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_G10"](), "removed 2026-11-15 (lane/expdel2-13-cluster): AFCL_G10 (never-run Apple FAST programme card) is gone; the default is kept; code at ceeb99c2a0; restore: experiments/removed/MOJOLEARN_AFCL_G10.patch"
+    # MOJOLEARN_AFCL_G10: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_UMAP_FUSED_EPOCH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_UMAP_FUSED_EPOCH_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): UMAP_FUSED_EPOCH_OFF (old path, no A/B recorded) is gone; the default is kept; code at 507a0aa5ac; restore: experiments/removed/MOJOLEARN_UMAP_FUSED_EPOCH_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_UMAP_INIT_TOL_OFF.patch

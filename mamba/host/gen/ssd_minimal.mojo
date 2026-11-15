@@ -81,7 +81,17 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA2_SSD_MMA (neural MERGED-UNMEASURED FAST+Apple arm: S12, S13/S14, S15/S16 on simdgroup 8x8
 # tiles) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 1ef421ae42.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA2_SSD_MMA.patch
-from mamba.host.gen.device_optimizations import IDN_M2_SSD_TILES
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+#: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA2_SSD_MMA`
+#: runs S12, S13/S14 and S15/S16 on simdgroup 8x8 tiles (afn_ssd_mma.mojo);
+#: every other build takes the three cell kernels below unchanged.
+from mamba.host.gen.device_optimizations import AFN_MAMBA2_SSD_MMA, IDN_M2_SSD_TILES
+from mamba.host.gen.device_optimizations import (
+    afn_m2_cb_g_mma,
+    afn_m2_cstate_mma,
+    afn_m2_ydiag_mma,
+    afn_ssd_mma_applies,
+)
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from std.memory import stack_allocation
 from mamba.checks.mamba2_fixture import (
@@ -1164,89 +1174,97 @@ def ssd_forward(
     def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6}:
         m2_seg_l_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6)
     host_launch(_launch_4, launch_count((_grid(b * nc * nh * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
-    comptime if M2_OCC_CB:
-        var cb_nt = (qv + M2_CB_T - 1) // M2_CB_T
-        var _l5_a0 = cb_g.unsafe_ptr()
-        var _l5_a1 = xbc_work.unsafe_ptr()
-        var _l5_a2 = Int32(b)
-        var _l5_a3 = Int32(t_work)
-        var _l5_a4 = Int32(di)
-        var _l5_a5 = Int32(cd)
-        var _l5_a6 = Int32(nc)
-        var _l5_a7 = Int32(qv)
-        def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7}:
-            m2_cb_g_tile_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7)
-        host_launch(_launch_5, launch_count((b * nc * cb_nt * cb_nt, 1, 1), (M2_CB_T * M2_CB_T, 1, 1)), 0)
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_AFN_MAMBA2_SSD_MMA opt-in arm back, default off, Apple fast only.
+    var mma = False
+    comptime if AFN_MAMBA2_SSD_MMA:
+        mma = afn_ssd_mma_applies(qv)
+    if mma:
+        afn_m2_cb_g_mma(ctx, cb_g, xbc_work, b, t_work, di, cd, nc, qv)
+        afn_m2_ydiag_mma(ctx, ydiag, cb_g, seg_l, xd, b, t_work, nh, nc, qv)
     else:
-        var _l6_a0 = cb_g.unsafe_ptr()
-        var _l6_a1 = xbc_work.unsafe_ptr()
-        var _l6_a2 = Int32(b)
-        var _l6_a3 = Int32(t_work)
-        var _l6_a4 = Int32(di)
-        var _l6_a5 = Int32(cd)
-        var _l6_a6 = Int32(nc)
-        var _l6_a7 = Int32(qv)
-        def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7}:
-            m2_cb_g_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7)
-        host_launch(_launch_6, launch_count((_grid(b * nc * qv * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
-    comptime if M2_SSD_TILED:
-        var n_it = (qv + M2_YD_ROWS - 1) // M2_YD_ROWS
-        var use_retained = False
-        comptime if M2_RETAIN_GL:
-            use_retained = b*nc*nh*qv*qv<=M2_RETAIN_GL_MAX_CELLS
-        if use_retained:
-            var cells = b*nc*nh*qv*qv
-            retained.append(ctx.enqueue_create_buffer[DType.float32](cells))
-            var _l7_a0 = retained[0].unsafe_ptr()
-            var _l7_a1 = cb_g.unsafe_ptr()
-            var _l7_a2 = seg_l.unsafe_ptr()
-            var _l7_a3 = Int32(b)
-            var _l7_a4 = Int32(t_work)
-            var _l7_a5 = Int32(nh)
-            var _l7_a6 = Int32(nc)
-            var _l7_a7 = Int32(qv)
-            def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7}:
-                m2_retained_gl_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7)
-            host_launch(_launch_7, launch_count((_grid(cells),1,1), (MAMBA2_TPB,1,1)), 23)
-            var _l8_a0 = ydiag.unsafe_ptr()
-            var _l8_a1 = retained[0].unsafe_ptr()
-            var _l8_a2 = seg_l.unsafe_ptr()
-            var _l8_a3 = xd.unsafe_ptr()
-            var _l8_a4 = Int32(b)
-            var _l8_a5 = Int32(t_work)
-            var _l8_a6 = Int32(nh)
-            var _l8_a7 = Int32(nc)
-            var _l8_a8 = Int32(qv)
-            def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7, imm _l8_a8}:
-                m2_ydiag_tile_kernel[True](gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7, _l8_a8)
-            host_launch(_launch_8, launch_count((b*nc*nh*n_it,1,1), (M2_YD_THREADS,1,1)), 0)
+        comptime if M2_OCC_CB:
+            var cb_nt = (qv + M2_CB_T - 1) // M2_CB_T
+            var _l5_a0 = cb_g.unsafe_ptr()
+            var _l5_a1 = xbc_work.unsafe_ptr()
+            var _l5_a2 = Int32(b)
+            var _l5_a3 = Int32(t_work)
+            var _l5_a4 = Int32(di)
+            var _l5_a5 = Int32(cd)
+            var _l5_a6 = Int32(nc)
+            var _l5_a7 = Int32(qv)
+            def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7}:
+                m2_cb_g_tile_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7)
+            host_launch(_launch_5, launch_count((b * nc * cb_nt * cb_nt, 1, 1), (M2_CB_T * M2_CB_T, 1, 1)), 0)
         else:
-            var _l9_a0 = ydiag.unsafe_ptr()
-            var _l9_a1 = cb_g.unsafe_ptr()
-            var _l9_a2 = seg_l.unsafe_ptr()
-            var _l9_a3 = xd.unsafe_ptr()
-            var _l9_a4 = Int32(b)
-            var _l9_a5 = Int32(t_work)
-            var _l9_a6 = Int32(nh)
-            var _l9_a7 = Int32(nc)
-            var _l9_a8 = Int32(qv)
-            def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4, imm _l9_a5, imm _l9_a6, imm _l9_a7, imm _l9_a8}:
-                m2_ydiag_tile_kernel[False](gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4, _l9_a5, _l9_a6, _l9_a7, _l9_a8)
-            host_launch(_launch_9, launch_count((b * nc * nh * n_it, 1, 1), (M2_YD_THREADS, 1, 1)), 0)
-    else:
-        var _l10_a0 = ydiag.unsafe_ptr()
-        var _l10_a1 = cb_g.unsafe_ptr()
-        var _l10_a2 = seg_l.unsafe_ptr()
-        var _l10_a3 = xd.unsafe_ptr()
-        var _l10_a4 = dt_work.unsafe_ptr()
-        var _l10_a5 = Int32(b)
-        var _l10_a6 = Int32(t_work)
-        var _l10_a7 = Int32(nh)
-        var _l10_a8 = Int32(nc)
-        var _l10_a9 = Int32(qv)
-        def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4, imm _l10_a5, imm _l10_a6, imm _l10_a7, imm _l10_a8, imm _l10_a9}:
-            m2_ydiag_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4, _l10_a5, _l10_a6, _l10_a7, _l10_a8, _l10_a9)
-        host_launch(_launch_10, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
+            var _l6_a0 = cb_g.unsafe_ptr()
+            var _l6_a1 = xbc_work.unsafe_ptr()
+            var _l6_a2 = Int32(b)
+            var _l6_a3 = Int32(t_work)
+            var _l6_a4 = Int32(di)
+            var _l6_a5 = Int32(cd)
+            var _l6_a6 = Int32(nc)
+            var _l6_a7 = Int32(qv)
+            def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7}:
+                m2_cb_g_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7)
+            host_launch(_launch_6, launch_count((_grid(b * nc * qv * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
+        comptime if M2_SSD_TILED:
+            var n_it = (qv + M2_YD_ROWS - 1) // M2_YD_ROWS
+            var use_retained = False
+            comptime if M2_RETAIN_GL:
+                use_retained = b*nc*nh*qv*qv<=M2_RETAIN_GL_MAX_CELLS
+            if use_retained:
+                var cells = b*nc*nh*qv*qv
+                retained.append(ctx.enqueue_create_buffer[DType.float32](cells))
+                var _l7_a0 = retained[0].unsafe_ptr()
+                var _l7_a1 = cb_g.unsafe_ptr()
+                var _l7_a2 = seg_l.unsafe_ptr()
+                var _l7_a3 = Int32(b)
+                var _l7_a4 = Int32(t_work)
+                var _l7_a5 = Int32(nh)
+                var _l7_a6 = Int32(nc)
+                var _l7_a7 = Int32(qv)
+                def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7}:
+                    m2_retained_gl_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7)
+                host_launch(_launch_7, launch_count((_grid(cells),1,1), (MAMBA2_TPB,1,1)), 23)
+                var _l8_a0 = ydiag.unsafe_ptr()
+                var _l8_a1 = retained[0].unsafe_ptr()
+                var _l8_a2 = seg_l.unsafe_ptr()
+                var _l8_a3 = xd.unsafe_ptr()
+                var _l8_a4 = Int32(b)
+                var _l8_a5 = Int32(t_work)
+                var _l8_a6 = Int32(nh)
+                var _l8_a7 = Int32(nc)
+                var _l8_a8 = Int32(qv)
+                def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7, imm _l8_a8}:
+                    m2_ydiag_tile_kernel[True](gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7, _l8_a8)
+                host_launch(_launch_8, launch_count((b*nc*nh*n_it,1,1), (M2_YD_THREADS,1,1)), 0)
+            else:
+                var _l9_a0 = ydiag.unsafe_ptr()
+                var _l9_a1 = cb_g.unsafe_ptr()
+                var _l9_a2 = seg_l.unsafe_ptr()
+                var _l9_a3 = xd.unsafe_ptr()
+                var _l9_a4 = Int32(b)
+                var _l9_a5 = Int32(t_work)
+                var _l9_a6 = Int32(nh)
+                var _l9_a7 = Int32(nc)
+                var _l9_a8 = Int32(qv)
+                def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4, imm _l9_a5, imm _l9_a6, imm _l9_a7, imm _l9_a8}:
+                    m2_ydiag_tile_kernel[False](gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4, _l9_a5, _l9_a6, _l9_a7, _l9_a8)
+                host_launch(_launch_9, launch_count((b * nc * nh * n_it, 1, 1), (M2_YD_THREADS, 1, 1)), 0)
+        else:
+            var _l10_a0 = ydiag.unsafe_ptr()
+            var _l10_a1 = cb_g.unsafe_ptr()
+            var _l10_a2 = seg_l.unsafe_ptr()
+            var _l10_a3 = xd.unsafe_ptr()
+            var _l10_a4 = dt_work.unsafe_ptr()
+            var _l10_a5 = Int32(b)
+            var _l10_a6 = Int32(t_work)
+            var _l10_a7 = Int32(nh)
+            var _l10_a8 = Int32(nc)
+            var _l10_a9 = Int32(qv)
+            def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4, imm _l10_a5, imm _l10_a6, imm _l10_a7, imm _l10_a8, imm _l10_a9}:
+                m2_ydiag_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4, _l10_a5, _l10_a6, _l10_a7, _l10_a8, _l10_a9)
+            host_launch(_launch_10, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var _l11_a0 = decay.unsafe_ptr()
     var _l11_a1 = dacs.unsafe_ptr()
     var _l11_a2 = Int32(b * nh * nc * qv)
@@ -1254,37 +1272,42 @@ def ssd_forward(
     def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2, imm _l11_a3}:
         m2_decay_kernel(gid_, _l11_a0, _l11_a1, _l11_a2, _l11_a3)
     host_launch(_launch_11, launch_count((_grid(b * nh * nc * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 41)
-    comptime if M2_SSD_TILED:
-        var _l12_a0 = cstate.unsafe_ptr()
-        var _l12_a1 = xbc_work.unsafe_ptr()
-        var _l12_a2 = decay.unsafe_ptr()
-        var _l12_a3 = xd.unsafe_ptr()
-        var _l12_a4 = Int32(b)
-        var _l12_a5 = Int32(t_work)
-        var _l12_a6 = Int32(nh)
-        var _l12_a7 = Int32(di)
-        var _l12_a8 = Int32(cd)
-        var _l12_a9 = Int32(nc)
-        var _l12_a10 = Int32(qv)
-        def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3, imm _l12_a4, imm _l12_a5, imm _l12_a6, imm _l12_a7, imm _l12_a8, imm _l12_a9, imm _l12_a10}:
-            m2_cstate_tile_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3, _l12_a4, _l12_a5, _l12_a6, _l12_a7, _l12_a8, _l12_a9, _l12_a10)
-        host_launch(_launch_12, launch_count((b * nc * nh * (M2_HEADDIM // M2_CS_PT), 1, 1), (M2_D_STATE, 1, 1)), 0)
+    if mma:
+        afn_m2_cstate_mma(
+            ctx, cstate, xbc_work, decay, xd, b, t_work, nh, di, cd, nc, qv
+        )
     else:
-        var _l13_a0 = cstate.unsafe_ptr()
-        var _l13_a1 = xbc_work.unsafe_ptr()
-        var _l13_a2 = decay.unsafe_ptr()
-        var _l13_a3 = xd.unsafe_ptr()
-        var _l13_a4 = dt_work.unsafe_ptr()
-        var _l13_a5 = Int32(b)
-        var _l13_a6 = Int32(t_work)
-        var _l13_a7 = Int32(nh)
-        var _l13_a8 = Int32(di)
-        var _l13_a9 = Int32(cd)
-        var _l13_a10 = Int32(nc)
-        var _l13_a11 = Int32(qv)
-        def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3, imm _l13_a4, imm _l13_a5, imm _l13_a6, imm _l13_a7, imm _l13_a8, imm _l13_a9, imm _l13_a10, imm _l13_a11}:
-            m2_cstate_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3, _l13_a4, _l13_a5, _l13_a6, _l13_a7, _l13_a8, _l13_a9, _l13_a10, _l13_a11)
-        host_launch(_launch_13, launch_count((_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
+        comptime if M2_SSD_TILED:
+            var _l12_a0 = cstate.unsafe_ptr()
+            var _l12_a1 = xbc_work.unsafe_ptr()
+            var _l12_a2 = decay.unsafe_ptr()
+            var _l12_a3 = xd.unsafe_ptr()
+            var _l12_a4 = Int32(b)
+            var _l12_a5 = Int32(t_work)
+            var _l12_a6 = Int32(nh)
+            var _l12_a7 = Int32(di)
+            var _l12_a8 = Int32(cd)
+            var _l12_a9 = Int32(nc)
+            var _l12_a10 = Int32(qv)
+            def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3, imm _l12_a4, imm _l12_a5, imm _l12_a6, imm _l12_a7, imm _l12_a8, imm _l12_a9, imm _l12_a10}:
+                m2_cstate_tile_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3, _l12_a4, _l12_a5, _l12_a6, _l12_a7, _l12_a8, _l12_a9, _l12_a10)
+            host_launch(_launch_12, launch_count((b * nc * nh * (M2_HEADDIM // M2_CS_PT), 1, 1), (M2_D_STATE, 1, 1)), 0)
+        else:
+            var _l13_a0 = cstate.unsafe_ptr()
+            var _l13_a1 = xbc_work.unsafe_ptr()
+            var _l13_a2 = decay.unsafe_ptr()
+            var _l13_a3 = xd.unsafe_ptr()
+            var _l13_a4 = dt_work.unsafe_ptr()
+            var _l13_a5 = Int32(b)
+            var _l13_a6 = Int32(t_work)
+            var _l13_a7 = Int32(nh)
+            var _l13_a8 = Int32(di)
+            var _l13_a9 = Int32(cd)
+            var _l13_a10 = Int32(nc)
+            var _l13_a11 = Int32(qv)
+            def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3, imm _l13_a4, imm _l13_a5, imm _l13_a6, imm _l13_a7, imm _l13_a8, imm _l13_a9, imm _l13_a10, imm _l13_a11}:
+                m2_cstate_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3, _l13_a4, _l13_a5, _l13_a6, _l13_a7, _l13_a8, _l13_a9, _l13_a10, _l13_a11)
+            host_launch(_launch_13, launch_count((_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var _l14_a0 = pass_states.unsafe_ptr()
     var _l14_a1 = h_last.unsafe_ptr()
     var _l14_a2 = h_state.unsafe_ptr()

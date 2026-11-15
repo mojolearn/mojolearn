@@ -138,10 +138,11 @@ from training.samba_ops import (
     samba_rms_norm_forward_host,
 )
 # lane afn-samba (2026-10-03): the fused Samba entries exist only in an
-# Apple FAST build with MOJOLEARN_AFN_SAMBA_ALL; AFN_SAMBA_FUSE
+# Apple FAST build with MOJOLEARN_AFN_SAMBA_FUSE (or _ALL); AFN_SAMBA_FUSE
 # is false everywhere else and nothing below registers.
 # TOMBSTONE: MOJOLEARN_AFN_SAMBA_FUSE (record read: EXP:2363 DELETED, superseded) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 3b87ca11bd.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_FUSE.expdel2-01-base.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from training.samba_afn import AFN_SAMBA_FUSE
 from providers.python.training_samba_afn_pyapi_pack import (
     samba_afn_embedding_backward_tied_binding,

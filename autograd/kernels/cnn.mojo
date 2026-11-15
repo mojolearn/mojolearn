@@ -79,6 +79,7 @@ from x_cnn.device import (
     NI12_TNP,
     ONES_CACHE,
     ONES_WS_SLOT,
+    TILED_ROWS,  # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_XCNN_TILED_ROWS opt-in arm
     XCNN_BIAS_FOLD,
     _LR,
     _LT,
@@ -540,7 +541,16 @@ def conv_block_backward_into[resident: Bool = False](
         # layout in one launch (the same values)
         var di = put_i[resident](ctx, 4, idx, no)
         var dpb = put_prm(ctx, 6, both)
-        launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
+        # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_XCNN_TILED_ROWS opt-in arm back, default off.
+        comptime if TILED_ROWS:
+            var S = rows // N
+            var g = _tiled_grid(N, S, OC)
+            ctx.enqueue_function[rows_bwd_tiled_kernel](
+                fp(dgo), fp(yconv), fp(grow), ip(di), ip(dpb), Int32(S), Int32(OC),
+                grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
+            )
+        else:
+            launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
         _ = di^
         _ = dpb^
     else:

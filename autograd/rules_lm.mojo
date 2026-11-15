@@ -65,7 +65,8 @@
 # the layers is ONE contribution, written in place by its rule (no fill, no
 # scratch, no OP_AG_ACCUMULATE). The two consumers of a layer input (norm1
 # and the residual1 add) are joined inside the layer as the hand path does:
-# d_x = norm1_dx + d_residual1 (S36's bwd_add2_kernel), by the norm1 rule (writes_total); the residual
+# d_x = norm1_dx + d_residual1 (S36's bwd_add2_kernel, or the
+# _AFN_NORM1_RESID fusion), by the norm1 rule (writes_total); the residual
 # rule writes nothing. Inside a layer the order is the transformer lane's:
 # d(norm2.out) = gate + up (S9), d(norm1.out) = (q + k) + v (S32),
 # d_residual1 = norm2_dx + d(residual2) (S10-13). The embedding gradient is

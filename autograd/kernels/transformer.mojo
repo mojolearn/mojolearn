@@ -24,7 +24,8 @@ from core.device_arena import arena_active, arena_take
 # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_FUSE / MOJOLEARN_AFN26_LM_BWD_FUSE (Apple FAST opt-in, never promoted) folded to False
 # here 2026-11-15 by lane/expdel2-24-neural; code recoverable at c15b52cbb4.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.expdel2-24-neural.patch
-from training.byte_lm_afn import AFN_LM_BWD_NOSYNC
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
 # TOMBSTONE: MOJOLEARN_AFN_LMGRAD_ALL, MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_EPILOGUE and
 # MOJOLEARN_AFN_LM_BWD_NORM1_RESID (Apple FAST block-backward arms, never measured) deleted 2026-11-15 by
 # lane/expdel2-24-neural with autograd/kernels/transformer_afn.mojo; code recoverable at d2c4643c6b.
@@ -32,6 +33,15 @@ from training.byte_lm_afn import AFN_LM_BWD_NOSYNC
 # MOJOLEARN_AFN26_LM_WGRAD_CAP8 and MOJOLEARN_AFN26_LM_WGRAD_MIN128 (their AFN26 aliases and split-K knobs) deleted
 # with them; code recoverable at d2c4643c6b.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# lane w2-lmgrad (2026-10-03): the block backward on the merged Apple FAST
+# GEMM; each False unless FAST, Apple, and its own -D MOJOLEARN_AFN_LM_* define
+# (or MOJOLEARN_AFN_LMGRAD_ALL). IDENTICAL compiles none of their arms.
+from autograd.kernels.transformer_afn import (
+    AFN_LM_BWD_NORM1_RESID,
+    AFN_LM_WGRAD_SPLIT,
+    afn_lm_wgrad_split_into,
+)
 from core.step_phase import (
     StepPhaseClock,
     step_count_d2h,
@@ -89,6 +99,10 @@ from transformer.impl.llama.fused_attention import (
     fused_backward_launch,
     fused_backward_launch_estash_ran,
     fused_backward_launch_estash_report,
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_ATTN_APPLE_ERECOMP opt-in arm
+    ATTN_APPLE_ESTASH_RECOMPUTE,
+    attention_estash_recompute_granted,
+    fused_backward_launch_erecomp_report,
 )
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_AUTO,
@@ -412,11 +426,15 @@ comptime BWD_ANY_SABOTAGE = (
     or SAB_B_FANIN_ORDER_QKV_REVERSED
 )
 
+# lane w2-lmgrad (2026-10-03): the FAST Apple arms, never in a sabotage build.
+comptime _AFN_WGRAD = AFN_LM_WGRAD_SPLIT and not BWD_ANY_SABOTAGE
 # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 # TOMBSTONE: _AFN_WGRAD / _AFN_NORM1_RESID (MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_NORM1_RESID) deleted
 # 2026-11-15 by lane/expdel2-24-neural; code recoverable at d2c4643c6b.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime _AFN_NORM1_RESID = AFN_LM_BWD_NORM1_RESID and not BWD_ANY_SABOTAGE
 
 #: Evidence-only control for pricing the pre-fusion RMSNorm backward. A
 #: normal build never defines it. Sabotage builds also retain the split
@@ -447,7 +465,7 @@ comptime BWD_GATED_SILU_FUSED_TRIAL = is_defined[
 #: SwiGLU rule (`autograd/rules_transformer.mojo`); the hand walk that once
 #: spelled it inline is deleted (docs/TOMBSTONES.md).
 comptime BWD_FUSE_GATED_SILU = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
     and (
         TARGET_COLUMN == COLUMN_APPLE
         or TARGET_COLUMN == COLUMN_NVIDIA
@@ -461,7 +479,7 @@ comptime BWD_FUSE_GATED_SILU = (
 #: by the autograd RMSNorm rule (`autograd/rules_transformer.mojo`); the hand
 #: walk that once spelled it inline is deleted (docs/TOMBSTONES.md).
 comptime BWD_FUSE_NORM2_RESIDUAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
     and (
         TARGET_COLUMN == COLUMN_APPLE
         or TARGET_COLUMN == COLUMN_NVIDIA
@@ -2032,6 +2050,12 @@ def _route_b(
     plan sections 5.2 and 5.4, and the gate asserts the NEGATIVE property
     that these outputs MOVE under a change of batch composition."""
     var call = gemm_backward_b_call(op, m, n, k)
+    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): the weight
+    # gradient, whose `k'` is the token count and whose output is small,
+    # on the split-K simdgroup route; falls through when it does not split.
+    comptime if _AFN_WGRAD:
+        if _afn_wgrad(ctx, out_buf, dc, other, call):
+            return
     if call[4] == BWD_DC_LEFT:
         workspace.run(
             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
@@ -2039,6 +2063,34 @@ def _route_b(
         return
     workspace.run(
         ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
+    )
+
+
+# lane w2-lmgrad (2026-10-03): FAST + Apple helpers, reached only from
+# `comptime if _AFN_*` arms; IDENTICAL never instantiates them.
+
+
+def _afn_ptr(mut buf: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _afn_wgrad(
+    ctx: DeviceContext,
+    mut out_buf: DeviceBuffer[DType.float32],
+    mut dc: DeviceBuffer[DType.float32],
+    mut other: DeviceBuffer[DType.float32],
+    call: Tuple[Int, Int, Int, Int, Int],
+) raises -> Bool:
+    """`_route_b`'s product (`call` from `gemm_backward_b_call`) on the
+    split-K route (WGRAD_SPLIT). False when it does not serve it."""
+    if call[4] == BWD_DC_LEFT:
+        return afn_lm_wgrad_split_into(
+            ctx, _afn_ptr(out_buf), _afn_ptr(dc), _afn_ptr(other),
+            call[1], call[2], call[3], call[0],
+        )
+    return afn_lm_wgrad_split_into(
+        ctx, _afn_ptr(out_buf), _afn_ptr(other), _afn_ptr(dc),
+        call[1], call[2], call[3], call[0],
     )
 
 
@@ -2972,6 +3024,19 @@ def bwd_attention_dispatch(
                 )
                 estash_done = True
         # (Sweep 2026-11-15: the ATTN_APPLE_ESTASH_RECOMPUTE arm (False on every build) removed.)
+        # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_ATTN_APPLE_ERECOMP opt-in arm back, default off.
+        comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+            # lane/neural-apple2: a process denied the kept stashes
+            # recomputes this layer's (fused_attention.mojo,
+            # ATTN_APPLE_ESTASH_RECOMPUTE); same bits, one extra forward.
+            if not estash_done and attention_estash_recompute_granted():
+                status = fused_backward_launch_erecomp_report(
+                    ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
+                    fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
+                    fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+                    bst.attn_repaired,
+                )
+                estash_done = True
         if not estash_done:
             status = fused_backward_launch(
                 ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
@@ -3068,7 +3133,7 @@ def _bwd_rms_norm_kernels[which: Int](
     comptime if (
         BWD_ANY_SABOTAGE
         or BWD_NORM_SPLIT_TRIAL
-        or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+        or (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_FUSE)
     ):
         ctx.enqueue_function[bwd_norm_dh_kernel](
             dh.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
@@ -3237,6 +3302,15 @@ def bwd_rms_norm_routed[which: Int](
         residual_out, residual_branch, fuse_residual, m, dm, eps,
     )
     var pc = StepPhaseClock(ctx)
+    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): `ones . dprod`
+    # at (1, dm, M) is a weight gradient over the tokens too; split-K, no
+    # env read, no workspace.
+    comptime if _AFN_WGRAD:
+        if afn_lm_wgrad_split_into(
+            ctx, _afn_ptr(dw_out), _afn_ptr(ones), _afn_ptr(dprod), 1, dm, m, OP_NN
+        ):
+            _bwd_rms_norm_dw_tick[which](ctx, pc)
+            return
     if _norm_dw_own_workspace():
         identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
     else:

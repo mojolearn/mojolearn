@@ -35,6 +35,7 @@ partials launch (taxi: 21 tasks x 366 blocks under FOLD_BLOCK), a
 different fold order (FAST bits only).
 """
 from max.gpu import block_idx, block_dim, thread_idx
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
@@ -79,10 +80,17 @@ comptime HUBER_DEVICE_LBFGS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS
 #: the FAST + Apple default, the only form of the fast fit.
 # TOMBSTONE: MOJOLEARN_HUBER_FAST_BLOCK512_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 246a53ea57.
 # Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch; record in docs/TOMBSTONES.md.
-#: Rows per partial of the fast fit (HUBER_FAST_BLOCK512): 512.
 # TOMBSTONE: MOJOLEARN_AFCL_L04 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 91fed31806.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L04.patch; record in docs/TOMBSTONES.md.
-comptime HF_FOLD = 512
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+#: Rows per partial of the fast fit (HUBER_FAST_BLOCK512): 512, or 256 under AFCL_L04.
+# AFCL-L04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# 256 rows shorten each partial chain and expose twice the row parallelism
+# of the existing 512-row schedule; scratch and final folds grow accordingly.
+# Solver tolerance, line-search budget and stopping observations are unchanged.
+comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+                    and is_defined["MOJOLEARN_AFCL_L04"]())
+comptime HF_FOLD = 256 if AFCL_L04 else 512
 #: Evaluation units enqueued between two reads of the stop word.
 comptime HF_BATCH = 16
 #: x_linear/lbfgs.mojo's line search: the step halved up to 40 times.
