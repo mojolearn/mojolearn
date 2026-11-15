@@ -64,7 +64,6 @@
 #
 # Import direction: this module imports the mamba modules; no mamba module
 # imports autograd.
-from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -136,6 +135,11 @@ from autograd.kernels.mamba3_prefill import (
     _m3_scratch,
     _mtick,
 )
+# `-D MOJOLEARN_MAMBA_TIMING`: the Mamba timing ticks (DIAGNOSTIC). Was an
+# environment read per call of the launch helpers below until 2026-11-15
+# (lane envgate-train-seq-mamba); the default build passes a constant False.
+comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the opaque M3_BLOCK rule, tag 72, and the hand Mamba-3 prefill backward walk it called; superseded by the stage rules below) deleted 2026-10-19 by bc0a9a24e; code recoverable at ba37327dc^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch
@@ -916,7 +920,7 @@ def mamba3_step_backward(
     ctx.enqueue_copy(dst_buf=d_output.create_sub_buffer[DType.float32](0, m * dm),
                      src_buf=_m3_view(ctx, d_out, m * dm))
     mamba_refuse_grad_output_on_device(ctx, String("mamba3"), d_output, m * dm)
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     var g = mamba3_tape_backward_on(ctx, w, st, x, d_output, b, l, dims, ton)
     _m3_put(ctx, d_x, g.x, m * dm)
     _m3_put(ctx, d_w + at[0], g.block_norm_weight, dm)
@@ -958,7 +962,7 @@ def mamba3_tape_backward(
         raise Error("mamba3 backward: input and grad_output lengths must equal B*L*d_model")
     var dims = weights.dims.copy()
     var m = b * l
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     var device_weights = Mamba3DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, b, dims)
     var stages = Mamba3DeviceStages(ctx, b, l, 0, dims)

@@ -12,7 +12,7 @@ from std.memory import bitcast, unsafe_memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
-from std.os import abort, getenv
+from std.os import abort
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -101,6 +101,11 @@ from autograd.kernels.mamba1 import ANY_BWD_BLOCK_SABOTAGE
 from autograd.kernels.mamba1_scan import ANY_BWD_SCAN_SABOTAGE
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
+# `-D MOJOLEARN_MAMBA_TIMING`: the Mamba timing ticks (DIAGNOSTIC). Was an
+# environment read per call of the launch helpers below until 2026-11-15
+# (lane envgate-train-seq-mamba); the default build passes a constant False.
+comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
@@ -984,7 +989,7 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     ref dw = s.w.value()
     ref stages = s.stages.value()
     ref dx = s.dx.value()
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     var g = mamba3_tape_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton)
     _m3_download_addr[False](ctx, g.x, n_x, a[11])
     _m3_download_addr[False](ctx, g.block_norm_weight, dm, a[12])
@@ -1078,7 +1083,7 @@ def _m3_backward_tape_run(mut s: Mamba3PrefillSession, a: List[Int]) raises:
     ref dw = s.w.value()
     ref stages = s.stages.value()
     ref dx = s.dx.value()
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     var g = mamba3_tape_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton)
     _m3_download_addr[False](ctx, g.x, n_x, a[1])
     _m3_download_addr[False](ctx, g.block_norm_weight, dm, a[2])
