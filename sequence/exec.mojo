@@ -334,7 +334,8 @@ struct HostExec(Exec, Movable):
         # products the shape rule selects take the split-K order, one
         # OP_GK_SPLIT element a cell (DeviceExec takes the same rule, so the
         # same words); the column sums of OP_AGK_GEMM_EPI stay OP_COLSUM_DIV.
-        # MOJOLEARN_IDN_GEMM_SPLITK_OFF: the host GEMM below, as before.
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_SPLITK_OFF (unmeasured old path, EXP:2180 PENDING: the GEMM without the split-K order; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f15596c0c6.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
         comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
             if gemm_split_on[OP](a):
                 self._launch[OP_GK_SPLIT](gemm_split_args[OP](a), a.i0 * a.i1)

@@ -1226,7 +1226,9 @@ struct DeviceExec(Exec, Movable):
         # lane ag-pass6-gemm (BIT VERSION, sequence/gemm_split.mojo): the
         # products the shape rule selects take the split-K order on every GPU
         # column (Apple too), ahead of the coop and tile routes; HostExec takes
-        # the same rule, so the same words. MOJOLEARN_IDN_GEMM_SPLITK_OFF: off.
+        # the same rule, so the same words.
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_SPLITK_OFF (unmeasured old path, EXP:2180 PENDING: the GEMM without the split-K order; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f15596c0c6.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
         comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
             if gemm_split_on[OP](a):
                 self._gemm_split[OP](a)
