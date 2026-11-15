@@ -1,0 +1,20 @@
+diff --git a/x_prep/fastprep2.mojo b/x_prep/fastprep2.mojo
+index 891822cdf0..c7a28cfad5 100644
+--- a/x_prep/fastprep2.mojo
++++ b/x_prep/fastprep2.mojo
+@@ -119,10 +119,12 @@ comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_G
+ comptime TGR = 256
+ # TOMBSTONE: MOJOLEARN_AFCL_P05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 1d5f37812c.
+ # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P05.patch
+-# TOMBSTONE: MOJOLEARN_AFCL_P06 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at a1ed29218e.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P06.patch
++# AFCL-P06: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
++# P06 doubles convergence-reduction lanes to shorten each lane's row walk;
++# it keeps the existing runtime II_CONV prerequisite equal in both arms.
++comptime AFCL_P06 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P06"]()
+ comptime TE_TGR = TGR
+-comptime II_CONV_TGR = TGR
++comptime II_CONV_TGR = 512 if AFCL_P06 else TGR
+ comptime OP_QUANTILE = 2
+ comptime OP_TE_GLOBAL = 20
+ comptime OP_TE_ENC = 21

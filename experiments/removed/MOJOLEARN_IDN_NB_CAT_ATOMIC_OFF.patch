@@ -1,0 +1,15 @@
+diff --git a/x_prep/fastnb.mojo b/x_prep/fastnb.mojo
+index 640f443706..658589c205 100644
+--- a/x_prep/fastnb.mojo
++++ b/x_prep/fastnb.mojo
+@@ -37,9 +37,7 @@ comptime AFCL_P03 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+ #: host column keeps the units. -D MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF restores
+ #: the unit path on the device.
+ comptime IDN_NB_CAT_ATOMIC = (
+-# TOMBSTONE: MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 7cf272e256.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ #: The switch: FAST, Apple, and the define (default OFF); or IDENTICAL (above).
+ comptime NB_CAT_ATOMIC = (

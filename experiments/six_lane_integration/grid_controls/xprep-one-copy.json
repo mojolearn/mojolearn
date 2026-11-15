@@ -3,24 +3,12 @@
   "lane": "xprep-one-copy",
   "branch": "lane/xprep-one-copy",
   "head": "4ce613da2",
-  "controls": {
-    "idn_dradix_range_passes": {
+  "controls": {},
+  "removed": [
+    {
       "define": "MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_prep/dradix.mojo"
-      ],
-      "binding": "_mojolearn_x_prep",
-      "bits_change": false,
-      "status": "promoted:w2-decide-algos-20261011",
-      "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): ordinal NV/AMD 0.744/0.782, onehot 0.816/0.808, kbins taxi 0.712 (istella 1.127); mean 14 prep cells 0.945; v0125/a1707 vs A v0124/a1706. `MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF` restores the old path. Before: I3: the IDENTICAL sort_cols radix sort skips, per column, the digit passes whose digit is constant (OR mask of key ^ first key; parity of active passes picks the key block on the device) and caps the sort chunk at 512 rows; same words. A/B owed: onehot + ordinal istella + taxi, kbins istella on nv and amd; ID check expected MATCH."
+      "control": "idn_dradix_range_passes",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-22-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 26ab6baddf): the old-path rollback beside the range passes promoted to the IDENTICAL default 2026-10-11 (EXP:2060, rule e). Refused in core/experiment_guards_linear.mojo; patch experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch."
     }
-  }
+  ]
 }
