@@ -251,8 +251,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_FA_LIVEBUF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_LIVEBUF (FAST Apple opt-in arena scratch for the FactorAnalysis EM loop) is gone; the default path is the only one; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_FA_SVD_GROUP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_FA_SVD_GROUP_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_SVD_GROUP_OFF (rollback of the FactorAnalysis grid SVD to one readback per sweep) is gone; the default path is the only one; see docs/TOMBSTONES.md"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): IDN_MCD_CHOL (IDENTICAL opt-in Cholesky C-step for MinCovDet, A/B owed and never run) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # MOJOLEARN_IDN_MCD_CHOL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_LDA_FUSED_SS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_LDA_FUSED_SS_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LDA_FUSED_SS_OFF (rollback of the FAST Apple fused LDA E-step) is gone; the default path is the only one; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_LDA_V_CAP_HALF_PAGE.patch

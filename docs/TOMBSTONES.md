@@ -2170,6 +2170,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CNN_GENERIC_OPS`](#mojolearn_cnn_generic_ops) | Neural (CNN program tuned ops) | 2026-11-15 (`f839bce651`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_CNN_GENERIC_OPS.patch](../experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch) |
 | [`MOJOLEARN_SAMBA_PROGRAM_FORWARD`](#mojolearn_samba_program_forward) | Samba stateless forward route (training/neural_identical_experiments.mojo) | 2026-11-15 (`2ea7c618fc`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch](../experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch) |
 | [`MOJOLEARN_XD_FAST_SVD_ONE_BLOCK`](#mojolearn_xd_fast_svd_one_block) | Decomposition (dense SVD route) | 2026-11-15 (`f899386021`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch](../experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch) |
+| [`MOJOLEARN_IDN_MCD_CHOL`](#mojolearn_idn_mcd_chol-unmeasured-arm-deleted-2026-11-15) | MinCovDet / EllipticEnvelope IDENTICAL (x_decomp/mcd.mojo, x_decomp/kit_device.mojo) | 2026-11-15 (`c387c0b2c1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MCD_CHOL.patch](../experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -13147,6 +13148,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c387c0b2c1` (deletion commit `7b5151da9b`).
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch`, then delete the `MOJOLEARN_IDN_MCD_CHOL` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `apple-holes.json` control `mcd_chol`: moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_LDA_FUSED_SS_OFF: old path deleted (2026-11-15)
 

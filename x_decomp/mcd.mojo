@@ -30,6 +30,8 @@ matrix resident on the device.
 """
 from std.memory import bitcast
 from std.builtin.sort import sort
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
@@ -61,11 +63,19 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # @a6b5f76cb, NVIDIA 186.2 s @12412eca4 -> 168.8 s @4c75b4144). One cell
 # each, other changes in between (history-audit hist-classical rank 2). The
 # measured LU + round-robin Jacobi pinvh C-step (0.8.25 .. 0.8.41) is the
-# default again. Flipping the default would change MinCovDet /
-# EllipticEnvelope IDENTICAL bits on every column together (host, Apple,
-# NVIDIA, AMD).
+# default again; `-D MOJOLEARN_IDN_MCD_CHOL` is the Cholesky C-step, the B
+# arm of the owed A/B (NV + AMD, min-cov-det and elliptic-envelope taxi AND
+# istella, plus one non-board shape; owed row mcd-chol in
+# bench/results/paper_compare/owed-pre0867.json). Flipping the default
+# changes MinCovDet / EllipticEnvelope IDENTICAL bits on every column
+# together (host, Apple, NVIDIA, AMD). The `_OFF` define is gone (it would
+# select the default). A size rule only if each arm wins on a range of
+# shapes (no dimension targeting).
 # TOMBSTONE: MOJOLEARN_IDN_MCD_CHOL (opt-in arm: the Cholesky C-step, EXP:581 RUN OWED, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at c387c0b2c1.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+# (MOJOLEARN_IDN_ALL_OFF stays deleted, so its term is not restored.)
+comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MCD_CHOL"]()
 
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes
 comptime _F32_EPS: Float64 = 1.1920928955078125e-07
@@ -173,19 +183,20 @@ def _quickselect(mut keys: List[UInt64], k: Int) -> UInt64:
 struct Est(Copyable, Movable):
     """One C-step's answer: (location, covariance, log det, support rows,
     distances). `owed`: the final distances are not computed yet
-    (`Mcd.finish` runs them from P, the precision the loop last used, or
-    from pinvh(cov) when P is empty)."""
+    (`Mcd.finish` runs them from P, the precision the loop last used
+    (L^{-1} when `p_chol`), or from pinvh(cov) when P is empty)."""
     var loc: Mat
     var cov: Mat
     var det: Float64
     var sel: List[Int]
     var dist: Mat
     var P: Mat
+    var p_chol: Bool
     var owed: Bool
 
     def __init__(
         out self, var loc: Mat, var cov: Mat, det: Float64, var sel: List[Int], var dist: Mat, var P: Mat,
-        owed: Bool,
+        p_chol: Bool, owed: Bool,
     ):
         self.loc = loc^
         self.cov = cov^
@@ -193,7 +204,19 @@ struct Est(Copyable, Movable):
         self.sel = sel^
         self.dist = dist^
         self.P = P^
+        self.p_chol = p_chol
         self.owed = owed
+
+
+struct Chol(Movable):
+    """IDN_MCD_CHOL: a covariance's Cholesky log determinant (-inf when the
+    factorization stopped) and L^{-1} (empty then)."""
+    var det: Float64
+    var li: Mat
+
+    def __init__(out self, det: Float64, var li: Mat):
+        self.det = det
+        self.li = li^
 
 
 def _order_by_det(est: List[Est], keep: Int) raises -> List[Int]:
@@ -284,6 +307,32 @@ struct Mcd[E: Exec]:
             return _neg_inf()
         return Float64(t.d[0])
 
+    # ---- IDN_MCD_CHOL: the Cholesky C-step's pieces (host column)
+    def chol(self, A: Mat) raises -> Chol:
+        """`potrf_lower` (+0.0 ridge, as `add_jitter`), `chol_logdet` and
+        L^{-1} = `trsm_lower(L, I)` through the executor (`Exec.chol_inv`)."""
+        var n = A.r
+        var li = Mat(n, n)
+        var st = Mat(1, 2)
+        self.k.chol_inv(A, li, st)
+        if Int(st.d[0]) != 0:
+            return Chol(_neg_inf(), Mat(0, 0))
+        return Chol(Float64(st.d[1]), li^)
+
+    def mahal_chol(self, X: Mat, loc: Mat, Li: Mat) raises -> Mat:
+        """rowsum((Xc L^{-T})^2): the distances under P = L^{-T} L^{-1}."""
+        var Xc = self.k.ew2(OP_SUB, X, loc)
+        var Y = self.k.mm(Xc, Li, False, True)
+        return self.k.rowsum(self.k.ew2(OP_MUL, Y, Y))
+
+    def dist_from(self, X: Mat, loc: Mat, cov: Mat) raises -> Mat:
+        """The distances under cov: its Cholesky when it factors, pinvh
+        otherwise."""
+        var f = self.chol(cov)
+        if f.det != _neg_inf():
+            return self.mahal_chol(X, loc, f.li)
+        return self.mahal(X, loc, self.pinvh(cov))
+
     def finish(self, X: Mat, mut e: Est) raises:
         """A C-step's final distances, owed since `c_step` (lane
         mcd-per-step-cost, 2026-11-14; x_decomp/kit_device.mojo
@@ -293,10 +342,68 @@ struct Mcd[E: Exec]:
             return
         if e.P.r == 0:
             e.dist = self.mahal(X, e.loc, self.pinvh(e.cov))
+        elif e.p_chol:
+            e.dist = self.mahal_chol(X, e.loc, e.P)
         else:
             e.dist = self.mahal(X, e.loc, e.P)
         e.P = Mat(0, 0)
         e.owed = False
+
+    def c_step_chol(
+        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat
+    ) raises -> Est:
+        """`c_step` with the Cholesky's log determinant and distances
+        (IDN_MCD_CHOL): the same control flow, statement for statement; the
+        final distances owed (`finish`)."""
+        var iters = n_iter
+        var dist = Mat(0, 0)
+        var sel: List[Int]
+        if not has_init:
+            sel = self.perm_head_sorted(X.r, h)
+        else:
+            dist = self.dist_from(X, loc0, cov0)
+            sel = smallest_sorted(dist, h)
+        var Xs = take_rows(X, sel)
+        var loc = self.colmean(Xs)
+        var cov = self.emp_cov_at(Xs, loc)
+        var f = self.chol(cov)
+        var det = f.det
+        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
+        var P = Mat(0, 0)
+        var p_chol = False
+        var has_p = False
+        if det == _neg_inf():
+            has_p = True
+        var prev_det = _pos_inf()
+        var have_prev = False
+        var prev_loc = Mat(0, 0)
+        var prev_cov = Mat(0, 0)
+        var prev_sel = List[Int]()
+        while det < prev_det and iters > 0 and det != _neg_inf():
+            prev_loc = loc.copy()
+            prev_cov = cov.copy()
+            prev_sel = sel.copy()
+            have_prev = True
+            prev_det = det
+            P = f.li.copy()                   # det is finite: cov factored
+            p_chol = True
+            has_p = True
+            dist = self.mahal_chol(X, loc, P)
+            sel = smallest_sorted(dist, h)
+            Xs = take_rows(X, sel)
+            loc = self.colmean(Xs)
+            cov = self.emp_cov_at(Xs, loc)
+            f = self.chol(cov)
+            det = f.det
+            iters -= 1
+        if not has_p:
+            raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
+        var use_prev = have_prev and det > prev_det
+        if iters == 0:
+            use_prev = False
+        if use_prev:
+            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, Mat(0, 0), False, False)
+        return Est(loc^, cov^, det, sel^, Mat(0, 0), P^, p_chol, True)
 
     # ---- randomness
     def perm(mut self, n: Int) raises -> List[Int]:
@@ -317,6 +424,8 @@ struct Mcd[E: Exec]:
         the final distances owed to `finish` (lane mcd-per-step-cost: a -inf
         start's pinvh(cov) and the final distances were computed for every
         candidate and read for the kept one only)."""
+        comptime if IDN_MCD_CHOL:
+            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0)
         var iters = n_iter
         var dist = Mat(0, 0)
         var sel: List[Int]
@@ -364,8 +473,8 @@ struct Mcd[E: Exec]:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, Mat(0, 0), False)
-        return Est(loc^, cov^, det, sel^, Mat(0, 0), P^, True)
+            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, Mat(0, 0), False, False)
+        return Est(loc^, cov^, det, sel^, Mat(0, 0), P^, False, True)
 
     def select_random(mut self, X: Mat, h: Int, trials: Int, keep: Int, n_iter: Int, want_dist: Bool) raises -> List[Est]:
         var est = List[Est]()
