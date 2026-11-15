@@ -666,15 +666,13 @@ def smr_round_reset_kernel(
 #: parallelism) is sized from the list length, and a device-side bound would
 #: launch phase B at the whole-list shape. 3 -> 2 drains per round (+1 before
 #: the first round, as before). Integer plumbing only; bits none.
-#: `-D MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF` (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the three reads.
+# TOMBSTONE: MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF (old path: three status reads per round on NVIDIA/AMD IDENTICAL; EXP:1714 owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at c6e7fbabc8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at c6e7fbabc8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
 comptime IDN_HDB_ROUND_ONE_SYNC = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 
 # TOMBSTONE: MOJOLEARN_IDN_HDB_ROUND_LEAN (NOISE: hdbscan istella 0.997, taxi 1.008, v0133/a1715 vs A v0132/a1714) deleted 2026-10-11 by 826f3d57e; code recoverable at 826f3d57e^.
