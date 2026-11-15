@@ -27,7 +27,11 @@ from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_fit_dev import lda_fit_dev_run
 from x_decomp.kit_device import lda_online_dev_run
 from x_decomp.fa_fast import (
-    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, fa_em_run, fa_gram_run,
+    FA_FAST_APPLE,
+    FA_GRAM_DF,
+    FA_ITER_DEVICE,
+    fa_em_run,
+    fa_gram_run,
 )
 
 
@@ -89,8 +93,6 @@ struct DevDecomp(DecompDev):
         # `x_decomp_fa_defines` is registered only under FA_FAST_APPLE
         var f = 0
         comptime if FA_FAST_APPLE:
-            comptime if FA_GRAM_ONCE:
-                f |= 1
             comptime if FA_ITER_DEVICE:
                 f |= 2
             # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531 (bit 4 is 0).
