@@ -274,12 +274,26 @@ from transformer.experiments.norm_fixed_lanes import (
     IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total, nfl_dot,
     nfl_square, nfl_sum, norm_row_threads,
 )
-from transformer.experiments.attention_schedules import (
-    NN25_RMS_SPLIT_SCALE, NN29_RING_PAIR,
-    rms_sumsq_kernel, rms_parallel_scale_kernel,
-    kv_ring_pair_kernel, NN27_QK_ROPE_PAIR, qk_rope_pair_kernel,
-    NN21_SCALE_MASK, score_scale_mask_kernel,
-)
+# Markers moved from the deleted transformer/experiments/attention_schedules.mojo (sweep 2026-11-15):
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN22_EAGER_DKDV_PAIR (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 2 and 4, NN25; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN29_RING_PAIR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_NN29_RING_PAIR.patch
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (the fixed 32-lane S1 arm, EXP:2246 pending) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+# TOMBSTONE: MOJOLEARN_IDN_ROPE (arm 1, NN27, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ROPE.patch
+# TOMBSTONE: MOJOLEARN_NN21_SCALE_MASK (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_NN21_SCALE_MASK.patch
+# TOMBSTONE: MOJOLEARN_NN23_ROWDOT_DS (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: transformer/experiments/attention_schedules.mojo deleted with its last importer's dead arms: NN25_RMS_SPLIT_SCALE,
+# NN29_RING_PAIR, NN27_QK_ROPE_PAIR, NN21_SCALE_MASK and rms_sumsq_kernel, rms_parallel_scale_kernel, kv_ring_pair_kernel,
+# qk_rope_pair_kernel, score_scale_mask_kernel.)
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from std.os import getenv
@@ -2235,22 +2249,6 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
-    # NN25 keeps the exact S1 fold; cell work is a second flat launch.
-    # OFF by default. No width threshold: this arm measures the actual
-    # extra launch/repeated-rsqrt cost across neighboring model widths.
-    comptime if NN25_RMS_SPLIT_SCALE and not SAB_S1_FOLD_DESCENDING and not SAB_BATCHINV_NORM_CHUNK_FROM_M:
-        step_count_launch()
-        ctx.enqueue_function[rms_sumsq_kernel](
-            sumsq.unsafe_ptr(), x.unsafe_ptr(), Int32(m), Int32(d_model),
-            grid_dim=(_grid(m), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        step_count_launch()
-        ctx.enqueue_function[rms_parallel_scale_kernel](
-            out_buf.unsafe_ptr(), sumsq.unsafe_ptr(), x.unsafe_ptr(),
-            weight.unsafe_ptr(), Int32(m), Int32(d_model), eps,
-            grid_dim=(_grid(m * d_model), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        return
     # DEVIATION 2645:
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the same kernel at that many threads per block. The kernel owns one
@@ -4503,26 +4501,14 @@ def attention_eager_core(
         ctx.synchronize()
 
     # ---- S12 (:204's `* scaling`), applied to the FINISHED dot.
-    var scale_mask_fused = False
-    comptime if NN21_SCALE_MASK and not BLOCK_ANY_SABOTAGE:
-        scale_mask_fused = softcap == Float32(0.0) and plant_at == PLANT_AT_NONE
-    if scale_mask_fused:
-        step_count_launch()
-        ctx.enqueue_function[score_scale_mask_kernel](
-            stages.scores.unsafe_ptr(), stages.masked.unsafe_ptr(),
-            Int32(cells), Int32(l), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale, bitcast[DType.float32](UInt32(MASK_FILL_BITS)),
-            grid_dim=(_grid(cells), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-    else:
-        step_count_launch()
-        ctx.enqueue_function[attn_scale_kernel](
-            stages.scores.unsafe_ptr(),
-            Int32(cells),
-            scale,
-            grid_dim=(_grid(cells), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+    step_count_launch()
+    ctx.enqueue_function[attn_scale_kernel](
+        stages.scores.unsafe_ptr(),
+        Int32(cells),
+        scale,
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
     if fence:
         step_count_sync()
         ctx.synchronize()
@@ -4944,35 +4930,23 @@ def llama_attention_forward(
 
     # ---- apply_rotary_pos_emb (:257). S9 and S10, q then k. V IS NOT
     #      ROTATED (:257 takes q and k only).
-    comptime if NN27_QK_ROPE_PAIR and not SAB_S07_ROPE_RELATIVE_POSITION and not SAB_S09_ROPE_HALVES_SWAPPED and not SAB_S10_ROPE_FUSED:
-        step_count_launch()
-        ctx.enqueue_function[qk_rope_pair_kernel](
-            stages.q_rope.unsafe_ptr(), stages.k_rope.unsafe_ptr(),
-            stages.q_proj.unsafe_ptr(), stages.k_proj.unsafe_ptr(),
-            rope.cos.unsafe_ptr(), rope.sin.unsafe_ptr(),
-            Int32(m), Int32(l), Int32(dims.n_heads), Int32(nkv),
-            Int32(hd), Int32(pos0), Int32(rope.rope_dim),
-            grid_dim=(_grid(m * qw), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-
-    else:
-        apply_rotary_pos_emb(
-            ctx,
-            stages.q_rope,
-            stages.q_proj,
-            rope.cos,
-            rope.sin,
-            m,
-            l,
-            dims.n_heads,
-            hd,
-            pos0,
-            rope.rope_dim,
-        )
-        apply_rotary_pos_emb(
-            ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
-            m, l, nkv, hd, pos0, rope.rope_dim,
-        )
+    apply_rotary_pos_emb(
+        ctx,
+        stages.q_rope,
+        stages.q_proj,
+        rope.cos,
+        rope.sin,
+        m,
+        l,
+        dims.n_heads,
+        hd,
+        pos0,
+        rope.rope_dim,
+    )
+    apply_rotary_pos_emb(
+        ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
+        m, l, nkv, hd, pos0, rope.rope_dim,
+    )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5064,44 +5038,33 @@ def llama_attention_forward(
         step_count_d2d()
         ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
     else:
-        comptime if NN29_RING_PAIR:
-            step_count_launch()
-            ctx.enqueue_function[kv_ring_pair_kernel](
-                kv.k.unsafe_ptr(), kv.v.unsafe_ptr(),
-                stages.k_rope.unsafe_ptr(), stages.v_proj.unsafe_ptr(),
-                Int32(b), Int32(l), Int32(nkv), Int32(hd),
-                Int32(kv.cap), Int32(s_old),
-                grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                block_dim=(LLAMA_TPB, 1, 1),
-            )
-        else:
-            # The ring takes this call's tokens AFTER the gather above read it.
-            step_count_launch()
-            ctx.enqueue_function[kv_ring_write_kernel](
-                kv.k.unsafe_ptr(),
-                stages.k_rope.unsafe_ptr(),
-                Int32(b),
-                Int32(l),
-                Int32(nkv),
-                Int32(hd),
-                Int32(kv.cap),
-                Int32(s_old),
-                grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                block_dim=(LLAMA_TPB, 1, 1),
-            )
-            step_count_launch()
-            ctx.enqueue_function[kv_ring_write_kernel](
-                kv.v.unsafe_ptr(),
-                stages.v_proj.unsafe_ptr(),
-                Int32(b),
-                Int32(l),
-                Int32(nkv),
-                Int32(hd),
-                Int32(kv.cap),
-                Int32(s_old),
-                grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                block_dim=(LLAMA_TPB, 1, 1),
-            )
+        # The ring takes this call's tokens AFTER the gather above read it.
+        step_count_launch()
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        step_count_launch()
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
     # 087231ba3): the hard wait after the cache update ordered nothing.
     # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
