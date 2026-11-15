@@ -77,7 +77,9 @@ comptime RADIX_MIN_ROWS = 8192
 #: 0.816/0.808, kbins taxi 0.712 (istella 1.127, NV 1.308 vs AMD 0.946); mean over 14 prep cells 0.945
 #: (AMD 0.59-0.69 on ordinal/onehot); same bits; runs v0125/a1707 vs A v0124/a1706. -D
 #: MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF restores the old path.
-comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF (old path; the range passes are the IDENTICAL default, EXP:2060) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 26ab6baddf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch
+comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the sort chunk cap of IDN_DRADIX_RANGE_PASSES
 comptime RANGE_CHUNK_ROWS = 512
 
