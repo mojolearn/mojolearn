@@ -38,9 +38,10 @@ comptime XB = 2048
 #: from the same pass (`csb1_neg`, op 163) instead of a column-stats pass.
 #: Every class chain is csb_part's chain (the class's rows of the block,
 #: ascending from zero), so the words are csb_part's.
-#: -D MOJOLEARN_IDN_NB_ONEPASS_OFF restores csb_part + colb_part + binarize.
+# TOMBSTONE: MOJOLEARN_IDN_NB_ONEPASS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2909d00ab4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_ONEPASS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_NB_ONEPASS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_ONEPASS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: classes csb1_part keeps in registers (more: the partial table itself)
 comptime CSB1_REG = 8
