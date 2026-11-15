@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""scikit-learn's input and target validation, once, around every estimator.
+"""scikit-learn's input and target validation for application subclasses.
 
-`_mode.install_fit_tracking` wraps every estimator's `fit`, `partial_fit`,
-`fit_predict` and `fit_transform`, and its `predict`, `transform`,
-`decision_function`, `predict_proba`, `predict_log_proba`, `score` and
-`score_samples`. The wrappers call `before_fit` / `before_call` here on the
-outermost call (never on a call a fit makes on its own instance), so every
-estimator refuses what scikit-learn's `validate_data` refuses, with
-scikit-learn's wording, without a copy of the check in each estimator:
+A package class admits and refuses its inputs natively inside its one-call
+public methods. `_mode.install_fit_tracking` runs only for a class written
+outside the package (an application subclass): it wraps that class's `fit`,
+`partial_fit`, `fit_predict` and `fit_transform`, and its `predict`,
+`transform`, `decision_function`, `predict_proba`, `predict_log_proba`,
+`score` and `score_samples`. Those wrappers call `before_fit` /
+`before_call` here on the outermost call (never on a call a fit makes on its
+own instance), so such a class refuses what scikit-learn's `validate_data`
+refuses, with scikit-learn's wording:
 
 - sparse X when the estimator's `input_tags.sparse` is False
   ("Sparse data was passed for X, but dense data is required ...");

@@ -190,9 +190,8 @@ class ForestArchive:
     """The forests' `save` and `load` (one native call each), written once.
     `_RandomForestBase` and `_ExtraTreesBase` bind them as their own class
     attributes (`save = ForestArchive.save`, `load = vars(ForestArchive)["load"]`, the
-    classmethod object itself)
-    so NumericModeMixin's class-definition loader wrapper, which reads the
-    class's own namespace, still sees `load` there."""
+    classmethod object itself). The native loader publishes the fitted state;
+    no Python loader wrapper applies to a package class."""
 
     def save(self, path):
         """Write the fitted forest to `path` as an npz file.
