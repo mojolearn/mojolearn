@@ -30,7 +30,9 @@ comptime LABELS_DEVICE_ELEM = LABELS_DEVICE_BASE
 # TOMBSTONE: MOJOLEARN_IDN_HPDEV_REDUCE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8ec3732a1b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime LABELS_DEVICE_REDUCE = LABELS_DEVICE_BASE
-comptime LABELS_DEVICE_ISUM = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ISUM_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_ISUM_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8f026542e3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_ISUM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LABELS_DEVICE_ISUM = LABELS_DEVICE_BASE
 comptime LABELS_DEVICE_CAST = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_CAST_OFF"]()
 comptime LABELS_DEVICE_INPUT = not HOTPATH_SABOTAGE
 comptime LABELS_DEVICE_CONTEXT = (
