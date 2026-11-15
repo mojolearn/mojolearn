@@ -73,7 +73,6 @@ from embedding.checks.embedding_identical import (
     identical_embedding_forward_into,
 )
 from autograd.kernels.embedding import emb_run_scratch_ints
-from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH arms 2/3 (NN62_LIFETIME_ARENA, the shared CE / optimizer lifetime arena;
 # opt-in, no A/B recorded; owner elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural with the
 # neural_scratch field; code recoverable at e7b9a56a35.
@@ -934,7 +933,6 @@ struct ByteTrainer(Movable):
     var released_eager_cells: Int
     var grad_step: Int
     # Diagnostic reach witness; counts successful live-status optimizer checks.
-    var embedding_runs: List[OwnedEmbeddingRuns]
     var live_status_steps: Int
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
@@ -959,7 +957,6 @@ struct ByteTrainer(Movable):
         self.shadow_step = -1
         self.released_eager_cells = 0
         self.grad_step = -1
-        self.embedding_runs = List[OwnedEmbeddingRuns]()
         self.live_status_steps = 0
         # lane/neural-pass43: the session's buffers carved from arena chunks
         # (core/device_arena.mojo) between here and `arena_end` below.
@@ -1693,7 +1690,7 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
         tr.buffers.ce_ones, tr.buffers.ce_weights, tr.buffers.ce_expo, tr.buffers.ce_denom,
         tr.buffers.ce_logp, tr.buffers.ce_max, tr.buffers.head_ws, tr.buffers.head_bwd_ws,
         tr.buffers.targets, tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
-        tr.buffers.emb_perm, tr.embedding_runs, config.batch, config.length, config.vocab_size,
+        tr.buffers.emb_perm, config.batch, config.length, config.vocab_size,
         config.chunked_lm_head_v2, False, False, emb_plan,
     )
     # The tape's backward has drained the queue (its one wait): the

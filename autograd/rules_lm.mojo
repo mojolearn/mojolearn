@@ -101,10 +101,12 @@ from autograd.kernels.embedding import (
 )
 from embedding.checks.embedding_oracle import EmbConfig
 # TOMBSTONE: MOJOLEARN_NN50_OWNED_RUNS (owned embedding runs, opt-in arm, no A/B recorded) folded to False here
-# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 7251df6425. The emb_runs plumbing stays until
-# training/byte_lm.mojo (another lane) stops passing it.
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 7251df6425.
 # Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.expdel2-24-neural.patch
-from autograd.kernels.embedding_runs import OwnedEmbeddingRuns
+# (Sweep 2026-11-15: the unread emb_runs plumbing (LmRules.emb_runs, _RunsRef, byte_backward_autograd's emb_runs
+# parameter, ByteTrainer.embedding_runs) removed and autograd/kernels/embedding_runs.mojo deleted; its markers:)
+# TOMBSTONE: MOJOLEARN_NN50_OWNED_RUNS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 4f9d2d5288.
+# Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch; record in docs/TOMBSTONES.md.
 from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import CeConfig
 from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
@@ -163,7 +165,6 @@ comptime _F32Ref = MutPointer[DeviceBuffer[DType.float32], MutUntrackedOrigin]
 comptime _I32Ref = MutPointer[DeviceBuffer[DType.int32], MutUntrackedOrigin]
 comptime _BstRef = MutPointer[LlamaBackwardStages, MutUntrackedOrigin]
 comptime _FwdRef = MutPointer[LlamaDeviceStages, MutUntrackedOrigin]
-comptime _RunsRef = MutPointer[List[OwnedEmbeddingRuns], MutUntrackedOrigin]
 comptime _ScansRef = MutPointer[List[DeferredNonfiniteScan], MutUntrackedOrigin]
 comptime _LayersRef = MutPointer[List[Int], MutUntrackedOrigin]
 
@@ -238,7 +239,6 @@ struct LmRules(BackwardRules):
     var emb_counts: _I32Ref
     var emb_run_begin: _I32Ref
     var emb_perm: _I32Ref
-    var emb_runs: _RunsRef
     # idea J: the deferred refusal scans and their layers, in backward
     # order (the trainer owns both lists; null when LM_REFUSE_DEFER is off)
     var scans: _ScansRef
@@ -252,7 +252,7 @@ struct LmRules(BackwardRules):
         logits: _F32Ref, ce_dlogits: _F32Ref, ce_weights: _F32Ref, ce_expo: _F32Ref, ce_denom: _F32Ref,
         ce_logp: _F32Ref, ce_max: _F32Ref, head_ws: _F32Ref, head_bwd_ws: _F32Ref,
         targets: _I32Ref, ids: _I32Ref, emb_counts: _I32Ref, emb_run_begin: _I32Ref, emb_perm: _I32Ref,
-        emb_runs: _RunsRef, scans: _ScansRef, scan_layers: _LayersRef,
+        scans: _ScansRef, scan_layers: _LayersRef,
     ):
         self.ctx = ctx.copy()
         self.bsts = bsts^
@@ -289,7 +289,6 @@ struct LmRules(BackwardRules):
         self.emb_counts = emb_counts
         self.emb_run_begin = emb_run_begin
         self.emb_perm = emb_perm
-        self.emb_runs = emb_runs
         self.scans = scans
         self.scan_layers = scan_layers
 
@@ -450,7 +449,6 @@ def byte_backward_autograd(
     mut emb_counts: DeviceBuffer[DType.int32],
     mut emb_run_begin: DeviceBuffer[DType.int32],
     mut emb_perm: DeviceBuffer[DType.int32],
-    mut emb_runs: List[OwnedEmbeddingRuns],
     b: Int,
     l: Int,
     vocab: Int,
@@ -531,7 +529,6 @@ def byte_backward_autograd(
         _f32(logits), _f32(ce_dlogits), _f32(ce_weights), _f32(ce_expo), _f32(ce_denom),
         _f32(ce_logp), _f32(ce_max), _f32(head_ws), _f32(head_bwd_ws),
         _i32(targets), _i32(ids), _i32(emb_counts), _i32(emb_run_begin), _i32(emb_perm),
-        _RunsRef(unsafe_from_address=Int(MutPointer(to=emb_runs))),
         _ScansRef(unsafe_from_address=Int(MutPointer(to=scans))),
         _LayersRef(unsafe_from_address=Int(MutPointer(to=scan_layers))),
     )
