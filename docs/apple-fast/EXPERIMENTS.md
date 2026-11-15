@@ -2484,3 +2484,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_ARIMA_FAST_LLONLY_OFF` | autoarima / taxi-hourly (FAST Apple) | lane/expdel-02-decomposition-series (code at a656258c20) | tsa-llonly-autoarima | - | DELETED (old path) | old path of the KEPT FAST+Apple LL_ONLY Kalman loop (50,459 -> 47,023 ms); define read removed; no bit change |
+| `MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF` | autoarima / taxi-hourly (FAST Apple) | lane/expdel-02-decomposition-series (code at 33f865ad21) | tsa-both-autoarima | - | DELETED (old path) | old path of the KEPT FAST+Apple held evaluation workspace (50,500 -> 39,504 ms with LLONLY); define read removed; no bit change |

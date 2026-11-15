@@ -41,6 +41,8 @@ def _check_configuration() -> Bool:
     # Lane expdel-02-decomposition-series (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_LLONLY_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): ARIMA_FAST_LLONLY_OFF (FAST+Apple rollback to the storing Kalman loop kernel inside the fit evaluations) is gone; the LL_ONLY loop is the FAST+Apple path (autoarima taxi-hourly 50,459 -> 47,023 ms, rmse identical, KEPT 6c54b7e87); restore: experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): ARIMA_FAST_EVAL_WS_OFF (FAST+Apple rollback to about 45 device buffers allocated and the series copied N + 1 times per candidate point) is gone; the held stacked workspace is the FAST+Apple path (autoarima taxi-hourly 50,299 -> 42,921 ms alone, 50,500 -> 39,504 ms with LLONLY, KEPT 6c54b7e87); restore: experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch"
     return True
 
 

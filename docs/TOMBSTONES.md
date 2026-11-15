@@ -649,6 +649,7 @@ in the tables after the sections.
 | [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LLONLY_OFF`](#mojolearn_arima_fast_llonly_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA Kalman loop, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch) |
+| [`MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF`](#mojolearn_arima_fast_eval_ws_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA fit evaluation workspace, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6314,4 +6315,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEPT 6c54b7e87 (EXPERIMENTS.md `ARIMA_FAST_LLONLY`, tsa-llonly-autoarima): M3 one run per arm, autoarima taxi-hourly 50,459 -> 47,023 ms (-6.8%), forecast rmse identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a656258c20`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch`, then delete the `MOJOLEARN_ARIMA_FAST_LLONLY_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `KALMAN_FAST_EVAL_WS` (`arima/impl/batched_kalman.mojo`, used by `batched_fit.mojo`, `fast_eval_ws.mojo`, `fast_order_state.mojo`): with `-D MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF` the fit's stacked evaluation allocated its device buffers and copied the series at every candidate point. Deleted: the define read; `KALMAN_FAST_EVAL_WS` is FAST and Apple, or IDN_ARIMA_EVAL_WS, as before (the sequential evaluation stays for every other build).
+- **Verdict**: KEPT 6c54b7e87 (EXPERIMENTS.md `ARIMA_FAST_EVAL_WS + ARIMA_FAST_LLONLY`, tsa-both-autoarima): M3 one run per arm, autoarima taxi-hourly 50,500 -> 39,504 ms (-21.8%) for both, EVAL_WS alone 50,299 -> 42,921 ms (code comment of the same A/B), forecast rmse 74.66 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `33f865ad21`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch`, then delete the `MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF` refusal in `core/experiment_guards_series.mojo`.
 - **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
