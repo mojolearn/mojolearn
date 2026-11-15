@@ -276,7 +276,7 @@ comptime C25_PROJECTION_REUSE = CLASSICAL_IDN
 # (Sweep 2026-11-15: comptime C26_UPDATE_FUSED removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_COMPONENTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 82b2284405.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch; record in docs/TOMBSTONES.md.
-comptime C27_COMPONENTS = False
+# (Sweep 2026-11-15: comptime C27_COMPONENTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 272ae35230.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch; record in docs/TOMBSTONES.md.
 comptime C28_BUCKET_SOLVES = False
