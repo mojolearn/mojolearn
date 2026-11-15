@@ -719,6 +719,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C27_COMPONENTS`](#mojolearn_classical_c27_components-unmeasured-arm-deleted-2026-11-15) | Decomposition (FastICA shared score / nonlinearity values, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch) |
 | [`MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS`](#mojolearn_classical_c27_fa_components-unmeasured-arm-deleted-2026-11-15) | Decomposition (FactorAnalysis fused loading map, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch) |
 | [`MOJOLEARN_CLASSICAL_C27_NORM_VECTOR`](#mojolearn_classical_c27_norm_vector-unmeasured-arm-deleted-2026-11-15) | Decomposition (PLS / CCA fused component normalization, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch) |
+| [`MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES`](#mojolearn_classical_c28_bucket_solves-unmeasured-arm-deleted-2026-11-15) | Decomposition (ALS / sparse-code bucketed row solves, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6942,4 +6943,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bdab7e3c8`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch`, then delete the `MOJOLEARN_CLASSICAL_C27_NORM_VECTOR` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which stable radix grouping of row solves by ALS nnz or sparse-code active-workspace bit length, original row IDs and the same immutable Gram (x_decomp/kit_device.mojo, x_decomp/device.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C28_BUCKET_SOLVES` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `272ae35230`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch`, then delete the `MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).

@@ -274,7 +274,9 @@ comptime C26_UPDATE_FUSED = False
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_COMPONENTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 82b2284405.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch; record in docs/TOMBSTONES.md.
 comptime C27_COMPONENTS = False
-comptime C28_BUCKET_SOLVES = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 272ae35230.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch; record in docs/TOMBSTONES.md.
+comptime C28_BUCKET_SOLVES = False
 
 # Additional independent component/residual sub-arms; the header status applies.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C18_TILE64 (unmeasured) deleted 2026-10-07 by f4de82db4; code recoverable at f4de82db4^.
