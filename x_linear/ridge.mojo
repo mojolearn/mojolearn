@@ -15,8 +15,7 @@ Reference: scikit-learn `sklearn/linear_model/_ridge.py`:
 Theirs takes an SVD/eigendecomposition of X; here each alpha is one
 Cholesky (x_linear/ops.mojo). float32, rows ascending.
 """
-from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, RIDGECV_FF_BLOCKED
-from x_linear.ridge_ff_blocks import rff_stats_host
+from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS
 from x_linear.ops import chol_solve_group
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
@@ -343,14 +342,10 @@ def _ridge_ff_host(x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, w
         for u in range(lo, hi):
             ridge_ff_unit(nm + u, x, y, n, d, t_n, fi, sw, wo, sh, sl)
 
-    # RIDGECV_FF_BLOCKED (lane/classical-cv-folds): the statistics as the
-    # device's block partials folded blocks ascending
-    # (x_linear/ridge_ff_blocks.mojo); the solve's words are the team's
-    comptime if RIDGECV_FF_BLOCKED:
-        rff_stats_host(x, y, n, d, t_n, fi, sw, wo, 0, 0, sh, sl)
-    else:
-        seq_rows(means, nm, 1)
-        seq_rows(cells, units - nm, 1)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5ff76a71a1.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+    seq_rows(means, nm, 1)
+    seq_rows(cells, units - nm, 1)
     var ok = ridge_ff_solve(d, t_n, fi, alpha, sh, sl, bh, bl, res, fh, fl)
     st(res, t_n * d + t_n + 2 + a_n, Float32(0) if ok else Float32(2))
     _ = hb^
