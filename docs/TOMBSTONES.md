@@ -679,6 +679,25 @@ in the tables after the sections.
 | [`MOJOLEARN_PCA_FAST_GRAM_MMA_OFF`](#mojolearn_pca_fast_gram_mma_off-old-path-deleted-2026-11-15) | Decomp (PCA covariance Gram past the split-K capacity, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2p-pca-grammma) | 2026-11-15 | [MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch) |
 | [`MOJOLEARN_TSVD_FAST_POOL_OFF`](#mojolearn_tsvd_fast_pool_off-old-path-deleted-2026-11-15) | Decomp (TruncatedSVD explained variance / transform copy of X, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-tsvdpool) | 2026-11-15 | [MOJOLEARN_TSVD_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch) |
 | [`MOJOLEARN_XD_FAST_GRP_FUSED_OFF`](#mojolearn_xd_fast_grp_fused_off-old-path-deleted-2026-11-15) | Decomp (Gaussian / sparse random projection fit, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-grp-fused) | 2026-11-15 | [MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch) |
+| [`MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF`](#mojolearn_ard_fast_cls1_parts_off-old-path-deleted-2026-11-15) | Linear (ARD row-block partials, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-ardparts-taxi) | 2026-11-15 | [MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch](../experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch) |
+| [`MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF`](#mojolearn_ard_fast_cls1_batch_off-old-path-deleted-2026-11-15) | Linear (ARD batched witness checks, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-ardall-taxi) | 2026-11-15 | [MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch) |
+| [`MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF`](#mojolearn_bayes_fast_cls1_parts_off-old-path-deleted-2026-11-15) | Linear (BayesianRidge row-block partials, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-brparts-taxi) | 2026-11-15 | [MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch) |
+| [`MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF`](#mojolearn_bayes_fast_cls1_batch_off-old-path-deleted-2026-11-15) | Linear (BayesianRidge batched guarded iterations, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-brall-taxi) | 2026-11-15 | [MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch) |
+| [`MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF`](#mojolearn_ridge_fast_cls1_codes_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier device +-1 targets, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-rccodes-taxi) | 2026-11-15 | [MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch](../experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch) |
+| [`MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF`](#mojolearn_x_linear_lars_fast_gram_off-old-path-deleted-2026-11-15) | Linear (Lars / LassoLars grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-lars-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch) |
+| [`MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF`](#mojolearn_x_linear_ridge_fast_gram_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier / RidgeCV grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-ridgeclf-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch) |
+| [`MOJOLEARN_SGD_PERC_AVG`](#mojolearn_sgd_perc_avg-loser-deleted-2026-11-15) | Linear (minibatch Perceptron epoch-end averaging, FAST) | removed (loser; REVERTED rab5-perc, accuracy worse) | 2026-11-15 | [MOJOLEARN_SGD_PERC_AVG.patch](../experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch) |
+| [`MOJOLEARN_SGDOC_FAST_TAIL_OFF`](#mojolearn_sgdoc_fast_tail_off-old-path-deleted-2026-11-15) | Linear (SGDOneClassSVM tail replay, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-sgdoc-q PASS) | 2026-11-15 | [MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch](../experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch) |
+| [`MOJOLEARN_HUBER_FAST_BLOCK512_OFF`](#mojolearn_huber_fast_block512_off-old-path-deleted-2026-11-15) | Linear (HuberRegressor fast-fit 512-row partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-huber512) | 2026-11-15 | [MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch](../experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch) |
+| [`MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF`](#mojolearn_fast_ols_normal_eq_off-old-path-deleted-2026-11-15) | Linear (LinearRegression resident normal equations, FAST Apple) | removed (old path; FAST+Apple default KEPT, olsne-taxi / olsne-istella) | 2026-11-15 | [MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch](../experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch) |
+| [`MOJOLEARN_QN_FAST_BLOCKS_OFF`](#mojolearn_qn_fast_blocks_off-old-path-deleted-2026-11-15) | Linear (QN one-class objective in two launches, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-*-blocks-istella) | 2026-11-15 | [MOJOLEARN_QN_FAST_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch) |
+| [`MOJOLEARN_PREP_FAST_MINMAX_OFF`](#mojolearn_prep_fast_minmax_off-old-path-deleted-2026-11-15) | Preprocessing (MinMaxScaler row-tiled extrema, FAST Apple) | removed (old path; FAST+Apple default KEPT, prep-minmax-istella) | 2026-11-15 | [MOJOLEARN_PREP_FAST_MINMAX_OFF.patch](../experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch) |
+| [`MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF`](#mojolearn_x_prep_fast_staged_out_off-old-path-deleted-2026-11-15) | Preprocessing (x_prep staged output download, FAST Apple) | removed (old path; FAST+Apple default KEPT, gmp-staged-*) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch) |
+| [`MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF`](#mojolearn_x_prep_fast_te_global_off-old-path-deleted-2026-11-15) | Preprocessing (TargetEncoder te_global by threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch) |
+| [`MOJOLEARN_X_PREP_FAST_TE_ENC_OFF`](#mojolearn_x_prep_fast_te_enc_off-old-path-deleted-2026-11-15) | Preprocessing (TargetEncoder te_enc by threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch) |
+| [`MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF`](#mojolearn_prep2_fast_eigh_block_off-old-path-deleted-2026-11-15) | Preprocessing (IterativeImputer eigh on a threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch) |
+| [`MOJOLEARN_CD_FAST_GRID_GRAM_OFF`](#mojolearn_cd_fast_grid_gram_off-old-path-deleted-2026-11-15) | Solver (CD Gram on the grid, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch) |
+| [`MOJOLEARN_CD_FAST_ROWMAJOR_OFF`](#mojolearn_cd_fast_rowmajor_off-old-path-deleted-2026-11-15) | Solver (CD row-major grid Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6584,3 +6603,154 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `436f8d47d1`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch`, then delete the `MOJOLEARN_XD_FAST_GRP_FUSED_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+## MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of ARDRegression's target sum, target variance and squared-residual partials from a whole block per row block (`c1_sum_parts_kernel`, `c1_dev_parts_kernel`, `c1_sq_parts_kernel`) to the one-thread-per-4096-rows partials (`ard_yparts_kernel`, `ard_vparts_kernel`, `ard_part_kernel`). Only the `and not is_defined` term of `ARD_CLS1_PARTS` (x_linear/cls1_fast.mojo) is gone; the one-thread partials stay the path of every non-FAST-Apple build.
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `ARD_FAST_CLS1_PARTS`, gapcls1-ardparts-taxi): M3 one run per arm, ard taxi 14.3 -> 12.0 ms (all three ARD switches 14.4 -> 8.3 ms), board FAST value equals the B arm. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a656258c20`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch`, then delete the `MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of ARDRegression's iteration loop from one witness check (a synchronize) per AG_BATCH iterations to one per iteration. Only the `and not is_defined` term of `ARD_CLS1_BATCH` (x_linear/cls1_fast.mojo) is gone; the per-iteration check stays the path of every non-FAST-Apple build (x_linear/ard_grid.mojo `batch_wit`).
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `ARD_FAST_CLS1_BATCH + ARD_FAST_CLS1_PARTS + ARD_FAST_CLS1_STATS`, gapcls1-ardall-taxi): M3 one run per arm, ard taxi 14.4 -> 8.3 ms with the three switches, board FAST value equals the B arm (8.3). Measured as the bundle; no own row for BATCH alone. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `d30f8b724f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch`, then delete the `MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of BayesianRidge's target sum, target variance and squared-residual partials from a whole block per row block (`c1_*_parts_kernel`) to one thread walking FOLD_BLOCK rows. Only the `and not is_defined` term of `BAYES_CLS1_PARTS` (x_linear/cls1_fast.mojo) is gone; the one-thread partials stay the path of every non-FAST-Apple build (x_linear/device.mojo).
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `BAYES_FAST_CLS1_PARTS`, gapcls1-brparts-taxi): M3 one run per arm, bayesian-ridge taxi -3% alone (102 -> 15.3 ms with the three BAYES switches), board FAST value equals the B arm. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `3cadf0f84b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch`, then delete the `MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of BayesianRidge's guarded iterations from C1_BATCH iterations per witness check (row pass, step and count gated on the device's state words) to two synchronizations per iteration. Only the `and not is_defined` term of `BAYES_CLS1_BATCH` (x_linear/cls1_fast.mojo) is gone; the per-iteration loop stays the path of every non-FAST-Apple build (x_linear/device.mojo).
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `BAYES_FAST_CLS1_BATCH + BAYES_FAST_CLS1_PARTS + BAYES_FAST_CLS1_STATS`, gapcls1-brall-taxi): M3 one run per arm, bayesian-ridge taxi 102 -> 15.3 ms with the three switches, board FAST value equals the B arm (15.3). Measured as the bundle. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `9a688a11e2`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch`, then delete the `MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of RidgeClassifier's +-1 targets from the int32 class codes expanded on the device (`c1_codes_targets_kernel`) to the targets built before the call. Only the `and not is_defined` term of `RIDGE_CLS1_CODES` (x_linear/cls1_fast.mojo) is gone; the old targets stay the path of every non-FAST-Apple build.
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `RIDGE_FAST_CLS1_CODES`, gapcls1-rccodes-taxi): M3 one run per arm, ridge-clf taxi 120 -> 19.0 ms, board FAST value equals the B arm (19). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `cb5f47564f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch`, then delete the `MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of Lars / LassoLars' means, centered Gram, X'y and y mean from the shared grid Gram (x_linear/fast_gram.mojo `fast_gram_into`) to the IDENTICAL moments (blocked moments / sliced `xg_gram_kernel`). Only the `and not is_defined` term of `XL_LARS_FAST_GRAM` (x_linear/device.mojo) is gone; the moments path stays the path of every non-FAST-Apple build.
+- **Verdict**: KEPT c5e1bbeb6 (EXPERIMENTS.md `X_LINEAR_LARS_FAST_GRAM`, gram-lars-taxi, gram-llars-taxi): M3 one run per arm, lars taxi 59.1 -> 15.1 ms, lasso-lars taxi 59.1 -> 14.2 ms, r2 the same (re-measured on c338b88dd). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8d8b814530`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch`, then delete the `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of RidgeClassifier / RidgeCV's means, centered Gram and X'Y, and k-fold RidgeCV's fold Grams, from the shared grid Gram (x_linear/fast_gram.mojo `fast_gram_into`) to main's moments and `kf_cells_kernel`. Only the `and not is_defined` term of `XL_RIDGE_FAST_GRAM` (x_linear/fast_gram.mojo) is gone; the old moments and `kf_cells_kernel` stay the path of every non-FAST-Apple build.
+- **Verdict**: KEPT c5e1bbeb6 (EXPERIMENTS.md `X_LINEAR_RIDGE_FAST_GRAM`, gram-ridgeclf-taxi, gram-ridgecv-taxi): M3 one run per arm, ridge-clf taxi 168 -> 122 ms, ridge-cv taxi 3,614 -> 37 ms, quality the same. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `9eb96f91e6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch`, then delete the `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_SGD_PERC_AVG: loser deleted (2026-11-15)
+
+- **What it was**: the opt-in FAST arm that returned the minibatch Perceptron's mean of its epoch-end iterates from epoch max_iter // 2 on instead of the last iterate: `SGD_PERC_AVG`, `sgd_perc_avg_on`, `sgd_perc_avg_from` (x_linear/sgd.mojo), the host column's `avg_from` sums in `sgd_mb_one` and its scratch tail (x_linear/sgd_host.mojo), and the device's `avg`/`avg_from`/`dacc` state with `sgd_avg_acc_kernel` / `sgd_avg_fin_kernel` (x_linear/device.mojo, x_linear/sgd_avg.mojo, file deleted; its SGD_PERC_QOLD marker moved to x_linear/sgd.mojo). The default (last iterate) is untouched.
+- **Verdict**: REVERTED (EXPERIMENTS.md `SGD_PERC_AVG`, rab5-perc): M3 afc_ab_def one run per arm, perceptron taxi accuracy 0.76219 (last iterate) -> 0.74097 (averaged), worse; 1401.1 -> 1400.3 ms. No bit change on any column (the arm was default off).
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8b2e35c54e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch`, then delete the `MOJOLEARN_SGD_PERC_AVG` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_SGDOC_FAST_TAIL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SGDOneClassSVM (learning_rate='optimal', tol=None, centered data) from replaying only the last `sgdoc_tail_k(d)` steps of the real schedule (x_linear/sgdoc_tail.mojo) to main's full per-sample run. Only the `and not is_defined` term of `SGDOC_FAST_TAIL` (x_linear/device.mojo) is gone; the full run stays the path of every non-FAST-Apple build and of non-centered data. tools/sgdoc_tail_pair.py keeps only the `_LONG` arm.
+- **Verdict**: DEFAULT (FAST+Apple) (EXPERIMENTS.md `SGDOC_FAST_TAIL`, w2-sgdoc-q quality PASS, w2-sgdoc-tail-taxi / -istella): M3 one run per arm, taxi 42142.4 -> 153.7 ms, istella 75533.9 -> 407.0 ms. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `43214c2e1e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch`, then delete the `MOJOLEARN_SGDOC_FAST_TAIL_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_HUBER_FAST_BLOCK512_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the device L-BFGS Huber fit's partials (x_linear/huber_fast.mojo) from 512-row blocks to FOLD_BLOCK rows. The `HUBER_FAST_BLOCK512` alias and the FOLD_BLOCK arm of `HF_FOLD` are gone (the fast fit runs only under HUBER_DEVICE_LBFGS, where the alias was always true without the define); the now-unused FOLD_BLOCK import went with them. The grid Huber fit of every other build is untouched.
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `HUBER_FAST_BLOCK512`, rab19-huber512): M3 one run per arm, huber taxi 192.0 -> 161.6 ms, r2 equal 0.900215. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `246a53ea57`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch`, then delete the `MOJOLEARN_HUBER_FAST_BLOCK512_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of LinearRegression.fit from the equilibrated normal equations with X and y uploaded once (`ols_fit_resident`) to the blocked TSQR. Only the `and not is_defined` term of `OLS_FAST_NORMAL_EQ` (glm/linear_route_controls.mojo) is gone; the TSQR route stays the path of IDENTICAL and every non-Apple build.
+- **Verdict**: KEPT 94cb5ba59 (EXPERIMENTS.md `FAST_OLS_NORMAL_EQ (_OFF)`, olsne-taxi, olsne-istella): M3 one run per arm, ols taxi 286 -> 110 ms (r2 .9088 same), istella 2,921 -> 842 ms (r2 .3325 -> .3319). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `ed9ef96a34`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch`, then delete the `MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_QN_FAST_BLOCKS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the quasi-Newton one-class objective evaluation (glm/impl/qn/glm_base.mojo) from two block launches (rows' z, loss and dZ with a per-block fold, then one epilogue block) to the nine-launch evaluation. Only the `and not is_defined` term of `QN_FAST_BLOCKS` is gone; the nine-launch evaluation stays the path of every non-FAST-Apple build.
+- **Verdict**: KEPT 0ae9c28cd (EXPERIMENTS.md `QN_FAST_BLOCKS`, linear-logreg-blocks-istella, linear-svc-blocks-istella, linear-svr-blocks-istella): M3 one run per arm, logreg istella 3,893 -> 3,612 ms, linearsvc 773 -> 733, linearsvr 913 -> 219, quality same. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1385d5e6ff`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch`, then delete the `MOJOLEARN_QN_FAST_BLOCKS_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_PREP_FAST_MINMAX_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MinMaxScaler's fit extrema pass from the row-tiled `extrema_rows_fast_kernel` (preprocessing/minmax.mojo `minmax_fit_fast_dev`) to `extrema_chunks_kernel`. Only the `and not is_defined` term of `PREP_FAST_MINMAX` is gone; `extrema_chunks_kernel` stays the path of IDENTICAL and every non-Apple build.
+- **Verdict**: KEPT f419ea9f1 (EXPERIMENTS.md `PREP_FAST_MINMAX`, prep-minmax-istella): M3 one run per arm, minmax-scaler istella 152 -> 106 ms, output digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6c544e9855`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch`, then delete the `MOJOLEARN_PREP_FAST_MINMAX_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the x_prep program's output region (and arena ranges of 1M+ words) from the pinned-stage download (core/staged_download.mojo) to raw host-pointer copies. Only the `and not is_defined` term of `X_PREP_STAGED_OUT` (x_prep/device.mojo) is gone; the raw copies stay the path of every non-FAST-Apple build.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `X_PREP_FAST_STAGED_OUT`, gmp-staged-lb-taxi, gmp-staged-mlb-taxi, gmp-staged-te-taxi): M3 one run per arm, label-binarizer taxi 563 -> 345 ms, multilabel-binarizer 287 -> 193, target-encoder 281 -> 272, digests the same (copies only). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `509aa1c3a5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of TargetEncoder's te_global stage from one threadgroup per (fold, target) with a tree (`te_global_fast_kernel`) to the one-thread `te_global_unit`. `X_PREP_FAST_TE_GLOBAL` and the `te_global` field of `Prep2Switches` (x_prep/fastprep2.mojo) are gone: `prep2_fast_stage` runs only under PREP2_FAST, where the field was always true. `te_global_unit` stays the path of every non-FAST-Apple build.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple (EXPERIMENTS.md `X_PREP_FAST_TE_GLOBAL`, afc_ab_def, lane/apple-fast-rec-ab3 @ 0ca521cc5): M3 full board, one run per arm, target-encoder taxi 201.4 -> 90.2 ms, output digest identical (measured apart from TE_ENC). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `d1ba1439d6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_PREP_FAST_TE_ENC_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of TargetEncoder's te_enc stage from one threadgroup per (fold, column, category, target) over the gathered bucket (`te_enc_fast_kernel`) to the one-thread `te_enc_unit`. `X_PREP_FAST_TE_ENC` and the `te_enc` field of `Prep2Switches` (x_prep/fastprep2.mojo) are gone: `prep2_fast_stage` runs only under PREP2_FAST, where the field was always true. `te_enc_unit` stays the path of every non-FAST-Apple build.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple (EXPERIMENTS.md `X_PREP_FAST_TE_ENC`, afc_ab_def, lane/apple-fast-rec-ab3 @ 0ca521cc5): M3 full board, one run per arm, target-encoder taxi 203.1 -> 148.7 ms, output digest identical (measured apart from TE_GLOBAL). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `3827e5294b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_TE_ENC_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of x_prep's eigh stage (IterativeImputer's BayesianRidge) from one 32-thread threadgroup per matrix (`eigh_block_fast_kernel`) to the one-thread cyclic Jacobi `eigh_unit`. `PREP2_FAST_EIGH_BLOCK`, the `eigh_block` field of `Prep2Switches` and the `comptime if` around the launch (x_prep/fastprep2.mojo) are gone: `prep2_fast_stage` runs only under PREP2_FAST, where both were always true. `eigh_unit` stays the path of every non-FAST-Apple build and of m > EIG_MAX.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple (EXPERIMENTS.md `PREP2_FAST_EIGH_BLOCK`, afc_ab_def, lane/apple-fast-rec-ab3 @ 0ca521cc5): M3 full board, one run per arm, iterative-imputer taxi 218.6 -> 185.3 ms, masked_rmse identical, digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `4867560045`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch`, then delete the `MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_CD_FAST_GRID_GRAM_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the CD_FAST_GRAM coordinate-descent Gram (solver/impl/cd.mojo `cd_fit_traced`) from the grid product (`cd_grid_gram_kernel` + `cd_grid_gram_red_kernel`, no copy of X) to the staged (p + 1) x n copy of [X ; y] and `gemm_nt` (p1^2 > CD_GRAM_CELLS) or `cd_gram_partial_kernel` (256-row blocks). That arm, `cd_gram_partial_kernel`, `CD_GRAM_ROWS` and the `gemm_nt` import are deleted; `CD_FAST_GRID_GRAM` is `CD_FAST_GRAM`. IDENTICAL and non-Apple builds never took the Gram path (they keep the row sweeps).
+- **Verdict**: KEPT 0ae9c28cd (EXPERIMENTS.md `CD_FAST_GRID_GRAM + CD_FAST_ROWMAJOR`, linear-lasso-rm-istella, linear-enet-rm-istella): M3 one run per arm, lasso istella 264 -> 149 ms, elasticnet 262 -> 143 ms, r2 .2616 -> .2609. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `e592fb6e9f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_GRID_GRAM_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_CD_FAST_ROWMAJOR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of Lasso / ElasticNet's C-order design on the CD_FAST_GRAM path from reading the row-major tiles as uploaded (no device transpose, no centering passes, means from the grid chunks: `cd_grid_sums_kernel` / `cd_grid_means_kernel`) to the device transpose plus `pre_process_data` / `post_process_data`. Only the `and not is_defined` term of `CD_FAST_ROWMAJOR` (solver/impl/cd.mojo) is gone; the transpose stays the path of weighted fits, of shapes the grid Gram does not serve and of every non-FAST-Apple build.
+- **Verdict**: KEPT 0ae9c28cd (EXPERIMENTS.md `CD_FAST_GRID_GRAM + CD_FAST_ROWMAJOR`, linear-lasso-rm-istella, linear-enet-rm-istella): M3 one run per arm, lasso istella 264 -> 149 ms, elasticnet 262 -> 143 ms with both, r2 .2616 -> .2609. Measured as the pair. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7d40f892a7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).

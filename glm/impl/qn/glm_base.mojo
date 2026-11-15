@@ -309,14 +309,13 @@ def mean_kernel(
 # ---------------------------------------------------------------------------
 
 # Default on (FAST + Apple) since the M3 A/B (istella n=1: logreg 3,893 ->
-# 3,612 ms, svc 773 -> 733, svr 913 -> 219, quality same). `-D
-# MOJOLEARN_QN_FAST_BLOCKS_OFF` keeps the nine-launch evaluation; the old
+# 3,612 ms, svc 773 -> 733, svr 913 -> 219, quality same). The `_OFF`
+# rollback was deleted 2026-11-15 (docs/TOMBSTONES.md); the nine-launch
+# evaluation stays the path of every other build. The old
 # `-D MOJOLEARN_QN_FAST_BLOCKS` name is harmless.
-comptime QN_FAST_BLOCKS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_QN_FAST_BLOCKS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_FAST_BLOCKS_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 1385d5e6ff.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_FAST_BLOCKS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime QNB_ROWS = 1024
 comptime QNB_TPB = 256
 

@@ -26,13 +26,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 #: the fit's extrema pass (and `minmax_transform_direct` the transform entry)
 #: on the FAST tier on Apple. DEFAULT since the M3 A/B (lane/apple-fast-prep
 #: 387211293, n=1, output digests identical: minmax-scaler istella 152 ->
-#: 106 ms). `-D MOJOLEARN_PREP_FAST_MINMAX_OFF` restores main's path; the old
+#: 106 ms). The `_OFF` rollback was deleted 2026-11-15 (docs/TOMBSTONES.md); the old
 #: `-D MOJOLEARN_PREP_FAST_MINMAX` stays harmless. Every other build takes
 #: `extrema_chunks_kernel`, so IDENTICAL compiles main's code unchanged.
-comptime PREP_FAST_MINMAX = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_PREP_FAST_MINMAX_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_PREP_FAST_MINMAX_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 6c544e9855.
+# Restore: git apply experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PREP_FAST_MINMAX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 from checks.numerics import ftz, identical_div, identical_mul
 from experiments.classical_identical_ideas.shared_controls import C03_FINITE_EXTREMA
 
@@ -133,7 +132,7 @@ def extrema_rows_fast_kernel(
     lows: MutPointer[UInt32, MutAnyOrigin], highs: MutPointer[UInt32, MutAnyOrigin],
 ):
     """lane/apple-fast-prep (2026-10-02), `PREP_FAST_MINMAX` (FAST on Apple,
-    default; -D MOJOLEARN_PREP_FAST_MINMAX_OFF turns it off) only, from `minmax_fit_fast`. Block
+    default) only, from `minmax_fit_fast`. Block
     (chunk, column group): thread t owns column group*tpb + t over the
     chunk's FAST_ROWS rows, so a simdgroup reads consecutive words of one
     row. `extrema_chunks_kernel` (above) gives

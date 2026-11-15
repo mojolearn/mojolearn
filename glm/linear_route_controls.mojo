@@ -9,15 +9,13 @@ from std.sys.compile import is_defined
 #: (`ols_fit_resident`) instead of the blocked TSQR under FAST on Apple.
 #: Default since the M3 A/B (lane/apple-fast-olsne 9f5cf2a77, n=1): taxi
 #: 286 -> 110 ms, r2 .9088 same; istella 2,921 -> 842 ms, r2 .3325 -> .3319.
-#: MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF turns it off; the old
+#: The `_OFF` rollback was deleted 2026-11-15 (docs/TOMBSTONES.md); the old
 #: MOJOLEARN_FAST_OLS_NORMAL_EQ define is now harmless. IDENTICAL
 #: and the other vendors keep main's route. Read by Python
 #: through `ols_normal_eq_default`.
-comptime OLS_FAST_NORMAL_EQ = (
-    GLOBAL_NUMERIC_MODE == _OLS_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at ed9ef96a34.
+# Restore: git apply experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch; record in docs/TOMBSTONES.md.
+comptime OLS_FAST_NORMAL_EQ = GLOBAL_NUMERIC_MODE == _OLS_FAST and TARGET_HAS_APPLE_GPU
 
 #: Lane apple-fast-ridgespeed (2026-10-03): Ridge.fit with X and y uploaded
 #: once (`ridge_fit_resident`) instead of the four host trips of the Python

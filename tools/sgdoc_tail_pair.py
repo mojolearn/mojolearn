@@ -23,7 +23,8 @@ import shutil
 import subprocess
 import sys
 
-DEFINES = ('-D MOJOLEARN_SGDOC_FAST_TAIL_OFF', '-D MOJOLEARN_SGDOC_FAST_TAIL_LONG')  # after promotion B=_OFF is the old path
+# SGDOC_FAST_TAIL_OFF deleted 2026-11-15 (lane expdel-03-linear, docs/TOMBSTONES.md): only the 4x tail arm is left.
+DEFINES = ('-D MOJOLEARN_SGDOC_FAST_TAIL_LONG',)
 FIXTURE = 'sgdoc-tail-v1-rows-small'
 
 

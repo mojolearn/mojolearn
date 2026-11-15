@@ -65,6 +65,8 @@ Files: `arima/impl/batched_fit.mojo`, `arima/impl/batched_kalman.mojo`, `arima/i
 
 ### expdel-03-linear (20 defines, 79 branch lines, 14 files)
 
+Outcome (lane/expdel-03-linear, 2026-11-15): 19 deleted; `MOJOLEARN_SGD_FAST_PS_SIMD_OFF` moved to KEEP-OPEN (reason in its row below).
+
 Defines: `MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF` (old-path), `MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF` (old-path), `MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF` (old-path), `MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF` (old-path), `MOJOLEARN_CD_FAST_GRID_GRAM_OFF` (old-path), `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` (old-path), `MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF` (old-path), `MOJOLEARN_HUBER_FAST_BLOCK512_OFF` (old-path), `MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF` (old-path), `MOJOLEARN_PREP_FAST_MINMAX_OFF` (old-path), `MOJOLEARN_QN_FAST_BLOCKS_OFF` (old-path), `MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF` (old-path), `MOJOLEARN_SGDOC_FAST_TAIL_OFF` (old-path), `MOJOLEARN_SGD_FAST_PS_SIMD_OFF` (old-path), `MOJOLEARN_SGD_PERC_AVG` (loser), `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` (old-path), `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` (old-path), `MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF` (old-path), `MOJOLEARN_X_PREP_FAST_TE_ENC_OFF` (old-path), `MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF` (old-path)
 
 Files: `bindings/_mojolearn_estimators.mojo`, `glm/impl/qn/glm_base.mojo`, `glm/linear_fit_device.mojo`, `glm/linear_route_controls.mojo`, `preprocessing/minmax.mojo`, `solver/estimator.mojo`, `solver/impl/cd.mojo`, `x_linear/cls1_fast.mojo`, `x_linear/device.mojo`, `x_linear/fast_gram.mojo`, `x_linear/huber_fast.mojo`, `x_linear/sgd.mojo`, `x_prep/device.mojo`, `x_prep/fastprep2.mojo`
@@ -1133,7 +1135,7 @@ Columns: verdict = evidence class (WIN / LOSE / OPEN / none) and the newest evid
 | `MOJOLEARN_QN_FAST_BLOCKS_OFF` | DELETE-OLD-PATH | WIN EXP:245 KEPT 0ae9c28cd | 1+4/0 | 5 | - | glm/impl/qn/glm_base.mojo:318 | expdel-03 |
 | `MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF` | DELETE-OLD-PATH | WIN EXP:291 KEPT 9decae29f | 1+1/0 | 2 | - | x_linear/cls1_fast.mojo:54 | expdel-03 |
 | `MOJOLEARN_SGDOC_FAST_TAIL_OFF` | DELETE-OLD-PATH | WIN EXP:745 DEFAULT (FAST+Apple), rollback MOJOLEARN_SGDOC_FAST_TAIL_OFF; parallel algorithm | 1+2/0 | 3 | - | x_linear/device.mojo:2733 | expdel-03 |
-| `MOJOLEARN_SGD_FAST_PS_SIMD_OFF` | DELETE-OLD-PATH | WIN EXP:235 KEPT (small d only), FAST+Apple default for d <= 32 (`_OFF` off) | 1+2/0 | 3 | - | x_linear/device.mojo:2752 | expdel-03 |
+| `MOJOLEARN_SGD_FAST_PS_SIMD_OFF` | KEEP-OPEN | WIN EXP:235 KEPT (small d only), FAST+Apple default for d <= 32 (`_OFF` off) | 1+2/0 | 3 | - | x_linear/device.mojo:2752 | expdel-03: KEEP-OPEN (2026-11-15): EXP:235 KEPT SIMD for small d only (sgd-ocsvm taxi d 11: 58,334 -> 42,252 ms) and records the block form WINNING at istella d 220 (75,506 -> 106,443 ms, +41% with SIMD); the current gate (d <= SPS_MAX_D = 256, x_linear/device.mojo, replacement of the benchmark-tuned d <= 32 cap) is UNMEASURED and covers istella, so `_OFF` is the only route to the measured winner there; owed A/B of the register-bound gate on sgd-ocsvm istella (with SGDOC_FAST_TAIL on) before the old path goes |
 | `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` | DELETE-OLD-PATH | WIN EXP:250 KEPT c5e1bbeb6 | 1+0/0 | 1 | - | x_linear/device.mojo:707 | expdel-03 |
 | `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` | DELETE-OLD-PATH | WIN EXP:251 KEPT c5e1bbeb6 | 1+0/0 | 1 | - | x_linear/fast_gram.mojo:49 | expdel-03 |
 | `MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF` | DELETE-OLD-PATH | WIN EXP:408 KEPT (FAST+Apple default, `_OFF`) | 1+0/0 | 1 | - | x_prep/device.mojo:61 | expdel-03 |
