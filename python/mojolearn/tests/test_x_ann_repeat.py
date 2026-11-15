@@ -27,8 +27,6 @@ import pytest
 
 pytest.importorskip("numpy")
 
-PKG = Path(__file__).resolve().parents[1]
-
 _SCRIPT = r'''
 import hashlib
 import numpy as np

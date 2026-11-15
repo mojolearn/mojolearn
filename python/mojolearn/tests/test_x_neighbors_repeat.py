@@ -23,9 +23,6 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("numpy")
-from mojolearn import _backend
-
-PKG = Path(__file__).resolve().parents[1]
 
 _SCRIPT = r'''
 import hashlib
