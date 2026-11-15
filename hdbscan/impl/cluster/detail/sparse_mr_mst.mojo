@@ -45,7 +45,7 @@ reported by its point and refused by name (DEVIATION 1607's rule).
 from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 from checks.numerics import identical_sqrt
 from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES, C62_SAME_COMPONENT_SKIP
+from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -278,26 +278,8 @@ def sparse_mr_search_tiled_kernel(
         var t = t0 + tid
         ti_s[unsafe_offset=tid] = todo[t] if t < n_todo else Int32(-1)
     barrier()
-    # C61 (default OFF): the block's one component when every listed point
-    # shares it (else -2); a j tile whose every point is in that component
-    # holds only cells the epilogue below excludes (`cj != ci[r]`), so the
-    # whole tile is skipped. Same cells written, same (key, j) minimum.
-    var uc_s = stack_allocation[
-        2, Scalar[DType.int32], address_space = AddressSpace.SHARED
-    ]()
-    comptime if C62_SAME_COMPONENT_SKIP:
-        if tid == 0:
-            var uc = Int32(-1)
-            for q in range(SMR_TI):
-                var i = Int(ti_s[unsafe_offset=q])
-                if i >= 0:
-                    var c = comp[i]
-                    if uc == Int32(-1):
-                        uc = c
-                    elif c != uc:
-                        uc = Int32(-2)
-            uc_s[unsafe_offset=0] = uc if uc >= 0 else Int32(-2)
-        barrier()
+    # TOMBSTONE: MOJOLEARN_C62_SAME_COMPONENT_SKIP (its alias use here: the same-component tile skip and its shared cells; owner lane expdel2-05-base) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at da8ebbce46.
+    # Restore: git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.expdel2-11-cluster.patch.
     var ci = Array[Int32, SMR_RI](fill=Int32(-1))
     var ni = Array[Float32, SMR_RI](fill=Float32(0.0))
     var cri = Array[Float32, SMR_RI](fill=Float32(0.0))
@@ -320,22 +302,6 @@ def sparse_mr_search_tiled_kernel(
                 crj_s[unsafe_offset=tid] = core[j]
             else:
                 cj_s[unsafe_offset=tid] = Int32(-1)
-        comptime if C62_SAME_COMPONENT_SKIP:
-            # uc_s[unsafe_offset=1]: 1 when some j < jb of this tile leaves the block's
-            # component. Reset, barrier, mark, barrier, then a block-uniform
-            # read; the trailing barrier on a skip keeps the next reset
-            # behind every read.
-            if tid == 0:
-                uc_s[unsafe_offset=1] = Int32(0)
-            barrier()
-            if tid < SMR_TJ and jt + tid < jb:
-                if cj_s[unsafe_offset=tid] != uc_s[unsafe_offset=0]:
-                    uc_s[unsafe_offset=1] = Int32(1)
-            barrier()
-            if uc_s[unsafe_offset=0] >= 0 and uc_s[unsafe_offset=1] == Int32(0):
-                barrier()
-                jt += SMR_TJ
-                continue
         var acc = Array[Float32, SMR_RI * SMR_RJ](fill=Float32(0.0))
         var k0 = 0
         while k0 < d:
