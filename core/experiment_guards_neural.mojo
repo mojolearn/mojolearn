@@ -340,6 +340,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the NVIDIA opt-out of the per-call transformer_forward_fresh export) is gone; NVIDIA IDENTICAL builds always export it (NVIDIA's full public A/B gate admitted it); restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch
     comptime assert not is_defined["MOJOLEARN_C58_TEAM_MIB"](), "removed 2026-11-15 (lane/expdel2-07-base): C58_TEAM_MIB (Sequence (classical series team state budget 64 MiB, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at d6045cbd0a; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_STASH"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_ATTN_STASH (Neural (fused attention exp-stash memory profile arms 1 recompute / 2 packed / 3 alias_y, IDENTICAL)) was opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower; the opt-in arm is gone and the default path is unchanged; code recoverable at dc10f7b50f; see docs/TOMBSTONES.md"
     return True
 
 

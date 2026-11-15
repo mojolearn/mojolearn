@@ -336,42 +336,6 @@
    ],
    "note": "Only in _launch_fwd_r2 (ATTN_ARM_TRIAL builds) and only for (n_heads/n_kv)%4==0. Board shapes have n_kv==n_heads: never engages on the board; needs a GQA workload. Two-head arm deleted (I06 loser)."
   },
-  "attn_stash": {
-   "define": "MOJOLEARN_IDN_ATTN_STASH",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "recompute": [
-     "MOJOLEARN_IDN_ATTN_STASH=1"
-    ],
-    "packed": [
-     "MOJOLEARN_IDN_ATTN_STASH=2"
-    ],
-    "alias_y": [
-     "MOJOLEARN_IDN_ATTN_STASH=3"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "transformer/impl/llama/fused_attention.mojo:1415",
-    "bindings/build_byte_lm.sh:75",
-    "bindings/build_transformer.sh:144"
-   ],
-   "binding": [
-    "_mojolearn_byte_lm",
-    "_mojolearn_transformer"
-   ],
-   "bits_change": false,
-   "status": "rewritten",
-   "merged_from": [
-    "I.N.NN19",
-    "I.N.NI21",
-    "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD",
-    "MOJOLEARN_ATTN_V1_PACKED_ESTASH",
-    "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"
-   ],
-   "note": "grid ge123e6f9 (lane grid-act-4, 2026-10-08): recompute SPLIT by algorithm: samba-train-step 0.905x FASTER (NV 96.0->79.5, AMD 147.2->145.7), lm-train-step 1.24x SLOWER (NV 36.0->43.6, AMD 42.7->54.4), same bits. The build-wide default stays off (stash) for the LM / transformer steps; the Samba train step takes recompute by model kind through control samba_attn_recompute (grid_controls/samba-resident.json). Off = shipped profile (alias_y automatic on NVIDIA estash, full estash elsewhere). NN19/NN18 ATTN_ARM runtime arms stay a runtime env sweep inside an ATTN_ARM_TRIAL build (MOJOLEARN_ATTN_ARM), not grid dimensions. Build scripts map MOJOLEARN_ATTENTION_MEMORY_PROFILE=recompute|packed|alias-y to arms 1|2|3."
-  },
   "attn_scale_mask": {
    "define": "MOJOLEARN_NN21_SCALE_MASK",
    "kind": "switch",
@@ -758,7 +722,6 @@
     "neural_gemm_pair",
     "neural_gemm_workspace",
     "neural_gemm_zero_tail",
-    "attn_stash",
     "attn_scale_mask",
     "norm",
     "rope",
@@ -843,7 +806,6 @@
     "neural_gemm_schedule_roles",
     "gemm_leaf",
     "neural_gemm_chains",
-    "attn_stash",
     "norm",
     "rope",
     "train_swiglu"
@@ -1071,6 +1033,11 @@
    "control": "attn_softmax",
    "arm": "online_tile32",
    "reason": "DELETED 2026-10-10 (lane grid-act-15, deletion c1bf9d832): slower. online_tile32/off ms ratio NV/AMD: lm-train-step 1.43/1.56 (35.43 -> 50.57 NV, 42.84 -> 66.68 AMD; avg 1.49 SLOWER), lm-forward 0.98/1.04 (48.55 -> 47.64 NV, 34.67 -> 36.04 AMD; avg 1.01 noise); mean_nll 9.018733 and train loss_last 8.418446 unchanged. main ca25d9321, byte-LM bytes profile, one run per arm, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557 (default v1232/a1557); identity: every arm's NV hash == AMD hash. It was the last arm (summary_tree =1 deleted 2026-10-08), so the control and the define are gone: transformer/impl/llama/attention_v2*.mojo, transformer/checks/attention_v2_*.mojo, tools/attention_v2_*oracle.py (+tests), tools/attention_v2_exact_leg.sh, transformer/ATTENTION_V2_CONTRACT.md and experiments/performance_ideas/N06 deleted, with its forward sweep attn_v2_tq (attention-tiled-v2.json). Code recoverable at main ca25d9321; MOJOLEARN_IDN_ATTN_SOFTMAX refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_ATTN_STASH",
+   "control": "attn_stash",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dc10f7b50f; patch experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch): opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower. EXP:1757 (ge123e6f9; samba nv v0280, amd a0681; lm nv v0349, amd a0814): recompute won on Samba only and became `MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF`'s default; on lm-train-step it was 1.24x slower; the packed and alias_y arms have no A/B. The arm switch is deleted (plan rule e). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

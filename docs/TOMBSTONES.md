@@ -757,6 +757,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C60_LAG4`](#mojolearn_c60_lag4-unmeasured-arm-deleted-2026-11-15) | Time series (shared detrended observations across lag tasks, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C60_LAG4.patch](../experiments/removed/MOJOLEARN_C60_LAG4.patch) |
 | [`MOJOLEARN_IDN_GPC_OVR_OFF`](#mojolearn_idn_gpc_ovr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path) | removed (old path, no A/B recorded; the batched one-vs-rest default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPC_OVR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch) |
 | [`MOJOLEARN_IDN_GPR_PTR_OFF`](#mojolearn_idn_gpr_ptr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path) | removed (old path, no A/B recorded; the resident pointer default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPR_PTR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch) |
+| [`MOJOLEARN_IDN_ATTN_STASH`](#mojolearn_idn_attn_stash-arm-deleted-2026-11-15) | Neural (fused attention exp-stash memory profile arms 1 recompute / 2 packed / 3 alias_y, IDENTICAL) | removed (opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_STASH.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7338,3 +7339,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b2a4adf292`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch`, then delete the `MOJOLEARN_IDN_GPR_PTR_OFF` refusal in `core/experiment_guards_kernel.mojo`.
 - **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_ATTN_STASH: arm deleted (2026-11-15)
+
+- **What it was**: `-D MOJOLEARN_IDN_ATTN_STASH=1|2|3`, the fused-attention exp-stash memory profiles (recompute, packed, alias_y; `ATTN_STASH_ARM` in `transformer/impl/llama/fused_attention.mojo`, another lane's file). This lane removed the read in the I07 timing driver `experiments/performance_ideas/attention_time.mojo`; the build scripts that pass it (`bindings/build_transformer.sh`, `bindings/build_byte_lm.sh`, `tools/*estash*`) are the tooling lane's.
+- **Verdict**: EXP:1757 (ge123e6f9; samba nv v0280, amd a0681; lm nv v0349, amd a0814): recompute won on Samba only and became `MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF`'s default; on lm-train-step it was 1.24x slower; the packed and alias_y arms have no A/B. The arm switch is deleted (plan rule e). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `dc10f7b50f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch`, then delete the `MOJOLEARN_IDN_ATTN_STASH` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-gemm-attn-dedupe.json` control `attn_stash`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
