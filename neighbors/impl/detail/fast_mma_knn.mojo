@@ -54,7 +54,6 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.os import getenv
 from std.time import perf_counter_ns
 
 #: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
@@ -112,10 +111,18 @@ comptime MQ_DC = 32
 """Feature chunk of the chunked arm's shared tile."""
 
 
+#: The chunked arm (more than MQ_MAX_D features), Apple fast builds only
+#: (FAST_MMA_KNN_ENABLED): on by default; `-D MOJOLEARN_KNN_FAST_MMA_BIGD_OFF`
+#: turns it off (the A/B arm: the scalar and tiled arms then). Before (lane
+#: envgate-classical-deviceplan): the run-time MOJOLEARN_KNN_FAST_MMA_BIGD=0,
+#: a getenv per query. Apple fast is paused: the arm is kept, not timed.
+comptime KNN_FAST_MMA_BIGD_ON = not is_defined["MOJOLEARN_KNN_FAST_MMA_BIGD_OFF"]()
+
+
+@always_inline
 def _bigd_on() -> Bool:
-    """`MOJOLEARN_KNN_FAST_MMA_BIGD=0` turns the chunked arm (more than
-    MQ_MAX_D features) off: the A/B arm, the scalar and tiled arms then."""
-    return getenv("MOJOLEARN_KNN_FAST_MMA_BIGD") != "0"
+    """`KNN_FAST_MMA_BIGD_ON`, a build constant."""
+    return KNN_FAST_MMA_BIGD_ON
 
 
 def _k64_on() -> Bool:
