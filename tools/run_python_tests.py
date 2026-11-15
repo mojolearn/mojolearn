@@ -58,6 +58,26 @@ def user_chose_workers(pytest_args):
                or a in ('no:xdist', '-pno:xdist') for a in pytest_args)
 
 
+#: THE INSTALLED-RUNTIME BOOTSTRAP: `python -I -c INSTALLED_BOOTSTRAP <tests root> <pytest args>`. It preloads
+#: the installed runtime under isolated Python, then attaches ONLY its test namespace (mojolearn.tests) to the
+#: source tests root, so relative fixtures keep their package names and Path(__file__).resolve() still sees
+#: repository evidence. Shared with tools/ops/wheel_verify_smoke.py (one process per test file).
+INSTALLED_BOOTSTRAP = '''import importlib.util, pathlib, sys
+import mojolearn, pytest
+root = pathlib.Path(sys.argv.pop(1)).resolve()
+runtime = pathlib.Path(mojolearn.__file__).resolve()
+if root.parent in runtime.parents:
+    raise SystemExit('refusing source runtime in installed qualification')
+print('Installed runtime:', runtime, flush=True)
+spec = importlib.util.spec_from_file_location('mojolearn.tests', root/'__init__.py', submodule_search_locations=[str(root)])
+tests = importlib.util.module_from_spec(spec)
+sys.modules['mojolearn.tests'] = tests
+mojolearn.tests = tests
+spec.loader.exec_module(tests)
+raise SystemExit(pytest.main(sys.argv[1:]))
+'''
+
+
 def serial_files(paths):
     """Files that mark tests `serial`, found by text like the inventory (never imported)."""
     return [p for p in paths if SERIAL_MARK in p.read_text(errors='replace')]
@@ -136,25 +156,8 @@ def main(argv=None):
         pytest_args = pytest_args[1:]
     if args.installed:
         # Stays one process: xdist workers are fresh interpreters and would not
-        # carry the mojolearn.tests namespace attached below.
-        # Preload the installed runtime under isolated Python, then attach ONLY
-        # its test namespace to source. Relative fixtures retain their package
-        # names and Path(__file__).resolve() still sees repository evidence.
-        code = '''import importlib.util, pathlib, sys
-import mojolearn, pytest
-root = pathlib.Path(sys.argv.pop(1)).resolve()
-runtime = pathlib.Path(mojolearn.__file__).resolve()
-if root.parent in runtime.parents:
-    raise SystemExit('refusing source runtime in installed qualification')
-print('Installed runtime:', runtime, flush=True)
-spec = importlib.util.spec_from_file_location('mojolearn.tests', root/'__init__.py', submodule_search_locations=[str(root)])
-tests = importlib.util.module_from_spec(spec)
-sys.modules['mojolearn.tests'] = tests
-mojolearn.tests = tests
-spec.loader.exec_module(tests)
-raise SystemExit(pytest.main(sys.argv[1:]))
-'''
-        return subprocess.call([sys.executable, '-I', '-c', code, str(args.tests_root),
+        # carry the mojolearn.tests namespace INSTALLED_BOOTSTRAP attaches.
+        return subprocess.call([sys.executable, '-I', '-c', INSTALLED_BOOTSTRAP, str(args.tests_root),
                                 '-q', '--import-mode=importlib',
                                 *map(str, suites['pytest']), *pytest_args])
     durations = durations_dir()
