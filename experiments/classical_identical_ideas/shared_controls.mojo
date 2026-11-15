@@ -20,7 +20,9 @@ comptime C01_LEAF = 32
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch
 comptime C01_MEAN = False
 comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C02_STATS_PAIR"]()
-comptime C03_FINITE_EXTREMA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at cf8de5ae6c.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch
+comptime C03_FINITE_EXTREMA = False
 # C04 is split (lane classical-decomp, 2026-10-07): its PCA use was the =4 arm of
 # MOJOLEARN_CLASSICAL_PCA_COV (deleted 2026-10-10, lane/grid-act-6); C04_LDA is the x_prep
 # `centered_matmul` op (LDA transform, solver != eigen), behavior unchanged.

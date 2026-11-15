@@ -728,6 +728,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED`](#mojolearn_classical_ridgecv_ff_blocked-unmeasured-arm-deleted-2026-11-15) | Linear (RidgeCV float-float fallback in block partials, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch) |
 | [`MOJOLEARN_CLASSICAL_C01_LEAF`](#mojolearn_classical_c01_leaf-arm-deleted-2026-11-15) | Metrics (regression-metrics PairSum leaf length sweep 32/64/128, IDENTICAL) | removed (opt-in arm; EXP:1530 DROPPED-slower record, no winning arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C01_LEAF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch) |
 | [`MOJOLEARN_CLASSICAL_C01_MEAN`](#mojolearn_classical_c01_mean-unmeasured-arm-deleted-2026-11-15) | Decomposition (PCA / TSVD column mean as leaf column sums + binary-counter fold, IDENTICAL) | removed (opt-in arm; EXP:1530 names it as the replacement, no A/B of its own) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C01_MEAN.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch) |
+| [`MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA`](#mojolearn_classical_c03_finite_extrema-unmeasured-arm-deleted-2026-11-15) | Preprocessing (MinMaxScaler finite extrema, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7077,3 +7078,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `569d288205`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch`, then delete the `MOJOLEARN_CLASSICAL_C01_MEAN` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C01_MEAN`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C03_FINITE_EXTREMA` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cf8de5ae6c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch`, then delete the `MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

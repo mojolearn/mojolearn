@@ -55,6 +55,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SPLINE_FAST_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): SPLINE_FAST_FUSED_OFF (FAST+Apple rollback of SplineTransformer to main's unfused fit and transform) is gone; the fused program is the FAST+Apple path (spline istella 48.1 -> 11.6 ms, taxi 34.2 -> 10.8 ms, kap2-spl-fused); restore: experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C01_LEAF"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C01_LEAF (Metrics (regression-metrics PairSum leaf length sweep 32/64/128, IDENTICAL)) was opt-in arm; EXP:1530 DROPPED-slower record, no winning arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 561d08802a; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C03_FINITE_EXTREMA (Preprocessing (MinMaxScaler finite extrema, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at cf8de5ae6c; see docs/TOMBSTONES.md"
     return True
 
 
