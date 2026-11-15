@@ -1,0 +1,181 @@
+unit	status	rc	primary	class	causes	first_key
+test_admitted_call_doors.py	failed	1	C10	TEST-STALE	C10:1	1x assert 'estimator_arguments(call, model,' in 'def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, va
+test_affinity_preference_native_boundary.py	failed	1	C17	PRODUCT	C99:3	1x ValueError: 'numpy.float32' object is not iterable
+test_agglo_native_boundary.py	failed	1	C10	TEST-STALE	C10:24 C99:1	24x TypeError: AgglomerativeClustering.__init__() got an unexpected keyword argument 'numeric_mode'
+test_archive_unicode_native.py	failed	1	C17	PRODUCT	C99:44	8x assert "String is no... base 10: 'f'" == "'utf-8' code...id start byte"
+test_arima_exog.py	failed	1	C10	TEST-STALE	C10:1	1x AssertionError: ['std.math', 'std.memory', 'std.sys.compile', 'core.host_parallel', 'core.host_predict_threads', 'checks.numerics']
+test_byte_lm_host_native_provider.py	failed	1	C17	PRODUCT	C99:1	1x assert 1 == 2
+test_byte_lm_native_state_restore.py	failed	1	C17	PRODUCT	C99:1	1x KeyError: 'forward_status_counts'
+test_byte_lm_runtime_shape.py	failed	1	C16	TEST-STALE	C99:3	3x AssertionError: Regex pattern did not match.
+test_byte_lm_surface.py	failed	1	C16	TEST-STALE	C99:4	4x AssertionError: assert <module 'mojolearn._host._mojolearn_byte_lm_host' (mojolearn/host/_mojolearn_native_orchestration_host.so)> is <mojol
+test_c3_c5_no_copies.py	failed	1	C02	PRODUCT	C02:4 C99:1	4x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_cache_get_native.py	failed	1	C01	PRODUCT	C01:75 C06:9	63x TypeError: numeric scalar decoding requires one primitive buffer element
+test_cache_stats_native.py	failed	1	C06	ENVIRONMENT	C06:7	6x AssertionError: Traceback (most recent call last):
+test_cache_supports_native.py	failed	1	C06	ENVIRONMENT	C06:1	1x AssertionError: Traceback (most recent call last):
+test_cache_upload_native.py	failed	1	C01	PRODUCT	C01:3	3x TypeError: numeric scalar decoding requires one primitive buffer element
+test_causal_model_native_loading.py	failed	1	C05	TEST-STALE	C05:19	19x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_cholesky_cpu_inference.py	failed	1	C04	PRODUCT	C04:1	1x TypeError: native binding requires its import-connected mode set
+test_class_weight_native_plan_boundary.py	failed	1	C01	PRODUCT	C01:2	2x TypeError: numeric scalar decoding requires one primitive buffer element
+test_class_weight_shared_families.py	failed	1	C01	PRODUCT	C01:6	6x TypeError: numeric scalar decoding requires one primitive buffer element
+test_classical_numpy_free.py	failed	1	C06	ENVIRONMENT	C06:2	2x AssertionError: Traceback (most recent call last):
+test_classical_pip_smoke_sep22.py	failed	1	C17	PRODUCT	C99:8	8x RuntimeError: this built-in estimator's native cross-validation schema is pending migration
+test_classical_warning_native_owner.py	failed	1	C16	TEST-STALE	C99:2	2x AssertionError: assert '  return method(self, *args, **kwargs)\n' in 'mojolearn/_mode.py:57: DataConversionWarning: A ... a 1d array was exp
+test_classification_metrics.py	failed	3	C15	ENVIRONMENT	C98:1	
+test_cpu_training_arima.py	failed	1	C10	TEST-STALE	C10:1	1x AssertionError: ['std.math', 'std.memory', 'std.sys.compile', 'core.host_parallel', 'core.host_predict_threads', 'checks.numerics']
+test_cpu_training_e2.py	failed	1	C10	TEST-STALE	C10:1	1x assert 'host_confusion_matrix_ptr(y, p, n, k, normalization)' in '# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Par
+test_cpu_training_e3.py	failed	1	C10	TEST-STALE	C10:1	1x AssertionError: ['std.math', 'std.memory', 'std.builtin.sort', 'std.sys.compile', 'core.host_parallel', 'checks.fixed_point', ...]
+test_cpu_training_e3_gbdt.py	failed	1	C10	TEST-STALE	C10:1 C99:1	1x assert '"no CPU implementation of _mojolearn_gbdt.gbdt_fit for "' in '# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel.
+test_cpu_training_e3_gbdt_rmse.py	failed	1	C10	TEST-STALE	C10:1	1x assert 'from gbdt.host.gbdt_oracle_rmse import' in '# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn
+test_cpu_training_e3_gbdt_trees.py	failed	1	C10	TEST-STALE	C10:1 C99:1	1x AssertionError: ['checks.fixed_point', 'checks.numerics', 'gbdt.data.permutation', 'gbdt.gpu_data.compressed_index_builder', 'gbdt.gpu_data.
+test_cpu_training_embedding_ivf.py	failed	1	C10	TEST-STALE	C10:1	1x assert "vendors = ('cpu',) if _backend._CPU_ONLY is not None" in '# SPDX-License-Identifier: Apache-2.0\n"""Public wrapper for a runtime-sha
+test_cpu_training_gbdt_losses.py	failed	1	C17	PRODUCT	C99:1	1x assert None
+test_cpu_training_gbdt_ordered.py	failed	1	C10	TEST-STALE	C10:3	1x assert ('gbdt_ordered_rmse_host_fit(' in '# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://
+test_cpu_training_gp.py	failed	1	C10	TEST-STALE	C10:1 C99:1	1x AssertionError: assert ['checks.nume... 'std.memory'] == ['checks.nume....memory', ...]
+test_cpu_training_umap.py	failed	1	C10	TEST-STALE	C10:1 C03:1	1x ValueError: substring not found
+test_cross_vendor_coordinator_native.py	failed	1	C17	PRODUCT	C99:1	1x AssertionError: assert 10 == 9
+test_dart_buffer_lifetime.py	failed	1	C17	PRODUCT	C99:1	1x ValueError: rf_regressor_fit_dart: invalid shape
+test_dbscan_native_boundary.py	failed	1	C12	ENVIRONMENT	C12:3 C04:1	3x Failed: DID NOT RAISE <class 'TypeError'>
+test_decode_n_tokens.py	failed	2	C16	TEST-STALE	C99:1	1x ERROR test_decode_n_tokens.py
+test_estimator_score_p2.py	crash	-11	C09	PRODUCT	C09:1	CRASH rc=-11
+test_forest_inference_engine.py	failed	1	C17	PRODUCT	C99:8	8x TypeError: mojolearn: model field 'format' is not a stored value
+test_full_reset_numpy_free_import.py	failed	1	C06	ENVIRONMENT	C06:2	2x AssertionError: Traceback (most recent call last):
+test_gp_mixed_label_identity.py	failed	1	C17	PRODUCT	C99:5 C01:4	4x TypeError: numeric scalar decoding requires one primitive buffer element
+test_gp_normalize_y.py	failed	1	C04	PRODUCT	C04:3	3x TypeError: native provider requires an exact compiled module
+test_gp_return_cov.py	failed	1	C04	PRODUCT	C04:1	1x TypeError: native provider requires an exact compiled module
+test_hdbscan_native_boundary.py	failed	1	C12	ENVIRONMENT	C12:1	1x Failed: DID NOT RAISE <class 'TypeError'>
+test_hierarchy_sparse_boundary.py	failed	1	C10	TEST-STALE	C10:13	13x TypeError: AgglomerativeClustering.__init__() got an unexpected keyword argument 'numeric_mode'
+test_holtwinters_inference.py	failed	1	C10	TEST-STALE	C10:1	1x AssertionError: bindings/holtwinters_host_predict_door.mojo imports ['bindings.holtwinters_host_predict_run']
+test_host_archive_native.py	failed	1	C10	TEST-STALE	C10:32	31x AttributeError: module 'mojolearn._classical_host' has no attribute '_serialize'
+test_host_archive_predict_native.py	failed	3	C15	ENVIRONMENT	C98:1	
+test_host_attribute_lifetime.py	failed	1	C17	PRODUCT	C99:3 C12:1	2x Failed: DID NOT RAISE <class 'Exception'>
+test_host_density_save_native.py	failed	1	C01	PRODUCT	C01:5	5x TypeError: numeric scalar decoding requires one primitive buffer element
+test_host_iforest_fit_native.py	failed	1	C01	PRODUCT	C01:78	55x AssertionError: {'approved_python_fallbacks': [], 'claim': 'The passed field covers only profiler-visible work and wrapper-bytecode ch...e, 
+test_host_inference_native.py	failed	1	C10	TEST-STALE	C10:3	3x AssertionError: assert ['metaclass'] == []
+test_host_kde_native.py	failed	1	C01	PRODUCT	C01:97 C99:4 C10:3	81x TypeError: numeric scalar decoding requires one primitive buffer element
+test_host_logistic_native.py	failed	2	C16	TEST-STALE	C99:1	1x ERROR test_host_logistic_native.py
+test_host_model_native_router.py	failed	1	C16	TEST-STALE	C99:1	1x AssertionError: assert {('mojolearn-...olesky'), ...} == {('mojolearn-...olesky'), ...}
+test_host_neighbor_finalizer_layout.py	failed	1	C02	PRODUCT	C02:5	5x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_host_radius_bindings.py	failed	1	C02	PRODUCT	C02:4	4x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_hotpath_native.py	failed	1	C16	TEST-STALE	C99:6	4x AssertionError: the new arm never called reduce_stat: {}; the comparison would pass vacuously
+test_iforest_depth_native.py	failed	1	C01	PRODUCT	C01:132	118x TypeError: numeric scalar decoding requires one primitive buffer element
+test_iforest_save_forest.py	failed	1	C16	TEST-STALE	C99:3	2x assert "['mojolearn-iforest-2']" == 'mojolearn-iforest-2'
+test_import_lower_native.py	failed	1	C04	PRODUCT	C04:9 C10:1	1x AssertionError: ('attention_two_head_causal', 'error', ('TypeError', 'native provider requires an exact compiled module'), 'program', <mojol
+test_imported_run_native.py	failed	1	C10	TEST-STALE	C10:1	1x ImportError: cannot import name '_mixed' from 'mojolearn.tests.test_import_lower' (mojolearn/tests/test_import_lower.py)
+test_ivf_embedding_cpu_inference.py	failed	1	C10	TEST-STALE	C10:1	1x AssertionError: bindings/_mojolearn_ivf_host.mojo
+test_jl_native_boundary.py	failed	1	C01	PRODUCT	C01:6	6x TypeError: numeric scalar decoding requires one primitive buffer element
+test_kde_native_boundary.py	failed	1	C12	ENVIRONMENT	C12:3 C99:1	3x Failed: DID NOT RAISE <class 'TypeError'>
+test_knn_metrics.py	failed	1	C02	PRODUCT	C02:4	4x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_kpca_native_boundary.py	failed	1	C16	TEST-STALE	C99:5	3x AssertionError: Regex pattern did not match.
+test_labels_native.py	failed	1	C17	PRODUCT	C99:1	1x AssertionError: native arm declined a supported buffer
+test_late_numpy_native_metadata.py	failed	1	C06	ENVIRONMENT	C06:16	16x AssertionError: Traceback (most recent call last):
+test_lazy_family_import.py	failed	1	C06	ENVIRONMENT	C06:13	13x AssertionError: Traceback (most recent call last):
+test_linear_archive_generic_native.py	failed	1	C14	TEST-STALE	C14:12	12x AssertionError: assert <class 'numpy.ndarray'> is Array
+test_linear_entry_table_boundary.py	failed	1	C14	TEST-STALE	C14:23 C99:3	23x ValueError: unknown private classical operation
+test_linear_svc_native_boundary.py	failed	1	C12	ENVIRONMENT	C12:3	3x Failed: DID NOT RAISE <class 'TypeError'>
+test_linear_svr_native_fit_boundary.py	failed	1	C16	TEST-STALE	C99:3 C12:1	2x AssertionError: 
+test_lof_native_state.py	failed	1	C16	TEST-STALE	C99:3	3x AssertionError: Regex pattern did not match.
+test_logistic_query_width_native.py	failed	1	C01	PRODUCT	C01:13 C99:3	9x TypeError: numeric scalar decoding requires one primitive buffer element
+test_logistic_scalar_native_boundary.py	failed	1	C01	PRODUCT	C01:20 C99:6	18x AssertionError: {'approved_python_fallbacks': [], 'claim': 'The passed field covers only profiler-visible work and wrapper-bytecode ch...e, 
+test_mamba3_constructor_native.py	failed	1	C05	TEST-STALE	C05:2	2x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_mamba_native_public.py	failed	1	C05	TEST-STALE	C05:8	8x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_measurement_startup.py	failed	1	C15	ENVIRONMENT	C99:5	5x AssertionError: assert 'cpu' in ('metal', 'cuda', 'hip')
+test_meta_members_native.py	crash	-11	C09	PRODUCT	C09:1	CRASH rc=-11
+test_metrics_selection_host_p2.py	failed	1	C16	TEST-STALE	C99:1	1x Failed: DID NOT RAISE <class 'NotImplementedError'>
+test_minmax_archive_generic_native.py	failed	1	C14	TEST-STALE	C14:12	12x TypeError: 'Array' object does not support item assignment
+test_model_config_native.py	failed	1	C10	TEST-STALE	C10:8	8x AttributeError: 'ModelPlan' object has no attribute 'pop'
+test_models_loader.py	failed	1	C05	TEST-STALE	C05:2	2x AttributeError: module 'mojolearn.models.causal_lm' has no attribute '_argmax_last'
+test_native_array_operations.py	failed	1	C16	TEST-STALE	C99:1	1x AssertionError: assert {'base_native...d_copy_bytes'} == {'cast_elemen...d_copy_bytes'}
+test_native_caller_frame.py	failed	1	C16	TEST-STALE	C99:7	7x AssertionError: 
+test_native_cv_logistic.py	failed	1	C17	PRODUCT	C99:1	1x KeyError: 'estimators_vendor'
+test_native_decomp_buffer_owners.py	failed	1	C03	PRODUCT	C03:1	1x ImportError: mojolearn: the UMAP binding publishes no native UMAP table; rebuild it
+test_native_forest_auxiliary.py	failed	1	C16	TEST-STALE	C99:3	3x AssertionError: assert 'X must be 2-D' == 'mojolearn: X...ingle sample.'
+test_native_idna.py	failed	1	C17	PRODUCT	C99:1	1x AssertionError: ADDR
+test_native_meta_metadata_snapshot.py	crash	-11	C09	PRODUCT	C09:1	CRASH rc=-11
+test_native_metric_scorer_helpers.py	failed	1	C01	PRODUCT	C01:3 C04:3	3x TypeError: numeric scalar decoding requires one primitive buffer element
+test_native_parallel_cv_wire.py	failed	1	C17	PRODUCT	C99:1	1x RuntimeError: native model worker failed: TypeError: worker has no connected native estimator for the requested schema
+test_native_parallel_drivers_wire.py	failed	1	C16	TEST-STALE	C99:1	1x AssertionError: _fit_forest
+test_native_parallel_kernel_methods_wire.py	failed	1	C10	TEST-STALE	C10:1	1x assert '_krr_predict(model, Python.tuple(binding, args[1]), context, x, False)' in '# SPDX-License-Identifier: Apache-2.0\n# KernelRidge `fi
+test_native_prep_iterimp_door.py	failed	1	C10	TEST-STALE	C10:11	11x AttributeError: native model has no attribute '_check_width'
+test_native_prep_labels_door.py	failed	1	C16	TEST-STALE	C99:3 C10:1	1x FileNotFoundError: [Errno 2] No such file or directory: 'mojolearn/source/bindings/prep_owner_native.mojo'
+test_native_prep_no_callbacks.py	crash	-11	C09	PRODUCT	C09:1	CRASH rc=-11
+test_native_process_pool.py	failed	1	C13	PRODUCT	C13:4	4x ValueError: transport: peer closed the connection
+test_native_process_pool.py::serial	failed	1	C06	ENVIRONMENT	C06:1	1x AssertionError: Traceback (most recent call last):
+test_native_registered_owner_replacement.py	failed	1	C16	TEST-STALE	C99:5	4x AssertionError: Regex pattern did not match.
+test_native_scalar_decode_public.py	failed	1	C01	PRODUCT	C01:74	62x TypeError: numeric scalar decoding requires one primitive buffer element
+test_native_sgd_weight_lifetime.py	failed	1	C06	ENVIRONMENT	C06:2	2x AssertionError: Traceback (most recent call last):
+test_native_stratified_connection.py	failed	1	C10	TEST-STALE	C10:3	3x AttributeError: <module 'mojolearn._expansion_metrics' from 'mojolearn/_expansion_metrics.py'> has no attribute '_binding'
+test_native_transient_buffer_lifetimes.py	failed	1	C06	ENVIRONMENT	C06:8	8x AssertionError: Traceback (most recent call last):
+test_nearest_centroid_native_state.py	failed	1	C16	TEST-STALE	C99:4	4x AssertionError: Regex pattern did not match.
+test_neighbors_kde_native.py	failed	1	C16	TEST-STALE	C99:4 C04:1	2x AssertionError: assert (<class 'Valu... be positive') == (<class 'Exce... be positive')
+test_neighbors_knn_native.py	failed	1	C02	PRODUCT	C02:4	4x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_neighbors_loc_native.py	failed	1	C07	TEST-STALE	C07:49 C99:1	49x AttributeError: module 'mojolearn._portable_math' has no attribute 'isclose'
+test_neighbors_sparse_input.py	failed	1	C02	PRODUCT	C02:1	1x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_neural_backward_native.py	failed	1	C05	TEST-STALE	C05:8	8x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_neural_block_native.py	failed	1	C05	TEST-STALE	C05:6	6x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_neural_coverage.py	failed	1	C10	TEST-STALE	C10:1	1x ImportError: cannot import name '_mamba2_block' from 'mojolearn.tests.test_mamba23_decode_sessions' (mojolearn/tests/test_mamba23_decode_ses
+test_neural_inference.py	failed	1	C10	TEST-STALE	C10:1	1x AttributeError: module 'mojolearn._mlp_impl' has no attribute '_array'. Did you mean: 'Array'?
+test_neural_numpy_free_merge.py	failed	1	C17	PRODUCT	C99:1	1x subprocess.CalledProcessError: Command '['/home/runner/work/_temp/smoke-venv/venv/bin/python', '-c', "\nimport sys\nclass BlockNumpy:\n    d
+test_neural_repeat_calls.py	failed	2	C16	TEST-STALE	C99:1	1x ERROR test_neural_repeat_calls.py
+test_numeric_profile.py	failed	1	C17	PRODUCT	C99:1	1x TypeError: _Optimizer() takes no arguments
+test_numpy_free_core.py	failed	1	C17	PRODUCT	C99:2	1x TypeError: checkpoints require a native binary file or standard path; Python file protocols cannot execute
+test_ocsvm_native_transport_boundary.py	failed	1	C16	TEST-STALE	C98:1	
+test_optimizer_native_array_ownership.py	failed	1	C11	PRODUCT	C11:3 C06:1	1x AssertionError: ('', 'Traceback (most recent call last):
+test_optimizer_native_config_order.py	failed	1	C01	PRODUCT	C01:3	3x AssertionError: {'schema': 'mojolearn.native-runtime-audit.v1', 'passed': True, 'compatibility_qualified': True, 'approved_python_fallbacks'
+test_optimizer_native_container_admission.py	failed	1	C11	PRODUCT	C11:3	1x AssertionError: assert b'`\x02\xb2\x...0\x00\x00\x00' == b'\x00\x00\x0...0\x00\x00\x00'
+test_optimizer_native_moment_assignment.py	failed	1	C11	PRODUCT	C11:7	7x AssertionError: assert (1, (b'\xd0\x...x00\x00\x00')) == (1, (b'\xd0\x...x00\x00\x00'))
+test_optimizer_native_owner_copy.py	failed	1	C11	PRODUCT	C11:6	6x Exception: optimizer: NaN in input.param at flat index 0 REFUSED (row 39: NaN payloads are vendor-shaped; no stage may record one)
+test_optimizer_native_scalar_constructors.py	failed	1	C11	PRODUCT	C11:14	1x AssertionError: assert b'\xc0CR\xa4\...0\x00\x00\x00' == b'\x00\x00\x0...0\x00\x00\x00'
+test_optimizer_public_native.py	failed	1	C11	PRODUCT	C11:8 C99:1	8x Exception: optimizer: NaN in input.param at flat index 0 REFUSED (row 39: NaN payloads are vendor-shaped; no stage may record one)
+test_parallel_causal_lm.py	failed	1	C13	PRODUCT	C13:9	9x ValueError: transport: operation timed out
+test_parallel_neural_admission.py	failed	2	C16	TEST-STALE	C99:1	1x ERROR test_parallel_neural_admission.py
+test_parallel_neural_native.py	failed	2	C16	TEST-STALE	C99:1	1x ERROR test_parallel_neural_native.py
+test_parallel_shard_payloads.py	failed	1	C02	PRODUCT	C02:3	3x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_pca_native_boundary.py	failed	1	C01	PRODUCT	C01:2	2x TypeError: numeric scalar decoding requires one primitive buffer element
+test_pcs_native_boundary.py	failed	1	C12	ENVIRONMENT	C12:2	2x Failed: DID NOT RAISE <class 'TypeError'>
+test_peer1_provider_boundary.py	failed	1	C02	PRODUCT	C02:1	1x ImportError: mojolearn: the k-NN binding publishes no native neighbors table; rebuild it
+test_perf_classical_0855_boundary.py	failed	1	C16	TEST-STALE	C99:1	1x AssertionError: Regex pattern did not match.
+test_pls_native_boundary.py	failed	1	C01	PRODUCT	C01:1	1x TypeError: numeric scalar decoding requires one primitive buffer element
+test_portable_math_fast.py	failed	1	C16	TEST-STALE	C99:2	1x AssertionError: [1e+308, 1e+308]
+test_provider_boundary_audit_controls.py	failed	1	C08	ENVIRONMENT	C08:14	14x ModuleNotFoundError: No module named 'torch'
+test_ptx_fallback.py	failed	1	C15	ENVIRONMENT	C99:1	1x AssertionError: ImportError not raised
+test_regression_metrics.py	failed	1	C12	ENVIRONMENT	C12:1	1x Failed: DID NOT RAISE <class 'TypeError'>
+test_runtime_manifold_partition.py	failed	1	C04	PRODUCT	C04:2	2x TypeError: manifold kit requires an exact native module
+test_samba_attention_wiring.py	failed	1	C16	TEST-STALE	C99:1	1x AttributeError: <class 'mojolearn._samba_impl.SambaStack'> does not have the attribute '_block'
+test_samba_checkpoint_native.py	failed	1	C05	TEST-STALE	C05:4	4x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_samba_construct_native.py	failed	1	C05	TEST-STALE	C05:7	7x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_samba_cpu_inference_native.py	failed	1	C05	TEST-STALE	C05:6	6x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_samba_decode_session.py	failed	1	C11	PRODUCT	C11:1	1x assert b'\x11)\xf0\x...xbc\x1br\x12=' == b'\xec\xc5Z:\...91<[\xf9\x8e='
+test_samba_gradients_native.py	failed	1	C05	TEST-STALE	C05:11	11x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_samba_inference_native.py	failed	1	C05	TEST-STALE	C05:7 C99:1	7x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_samba_state_native.py	failed	1	C05	TEST-STALE	C05:7	7x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_samba_step_native.py	failed	1	C05	TEST-STALE	C05:8	8x AttributeError: <module 'mojolearn.models.causal_lm' from 'mojolearn/models/causal_lm.py'> has no attribute '_route'
+test_scaler_native_descriptor_lifetime.py	failed	1	C17	PRODUCT	C99:2	2x ValueError: x_prep transport ABI: the host binding has no device operation 3
+test_scaler_sklearn_tags_native.py	failed	1	C06	ENVIRONMENT	C06:1	1x AssertionError: Traceback (most recent call last):
+test_small_mlp_surface.py	failed	1	C10	TEST-STALE	C10:10	10x AttributeError: module 'mojolearn._mlp_impl' has no attribute '_canonical'
+test_small_mlp_tensor_errors.py	failed	2	C15	ENVIRONMENT	C99:1	1x ERROR test_small_mlp_tensor_errors.py
+test_standard_archive_native.py	failed	1	C14	TEST-STALE	C14:15	15x TypeError: 'Array' object does not support item assignment
+test_svr_native_transport_boundary.py	failed	1	C12	ENVIRONMENT	C12:2	2x Failed: DID NOT RAISE <class 'TypeError'>
+test_tokenizer_manifest.py	failed	1	C10	TEST-STALE	C10:1	1x assert 'sh tokenizer/tools/gen_unicode_table.sh' in '#!/bin/sh\n. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEA
+test_torch_compile_backend.py	failed	1	C08	ENVIRONMENT	C08:2	2x ModuleNotFoundError: No module named 'torch'
+test_torch_program_module_admission.py	failed	2	C15	ENVIRONMENT	C99:1	1x ERROR test_torch_program_module_admission.py
+test_training_cross_entropy_public_native.py	failed	1	C01	PRODUCT	C01:8	5x TypeError: numeric scalar decoding requires one primitive buffer element
+test_training_device_native_finalizer.py	failed	1	C17	PRODUCT	C99:4	2x AssertionError: native runtime boundary failed: Python frames=[{'file': '/home/runner/work/_temp/smoke-venv/venv/lib/python3.12/site-package
+test_training_embedding_public_native.py	failed	1	C01	PRODUCT	C01:4	4x TypeError: numeric scalar decoding requires one primitive buffer element
+test_training_linear_public_native.py	failed	1	C16	TEST-STALE	C99:1	1x AttributeError: module 'mojolearn.tests.test_training_primitives_surface' has no attribute 'arm_linear'
+test_training_rms_public_native.py	failed	1	C01	PRODUCT	C01:27 C99:1	27x TypeError: numeric scalar decoding requires one primitive buffer element
+test_training_scalar_buffer_native.py	failed	1	C01	PRODUCT	C01:85	63x TypeError: numeric scalar decoding requires one primitive buffer element
+test_transformer_public_boundary.py	failed	1	C16	TEST-STALE	C99:1	1x Failed: DID NOT RAISE <class 'ValueError'>
+test_trees_repeat.py	failed	1	C06	ENVIRONMENT	C06:1	1x AssertionError: Traceback (most recent call last):
+test_umap_native_constructor.py	failed	1	C16	TEST-STALE	C99:1	1x ValueError: UMAP n_neighbors must be in [2, 9223372036854775807]
+test_umap_surface.py	failed	1	C03	PRODUCT	C03:5	5x ImportError: mojolearn: the UMAP binding publishes no native UMAP table; rebuild it
+test_umap_transform.py	failed	1	C03	PRODUCT	C03:6	6x ImportError: mojolearn: the UMAP binding publishes no native UMAP table; rebuild it
+test_verify_all.py	failed	1	C06	ENVIRONMENT	C06:1	1x mojolearn.tests._fresh_process.CaseFailed: shared child died (rc=1):
+test_x_ann_repeat.py	failed	1	C06	ENVIRONMENT	C06:1	1x AssertionError: Traceback (most recent call last):
+test_x_cluster_twice.py	failed	1	C06	ENVIRONMENT	C06:2	2x AssertionError: Traceback (most recent call last):
+test_x_decomp_native_api_cpu.py	failed	1	C03	PRODUCT	C03:1	1x ImportError: mojolearn: the UMAP binding publishes no native UMAP table; rebuild it
+test_x_metrics_repeat.py	failed	1	C16	TEST-STALE	C99:1	1x NameError: name 'X' is not defined
+test_x_neighbors_repeat.py	failed	1	C06	ENVIRONMENT	C06:1	1x AssertionError: Traceback (most recent call last):
+test_x_prep_twice.py	failed	1	C06	ENVIRONMENT	C06:2	2x AssertionError: Traceback (most recent call last):
+test_x_sequence_repeat.py	failed	1	C06	ENVIRONMENT	C06:2	2x AssertionError: Traceback (most recent call last):
+test_x_sequence_sched.py	failed	1	C16	TEST-STALE	C99:1	1x AttributeError: 'array.array' object has no attribute 'shape'
+test_x_trees_sanity.py	crash	-11	C09	PRODUCT	C09:1	CRASH rc=-11
