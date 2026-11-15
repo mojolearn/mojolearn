@@ -32,7 +32,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_cpython_table import cpython_table
 from std.python._cpython import ExternalFunction, GILReleased, PyObjectPtr
-from bindings.admitted_input_unpack import admitted_storage_native
+from bindings.admitted_input_unpack import admitted_storage_native, admitted_zeros
 from training.optimizer_config import optimizer_keyword_refusal
 from training.optimizer_owner_control import OptimizerOwnerControl
 from training.optimizer_native_api import OptimizerNativeDriver
@@ -182,6 +182,16 @@ def type_name(value: PythonObject) raises -> String:
 def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
     """PACK an owned Array through the shared native layout/storage boundary."""
     return admitted_storage_native(dims, dtype, OPT_DOOR.get_or_create_ptr()[].context["input_context"], as_array=True)
+
+
+def new_zeros(dims: List[Int], dtype: String) raises -> PythonObject:
+    """`new_array` whose words are zero: the moments and `buf_initialized`
+    are read before any step writes them (a fresh optimizer's state is its
+    zeros). `new_array` is unfilled since 1bcfa0d69b (the Array branch of
+    admitted_storage_native lost its fill pass), so these owners ask for the
+    fill explicitly; a destination one writer fills in full keeps new_array."""
+    var buf = admitted_zeros(dims, dtype, OPT_DOOR.get_or_create_ptr()[].context["input_context"])
+    return buf.keep
 
 
 def set_field(opt: PythonObject, name: String, value: PythonObject) raises:
@@ -480,9 +490,9 @@ def host_moments(opt: PythonObject) raises:
     var n = Int(py=fields["n_total"])
     var plan = optimizer_host_moment_plan(n, fields["_m"] is not None, fields["_v"] is not None)
     if plan[0]:
-        set_field(opt, "_m", new_array([n], "<f4"))
+        set_field(opt, "_m", new_zeros([n], "<f4"))
     if plan[1]:
-        set_field(opt, "_v", new_array([n], "<f4"))
+        set_field(opt, "_v", new_zeros([n], "<f4"))
 
 
 def keep_slot(mut record: OptimizerOwner, handle: Int, provider: PythonObject,
@@ -565,9 +575,9 @@ def optimizer_prepare_registry(params: PythonObject, where: String) raises -> Op
     var first = PythonObject(None)
     var second = PythonObject(None)
     if plan.eager:
-        first = new_array([plan.count], "<f4")
-        second = new_array([plan.count], "<f4")
-    var initialized = new_array([plan.parameters], "<i4")
+        first = new_zeros([plan.count], "<f4")
+        second = new_zeros([plan.count], "<f4")
+    var initialized = new_zeros([plan.parameters], "<i4")
     _ = pins
     return OptimizerRegistryPrepared(published, offsets, initialized, first, second, plan)
 
