@@ -31,7 +31,7 @@ BITS: a new order for every fold longer than one position (te_global /
 te_enc at more than 1 row of a category or fold; ii_gram at n > IIG_ROWS).
 All four columns run it together.
 
-SWITCHES (IDENTICAL only, ON by default; MOJOLEARN_IDN_ALL_OFF turns all off):
+SWITCHES (IDENTICAL only, ON by default; the rollbacks below were deleted 2026-11-15):
   -D MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF  te_global's old serial unit
   -D MOJOLEARN_IDN_TE_ENC_TREE_OFF     te_enc's old serial unit / host pass
   -D MOJOLEARN_IDN_II_GRAM_TILE_OFF    ii_gram's old serial unit
@@ -77,7 +77,9 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.prims import add
 
-comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: lane classical-te-gmm: te_global / te_enc in the blocked order `BLT` (docstring); the arm is deleted,
 #: the alias stays False for x_prep/target.mojo
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 74754fe939.

@@ -45,12 +45,11 @@ from x_decomp.rr import rr_cs, rr_block, rr_vrow, rr_off_fold, rr_converged
 from x_prep.common import FP, IP, p
 from x_prep.eigh import eigh_unit
 
-comptime IDN_RR_EIGH = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_RR_EIGH_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 43f37f93b7.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime IDN_RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the smallest matrix the round-robin takes under IDN_RR_EIGH (shape only).
 #: Lane fam2-prep-metrics: CANDIDATE ARMS for the threshold, each default OFF
 #: (the default stays 24): -D MOJOLEARN_IDN_RR_MIN_8, _16, _48 or _96 builds

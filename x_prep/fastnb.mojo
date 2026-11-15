@@ -36,11 +36,11 @@ comptime AFCL_P03 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: row count (`cat_hfold_unit` also sums integers and converts once), and the
 #: host column keeps the units. -D MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF restores
 #: the unit path on the device.
-comptime IDN_NB_CAT_ATOMIC = (
 # TOMBSTONE: MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 7cf272e256.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime IDN_NB_CAT_ATOMIC = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: The switch: FAST, Apple, and the define (default OFF); or IDENTICAL (above).
 comptime NB_CAT_ATOMIC = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_NB_CAT_ATOMIC"]()

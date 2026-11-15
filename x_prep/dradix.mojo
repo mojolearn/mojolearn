@@ -4,7 +4,7 @@
 FAST on the Apple GPU, and (K1, lane ml-cluster-nbrs 2026-10-04) IDENTICAL on
 every vendor: x_prep/device.mojo gates every call on RADIX_SORT. The sort has
 one answer, so IDENTICAL keeps its bits (the host heapsort is unchanged).
-`-D MOJOLEARN_IDN_XPREP_RADIX_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+the deleted `MOJOLEARN_IDN_XPREP_RADIX_OFF` (2026-11-15) restored the
 bitonic sort under IDENTICAL. RBS = 64 assumes no wave width.
 
 A sort has ONE answer under a total order on the words (x_prep/dsort.mojo),
@@ -40,7 +40,9 @@ comptime RUP = MutPointer[UInt32, MutAnyOrigin]
 #: K1 (IDENTICAL, every vendor): the radix sort of sort_cols, same words as the bitonic sort
 # TOMBSTONE: MOJOLEARN_IDN_XPREP_RADIX_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 60adf729d6.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch
-comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
 comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU) or IDN_XPREP_RADIX
 # C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS = 4|6|8, default 8):

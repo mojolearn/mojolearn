@@ -32,7 +32,9 @@ comptime LABEL_DIRECT = _FAST_APPLE
 #: words. -D MOJOLEARN_IDN_LABEL_OFF restores the device sort + per-cell lookup.
 # TOMBSTONE: MOJOLEARN_IDN_LABEL_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 886a739db7.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LABEL_OFF.patch
-comptime IDN_LABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime IDN_LABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime LABEL_PRESENT = LABEL_DIRECT or IDN_LABEL
 comptime LABEL_SCATTER = LABEL_DIRECT or IDN_LABEL
 
