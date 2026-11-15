@@ -233,7 +233,7 @@ def decode_labels(classes, codes):
 
 
 class _PrepBase(SklearnTagsMixin):
-    """sklearn's parameter protocol, tags and fit_transform for the lane's classes."""
+    """sklearn's parameter protocol and tags for the lane's classes."""
     _parameters = ()
 
     def get_params(self, deep=True):
@@ -263,18 +263,9 @@ class _PrepBase(SklearnTagsMixin):
         """
         return _DECLARED_PARAMS_SET(self, params, _DECLARED_PARAMS_CONTEXT)
 
-    # Only a class with a `transform` has `fit_transform` (scikit-learn's
-    # TransformerMixin): a classifier or detector on this base has neither.
-    @available_if(lambda self: hasattr(self, "transform"))
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return self.fit(X, y, **fit_params).transform(X)
+    # The base `fit_transform` composition is deleted (lane py-tail-2, 2026-11-15): every package
+    # class on this base with a `transform` defines its own; the private intermediate
+    # `_SelectorMixin` is never instantiated.
 
 
 
