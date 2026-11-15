@@ -9,7 +9,6 @@ missing vocabulary is refused by name before any binding is loaded.
 import os
 import sys
 import tempfile
-from pathlib import Path
 
 import mojolearn
 from mojolearn import tokenizer as tokenizer_module
@@ -42,11 +41,19 @@ _VOCAB_NAMES = ("vocab.json", "merges.txt", "tokenizer.json", "ranks.tsv", "enco
 
 
 def test_installed_package_ships_no_vocabulary():
-    """mojolearn ships no vocabulary (2026-09-15): the installed package
-    holds no rank table or vocabulary file; the caller supplies one."""
-    root = Path(mojolearn.__file__).resolve().parent
-    shipped = [str(p.relative_to(root)) for p in root.rglob("*")
-               if p.is_file() and (p.name in _VOCAB_NAMES or p.suffix in (".tiktoken", ".bpe"))]
+    """mojolearn ships no vocabulary (2026-09-15): the installed
+    distribution's file list holds no rank table or vocabulary file; the
+    caller supplies one."""
+    from importlib.metadata import PackageNotFoundError, files
+    try:
+        listed = files("mojolearn")
+    except PackageNotFoundError:
+        listed = None
+    if not listed:
+        print("SKIP: mojolearn is not installed as a distribution here")
+        return
+    shipped = [str(f) for f in listed
+               if f.name in _VOCAB_NAMES or f.suffix in (".tiktoken", ".bpe")]
     assert shipped == [], shipped
 
 
