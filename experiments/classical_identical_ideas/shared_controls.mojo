@@ -132,7 +132,7 @@ comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at eb67cbe21f.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch
-comptime C05_OLS_PHASE = False
+# (Sweep 2026-11-15: comptime C05_OLS_PHASE removed; nothing read it.)
 
 # C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics
 # (MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 for GaussianNB,
