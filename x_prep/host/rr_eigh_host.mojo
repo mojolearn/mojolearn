@@ -64,7 +64,9 @@ comptime IDN_RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_16.patch
 # TOMBSTONE: MOJOLEARN_IDN_RR_MIN_48 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9086d9b3d1.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_48.patch
-comptime IDN_RR_MIN_N = 96 if is_defined["MOJOLEARN_IDN_RR_MIN_96"]() else 24
+# TOMBSTONE: MOJOLEARN_IDN_RR_MIN_96 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 688ea8608f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_96.patch
+comptime IDN_RR_MIN_N = 24
 #: x_prep/rr_eigh.mojo RRE_SWEEPS: the sweep budget (the device enqueues it whole)
 comptime IDN_RR_SWEEPS = 32
 #: x_prep/device.mojo EIGH_CYCLIC_Q
