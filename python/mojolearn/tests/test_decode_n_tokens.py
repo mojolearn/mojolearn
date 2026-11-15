@@ -15,9 +15,65 @@ import pytest
 os.environ.setdefault("MOJOLEARN_NUMERIC_MODE", "identical")
 
 import mojolearn as ml  # noqa: E402
-from mojolearn.tests.test_mamba23_decode_sessions import (  # noqa: E402
-    _STATE, _block, _state_bytes, _tokens, _weights,
-)
+
+
+# Test fixtures (weights, Mamba-2/3 blocks, tokens, state bytes). They lived in
+# test_mamba23_decode_sessions.py until 3fe4f407d6 moved its session-step test
+# to checks/native_tests/mamba_decode_sessions.mojo and deleted them there;
+# test_neural_repeat_calls.py and test_neural_coverage.py import them from here.
+def _weights(shapes, ones=()):
+    out = {}
+    for i, (name, shape) in enumerate(sorted(shapes.items())):
+        n = int(np.prod(shape))
+        if name in ones:
+            a = np.ones(n, dtype=np.float32)
+        else:
+            a = ((np.arange(n, dtype=np.float32) + 7 * i) % 11 - 5) / 32.0
+        out[name] = np.ascontiguousarray(a.astype(np.float32).reshape(shape))
+    return out
+
+
+def _mamba2_block():
+    dm, di, nh = 32, 64, 1
+    cd, dip = di + 256, 2 * di + 256 + nh
+    return ml.Mamba2Block(_weights({
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4),
+        "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
+        "out_proj.weight": (dm, di)}, ones=("block_norm.weight", "norm.weight"))), dm
+
+
+def _mamba3_block():
+    dm, di, nh = 32, 64, 1
+    dip = 2 * di + 256 + 3 * nh + 32
+    return ml.Mamba3Block(_weights({
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "dt_bias": (nh,),
+        "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128), "C_bias": (nh, 128),
+        "D": (nh,), "out_proj.weight": (dm, di)}, ones=("block_norm.weight",))), dm
+
+
+_STATE = {
+    "mamba2": ("conv_window", "h", "buffer_xbc", "buffer_dtraw"),
+    "mamba3": ("theta", "h", "buffer_qrot", "buffer_krot", "buffer_v",
+               "buffer_dt", "buffer_sig", "buffer_adt", "pending_k", "pending_v"),
+}
+
+
+def _block(which):
+    try:
+        return (_mamba2_block if which == "mamba2" else _mamba3_block)()
+    except ImportError as exc:
+        pytest.skip(f"no mamba binding on this install: {exc}")
+
+
+def _tokens(rows, length, dm):
+    a = ((np.arange(rows * length * dm, dtype=np.float32)) % 13 - 6) / 64.0
+    return np.ascontiguousarray(a.reshape(rows, length, dm))
+
+
+def _state_bytes(which, state):
+    parts = [np.ascontiguousarray(np.asarray(getattr(state, n))).reshape(-1).tobytes()
+             for n in _STATE[which]]
+    return parts, (int(state.buffered_tokens), getattr(state, "pending", None))
 
 
 def _mamba1_block():
