@@ -81,27 +81,6 @@
       "grid": "exclude",
       "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
     },
-    "c14_group_rhs": {
-      "define": "MOJOLEARN_CLASSICAL_C14_GROUP_RHS",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C14_GROUP_RHS"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_decomp/device.mojo:2143",
-        "x_linear/ridge.mojo:294",
-        "x_linear/ridge.mojo:195",
-        "x_decomp/cells.mojo:1534"
-      ],
-      "binding": "_mojolearn_x_decomp,_mojolearn_x_linear",
-      "bits_change": true,
-      "status": "kept",
-      "note": "Reach fixed (catalog narrowed): grouping only acts on lu-solve (64 RHS; trs_group_kernel, 16 active threads replacing cell-parallel trs_diag_kernel: expected loser). ridge-clf (binary, T=1) and the ridge-cv REFIT reach t_ridge_solve_best with count=1 (no grouping). The RidgeCV fold solve kf_solve_kernel (x_linear/device.mojo:3444) has one RHS per (fold, alpha) factor, so RHS grouping cannot apply there; the ridge-cv speedup is C13 (review section 3). ridge.mojo:195 and cells.mojo:1534 are host-only. | lane classical-fixes 2026-10-07: the expanded:ridge-clf and expanded:ridge-cv algorithm entries were removed from this file (they measured a no-op: T=1 / count=1, no grouping); lu-solve is the only declared algorithm."
-    },
     "c15_factor_solve": {
       "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
       "kind": "switch",
@@ -428,9 +407,7 @@
     "expanded:lu-solve": {
       "binding": "_mojolearn_x_decomp",
       "route": "solve -> x_decomp_lu_gesv -> launch_lu_solve -> launch_trisolve -> launch_trs_tri (x_decomp/device.mojo:2143)",
-      "controls": [
-        "c14_group_rhs"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:ard": {
@@ -701,6 +678,11 @@
       "define": "MOJOLEARN_C58_FORECAST4",
       "control": "c58_forecast4",
       "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD (synthetic, taxi-hourly): auto-theta 2.93/2.58, 2.81/2.13; damped-ets 2.59/2.39, 2.53/2.43; dynamic-optimized-theta 2.96/2.49, 2.66/1.81; dynamic-theta 3.15/3.00, 3.02/2.91; optimized-theta 2.72/2.60, 3.09/2.99; theta 2.93/2.86, 3.13/3.08 (2.72x combined SLOWER); quality SAME. Four series per thread cut the parallelism 4x. seq_kernel is one series per thread again (sequence/exec_device.mojo). Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C14_GROUP_RHS",
+      "control": "c14_group_rhs",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 9b13c93ee0; patch experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note called the lu-solve form an expected loser. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
     }
   ],
   "owed_removal_ab": [

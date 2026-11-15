@@ -2549,3 +2549,4 @@ Plan `docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md`; sections in docs/TOMBST
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS` | logreg-cv (weighted) | lane/expdel2-06-base (recoverable at 337c096a5b) | none | - | DELETED 2026-11-15 (opt-in arm; unmeasured opt-in arm) | `C13_LOGCV_WEIGHTS` folded to its default constant; patch experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch |
+| `MOJOLEARN_CLASSICAL_C14_GROUP_RHS` | lu-solve, ridge-clf | lane/expdel2-06-base (recoverable at 9b13c93ee0) | none | - | DELETED 2026-11-15 (opt-in arm; unmeasured opt-in arm) | `C14_GROUP_RHS` folded to its default constant; patch experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch |
