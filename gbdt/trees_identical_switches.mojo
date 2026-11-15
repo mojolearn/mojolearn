@@ -254,7 +254,9 @@ comptime ORD_HIST_FOLD_SKIP = False
 # the per-part document budget below which a fold partition takes the small
 # kernel (default 256 = one document per thread of the 8-bit block); an int
 # sweep arm for the grid, not a shape rule
-comptime ORD_HIST_FOLD_SKIP_DOCS = get_defined_int["MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS", 256]()
+# TOMBSTONE: MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 5a5f297498.
+# Restore: git apply experiments/removed/MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS.patch
+comptime ORD_HIST_FOLD_SKIP_DOCS = 256
 
 # E IDN_ORD_INDEX_SHARED (default OFF, a storage change; A/B owed).
 # T22 keeps, per searched learn permutation, a fold-order copy of the
