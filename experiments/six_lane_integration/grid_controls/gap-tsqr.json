@@ -46,25 +46,6 @@
    "bits_change": true,
    "status": "new",
    "note": "The TSQR combine tree: each reflector's norm is a 256-lane fixed fold (lane t: alpha^2 for t == 0, then rows i == t mod 256 ascending; halving tree ts_tree_fold) instead of one serial chain recomputed by every thread of the pair's threadgroup; the scaled reflector column is staged in threadgroup memory for the column threads (same words). The Q C tree apply (ts_capply_kernel) tiles C's columns over threadgroups (256 a tile) with the reflector column staged. Bits change in the tree norms only; the column chains are unchanged. Host replay (ts_combine_host) folds the same lanes. NV and AMD must match per arm. NOT COMPILED, NOT MEASURED."
-  },
-  "xd_svd_group": {
-   "define": "MOJOLEARN_IDN_XD_SVD_GROUP_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_XD_SVD_GROUP_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_decomp/device.mojo:217",
-    "x_decomp/device.mojo:3622"
-   ],
-   "binding": "_mojolearn_x_decomp (device) + _mojolearn_linalg (imports DevExec)",
-   "bits_change": false,
-   "status": "new",
-   "note": "The small SVD of R (DevExec.svd, the round-robin one-sided Jacobi) enqueues 4 sweeps per convergence readback, each sweep on its own flag slice and lowest-flag word, instead of one wait and one readback per sweep. Bit-neutral: a sweep without a rotation is the identity, so the sweeps enqueued after the converging one change nothing; the convergence test and the X_DECOMP_SVD_SWEEPS bound are the same. Requires IDN_XD_SWEEP (IDENTICAL). NOT COMPILED, NOT MEASURED."
   }
  },
  "algorithms": {
@@ -87,16 +68,9 @@
    "route": "_linalg_impl.py _svd_tsqr -> x_decomp_tsqr_r [tsqr_wy_pair, tsqr_tree_par] -> _svd_tall(R) -> DevExec.svd _svd_on [xd_svd_group] -> x_decomp_tsqr_q [tsqr_wy_pair, tsqr_tree_par]",
    "controls": [
     "tsqr_wy_pair",
-    "tsqr_tree_par",
-    "xd_svd_group"
+    "tsqr_tree_par"
    ],
-   "interaction_groups": [
-    [
-     "tsqr_wy_pair",
-     "tsqr_tree_par",
-     "xd_svd_group"
-    ]
-   ]
+   "interaction_groups": []
   },
   "linalg:lstsq": {
    "binding": "_mojolearn_x_decomp",
@@ -132,6 +106,11 @@
    "define": "MOJOLEARN_IDN_TSQR_RSTACK_TREE",
    "control": "tsqr_rstack_tree",
    "reason": "DELETED 2026-10-11 (lane w2-decide-linalg, deletion 7d76f567e; recoverable at 7d76f567e^; patch experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch): LOSER: 8 cells mean 1.087, every cell > 1 (lstsq 1.12/1.10, rsvd istella 1.196, svd taxi 1.128), bits changed; nv2 v0093, amd a1675. A/B on main c8ef6c66d, same box, one run per arm, NV==AMD digests; see docs/TOMBSTONES.md"
+  },
+  {
+   "define": "MOJOLEARN_IDN_XD_SVD_GROUP_OFF",
+   "control": "xd_svd_group",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-16-decomposition, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the _OFF rollback of the bit-neutral svd sweep grouping default is gone; IDN_XD_SVD_GROUP = IDN_XD_SWEEP (no bit change); define refused in core/experiment_guards_decomposition.mojo; code recoverable at 02aeadc9f6."
   }
  ]
 }

@@ -224,19 +224,20 @@ def cholesky_factor_host(
 #: The factorization itself is `potrf_lower` unchanged: the same words.
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
 #: cholesky synthetic 435 -> 290 ms, residual the same 1.659e-07; tag
-#: gl2-chol-devio-synthetic). -D MOJOLEARN_CHOL_FAST_DEVIO_OFF restores
-#: main's host-List route (the A/B arm).
+#: gl2-chol-devio-synthetic).
 #: lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
 #: (the same predicate on the device, `potrf_lower` unchanged, so the same
 #: words; `defer_ok` is honoured under CHOL_FAST_NOSYNC only, which stays
-#: FAST + Apple). -D MOJOLEARN_IDN_GATES_OFF (or the _OFF above) restores
-#: the host-List route in IDENTICAL.
+#: FAST + Apple).
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path, EXP:2479 DELETED old path; the IDENTICAL gates are the default) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d224fbc6f5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_DEVIO_OFF (unmeasured old path beside the FAST Apple default, EXP:1395 READY-AB) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 70d6bad292.
+# Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 comptime CHOL_FAST_DEVIO = (
-    (
-        (_CTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
-        or (_CTX_MODE == _CTX_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
-    )
-    and not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"]()
+    (_CTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+    or _CTX_MODE == _CTX_IDENTICAL
 )
 
 

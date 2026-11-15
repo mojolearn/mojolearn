@@ -276,19 +276,19 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         comptime if IDN_SVD_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF) (x_decomp/resident.mojo)
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
             m.def_function[dev_svd_py]("x_decomp_dev_svd")
         comptime if IDN_LU_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_LU_RESIDENT_OFF) (x_decomp/resident.mojo)
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
             m.def_function[dev_lu_py]("x_decomp_dev_lu")
             m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         comptime if IDN_CODE_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF) (x_decomp/resident.mojo)
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
             m.def_function[dev_code_rows_py]("x_decomp_dev_code_rows")
         comptime if IDN_EIGH_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF) (x_decomp/resident.mojo)
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
             m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
             # lane n9-decomp-eigh-families: device outputs (DevExec.eigh_into), no w / V round trip
             m.def_function[dev_eigh_to_py]("x_decomp_dev_eigh_to")

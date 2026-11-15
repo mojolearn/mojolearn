@@ -1,0 +1,25 @@
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 7209ec7eb8..7eae0e3023 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -1820,7 +1820,8 @@ def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
+ #: lane/apple-fast-gap-linalg2-pca (2026-10-03): DECOMP_FAST_GEMM_MMA, the FAST +
+ #: Apple default (M3 A/B, one run per arm: randomized-svd istella 711 -> 533 ms,
+ #: taxi -1.3%, nmf istella 8,155 -> 6,333 ms, reconstruction errors the same;
+-#: tags gl2p-rsvd-gemmmma-istella, -taxi, gl2p-nmf-gemmmma-istella).
++#: tags gl2p-rsvd-gemmmma-istella, -taxi, gl2p-nmf-gemmmma-istella). -D MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF
++#: restores the per-cell kit GEMM (the A/B arm).
+ #: The kit's GEMM (`launch_gemm`: one thread per output cell and FOLD_BLOCK
+ #: slice, scalar loads, no tiling) on the Apple matrix unit instead
+ #: (`gemm/afn_apple_fast.mojo::afn_gemm_mma_kernel`, 64 x 64 tiles, any of
+@@ -1829,9 +1830,7 @@ def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
+ #: W^T X: a few output tiles over a million rows) splits k into row ranges
+ #: summed with f32 atomics into a zeroed C. FAST + Apple only; the sum order
+ #: is the matrix unit's (FAST's fold order is free).
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF (old path, EXP:435 DROPPED-slower; the FAST Apple MMA GEMM is the default) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at f899386021.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime DECOMP_FAST_GEMM_MMA = AFN_GEMM_APPLE
++comptime DECOMP_FAST_GEMM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF"]()
+ comptime DFG_BLOCK_TARGET = 640
+ comptime DFG_MIN_SPLIT_STEPS = 512
+ 

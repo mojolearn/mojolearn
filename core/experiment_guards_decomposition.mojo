@@ -147,6 +147,49 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C57_CANDIDATE_STATE"](), "removed 2026-11-15 (lane/expdel2-07-base): C57_CANDIDATE_STATE (Decomposition (MinCovDet candidate mean retained for its covariance, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 5bb9e1659f; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_REUSE"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_TSQR_REUSE (Decomposition (TSQR immutable-factor reuse across RHS calls, I22)) was opt-in arm; component screening only (I22 source5b), never a full-operation A/B; the opt-in arm is gone and the default path is unchanged; code recoverable at c336036020; see docs/TOMBSTONES.md"
+    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L10.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L10"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): AFCL_L10 (never-run Apple FAST programme card) is gone; the default is kept; code at 6837570bd9; restore: experiments/removed/MOJOLEARN_AFCL_L10.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch
+    comptime assert not is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): XD_FAST_SVD_ONE_BLOCK (unmeasured opt-in arm) is gone; the default is kept; code at 0564fdef0e; restore: experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): DECOMP_FAST_GEMM_MMA_OFF (old path of the FAST Apple default) is gone; the default is kept; code at f899386021; restore: experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_SWEEP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XD_SWEEP_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_XD_SWEEP_OFF (unmeasured old path) is gone; the default is kept; code at 0ddee7ae4b; restore: experiments/removed/MOJOLEARN_IDN_XD_SWEEP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_SVD_GROUP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_XD_SVD_GROUP_OFF (old path of the bit-neutral default) is gone; the default is kept; code at 02aeadc9f6; restore: experiments/removed/MOJOLEARN_IDN_XD_SVD_GROUP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_QR_R_DIRECT_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_QR_R_DIRECT_OFF (unmeasured old path) is gone; the default is kept; code at 0c86559205; restore: experiments/removed/MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_GESV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LU_GESV_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_LU_GESV_OFF (unmeasured old path) is gone; the default is kept; code at c9e3c20372; restore: experiments/removed/MOJOLEARN_IDN_LU_GESV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LLE_DEV_F0_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LLE_DEV_F0_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_LLE_DEV_F0_OFF (unmeasured old path) is gone; the default is kept; code at 79f4ad1e97; restore: experiments/removed/MOJOLEARN_IDN_LLE_DEV_F0_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAND_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RAND_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_RAND_RESIDENT_OFF (unmeasured old path) is gone; the default is kept; code at c47a9137eb; restore: experiments/removed/MOJOLEARN_IDN_RAND_RESIDENT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RES_MOVES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RES_MOVES_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_RES_MOVES_OFF (unmeasured old path) is gone; the default is kept; code at d82ec62247; restore: experiments/removed/MOJOLEARN_IDN_RES_MOVES_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NMF_L2_CELL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NMF_L2_CELL_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_NMF_L2_CELL_OFF (unmeasured old path) is gone; the default is kept; code at 87157c4174; restore: experiments/removed/MOJOLEARN_IDN_NMF_L2_CELL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ICA_LIM_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ICA_LIM_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_ICA_LIM_DEV_OFF (unmeasured old path) is gone; the default is kept; code at b6300f1d85; restore: experiments/removed/MOJOLEARN_IDN_ICA_LIM_DEV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_POLAR_MAX_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_POLAR_MAX_DEV_OFF (unmeasured old path) is gone; the default is kept; code at 6278f49a67; restore: experiments/removed/MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LLE_PAD_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LLE_PAD_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_LLE_PAD_DEV_OFF (unmeasured old path) is gone; the default is kept; code at 4265e949c0; restore: experiments/removed/MOJOLEARN_IDN_LLE_PAD_DEV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_TN_CENTERED"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_GEMM_TN_CENTERED (unmeasured opt-in arm) is gone; the default is kept; code at 4b13787b83; restore: experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_PCA_LEAN_SCRATCH_OFF (old path of the confirmed default) is gone; the default is kept; code at e1c7b2b99a; restore: experiments/removed/MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): EIGH_FAST_TRIDIAG_PANELS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 15bbecfc2b; restore: experiments/removed/MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_TRIDIAG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_EIGH_TRIDIAG_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_EIGH_TRIDIAG_OFF (old path of the KEPT IDENTICAL default) is gone; the default is kept; code at 8e83b98cee; restore: experiments/removed/MOJOLEARN_IDN_EIGH_TRIDIAG_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_EIGH_BLOCK_OFF (unmeasured old path) is gone; the default is kept; code at d5f1bc4291; restore: experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_EIGH_BLOCK_ON (unmeasured opt-in arm) is gone; the default is kept; code at 2d8c673dc0; restore: experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PCA_RR_EIGH_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): PCA_RR_EIGH_OFF (unmeasured old path) is gone; the default is kept; code at 5972d75b59; restore: experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch"
     return True
 
 

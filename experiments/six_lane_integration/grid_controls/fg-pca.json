@@ -3,61 +3,13 @@
  "lane": "fg-pca",
  "branch": "lane/fg-pca",
  "head": "385b276e8",
- "controls": {
-  "pca_lean_scratch": {
-   "define": "MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "decomposition/impl/linalg/detail/pca.mojo:445",
-    "decomposition/estimator.mojo:137"
-   ],
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): lean scratch stays the default",
-   "note": "P2: PCA fit skips the dead +mu restore pass (2 n*d words) and sizes the two n*d alias buffers to the IDENTICAL route's scratch (split-K partials / v1 workspace / 1). Waste removal; same words. CONFIRMED 2026-10-10 (measured together with tsvd_one_upload_off): pca istella NV 1.11x / AMD 1.04x, pca taxi NV 1.00x / AMD 1.04x, tsvd istella NV 1.60x / AMD 1.48x, tsvd taxi NV 0.96x / AMD 1.24x slower with both _OFF; hashes unchanged."
-  },
-  "gemm_tn_centered": {
-   "define": "MOJOLEARN_IDN_GEMM_TN_CENTERED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GEMM_TN_CENTERED"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "decomposition/impl/linalg/detail/pca.mojo:423",
-    "decomposition/impl/linalg/detail/pca.mojo:360",
-    "gemm/tn_centered.mojo:101"
-   ],
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "bits_change": false,
-   "status": "hold:postmerge-20261010 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1021 -> v1031, amd MI325X a1161 -> a1171; ratio = arm / fg2.default-linear)): mixed, stays default off, no change",
-   "note": "P3: past the split-K Gram width, the covariance Gram centers at its tile load on the v1 SPLIT plan's arithmetic (same leaf partition, per-cell chain, partial and fold launch), X read-only; falls back to shift + gemm_tn when the shipped dispatch would not run a split plan. Same staged words as shift_columns_kernel, so no bit should move; the ID check settles it. HOLD 2026-10-10 (mixed): tsvd taxi NV 0.73x / AMD 0.99x, tsvd istella 0.99x / 0.99x, pca taxi NV 1.03x / AMD 1.00x, pca istella NV 0.97x / AMD 1.13x; hashes unchanged (tsvd 8e8dc2a1 / 3747911d, pca 187a68d3 / 3cc2b456). Neither promoted nor deleted."
-  }
- },
+ "controls": {},
  "algorithms": {
   "classical:pca": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host [pca_lean_scratch] -> compute_covariance (column_mean_launch; split-K centered Gram | [gemm_tn_centered] | shift + gemm_tn_identical_v1) -> eig_and_truncate (_eig_rr_device [pca_rr_one_block]; host tail |)",
-   "controls": [
-    "pca_lean_scratch",
-    "gemm_tn_centered"
-   ],
-   "interaction_groups": [
-    [
-     "pca_lean_scratch",
-     "gemm_tn_centered"
-    ]
-   ],
+   "controls": [],
+   "interaction_groups": [],
    "note": "gemm_tn_centered reads x_alias2, which pca_lean_scratch sizes; it only acts past the split-K width (d > 128). (pca_rr_one_block and pca_device_truncate, independent of the Gram switches, were removed 2026-10-09 / 2026-10-10.)"
   },
   "more:tsvd": {
@@ -100,6 +52,16 @@
    "define": "MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF",
    "control": "tsvd_one_upload",
    "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the CONFIRMED default (g50ebe26a5: _OFF 1.610x combined slower). Code recoverable at 34a0226192."
+  },
+  {
+   "define": "MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF",
+   "control": "pca_lean_scratch",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-16-decomposition, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the _OFF rollback of the CONFIRMED IDENTICAL default (lean scratch, confirmed:postmerge-20261010) is gone; PCA_LEAN_SCRATCH is the IDENTICAL mode term (no bit change); define refused in core/experiment_guards_decomposition.mojo; code recoverable at e1c7b2b99a."
+  },
+  {
+   "define": "MOJOLEARN_IDN_GEMM_TN_CENTERED",
+   "control": "gemm_tn_centered",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-16-decomposition, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the opt-in P3 arm (centered-at-load v1 Gram), held at postmerge-20261010 and never measured, is gone; the wide IDENTICAL covariance keeps shift_columns + gemm_tn (no bit change); define refused in core/experiment_guards_decomposition.mojo; code recoverable at 4b13787b83."
   }
  ],
  "notes": [

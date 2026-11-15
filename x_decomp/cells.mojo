@@ -20,7 +20,6 @@ cell is written so it cannot:
     lu_result_word at the factor/solve boundary;
   * no float64 anywhere.
 """
-from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -1517,32 +1516,16 @@ def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, h
     b.unsafe_store(i * nrhs + c, acc)
 
 
-def trs_block_group(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, hi: Int, c0: Int, c1: Int):
-    """C14: one factor entry feeds bounded RHS columns; each RHS retains B's fold."""
-    var forward = tri == 0 or tri == 2
-    for step in range(hi - lo):
-        var j = lo + step if forward else hi - 1 - step
-        if trs_divides(tri):
-            var diag = lu.unsafe_load(j * n + j)
-            for c in range(c0, c1):
-                b.unsafe_store(j * nrhs + c, div0(ftz(b.unsafe_load(j * nrhs + c)), diag))
-        var first = j + 1 if forward else lo
-        var last = hi if forward else j
-        for i in range(first, last):
-            var coeff = -ftz(trs_coef(lu, n, tri, i, j))
-            for c in range(c0, c1):
-                b.unsafe_store(i * nrhs + c, ftz(identical_mul_add(
-                    coeff, ftz(b.unsafe_load(j * nrhs + c)), ftz(b.unsafe_load(i * nrhs + c)))))
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 
 
 def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
     """One triangle on the columns [c0, c1): the reference walk (one row at
     a time, each applied to every row it feeds, columns innermost). Every
     cell's chain is its own column's, so column slices run apart."""
-    comptime if C14_GROUP_RHS:
-        for first in range(c0, c1, 4):
-            trs_block_group(lu, b, n, nrhs, tri, 0, n, first, min(c1, first + 4))
-        return
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
     if tri == 0 or tri == 2:
         for j in range(n):
             if trs_divides(tri):

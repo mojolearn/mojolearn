@@ -161,8 +161,7 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
-from cholesky.chol_ops import CHOL_OPS_FIT, chol_op_cho_solve, chol_op_factor
-from cholesky.multi_gpu import chol_device_count
+from cholesky.chol_ops import chol_op_cho_solve, chol_op_factor
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from kernel_methods.checks.km_sabotage import (
@@ -315,21 +314,8 @@ def kernel_ridge_solve(
     # MOJOLEARN_STAGE_TIMES=1: factor and solve walls (drained), timing only.
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t0 = Int(perf_counter_ns())
-    if kernel_ridge_ops_route(trace):
-        # The executor's Cholesky ops (lane n8-gp-krr-smo): the factor and
-        # the solve enqueued read-free, the solve skipped on the device when
-        # the factor fails (so `y` keeps the targets), `info` read once here.
-        var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
-        kernel_ridge_factor_solve_enqueue(ctx, k, y, dinfo, n, n_targets)
-        var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-        ctx.synchronize()
-        var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
-        if st_on:
-            print("KRR_SOLVE_STAGES n=" + String(n) + " factor_solve_ms=" + String((Int(perf_counter_ns()) - t0) // 1000000))
-        _ = hinfo^
-        _ = dinfo^
-        return info
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
     # The identity-trace route (km_check: `potrf_lower`'s per-panel records,
     # `chol.panelNNN.*`, and `cho_solve`'s) and the multi-GPU owner set
     # (the parallel kernel-method driver's plan, cholesky/multi_gpu.mojo:
@@ -363,15 +349,12 @@ def kernel_ridge_solve(
 
 
 def kernel_ridge_ops_route(trace: IdentityTrace) raises -> Bool:
-    """True when the factor and the solve run as the executor's Cholesky ops
-    (`-D MOJOLEARN_IDN_CHOL_OPS_FIT`, one device, no identity trace); False
-    by default, on the trace route and under a multi-GPU Cholesky plan,
-    which keep `potrf_lower` / `cho_solve` (cholesky/chol_ops.mojo
-    CHOL_OPS_FIT: the ops route measured AMD kernel-ridge 1.21-1.25x slower
-    than 0.8.66, NVIDIA the same; the define is its A/B arm)."""
-    comptime if not CHOL_OPS_FIT:
-        return False
-    return not trace.enabled and chol_device_count() == 1
+    """False: the factor and the solve run as `potrf_lower` / `cho_solve`
+    (the measured 0.8.66 route). Kept for kernel_methods/estimator.mojo's
+    import until that file folds it."""
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+    return False
 
 
 def kernel_ridge_factor_solve_enqueue(

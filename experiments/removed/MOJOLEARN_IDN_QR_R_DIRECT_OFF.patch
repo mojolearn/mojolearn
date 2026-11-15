@@ -1,0 +1,16 @@
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 31165bc46f..cdd6187eb9 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -258,9 +258,8 @@ comptime XD_EIGH_ONE_BLOCK_N = 32
+ # (220 M appends at the board's 1 M x 220 FactorAnalysis), copying that List
+ # into a staging buffer, and copying R through a second List. Copies only:
+ # the same launches on the same values, the same words.
+-# TOMBSTONE: MOJOLEARN_IDN_QR_R_DIRECT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0c86559205.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++# -D MOJOLEARN_IDN_QR_R_DIRECT_OFF restores the List route.
++comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_QR_R_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ 
+ 
+ @always_inline
