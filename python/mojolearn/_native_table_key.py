@@ -44,8 +44,7 @@ def connected_key(name, required=False):
     try:
         with _backend.host_helper_scope():
             module = _backend.binding(name, "identical")
-        if type(module) is _backend._HostBinding:
-            module = _backend.load_host_module(module._HostBinding__basename)  # import-time: resolve the CPU-only proxy
+        module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
     except (ImportError, AttributeError):
         if required:
             raise

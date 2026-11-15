@@ -262,6 +262,12 @@ struct KDEResidentLookup(Movable):
 
 def _kde_handle(model: PythonObject, fields: PythonObject, connection: KDEConnection,
                 context: PythonObject) raises -> KDEResidentLookup:
+    # A changed string bandwidth ('scott') revalidates on every route; the
+    # CPU (non-resident) route returned before this check (smoke 2026-11-15,
+    # test_resident_key_change_revalidates_like_former_path).
+    var bandwidth = family_field(fields, "bandwidth")
+    if family_is_str(bandwidth):
+        _kde_validate(fields, context)
     if not kde_resident_capable(connection.capabilities):
         return KDEResidentLookup(PythonObject(None), False)
     var b = native_loaded_module("builtins")
@@ -270,9 +276,6 @@ def _kde_handle(model: PythonObject, fields: PythonObject, connection: KDEConnec
     var w_address = 0 if w is None else Int(py=classical_address(w))
     var kernel = family_field(fields, "kernel")
     var metric = family_field(fields, "metric")
-    var bandwidth = family_field(fields, "bandwidth")
-    if family_is_str(bandwidth):
-        _kde_validate(fields, context)
     var key = kde_fit_key(Int(py=classical_address(x)), Int(py=x.shape[0]), Int(py=x.shape[1]), w_address,
                         _kde_text(kernel, context), _kde_text(metric, context), Float64(py=family_call(b.float, bandwidth)))
     var cached = py_get(fields, "_resident")

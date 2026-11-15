@@ -1549,7 +1549,12 @@ def _connect_session_mode(mode):
     # Import-time registration of common native provider/resource owner types.
     from .tokenizer import _binding
     _binding()
-    module = _backend.binding("_mojolearn_x_sequence", mode)
+    # The exact compiled module, resolved once here: a session stores it as
+    # `_b`, and native admission (`neural_descriptor_entry`, the device
+    # provider's exact-module check) refuses the CPU `_HostBinding` facade
+    # ("native provider requires an exact compiled module": every imported
+    # program and Session on a CPU-only install, smoke 2026-11-15).
+    module = _backend.exact_host_module(_backend.binding("_mojolearn_x_sequence", mode))
     distributed = SimpleNamespace(
         ops_distributed_open=getattr(module, "ops_distributed_open", None),
         ops_distributed_load=getattr(module, "ops_distributed_load", None),

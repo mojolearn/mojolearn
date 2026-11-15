@@ -89,5 +89,6 @@ assert fnv(_verify._le_bytes(x)) == _verify.FIXTURE_X_FNV1A64
 assert fnv(_verify._le_bytes(c)) == _verify.FIXTURE_C_FNV1A64
 assert 'numpy' not in sys.modules
 '''
-    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2]))
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT  # the runtime this process imported, not the source tree
+    env = dict(os.environ, PYTHONPATH=PACKAGE_PARENT)
     subprocess.run([sys.executable, '-c', code], env=env, check=True, capture_output=True, text=True)

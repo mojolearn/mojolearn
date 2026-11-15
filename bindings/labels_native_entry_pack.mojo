@@ -124,11 +124,14 @@ def _labels_operation(op: Int, args: PythonObject, context: PythonObject) raises
         # Hot path: every validated fit, predict, transform and score.
         return admission_x_op(args[0], String(py=args[1]), Int(py=args[2]), context)
     if op == ADMISSION_OP_Y:
-        return admission_y_op(args[0], String(py=args[1]), Int(py=args[2]), Int(py=args[3]), context)
+        # X (optional fifth word): scanned only when y refuses as non-finite.
+        return admission_y_op(args[0], String(py=args[1]), Int(py=args[2]), Int(py=args[3]),
+                              args[4] if len(args) > 4 else PythonObject(None), context)
     if op == ADMISSION_OP_DESCRIBE:
         return admission_describe_op(args[0], context)
     if op == ADMISSION_OP_CHECK_Y:
-        admission_check_y_op(args[0], String(args[1]), Int(py=args[2]), Int(py=args[3]), Int(py=args[4]), context)
+        admission_check_y_op(args[0], String(args[1]), Int(py=args[2]), Int(py=args[3]), Int(py=args[4]),
+                             args[5] if len(args) > 5 else PythonObject(None), context)
         return PythonObject(None)
     raise Error("TypeError: mojolearn: unknown label operation")
 

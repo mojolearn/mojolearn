@@ -53,7 +53,14 @@ def archive_numeric_pack(member: NativeArchiveDecoded, context: PythonObject) ra
     var shape = native_shape_pack(member.layout.shape)
     var order = String("F" if member.layout.fortran else "C")
     var payload = member.layout.payload.copy()
-    if classical_numpy(context):
+    # One published type: a mojolearn Array for every dtype an Array holds
+    # (as the scaler archives publish), with or without NumPy connected. An
+    # ndarray only for a dtype no Array holds (bool, int16, uint64, ...), and
+    # only when NumPy is connected (orchestrator, 2026-11-15).
+    var dtype = member.layout.dtype
+    var array_dtype = (dtype == "<f4" or dtype == "<f8" or dtype == "<i8" or dtype == "<i4" or dtype == "<u4"
+                       or dtype == "<u1" or dtype == "<i1" or dtype == "<f2" or dtype == "<u2")
+    if not array_dtype and classical_numpy(context):
         var raw = cpython_table()[].PyByteArray_FromStringAndSize(payload.address, payload.size)
         if not raw:
             var failure = stash_python_error()

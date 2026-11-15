@@ -1448,6 +1448,9 @@ def _connect_host_inference():
                    host_iforest_memoryview_type=memoryview,
                    host_iforest_module_type=ModuleType, host_iforest_module_dict=vars(ModuleType)["__dict__"].__get__,
                    host_iforest_context_type=ContextVar, host_iforest_context_get=ContextVar.get,
+                   # iforest_validate's absent-field sentinel (trees_public_iforest_door `_field`),
+                   # read when a saved forest loads into HostIsolationForest (smoke 2026-11-15)
+                   trees_missing=object(),
                    host_density_object_setattr=vars(object)["__setattr__"],
                    host_hash_list_sort=list.sort,
                    host_hash_field_collection_types=(list, tuple, set, frozenset, dict, str, bytes, bytearray, range),

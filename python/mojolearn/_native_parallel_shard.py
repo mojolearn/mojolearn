@@ -21,8 +21,7 @@ def _connect_binding(name, required, optional=()):
     from types import BuiltinFunctionType, ModuleType
     try:
         module = _backend.binding(name, "identical")
-        if type(module) is _backend._HostBinding:
-            module = _backend.load_host_module(module._HostBinding__basename)  # import-time: import-time resolution of the existing CPU-only proxy
+        module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
         if type(module) is not ModuleType:
             raise ImportError(f"parallel native binding requires the compiled {name} module")
         fields = vars(module)
