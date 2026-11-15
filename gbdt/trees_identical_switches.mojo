@@ -104,7 +104,9 @@ comptime T30 = False
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T19_DEFER.patch
 comptime T19_DEFER = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime T28_SORT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T28_SORT"]()
+# TOMBSTONE: MOJOLEARN_TREES_T28_SORT (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 7745e944ef.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_SORT.patch
+comptime T28_SORT = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime T28_PREFIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T28_PREFIX"]()
 # C47_GBDT (8 MiB cap on the lossguide exact batch width) deleted by lane/grid-prune 2026-10-07; T17_BATCH owns the width.
