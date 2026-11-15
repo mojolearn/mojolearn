@@ -72,7 +72,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from x_decomp.cells import F32Ptr, I32Ptr, add, sub, mul, div0, sqrt0, log_floor, rand_cell
-from x_decomp.device import xd_ctx, _down, _down_i, _launch_gemm_mma, DECOMP_FAST_GEMM_MMA
+from x_decomp.device import xd_ctx, _down, _down_i, DECOMP_FAST_GEMM_MMA
 from x_decomp.mcd_mma import mc_center_kernel, mc_publish_matrix_kernel, mc_mahal_reduce_kernel
 from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
@@ -138,8 +138,10 @@ comptime MCD_DEVICE_CSTEPS = MCD_BATCH_COMPAT
 # M3, one run per arm: MinCovDet taxi 3002.9 -> 294.3 ms (w2-mcdb-t-mcd-taxi),
 # EllipticEnvelope taxi 3010.3 -> 299.3 ms (w2-mcdb-t-ee-taxi); quality
 # w2-mcdb-q-mcd-taxi, w2-mcdb-q-ee-taxi MCDQ-PAIR-PASS (1% fitted state,
-# .99 support). MOJOLEARN_MCD_BMMA_OFF restores the per-candidate launches.
-comptime MCD_BMMA = MCD_BATCH_MMA and not is_defined["MOJOLEARN_MCD_BMMA_OFF"]()
+# .99 support).
+# TOMBSTONE: MOJOLEARN_MCD_BMMA_OFF (old path: one GEMM launch per candidate; EXP:804 DEFAULT on FAST + Apple) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 17bcfd0411.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_BMMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MCD_BMMA = MCD_BATCH_MMA
 # MCD_WIDE, DEFAULT (FAST + Apple, only with MCD_BMMA on; lane/apple-fast-w2-mcd2):
 # this batched search for 64 < d <= MF_WIDE_DMAX too
 # (istella d = 220 fell back to fast_mcd_dev: per candidate, per C-step kit
@@ -925,15 +927,9 @@ def _perm(ctx: DeviceContext, keys: DeviceBuffer[DType.uint64], npad: Int, count
 
 
 def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
-    comptime if MCD_BMMA:
-        # gate = mm_ran (pinvh ran for the candidate), the publication's mask
-        launch_gemm_mma_batched(ctx, _f(ph.mm_vw), _f(ph.mm_v), _f(ph.mm_out), d, d, d, False, True,
-                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False)
-    else:
-        for c in range(ph.nc):
-            var off = c*d*d
-            _launch_gemm_mma(ctx, _f(ph.mm_vw)+off, _f(ph.mm_v)+off,
-                             _f(ph.mm_out)+off, d, d, d, False, True)
+    # gate = mm_ran (pinvh ran for the candidate), the publication's mask
+    launch_gemm_mma_batched(ctx, _f(ph.mm_vw), _f(ph.mm_v), _f(ph.mm_out), d, d, d, False, True,
+                            ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False)
     ctx.enqueue_function[mc_publish_matrix_kernel](
         _f(ph.mm_out), _f(ph.pm), _i(ph.mm_ran), Int32(ph.nc), Int32(d), Float32(1),
         grid_dim=_blocks(ph.nc*d*d), block_dim=MF_TPB,
@@ -957,19 +953,14 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
             grid_dim=_blocks(cn*ph.h*d), block_dim=MF_TPB,
         )
         var out = _f(ph.mm_out) + c0*d*d
-        comptime if MCD_BMMA:
-            # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
-            # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
-            if one:
-                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
-                                        cn, ph.r*d, ph.r*d, d*d, gate, False)
-            else:
-                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
-                                        cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
+        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+        if one:
+            launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+                                    cn, ph.r*d, ph.r*d, d*d, gate, False)
         else:
-            for c in range(cn):
-                var x = _f(ph.mm_x)+c*ph.r*d
-                _launch_gemm_mma(ctx, x, x, out+c*d*d, d, ph.h, d, True, False)
+            launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+                                    cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
         c0 += cn
     ctx.enqueue_function[mc_publish_matrix_kernel](
         _f(ph.mm_out), _f(ph.cov1) if par == 1 else _f(ph.cov0), gate,
@@ -993,19 +984,13 @@ def _mma_distance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float3
             Int32(ph.per), Int32(ph.ident), Int32(ph.r), Int32(0), Int32(par), Int32(1 if use_fin else 0), Int32(c0),
             grid_dim=_blocks(cn*ph.r*d), block_dim=MF_TPB,
         )
-        comptime if MCD_BMMA:
-            # gate = active, every candidate for the final distances (use_fin)
-            if one:
-                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
-                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin)
-            else:
-                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm) + c0*d*d, _f(ph.mm_y), ph.r, d, d, False, False,
-                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active) + c0, use_fin)
+        # gate = active, every candidate for the final distances (use_fin)
+        if one:
+            launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
+                                    cn, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin)
         else:
-            for c in range(cn):
-                var off = c*ph.r*d
-                _launch_gemm_mma(ctx, _f(ph.mm_x)+off, _f(ph.pm)+(c0+c)*d*d,
-                                 _f(ph.mm_y)+off, ph.r, d, d, False, False)
+            launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm) + c0*d*d, _f(ph.mm_y), ph.r, d, d, False, False,
+                                    cn, ph.r*d, d*d, ph.r*d, _i(ph.active) + c0, use_fin)
         ctx.enqueue_function[mc_mahal_reduce_kernel](
             _f(ph.mm_x), _f(ph.mm_y), _f(ph.dist) + c0*ph.r, _i(ph.active) + c0, _i(err),
             Int32(cn), Int32(ph.r), Int32(d), Int32(1 if use_fin else 0),
