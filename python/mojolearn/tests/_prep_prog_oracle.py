@@ -21,6 +21,8 @@ import os
 from mojolearn import _arena_io
 from mojolearn import _expansion_prep as _ep
 from mojolearn._array import Array
+# `full` left `_expansion_prep`'s imports in ec78e70324; the select oracle reads it from here.
+from mojolearn._buffer import full  # noqa: F401
 from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._expansion_prep import (
     _OPS, _PROG_CALL, _PROG_CONTEXT, _Scratch, _XB, _blocked,

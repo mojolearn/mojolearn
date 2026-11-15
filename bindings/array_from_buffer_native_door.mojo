@@ -49,7 +49,9 @@ def _dtype(original: String, itemsize: Int, context: PythonObject) raises -> Str
     elif fmt == "B" or fmt == "H" or fmt == "I" or fmt == "L" or fmt == "Q" or fmt == "N" or fmt == "P":
         dtype = "<u" + String(itemsize)
     elif fmt.startswith("Z"):
-        raise Error("ValueError: Complex data not supported: buffer format is complex")
+        # One wording with the KDE fit door (host_kde_fit_native_door.mojo) and
+        # scikit-learn's check_array: the format is named.
+        raise Error("ValueError: Complex data not supported: buffer format '" + fmt + "' is complex")
     if dtype == "" or not py_contains(context["codes"], PythonObject(dtype)):
         raise Error("TypeError: mojolearn: buffer format " + original + " is not a supported Array dtype")
     if itemsize != Int(py=context["itemsizes"][PythonObject(dtype)]):

@@ -102,7 +102,10 @@ def test_ocsvm_rebound_factory_is_refused_without_python_call(monkeypatch, entry
         calls.append(True)
         raise AssertionError("Python provider invoked")
 
-    monkeypatch.setattr(model._bind(), entry, hook)
+    from mojolearn import _backend
+    # the product reads the exact compiled module connected at import; on a CPU-only install `_bind()` is the
+    # `_HostBinding` facade in front of it
+    monkeypatch.setattr(_backend.exact_host_module(model._bind()), entry, hook)
     with pytest.raises(TypeError, match="compiled extension entry"):
         model.fit(_train())
     assert calls == []

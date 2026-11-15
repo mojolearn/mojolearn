@@ -180,14 +180,16 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
             estimator_fit_end(model, depth)
     if fitting:
         estimator_fit_complete(model, source, False, context)
+    # Preserve internal Float32 arrays; public outlier scores widen even when
+    # the optional NumPy output view is unavailable. The float32 scores of a
+    # binary without iforest_scores_f64 (the CPU column, Apple,
+    # -D MOJOLEARN_IDN_IF_SCORES_F64_OFF) are widened by one parallel cast,
+    # whatever container the route returned (the CPU column's scores reached
+    # the public caller as float32, smoke 2026-11-15); float64 scores are
+    # returned as they are.
+    if outside and (method == "score_samples" or method == "decision_function") and result is not None:
+        result = admit_family_f64(result, "scores", context)
     if py_type(result) is context["array_class"]:
-        # Preserve internal Float32 arrays; public outlier scores widen
-        # even when the optional NumPy output view is unavailable.
-        # The float32 scores of a binary without iforest_scores_f64 (the CPU
-        # column, Apple, -D MOJOLEARN_IDN_IF_SCORES_F64_OFF) are widened by one
-        # parallel cast; float64 scores are returned as they are.
-        if outside and (method == "score_samples" or method == "decision_function"):
-            result = admit_family_f64(result, "scores", context)
         if outside and py_get(context, "ndarray") is not None:
             return native_array_ndarray_view(result, context)
     return result

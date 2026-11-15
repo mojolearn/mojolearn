@@ -35,8 +35,8 @@ def _clean(audit):
 
 
 @pytest.mark.parametrize("metadata", [
-    2, 2.0, 2 + 0j, np.int64(2), np.uint64(2), np.float16(2),
-    np.float32(2), np.float64(2), np.complex64(2),
+    2, 2.0, np.int64(2), np.uint64(2), np.float16(2),
+    np.float32(2), np.float64(2),
     np.array(2, dtype=">i8"), np.array([[2]], dtype=">f8"),
     np.array([2 + 0j], dtype=">c16"), np.array([2], dtype=object),
 ])
@@ -53,7 +53,7 @@ def test_feature_metadata_uses_native_storage_and_preserves_public_owner(metadat
 
 
 @pytest.mark.parametrize("metadata", [
-    3, 2.5, 2 + 1j, 1 << 200, np.nan, np.inf,
+    3, 2.5, 1 << 200, np.nan, np.inf,
     np.array([2, 2]), np.array([], dtype="f8"),
     np.array([(2,)], dtype=[("width", "i8")]),
     np.array(["2"]), np.array([None], dtype=object),
@@ -81,6 +81,18 @@ def test_feature_refusal_matches_original_comparison_and_live_numpy_policy(metad
     else:
         assert type(audit.exception) is type(reference_error), audit.report()
         assert str(audit.exception) == str(reference_error)
+    assert model.n_features_in_ is metadata
+
+
+@pytest.mark.parametrize("metadata", [2 + 0j, 2 + 1j, np.complex64(2)])
+def test_complex_scalar_feature_metadata_is_refused_by_field_admission(metadata):
+    # Complex scalars are not native configuration types of the classical field admission
+    # (bindings/sequential_admission_door.mojo; the classical context admits int/float/bool scalars), so a
+    # complex n_features_in_ is a TypeError before any width comparison, never compared as 2 == 2+0j.
+    model, x = _model()
+    model.n_features_in_ = metadata
+    with pytest.raises(TypeError, match="requires native input types"):
+        model.decision_function(x)
     assert model.n_features_in_ is metadata
 
 

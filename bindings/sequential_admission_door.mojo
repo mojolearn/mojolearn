@@ -9,6 +9,7 @@ from bindings.native_torch_admission_door import native_torch_exact, native_torc
 from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get, py_setitem
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.native_identity_key_door import NativeIdentityKey
+from bindings.native_owner_registry_unpack import registered_native_owner_pins
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
 
@@ -200,6 +201,12 @@ def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, contex
         native_torch_admit(value)
         mods.released()
         _ = mods.module("builtins")
+        return
+    if registered_native_owner_pins(cls):
+        # An exact registered compiled owner (a resident holder in a fitted
+        # field): a C type with no Python hooks, registered by identity
+        # (90c1fdb86b). A reset that drops it admits its retained pins through
+        # native_release_admit. Reached only after every ordinary type check.
         return
     mods.released()
     raise Error("TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported")

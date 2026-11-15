@@ -83,7 +83,10 @@ def test_saved_host_public_predict_uses_connected_cpu_owner(tmp_path, name):
     explicit = np.asarray(ml.host_predict(archive, query))
     np.testing.assert_array_equal(actual, explicit)
     fields = object.__getattribute__(model, '__dict__')
-    held = fields.get('_resident_holder', {}).get('index')
+    # A dict holder (neighbors) names its resident index; AgglomerativeClustering's holder is the typed native
+    # `_AggloHolder` since c4a76ec7fa, whose owner is the connected module checked above.
+    holder = fields.get('_resident_holder')
+    held = holder.get('index') if type(holder) is dict else None
     if held is not None:
         assert held[2] is module, 'saved host prediction selected a non-CPU resident owner'
     # Repeated missing accesses used by the crosscheck must not corrupt the

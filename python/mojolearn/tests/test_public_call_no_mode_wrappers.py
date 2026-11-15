@@ -164,7 +164,8 @@ def test_no_python_frame_between_public_method_and_binding(family):
 @pytest.mark.parametrize("factory", [
     lambda: ml.RandomForestClassifier(n_estimators=2, max_depth=2),
     lambda: ml.ExtraTreesClassifier(n_estimators=2, max_depth=2),
-    lambda: ml.AgglomerativeClustering(n_clusters=2),
+    # save() refuses a fit without prediction data (documented; default prediction_data=False since 6743480016)
+    lambda: ml.AgglomerativeClustering(n_clusters=2, prediction_data=True),
 ], ids=["random_forest", "extra_trees", "agglomerative"])
 def test_load_is_one_binding_call_and_publishes_fitted(tmp_path, factory):
     X, y_class, _ = _data()

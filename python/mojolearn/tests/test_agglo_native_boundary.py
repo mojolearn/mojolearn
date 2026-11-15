@@ -67,7 +67,9 @@ def test_agglo_python_descriptor_factory_is_refused_without_call(route, module, 
         calls.append(True)
         raise AssertionError("Python factory was called")
 
-    monkeypatch.setattr(_backend.binding(module, "identical"), factory, forbidden)
+    # The product connected the exact compiled module at import (`_native_family_bridge.connect_bindings`); on a
+    # CPU-only install `binding()` is the `_HostBinding` facade, so patch the module the product reads.
+    monkeypatch.setattr(_backend.exact_host_module(_backend.binding(module, "identical")), factory, forbidden)
     with pytest.raises(TypeError, match="compiled extension entry"):
         model.predict(_x()) if route == "predict" else model.fit(_x())
     assert calls == []
@@ -182,7 +184,7 @@ def test_agglo_legacy_internal_predict_keeps_direct_uploads():
     model = _model().fit(_x())
     expected = np.asarray(model.predict(_x())).copy()
     model._resident_holder = None
-    binding = _backend.binding("_mojolearn_estimators", "identical")
+    binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
     result = _hierarchy_impl._NATIVE(model, "family_xc_agglo_predict", (binding, _x()), _hierarchy_impl._NATIVE_CONTEXT)
     np.testing.assert_array_equal(np.asarray(result), expected)
     assert model._resident_holder is None

@@ -3,13 +3,13 @@
 
 import numpy as np
 
-from mojolearn import Ridge
-from mojolearn import _serialize, linear_model
+from mojolearn import Array, Ridge
+from mojolearn import _serialize
 
 
 def test_ridge_load_restores_exact_state_without_python_reader(tmp_path, monkeypatch):
     model = Ridge(alpha=0.25, fit_intercept=True)
-    model.coef_ = linear_model.Array.from_list([1.0, -2.0, 3.0], "<f4")
+    model.coef_ = Array.from_list([1.0, -2.0, 3.0], "<f4")
     model.intercept_ = -0.125
     model.n_features_in_ = 3
     path = tmp_path / "ridge.npz"

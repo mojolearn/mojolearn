@@ -278,13 +278,14 @@ def test_logistic_input_protocols_are_refused_before_python(tmp_path, method):
     assert touched == []
 
 
+# Every host logistic query runs through the one typed descriptor `logistic_native_api_v1`
+# (bindings/logistic_descriptor_boundary_door.mojo, 48de8844b5); the per-operation entries
+# (qn_predict_binary, qn_decision_function, qn_proba, py2mojo_*) are no longer read, so the
+# replacement that must be refused is the descriptor factory.
 @pytest.mark.parametrize("entry,count,method", [
-    ("qn_predict_binary", 2, "predict"), ("qn_decision_function", 3, "decision_function"),
-    # predict_proba runs decision and link in one fused `qn_proba` call when the
-    # binding exports it (bindings/host_logistic_native_door.mojo); qn_sigmoid and
-    # qn_softmax are only the fallback for a binding without it.
-    ("qn_proba", 2, "predict_proba"), ("qn_proba", 3, "predict_proba"),
-    ("py2mojo_linear_flags", 2, "predict_log_proba"), ("py2mojo_rows", 2, "predict_log_proba")])
+    ("logistic_native_api_v1", 2, "predict"), ("logistic_native_api_v1", 3, "decision_function"),
+    ("logistic_native_api_v1", 2, "predict_proba"), ("logistic_native_api_v1", 3, "predict_proba"),
+    ("logistic_native_api_v1", 2, "predict_log_proba")])
 def test_logistic_native_entries_reject_python_replacements(tmp_path, entry, count, method, monkeypatch):
     model = _model(tmp_path, count)
     touched = []

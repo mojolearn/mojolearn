@@ -42,6 +42,19 @@ from bindings.svc_common_door import (
 )
 from svm.svc_ocsvm_native_run import _f32_scalar
 
+
+def _oc_kernel_code(kernel: PythonObject, context: PythonObject) raises -> Int:
+    # The kernel-name table lookup. An array kernel (any rank) is an unhashable
+    # key: keep CPython's TypeError (a caught Python error reaches Mojo as its
+    # message only, which the door would otherwise raise as a ValueError).
+    var code = PythonObject(None)
+    try:
+        code = context["family_svc_xn_kernels"][kernel]
+    except e:
+        raise Error("TypeError: " + String(e))
+    return Int(py=code)
+
+
 def _oc_float(value: PythonObject, context: PythonObject) raises -> Float64:
     oc_scalar_admit[True](value, context)
     return svc_float(value)
@@ -155,7 +168,7 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
         else:
             resident_available = (xn_capabilities(binding) & 1) != 0
         if not resident_available:
-            var code = Int(py=context["family_svc_xn_kernels"][kernel])
+            var code = _oc_kernel_code(kernel, context)
             var driver = connection.driver()
             with GILReleased(Python()):
                 q = oc_kernel(driver, xw.address(), xw.address(), m, m, d, code, degree, gamma, coef0)
@@ -169,7 +182,7 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
     var cap = 10000000 if max_iter < 0 else max_iter
     var tol = _f32_scalar(_oc_float(svc_field(fields, "tol"), context))
     if not has_gram:
-        var code = Int(py=context["family_svc_xn_kernels"][kernel])
+        var code = _oc_kernel_code(kernel, context)
         var gamma = _oc_float(svc_field(fields, "_gamma"), context)
         if xn_is_module(binding):
             var resident = connection.resident_driver()
@@ -288,7 +301,7 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
             var query_address = Int(py=_a(q))
             var reference_address = Int(py=_a(sv))
             var coefficient_address = Int(py=_a(coef))
-            var code = Int(py=context["family_svc_xn_kernels"][kernel])
+            var code = _oc_kernel_code(kernel, context)
             var driver = connection.driver()
             with GILReleased(Python()):
                 oc_fused_labels(driver, query_address, reference_address, coefficient_address,
@@ -301,7 +314,7 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
         var query_address = Int(py=_a(q))
         var reference_address = Int(py=_a(sv))
         var coefficient_address = Int(py=_a(coef))
-        var code = Int(py=context["family_svc_xn_kernels"][kernel])
+        var code = _oc_kernel_code(kernel, context)
         var driver = connection.driver()
         with GILReleased(Python()):
             oc_kernel_product(driver, query_address, reference_address, coefficient_address,
@@ -320,7 +333,7 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
             gram = oc_take_cols(driver, query_address, nq, columns, support.address, support.count)
         _ = support
     else:
-        var code = Int(py=context["family_svc_xn_kernels"][kernel])
+        var code = _oc_kernel_code(kernel, context)
         var gamma = _oc_float(svc_field(fields, "_gamma"), context)
         var coef0 = _oc_float(svc_field(fields, "coef0"), context)
         var degree = _oc_int(svc_field(fields, "degree"), context)

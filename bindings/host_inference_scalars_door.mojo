@@ -63,4 +63,13 @@ def host_inference_scalar(value: PythonObject, context: PythonObject, truth: Boo
             for i in range(len(complex_types)):  # driver-loop: native complex truth slots, never numeric casts
                 if py_type(dtype) is py_type(py_call(constructor, complex_types[i])):
                     return
+    elif py_get(context, "ndarray") is not None:
+        # NumPy's text scalars (numpy.str_, numpy.bytes_) are C types with no
+        # Python conversion hooks; scikit-learn accepts them for string
+        # options (kernel='gaussian' from a NumPy string array). The host tree
+        # door admits the same two types (host_tree_native_door.mojo). Reached
+        # only on the refusal path: admitted values never pay these two lookups.
+        var text_dtype = native_numpy_dtype(context)
+        if cls is py_call(text_dtype, "U").type or cls is py_call(text_dtype, "S").type:
+            return
     raise Error("TypeError: scalar model state requires native values without Python conversion hooks")

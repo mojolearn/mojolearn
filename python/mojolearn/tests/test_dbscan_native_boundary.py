@@ -117,7 +117,8 @@ def test_dbscan_legacy_internal_query_keeps_its_direct_upload_route():
     model = _model().fit(_x())
     expected = np.asarray(model.predict(_x())).copy()
     model._resident_holder = None
-    binding = _backend.binding("_mojolearn_estimators", "identical")
+    # the exact compiled module (on a CPU-only install `binding()` is the `_HostBinding` facade)
+    binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
     actual = density._NATIVE(model, "family_xc_dbscan_predict", (binding, _x()), density._NATIVE_CONTEXT)
     np.testing.assert_array_equal(np.asarray(actual), expected)
     assert model._resident_holder is None

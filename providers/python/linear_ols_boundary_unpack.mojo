@@ -36,7 +36,17 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     var x = admitted_x.array
     var rows = admitted_x.rows
     var cols = admitted_x.cols
-    var y = classical_check_y(args[1], rows, est, context, admitted=True)
+    var y = PythonObject(None)
+    try:
+        y = classical_check_y(args[1], rows, est, context, admitted=True)
+    except error:
+        # scikit-learn refuses a non-finite X before a non-finite y. X's scan
+        # is deferred above, so on this refusal path only, scan it first.
+        var message = String(error)
+        if (message.startswith("Input y contains NaN or infinity") and not admitted_x.finite
+                and not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=admitted_x.address), rows * cols)):
+            admitted_finite_refuse(1, est, "X")
+        raise Error(message)
     var connection = linear_entry_connection(entries)
     var key = connection.key.copy()
     var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 0, String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)

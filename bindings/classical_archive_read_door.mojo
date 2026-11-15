@@ -339,7 +339,10 @@ def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: P
     if not py_contains(arrays, name):
         raise Error(_archive_missing(name))
     var value = arrays[name]
-    var numeric = py_type(value) is context["ndarray"] if classical_numpy(context) else classical_is_array(value, context)
+    # The reader publishes a mojolearn Array for every dtype an Array holds,
+    # with or without NumPy (classical_archive_output_door.mojo, 2745da68ec);
+    # an ndarray only for the other dtypes, when NumPy is connected.
+    var numeric = classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is context["ndarray"])
     if not numeric or classical_dtype_str(value, context) != dtype:
         raise Error("mojolearn: model field '" + name + "' has dtype " + _archive_dtype_name(value, context)
                     + ", the format stores " + dtype + "; refusing to cast a model file")

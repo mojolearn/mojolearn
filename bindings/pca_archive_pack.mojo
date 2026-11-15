@@ -13,6 +13,14 @@ from bindings.pca_metadata_pack import pca_initialize
 from bindings.py_balanced import py_call, py_contains, py_setitem
 
 
+
+def _meta_word(meta: PythonObject, index: Int) raises -> Int:
+    # `meta` is the admitted 1-D <i8 member (an Array or an ndarray): read the
+    # word at its data address; neither `.flat` nor an item protocol runs.
+    var address = Int(py=sequential_address(meta))
+    return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)[index])
+
+
 def pca_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     if not py_contains(fields, "components_"):
@@ -52,8 +60,8 @@ def pca_archive_load(cls: PythonObject, path: PythonObject, context: PythonObjec
     var meta = _archive_exact(arrays, "meta", "<i8", context)
     if Int(py=meta.size) != 4:
         raise Error("PCA model meta must hold four fields")
-    var nc = Int(py=meta.flat[0])
-    var nf = Int(py=meta.flat[1])
+    var nc = _meta_word(meta, 0)
+    var nf = _meta_word(meta, 1)
     var mode = _archive_string(arrays, "numeric_mode", context)
     if String(mode) != "identical" and String(mode) != "fast":
         raise Error("invalid saved numeric_mode")
@@ -75,7 +83,7 @@ def pca_archive_load(cls: PythonObject, path: PythonObject, context: PythonObjec
         raise Error("PCA model noise_variance must hold one value")
     var solver = _archive_string(arrays, "svd_solver", context)
     var model = py_call(native_loaded_module("builtins").object.__new__, cls)
-    _ = pca_initialize(model, Python.tuple(nc, True, Bool(py=meta.flat[3]), solver, 0.0,
+    _ = pca_initialize(model, Python.tuple(nc, True, _meta_word(meta, 3) != 0, solver, 0.0,
                                           "auto", 10, "auto", PythonObject(None), mode))
     var fields = sequential_fields(model)
     py_setitem(fields, "components_", components)
@@ -85,6 +93,6 @@ def pca_archive_load(cls: PythonObject, path: PythonObject, context: PythonObjec
     py_setitem(fields, "noise_variance_", PythonObject(classical_word(noise)))
     py_setitem(fields, "n_components_", nc)
     py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "n_samples_", Int(py=meta.flat[2]))
+    py_setitem(fields, "n_samples_", _meta_word(meta, 2))
     py_setitem(fields, "_mojolearn_fitted", True)
     return model

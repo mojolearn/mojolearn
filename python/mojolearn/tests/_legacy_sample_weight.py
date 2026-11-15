@@ -57,6 +57,10 @@ def check_sample_weight(sample_weight, n_samples, *, dtype="<f4", copy=False,
         if hasattr(sample_weight, "ndim") and hasattr(sample_weight, "shape") \
                 and int(sample_weight.ndim) == 0:
             w = full((n,), float(sample_weight), dtype)
+        elif isinstance(sample_weight, bool):
+            # The deleted `_buffer.as_f32_c` made a bool a 0-D array, refused just below as not 1-D; the
+            # tests/_typed_input converters (7b3c18d435) refuse a bool with a TypeError instead.
+            raise ValueError("Sample weights must be 1D array or scalar")
         else:
             conv = as_f32_c if dtype == "<f4" else as_f64_c
             try:

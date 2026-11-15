@@ -79,7 +79,11 @@ def materialize(obj, name="X"):
 def as_typed(obj, dtype, order="C", ndim=None, name="X"):
     a, copied = materialize(obj, name)
     if ndim is not None and a.ndim != ndim:
-        raise ValueError(f"mojolearn: {name} must be {ndim}-D, got {a.ndim}-D shape {a.shape}")
+        # the product's rank refusal (bindings/admitted_family_door.mojo): a 2-D request below rank 2 adds
+        # scikit-learn's reshape hint
+        hint = (". Reshape your data either using array.reshape(-1, 1) if your data has a single feature or "
+                "array.reshape(1, -1) if it contains a single sample.") if ndim == 2 and a.ndim < 2 else ""
+        raise ValueError(f"mojolearn: {name} must be {ndim}-D, got {a.ndim}-D shape {a.shape}{hint}")
     if a.size == 0:
         what = "feature(s)" if a.ndim == 2 and a.shape[0] != 0 else "sample(s)"
         raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}: Found array with 0 {what} "

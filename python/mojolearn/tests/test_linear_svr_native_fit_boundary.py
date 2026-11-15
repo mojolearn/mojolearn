@@ -50,7 +50,9 @@ def test_linear_svr_target_refusal_retains_input_publication_order():
     # The length refusal now uses scikit-learn's wording at admission.
     with pytest.raises(ValueError, match=r"inconsistent numbers of samples: \[8, 1\]"):
         model.fit(_points(), [1])
-    assert "input_copied_" in vars(model)
+    # The shared admission (core/admitted_f32_plan.mojo, 5a4721d102) refuses the length before the LinearSVR door
+    # publishes anything, `input_copied_` included.
+    assert "input_copied_" not in vars(model)
     assert "_w" not in vars(model)
     assert "objective_" not in vars(model)
     assert "coef_" not in vars(model)
@@ -69,7 +71,8 @@ def test_linear_svr_native_factory_replacement_refuses_without_callback(monkeypa
     # so the replacement goes into that module's namespace.
     from mojolearn import _backend
     monkeypatch.setattr(_backend.exact_host_module(model._bind()), "linear_svc_native_api_v1", forbidden)
-    with pytest.raises(TypeError, match="compiled extension entry"):
+    # the QN provider refusal names the entry (bindings/qn_native_door.mojo)
+    with pytest.raises(TypeError, match="requires compiled entry linear_svc_native_api_v1"):
         model.fit(_points(), [-1, 1] * 4)
     assert calls == []
     assert "input_copied_" in vars(model)
