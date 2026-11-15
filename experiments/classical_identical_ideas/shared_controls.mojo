@@ -52,7 +52,7 @@ comptime C06_ROWS_ON = C06_NORM_ROWS > 1
 # the bound).
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 6a40fe1b92.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch
-comptime C06_SMALL_D_THREAD = False
+# (Sweep 2026-11-15: comptime C06_SMALL_D_THREAD removed; nothing read it.)
 # C07 (lane classical-encoders, 2026-10-07): two integer sweeps of the device
 # radix sort (x_prep/dradix.mojo), replacing DIGIT4/DIGIT6/KEYS1024/KEYS4096,
 # which silently overrode each other. The sort has one answer, so no arm
