@@ -44,9 +44,9 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
 #: source), never timed. Fixed: the pack kernel compares by `exact_f32_gt`
 #: (as INDEX_PACK_DEVICE).
-comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_QUANT_DEVICE"]() or GBDT_INDEX_PACK_DEVICE
-)
+# TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 408e1ba726.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch; record in docs/TOMBSTONES.md.
+comptime GBDT_QUANT_DEVICE = GBDT_INDEX_PACK_DEVICE
 # TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
 # 8815b00d75.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
