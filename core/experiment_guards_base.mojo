@@ -53,6 +53,33 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_UNIQUE_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): X_PREP_FAST_UNIQUE_OFF (FAST+Apple rollback of the encoders' category fit to one thread per column) is gone; the chunked run scan is the FAST+Apple path (onehot taxi 69.7 -> 30.4 ms, ordinal 67.2 -> 25.3 ms, prep-onehot-uniq-taxi); restore: experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SPLINE_FAST_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): SPLINE_FAST_FUSED_OFF (FAST+Apple rollback of SplineTransformer to main's unfused fit and transform) is gone; the fused program is the FAST+Apple path (spline istella 48.1 -> 11.6 ms, taxi 34.2 -> 10.8 ms, kap2-spl-fused); restore: experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch"
+    # Lane expdel2-02-base (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL"](), "removed 2026-11-15 (lane/expdel2-02-base): BYTE_LM_LOGITS_ZERO_FILL (opt-in arm, never measured) is gone; the default is kept; code at 337c096a5b; restore: experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_DART_ROUND_REF_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): DART_ROUND_REF_OFF (old path, never measured) is gone; the default is kept; code at 650388311e; restore: experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_GBDT_STEP_OLD (old path, never measured) is gone; the default is kept; code at f644604c7a; restore: experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_HPDEV_INIT_OFF (old path, never measured) is gone; the default is kept; code at 2136ab3bb0; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_HPDEV_NORMAL_OFF (old path, never measured) is gone; the default is kept; code at 31aef6de0f; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_IF_FIT_OWN_X"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_IF_FIT_OWN_X (opt-in arm, never measured) is gone; the default is kept; code at 0a98ac1ae9; restore: experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_IF_FIT_EXPORT"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_IF_FIT_EXPORT (opt-in arm, never measured) is gone; the default is kept; code at cfce0d30ce; restore: experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_LM_RESIDENT_GENERATE (opt-in arm, never measured) is gone; the default is kept; code at 29fe2d5748; restore: experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"](), "removed 2026-11-15 (lane/expdel2-02-base): MAMBA3_FORWARD_ZERO_FILL (opt-in arm, never measured) is gone; the default is kept; code at 54f0ca8d71; restore: experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch
+    comptime assert not is_defined["MOJOLEARN_MLP_SESSIONS_PACKED"](), "removed 2026-11-15 (lane/expdel2-02-base): MLP_SESSIONS_PACKED (opt-in arm, never measured) is gone; the default is kept; code at 1c0608ab17; restore: experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch
+    comptime assert not is_defined["MOJOLEARN_MSEL_UNITS_GPU_PARALLEL"](), "removed 2026-11-15 (lane/expdel2-02-base): MSEL_UNITS_GPU_PARALLEL (opt-in arm, never measured) is gone; the default is kept; code at 853bb6d0ee; restore: experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_NEURAL_TABLE_ROUTE_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): NEURAL_TABLE_ROUTE_OFF (old path, never measured) is gone; the default is kept; code at 0ace134aa9; restore: experiments/removed/MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): SEQ_MOE_DEVICE_IO_OFF (old path, never measured) is gone; the default is kept; code at 193542c352; restore: experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch"
     return True
 
 

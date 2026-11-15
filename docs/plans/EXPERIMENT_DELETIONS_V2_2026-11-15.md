@@ -172,6 +172,8 @@ Files: `bindings/_mojolearn_x_prep.mojo`, `bindings/_mojolearn_x_prep_host.mojo`
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `134_CONTROL`, `BYTE_LM_LOGITS_ZERO_FILL`, `DART_ROUND_REF_OFF`, `IDN_GBDT_STEP_OLD`, `IDN_HPDEV_INIT_OFF`, `IDN_HPDEV_NORMAL_OFF`, `IDN_IF_FIT_EXPORT`, `IDN_IF_FIT_OWN_X`, `IDN_LM_RESIDENT_GENERATE`, `MAMBA3_FORWARD_ZERO_FILL`, `MLP_SESSIONS_PACKED`, `MSEL_UNITS_GPU_PARALLEL`, `NEURAL_TABLE_ROUTE_OFF`, `SEQ_MOE_DEVICE_IO_OFF`
 
+Lane result (expdel2-02-base, 2026-11-15): KEPT, not deleted: `COLUMN_CPU` (the CPU-column build switch, coordinator correction) and `134_CONTROL` (the DEVIATION 134f positive control, a sabotage arm of checks/determinism_soak.mojo and greedy_search_helper.mojo, in the KEEP set). The 13 other owned defines are deleted with their records; 10 non-owner defines are folded in this lane's files; the remaining 19 have only mode-dependent alias reads here, which stay as they are.
+
 ### expdel2-03-base (43 defines, 198 code files)
 
 | define | decision | rule | sites | lines | evidence / why |
