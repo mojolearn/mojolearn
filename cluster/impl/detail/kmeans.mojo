@@ -859,7 +859,6 @@ def _assign_to_candidates(
 #: the running (min_dist, label) instead of reassigning every sample against
 #: every candidate so far (`fold_new_candidates_kernel`; a strict `<` keeps
 #: the earlier candidate on a tie, as the full argmin does).
-#: `-D MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF` reassigns in full.
 #: IDENTICAL on Apple takes it too (lane/apple-identical-neural,
 #: 2026-09-27): each (point, candidate) distance comes from the same
 #: `_assign_to_candidates` (its bits do not depend on which candidates share
@@ -883,10 +882,9 @@ comptime IDN_KMEANS_INCR_INIT = (
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
     TARGET_HAS_APPLE_GPU and (
-        (
-            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-            and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
-        )
+        # TOMBSTONE: MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3f8a07d350.
+        # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
         or (
             GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
             and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
