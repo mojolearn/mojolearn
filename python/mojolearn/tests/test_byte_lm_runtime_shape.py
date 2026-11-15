@@ -151,7 +151,8 @@ def test_generalized_registry_training_and_restore(tmp_path, layers, vocab):
     assert np.asarray(restored.state_dict()['flags']).shape == (cfg.n_tensors,)
     invalid = ids.copy()
     invalid[0, 0] = vocab
-    with pytest.raises(ValueError, match='IDs'):
+    # The native session's wording (training/byte_lm_host_session.mojo, 8e0d93425b).
+    with pytest.raises(ValueError, match=r'token id outside \[0, vocab\)'):
         restored.train_step(invalid)
     if cfg.n_total * 24 < impl._CHECKPOINT_LIMIT:
         path = tmp_path / 'generalized.json'

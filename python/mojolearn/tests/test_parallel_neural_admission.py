@@ -6,8 +6,9 @@ import pytest
 
 from mojolearn import ParallelNeuralTrainer, SmallMLPTrainer, _backend
 from mojolearn._verify_native_runtime import audit_native_call
-from mojolearn.tests.test_parallel_mlp_native import model_fixture, independent_gradient
-from mojolearn.tests.test_parallel_neural_native import training_state
+from mojolearn.tests.test_parallel_mlp_native import model_fixture
+# independent_gradient left test_parallel_mlp_native.py in 2fb40775dc.
+from mojolearn.tests.test_parallel_neural_native import independent_gradient, training_state
 
 
 @pytest.fixture(autouse=True)

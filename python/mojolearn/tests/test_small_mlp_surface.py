@@ -33,8 +33,26 @@ def batch(rows=7):
     return x, y
 
 
+# Test-side oracles for the checkpoint's canonical JSON and the state bytes.
+# The product's Python twins (_mlp_impl._canonical, _encode_state) were deleted
+# by 0a71e11436; the native door writes the checkpoint.
+def _canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'),
+                      ensure_ascii=True, allow_nan=False).encode('ascii')
+
+
+def _encode_array(value):
+    a = np.asarray(value)
+    dtype = '<i4' if a.dtype.kind in 'iu' else '<f4'
+    return dict(dtype=dtype, shape=list(a.shape), hex=np.ascontiguousarray(a, dtype=dtype).tobytes().hex())
+
+
 def state_bytes(model):
-    return impl._canonical(impl._encode_state(model.state_dict()))
+    state = model.state_dict()
+    state['weights'] = {name: _encode_array(value) for name, value in state['weights'].items()}
+    for key in ('m', 'v', 'flags'):
+        state['optimizer'][key] = _encode_array(state['optimizer'][key])
+    return _canonical(state)
 
 
 def trainer():
@@ -206,8 +224,8 @@ def test_checkpoint_is_canonical_complete_and_resumable(tmp_path):
     assert len(first.read_bytes()) < impl._FILE_LIMIT
     assert first.read_bytes().endswith(b'\n')
     envelope = json.loads(first.read_bytes())
-    assert envelope['payload_sha256'] == hashlib.sha256(impl._canonical(envelope['payload'])).hexdigest()
-    assert first.read_bytes() == impl._canonical(envelope) + b'\n'
+    assert envelope['payload_sha256'] == hashlib.sha256(_canonical(envelope['payload'])).hexdigest()
+    assert first.read_bytes() == _canonical(envelope) + b'\n'
     assert sorted(p.name for p in tmp_path.iterdir()) == ['first.mlp.json', 'second.mlp.json']
     restored = SmallMLPTrainer.from_checkpoint(first)
     assert type(restored) is SmallMLPTrainer
@@ -233,7 +251,7 @@ def test_checkpoint_refuses_corruption_wrong_schema_and_oversize(tmp_path):
         SmallMLPTrainer.from_checkpoint(path)
     envelope = json.loads(original)
     envelope['payload']['weights']['extra'] = envelope['payload']['weights']['bias2']
-    envelope['payload_sha256'] = hashlib.sha256(impl._canonical(envelope['payload'])).hexdigest()
+    envelope['payload_sha256'] = hashlib.sha256(_canonical(envelope['payload'])).hexdigest()
     path.write_text(json.dumps(envelope))
     with pytest.raises(ValueError, match='registry'):
         SmallMLPTrainer.from_checkpoint(path)
