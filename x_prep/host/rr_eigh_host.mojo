@@ -47,7 +47,9 @@ from x_prep.eigh import eigh_unit
 
 comptime IDN_RR_EIGH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_RR_EIGH_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 43f37f93b7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: the smallest matrix the round-robin takes under IDN_RR_EIGH (shape only).
 #: Lane fam2-prep-metrics: CANDIDATE ARMS for the threshold, each default OFF
