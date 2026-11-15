@@ -472,19 +472,27 @@ the host column needs no change."""
 
 # TOMBSTONE: MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN (old per-column arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN (FAST per-column sampler) opt-in arm back as it was, default off; default path unchanged.
 comptime SAMPLE_PER_NODE_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN"]()
 ) or IDN_RF_SAMPLE_PER_NODE
 """FAST only: the fused setup's feature sampler runs one thread per node
 (`sampled_columns_for_node`) instead of one per (node, column), drawing
-each node's 24-key bijection once instead of `k` times. Same columns."""
+each node's 24-key bijection once instead of `k` times. Same columns.
+`-D MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN` restores the per-column arm."""
 
 # TOMBSTONE: MOJOLEARN_RF_SPLIT_CANDIDATES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_RF_SPLIT_CANDIDATES_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_RF_SPLIT_CANDIDATES (off-Apple FAST candidate slots; the _OFF rollback stays deleted) opt-in arm back as it was, default off; default path unchanged.
 comptime HIST_SPLIT_CANDIDATES_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL or (
-    BUILD_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+    BUILD_MODE == NUMERIC_FAST
+    and (
+        is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
+        or TARGET_HAS_APPLE_GPU
+    )
 )
 """IDENTICAL, EVERY VENDOR (DEVIATION 5611, 2026-09-27): the node's split
 is merged from per-block candidate slots by `merge_split_candidates_kernel`
@@ -503,8 +511,8 @@ every other column.
 FAST: each `find_best_splits` block stores its winner in its own
 candidate slot and `merge_split_candidates_kernel` folds a node's slots
 with `Split.update` (a total order), instead of every block spinning on
-the node's device mutex. Same winner. Off-Apple FAST NOT FLIPPED
-(the opt-in was deleted 2026-11-15): Apple M4 1M rows, hashes
+the node's device mutex. Same winner. OPT-IN off Apple (`-D
+MOJOLEARN_RF_SPLIT_CANDIDATES=1`), NOT FLIPPED: Apple M4 1M rows, hashes
 unchanged, taxireg 0.993, taxi 1.018 -- the mutex is not the cost here.
 ON BY DEFAULT on Apple since the SIMD-group split kernel
 (`FBS_WARP_DEFAULT`): with 40 columns per pass every node's mutex took
@@ -1547,6 +1555,16 @@ def node_split_copy_back_sampled_kernel[
 
 # TOMBSTONE: MOJOLEARN_AFT_F04 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F04.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F04 (Apple fast) opt-in arm back as it was, default off; default path unchanged.
+# AFT F04: double only the scan's cooperative width. The ops retain the
+# original TPB-grained work map, so segment boundaries and row multiplicity
+# do not change; fewer scan aggregates trade for more shared memory/block.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_RF_SCAN_WIDTH_SCALE = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F04"]()
+) else 1
 
 
 struct NodeSplitScratch[
@@ -1616,7 +1634,7 @@ struct NodeSplitScratch[
         max_work_items: Int,
         max_rows: Int = 1,
     ) raises:
-        comptime SCAN_TPB = Self.TPB
+        comptime SCAN_TPB = Self.TPB * AFT_RF_SCAN_WIDTH_SCALE
         var n_blocks = ceildiv(max_slots, SCAN_TPB)
         # DEVIATION 2001: the staging trio holds whichever functor the
         # flag selects. `OPS_BYTES == size_of[Ops]()` when the flag is
@@ -1859,7 +1877,7 @@ def launch_node_split_kernel[
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[OpsST]()
         )
-        launch_inclusive_scan_by_key[OpsST, TPB, scan_sab](
+        launch_inclusive_scan_by_key[OpsST, TPB * AFT_RF_SCAN_WIDTH_SCALE, scan_sab](
             ctx,
             ops_ptr,
             n_slots,
@@ -1905,7 +1923,7 @@ def launch_node_split_kernel[
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[OpsT]()
         )
-        launch_inclusive_scan_by_key[OpsT, TPB, scan_sab](
+        launch_inclusive_scan_by_key[OpsT, TPB * AFT_RF_SCAN_WIDTH_SCALE, scan_sab](
             ctx,
             ops_ptr,
             n_slots,
@@ -1990,6 +2008,17 @@ def launch_node_split_kernel[
 
 # TOMBSTONE: MOJOLEARN_AFT_F05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F05.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F05 (Apple fast) opt-in arm back as it was, default off; default path unchanged.
+# AFT F05: four coalesced row stripes/lane in the existing label+weight
+# gather, preserving each sampled position and the sampler's entire stream.
+# The tile amortizes lane scheduling and keeps adjacent lanes on adjacent
+# positions; no sorting or sample-selection change is part of the candidate.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_RF_GATHER_ROWS = 4 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F05"]()
+) else 1
 
 
 def gather_sampled_order_kernel[
@@ -2006,19 +2035,21 @@ def gather_sampled_order_kernel[
     """DEVIATION 2001's once-per-tree gather (see the block above). One
     thread per sampled position; `gather_weights` is the runtime
     `has_sample_weight` (Int32 per the kernel-scalar rule)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_sampled_rows):
-        var src = Int(row_ids[unsafe_offset=i])
-        comptime if sabotage == 1:
-            # SABOTAGE: broadcast position 0's row -- every label collapses.
-            src = Int(row_ids[unsafe_offset=0])
-        labels_s[unsafe_offset=i] = labels[unsafe_offset=src]
-        if gather_weights != Int32(0):
-            var w = sample_weight[unsafe_offset=src]
+    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_RF_GATHER_ROWS + Int(thread_idx.x)
+    comptime for r in range(AFT_RF_GATHER_ROWS):
+        var i = first + r * Int(block_dim.x)
+        if i < Int(n_sampled_rows):
+            var src = Int(row_ids[unsafe_offset=i])
             comptime if sabotage == 1:
-                # SABOTAGE: multiplicative, exact in fp32.
-                w = w * Float32(2.0)
-            sample_weight_s[unsafe_offset=i] = w
+                # SABOTAGE: broadcast position 0's row -- every label collapses.
+                src = Int(row_ids[unsafe_offset=0])
+            labels_s[unsafe_offset=i] = labels[unsafe_offset=src]
+            if gather_weights != Int32(0):
+                var w = sample_weight[unsafe_offset=src]
+                comptime if sabotage == 1:
+                    # SABOTAGE: multiplicative, exact in fp32.
+                    w = w * Float32(2.0)
+                sample_weight_s[unsafe_offset=i] = w
 
 
 def launch_gather_sampled_order_kernel[
@@ -2048,7 +2079,7 @@ def launch_gather_sampled_order_kernel[
         sample_weight_s.unsafe_origin_cast[MutAnyOrigin](),
         Int32(n_sampled_rows),
         Int32(1) if gather_weights else Int32(0),
-        grid_dim=ceildiv(n_sampled_rows, TPB),
+        grid_dim=ceildiv(n_sampled_rows, TPB * AFT_RF_GATHER_ROWS),
         block_dim=TPB,
     )
 
@@ -2940,9 +2971,14 @@ def launch_build_histograms_kernel[
             ]() else (
                 # FAST Apple default (M3 aft-ab-rfc8: taxi 11.51 -> 11.36 s,
                 # Istella 14.38 -> 14.24 s, same hashes as 4-column tiles)
+                # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_RF_HIST_COLUMNS8 force knob back as it was
+                # (its _OFF rollback stays deleted); default path unchanged.
                 8 if (
-                    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-                    and TARGET_HAS_APPLE_GPU
+                    is_defined["MOJOLEARN_RF_HIST_COLUMNS8"]()
+                    or (
+                        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+                        and TARGET_HAS_APPLE_GPU
+                    )
                 ) else 4
             ))
             comptime ENABLED = USE4
@@ -3389,7 +3425,17 @@ of which paid a 128-thread block and a barrier-bound scan."""
 
 # TOMBSTONE: MOJOLEARN_AFT_F03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F03.patch; record in docs/TOMBSTONES.md.
-comptime FBS_WARP_CELLS = 4
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F03 (Apple fast) opt-in arm back as it was, default off; default path unchanged.
+# AFT F03: two small-histogram split cells per block instead of four.
+# This is the device-loop-reachable small-work split scheduler: the older
+# small_node_split path only runs host-staged batches. Halving cells halves
+# this kernel's shared carve and changes occupancy, not candidate coverage.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime FBS_WARP_CELLS = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F03"]()
+) else 4
 
 
 def find_best_splits_warp_kernel[
