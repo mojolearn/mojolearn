@@ -660,6 +660,7 @@ in the tables after the sections.
 | [`MOJOLEARN_HUBER_FAST_BLOCK512_OFF`](#mojolearn_huber_fast_block512_off-old-path-deleted-2026-11-15) | Linear (HuberRegressor fast-fit 512-row partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-huber512) | 2026-11-15 | [MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch](../experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch) |
 | [`MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF`](#mojolearn_fast_ols_normal_eq_off-old-path-deleted-2026-11-15) | Linear (LinearRegression resident normal equations, FAST Apple) | removed (old path; FAST+Apple default KEPT, olsne-taxi / olsne-istella) | 2026-11-15 | [MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch](../experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch) |
 | [`MOJOLEARN_QN_FAST_BLOCKS_OFF`](#mojolearn_qn_fast_blocks_off-old-path-deleted-2026-11-15) | Linear (QN one-class objective in two launches, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-*-blocks-istella) | 2026-11-15 | [MOJOLEARN_QN_FAST_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch) |
+| [`MOJOLEARN_PREP_FAST_MINMAX_OFF`](#mojolearn_prep_fast_minmax_off-old-path-deleted-2026-11-15) | Preprocessing (MinMaxScaler row-tiled extrema, FAST Apple) | removed (old path; FAST+Apple default KEPT, prep-minmax-istella) | 2026-11-15 | [MOJOLEARN_PREP_FAST_MINMAX_OFF.patch](../experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6409,4 +6410,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT 0ae9c28cd (EXPERIMENTS.md `QN_FAST_BLOCKS`, linear-logreg-blocks-istella, linear-svc-blocks-istella, linear-svr-blocks-istella): M3 one run per arm, logreg istella 3,893 -> 3,612 ms, linearsvc 773 -> 733, linearsvr 913 -> 219, quality same. No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1385d5e6ff`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch`, then delete the `MOJOLEARN_QN_FAST_BLOCKS_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_PREP_FAST_MINMAX_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MinMaxScaler's fit extrema pass from the row-tiled `extrema_rows_fast_kernel` (preprocessing/minmax.mojo `minmax_fit_fast_dev`) to `extrema_chunks_kernel`. Only the `and not is_defined` term of `PREP_FAST_MINMAX` is gone; `extrema_chunks_kernel` stays the path of IDENTICAL and every non-Apple build.
+- **Verdict**: KEPT f419ea9f1 (EXPERIMENTS.md `PREP_FAST_MINMAX`, prep-minmax-istella): M3 one run per arm, minmax-scaler istella 152 -> 106 ms, output digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6c544e9855`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch`, then delete the `MOJOLEARN_PREP_FAST_MINMAX_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
