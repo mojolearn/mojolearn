@@ -632,6 +632,7 @@ in the tables after the sections.
 | [`MOJOLEARN_GBDT_EVAL_SKIP_EMPTY`](#mojolearn_gbdt_eval_skip_empty) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch) |
 | [`MOJOLEARN_GBDT_EVAL_FUSED`](#mojolearn_gbdt_eval_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_FUSED.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch) |
 | [`MOJOLEARN_SYM_HIST_ALL`](#mojolearn_sym_hist_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_HIST_ALL.patch](../experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch) |
+| [`MOJOLEARN_SYM_SORT_SWAP`](#mojolearn_sym_sort_swap) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_SORT_SWAP.patch](../experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5959,3 +5960,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 194, 218, 1299; appended row in the "Lane expdel-05-trees" section.
 - Note: Only the umbrella went here; SYM_SORT_SWAP is deleted in its own commit; SYM_RESOLVE_BLOCK keeps its define (the prerequisite of the unmeasured AFCL_T05 card in gbdt/apple_fast_classical.mojo; KEEP-OPEN).
+
+### MOJOLEARN_SYM_SORT_SWAP
+
+- Tried: the level split's one-bit radix pass written into `tmp_bins` / `tmp_indices` and the handles swapped instead of copied back (two `copy_u32_kernel` launches per level fewer, `split_subsets_from_desc`), FAST + Apple only.
+- Verdict: NEUTRAL. rab7-symsortswap (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella +0.3%, taxi +0.1%; stays off. The `_radix_pass` import went with it. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `1805cb6b73`. Patch: `experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/kernel/sym_fast.mojo`, `gbdt/methods/pointwise_optimization_subsets.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 203, 227, 1303; appended row in the "Lane expdel-05-trees" section.

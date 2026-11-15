@@ -23,16 +23,9 @@ comptime SYM_FAST_APPLE = (
 # RESOLVE_BLOCK deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 24c9108159.
 # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch
 
-#: the one-bit radix pass of the level split writes into `tmp_bins` /
-#: `tmp_indices` and the handles are SWAPPED instead of copied back: the
-#: two `copy_u32_kernel` launches per level go away
-#: (`pointwise_optimization_subsets.mojo::split_subsets_from_desc`).
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
-#: arms never reached the queue).
-comptime SYM_SORT_SWAP = SYM_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_SORT_SWAP"]()
-)
+# TOMBSTONE: MOJOLEARN_SYM_SORT_SWAP (NEUTRAL: rab7-symsortswap istella +0.3%, taxi +0.1%) deleted 2026-11-15 by
+# lane/expdel-05-trees; code recoverable at 1805cb6b73.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch
 
 #: `pw_resolve_pack_bins_kernel` folds the per-block score records ONCE
 #: per threadgroup (threads stride the records, then a shared-memory tree
