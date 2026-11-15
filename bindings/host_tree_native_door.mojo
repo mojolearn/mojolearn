@@ -18,6 +18,7 @@ from bindings.host_archive_native_door import host_archive_check_layout, host_ar
 from bindings.host_archive_lifetime_door import host_archive_finalize
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from core.scaler_fit_impl import scaler_cast
+from bindings.admitted_input_run import RESHAPE_HINT
 from core.host_tree_impl import host_label_first_unconverted, host_label_gather_i64, host_label_gather_f64, host_tree_widen, host_tree_argmax, host_tree_column_copy
 from core.sha256 import Sha256
 from core.host_entry_table import HostEntryKey, FH_RF_PREDICT_PROBA, FH_RF_PREDICT_REG, FH_ET_PREDICT
@@ -56,8 +57,13 @@ def host_tree_cast(value: PythonObject, context: PythonObject) raises -> PythonO
     the caller already admitted and viewed (classical_input), so a door that
     inspected the view does not admit X a second time (row N279). The caller
     keeps `value` (and whatever it views) alive through this call."""
-    if Int(py=value.ndim) != 2:
-        raise Error("X must be 2-D")
+    var rank = Int(py=value.ndim)
+    if rank != 2:
+        # The product's one rank refusal (bindings/admitted_family_door.mojo:167), with the reshape hint
+        # below rank 2; smoke 9685746f95 found this door's bare "X must be 2-D". Refusal path only.
+        var hint = String(". ") + String(RESHAPE_HINT) if rank < 2 else String("")
+        raise Error("mojolearn: X must be 2-D, got " + String(rank) + "-D shape "
+                    + String(py_call(value.shape.__repr__)) + hint)
     var rows = Int(py=value.shape[0])
     var cols = Int(py=value.shape[1])
     if rows < 1 or cols < 1:
