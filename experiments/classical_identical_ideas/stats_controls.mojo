@@ -25,7 +25,7 @@ comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM
 # C54: reuse within kernel construction; fitted factors remain caller-owned.
 # TOMBSTONE: MOJOLEARN_C54_PREDICT_TILES (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 843366c4fd.
 # Restore: git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch
-comptime C54_PREDICT_TILES = False
+# (Sweep 2026-11-15: comptime C54_PREDICT_TILES removed; nothing read it.)
 # C56_QDA_PROJECT (lane classical-nbda, 2026-10-07; was MOJOLEARN_C56_QDA_PROJECT4):
 # one switch with arms, QDA `qda_dec` only (predict / predict_proba scoring):
 # each unit computes W adjacent projection columns per pass over the centred
