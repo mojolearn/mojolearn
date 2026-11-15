@@ -565,7 +565,9 @@ comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the entry out and Python keeps the host-address call.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
-comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_SVD_RESIDENT_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_SVD_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at d4f807923d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
