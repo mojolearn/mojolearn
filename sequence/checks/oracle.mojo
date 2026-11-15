@@ -190,7 +190,9 @@ def _o_wgrad_block(K: Int) -> Int:
     R R >= K."""
     # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (unmeasured old path: one ascending BPTT weight-gradient fold in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 105cf60fa6.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return K
     # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD (unmeasured opt-in arms 1 (NI51 256-row blocks) and 2 (NN43 leaf profile) of the IDENTICAL BPTT weight-gradient block) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at d09d3a3b71.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.patch; record in docs/TOMBSTONES.md.
@@ -696,7 +698,9 @@ def _o_ln_row_warp() -> Bool:
     32-slot fold under IDENTICAL unless the all-off define is set."""
     # TOMBSTONE: MOJOLEARN_IDN_LN_ROW_WARP_OFF (old path beside the IDENTICAL LayerNorm 32-slot row fold, EXP:1945 PROMOTED) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 730ca5e639.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch; record in docs/TOMBSTONES.md.
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return False
     return True
 

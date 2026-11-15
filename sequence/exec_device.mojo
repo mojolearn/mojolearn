@@ -90,31 +90,33 @@ from core.shared_slot import SharedSlot
 #: cooperative fold is the one-thread op's chain (same fmas, same values,
 #: same order; only the loads are spread over the warp), so no bit moves on
 #: any column; `coop_bcast` keeps a cell inside its 32-lane half of a CDNA
-#: wavefront. MOJOLEARN_IDN_ALL_OFF restores Apple only.
+#: wavefront.
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (unmeasured old path: Apple-only coop folds in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 14eb8b482b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_COOP_NVAMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime SEQ_COOP = TARGET_HAS_APPLE_GPU or SEQ_COOP_NVAMD
 #: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
 #: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
-#: IDENTICAL on every GPU. MOJOLEARN_IDN_ALL_OFF restores one thread per row.
+#: IDENTICAL on every GPU.
 #: nr-small D11: Adafactor's row factor (op_af_row) and row-var mean
 #: (op_af_rmean, one thread) on a simdgroup, the same chains; IDENTICAL.
-#: Off under MOJOLEARN_IDN_ALL_OFF.
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_AF_COOP_OFF (unmeasured old path: one-thread Adafactor row factor in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2794197ed7.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_AF_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_LN_COOP_OFF (unmeasured old path: one thread per LayerNorm row in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2c0d457d23.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_LN_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 comptime TPB = 128
@@ -156,12 +158,12 @@ comptime _SEQ_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_PIPE_UP_OFF (unmeasured old path: IDENTICAL serial uploads) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at b25786e9b3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST or (
-    _SEQ_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    _SEQ_IDN
 )
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF (unmeasured old path: IDENTICAL serial downloads) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c0a04b3bfd.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST or (
-    _SEQ_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    _SEQ_IDN
 )
 #: the pipelined chunk, floats (8 MB).
 # TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_CH (unmeasured Apple FAST knob, EXP:680 MERGED-UNMEASURED; default 1 << 21 kept) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c5730b729c.

@@ -39,9 +39,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 
 # TOMBSTONE: MOJOLEARN_IDN_NM_SPEC_OFF (old path beside the IDENTICAL ETS Nelder-Mead spec default, EXP:2086 KEEP) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 33ca37483e.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime ETS_SPEC = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 #: coordinate capacity (no season: alpha, beta, phi, l0, b0 <= 5)

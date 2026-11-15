@@ -1021,10 +1021,10 @@ def gmm_estep_scratch_floats(n: Int, d: Int) -> Int:
 #: takes the stacked E-step on the NVIDIA and AMD columns too. Same words
 #: (the argument above is vendor neutral); whether the launches it saves
 #: outweigh the `n x Kd` operand there is for the orchestrator's A/B to say.
-#: Off under `MOJOLEARN_IDN_ALL_OFF`.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime IDN_GMM_ESTEP_STACK = (
     is_defined["MOJOLEARN_IDN_GMM_ESTEP_STACK"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GMM_ESTEP_STACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -1103,10 +1103,11 @@ def mahal_stacked_kernel(
 # Remains OFF: these representative fits lose, and full-board qualification
 # remains pending. Other existing GMM controls are unchanged.
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime GMM_COMPONENT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_GMM_COMPONENT_BATCH"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GMM_COMPONENT_BATCH_FLOATS = 1 << 22  # all extra scratch <=16 MiB
 

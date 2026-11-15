@@ -78,12 +78,13 @@ comptime ETS_TEAM = (
 #: trend form, chunked SSE fold, the forecast's running phi power) on NVIDIA,
 #: AMD and the host column together: the host binding replays the same chunk
 #: maps, tree and fold in `ets_team_replay` (sequence/exec.mojo). Every other
-#: ETS model keeps op_ets. MOJOLEARN_IDN_ALL_OFF turns it off.
+#: ETS model keeps op_ets.
 # TOMBSTONE: MOJOLEARN_IDN_ETS_TEAM_OFF (old path beside the IDENTICAL ETS team default, EXP:2087 KEEP) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 0fe5074767.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ETS_TEAM_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime IDN_ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: IDN_ETS_TEAM's chunk count: the team's threads (the host replay runs
 #: them one after another)

@@ -267,10 +267,11 @@ comptime M1_SCAN_PERSISTENT = 3
 # lane/neural-fusions (L13): the persistent chunked scan, one launch, bits
 # unchanged (m1_persistent_scan.mojo). Exclusive with the NI38 window arm.
 # The native host keeps the shipped serial kernel (the same graph).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime IDN_M1_PERSISTENT_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and M1_SCAN == M1_SCAN_PERSISTENT
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not ANY_SABOTAGE
 )
