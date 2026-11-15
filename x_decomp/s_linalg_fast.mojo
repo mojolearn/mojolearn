@@ -13,7 +13,6 @@ verdicts batch 6 (2026-10-05), each with an _OFF rollback:
 IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries.
 """
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.device_pool import pool_give, pool_take

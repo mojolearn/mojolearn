@@ -38,7 +38,6 @@ hand DEVICE words between threads are `dev_barrier` (Apple's
 from std.atomic import Atomic
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

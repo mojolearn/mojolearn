@@ -56,10 +56,8 @@ below is one comptime constant every one of them imports; the cells here
 are the only arithmetic). Its -D MOJOLEARN_IDN_EIGH_BLOCK_ON
 switch was deleted 2026-11-15 (docs/TOMBSTONES.md): IDN_EIGH_BLOCK is False and
 the rotation solver runs at every size.
-
-CANDIDATE ARMS (default off, each moves the words on all four columns):
 """
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add
+from checks.numerics import ftz, identical_mul, identical_mul_add
 from std.memory import bitcast
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import pj_first, pj_second
