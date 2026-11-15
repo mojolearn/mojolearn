@@ -53,7 +53,7 @@ struct _Run(Movable):
         self.indices = List[Int32]()
 
 
-def _fit_search(x: List[Float32], keep: List[Int32], mut out: _Run) raises:
+def _fit_search(x: List[Float32], keep: List[Int32], mut dst: _Run) raises:
     var plan = pq_fit_plan(_N, _D, _LISTS, _PQ_DIM, _PQ_BITS)
     var index = ivf_pq_build_host(x, _N, _D, _LISTS, 20, 3, _PQ_DIM, _PQ_BITS, 3)
     var q = List[Float32](length=_M * _D, fill=Float32(0.0))
@@ -78,9 +78,9 @@ def _fit_search(x: List[Float32], keep: List[Int32], mut out: _Run) raises:
         var id = Int(ids[i])
         require(id >= 0 and id < _N, "IVF-PQ filtered id " + String(i) + " is " + String(id))
         require(keep[id] != 0, "IVF-PQ filtered id " + String(id) + " is not kept by the filter")
-    out.codes = index.codes.copy()
-    out.distances = dist.copy()
-    out.indices = ids.copy()
+    dst.codes = index.codes.copy()
+    dst.distances = dist.copy()
+    dst.indices = ids.copy()
     # buffers the search read or wrote by address
     _ = index^
     _ = q^
