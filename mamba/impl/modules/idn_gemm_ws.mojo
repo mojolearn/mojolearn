@@ -21,7 +21,7 @@ the per-context workspace lives for the process. Growth waits first, so a
 queued GEMM never loses the workspace it is using. Different device contexts
 use distinct buffers keyed by core/ctx_key.mojo.
 
-`-D MOJOLEARN_IDN_ALL_OFF` restores `identical_gemm[False]` at every site. FAST builds always take
+FAST builds always take
 `identical_gemm[False]`, as before.
 """
 from std.sys.compile import is_defined
@@ -41,7 +41,8 @@ comptime IDN_MAMBA_GEMM_WS = (
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     # TOMBSTONE: MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF (unmeasured old path beside the retained-workspace default) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 23341493ec.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at 67448f09b2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
 )
 
 
