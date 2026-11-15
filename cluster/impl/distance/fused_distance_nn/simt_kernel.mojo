@@ -166,12 +166,8 @@ from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_FAST,
     ftz,
     ftz_simd,
     identical_mul_add,
@@ -188,24 +184,20 @@ comptime FUSED_CLAMP_PRECISION = Float32(1.0e-6)
 
 # `Policy4x4<float, _veclen>`: KernelPolicy<float, v, 32, 4, 4, 16, 16>
 # (`raft/linalg/contractions.cuh:160-166`).
-# AFCL-G05: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
-# Halve row ownership per threadgroup (both existing feature policies).
-# Column ownership, vector alignment and exhaustive centroid traversal stay
-# fixed. Smaller X pages and fewer threads trade operand reuse for occupancy
-# across neighboring shapes; no input size or dataset chooses this arm.
-comptime AFCL_G05 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and is_defined["MOJOLEARN_AFCL_G05"]()
-)
+# AFCL-G05 (half row ownership per threadgroup, never run).
+# TOMBSTONE: MOJOLEARN_AFCL_G05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 52d759e739.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G05.patch; record in docs/TOMBSTONES.md.
 comptime FUSED_NORMAL_KBLK = 32
-comptime FUSED_NORMAL_TR = 8 if AFCL_G05 else 16
+comptime FUSED_NORMAL_TR = 16
 comptime FUSED_NORMAL_TC = 16
 
 # `Policy4x4Skinny<float, _veclen>`: KernelPolicy<float, v, 8, 4, 4, 8, 8>
 # (`raft/linalg/contractions.cuh:183-196`), "faster for fusedL2NN on skinny
 # matrices, i.e., matrices with a small k dimension" (`:177-181`).
 comptime FUSED_SKINNY_KBLK = 8
-comptime FUSED_SKINNY_TR = 4 if AFCL_G05 else 8
+# TOMBSTONE: MOJOLEARN_AFCL_G05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 52d759e739.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G05.patch; record in docs/TOMBSTONES.md.
+comptime FUSED_SKINNY_TR = 8
 comptime FUSED_SKINNY_TC = 8
 
 
@@ -214,17 +206,16 @@ comptime FUSED_SKINNY_TC = 8
 #: that reads them. `ftz` is idempotent, so every accumulator sees the same
 #: operand words and the same fma chain: the same bits, fewer instructions
 #: on the kernel's inner loop (the k-means assignment, IVF quantizer, k-means||
-#: rounds). `-D MOJOLEARN_FUSED_STAGE_FTZ_OFF` flushes at every use again.
-comptime FUSED_STAGE_FTZ = not is_defined["MOJOLEARN_FUSED_STAGE_FTZ_OFF"]()
+#: rounds). The staging flush is the only form.
+# TOMBSTONE: MOJOLEARN_FUSED_STAGE_FTZ_OFF (old path, no A/B row; flush at every use) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3a3c2a7c91.
+# Restore: git apply experiments/removed/MOJOLEARN_FUSED_STAGE_FTZ_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
 def _fused_x_lane[w: Int](v: Float32) -> SIMD[DType.float32, w]:
     """The X operand broadcast to the accumulator row, flushed here only
-    when the staging did not flush it already."""
-    comptime if FUSED_STAGE_FTZ:
-        return SIMD[DType.float32, w](v)
-    return ftz_simd[w](SIMD[DType.float32, w](v))
+    already flushed by the staging."""
+    return SIMD[DType.float32, w](v)
 
 
 def fused_is_skinny(k: Int) -> Bool:
@@ -442,8 +433,7 @@ def _fused_distance_nn_body[
                     var vx = SIMD[DType.float32, veclen](0.0)
                     if koff < k and xrow < m:
                         vx = x.unsafe_load[width=veclen](xrow * k + koff)
-                    comptime if FUSED_STAGE_FTZ:
-                        vx = ftz_simd[veclen](vx)
+                    vx = ftz_simd[veclen](vx)
                     sx.unsafe_store(
                         (srowid + li * ldg_rows_x) * smem_stride + scolid, vx
                     )
@@ -453,8 +443,7 @@ def _fused_distance_nn_body[
                     var vy = SIMD[DType.float32, veclen](0.0)
                     if koff < k and yrow < n:
                         vy = y.unsafe_load[width=veclen](yrow * k + koff)
-                    comptime if FUSED_STAGE_FTZ:
-                        vy = ftz_simd[veclen](vy)
+                    vy = ftz_simd[veclen](vy)
                     sy.unsafe_store(
                         (srowid + li * ldg_rows_y) * smem_stride + scolid, vy
                     )
@@ -496,8 +485,6 @@ def _fused_distance_nn_body[
                         var yv = SIMD[DType.float32, cpt](
                             ry0[v], ry1[v], ry2[v], ry3[v]
                         )
-                        comptime if not FUSED_STAGE_FTZ:
-                            yv = ftz_simd[cpt](yv)
                         # `acc += x * y` (`l2_exp.cuh:103-109`) with the
                         # CONTRACTION PINNED under IDENTICAL: one `fma`,
                         # one rounding, the same on Metal, PTX and AMDGPU

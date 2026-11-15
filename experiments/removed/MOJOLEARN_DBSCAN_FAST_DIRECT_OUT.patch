@@ -1,0 +1,24 @@
+diff --git a/dbscan/estimator.mojo b/dbscan/estimator.mojo
+index f655ae0818..49dc3ddae6 100644
+--- a/dbscan/estimator.mojo
++++ b/dbscan/estimator.mojo
+@@ -158,11 +158,14 @@ comptime IDN_DBSCAN_COSINE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_DBSCAN_DIRECT_OUT = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-# DBSCAN_FAST_DIRECT_OUT (FAST + Apple arm): F15/dbscan-outputs M3 2026-10-06,
+-# B/A 0.9371..1.7658 (mixed/regressing), never promoted.
+-# TOMBSTONE: MOJOLEARN_DBSCAN_FAST_DIRECT_OUT (unmeasured-to-promotion Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 48be49ddd8.
+-# Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_DIRECT_OUT.patch; record in docs/TOMBSTONES.md.
+-)
++# MEASURED M3 FAST; broader workload evidence remains separate.
++# F15/dbscan-outputs M3 2026-10-06: 6 scored caller times; B/A
++# 0.9371..1.7658 (mixed/regressing); FAST candidate remains OFF.
++# Scored FAST quality 3/3 within existing bands; PASS.
++# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
++# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/dbscan-outputs.
++# Compilation/identity reused. No combined-toggle/full-board claim.
++) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"]())
+ 
+ comptime COSINE_TPB = 256
+ comptime COSINE_NO_BAD_ROW = Int32(2147483647)

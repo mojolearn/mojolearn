@@ -27,7 +27,8 @@ from ivf.ivf_index_arrays_run import (
     ivf_write_search_result_run,
 )
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_PREPARE
+# TOMBSTONE: MOJOLEARN_ANN3_PREPARE_OFF (old path, no A/B row; owner expdel2-14-cluster; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 14dcaf94ce.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
@@ -119,25 +120,20 @@ def ivf_device_prepare_run(var arrays: IvfIndexArrays, partial: Bool, mut bst: A
     # cpu2-l6-bindings: the resident index never reads `labels` (build
     # workspace), so no host scatter over every row restores it
     var labels = List[UInt32]()
-    # lane ann-apple3, behind `ANN3_PREPARE`: the admitted arrays move into
-    # the index (copied otherwise, the n_rows x dim list data among them)
+    # lane ann-apple3: the admitted arrays move into the index (the
+    # ANN3_PREPARE default; the copying arm is deleted)
     var centers = List[Float32]()
     var center_norms = List[Float32]()
     var offsets = List[Int32]()
     var list_indices = List[UInt32]()
     var list_data = List[Float32]()
-    comptime if ANN3_PREPARE:
-        swap(centers, arrays.centers)
-        swap(center_norms, arrays.center_norms)
-        swap(offsets, arrays.offsets)
-        swap(list_indices, arrays.list_indices)
-        swap(list_data, arrays.list_data)
-    else:
-        centers = arrays.centers.copy()
-        center_norms = arrays.center_norms.copy()
-        offsets = arrays.offsets.copy()
-        list_indices = arrays.list_indices.copy()
-        list_data = arrays.list_data.copy()
+    # TOMBSTONE: MOJOLEARN_ANN3_PREPARE_OFF (old path, no A/B row; owner expdel2-14-cluster; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 14dcaf94ce.
+    # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+    swap(centers, arrays.centers)
+    swap(center_norms, arrays.center_norms)
+    swap(offsets, arrays.offsets)
+    swap(list_indices, arrays.list_indices)
+    swap(list_data, arrays.list_data)
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
         centers^, center_norms^, offsets^, list_indices^, list_data^, labels^,

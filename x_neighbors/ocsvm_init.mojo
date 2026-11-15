@@ -24,8 +24,6 @@ kernels (x_neighbors/ocsvm_dev.mojo) and the host column
 
 Nothing here imports a GPU module, so the CPU-only host binding compiles it.
 """
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_neighbors.items import FP
 from x_linear.ff import FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_div, ff_f32
 from x_neighbors.items import IP
@@ -114,12 +112,13 @@ def oci_nu_lo(nu: Float64) -> Float32:
 #: Bits: an element can move in its last float32 bit (float-float quotient
 #: vs the binary64 one), device and host column together.
 #: Lane py-runtime-b: FAST registers it too (the Python walk is deleted:
-#: no Python compute in the runtime). In IDENTICAL, -D
-#: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (or MOJOLEARN_IDN_ALL_OFF) leaves the binding
-#: function unregistered and PageRank refuses a caller vector.
-comptime XN_UNIT_DEV = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not (
-    is_defined["MOJOLEARN_IDN_XN_UNIT_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: no Python compute in the runtime).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 4ff9d4e272.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_UNIT_DEV_OFF.patch; record in docs/TOMBSTONES.md.
+#: Kept as a name for its importers; always registered.
+comptime XN_UNIT_DEV = True
 
 
 @always_inline

@@ -1,0 +1,37 @@
+diff --git a/x_neighbors/svgp_b32_gate.mojo b/x_neighbors/svgp_b32_gate.mojo
+index 8c4a71a674..27201b84c0 100644
+--- a/x_neighbors/svgp_b32_gate.mojo
++++ b/x_neighbors/svgp_b32_gate.mojo
+@@ -6,8 +6,8 @@ A/B one run per arm, main@b2657cc89, algos svgp (runs v0035/v0036, a1618/a1619):
+   istella NV L40S 344.4 -> 206.5 ms (0.60), AMD MI325X 1091.7 -> 620.7 ms (0.57)
+   taxi    NV L40S 337.0 -> 334.6 ms (0.99), AMD MI325X 1086.9 -> 716.6 ms (0.66)
+   digests NV == AMD on both arms; r2 equal (istella -0.10601568648, taxi -0.19498).
+-The float-float B stays for a
+-rejected fit and for FAST. FAST builds never take it (IDENTICAL-only, so the
++`-D MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF` restores the
++float-float B everywhere. FAST builds never take it (IDENTICAL-only, so the
+ SVGP_FAST_BSPLIT assert in iter_device.mojo cannot fire there).
+ 
+ B = Kuf Kfu through the identical GEMM in float32,
+@@ -41,6 +41,7 @@ contract (gemm/contract.mojo), and the host runs the same gate cells.
+ Cells only here (no GPU import): x_neighbors/iter_host.mojo imports them for
+ the host column, x_neighbors/iter_device.mojo wraps them in kernels.
+ """
++from std.sys.compile import is_defined
+ from x_neighbors.items import FP
+ from checks.numerics import ftz, identical_div, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from x_decomp.cells import chol_diag, div0, sqrt0
+@@ -48,9 +49,10 @@ from glm.impl.gram_solve_cells import gs_pivot_trusted
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF (old path, EXP:2036 KEEP of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 84842e7d45.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_SVGP_B_FP32_GATED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_SVGP_B_FP32_GATED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF"]()
++)
+ 
+ 
+ @always_inline

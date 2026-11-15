@@ -99,7 +99,6 @@ one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
@@ -222,24 +221,23 @@ from neighbors.impl.ball_cover.registers import (
 #: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns keeps
 #: the counts too (it was Apple only), so a fit the edge cap splits into
 #: several batches does not re-run the count pass in loop 2. Same counts, so
-#: the same CSR. `-D MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF=1` re-counts there.
+#: the same CSR.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 1994e86138.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_KEEP_COUNTS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not TARGET_HAS_APPLE_GPU
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
+# TOMBSTONE: MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at e713eb2d5c.
+# Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime DBSCAN_RBC_KEEP_COUNTS = (
     (
-        (
-            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and TARGET_HAS_APPLE_GPU
-        )
-        or IDN_DBSCAN_KEEP_COUNTS
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+        and TARGET_HAS_APPLE_GPU
     )
-    and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
+    or IDN_DBSCAN_KEEP_COUNTS
 )
 
 #: fam-cluster (2026-10-04), IDENTICAL: on the ball-cover arm loop 1 no
@@ -247,15 +245,12 @@ comptime DBSCAN_RBC_KEEP_COUNTS = (
 #: by the exact 64-bit count (`adjlen_here = nnz1`), and the per-batch
 #: maximum degree feeds only `rbc_dbscan_take_one_pass`, which returns False
 #: unconditionally. Three drains and one launch per batch; no value any
-#: kernel reads changes. `-D MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF=1`
-#: restores them.
-comptime IDN_DBSCAN_RBC_DEAD_READS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: kernel reads changes.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 7a7bdb9b23.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DBSCAN_RBC_DEAD_READS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: the border pass
 #: decides on the device which batches hold a labelled non-core row. One
@@ -264,14 +259,12 @@ comptime IDN_DBSCAN_RBC_DEAD_READS = (
 #: row) and walking them on the host. Same predicate on the same values, so
 #: the same batches take the pass.
 #: cpu3-neighbors (2026-10-04): the device decision is now the only route in
-#: every mode; the host walk and this define's off arm are gone from the fit.
-comptime IDN_DBSCAN_BORDER_NEEDS_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: every mode; the host walk and this define's off arm are gone from the fit,
+#: and the unread IDN_DBSCAN_BORDER_NEEDS_DEVICE constant with them.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF (old path, no A/B row; the constant was read by nothing) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at cb13fe2afb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 
 comptime EPS_NN_BRUTE_FORCE = 0
 comptime EPS_NN_RBC = 1
@@ -389,7 +382,7 @@ def border_needs_kernel(
     n_points_in: Int32,
 ):
     """`needs[cell] = 1` when rows `start .. start + n_points` hold a
-    non-core row with a label (`IDN_DBSCAN_BORDER_NEEDS_DEVICE`). Every
+    non-core row with a label (the device border decision). Every
     writer stores the same 1, so the cell does not depend on thread order.
     """
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)

@@ -1,0 +1,29 @@
+diff --git a/cluster/impl/detail/kmeans.mojo b/cluster/impl/detail/kmeans.mojo
+index 707c88db47..1ddb3c2c76 100644
+--- a/cluster/impl/detail/kmeans.mojo
++++ b/cluster/impl/detail/kmeans.mojo
+@@ -148,7 +148,8 @@ from cluster.impl.kmeans_params import (
+ #: bench/results/kmeans_linear_2026-09-18/: kmeans taxi 4M x 11 1216 to 100
+ #: ms, Istella-S 2M x 220 14167 to 460 ms with 3081, digests equal to main's
+ #: and to the H100 record's on every cell, the sabotage arm divergent on 75
+-#: of 90 fitting cells); `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
++#: of 90 fitting cells); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` forces
++#: it on any column for an A/B, `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
+ #: it off. Apple and AMD are untimed and keep the atomic reductions.
+ #: fam-cluster (2026-10-04), IDENTICAL: the row-block accumulator on the AMD
+ #: column too. The kernels are vendor neutral (plain Int32 loads and stores,
+@@ -163,12 +164,11 @@ comptime IDN_KMEANS_BLOCK_ACC_AMD = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and TARGET_COLUMN == COLUMN_AMD
+ )
+-# TOMBSTONE: MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC (unmeasured opt-in force-on arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at d018a447ba.
+-# Restore: git apply experiments/removed/MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC.patch; record in docs/TOMBSTONES.md.
+ comptime KMEANS_BLOCK_ACC = (
+     not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
+     and (
+-        TARGET_COLUMN == COLUMN_NVIDIA
++        is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]()
++        or TARGET_COLUMN == COLUMN_NVIDIA
+         or IDN_KMEANS_BLOCK_ACC_AMD
+     )
+ )

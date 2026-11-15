@@ -180,6 +180,80 @@ def _check_configuration() -> Bool:
     # Lane expdel2-09-base (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_KPCA_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KPCA_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): KPCA_RESIDENT_OFF (old path) is gone; the default is kept; code at 8c0f2452a2; restore: experiments/removed/MOJOLEARN_KPCA_RESIDENT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G03.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G03"](), "removed 2026-11-15 (lane/expdel2-10-cluster): AFCL_G03 (never-run programme card: four SIMD groups per MMA eps block (ME_SG 4) instead of 8, trading operand reuse for occupancy) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G05.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G05"](), "removed 2026-11-15 (lane/expdel2-10-cluster): AFCL_G05 (never-run programme card: half the row ownership per threadgroup in both fused feature policies (TR 8 / 4)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSE_ADJ.patch
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_DENSE_ADJ"](), "removed 2026-11-15 (lane/expdel2-10-cluster): DBSCAN_FAST_DENSE_ADJ (unmeasured opt-in arm: kept the full batch x n_rows dense adjacency on the Apple sparse ball-cover arm, which never reads it) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_DIRECT_OUT.patch
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"](), "removed 2026-11-15 (lane/expdel2-10-cluster): DBSCAN_FAST_DIRECT_OUT (unmeasured opt-in arm: downloaded labels and core mask straight into the caller arrays on FAST + Apple) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): DBSCAN_FAST_MMA_OFF (old path; default kept: rollback of the FAST + Apple MMA eps neighbourhood to the unexpanded kernel) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): DBSCAN_RBC_KEEP_COUNTS_OFF (old path; default kept: loop 2 re-ran the count pass instead of scanning the counts loop 1 kept) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC.patch
+    comptime assert not is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"](), "removed 2026-11-15 (lane/expdel2-10-cluster): EXPERIMENTAL_KMEANS_BLOCK_ACC (unmeasured opt-in arm: forced the row-block accumulator on any column for an A/B) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_FUSED_STAGE_FTZ_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_FUSED_STAGE_FTZ_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): FUSED_STAGE_FTZ_OFF (old path; default kept: flushed the operands at every multiply-add instead of once at staging) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF (old path; default kept: rollback of the device decision of which batches take the border pass) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_DBSCAN_COSINE_DEVICE_OFF (old path; default kept: scaled the cosine rows on the host instead of the device) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_DBSCAN_DIRECT_OUT_OFF (old path; default kept: staged labels and core mask through a host buffer and a per-element copy loop) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EDGE_FREE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_EDGE_FREE_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_DBSCAN_EDGE_FREE_OFF (old path; default kept: restored the CSR route where the bit matrix is (IDENTICAL, NVIDIA and AMD)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_DBSCAN_KEEP_COUNTS_OFF (old path; default kept: re-counted the neighbours in loop 2 on NVIDIA and AMD) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_DBSCAN_RBC_DEAD_READS_OFF (old path; default kept: read back two scalars nothing uses (three drains and one launch per batch)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_DBSCAN_RBC_ONE_BATCH_OFF (old path; default kept: the reference batch sizing instead of one planned batch with a memory-derived edge cap) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_KMEANS_BLOCK_ACC_AMD_OFF (old path; default kept: the atomic reductions on AMD instead of the row-block accumulator) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_CONV_CHUNK.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_KMEANS_CONV_CHUNK (unmeasured opt-in arm: int sweep of the Lloyd iterations enqueued per device-convergence flag read (1|2|4|16|32; default 8)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_KMEANS_DEVICE_CONV_OFF (old path; default kept: the per-iteration drain of the Lloyd shift instead of the device flag) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_KMEANS_FOLD_STORE_OFF (old path; default kept: two zero launches and an adding fold of the block tables per Lloyd iteration) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_KMEANS_INCR_INIT_OFF (old path; default kept: reassigned every sample against every candidate in each k-means|| round) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_KMEANS_INIT_PSI_DEVICE_OFF (old path; default kept: drained and read back each round's psi) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_2L_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_OCSVM_2L_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_OCSVM_2L_OFF (old path; default kept: three launches per SMO iteration instead of two) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_CHUNK256.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_OCSVM_CHUNK256"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_OCSVM_CHUNK256 (unmeasured opt-in arm: 256 SMO iterations between two stop-flag reads instead of 64 (CANDIDATE, default off)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_RES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_OCSVM_RES_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_OCSVM_RES_OFF (old path; default kept: downloaded and re-uploaded the n x n Gram around the solve) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_SVGP_B_FP32_GATED_OFF (old path; default kept: the float-float B everywhere instead of the gated float32 GEMM) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_DOT2_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SVGP_DOT2_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_SVGP_DOT2_OFF (old path; default kept: a full ff_add per row instead of the Dot2 chunk fold) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_UNIT_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XN_UNIT_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IDN_XN_UNIT_DEV_OFF (old path; default kept: left unit_ff unregistered in IDENTICAL, so PageRank refused a caller vector) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): IVF_KMEANS_LAZY_SHIFT_OFF (old path; default kept: read the Lloyd shift back every iteration) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_BLOCK_ACC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): KMEANS_BLOCK_ACC_OFF (old path; default kept: forced the atomic reductions off the row-block accumulator columns) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): KMEANS_FAST_INCR_INIT_OFF (old path; default kept: reassigned every sample against every candidate on FAST + Apple) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): KMEANS_FAST_PP_NOSYNC_OFF (old path; default kept: synchronized each of the k - 1 picks and read the costs back) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ID_INCR_INIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): KMEANS_ID_INCR_INIT_OFF (old path; default kept: reassigned every sample against every candidate on IDENTICAL Apple) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY"](), "removed 2026-11-15 (lane/expdel2-10-cluster): KMEANS_PP_NOSYNC_APPLE_ONLY (unmeasured opt-in arm: restored the Apple-only gate of the sync-free k-means++ (NVIDIA and AMD synchronized each pick)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_PROBA64_QOLD.patch
+    comptime assert not is_defined["MOJOLEARN_PROBA64_QOLD"](), "removed 2026-11-15 (lane/expdel2-10-cluster): PROBA64_QOLD (old path; default kept: float32 probabilities (softmax_item, row_softmax) instead of the float64 words) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_5_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PURITY_5_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): PURITY_5_OFF (old path; default kept: the ascending chains (one thread) instead of the SVGP_TREE fold) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): XN_FAST_CLS2_OCSVM_2L_OFF (old path; default kept: three launches per SMO iteration on FAST + Apple) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): XN_FAST_CLS2_OCSVM_CHUNK256_OFF (old path; default kept: 64 SMO iterations between two stop-flag reads on FAST + Apple) is gone; see docs/TOMBSTONES.md"
     return True
 
 

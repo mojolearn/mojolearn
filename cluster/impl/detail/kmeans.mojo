@@ -76,7 +76,6 @@ from cluster.checks.plus_plus import (
     write_inclusive_scan_kernel,
 )
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from std.os import getenv
 from std.time import perf_counter_ns
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -148,44 +147,34 @@ from cluster.impl.kmeans_params import (
 #: bench/results/kmeans_linear_2026-09-18/: kmeans taxi 4M x 11 1216 to 100
 #: ms, Istella-S 2M x 220 14167 to 460 ms with 3081, digests equal to main's
 #: and to the H100 record's on every cell, the sabotage arm divergent on 75
-#: of 90 fitting cells); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` forces
-#: it on any column for an A/B, `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
-#: it off. Apple and AMD are untimed and keep the atomic reductions.
+#: of 90 fitting cells). Apple and AMD are untimed and keep the atomic reductions.
 #: fam-cluster (2026-10-04), IDENTICAL: the row-block accumulator on the AMD
 #: column too. The kernels are vendor neutral (plain Int32 loads and stores,
 #: no shared memory, no atomics) and the Int32 totals are the atomic arms'
 #: totals by the associativity argument in `reduce_by_key.mojo`, so no bit
-#: moves. `-D MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF=1` restores the atomic
-#: reductions on AMD.
+#: moves.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at cf541811a6.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_BLOCK_ACC_AMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_AMD
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
-comptime KMEANS_BLOCK_ACC = (
-    not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
-    and (
-        is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]()
-        or TARGET_COLUMN == COLUMN_NVIDIA
-        or IDN_KMEANS_BLOCK_ACC_AMD
-    )
-)
+# TOMBSTONE: MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC (unmeasured opt-in force-on arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at d018a447ba.
+# Restore: git apply experiments/removed/MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_KMEANS_BLOCK_ACC_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 5f12862454.
+# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_BLOCK_ACC_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMEANS_BLOCK_ACC = TARGET_COLUMN == COLUMN_NVIDIA or IDN_KMEANS_BLOCK_ACC_AMD
 #: fam-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: the
 #: fold of the block tables STORES each output cell instead of adding into a
 #: buffer zeroed by two extra launches per Lloyd iteration. `0 + total` is
-#: `total` in Int32, so no bit moves. `-D MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF=1`
-#: restores the two zero launches and the adding fold.
-comptime IDN_KMEANS_FOLD_STORE = (
-    KMEANS_BLOCK_ACC
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: `total` in Int32, so no bit moves.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at dc02ea5629.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_KMEANS_FOLD_STORE = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: fam2-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: THE
 #: STOPPING RULE ON THE DEVICE. The Lloyd loop no longer drains once per
 #: iteration to read the shift scalar. The executor loop's criterion op
@@ -201,21 +190,14 @@ comptime IDN_KMEANS_FOLD_STORE = (
 #: `n_iter` are the per-iteration loop's, bit for bit. The loop keeps the
 #: per-iteration form when `inertia_check` is on, when the identity trace is
 #: recording, and when the assignment is split across devices.
-#: `-D MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF=1` restores the per-iteration
-#: drain everywhere.
-comptime IDN_KMEANS_DEVICE_CONV = (
-    KMEANS_BLOCK_ACC
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-#: Iterations enqueued per flag read: ONE int sweep define (lane
-#: classical-fixes, 2026-10-07), `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|16|32`,
-#: default 8 when absent. It replaces the five mutually overriding defines
-#: `MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32` (refused in
-#: core/six_lane_experiment_guards.mojo); each value keeps that arm's loop.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF (old path, EXP:2274 REFACTORED default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at ea62796835.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_KMEANS_DEVICE_CONV = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: Iterations enqueued per flag read: 8. The int sweep define of lane
+#: classical-fixes (2026-10-07; it replaced five mutually overriding chunk
+#: defines) is gone: see the tombstone below.
 #: Cost reasoning: a chunk trades one host flag read (a sync) per chunk
 #: against up to chunk-1 near-empty launches enqueued past convergence; it
 #: does not depend on the data shape. No bit depends on the chunk (labels,
@@ -230,7 +212,9 @@ comptime IDN_KMEANS_DEVICE_CONV = (
 # candidate0.887/1.077/1.517 ms vs1.086/1.272/1.503 ms on
 # 100000x32,100001x33,65537x17,k32. One warmup/score; default8 retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime KMEANS_CONV_CHUNK = get_defined_int["MOJOLEARN_IDN_KMEANS_CONV_CHUNK", 8]()
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_CONV_CHUNK (int sweep arm, EXP:1571 RETIRED; A08 mixed on NVIDIA, default 8 kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 9fb488c850.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_CONV_CHUNK.patch; record in docs/TOMBSTONES.md.
+comptime KMEANS_CONV_CHUNK = 8
 
 
 def kmeans_shift_threshold(tol: Float64) -> Float32:
@@ -408,17 +392,17 @@ def init_random(
 #: k - 1 picks each synchronized and read the costs back (ivf's 1024-list
 #: coarse quantizer: ~3,000 syncs; IVF-PQ's 55 codebooks: ~42,000). The same
 #: draws and the same first-strict-minimum pick on the device.
-#: -D MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY=1 restores the Apple-only gate.
 comptime KMEANS_FAST_PP_NOSYNC = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+    # TOMBSTONE: MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY (unmeasured opt-in Apple-only gate) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 879a63ceab.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY.patch; record in docs/TOMBSTONES.md.
     and (
         TARGET_HAS_APPLE_GPU
-        or (
-            (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-            and not is_defined["MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY"]()
-        )
+        or TARGET_COLUMN == COLUMN_NVIDIA
+        or TARGET_COLUMN == COLUMN_AMD
     )
-    and not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"]()
+    # TOMBSTONE: MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at af1f49acbe.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF.patch; record in docs/TOMBSTONES.md.
 )
 """FAST on Apple: the greedy k-means++ loop draws every pick's uniforms up
 front and chooses the best candidate on the device, so the `k - 1` picks
@@ -874,40 +858,34 @@ def _assign_to_candidates(
 #: the running (min_dist, label) instead of reassigning every sample against
 #: every candidate so far (`fold_new_candidates_kernel`; a strict `<` keeps
 #: the earlier candidate on a tie, as the full argmin does).
-#: `-D MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF` reassigns in full.
 #: IDENTICAL on Apple takes it too (lane/apple-identical-neural,
 #: 2026-09-27): each (point, candidate) distance comes from the same
 #: `_assign_to_candidates` (its bits do not depend on which candidates share
 #: the launch), and the fold's strict `<` returns the full argmin's
-#: (value, lowest index). `-D MOJOLEARN_KMEANS_ID_INCR_INIT_OFF` reassigns in
-#: full there.
+#: (value, lowest index).
 #: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
 #: it too. Same argument as Apple IDENTICAL above (per-pair distance bits do
 #: not depend on the launch's candidate set; strict `<` keeps the lowest
 #: index), so no bit moves; the eight rounds plus step 7 stop paying
-#: `n * |C so far| * d` each. `-D MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF=1`
-#: reassigns in full there.
+#: `n * |C so far| * d` each.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 38518c77d5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_INCR_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
     TARGET_HAS_APPLE_GPU and (
-        (
-            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-            and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
-        )
-        or (
-            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            and not (
-                is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
-                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-            )
-        )
+        # TOMBSTONE: MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3f8a07d350.
+        # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        # TOMBSTONE: MOJOLEARN_KMEANS_ID_INCR_INIT_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at c954d92f8b.
+        # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ID_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     )
 )
 
@@ -917,14 +895,11 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
 #: scalar the reduction wrote, so the round drops its drain-and-read of psi
 #: (one of the round's drains; the selected COUNT still comes back, because
 #: it sizes the next allocation). Same Float32 psi, so the same flags.
-#: `-D MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF=1` restores the readback.
-comptime IDN_KMEANS_INIT_PSI_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3ee80555d0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_KMEANS_INIT_PSI_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def fold_new_candidates_kernel(
@@ -1508,19 +1483,19 @@ comptime KMEANS_LAZY_SHIFT = (
         )
         or KMEANS_LAZY_SHIFT_IDN
     )
-    and not is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF (old path, EXP:352 KEPT FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at f1d1f0f0b6.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF.patch; record in docs/TOMBSTONES.md.
 )
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
 #: IVF-family rows faster, recall_at_10 identical. ACCEPT;
-#: rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF` (shift read every iteration).
 #: SCOPE (2026-10-04): a fit takes the lazy read only when its caller sets
 #: `KMeansParams.lazy_shift` (IVF's coarse quantizer in ivf_flat_build.mojo,
 #: its k-means|| recluster through the propagated params, and IVF-PQ's
 #: subspace codebooks in x_ann/ivf_pq_device.mojo); every other caller keeps
 #: the per-iteration read.
 """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
-rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF`): the Lloyd loop reads the centroid shift
+rollback switch deleted 2026-11-15): the Lloyd loop reads the centroid shift
 back and tests convergence every KMEANS_LAZY_SHIFT_EVERY iterations and at
 max_iter, instead of every iteration (one synchronize and one host round
 trip per iteration: 20 waits per IVF coarse fit, per k-means|| recluster and
