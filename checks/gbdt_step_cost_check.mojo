@@ -23,8 +23,7 @@ THE CLAIMS:
       beyond that fails here.
   S3  LOSSGUIDE POOL: the tree pool holds the fit's leaf capacity (at most
       `2 * max_leaves` slots), not `1 << max_depth`; at max_depth 16 the
-      depth-sized pool was 65,536 slots zeroed every tree. Skipped under
-      `-D MOJOLEARN_IDN_GBDT_STEP_OLD` (the A/B arm that restores it).
+      depth-sized pool was 65,536 slots zeroed every tree.
   S4  POOL REUSE: the second through fiftieth trees reuse the first tree's
       pools (no per-tree rebuild).
 
@@ -35,7 +34,6 @@ it was so in the measured winner too; the device-resident Lossguide frontier
 deleted. S2 bounds the drains by the rounds, which is the structure that runs.
 """
 
-from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceContext
 
@@ -54,7 +52,6 @@ from gbdt.options.catboost_options import GROW_DEPTHWISE, GROW_LOSSGUIDE
 from checks.depthwise_check import Fixture
 
 comptime TREES = 50
-comptime STEP_OLD = is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"]()
 
 
 def policy_options(
@@ -117,13 +114,14 @@ def run_policy(
         elif slots != first_slots:
             print("FAIL", name, "S4 pool rebuilt at tree", t)
             failures += 1
-        comptime if not STEP_OLD:
-            if lossguide and slots > 2 * options.max_leaves:
-                print(
-                    "FAIL", name, "S3 pool slots", slots,
-                    "past the capacity", 2 * options.max_leaves,
-                )
-                failures += 1
+        # TOMBSTONE: MOJOLEARN_IDN_GBDT_STEP_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at f644604c7a.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch; record in docs/TOMBSTONES.md.
+        if lossguide and slots > 2 * options.max_leaves:
+            print(
+                "FAIL", name, "S3 pool slots", slots,
+                "past the capacity", 2 * options.max_leaves,
+            )
+            failures += 1
     print(
         name, "trees", TREES, "max drains/tree", max_drains,
         "max rounds/tree", max_rounds, "pool slots", first_slots,
