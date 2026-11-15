@@ -41,14 +41,12 @@ from x_ann.fast_env import FAST_KNN_BIGD
 #: ascending j, so every listed index is below j, and (dist >= ld, j > li)
 #: never beats (ld, li) under `ts_knn_beats`; a NaN never beats either. A
 #: pruned candidate is exactly one the full fold would reject: the same list,
-#: the same bits. Tested every KNP_EVERY features. `-D
-#: MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF` folds every
-#: feature.
+#: the same bits. Tested every KNP_EVERY features.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
-comptime IDN_ANN_KNN_PRUNE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 9817a8d9b9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ANN_KNN_PRUNE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: features between two prune tests (a multiple of 4)
 comptime KNP_EVERY = 16
 
