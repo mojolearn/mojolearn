@@ -2084,6 +2084,19 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
     return f
 
 
+def _saved_fields(est, *keys):
+    """Arrays `keys` of the file the estimator's public `save` writes (an
+    `.npz`), copied out. Where a lane hashed a fitted value the estimator
+    keeps only as private state (a resolved gamma, normalize_y's mean and
+    scale), it reads the same float from the saved model, whose bytes are
+    the public record of that state."""
+    with tempfile.TemporaryDirectory(prefix="ib-saved-") as d:
+        path = os.path.join(d, "model.npz")
+        est.save(path)
+        with np.load(path, allow_pickle=False) as z:
+            return tuple(np.array(z[k]) for k in keys)
+
+
 def _labels_and_proba(m, X):
     """The two public classifier views, `predict` and `predict_proba`, in
     that order. Two public calls (two forest traversals) where the harness
@@ -5742,7 +5755,7 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
     mean, std = m.predict(X[256:320, :4], return_std=True)
     return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
-                     y_stats=_h(np.float32([m._y_train_mean, m._y_train_std])),
+                     y_stats=_h(_saved_fields(m, "reals")[0][1:3].astype(np.float32)),
                      mean=_h(mean), std=_h(std)),
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
@@ -5784,7 +5797,7 @@ def _gp_optimize_lane(restarts):
         mean, std = m.predict(X[64:128, :4], return_std=True)
         runs = m._optimizer_runs
         return _fit(dict(theta=_h(np.array(m.kernel_.theta, dtype=np.float64)),
-                         params=_h(np.array(m.kernel_._free_values(), dtype=np.float64)),
+                         params=_h(*_saved_fields(m, "params", "ls")),
                          runs=_h(np.array([[r[0], r[1]] for r in runs], dtype=np.int64),
                                  np.array([r[3] for r in runs], dtype=np.float64)),
                          lml=_h(np.float64(m.log_marginal_likelihood_value_)),

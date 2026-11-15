@@ -230,9 +230,14 @@ def _(ml, X, yc, yr, Xh=None):
     c = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:512], yc[:512])
     r = ml.SVR(C=1.0, kernel="rbf", gamma="scale", epsilon=0.1, max_iter=200).fit(X[:512], yr[:512])
     f = ml.RBFSampler(gamma="scale", n_components=32, random_state=1).fit(X[:512])
-    return _fit(dict(svc_decision=_h(c.decision_function(X[512:768])), svc_gamma=_h(np.float64(c._gamma)),
-                     svr_predict=_h(r.predict(X[512:768])), svr_gamma=_h(np.float64(r._gamma)),
-                     rbf_gamma=_h(np.float64(f._params[0])), rbf_transform=_h(f.transform(X[:256]))),
+    # The resolved gammas are read from each model's saved file (`hyper`, binary64:
+    # SVC [C, tol, cache_size, gamma], SVR [C, epsilon, tol, cache_size, gamma],
+    # RBFSampler [gamma, sigma_, scale_]), the same floats the private `_gamma` and
+    # `_params[0]` held, through the public `save`.
+    return _fit(dict(svc_decision=_h(c.decision_function(X[512:768])),
+                     svc_gamma=_h(np.float64(_saved_fields(c, "hyper")[0][3])),
+                     svr_predict=_h(r.predict(X[512:768])), svr_gamma=_h(np.float64(_saved_fields(r, "hyper")[0][4])),
+                     rbf_gamma=_h(np.float64(_saved_fields(f, "hyper")[0][0])), rbf_transform=_h(f.transform(X[:256]))),
                 c, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
