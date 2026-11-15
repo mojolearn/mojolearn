@@ -51,7 +51,7 @@ comptime ANN3_PQ_SEED = False
 #: 5976 -> 5253 ms (-12.1%), recall_at_10 .5995 -> .6071.
 # TOMBSTONE: MOJOLEARN_ANN3_COARSE_SEED_OFF (old path, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at d8754520a2.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_COARSE_SEED_OFF.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_COARSE_SEED = True
+# (Sweep 2026-11-15: comptime ANN3_COARSE_SEED removed; always True, nothing read it.)
 
 #: FAST on Apple: rows per threadgroup of the t-SNE repulsion (128 in a
 #: default build). At 10,000 rows 128 makes 79 threadgroups, and the M3 Ultra
