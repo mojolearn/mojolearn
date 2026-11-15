@@ -95,6 +95,7 @@ the block kernel, the order this DEVIATION must not change.
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.apple_fast_tree_experiments import AFT_N09, AFT_N10, AFT_N11
 from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined
@@ -147,13 +148,16 @@ comptime YETI_LANES = 4
 # All three are source-only, no performance/quality evidence, default OFF.
 # TOMBSTONE: MOJOLEARN_AFT_N09 (DELETE-EXPERIMENT, never-run Apple FAST card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at c75602fed4.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N09.expdel2-45-trees.patch; record in docs/TOMBSTONES.md
-comptime AFT_YETI_TASKS_PER_BLOCK = 1
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime AFT_YETI_TASKS_PER_BLOCK = 2 if AFT_N09 else 1
 # TOMBSTONE: MOJOLEARN_AFT_N10 (DELETE-EXPERIMENT, never-run Apple FAST card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 3e94c34cf5.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N10.expdel2-45-trees.patch; record in docs/TOMBSTONES.md
-comptime AFT_YETI_MERGE_LANES = YETI_LANES
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime AFT_YETI_MERGE_LANES = 8 if AFT_N10 else YETI_LANES
 # TOMBSTONE: MOJOLEARN_AFT_N11 (DELETE-EXPERIMENT, never-run Apple FAST card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0fd7d7dfa3.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N11.expdel2-45-trees.patch; record in docs/TOMBSTONES.md
-comptime AFT_YETI_ROW_THREADS = MSE_BLOCK_SIZE
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime AFT_YETI_ROW_THREADS = 128 if AFT_N11 else MSE_BLOCK_SIZE
 
 
 def yeti_block_parallel_for[column: Int]() -> Bool:
@@ -567,6 +571,9 @@ def yeti_rank_task_block_kernel(
     ]()
 
     var task_count = Int(grid_dim.x)
+    comptime if AFT_N09:
+        if n_tasks_in > Int32(0):
+            task_count = Int(n_tasks_in)
     comptime for task_lane in range(AFT_YETI_TASKS_PER_BLOCK):
         var task = Int(block_idx.x) + task_lane * Int(grid_dim.x)
         if task < task_count:
@@ -811,6 +818,8 @@ def yeti_rank_task_block_kernel(
                 if p < size:
                     der_acc.unsafe_store(offset + p, sh_der.unsafe_load(p))
                     weight_acc.unsafe_store(offset + p, sh_weight.unsafe_load(p))
+            comptime if AFT_N09:
+                barrier()
 
 
 def yeti_rank_decay_table_kernel(
@@ -923,6 +932,9 @@ def yeti_rank_task_block16k_kernel(
     ]()
 
     var task_count = Int(grid_dim.x)
+    comptime if AFT_N09:
+        if n_tasks_in > Int32(0):
+            task_count = Int(n_tasks_in)
     comptime for task_lane in range(AFT_YETI_TASKS_PER_BLOCK):
         var task = Int(block_idx.x) + task_lane * Int(grid_dim.x)
         if task < task_count:
@@ -1122,6 +1134,8 @@ def yeti_rank_task_block16k_kernel(
                 if p < size:
                     der_acc.unsafe_store(offset + p, acc_der[k])
                     weight_acc.unsafe_store(offset + p, acc_weight[k])
+            comptime if AFT_N09:
+                barrier()
 
 
 def yeti_rank_row_kernel[estimation: Bool](
