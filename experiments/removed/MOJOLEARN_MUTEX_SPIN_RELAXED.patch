@@ -1,0 +1,36 @@
+diff --git a/core/device_mutex.mojo b/core/device_mutex.mojo
+index dfd7709068..aca2b48493 100644
+--- a/core/device_mutex.mojo
++++ b/core/device_mutex.mojo
+@@ -84,8 +84,14 @@ comptime CLAIM_STOCK = is_defined["MOJOLEARN_RF_MUTEX_CLAIM_STOCK"]()
+ #: The protocol still works under it, since only the holder writes the held value.
+ comptime SECTION_SABOTAGE = is_defined["MOJOLEARN_MUTEX_SECTION_SABOTAGE"]()
+ 
+-# TOMBSTONE: MOJOLEARN_MUTEX_SPIN_RELAXED (differential-build instrument: relaxed spin load instead of acquire; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at b616f3bc41.
+-# Restore: git apply experiments/removed/MOJOLEARN_MUTEX_SPIN_RELAXED.patch; record in docs/TOMBSTONES.md.
++#: MEASUREMENT INSTRUMENT, NEVER A DEFAULT. `-D MOJOLEARN_MUTEX_SPIN_RELAXED=1` makes the
++#: SPIN TEST a relaxed load instead of an acquire load. It exists to answer, on a column
++#: with no AMDGPU disassembler to hand, whether the spin's ACQUIRE ORDERING survives into
++#: the instruction stream at all. If this arm is byte-identical to the default, the
++#: acquire on the spin emits nothing on that column and the shipped spin-wait has been
++#: resting on an ordering it never had. If it differs, the acquire is real. This is a
++#: differential build, and it answers the question without disassembling anything.
++comptime SPIN_RELAXED = is_defined["MOJOLEARN_MUTEX_SPIN_RELAXED"]()
+ 
+ 
+ @always_inline
+@@ -95,8 +101,12 @@ def claim_device_mutex[origin: MutOrigin, //](
+     """Take a cross-block device lock. Supports both the `0 -> 1` and `-2 -> -1` claims."""
+     var claim_value = held + Int32(1) if SECTION_SABOTAGE else held
+     while True:
+-        if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != available:
+-            continue
++        comptime if SPIN_RELAXED:
++            if Atomic.load[ordering = Ordering.RELAXED](mutex) != available:
++                continue
++        else:
++            if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != available:
++                continue
+         var expected = available
+         if Atomic.compare_exchange[
+             success_ordering = Ordering.RELAXED,

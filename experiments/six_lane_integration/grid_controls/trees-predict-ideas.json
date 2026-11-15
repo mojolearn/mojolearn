@@ -22,9 +22,6 @@
       "binding": "_mojolearn_gbdt",
       "bits_change": false,
       "status": "new",
-      "exclusive_with": [
-        "MOJOLEARN_TREES_C50_GB_PACKED"
-      ],
       "note": "QuickScorer bitvector apply for Depthwise/Lossguide predict: one kernel per bounded tree chunk over rows, nodes in cindex-word order, masks built on device; same per-row float32 tree-order adds as the incumbent. Trees past 512 leaves (8 mask words) or mixed approx dims take the incumbent packed apply. Compile-time refusal when both it and C50_GB_PACKED are defined: grid them as one 3-way choice {none, C50_GB, BITVEC} on the non-symmetric predict path."
     }
   },

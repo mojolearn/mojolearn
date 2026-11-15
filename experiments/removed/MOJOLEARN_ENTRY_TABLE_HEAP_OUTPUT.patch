@@ -1,0 +1,76 @@
+diff --git a/core/byte_lm_entry_table_sessions.mojo b/core/byte_lm_entry_table_sessions.mojo
+index e7686007f0..29162f9e5e 100644
+--- a/core/byte_lm_entry_table_sessions.mojo
++++ b/core/byte_lm_entry_table_sessions.mojo
+@@ -32,6 +32,7 @@ the layout requires a new V suffix. Publication and lookup are small
+ metadata operations with no independent numerical work to split.
+ """
+ from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
++from std.sys import is_defined
+ from std.sys.info import size_of
+ from core.native_call_output import NativeCallOutput
+ from core.native_descriptor_abi import NativeDescriptorCall
+@@ -222,12 +223,17 @@ def byte_lm_sessions_run(entry: NativeDescriptorCall, session: Int, a: List[Int]
+         addresses.append(a[i])
+     var ints = Int(p.unsafe_ptr()) + 3 * size_of[Int]()
+     var result = 0
+-    # TOMBSTONE: MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT (opt-in former heap-held NativeCallOutput; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at d5699d97e3.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch; record in docs/TOMBSTONES.md.
+-    var output = NativeCallOutput()
+-    result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
+-        ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), output)
+-    _ = output
++    comptime if is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"]():
++        var held = List[NativeCallOutput]()
++        held.append(NativeCallOutput())
++        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
++            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), held[0])
++        _ = held
++    else:
++        var output = NativeCallOutput()
++        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
++            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), output)
++        _ = output
+     # Raw span addresses do not themselves retain their List owners.
+     _ = addresses
+     _ = p
+diff --git a/core/entry_table.mojo b/core/entry_table.mojo
+index 6164a79ff6..77fbb2c9f5 100644
+--- a/core/entry_table.mojo
++++ b/core/entry_table.mojo
+@@ -17,6 +17,7 @@ callee reports one. `entry_table_read` keeps its name and its error texts and
+ now returns `entry_table_resolve(...).call`.
+ """
+ from std.atomic import Atomic, Ordering
++from std.sys import is_defined
+ from std.sys.info import size_of
+ from core.native_call_output import NativeCallOutput
+ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+@@ -164,13 +165,20 @@ def entry_ref_call(entry: EntryRef, operation: Int, addresses: Int, address_coun
+     passed by reference to the out-of-line span call, so their address is
+     real storage for the whole foreign call. The error list stays empty (no
+     allocation) unless the callee reports a refusal."""
+-    # TOMBSTONE: MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT (opt-in former heap-held NativeCallOutput; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at d5699d97e3.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch; record in docs/TOMBSTONES.md.
+-    var output = NativeCallOutput()
+-    var result = native_descriptor_call_spans(entry.call, operation, addresses, address_count,
+-        ints, int_count, floats, float_count, output)
+-    _ = output
+-    return result
++    comptime if is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"]():
++        # Opt-in former form (see core/native_descriptor_call.mojo).
++        var held = List[NativeCallOutput]()
++        held.append(NativeCallOutput())
++        var held_result = native_descriptor_call_spans(entry.call, operation, addresses, address_count,
++            ints, int_count, floats, float_count, held[0])
++        _ = held
++        return held_result
++    else:
++        var output = NativeCallOutput()
++        var result = native_descriptor_call_spans(entry.call, operation, addresses, address_count,
++            ints, int_count, floats, float_count, output)
++        _ = output
++        return result
+ 
+ 
+ def entry_ref_call(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[Int],
