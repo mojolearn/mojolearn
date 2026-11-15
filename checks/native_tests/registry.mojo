@@ -35,6 +35,7 @@ from checks.native_tests.core_convert import register as register_core_convert
 from checks.native_tests.core_helpers import register as register_core_helpers
 from checks.native_tests.core_import_lower import register as register_core_import_lower
 from checks.native_tests.core_ne2_rounds import register as register_core_ne2_rounds
+from checks.native_tests.core_ne3_fused_entries import register as register_core_ne3_fused_entries
 from checks.native_tests.core_ops_import_kinds import register as register_core_ops_import_kinds
 from checks.native_tests.core_ops_layernorm_view import register as register_core_ops_layernorm_view
 from checks.native_tests.core_ops_program import register as register_core_ops_program
@@ -55,6 +56,7 @@ from checks.native_tests.decomp_ne2_g_decomp_entries import register as register
 from checks.native_tests.eigh_route import register as register_eigh_route
 from checks.native_tests.embedding_ne3_entries import register as register_embedding_ne3_entries
 from checks.native_tests.embedding_surface import register as register_embedding_surface
+from checks.native_tests.gbdt_ova_link import register as register_gbdt_ova_link
 from checks.native_tests.gbdt_public_fits import register as register_gbdt_public_fits
 from checks.native_tests.gbdt_resident_ns_predict import register as register_gbdt_resident_ns_predict
 from checks.native_tests.gp_entry_table import register as register_gp_entry_table
@@ -198,6 +200,7 @@ def all_checks() -> List[Check]:
     checks.append(register_core_helpers())
     checks.append(register_core_import_lower())
     checks.append(register_core_ne2_rounds())
+    checks.append(register_core_ne3_fused_entries())
     checks.append(register_core_ops_import_kinds())
     checks.append(register_core_ops_layernorm_view())
     checks.append(register_core_ops_program())
@@ -218,6 +221,7 @@ def all_checks() -> List[Check]:
     checks.append(register_eigh_route())
     checks.append(register_embedding_ne3_entries())
     checks.append(register_embedding_surface())
+    checks.append(register_gbdt_ova_link())
     checks.append(register_gbdt_public_fits())
     checks.append(register_gbdt_resident_ns_predict())
     checks.append(register_gp_entry_table())
