@@ -201,8 +201,12 @@ def test_cpu_only_install_serves_the_installed_module_without_load_set(monkeypat
     reads the module installed under the canonical name from `sys.modules`
     on every call and never opens a tier directory. Only the exact extension
     module is served: a replaced module is refused by type and a removed one
-    by name."""
+    by name. The slot read is the one the import-time connection recorded:
+    the exact module's own name (`_backend.exact_host_module`; on a real
+    CPU-only install the host extension, never the `_HostBinding` facade
+    under the canonical name)."""
     import sys
+    slot = _backend.exact_host_module(_backend.binding("_mojolearn_metrics", "identical")).__name__
     monkeypatch.setattr(_backend, "_CPU_ONLY", "no GPU binding on this box (test)")
     monkeypatch.setattr(_backend, "_DEFAULT_MODE", "identical")
 
@@ -211,9 +215,9 @@ def test_cpu_only_install_serves_the_installed_module_without_load_set(monkeypat
 
     monkeypatch.setattr(_backend, "load_set", load)
     x = np.arange(3, dtype=np.float32)
-    monkeypatch.setitem(sys.modules, "mojolearn._mojolearn_metrics", Binding("identical"))
+    monkeypatch.setitem(sys.modules, slot, Binding("identical"))
     with pytest.raises(TypeError, match="exact extension module"):
         metrics.mean_squared_error(x, x)
-    monkeypatch.delitem(sys.modules, "mojolearn._mojolearn_metrics", raising=False)
+    monkeypatch.delitem(sys.modules, slot, raising=False)
     with pytest.raises(ImportError, match="removed after import"):
         metrics.mean_squared_error(x, x, numeric_mode="identical")
