@@ -1,0 +1,25 @@
+diff --git a/x_cnn/checks/oracle.mojo b/x_cnn/checks/oracle.mojo
+index 41061633b9..5d945e743a 100644
+--- a/x_cnn/checks/oracle.mojo
++++ b/x_cnn/checks/oracle.mojo
+@@ -31,6 +31,7 @@ Seams (DEVIATION numbers, lane cnn 5700-5799):
+ """
+ from std.math import fma
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
+ from core.philox import philox4x32_10
+ from gemm.contract import OP_TN
+@@ -107,11 +108,7 @@ def o_conv_dw(
+ # ---------------------------------------------------------------- 5702
+ #: The oracle's own reading of the blocked-fold switch (x_cnn/ops.mojo
+ #: BN_FOLD_BLOCK; lane idn-loss-norm-folds).
+-# TOMBSTONE: MOJOLEARN_BN_FOLD_BLOCK_OFF (DELETE-OLD-PATH: no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+-# Restore: git apply experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-33-neural.patch; record in docs/TOMBSTONES.md.
+-comptime O_BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime O_BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ 
+ 
+ def _o_blocked_sum(v: List[Float32]) -> Float32:
