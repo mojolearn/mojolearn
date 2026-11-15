@@ -69,7 +69,7 @@ commands live in `mamba/checks/mamba2_check.mojo`'s header.
 """
 
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
@@ -111,18 +111,19 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
 ]()
 
 #: lane nr-mamba (2026-10-04, roadmap B9) IDN_M2_CB_LOWER (IDENTICAL, default
-#: ON; `-D MOJOLEARN_IDN_ALL_OFF` restores main): S12's G = C.B folds only j <= i and writes an explicit
+#: ON): S12's G = C.B folds only j <= i and writes an explicit
 #: +0.0 above the diagonal (never leaves the cell unwritten: cb.G is a
 #: recorded, arena-allocated stage). Every reader (S13's M = G o L, the
 #: backward's ydiag and cb gradients) reads j <= i only, so no output bit
 #: moves; the RECORDED cb.G stage changes above the diagonal, on every column
 #: together with the oracle (mamba/checks/mamba2_oracle.mojo, same define).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) folded here 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at dc4096f0f8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
 comptime IDN_M2_CB_LOWER = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     # TOMBSTONE: MOJOLEARN_IDN_M2_CB_LOWER_OFF (unmeasured old path beside the lower-triangle default) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at d9f1a09f89.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.expdel2-27-neural.patch
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime SSD_ANY_SABOTAGE = (
     SAB_SEGSUM_DESCENDING
@@ -675,7 +676,9 @@ comptime M2_SSD_TILED = (
 # 32 to keep the page) and -D MOJOLEARN_IDN_M2_CS_PT=8|16 (default 8). The
 # legal sets are asserted in core/six_lane_experiment_guards.mojo. Tiles
 # move no bit; they may be tuned per vendor.
-comptime _M2_TILE_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) folded here 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at dc4096f0f8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
+comptime _M2_TILE_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # PROMOTED 2026-10-11 (grid g50ebe26a5, single-switch arm m2_yd_rows=8 vs today's defaults, one run per arm): mamba2-forward
 # gaussian NV L40S 13.079 -> 5.688 ms (v1223), AMD MI325X 4.551 -> 4.388 ms (a1344); avg ratio 0.648; hash 0350b90b on both
 # vendors. Default is now 8; -D MOJOLEARN_IDN_M2_YD_ROWS=4 restores the old tile.
@@ -716,7 +719,6 @@ comptime M2_RETAIN_GL = (
     # NV L40S 13.079 -> 5.690 ms (v1242), AMD MI325X 4.551 -> 4.554 ms (a1350); avg ratio 0.660; hash 0350b90b on both vendors.
     # TOMBSTONE: MOJOLEARN_IDN_M2_RETAIN_GL_OFF (old recompute path beside the promoted default, EXP:2013) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at a93584a744.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_RETAIN_GL_OFF.patch
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE
 )
 comptime M2_RETAIN_GL_MAX_CELLS = 1<<22
