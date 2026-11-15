@@ -187,15 +187,13 @@ comptime ROWS_SORTED_MIN_COLS = 64
 # bytes are unchanged; weighted and non-bootstrap arms keep their old route.
 # H100 Taxi and Istella repeated-fit trials were bitwise/quality identical and
 # improved the median of process medians. NVIDIA therefore ships the fused
-# route. HIP remains unchanged after a small Taxi regression on MI325X. The
-# explicit candidate define still permits experiments on other vendors, and
-# OFF restores the old two-launch route everywhere.
+# route. HIP remains unchanged after a small Taxi regression on MI325X;
+# AMD and Apple keep the two-launch route.
+# TOMBSTONE: MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER.patch
 comptime FUSED_BOOTSTRAP_GATHER = (
     not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
-    and (
-        TARGET_HAS_NVIDIA_GPU
-        or is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER"]()
-    )
+    and TARGET_HAS_NVIDIA_GPU
 )
 comptime FUSED_BOOTSTRAP_GATHER_SABOTAGE = is_defined[
     "MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_SABOTAGE"
