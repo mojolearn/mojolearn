@@ -11,14 +11,14 @@
 # repeated term fails) and "round" (fractions on a 2^-23 grid: within a
 # worst-case rounding bound, digests printed). Every FOLD line carries a
 # digest of the output bits: HostExec, Metal, NVIDIA and AMD print the same
-# lines (diff the cpu and gpu outputs), and fold v2 against
-# -D MOJOLEARN_AUTOGRAD_FOLD_V2_OFF moves only the "round" digests of folds
-# over more than 4096 terms.
+# lines (diff the cpu and gpu outputs).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (old path, no A/B recorded) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at afaee1c189.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from std.memory import bitcast
 from autograd import Tape, Tensor
 from sequence.exec_trait import Exec
 from sequence.ops import FP, mul
-from autograd.ops import AXIS_ALL, AXIS_ROWS, AXIS_COLS, AUTOGRAD_FOLD_V2
+from autograd.ops import AXIS_ALL, AXIS_ROWS, AXIS_COLS
 from autograd.fold import blocked_fold, fold_partials, fold_extent, fold_outputs
 
 
@@ -129,7 +129,7 @@ def _vjp[E: Exec](
 
 
 def run_fold_cases[E: Exec](mut ex: E) raises:
-    print("FOLD geometry", String("v2") if AUTOGRAD_FOLD_V2 else String("v1"))
+    print("FOLD geometry", String("v2"))
     var shapes = List[List[Int]]()
     shapes.append([512, 1])
     shapes.append([512, 256])

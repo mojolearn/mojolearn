@@ -51,7 +51,7 @@ from sequence.ops import Args, FP, ld, st, add
 from autograd.ops import (
     OP_AG_FIRST, OP_AG_LAST, OP_AG_REDUCE_PART, OP_AG_TRANSPOSE, OP_AG_BIN_FWD, OP_AG_BIN_VJP,
     OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_REDUCE_VJP, OP_AG_ACCUMULATE, OP_AGK_BIN_VJP_PART,
-    AXIS_ROWS, AG_FOLD_LEAF, AG_VEC, AUTOGRAD_FOLD_V2, ag_leaf_span, ag_part_finish, _bin_vjp_at,
+    AXIS_ROWS, AG_FOLD_LEAF, AG_VEC, ag_leaf_span, ag_part_finish, _bin_vjp_at,
     apply_autograd, apply_autograd_vec4,
 )
 from autograd.data_ops import (
@@ -63,7 +63,9 @@ from autograd.fold_ops import OP_AGS_LOSS_PART, ags_loss_term
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_FOLD_STAGED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 479d223bd3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_FOLD_STAGED_OFF.patch; record in docs/TOMBSTONES.md.
-comptime AG_FOLD_STAGED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and AUTOGRAD_FOLD_V2
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (old path, no A/B recorded) use deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at afaee1c189.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+comptime AG_FOLD_STAGED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_ELEM_VEC4_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b57fa1c4dd.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ELEM_VEC4_OFF.patch; record in docs/TOMBSTONES.md.
 comptime AG_ELEM_VEC4 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

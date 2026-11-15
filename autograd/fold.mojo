@@ -5,11 +5,13 @@
 # same arguments, hence the same bits on every executor.
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr
-from autograd.ops import OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, AXIS_ALL, AXIS_ROWS, ag_fold_block
-from autograd.ops import OP_AGF_LEVEL, AUTOGRAD_FOLD_V2, AG_FOLD_LEAF
+from autograd.ops import OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, AXIS_ALL, AXIS_ROWS
+from autograd.ops import OP_AGF_LEVEL, AG_FOLD_LEAF
 from autograd.fold_ops import OP_AGS_LOSS_PART
 
-# Lane ag-pass3-fold (2026-10-19): under AUTOGRAD_FOLD_V2 (the default) the
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (old path, no A/B recorded) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner of the read autograd/ops.mojo); code recoverable at afaee1c189.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+# Lane ag-pass3-fold (2026-10-19): the
 # fold is a tree of fixed 64-term blocks (autograd/ops.mojo, "THE BLOCKED
 # FOLD", geometry before and after): OP_AG_REDUCE_PART (or a first launch
 # of the caller's that writes leaf partials, OP_AGK_BIN_VJP_PART), then
@@ -46,27 +48,18 @@ def fold_partials_bound(max_extent: Int) -> Int:
     R = ag_fold_block is non-decreasing in n, so R(max_extent) blocks always
     suffice (the block count itself is not monotone in n). v2: the leaf
     length is a constant, so ceil(max_extent / 64) blocks."""
-    comptime if AUTOGRAD_FOLD_V2:
-        return max((max_extent + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF, 1)
-    else:
-        return ag_fold_block(max(max_extent, 1))
+    return max((max_extent + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF, 1)
 
 
 def fold_block(rows: Int, cols: Int, axis: Int) -> Int:
     """The block length of a fold of a rows x cols source over `axis`."""
-    comptime if AUTOGRAD_FOLD_V2:
-        return AG_FOLD_LEAF
-    else:
-        return ag_fold_block(fold_extent(rows, cols, axis))
+    return AG_FOLD_LEAF
 
 
 def fold_single_launch(rows: Int, cols: Int, axis: Int) -> Bool:
     """True when the fold is one leaf block an output (v2), so its first
     launch can write the finished outputs (no partials, no second launch)."""
-    comptime if AUTOGRAD_FOLD_V2:
-        return fold_extent(rows, cols, axis) <= AG_FOLD_LEAF
-    else:
-        return False
+    return fold_extent(rows, cols, axis) <= AG_FOLD_LEAF
 
 
 def blocked_fold_finish[E: Exec](
@@ -95,26 +88,25 @@ def blocked_fold_finish[E: Exec](
     if divide:
         f.i4 = 1
     f.f0 = factor
-    comptime if AUTOGRAD_FOLD_V2:
-        var outputs = fold_outputs(rows, cols, axis)
-        var live = (fold_extent(rows, cols, axis) + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
-        var stride = 1
-        # driver-loop: over fold tree levels (ceil(log64(extent)) - 1 of them)
-        while live > AG_FOLD_LEAF:
-            var g = Args()
-            g.p0 = partials
-            g.i0 = axis
-            g.i1 = rows
-            g.i2 = cols
-            g.i3 = AG_FOLD_LEAF
-            g.i5 = stride
-            g.i6 = live
-            var groups = (live + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
-            ex.launch[OP_AGF_LEVEL](g, groups * outputs)
-            live = groups
-            stride *= AG_FOLD_LEAF
-        f.i5 = stride
-        f.i6 = live
+    var outputs = fold_outputs(rows, cols, axis)
+    var live = (fold_extent(rows, cols, axis) + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
+    var stride = 1
+    # driver-loop: over fold tree levels (ceil(log64(extent)) - 1 of them)
+    while live > AG_FOLD_LEAF:
+        var g = Args()
+        g.p0 = partials
+        g.i0 = axis
+        g.i1 = rows
+        g.i2 = cols
+        g.i3 = AG_FOLD_LEAF
+        g.i5 = stride
+        g.i6 = live
+        var groups = (live + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
+        ex.launch[OP_AGF_LEVEL](g, groups * outputs)
+        live = groups
+        stride *= AG_FOLD_LEAF
+    f.i5 = stride
+    f.i6 = live
     ex.launch[OP_AG_REDUCE_FOLD](f, fold_outputs(rows, cols, axis))
 
 
@@ -185,10 +177,6 @@ def loss_fold[E: Exec](
     a.i3 = block
     a.i6 = kind
     a.f2 = delta
-    comptime if not AUTOGRAD_FOLD_V2:
-        # v1's block rule has no one-launch form and its leaf is not
-        # ag_part_finish's: the terms are stored, then folded (v1's words)
-        raise Error("autograd: loss_fold needs the v2 fold (MOJOLEARN_AUTOGRAD_FOLD_V2_OFF builds take loss_terms)")
     if fold_single_launch(rows, cols, AXIS_ALL):
         a.p2 = dst
         a.i4 = 1
