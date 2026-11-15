@@ -19,7 +19,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_arena import arena_active, arena_take
 # lane afn-lm (2026-10-03): Apple FAST experiments, each False unless the
 # build is FAST, on Apple, and carries its own -D MOJOLEARN_AFN_LM_* define.
-from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
+# TOMBSTONE: MOJOLEARN_AFN_LM_BWD_FUSE / MOJOLEARN_AFN26_LM_BWD_FUSE (Apple FAST opt-in, never promoted) folded to False
+# here 2026-11-15 by lane/expdel2-24-neural; code recoverable at c15b52cbb4.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.expdel2-24-neural.patch
+from training.byte_lm_afn import AFN_LM_BWD_NOSYNC
 # TOMBSTONE: MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_NORM1_RESID, MOJOLEARN_AFN_LMGRAD_ALL and their AFN26
 # aliases (Apple FAST block-backward arms, never measured) deleted 2026-11-15 by lane/expdel2-24-neural with
 # autograd/kernels/transformer_afn.mojo; code recoverable at d2c4643c6b.
@@ -446,7 +449,7 @@ comptime BWD_GATED_SILU_FUSED_TRIAL = is_defined[
 #: SwiGLU rule (`autograd/rules_transformer.mojo`); the hand walk that once
 #: spelled it inline is deleted (docs/TOMBSTONES.md).
 comptime BWD_FUSE_GATED_SILU = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (
         TARGET_COLUMN == COLUMN_APPLE
         or TARGET_COLUMN == COLUMN_NVIDIA
@@ -460,7 +463,7 @@ comptime BWD_FUSE_GATED_SILU = (
 #: by the autograd RMSNorm rule (`autograd/rules_transformer.mojo`); the hand
 #: walk that once spelled it inline is deleted (docs/TOMBSTONES.md).
 comptime BWD_FUSE_NORM2_RESIDUAL = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (
         TARGET_COLUMN == COLUMN_APPLE
         or TARGET_COLUMN == COLUMN_NVIDIA
@@ -3085,7 +3088,7 @@ def _bwd_rms_norm_kernels[which: Int](
     comptime if (
         BWD_ANY_SABOTAGE
         or BWD_NORM_SPLIT_TRIAL
-        or (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_FUSE)
+        or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
     ):
         ctx.enqueue_function[bwd_norm_dh_kernel](
             dh.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
