@@ -135,18 +135,8 @@ def harness_path():
     """(path, how): MOJOLEARN_IDENTITY_BREAK, the wheel copy, or the checkout,
     as `mojolearn.runtime_report()["harness_source"]` names it. Raises
     FileNotFoundError when this install carries none."""
-    from . import runtime_report
-    report = runtime_report()
-    source = report["harness_source"]
-    if source["path"] is None:
-        tried = [p for p in (os.environ.get("MOJOLEARN_IDENTITY_BREAK", "").strip(),) if p]
-        tried += [os.path.join(report["package_dir"], "_identity_break.py"), "<checkout>/tools/identity_break.py"]
-        raise FileNotFoundError(
-            "tools/identity_break.py is not in this install, so there is no harness to run. "
-            "Looked at:\n  " + "\n  ".join(tried)
-            + "\nInstall a wheel built with the packaging step that copies it in, "
-            "run from a checkout, or point MOJOLEARN_IDENTITY_BREAK at the file.")
-    return source["path"], source["how"]
+    from . import _verify
+    return _verify.harness_path()
 
 
 def load_harness(path=None):

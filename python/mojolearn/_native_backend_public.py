@@ -137,7 +137,8 @@ def _report_context(package):
     return dict(version=package.__version__, package_dir=package_dir, package_parents=tuple(parents),
                 fallbacks=tuple(_runtime_fallbacks.FALLBACKS), modules=sys.modules,
                 module_type=types.ModuleType, list_type=list, listdir=posix.listdir, getcwd=posix.getcwd,
-                merged_cache=_merged._INDEX_CACHE, merged_index_name=_merged.INDEX_NAME)
+                merged_cache=_merged._INDEX_CACHE, merged_index_name=_merged.INDEX_NAME,
+                identity_cache=dict(stat=posix.stat, digests={}))
 
 
 def connect(package):

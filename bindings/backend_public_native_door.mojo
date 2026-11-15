@@ -220,12 +220,18 @@ def _host_families(context: PythonObject, host_dir: String) raises -> PythonObje
 
 
 def _identity(cache: PythonObject, path: String) raises -> PythonObject:
-    # One SHA-256 per distinct file: a merged file serves many members.
-    var known = py_get(cache, PythonObject(path))
+    # One SHA-256 per distinct file and file state: a merged file serves many
+    # members, and a report read repeatedly (verify reads it per lane) hashes
+    # a binding again only when its size or modification time changed. The
+    # cache lives in the import-connected context; key (path, mtime_ns, size).
+    var st = py_call(cache["stat"], PythonObject(path))
+    var key = Python.tuple(PythonObject(path), st.st_mtime_ns, st.st_size)
+    var digests = cache["digests"]
+    var known = py_get(digests, key)
     if known is not None:
         return known
     var digest = PythonObject(sha256_file(path))
-    py_setitem(cache, PythonObject(path), digest)
+    py_setitem(digests, key, digest)
     return digest
 
 
@@ -255,7 +261,7 @@ def _binding_row_unresolved() raises -> PythonObject:
 
 def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var rows = Python.dict()
-    var hashes = Python.dict()
+    var hashes = context["identity_cache"]
     var modules = context["modules"]
     var keys = py_call(context["list_type"], modules)
     var text_type = py_type(PythonObject(""))

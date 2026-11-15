@@ -1773,18 +1773,23 @@ def comparator_self_test(report):
 
 
 def run_checks(vendor, require_installed=False):
-    from . import _backend
     import mojolearn
+    from . import ops
+    from ._verify_native_runtime import loaded_binding
     report = {"format": FORMAT, "expected_cases": list(EXPECTED_CASES), "cases": {}, "backend": {}}
     try:
-        b = _backend.binding("_mojolearn_x_sequence", "identical")
-        report["backend"] = {"vendor": str(b.x_sequence_vendor()), "numeric_mode": int(b.x_sequence_numeric_mode()),
-                             "binding_file": str(getattr(b, "__file__", "")), "binding_type": type(b).__name__,
+        # One public identical-session call loads the binding the cases run
+        # on; mojolearn.runtime_report() then names it (it never loads one).
+        # A missing program entry refuses by name inside the cases.
+        with ops.Session(numeric_mode="identical") as s:
+            s.tensor([[0.0]])
+        row = loaded_binding("_mojolearn_x_sequence", "identical")
+        assert row is not None, "no identical _mojolearn_x_sequence binding is loaded"
+        report["backend"] = {"vendor": row["vendor"], "numeric_mode": 1 if row["compiled_mode"] == "identical" else 0,
+                             "binding_file": row["path"], "binding_sha256": row["identity"],
                              "package_file": str(Path(mojolearn.__file__).resolve()), "python": sys.executable}
         assert report["backend"]["vendor"] == vendor, report["backend"]
         assert report["backend"]["numeric_mode"] == 1, report["backend"]
-        for entry in ("ops_program_execute", "ops_program_control", "ops_program_inspect"):
-            assert hasattr(b, entry), "missing native entry " + entry
         if require_installed:
             package_path = Path(mojolearn.__file__).resolve()
             assert "site-packages" in package_path.parts or "dist-packages" in package_path.parts, package_path

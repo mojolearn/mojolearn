@@ -17,6 +17,7 @@ import gc
 import sys
 import threading
 from collections import Counter
+from contextlib import contextmanager
 from types import ModuleType
 
 #: The audited call stands in for a user's: the public methods answer this
@@ -182,6 +183,32 @@ def audit_native_call(operation, *args, **kwargs):
     not standalone proof that the operation executed no Python callbacks.
     """
     return _audit_call(operation, args, kwargs, {})
+
+
+def audited(audits, name, operation, *args, **kwargs):
+    """Audit one complete public call, append its trace (with ``operation``
+    set to ``name``) to the list ``audits`` and return its value; a call that
+    entered Python raises (``assert_native``)."""
+    audit = audit_native_call(operation, *args, **kwargs)
+    entry = audit.report()
+    entry["operation"] = name
+    audits.append(entry)
+    return audit.assert_native()
+
+
+@contextmanager
+def audited_context(audits, name, operation, *args, **kwargs):
+    """Open a context-managed public object with ``operation`` and audit its
+    construction, ``__enter__`` and ``__exit__`` as three complete public
+    boundaries (``name``, ``name.enter``, ``name.exit``), each appended to
+    ``audits``. The one shared controller of the distributed and partitioned
+    program verifiers."""
+    instance = audited(audits, name, operation, *args, **kwargs)
+    try:
+        assert audited(audits, name + ".enter", instance.__enter__) is instance
+        yield instance
+    finally:
+        audited(audits, name + ".exit", instance.__exit__, None, None, None)
 
 
 def audit_compatible_call(operation, *args, **kwargs):

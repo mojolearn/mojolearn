@@ -591,6 +591,34 @@ def environment_json(mode=None):
     return result
 
 
+def harness_path():
+    """(path, how) of the identity harness, as
+    `mojolearn.runtime_report()["harness_source"]` names it:
+    MOJOLEARN_IDENTITY_BREAK, the wheel copy or the checkout. Raises
+    FileNotFoundError naming what was tried when this install carries none.
+    The one reader for `verify` (`_verify_all`) and `identity` (`_identity`)."""
+    report = _runtime_report()
+    source = report["harness_source"]
+    if source["path"] is None:
+        tried = [p for p in (os.environ.get("MOJOLEARN_IDENTITY_BREAK", "").strip(),) if p]
+        tried += [os.path.join(report["package_dir"], "_identity_break.py"), "<checkout>/tools/identity_break.py"]
+        raise FileNotFoundError(
+            "tools/identity_break.py is not in this install, so there is no harness to run. "
+            "Looked at:\n  " + "\n  ".join(tried)
+            + "\nInstall a wheel built with the packaging step that copies it in, "
+            "run from a checkout, or point MOJOLEARN_IDENTITY_BREAK at the file.")
+    return source["path"], source["how"]
+
+
+def commit_witness():
+    """(commit, source) for the local column, as
+    `mojolearn.runtime_report()["source_commit"]` names it: MOJOLEARN_COMMIT,
+    the wheel's COMMIT witness, or None (the harness then reads `git
+    rev-parse HEAD` of the checkout it lives in)."""
+    source = _runtime_report()["source_commit"]
+    return source["commit"], source["how"]
+
+
 def _vendor_text():
     """'cuda (the box probe ...)' and so on: what `_backend.vendor()` read
     back from the loaded binaries, and how the directory was chosen. Printed

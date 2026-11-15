@@ -24,14 +24,9 @@ import tempfile
 from . import _verify
 from . import host_surface
 
-#: A copy of tools/identity_break.py placed in the package by the wheel
-#: build; absent from a checkout (python/.gitignore).
-_HARNESS_COPY = "_identity_break"
 #: Where the wheel build places the three columns and the commit witness.
 _COLUMNS_DIR = "identity_columns"
-_ENV_HARNESS = "MOJOLEARN_IDENTITY_BREAK"
 _ENV_COMMIT = "MOJOLEARN_COMMIT"
-_COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
 
 #: Runs the harness by path inside the package the parent imported. `-c`
 #: puts the current directory first on sys.path, so the package directory's
@@ -51,40 +46,17 @@ def _pkg_dir():
 
 def _checkout_root():
     """The repository root when this package sits in a checkout (the
-    directory holding tools/identity_break.py), else None."""
-    base = _pkg_dir()
-    for _ in range(6):  # glue: identity verification CLI over record files
-        base = os.path.dirname(base)
-        if not base or base == os.path.dirname(base):
-            return None
-        if os.path.isfile(os.path.join(base, "tools", "identity_break.py")):
-            return base
-    return None
+    directory holding tools/identity_break.py), else None
+    (`mojolearn.runtime_report()["checkout_root"]`)."""
+    from . import runtime_report
+    return runtime_report()["checkout_root"]
 
 
 def harness_path():
     """(path, how) for tools/identity_break.py: MOJOLEARN_IDENTITY_BREAK,
     the wheel copy, or the checkout. Raises FileNotFoundError naming what
-    was tried."""
-    tried = []
-    explicit = os.environ.get(_ENV_HARNESS, "").strip()
-    if explicit:
-        tried.append(explicit)
-        if os.path.isfile(explicit):
-            return explicit, _ENV_HARNESS
-    copy = os.path.join(_pkg_dir(), _HARNESS_COPY + ".py")
-    tried.append(copy)
-    if os.path.isfile(copy):
-        return copy, "wheel copy"
-    root = _checkout_root()
-    if root:
-        return os.path.join(root, "tools", "identity_break.py"), "checkout"
-    tried.append("<checkout>/tools/identity_break.py")
-    raise FileNotFoundError(
-        "tools/identity_break.py is not in this install, so there is no harness to run. "
-        "Looked at:\n  " + "\n  ".join(tried)
-        + "\nInstall a wheel built with the packaging step that copies it in, "
-        "run from a checkout, or point MOJOLEARN_IDENTITY_BREAK at the file.")
+    was tried (`_verify.harness_path`, the one reader)."""
+    return _verify.harness_path()
 
 
 def columns():
@@ -116,18 +88,9 @@ def columns():
 def commit_witness():
     """(commit, source) for the local column: MOJOLEARN_COMMIT, the wheel's
     COMMIT witness, or None (the harness then reads `git rev-parse HEAD` of
-    the checkout it lives in, and refuses to write a column without one)."""
-    explicit = os.environ.get(_ENV_COMMIT, "").strip()
-    if explicit:
-        return explicit, _ENV_COMMIT
-    witness = os.path.join(_pkg_dir(), _COLUMNS_DIR, "COMMIT")
-    if os.path.isfile(witness):
-        with open(witness, "r", encoding="utf-8") as fh:
-            text = fh.read().strip()
-        value = text.split()[0] if text else ""
-        if _COMMIT_RE.match(value):
-            return value, "wheel COMMIT witness"
-    return None, "git rev-parse HEAD of the checkout (the harness reads it)"
+    the checkout it lives in, and refuses to write a column without one).
+    `_verify.commit_witness`, the one reader."""
+    return _verify.commit_witness()
 
 
 def _column_lanes_and_fixtures(paths):
