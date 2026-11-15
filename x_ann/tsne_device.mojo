@@ -297,12 +297,10 @@ def _enq_repulse(
 # in parallel inside the same kernel (each block's rows, then the parts in
 # the block that finishes last), so no one-block launch remains. Both
 # coordinates' steps run in one thread (`step_rows_kernel`, the cell's
-# statements in the cell's order). -D MOJOLEARN_TSNE_SPLIT_OFF=1 restores
-# main's three kernels.
-comptime TS_SPLIT = (
-    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not is_defined["MOJOLEARN_TSNE_SPLIT_OFF"]()
-)
+# statements in the cell's order).
+# TOMBSTONE: MOJOLEARN_TSNE_SPLIT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 691ab5ae34.
+# Restore: git apply experiments/removed/MOJOLEARN_TSNE_SPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TS_SPLIT = TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
 comptime RS_ROWS = 32
 comptime RS_TJ = 64
 comptime RS_TPB = 256
