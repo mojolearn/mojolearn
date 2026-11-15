@@ -91,17 +91,15 @@ Nothing in this module imports NumPy.
 from . import _mojolearn_trees, _native_archive_bridge, _native_trees_bridge
 from ._labels import argmax_rows, decode_labels
 from ._mode import NumericModeMixin
-from ._forest_protocol import ForestProtocol, forest_estimator
+from ._forest_protocol import ForestArchive, ForestClassifierPredict, ForestProtocol, forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
 
-# The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native_door.mojo
-# writes the schema registered after `_ExtraTreesBase`;
-# bindings/host_archive_native_door.mojo `host_archive_public_forest` builds the
-# loaded model).
-_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# `save` and `load` are _forest_protocol.ForestArchive's, one native call each
+# (bindings/archive_schema_native_door.mojo writes the schema registered after
+# `_ExtraTreesBase`; bindings/host_archive_native_door.mojo `host_archive_public_forest`
+# builds the loaded model).
 # The compiled tree-ensemble owner: `fit`, `predict` and `predict_proba` are
 # one native call each (bindings/trees_public_forest_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
@@ -156,26 +154,8 @@ _UNSUPPORTED_CRITERIA = {
 
 class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
     _BINDING = "_mojolearn_trees"
-
-    def save(self, path):
-        """Write the fitted forest to `path` as an npz file.
-
-        The file holds the prediction arrays exactly as fitted, with exact
-        dtypes; floats never pass through decimal text. A model saved with the
-        'parallel_groves' inference engine also records its engine and
-        numeric mode. The file bytes depend only on the model, so equal models
-        give equal file hashes on any machine.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
-
-    @classmethod
-    def load(cls, path):
-        """Load a forest saved by `save`.
-
-        The loaded model predicts; it does not refit. Loading a file saved by
-        a different estimator class raises `ValueError`.
-        """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+    save = ForestArchive.save
+    load = vars(ForestArchive)["load"]
 
 
 #: The saved formats `load` reads, and the save schema of both extra-trees
@@ -204,7 +184,7 @@ _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
 # Maintainer note (moved from the docstring): `predict_proba` is
 # `forest_vote`'s average of per-tree leaf distributions (cuML
 # `randomforest.cuh:229-242`); `predict` is its argmax through `classes_`.
-class ExtraTreesClassifier(_ExtraTreesBase):
+class ExtraTreesClassifier(ForestClassifierPredict, _ExtraTreesBase):
     """Extra-trees classifier with scikit-learn's defaults.
 
     Extremely randomized trees: each split draws one random threshold per
@@ -372,18 +352,6 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         """
         proba = self.predict_proba(X)
         return decode_labels(self.classes_, argmax_rows(proba)), proba
-
-    def predict(self, X):
-        """Predicted class labels: the argmax of `predict_proba`, first
-        maximum winning, mapped through `classes_`.
-
-        Returns
-        -------
-        Array or list of shape (n_samples,)
-            An int64 or float64 `Array` for numeric labels, a Python list for
-            string labels.
-        """
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 @forest_estimator("regressor")
 # Maintainer note (moved from the docstring): GPU training produces means of

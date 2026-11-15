@@ -9,11 +9,14 @@ import functools
 import inspect
 from types import GetSetDescriptorType
 
-from . import _native_trees_bridge
+from . import _native_archive_bridge, _native_trees_bridge
 
 # The compiled tree-ensemble owner: `score` predicts and scores in one native
 # call (bindings/trees_public_score_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
+# The compiled saved-model owner the forests' `save` and `load` call (the
+# same connected pair randomforest.py and extratrees.py hold).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 # `_ResidentForest` (a Python-owned device snapshot) deleted by lane py-trees
@@ -183,3 +186,47 @@ class ForestProtocol:
         return _TREES(self, "trees_public_forest_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 
+class ForestArchive:
+    """The forests' `save` and `load` (one native call each), written once.
+    `_RandomForestBase` and `_ExtraTreesBase` bind them as their own class
+    attributes (`save = ForestArchive.save`, `load = vars(ForestArchive)["load"]`, the
+    classmethod object itself)
+    so NumericModeMixin's class-definition loader wrapper, which reads the
+    class's own namespace, still sees `load` there."""
+
+    def save(self, path):
+        """Write the fitted forest to `path` as an npz file.
+
+        The file holds the prediction arrays exactly as fitted, with exact
+        dtypes; floats never pass through decimal text. A model saved with the
+        'parallel_groves' inference engine also records its engine and
+        numeric mode. The file bytes depend only on the model, so equal models
+        give equal file hashes on any machine.
+        """
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
+
+    @classmethod
+    def load(cls, path):
+        """Load a forest saved by `save`.
+
+        The loaded model predicts; it does not refit. Loading a file saved by
+        a different estimator class raises `ValueError`.
+        """
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+class ForestClassifierPredict:
+    """The forest classifiers' `predict` (RandomForestClassifier,
+    ExtraTreesClassifier): one native call. First in their bases."""
+
+    def predict(self, X):
+        """Predicted class labels: the argmax of `predict_proba`, first
+        maximum winning, mapped through `classes_`.
+
+        Returns
+        -------
+        Array or list of shape (n_samples,)
+            An int64 or float64 `Array` for numeric labels, a Python list for
+            string labels.
+        """
+        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
