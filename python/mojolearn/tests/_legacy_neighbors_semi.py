@@ -9,8 +9,9 @@ import struct
 from mojolearn._buffer import addr, addr_ro, empty
 from mojolearn._lazy_out import _empty_out
 from mojolearn import _expansion_neighbors as xn
+from mojolearn.tests._typed_input import f32_dense as _f32, f32_1d as _f32_1d, i32_1d as _i32
 from mojolearn._expansion_neighbors import (
-    _f32, _kfeat_flags, _f32_scalar,
+    _kfeat_flags, _f32_scalar,
     _classical_graph_normalization, _accuracy, _U_LOG,
 )
 from mojolearn.tests._legacy_neighbors_loc import _argmax_labels

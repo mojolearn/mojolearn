@@ -11,8 +11,9 @@ from mojolearn import _portable_math as math
 from mojolearn._array import Array
 from mojolearn._buffer import addr, addr_ro, empty
 from mojolearn._lazy_out import _empty_out
+from mojolearn.tests._typed_input import f32_dense as _f32, f32_1d as _f32_1d, i32_1d as _i32
 from mojolearn._expansion_neighbors import (
-    NearestCentroid, KNNImputer, _f32, _i32, _f32_scalar,
+    NearestCentroid, KNNImputer, _f32_scalar,
     _accuracy, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
 )
 

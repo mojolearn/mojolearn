@@ -7,8 +7,9 @@ import struct
 from mojolearn._buffer import addr, addr_ro, empty, zeros
 from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._lazy_out import _empty_out
+from mojolearn.tests._typed_input import f32_dense as _f32, f32_1d as _f32_1d, i32_1d as _i32
 from mojolearn._expansion_neighbors import (
-    _XNeighbors, _f32, _f32_1d, _i32, _f32_scalar, _p2m_relabel, _OLD_ITEMS, _U_IDENTITY,
+    _XNeighbors, _f32_scalar, _p2m_relabel, _OLD_ITEMS, _U_IDENTITY,
 )
 
 

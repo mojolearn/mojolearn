@@ -87,6 +87,21 @@ def as_f32_dense_c(obj, *, ndim=2, name="X"):
     return as_f32_c(obj, ndim=ndim, name=name)
 
 
+def f32_dense(X, name="X"):
+    """The deleted `_expansion_neighbors._f32` (ec78e70324): a dense 2-D float32 Array."""
+    return as_f32_dense_c(X, ndim=2, name=name)[0]
+
+
+def f32_1d(x, name):
+    """The deleted `_expansion_neighbors._f32_1d` (ec78e70324)."""
+    return as_f32_c(x, ndim=1, name=name)[0]
+
+
+def i32_1d(x, name):
+    """The deleted `_expansion_neighbors._i32` (ec78e70324)."""
+    return as_i32_c(x, ndim=1, name=name)[0]
+
+
 def as_f32_colmajor(obj, *, name="X"):
     return as_typed(obj, "<f4", "F", 2, name)
 
