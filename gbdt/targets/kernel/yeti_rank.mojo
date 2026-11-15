@@ -159,8 +159,8 @@ def yeti_block_parallel_for[column: Int]() -> Bool:
     identity-checked on."""
     # TOMBSTONE: MOJOLEARN_3040_YETI_SEQUENTIAL (DELETE-ARM, kill switch, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 185ae2aa1b.
     # Restore: git apply experiments/removed/MOJOLEARN_3040_YETI_SEQUENTIAL.patch
-    comptime if is_defined["MOJOLEARN_3040_YETI_BLOCK"]():
-        return True
+    # TOMBSTONE: MOJOLEARN_3040_YETI_BLOCK (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at ebec4a4e17.
+    # Restore: git apply experiments/removed/MOJOLEARN_3040_YETI_BLOCK.patch
     # FAST on Apple (lane apple-fast-trees2): the block kernel too. The
     # one-thread-per-task launch ran each task's permutations, its 1024-key
     # sort and its pairs on ONE GPU thread (block_dim 1); the block kernel is
