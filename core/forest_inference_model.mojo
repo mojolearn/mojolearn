@@ -65,8 +65,7 @@ def forest_ordered_resident_policy[
 
 #: Retain the resident model/workspaces while launching the strict
 #: increasing-tree kernel. H100 full-buffer qualification promotes this for
-#: Apple, NVIDIA and AMD in FAST/IDENTICAL. `_OFF` restores the former
-#: sequential IDENTICAL AUTO policy and resident FAST 32-grove graph.
+#: Apple, NVIDIA and AMD in FAST/IDENTICAL.
 #: Since 2026-09-22 this is the DEFAULT of a per-snapshot choice
 #: (`ResidentForest.ordered`, forest_prepare_gpu's optional 4th param): an
 #: IDENTICAL caller names it, strict for `auto` (the sequential bits) and
@@ -79,8 +78,10 @@ comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
     TARGET_COLUMN,
     GLOBAL_NUMERIC_MODE,
     False,
-    is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"](),
+    False,
 ]()
+# TOMBSTONE: MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 057d3cc56b.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 struct ForestIOWorkspace(Defaultable, Movable):
