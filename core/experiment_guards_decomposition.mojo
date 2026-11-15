@@ -111,6 +111,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TSVD_FAST_POOL_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): TSVD_FAST_POOL_OFF (FAST+Apple rollback to a fresh n x d device allocation per TruncatedSVD fit / transform) is gone; the pooled copy of X is the FAST+Apple path (tsvd istella 995.9 -> 921.0 ms, taxi 40.4 -> 32.3 ms, quality equal); restore: experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): XD_FAST_GRP_FUSED_OFF (FAST+Apple rollback to the two-wait DEVSCAN random projection fit with separate rand and scale launches) is gone; the one-call one-synchronize fit is the FAST+Apple path (gaussian-rp taxi 3.4 -> 2.1 ms, sparse-rp taxi -10.7%, istella -8.5%, distortion identical); restore: experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch"
+    # Lane expdel2-06-base (2026-11-15): the C13-C28 classical arms with no recorded A/B and the _OFF rollbacks of measured
+    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C23_MCD"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C23_MCD (Decomposition (MinCovDet centered Gram row-parallel, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 4ab2967a7e; see docs/TOMBSTONES.md"
     return True
 
 
