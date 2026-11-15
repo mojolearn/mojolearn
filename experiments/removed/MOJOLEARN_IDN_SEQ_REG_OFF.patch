@@ -1,0 +1,29 @@
+diff --git b/sequence/theta.mojo a/sequence/theta.mojo
+index 1b1f120229..b792a374d9 100644
+--- b/sequence/theta.mojo
++++ a/sequence/theta.mojo
+@@ -43,8 +43,8 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ #: / AMD 189.2 -> 122.4 (avg 0.62x); theta taxi-hourly 294.6 -> 173.5 /
+ #: 596.8 -> 397.6 (0.63x); dynamic-optimized-theta synthetic 476.5 -> 340.4
+ #: / 1117.1 -> 792.2 (0.71x), taxi-hourly 2161.6 -> 1807.9 / 6295.8 ->
+-#: 4603.4 (0.78x); damped-ets 1.00x). MOJOLEARN_IDN_ALL_OFF restores the
+-#: stored-row code. The same register form on
++#: 4603.4 (0.78x); damped-ets 1.00x). -D MOJOLEARN_IDN_SEQ_REG_OFF (or
++#: MOJOLEARN_IDN_ALL_OFF) restores the stored-row code. The same register form on
+ #: NVIDIA/AMD and the host binding. Structural reason: the stored-row run
+ #: makes ~1.4M dependent device-memory round trips per thread (five state
+ #: words and one error per step, the previous row read back) on a kernel of
+@@ -58,12 +58,9 @@ comptime THETA_REG_FAST = (
+     and TARGET_HAS_APPLE_GPU
+     and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_REG_OFF (superseded: IDN_SEQ_REG PROMOTED 2026-10-11, NV v0037/v0038 + AMD a1620/a1621,
+-# theta 0.62x, dynamic-optimized-theta 0.71x-0.78x, digests NV == AMD) deleted 2026-11-15 by lane/expdel-04-neural;
+-# code recoverable at 38664dbf45.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch
+ comptime THETA_REG = THETA_REG_FAST or (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_SEQ_REG_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 

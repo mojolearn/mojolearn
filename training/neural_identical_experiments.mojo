@@ -92,13 +92,15 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
 # layers and op count, not with any one shape. Measured alone against the
 # incumbent; it now combines with the promoted m3_angle_carry_cache and
 # act_retain=2 and attn_stash=recompute (Samba only), and the post-merge race
-# measures the combination. Default on in IDENTICAL; -D
-# MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route. The NI34
-# chunked head (MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2) spells a different head, so a
-# chunked-head build takes the per-op route (was a refused pair).
+# measures the combination. Default on in IDENTICAL. The NI34 chunked head
+# (MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2) spells a different head, so a chunked-head
+# build takes the per-op route (was a refused pair); IDN_ALL_OFF does too.
+# TOMBSTONE: MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF (superseded: IDN_SAMBA_RESIDENT_STEP PROMOTED grid ge123e6f9,
+# samba-forward NV 12.0 -> 5.3 / AMD 8.8 -> 5.8 ms, samba-train-step NV 96.0 -> 39.2 / AMD 147.2 -> 114.2 ms, hashes
+# equal) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 5bfce25001.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch
 comptime IDN_SAMBA_RESIDENT_STEP = (
     _ENABLED
-    and not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"]()
     and not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
 )
 # Samba stateless forward route (lane restore-samba-resident-forward,

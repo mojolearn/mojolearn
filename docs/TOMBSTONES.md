@@ -627,6 +627,16 @@ in the tables after the sections.
 | [`P1_ONEHOT_WARN_IN_NATIVE` (`warnings.warn` called from the native OneHotEncoder transform)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Prep (OneHotEncoder.transform) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_ONEHOT_WARN_IN_NATIVE.patch](../experiments/removed/P1_ONEHOT_WARN_IN_NATIVE.patch) |
 | [`P1_NATIVE_SKLEARN_TAGS` (`bindings/classical_tags.mojo`, `bindings/scaler_tags_native.mojo` and their tag operations)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | sklearn tags (linear models, scalers) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_NATIVE_SKLEARN_TAGS.patch](../experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch) |
 | [`P1_DEAD_PY_CURVE_DRIVERS` (unreachable Python drivers (`_FoldCurve`, `_curves`, `roc_auc_options`, ... 91 defs))](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Metrics, decomp, prep, linear model (Python) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_DEAD_PY_CURVE_DRIVERS.patch](../experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch) |
+| [`MOJOLEARN_AFN_OPTIM_ALL`](#mojolearn_afn_optim_all) | Neural (Apple FAST optimizer candidates bundle) | NEUTRAL | 2026-11-15 | [MOJOLEARN_AFN_OPTIM_ALL.patch](../experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch) |
+| [`MOJOLEARN_AF_FAST_NOFILL_OFF`](#mojolearn_af_fast_nofill_off) | Neural (Apple FAST Adafactor step, x_sequence) | superseded (AF_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_AF_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch) |
+| [`MOJOLEARN_LN_FAST_NOFILL_OFF`](#mojolearn_ln_fast_nofill_off) | Neural (Apple FAST LayerNorm, x_sequence) | superseded (LN_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_LN_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_PIPE_UP_OFF`](#mojolearn_seq_fast_pipe_up_off) | Neural (Apple FAST x_sequence executor uploads) | superseded (SEQ_FAST_PIPE_UP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF`](#mojolearn_seq_fast_pipe_down_off) | Neural (Apple FAST x_sequence executor downloads) | superseded (SEQ_FAST_PIPE_DOWN default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF`](#mojolearn_seq_fast_theta_snap_off) | Series on x_sequence (Apple FAST theta Nelder-Mead cycle watch) | superseded (SEQ_FAST_THETA_SNAP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF`](#mojolearn_seq_fast_theta_spec_off) | Series on x_sequence (Apple FAST theta speculative Nelder-Mead) | superseded (SEQ_FAST_THETA_SPEC default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_REG_OFF`](#mojolearn_idn_seq_reg_off) | Series on x_sequence (IDENTICAL theta register form) | superseded (IDN_SEQ_REG promoted) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_REG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_VAR_COOP_OFF`](#mojolearn_seq_fast_var_coop_off) | Series on x_sequence (Apple FAST VAR coop folds) | superseded (SEQ_FAST_VAR_COOP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch) |
+| [`MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF`](#mojolearn_idn_samba_resident_step_off) | Neural (IDENTICAL Samba resident forward and train step) | superseded (IDN_SAMBA_RESIDENT_STEP promoted) | 2026-11-15 | [MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5901,3 +5911,97 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Restore**: `git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch` (the two binding files), then re-add
   `labels_native_api_v2` to the core host export list in `python/mojolearn/host_surface.py`.
 - **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.
+
+## Experiment deletions: lane expdel-04-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-neural); each evidence row was read before the deletion. No bit changes: every deletion removes a non-default arm.
+
+### MOJOLEARN_AFN_OPTIM_ALL
+
+- Tried: one define that turned on every Apple FAST optimizer candidate of `training/afn_optim.mojo` at once (`AFN_OPT_CLIP_FUSE`, `AFN_OPT_MULTITENSOR`, `AFN_LOSS_FUSED`; earlier also FUSE_SCAN, VEC4, RESIDENT_STATE, deleted 2026-10-09).
+- Verdict: NEUTRAL (docs/apple-fast/EXPERIMENTS.md row `TRAIN_OPT_FAST_PIPE_DOWN + AFN_OPTIM_ALL`, reconciled 2026-10-05): M3 rab2-combo sgd 332.05 -> 207.78 ms, adam 332.94 -> 205.79, adamw 336.45 -> 204.48 equals TRAIN_OPT_FAST_PIPE_DOWN alone (rab2-pipedown 208.8 / 209.6 / 209.8); the bundle adds nothing and moves the output digest; no quality metric. Apple FAST only; no NVIDIA / AMD arm.
+- Removed: the `AFN_OPTIM_ALL` alias and its `AFN_OPTIM_ALL or` term in the three candidate switches; each candidate keeps its own define (still opt-in). Default unchanged: no bits move.
+- Files: training/afn_optim.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `54b6a264fc`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_AF_FAST_NOFILL_OFF
+
+- Tried: the rollback of `AF_FAST_NOFILL` in `sequence/ops_impl.mojo` `adafactor_step_impl`: under FAST + Apple, allocate P, G and the variance buffers and upload into them instead of binding the host buffers by their upload (`Exec.bind`).
+- Verdict: the NOFILL default won (docs/apple-fast/EXPERIMENTS.md row `AF_FAST_NOFILL` (rollback `AF_FAST_NOFILL_OFF`), M3 rab10-afnofill, full board size, one run per arm: adafactor 393.2 -> 380.1 ms, digest identical). KEEP (FAST + Apple default, `_OFF`). Apple FAST only.
+- Removed: the `_OFF` term of `AF_NOFILL` (now `_PY_APPLE_FAST`). The alloc + upload arm stays: IDENTICAL and FAST off Apple compile it. No bits move.
+- Files: sequence/ops_impl.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `4ebe87a042`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_LN_FAST_NOFILL_OFF
+
+- Tried: the rollback of `LN_FAST_NOFILL` in `sequence/ops_impl.mojo` `layer_norm_impl`: under FAST + Apple, allocate x and dy and upload into them instead of binding the host buffers.
+- Verdict: the NOFILL default won (docs/apple-fast/EXPERIMENTS.md row `LN_FAST_NOFILL`, lane/apple-fast-rec-ab2 @ 40027eb8e, M3 afc_ab_def, full board, one run per arm, 2026-10-04: layernorm 48.2 -> 45.5 ms, digest identical A == B). KEEP: FAST + Apple default. Apple FAST only.
+- Removed: the `_OFF` term of `LN_NOFILL` (now `_PY_APPLE_FAST`). The alloc + upload arm stays: IDENTICAL and FAST off Apple compile it. No bits move.
+- Files: sequence/ops_impl.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `3004379441`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_PIPE_UP_OFF
+
+- Tried: the rollback of `SEQ_FAST_PIPE_UP` in `sequence/exec_device.mojo`: under FAST + Apple, serial upload copies instead of chunked copies whose DMA overlaps the next chunk's copy.
+- Verdict: the pipelined default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_PIPE_UP`, lane/apple-fast-regress @ 93951fafb, M3 regress-layernorm-pipe: layernorm 76.0 -> 52.2 ms with PIPE_DOWN, neutral elsewhere, digests identical). KEPT f6a9e7c04. Apple FAST only.
+- Removed: the `_OFF` term of `SEQ_PIPE_UP`'s FAST + Apple half (now `_SEQ_APPLE_FAST`). The serial upload stays: FAST off Apple and `MOJOLEARN_IDN_SEQ_PIPE_UP_OFF` / `IDN_ALL_OFF` compile it. No bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `eff4ddd2d8`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF
+
+- Tried: the rollback of `SEQ_FAST_PIPE_DOWN` in `sequence/exec_device.mojo`: under FAST + Apple, serial downloads at a sync instead of two pinned halves whose DMA overlaps the read of the previous chunk.
+- Verdict: the pipelined default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_PIPE_DOWN`, lane/apple-fast-regress @ 93951fafb, M3 regress-adafactor-down / -pipe, regress-adagrad-pipe: adafactor 684 -> 390 ms (-43%), adagrad 195.5 -> 199.1 neutral, digests identical). KEPT f6a9e7c04. Apple FAST only.
+- Removed: the `_OFF` term of `SEQ_PIPE_DOWN`'s FAST + Apple half (now `_SEQ_APPLE_FAST`). The serial download stays: FAST off Apple and `MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF` / `IDN_ALL_OFF` compile it; `autograd/program_output_copy.mojo` reads `SEQ_PIPE_DOWN` unchanged. No bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `2e31a412c9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF
+
+- Tried: the rollback of `SEQ_FAST_THETA_SNAP` in `sequence/theta.mojo`: under FAST + Apple, run every Nelder-Mead iteration of the theta fits instead of stopping a series whose state returned bit for bit to an earlier one (same final state).
+- Verdict: the snapshot default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_THETA_SNAP`, lane/apple-fast-regress @ 93951fafb, M3 regress-dotm-snap: dynamic-optimized-theta taxi-hourly 2,088 -> 562 ms (-73%), same bits). KEPT f6a9e7c04. Apple FAST only.
+- Removed: the `_OFF` term of `THETA_SNAP` (now FAST + Apple). The plain run stays for every other build. No bits move.
+- Files: sequence/theta.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `e382ce0c14`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF
+
+- Tried: the rollback of `SEQ_FAST_THETA_SPEC` in `sequence/theta_spec.mojo`: under FAST + Apple (on THETA_REG), the serial one-thread-per-series Nelder-Mead instead of one simdgroup per series evaluating the candidates side by side.
+- Verdict: the speculative default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_THETA_SPEC`, lane/apple-fast-gap-tsa @ e9da47064, M3 gaptsa-thetaspec-theta-taxi-hourly: theta taxi-hourly 218 -> 20.3 ms (-91%), quality identical). KEPT 6c0ba4379. Apple FAST only.
+- Removed: the `_OFF` term of `THETA_SPEC_FAST` (now `THETA_REG_FAST`). The serial `op_theta` stays (IDENTICAL with `MOJOLEARN_IDN_NM_SPEC_OFF`, FAST off Apple, the host column). No bits move.
+- Files: sequence/theta_spec.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `c5925a0e35`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_REG_OFF
+
+- Tried: the rollback of `IDN_SEQ_REG` in `sequence/theta.mojo`: IDENTICAL theta with the stored-row run (five state words and one error written and read back per step) instead of the register form.
+- Verdict: the register form won on both vendors (`grid_controls/seq-reg.json` `idn_seq_reg`, PROMOTED 2026-10-11 by lane/i17-decide-linalg-seq; A/B main b2657cc89, one run per arm, NV v0037/v0038, AMD a1620/a1621, digests NV == AMD, quality equal): theta synthetic avg 0.62x, theta taxi-hourly 0.63x, dynamic-optimized-theta synthetic 0.71x, taxi-hourly 0.78x, damped-ets 1.00x.
+- Removed: the `_OFF` term of `THETA_REG`'s IDENTICAL half. The stored-row code stays (FAST off Apple, `MOJOLEARN_IDN_ALL_OFF`). No bits move: the register form is bit-identical by construction and was the default.
+- Files: sequence/theta.mojo; grid entry `idn_seq_reg` moved to `removed` in seq-reg.json.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `38664dbf45`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo` and move the entry back to `controls` in `experiments/six_lane_integration/grid_controls/seq-reg.json`.
+
+### MOJOLEARN_SEQ_FAST_VAR_COOP_OFF
+
+- Tried: the rollback of `SEQ_FAST_VAR_COOP` (`sequence/ops.mojo`): under FAST + Apple with TSA2_VAR, VAR's R-long folds (column scale, Z^T Z, Z^T Ys, sigma_u) one thread per cell instead of one simdgroup per cell.
+- Verdict: the coop default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_VAR_COOP` (rollback `SEQ_FAST_VAR_COOP_OFF`), lane/apple-fast-verdicts-6, M3 rab13-varcoop, full board size, one run per arm: var synthetic 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms, forecast_rmse identical). KEEP (FAST + Apple default, `_OFF`). Apple FAST only.
+- Removed: the `_OFF` term (`SEQ_FAST_VAR_COOP = TSA2_VAR`) and, in `sequence/ops_impl.mojo` `_var_fit_queued` (reached only under TSA2_VAR), the plain-`gemm` else arm and the `comptime if`, plus the now unused `SEQ_FAST_VAR_COOP` import there. `sequence/exec_device.mojo`'s coop routing keeps reading `SEQ_FAST_VAR_COOP` (false off FAST + Apple). No bits move.
+- Files: sequence/ops.mojo, sequence/ops_impl.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `72b582962f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF
+
+- Tried: the rollback of `IDN_SAMBA_RESIDENT_STEP` (`training/neural_identical_experiments.mojo`): an IDENTICAL build without the device-resident Samba forward / train step entries, so every Samba call takes the per-op route.
+- Verdict: the resident step won on both vendors (`grid_controls/samba-resident.json` `samba_resident_step`, PROMOTED 2026-10-08, lane grid-act-4, grid ge123e6f9, one run per arm): samba-forward NV 12.0 -> 5.3 ms, AMD 8.8 -> 5.8 ms; samba-train-step NV 96.0 -> 39.2 ms, AMD 147.2 -> 114.2 ms (0.551x combined); output hashes equal to the incumbent on both vendors.
+- Removed: the `_OFF` term of `IDN_SAMBA_RESIDENT_STEP` and the two binding comments that named it. The per-op route is not deleted: `MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2` and `IDN_ALL_OFF` builds still take it, as do accumulation_steps > 1 and dropout > 0 at run time. No bits move.
+- Files: training/neural_identical_experiments.mojo, bindings/_mojolearn_training.mojo (comments); grid entry `samba_resident_step` moved to `removed` in samba-resident.json.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `5bfce25001`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo` and move the entry back to `controls` in `experiments/six_lane_integration/grid_controls/samba-resident.json`.

@@ -13,7 +13,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.exec_trait import Exec
 from sequence.ops import OP_THETA_FORECAST
 from sequence.prophet_prep import prophet_features_on
-from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
+from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
@@ -43,17 +43,24 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: AF_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab10-afnofill): adafactor 393.2 -> 380.1 ms, digest identical
-#: A == B. KEEP: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_AF_FAST_NOFILL_OFF. No conflict with AF_FAST_RESIDENT (also a
-#: default): the resident step does not go through `adafactor_step_impl`'s
-#: per-call path, so with RESIDENT on the Adafactor class no longer reaches
-#: it; NOFILL covers the RESIDENT_OFF rollback.
-comptime AF_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_NOFILL_OFF"]()
+#: A == B. KEEP: the FAST + Apple default since then. No conflict with
+#: AF_FAST_RESIDENT (also a default): the resident step does not go through
+#: `adafactor_step_impl`'s per-call path, so with RESIDENT on the Adafactor
+#: class no longer reaches it; NOFILL covers the RESIDENT_OFF rollback.
+#: Every other build (IDENTICAL, FAST off Apple) keeps the alloc + upload form.
+# TOMBSTONE: MOJOLEARN_AF_FAST_NOFILL_OFF (superseded: AF_FAST_NOFILL won M3 rab10-afnofill 393.2 -> 380.1 ms, digest
+# identical) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 4ebe87a042.
+# Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch
+comptime AF_NOFILL = _PY_APPLE_FAST
 #: LN_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 48.2 -> 45.5 ms,
-#: output digest identical A == B. KEEP: the FAST + Apple default since then;
-#: rollback -D MOJOLEARN_LN_FAST_NOFILL_OFF (the old -D name is harmless).
-comptime LN_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_LN_FAST_NOFILL_OFF"]()
+#: output digest identical A == B. KEEP: the FAST + Apple default since then
+#: (the old -D MOJOLEARN_LN_FAST_NOFILL name is harmless). Every other build
+#: keeps the alloc + upload form.
+# TOMBSTONE: MOJOLEARN_LN_FAST_NOFILL_OFF (superseded: LN_FAST_NOFILL won M3 afc_ab_def layernorm 48.2 -> 45.5 ms, digest
+# identical) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 3004379441.
+# Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch
+comptime LN_NOFILL = _PY_APPLE_FAST
 
 
 def fptr(addr: Int, what: String) raises -> FP:
@@ -583,17 +590,17 @@ def _var_fit_queued[E: Exec](
     b.i0 = R
     b.i1 = m
     ex.launch[OP_COLSCALE](b, m)
-    comptime if SEQ_FAST_VAR_COOP:
-        # MOJOLEARN_SEQ_FAST_VAR_COOP (sequence/ops.mojo): the two R-long
-        # normal-equation products as coop cells (Args.i11 = 1 asks
-        # DeviceExec.launch for coop_kernel[OP_GEMM]; the same chain). A K
-        # long enough for gemm's FAST split keeps the split.
-        if R < 32768:
-            _var_gemm_coop(ex, Z, Z, G, m, m, R, 1, m, m, 1, m)
-            _var_gemm_coop(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, K)
-        else:
-            gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
-            gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
+    # MOJOLEARN_SEQ_FAST_VAR_COOP (sequence/ops.mojo; holds wherever TSA2_VAR,
+    # the only build that reaches this function): the two R-long
+    # normal-equation products as coop cells (Args.i11 = 1 asks
+    # DeviceExec.launch for coop_kernel[OP_GEMM]; the same chain). A K
+    # long enough for gemm's FAST split keeps the split.
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_COOP_OFF (superseded: the coop default) deleted 2026-11-15 by
+    # lane/expdel-04-neural; code recoverable at 72b582962f.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch
+    if R < 32768:
+        _var_gemm_coop(ex, Z, Z, G, m, m, R, 1, m, m, 1, m)
+        _var_gemm_coop(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, K)
     else:
         gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
         gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)

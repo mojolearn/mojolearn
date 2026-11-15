@@ -300,6 +300,38 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
     comptime assert not is_defined["MOJOLEARN_AFN_ATTN_ARENA"](), "removed 2026-11-09 (lane/m2-neural-leftovers): MOJOLEARN_AFN_ATTN_ARENA (A07, Apple FAST, never measured) put TransformerWorkspace's buffers in one device arena; nothing built that workspace after the block forward moved onto the attention step op (lanes x45c, x6), so the workspace, its key and the arena arm are deleted. Restore with experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch"
     # ---- end lane m2-neural-leftovers
+    # ---- lane expdel-04-neural (2026-11-15): experiment deletions (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md)
+    # TOMBSTONE: MOJOLEARN_AFN_OPTIM_ALL (NEUTRAL) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 54b6a264fc.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_OPTIM_ALL"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_AFN_OPTIM_ALL (bundle of the Apple FAST optimizer candidates) was NEUTRAL: M3 rab2-combo equals TRAIN_OPT_FAST_PIPE_DOWN alone, digest moves; set the candidate defines one by one; recoverable at 54b6a264fc; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_AF_FAST_NOFILL_OFF (superseded (AF_FAST_NOFILL default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 4ebe87a042.
+    # Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AF_FAST_NOFILL_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_AF_FAST_NOFILL_OFF rolled back AF_FAST_NOFILL, the FAST + Apple default that won M3 rab10-afnofill (adafactor 393.2 -> 380.1 ms, digest identical); drop the define; recoverable at 4ebe87a042; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_LN_FAST_NOFILL_OFF (superseded (LN_FAST_NOFILL default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 3004379441.
+    # Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LN_FAST_NOFILL_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_LN_FAST_NOFILL_OFF rolled back LN_FAST_NOFILL, the FAST + Apple default that won M3 afc_ab_def (layernorm 48.2 -> 45.5 ms, digest identical); drop the define; recoverable at 3004379441; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_UP_OFF (superseded (SEQ_FAST_PIPE_UP default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at eff4ddd2d8.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_PIPE_UP_OFF rolled back SEQ_FAST_PIPE_UP, the FAST + Apple default KEPT f6a9e7c04 (M3 layernorm 76.0 -> 52.2 ms with PIPE_DOWN, digests identical); drop the define; recoverable at eff4ddd2d8; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF (superseded (SEQ_FAST_PIPE_DOWN default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 2e31a412c9.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF rolled back SEQ_FAST_PIPE_DOWN, the FAST + Apple default KEPT f6a9e7c04 (M3 adafactor 684 -> 390 ms, digests identical); drop the define; recoverable at 2e31a412c9; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF (superseded (SEQ_FAST_THETA_SNAP default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at e382ce0c14.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF rolled back SEQ_FAST_THETA_SNAP, the FAST + Apple default KEPT f6a9e7c04 (M3 dynamic-optimized-theta taxi-hourly 2,088 -> 562 ms, same bits); drop the define; recoverable at e382ce0c14; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF (superseded (SEQ_FAST_THETA_SPEC default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at c5925a0e35.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF rolled back SEQ_FAST_THETA_SPEC, the FAST + Apple default KEPT 6c0ba4379 (M3 theta taxi-hourly 218 -> 20.3 ms, quality identical); drop the define; recoverable at c5925a0e35; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_IDN_SEQ_REG_OFF (superseded (IDN_SEQ_REG promoted)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 38664dbf45.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_REG_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_IDN_SEQ_REG_OFF rolled back the IDENTICAL theta register form, PROMOTED 2026-10-11 on NVIDIA and AMD (theta 0.62x, dynamic-optimized-theta 0.71x-0.78x, digests NV == AMD); drop the define; recoverable at 38664dbf45; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_COOP_OFF (superseded (SEQ_FAST_VAR_COOP default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 72b582962f.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_VAR_COOP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_VAR_COOP_OFF rolled back SEQ_FAST_VAR_COOP, the FAST + Apple default (M3 rab13-varcoop var synthetic 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms, forecast_rmse identical); drop the define; recoverable at 72b582962f; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF (superseded (IDN_SAMBA_RESIDENT_STEP promoted)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 5bfce25001.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF rolled back the device-resident Samba step, PROMOTED 2026-10-08 on NVIDIA and AMD (grid ge123e6f9: samba-forward 0.44x / 0.66x, samba-train-step 0.41x / 0.78x, hashes equal); drop the define; recoverable at 5bfce25001; see docs/TOMBSTONES.md"
+    # ---- end lane expdel-04-neural
     return True
 
 
