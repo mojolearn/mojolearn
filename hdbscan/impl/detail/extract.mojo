@@ -58,7 +58,6 @@ from hdbscan.impl.detail.stabilities import (
     compute_stabilities,
     get_stability_scores_device,
 )
-from hdbscan.impl.detail.fast_apple import HDB_SELECT_DEVICE
 from hdbscan.impl.detail.idn_switches import (
     IDN_HDB_ONE_SYNC,
     IDN_HDB_SELECT_ONE_READ,
@@ -449,8 +448,8 @@ def probabilities_kernel(
         dst[child] = ftz(identical_div(lo, death))
 
 
-# ---------------------------------------- lane af-hdbscan2, FAST Apple ---
-# `-D MOJOLEARN_HDB_SELECT_DEVICE` (epsilon == 0 only; the epsilon search
+# ------------------------------- lane af-hdbscan2, IDENTICAL since fam2 ---
+# `IDN_HDB_SELECT_ONE_READ` (epsilon == 0 only; the epsilon search
 # needs the selected count on the host to decide whether it runs, so it
 # keeps main's route). Main's extract already runs every pass on the device
 # (stabilities by a fixed fold, EOM level by level, negation by pointer
@@ -772,11 +771,11 @@ def extract_clusters(
     """`extract.cuh:246-314`, then the runner's tail (`runner.h:208-233`:
     max_lambda, the stability scores, the label remap) and the
     probabilities, all on the device over `tree`."""
-    # lane af-hdbscan2 (-D MOJOLEARN_HDB_SELECT_DEVICE): the same passes
+    # IDENTICAL on every vendor (IDN_HDB_SELECT_ONE_READ): the same passes
     # with no wait between them and one readback (epsilon 0 only).
-    # fam2-cluster: the same route under IDENTICAL on every vendor
-    # (IDN_HDB_SELECT_ONE_READ).
-    comptime if HDB_SELECT_DEVICE or IDN_HDB_SELECT_ONE_READ:
+    # TOMBSTONE: MOJOLEARN_HDB_SELECT_DEVICE (its FAST Apple term here) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at aab954d195.
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_SELECT_DEVICE.patch; record in docs/TOMBSTONES.md.
+    comptime if IDN_HDB_SELECT_ONE_READ:
         if cluster_selection_epsilon == Float32(0.0):
             return _extract_one_read(
                 ctx, tree, cluster_selection_method, allow_single_cluster,

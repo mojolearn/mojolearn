@@ -65,12 +65,6 @@ comptime HDB_LINKAGE_DEVICE = HDB_FAST_APPLE and (
 flag readback, dendrogram_union.mojo) and the condense with two status
 readbacks instead of eight waits (tree_device.mojo `_condensed_two_reads`)."""
 
-# F15/hdbscan-selection M3 2026-10-06: six cold/repeated public fit times,
-# B/A0.9170..1.0298, mixed; retain OFF. Same three-case quality contract,
-# one warmup/one score, caller67d0efb29; results/F15/hdbscan-selection.
-comptime HDB_SELECT_DEVICE = HDB_FAST_APPLE and (
-    is_defined["MOJOLEARN_HDB_SELECT_DEVICE"]()
-)
-"""Stabilities, selection, labels, scores and probabilities with no wait in
-between and ONE readback at the end (extract.mojo `_extract_one_read`);
-epsilon != 0 keeps main's route."""
+# TOMBSTONE: MOJOLEARN_HDB_SELECT_DEVICE (FAST Apple opt-in: one-readback selection; F15 B/A 0.92..1.03 mixed, EXP:1915 owed row withdrawn) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at aab954d195.
+# Restore: git apply experiments/removed/MOJOLEARN_HDB_SELECT_DEVICE.patch; record in docs/TOMBSTONES.md.
+# The same route stays the IDENTICAL default (idn_switches.IDN_HDB_SELECT_ONE_READ).
