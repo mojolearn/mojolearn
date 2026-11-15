@@ -68,6 +68,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_IDN_ADA_SESSION_OFF, the IDENTICAL escape from the AdaBoost members' data session (the session moves no bit); every build opens the session and a GPU binary runs every tree member's round on the device; code at 5b5490960d; see docs/TOMBSTONES.md"
     # integ-w6 (2026-11-09): a retired model-selection define; CalibratedClassifierCV (bindings/trees_public_meta_door.mojo) is in this family.
     comptime assert not is_defined["MOJOLEARN_MSEL_UNITS_SERIAL"](), "removed 2026-11-09 (integ-w6, integ/pre-0867-w3; code at lane/p3-msel-parallel-and-process-pool@9d7f5a2af9): MSEL_UNITS_SERIAL (every CV unit on the calling thread) is redundant: units whose member fits run on a GPU run one at a time by default (bindings/native_unit_threads.mojo native_unit_device_workers); -D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL is the parallel-GPU arm (docs/TOMBSTONES.md)"
+    # Lane expdel-05-trees (2026-11-15): Apple FAST GBDT/SYM losers and a superseded old path (docs/plans/
+    # EXPERIMENT_DELETIONS_2026-11-15.md, docs/TOMBSTONES.md "Lane expdel-05-trees"); code recoverable at each line's sha.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_FEAT_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_FEAT_ALL, the FAST Apple umbrella of the six symmetric feature-set switches, was NEUTRAL: rab4-symfeat istella -1.3%, taxi -0.1%, quality noise; the switches it kept keep their own defines; code at 54b6a264fc; see docs/TOMBSTONES.md"
     return True
 
 

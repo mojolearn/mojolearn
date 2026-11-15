@@ -627,6 +627,7 @@ in the tables after the sections.
 | [`P1_ONEHOT_WARN_IN_NATIVE` (`warnings.warn` called from the native OneHotEncoder transform)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Prep (OneHotEncoder.transform) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_ONEHOT_WARN_IN_NATIVE.patch](../experiments/removed/P1_ONEHOT_WARN_IN_NATIVE.patch) |
 | [`P1_NATIVE_SKLEARN_TAGS` (`bindings/classical_tags.mojo`, `bindings/scaler_tags_native.mojo` and their tag operations)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | sklearn tags (linear models, scalers) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_NATIVE_SKLEARN_TAGS.patch](../experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch) |
 | [`P1_DEAD_PY_CURVE_DRIVERS` (unreachable Python drivers (`_FoldCurve`, `_curves`, `roc_auc_options`, ... 91 defs))](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Metrics, decomp, prep, linear model (Python) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_DEAD_PY_CURVE_DRIVERS.patch](../experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch) |
+| [`MOJOLEARN_SYM_FEAT_ALL`](#mojolearn_sym_feat_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_FEAT_ALL.patch](../experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5901,3 +5902,19 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Restore**: `git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch` (the two binding files), then re-add
   `labels_native_api_v2` to the core host export list in `python/mojolearn/host_surface.py`.
 - **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.
+
+## Lane expdel-05-trees: GBDT and SYM Apple FAST losers (2026-11-15)
+
+Deleted from the plan docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-05-trees), one commit per
+define, each evidence row read first. Every arm here was default off (or, for `_OFF`, the non-default old path): no
+bits change on any vendor or the host column, no board row needs re-timing.
+
+### MOJOLEARN_SYM_FEAT_ALL
+
+- Tried: one umbrella define turning on the six FAST + Apple symmetric feature-set switches (GBDT_INDEX_PACK_DEVICE, GBDT_QUANT_DEVICE, GBDT_EVAL_SKIP_EMPTY, GBDT_EVAL_FUSED, GBDT_PREDICT_PACKED, GBDT_BOOT_DEVICE) together.
+- Verdict: NEUTRAL. rab4-symfeat (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella -1.3%, taxi -0.1%, quality noise; stays off. Apple FAST only (no NVIDIA / AMD arm). Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `54b6a264fc`. Patch: `experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 192, 216, 1300; appended row in the "Lane expdel-05-trees" section.
+- Note: Only the umbrella went: GBDT_INDEX_PACK_DEVICE, GBDT_QUANT_DEVICE and GBDT_PREDICT_PACKED keep their own defines (prerequisites of the unmeasured AFT_G06 / AFT_P05 cards; KEEP-OPEN in the plan).
