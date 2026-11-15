@@ -5,14 +5,8 @@ ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
 and is OFF by default, so IDENTICAL (and FAST on any other vendor) compiles
 main's code unchanged. One module so `train.mojo`, `gls_borders_device.mojo`,
 `doc_parallel_boosting.mojo` and `resident_model.mojo`
-read the same flags without importing each other."""
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-
-comptime SYM_FEAT_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-)
+read the same flags without importing each other. Every switch here is
+deleted (2026-11-15); each name stays as False for its importers."""
 # TOMBSTONE: MOJOLEARN_SYM_FEAT_ALL (NEUTRAL: rab4-symfeat istella -1.3%, taxi -0.1%) deleted 2026-11-15 by
 # lane/expdel-05-trees; code recoverable at 54b6a264fc.
 # Restore: git apply experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch
@@ -27,9 +21,9 @@ comptime SYM_FEAT_FAST_APPLE = (
 #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
 #: source), never timed. Fixed: the pack kernel compares by `exact_f32_gt`,
 #: as main's binarize kernel (subnormal borders on Metal).
-comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_INDEX_PACK_DEVICE"]()
-)
+# TOMBSTONE: MOJOLEARN_GBDT_INDEX_PACK_DEVICE (DELETE-EXPERIMENT, EXP:170 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at b763f5cf63.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_INDEX_PACK_DEVICE.patch; record in docs/TOMBSTONES.md.
+comptime GBDT_INDEX_PACK_DEVICE = False
 #: `-D MOJOLEARN_GBDT_QUANT_DEVICE`: the float columns go host to device
 #: ONCE, into one resident column-major matrix, before the border build;
 #: `device_float_borders` reads its chunks from it instead of uploading the
@@ -46,7 +40,7 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 #: (as INDEX_PACK_DEVICE).
 # TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 408e1ba726.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch; record in docs/TOMBSTONES.md.
-comptime GBDT_QUANT_DEVICE = GBDT_INDEX_PACK_DEVICE
+comptime GBDT_QUANT_DEVICE = False
 # TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
 # 8815b00d75.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
