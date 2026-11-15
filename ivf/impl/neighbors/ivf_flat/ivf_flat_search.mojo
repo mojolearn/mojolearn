@@ -74,7 +74,6 @@ than approximately. Read `ivf/checks/list_layout.mojo`'s header before
 changing anything about that order.
 """
 from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
-from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -84,7 +83,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
-from ivf.impl.neighbors.ivf_flat.ivf_balanced_tasks import ivf_balanced_scan
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
     IIVF_MAX_DIM,
     IIVF_QPB,
@@ -926,7 +924,7 @@ def ivf_flat_search_prepared(
                 var grid = (n_queries + FIVF_QPB - 1) // FIVF_QPB
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
-                        comptime if IVF_IDENTICAL_SCAN or C35_PACKED_LISTS:
+                        comptime if IVF_IDENTICAL_SCAN:
                             # I16 2026-10-06 AMD MI325X scoped LOSER, source 5b467815b:
                             # balanced / flat ratios 3.253-16.510; staged / flat 1.381-2.200.
                             # 100000 rows, 128 queries, features7/33/65, 64 lists/probes,
@@ -944,10 +942,10 @@ def ivf_flat_search_prepared(
                             # TOMBSTONE: MOJOLEARN_IVF_BALANCED_TASKS (loser) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
                             # Restore: git apply experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch
                             # (the IDENTICAL opt-in and its run-time MOJOLEARN_IVF_BALANCED_TASKS_OFF getenv; measured
-                            # slower on both vendors, I16 above; ivf_balanced_scan stays for C35_PACKED_LISTS)
-                            if C35_PACKED_LISTS:
-                                ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)
-                            elif _ivf_scan_grouped():
+                            # slower on both vendors, I16 above)
+                            # TOMBSTONE: MOJOLEARN_C35_PACKED_LISTS (unmeasured arm) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at a2aabdcd81.
+                            # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.expdel2-12-cluster.patch (ivf_balanced_scan and its file, ivf_balanced_tasks.mojo, had no other caller and are deleted); record in docs/TOMBSTONES.md.
+                            if _ivf_scan_grouped():
                                 # lane neural-pass42: the (query, probe) pairs grouped by
                                 # list, ascending (q, p) within a list, the blocks GQPB
                                 # pairs of one list each; lane cgr4-download-loop: the
