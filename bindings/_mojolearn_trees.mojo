@@ -61,7 +61,6 @@ from core.forest_inference_model import resident_release
 
 
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
-from std.sys.compile import is_defined
 from forest_export_binding_unpack import (forest_export_py_list_f64, forest_export_py_list_i64,)
 from core.forest_export_run import (ForestExportRegistry,)
 from core.forest_export_binding_impl import (validate_forest_export_destinations, copy_forest_export_leaves,)
@@ -270,8 +269,8 @@ def trees_vendor_binding() raises -> PythonObject:
 
 
 def trees_stage_copy_policy_binding() raises -> PythonObject:
-    comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
-        return PythonObject("scalar_reference")
+    # TOMBSTONE: MOJOLEARN_ET_SCALAR_STAGE_COMPARE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 337c096a5b.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch
     return PythonObject("vector_bytes")
 
 

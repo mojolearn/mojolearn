@@ -92,6 +92,12 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_YR_TASK_FUSED"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_YR_TASK_FUSED, the FAST Apple one-launch YetiRank call, was NEUTRAL: rab7-yrtaskfused yetirank 3386.79 -> 3394.43 ms (+0.2%), ndcg10 .680466 -> .680553; code at 41f0634a67; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_KSHAP_FAST_BATCH_OFF, the FAST Apple rollback of the batched kernel / permutation SHAP buffers, is removed: KSHAP_FAST_BATCH was KEPT (kap2-kshap-batch-istella 27,011 -> 15,325 ms, kap2-pshap-batch-istella 34,198 -> 28,236 ms, M3); every FAST Apple build batches; code at 073a9cc375; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch
+    comptime assert not is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_ET_SCALAR_STAGE_COMPARE (the ExtraTrees scalar staging-copy reference arm) is gone, no A/B was ever recorded; the vector byte copies are the only path; restore: experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch
+    comptime assert not is_defined["MOJOLEARN_DT_BINS_QOLD"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_DT_BINS_QOLD (rollback of the FAST DecisionTreeRegressor default to 128 quantile bins) is gone; RF_DT_DEFAULT_BINS is 256 under FAST, 128 otherwise (rab5-dtbins); restore: experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_IDN_IF_RESIDENT_OFF (rollback of IsolationForest to a refit of the whole forest inside every scoring call) is gone, no A/B was ever recorded for it; the resident forest that fit built is the path on every tier; restore: experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch"
     return True
 
 

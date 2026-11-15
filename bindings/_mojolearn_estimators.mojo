@@ -29,7 +29,6 @@ from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQ
 from core.pca_native_device import PCA_DEVICE_API
 from core.tsvd_native_device import TSVD_DEVICE_API
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -674,8 +673,9 @@ def ols_fit_resident_binding(
 
 
 def lm_classical_stats_binding() raises -> PythonObject:
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    return PythonObject(Int(C02_LINEAR_PAIR))
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at d61f68e1ea.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch
+    return PythonObject(0)
 
 
 def lm_col_sums_pair_binding(x: PythonObject, y: PythonObject, sx: PythonObject, sy: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1017,8 +1017,10 @@ def linear_gram_fit_binding(
     alpha, center (0/1). Returns 0 with coef (and, with center, mu float32
     [n_features] and ymean float64 [1]) written, or 1 with nothing written
     when the Gram is not trusted: the caller then runs its incumbent route."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
     comptime if not LINEAR_GRAM_SOLVE:
-        raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+        raise Error("linear_gram_fit: this build lacks the route (FAST)")
     if len(params) != 4:
         raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
     var xp = _f32_ptr(Int(py=x_addr))
@@ -1066,8 +1068,10 @@ def ridge_fit_resident_binding(
     (glm/estimator.mojo `ridge_fit_resident_host`). params: n_rows,
     n_features, alpha, center (0/1). With center, mu (float32 [n_features])
     and ymean (float64 [1]) are written. Returns 0."""
+    # TOMBSTONE: MOJOLEARN_RIDGE_RESIDENT_OFF (old path of the FAST Apple resident Ridge fit, EXP:247 KEPT; NVIDIA/AMD never owed: FAST is Apple only) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 76bf633f92.
+    # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.expdel2-01-base.patch
     comptime if not RIDGE_FAST_RESIDENT:
-        raise Error("ridge_fit_resident: only the FAST Apple build without -D MOJOLEARN_RIDGE_RESIDENT_OFF has this route")
+        raise Error("ridge_fit_resident: only the FAST Apple build has this route")
     if len(params) != 4:
         raise Error("ridge_fit_resident: params must contain n_rows, n_features, alpha, center")
     var xp = _f32_ptr(Int(py=x_addr))

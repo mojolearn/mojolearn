@@ -15,7 +15,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.mojolearn_x_ann_run import ivf_pq_build_run, ivf_pq_build_resident_run
 from providers.python.x_ann_abi_pyapi_unpack import a_int, in_f32, in_i32, out_f32, out_i32, p_int, py_int_list
-from x_ann.switches import ANN3_DIRECT_OUT, IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
+from x_ann.switches import IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
 from x_ann.ivf_pq_core import IvfPqIndex
 from x_ann.stage_timer import AnnStages
@@ -59,12 +59,9 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var pq_dim = p_int(params, 5)
     var pq_bits = p_int(params, 6)
     var pq_iters = p_int(params, 7)
-    # lane ann-apple3, behind `ANN3_DIRECT_OUT`: the codes go from the device
-    # straight into the caller's array (`index.codes` is then empty and the
-    # copy below moves nothing)
+    # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm: codes written by the device into the caller's array) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 418bb3c6c3.
+    # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.expdel2-01-base.patch
     var codes_addr = 0
-    comptime if ANN3_DIRECT_OUT:
-        codes_addr = a_int(addrs, 5)
     # p3-neighbors-cluster: the output addresses are Python items, so they are
     # read here with the GIL held; the released block below touches no
     # PythonObject (the host binding's pattern).
@@ -224,9 +221,9 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var vmin = List[Float32]()
     var delta = List[Float32]()
     var codes = List[Int32]()
+    # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm: codes written by the device into the caller's array) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 418bb3c6c3.
+    # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.expdel2-01-base.patch
     var codes_addr = 0
-    comptime if ANN3_DIRECT_OUT:
-        codes_addr = a_int(addrs, 6)
     with GILReleased(Python()):
         ivf_sq_build_device(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, vmin, delta, codes,
                             codes_addr, train_rows_per_list=train_rows_per_list)
@@ -398,8 +395,10 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[x_ann_index_release_binding]("x_ann_index_release")
         comptime if IVF_PQ_RESIDENT_FIT:
             # lane fg-ivf A7: the resident IVF-PQ fit and its codes export
-            # (absent under -D MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF: fit takes
-            # x_ann_ivf_pq_build and the first search prepares the handle)
+            # (absent under FAST: fit takes x_ann_ivf_pq_build and the first
+            # search prepares the handle)
+            # TOMBSTONE: MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF (old path; one-vendor promotion, grid fg-ivf.json A7: the other vendor's A/B is owed) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 699d5e93a1.
+            # Restore: git apply experiments/removed/MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF.expdel2-01-base.patch
             m.def_function[ivf_pq_build_resident_binding]("x_ann_ivf_pq_build_resident")
             m.def_function[x_ann_index_export_codes_binding]("x_ann_index_export_codes")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")

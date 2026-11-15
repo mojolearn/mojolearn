@@ -771,6 +771,12 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_SVGP_FAST_SYMTILE_OFF`](#mojolearn_svgp_fast_symtile_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B = Kuf Kfu upper tiles, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_COLSPLIT_OFF`](#mojolearn_svgp_fast_colsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP column phase solves, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_BSPLIT_OFF`](#mojolearn_svgp_fast_bsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B and b row-slice partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-svgpbsplit) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch) |
+| [`MOJOLEARN_ET_SCALAR_STAGE_COMPARE`](#mojolearn_et_scalar_stage_compare-unmeasured-arm-deleted-2026-11-15) | Trees (ExtraTrees batched level builder staging copy) | removed (unmeasured opt-in arm; AGENTS.md 2026-11-15) | 2026-11-15 | [MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch](../experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch) |
+| [`MOJOLEARN_DT_BINS_QOLD`](#mojolearn_dt_bins_qold-old-path-deleted-2026-11-15) | Trees (DecisionTreeRegressor default n_bins, FAST) | removed (old path; FAST default 256 bins QUALITY-FIX KEPT, rab5-dtbins) | 2026-11-15 | [MOJOLEARN_DT_BINS_QOLD.patch](../experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch) |
+| [`MOJOLEARN_IDN_IF_RESIDENT_OFF`](#mojolearn_idn_if_resident_off-old-path-deleted-2026-11-15) | Trees (IsolationForest resident forest between binding calls) | removed (old path, no A/B recorded; resident default kept) | 2026-11-15 | [MOJOLEARN_IDN_IF_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL`](#mojolearn_mamba3_legacy_fresh_prefill-old-path-deleted-2026-11-15) | Neural (Mamba-3 fresh prefill entries, GPU binding) | removed (old path, no A/B recorded; fresh prefill default kept) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch) |
+| [`MOJOLEARN_TRANSFORMER_FRESH_PREFILL`](#mojolearn_transformer_fresh_prefill-unmeasured-arm-deleted-2026-11-15) | Neural (TransformerBlock per-call fresh prefill export, off NVIDIA) | removed (unmeasured opt-in arm; EXP:2376 PENDING) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch) |
+| [`MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL`](#mojolearn_transformer_legacy_fresh_prefill-old-path-deleted-2026-11-15) | Neural (TransformerBlock per-call fresh prefill export, NVIDIA) | removed (old path; NVIDIA export is the kept path, EXP:2355) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch) |
 
 ## Trees
 
@@ -6754,3 +6760,51 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7d40f892a7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_ET_SCALAR_STAGE_COMPARE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: an opt-in reference arm that staged the ExtraTrees batched-level builder's node buffers with scalar element copies instead of vector byte copies, plus its witness answer `scalar_reference` from `trees_stage_copy_policy` (`bindings/_mojolearn_trees.mojo`). This lane folded the binding to `vector_bytes`; the two builder reads in `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo` are folded by lane expdel2-40-trees (its own inline tombstones and patch).
+- **Verdict**: no A/B recorded for the opt-in arm (plan rule a); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default (vector byte copies) is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch`, then delete the `MOJOLEARN_ET_SCALAR_STAGE_COMPARE` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_DT_BINS_QOLD: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of `RF_DT_DEFAULT_BINS` (`bindings/_mojolearn_rf.mojo`, the quantile bin count a DecisionTreeRegressor fits with at n_bins=None) from 256 to 128 under FAST. Only the define read is deleted: FAST keeps 256, IDENTICAL keeps 128.
+- **Verdict**: QUALITY-FIX KEPT, FAST default (EXPERIMENTS.md `RF_DT_DEFAULT_BINS` row, rab5-dtbins, M3 one run per arm, taxi): decision-tree-reg r2 0.8626 -> 0.8792 at 52.79 -> 53.38 ms, bagging-reg r2 0.9170 -> 0.9233 at 202.06 -> 187.32 ms. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b81caf7773`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch`, then delete the `MOJOLEARN_DT_BINS_QOLD` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_IDN_IF_RESIDENT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of IsolationForest's resident forest (`IDN_IF_RESIDENT` in `isolation_forest/impl/isolation_forest.mojo`, `_IF_RESIDENT_ROUTE` in `bindings/_mojolearn_svm.mojo`) to DEVIATION 874's refit-per-call form inside every score_samples / decision_function / predict call. This lane removed the binding's read; the read in `isolation_forest/impl/isolation_forest.mojo` belongs to another lane of the wave (its own inline tombstone and patch). `MOJOLEARN_IDN_ALL_OFF` (deleted by the same wave) was the other way to reach the refit-per-call form; once both are folded `_IF_RESIDENT_ROUTE` is always true and the refit branches in `bindings/_mojolearn_svm.mojo` are dead (integrator follow-up).
+- **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The resident default is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e51e8748dd`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_IDN_IF_RESIDENT_OFF` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL: old path deleted (2026-11-15)
+
+- **What it was**: the opt-out that left `mamba3_forward_fresh`, the prefill-session weight install and the B-arm entries unregistered in `bindings/_mojolearn_mamba.mojo` and zeroed `mamba3_prefill_image_caps` in `mamba/native_block_dispatch.mojo`. This lane removed the binding's read; the read in `mamba/native_block_dispatch.mojo` belongs to another lane of the wave (its own inline tombstone and patch).
+- **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default registration is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7d80876e08`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch`, then delete the `MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_TRANSFORMER_FRESH_PREFILL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in that registered `transformer_forward_fresh` (the per-call fresh prefill restored 2026-11-09 by lane r1-restore-measured-winners) on Apple and AMD IDENTICAL builds, where the block session prefill is the default. The NVIDIA IDENTICAL export, admitted by NVIDIA's full public A/B gate, is untouched. The 2026-11-09 tombstone of this define (`experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch`, section "transformer on the attention step op") is a different, earlier deletion that was reversed; it is not touched.
+- **Verdict**: no A/B recorded for the opt-in arm (plan rule a; EXPERIMENTS.md 2376 PENDING); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default export rule is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `191ceb5942`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch`, then delete the `MOJOLEARN_TRANSFORMER_FRESH_PREFILL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL: old path deleted (2026-11-15)
+
+- **What it was**: the NVIDIA IDENTICAL opt-out that left `transformer_forward_fresh` unregistered in `bindings/_mojolearn_transformer.mojo` (and the `tools/transformer_fresh_prefill_leg.sh` B arm that set it). The export rule is now `GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_NVIDIA`. The 2026-11-09 tombstone of this define (with MOJOLEARN_TRANSFORMER_FRESH_PREFILL) is an earlier deletion that was reversed; it is not touched.
+- **Verdict**: record read (plan rule e; EXPERIMENTS.md 2355): the NVIDIA export is the default the source names as admitted by NVIDIA's full public A/B gate; the opt-out is the old path. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3f08712c53`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch`, then delete the `MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).

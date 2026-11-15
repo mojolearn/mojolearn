@@ -138,8 +138,10 @@ from training.samba_ops import (
     samba_rms_norm_forward_host,
 )
 # lane afn-samba (2026-10-03): the fused Samba entries exist only in an
-# Apple FAST build with MOJOLEARN_AFN_SAMBA_FUSE (or _ALL); AFN_SAMBA_FUSE
+# Apple FAST build with MOJOLEARN_AFN_SAMBA_ALL; AFN_SAMBA_FUSE
 # is false everywhere else and nothing below registers.
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_FUSE (record read: EXP:2363 DELETED, superseded) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 3b87ca11bd.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_FUSE.expdel2-01-base.patch
 from training.samba_afn import AFN_SAMBA_FUSE
 from providers.python.training_samba_afn_pyapi_pack import (
     samba_afn_embedding_backward_tied_binding,
@@ -147,8 +149,7 @@ from providers.python.training_samba_afn_pyapi_pack import (
 )
 # lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
 # train step, registered only when IDN_SAMBA_RESIDENT_STEP holds (IDENTICAL
-# default since 2026-10-08, lane grid-act-4; off under
-# MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
+# default since 2026-10-08, lane grid-act-4); `samba_resident_enabled` is registered always so the Python
 # shell can ask (training/samba_resident.mojo).
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
 from core.philox_neural import neural_rng_host
@@ -859,7 +860,8 @@ def neural_rng_binding(
     return PythonObject(count)
 
 
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
+# TOMBSTONE: MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (record read: superseded by the measured resident Samba step, IDN_SAMBA_RESIDENT_STEP PROMOTED) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 86fbae4d17.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-01-base.patch
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 
@@ -867,8 +869,6 @@ def training_experiment_profile_binding() raises -> PythonObject:
     """Checkpoint identity for optional NI34/35/08 numerical contracts."""
     var profile = String("baseline")
     # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
-    if IDN_CHUNKED_LM_HEAD_V2:
-        profile += "+head-serial-logit-chunked-v2"
     # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     if CONTRACT_K_LEAF_MIN != 128:
         profile += "+gemm-leaf" + String(CONTRACT_K_LEAF_MIN)
@@ -877,7 +877,7 @@ def training_experiment_profile_binding() raises -> PythonObject:
 
 def training_chunked_lm_head_enabled_binding() raises -> PythonObject:
     """NI34 profile selector shared by native-host and GPU Samba wrappers."""
-    return PythonObject(IDN_CHUNKED_LM_HEAD_V2)
+    return PythonObject(False)
 
 
 def chunked_lm_head_v2_loss_binding(
