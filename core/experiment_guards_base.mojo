@@ -79,6 +79,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C08_GROUPED_OUTPUT (Prep (grouped one-hot emission, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 9a0b339815; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C56_LDA_INPUT"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C56_LDA_INPUT (Prep (LDA input reuse, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at e96891c8e7; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C56_QDA_PROJECT"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C56_QDA_PROJECT (Naive Bayes / DA (QDA W projection columns per pass 2/4/8, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at fe708dfe4a; see docs/TOMBSTONES.md"
     return True
 
 

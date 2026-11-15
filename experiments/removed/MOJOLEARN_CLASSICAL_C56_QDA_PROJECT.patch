@@ -1,0 +1,15 @@
+diff --git b/experiments/classical_identical_ideas/stats_controls.mojo a/experiments/classical_identical_ideas/stats_controls.mojo
+index 590a24beae..192c41d387 100644
+--- b/experiments/classical_identical_ideas/stats_controls.mojo
++++ a/experiments/classical_identical_ideas/stats_controls.mojo
+@@ -33,9 +33,7 @@ comptime C54_PREDICT_TILES = False
+ # per column. Register width, a hardware choice, not a data shape.
+ # -D MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2|4|8 (absent: off). Each projection
+ # keeps ascending c and the norm keeps ascending r: same words as off.
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C56_QDA_PROJECT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at fe708dfe4a.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch
+-comptime C56_QDA_PROJECT = 0
++comptime C56_QDA_PROJECT = get_defined_int["MOJOLEARN_CLASSICAL_C56_QDA_PROJECT", 0]() if CLASSICAL_IDENTICAL else 0
+ # C57: retain each robust candidate's mean for its covariance computation.
+ comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57_CANDIDATE_STATE"]()
+ # C58/59: only independent classical series/trials, no neural sequence callers.

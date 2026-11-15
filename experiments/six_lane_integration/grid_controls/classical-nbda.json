@@ -4,33 +4,7 @@
  "branch": "lane/classical-nbda",
  "head": "0034d93b4b98",
  "head_note": "head is the commit before this file was added; see git log for the final sha",
- "controls": {
-  "c56_qda_project": {
-   "define": "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "2": [
-     "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2"
-    ],
-    "4": [
-     "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4"
-    ],
-    "8": [
-     "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/stats_controls.mojo:29",
-    "naive_bayes/da.mojo:238"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": false,
-   "status": "rewritten",
-   "note": "was MOJOLEARN_C56_QDA_PROJECT4 (fixed 4); now width arms. qda_dec = QDA predict/predict_proba (board inference column)."
-  }
- },
+ "controls": {},
  "algorithms": {
   "expanded:gaussian-nb": {
    "binding": "_mojolearn_x_prep",
@@ -96,9 +70,7 @@
   "expanded:qda": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: _cls[csb1_part, csb_fold] (means only) -> lda_prep -> _qda_cov -> eigh -> qda_prep; predict/proba: qda_dec",
-   "controls": [
-    "c56_qda_project"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "not_reached": [
     "c61_da (no shrinkage: no class variance)"
@@ -137,6 +109,11 @@
    "define": "MOJOLEARN_CLASSICAL_C56_LDA_INPUT",
    "control": "c56_lda_input",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at e96891c8e7; patch experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT",
+   "control": "c56_qda_project",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at fe708dfe4a; patch experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
   }
  ]
 }
