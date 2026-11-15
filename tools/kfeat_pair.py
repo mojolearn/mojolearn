@@ -47,7 +47,7 @@ REACH_EXTRA = {
 ALLOWED = {
     "kernel_methods": set(),
     "x_neighbors": set(),
-    "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
+    "x_decomp": set(),  # MOJOLEARN_XD_FAST_SRP_STRAT_OFF deleted 2026-11-15
 }
 
 

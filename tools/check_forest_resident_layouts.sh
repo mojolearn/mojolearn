@@ -5,13 +5,11 @@ cd "$(dirname "$0")/.."
 output_dir="${1:-$(mktemp -d /tmp/mojolearn-forest-layouts.XXXXXX)}"
 mkdir -p "$output_dir"
 for mode in fast identical; do
-    for layout in separate_arrays packed_siblings; do
+    # separate_arrays (-D MOJOLEARN_FOREST_SEPARATE_NODES) was deleted 2026-11-15 (docs/TOMBSTONES.md).
+    for layout in packed_siblings; do
         defines=()
         if [[ "$mode" == identical ]]; then
             defines+=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
-        fi
-        if [[ "$layout" == separate_arrays ]]; then
-            defines+=(-D MOJOLEARN_FOREST_SEPARATE_NODES=1)   # packed is the default (2026-09-17)
         fi
         stem="$output_dir/$mode-$layout"
         echo "CHECK resident layout=$layout mode=$mode (small correctness fixture)"

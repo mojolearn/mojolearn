@@ -13,20 +13,13 @@ DATASET=$2
 LANE=${3:-min-cov-det}
 ROWS=${4:-}
 MCD_DEFINE=${MCD_DEFINE:?set MCD_DEFINE (MOJOLEARN_MCD_BATCH_COMPAT was deleted 2026-11-08, docs/TOMBSTONES.md)}
-# MCD_DEFINE may list several defines, space or comma separated (w2-mcd2: B =
-# "MOJOLEARN_MCD_WIDE_OFF"; BMMA and WIDE are default since their promotion,
-# so "MOJOLEARN_MCD_BMMA_OFF" / "MOJOLEARN_MCD_WIDE_OFF" build the
-# pre-promotion paths; BMMA_OFF also turns WIDE off).
+# MCD_DEFINE may list several defines, space or comma separated. The pre-promotion
+# arms MOJOLEARN_MCD_{BMMA,WIDE,SKIP_PINVH,DEFLATE}_OFF were deleted 2026-11-15
+# (docs/TOMBSTONES.md); MOJOLEARN_MCD_BATCH_MMA is the one B arm left.
 B_DEFINES=
 for D in ${MCD_DEFINE//,/ }; do
   case "$D" in
-    MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA_OFF|MOJOLEARN_MCD_WIDE_OFF) ;;
-    # w4-mcd: SKIP_PINVH and DEFLATE are default now (_OFF is the old arm)
-    MOJOLEARN_MCD_SKIP_PINVH_OFF|MOJOLEARN_MCD_DEFLATE_OFF) ;;
-    MOJOLEARN_MCD_DEFLATE) echo "MCDQ MOJOLEARN_MCD_DEFLATE is default now; use MOJOLEARN_MCD_DEFLATE_OFF for the old arm"; exit 2 ;;
-    MOJOLEARN_MCD_SKIP_PINVH) echo "MCDQ MOJOLEARN_MCD_SKIP_PINVH is default now; use MOJOLEARN_MCD_SKIP_PINVH_OFF for the old arm"; exit 2 ;;
-    MOJOLEARN_MCD_BMMA) echo "MCDQ MOJOLEARN_MCD_BMMA is default now; use MOJOLEARN_MCD_BMMA_OFF for the old arm"; exit 2 ;;
-    MOJOLEARN_MCD_WIDE) echo "MCDQ MOJOLEARN_MCD_WIDE is default now; use MOJOLEARN_MCD_WIDE_OFF for the old arm"; exit 2 ;;
+    MOJOLEARN_MCD_BATCH_MMA) ;;
     *) echo "MCDQ unsupported define: $D"; exit 2 ;;
   esac
   B_DEFINES="$B_DEFINES -D $D"

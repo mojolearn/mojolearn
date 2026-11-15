@@ -754,7 +754,7 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # the 2040 run: it was inert, and because it was the only thing
       # changed, "inert" means something.
       fast-replication-ab)
-        CMD="env MOJOLEARN_AB_DEFINES=\"${AB_DEFINES:-MOJOLEARN_2041_FAST_CHUNKS_PIN MOJOLEARN_2042_FAST_NO_LOOKBACK}\" MOJOLEARN_AB_OUT_BASE=\"\$OUT/fast_replication_ab\" MOJOLEARN_AB_ROUNDS=${AB_ROUNDS:-3} MOJOLEARN_AB_ROWS=${AB_ROWS:-1000000} sh tools/fast_replication_ab_all.sh"; WRAP=0 ;;
+        CMD="env MOJOLEARN_AB_DEFINES=\"${AB_DEFINES:-MOJOLEARN_2042_FAST_NO_LOOKBACK}\" MOJOLEARN_AB_OUT_BASE=\"\$OUT/fast_replication_ab\" MOJOLEARN_AB_ROUNDS=${AB_ROUNDS:-3} MOJOLEARN_AB_ROWS=${AB_ROWS:-1000000} sh tools/fast_replication_ab_all.sh"; WRAP=0 ;;
       # THE CHECKPOINT FILE, WRITTEN ON THIS BOX SO IT CAN BE COMPARED TO
       # ANOTHER BOX'S BYTES. The gate's own closing line is the reason this
       # check exists: "ALL CLAUSES GREEN on ONE device. That is a serializer

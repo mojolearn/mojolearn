@@ -61,11 +61,7 @@ try:
     run([py, '-m', 'pip', 'install', 'torch==2.13.0', '--index-url', 'https://download.pytorch.org/whl/cpu'], 'torch-install.log', 1800)
     run([py, '-m', 'pip', 'freeze'], 'packages.txt')
     native = out / 'native'; native.mkdir(exist_ok=True)
-    phase = 'build-ivf-scan-off'
-    env['MOJOLEARN_BUILD_EXTRA_DEFINES'] = '-D MOJOLEARN_IVF_IDENTICAL_SCAN_OFF'
-    run(['bash', 'bindings/build_ivf.sh'], phase + '.log')
-    env.pop('MOJOLEARN_BUILD_EXTRA_DEFINES')
-    ivf_off = native / '_mojolearn_ivf.scan-off.so'; shutil.move(str(built('ivf')), ivf_off)
+    # (the ivf scan-off arm, -D MOJOLEARN_IVF_IDENTICAL_SCAN_OFF, was deleted 2026-11-15)
     for m in MODULES:
         phase = 'build-' + m
         run(['bash', 'bindings/build_%s.sh' % m], phase + '.log')
@@ -79,7 +75,7 @@ try:
         shutil.rmtree(cache)
     target = site / backend / arch / 'identical'
     receipts = {'head': head, 'vendor': a.vendor, 'arch': arch, 'source_patch_sha256': sha(out / 'source.patch'),
-                'artifacts': {'_mojolearn_ivf.scan-off.so': sha(ivf_off)},
+                'artifacts': {},
                 'base_distribution': 'mojolearn 0.8.31; Python sources and six IDENTICAL bindings replaced from head'}
     for m in MODULES:
         name = '_mojolearn_%s.so' % m
@@ -96,9 +92,8 @@ try:
     results[phase] = run([py, root / 'tools/neural_experiments.py', '--set', a.vendor, '--calls', '10',
                           '--json', out / 'neural-sweep.json'], phase + '.log', 7200, False)
     phase = 'classical-ab'
-    env['CLASSICAL_IVF_SO'] = str(target / '_mojolearn_ivf.so')
-    results[phase] = run([py, root / 'tools/classical_pass_ab.py', 'all', '--out', out / 'classical',
-                          '--ivf-off-so', ivf_off], phase + '.log', 6 * 3600, False)
+    results[phase] = run([py, root / 'tools/classical_pass_ab.py', 'all', '--out', out / 'classical'],
+                         phase + '.log', 6 * 3600, False)
     receipts['returncodes'] = results
     (out / 'complete.json').write_text(json.dumps(receipts, indent=2) + '\n')
     phase = 'complete'; stamp('finished', returncodes=results)

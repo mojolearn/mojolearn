@@ -27,20 +27,15 @@
 #   sh tools/gemm_remote_leg.sh amd --payload gemm --rent --minutes 60   (group perround only)
 #
 # ENV (values limited to the runners' [A-Za-z0-9_.,:/=-])
-#   MOJOLEARN_GBDT_ARMS_GROUP   perround (default): sets h2550 (2550 opted out),
-#                               default (2550 ON), a2551 (2550 ON plus 2551);
-#                               lanes depthwise lossguide symmetric
-#                               sym: sets default a2580 a2581, combo
-#                               c2580_2581, lane symmetric (the only lane the
-#                               two arms reach)
+#   MOJOLEARN_GBDT_ARMS_GROUP   perround (the only group): sets h2550 (2550 opted
+#                               out), default (2550 ON); lanes depthwise lossguide
+#                               symmetric. (a2551 and the sym group's 2580/2581
+#                               arms were deleted 2026-11-15, docs/TOMBSTONES.md.)
 #   MOJOLEARN_GBDT_ARMS_TIERS   identical,fast (default)
-#   MOJOLEARN_GBDT_ARMS_COMBOS  1 (default) or 0; the sym combo builds and
-#                               times last and goes first when time is short
 #   MOJOLEARN_GBDT_ARMS_BUDGET_S  work bound when the start wrapper's is unreadable
 #
 # VERDICT PAIRS (before:after), per tier per lane the pair reaches:
-#   perround  h2550:default (2550)  default:a2551 (2551)  h2550:a2551 (both)
-#   sym       default:a2580  default:a2581  combo pass default:c2580_2581
+#   perround  h2550:default (2550)
 #
 # PHASES (each a row in status.tsv; a red phase does not stop the next)
 #   deps, data (background; an uploaded taxi parquet is copied in first, and
@@ -105,16 +100,11 @@ status body_start 0
 
 case "$GROUP" in
     perround)
-        SETS="default h2550 a2551"
+        # a2551 and the sym group (a2580, a2581, c2580_2581) were deleted 2026-11-15 (docs/TOMBSTONES.md)
+        SETS="default h2550"
         COMBO=""
         LANES="gbdt-depthwise gbdt-lossguide gbdt-symmetric"
-        PAIRS="h2550:default default:a2551 h2550:a2551"
-        ;;
-    sym)
-        SETS="default a2580 a2581"
-        COMBO=c2580_2581
-        LANES="gbdt-symmetric"
-        PAIRS="default:a2580 default:a2581"
+        PAIRS="h2550:default"
         ;;
     *)
         status bad_group 2
@@ -126,10 +116,6 @@ defines_for() {
     case "$1" in
         default) echo "" ;;
         h2550) echo "-D MOJOLEARN_2550_HOST_COPY=1" ;;
-        a2551) echo "-D MOJOLEARN_2551_DEVICE_PARTITION=1" ;;
-        a2580) echo "-D MOJOLEARN_2580_LEVEL_QUANT=1" ;;
-        a2581) echo "-D MOJOLEARN_2581_GROUP_WIDTH=1" ;;
-        c2580_2581) echo "-D MOJOLEARN_2580_LEVEL_QUANT=1 -D MOJOLEARN_2581_GROUP_WIDTH=1" ;;
     esac
 }
 # sets_for <lane> <sets...>: the sets that reach the lane
@@ -137,11 +123,7 @@ sets_for() {
     _lane=$1; shift
     _o=""
     for _s in "$@"; do
-        case "$_lane.$_s" in
-            gbdt-symmetric.a2551) ;;
-            gbdt-depthwise.a258*|gbdt-lossguide.a258*|gbdt-depthwise.c2580_2581|gbdt-lossguide.c2580_2581) ;;
-            *) _o="$_o $_s" ;;
-        esac
+        _o="$_o $_s"
     done
     echo $_o
 }
@@ -255,22 +237,12 @@ check() {  # <name> <mojo run args...>
     ( timeout -k 30 1200 pixi run mojo run -I . "$@" > "$G/checks/$_n.log" 2>&1; echo "$?" > "$G/checks/$_n.exit" ) &
 }
 DI="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
-if [ "$GROUP" = perround ]; then
-    # pixi.toml: check-gbdt-per-round (2550 ON), -2550-host-copy (2550
-    # opted out), -2551 (2551 on); the fourth crosses the two switches
-    # shellcheck disable=SC2086
-    check check-gbdt-per-round $DI checks/gbdt_per_round_check.mojo
-    check check-gbdt-per-round-2550-host-copy $DI -D MOJOLEARN_2550_HOST_COPY=1 checks/gbdt_per_round_check.mojo
-    # 2551 is the IDENTICAL default since 2026-09-11: its named OFF side
-    check check-gbdt-per-round-2551-host-partition $DI -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1 checks/gbdt_per_round_check.mojo
-    check check-gbdt-per-round-both-off $DI -D MOJOLEARN_2550_HOST_COPY=1 -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1 checks/gbdt_per_round_check.mojo
-    CHECKS="check-gbdt-per-round check-gbdt-per-round-2550-host-copy check-gbdt-per-round-2551-host-partition check-gbdt-per-round-both-off"
-else
-    # the check instantiates every side itself; one run per tier
-    check check-sym-arms-identical $DI checks/sym_arms_check.mojo
-    check check-sym-arms checks/sym_arms_check.mojo
-    CHECKS="check-sym-arms-identical check-sym-arms"
-fi
+# pixi.toml: check-gbdt-per-round (2550 ON), -2550-host-copy (2550 opted out). The 2551 OFF side
+# (2551_DEVICE_PARTITION_OFF) and the sym group were deleted 2026-11-15.
+# shellcheck disable=SC2086
+check check-gbdt-per-round $DI checks/gbdt_per_round_check.mojo
+check check-gbdt-per-round-2550-host-copy $DI -D MOJOLEARN_2550_HOST_COPY=1 checks/gbdt_per_round_check.mojo
+CHECKS="check-gbdt-per-round check-gbdt-per-round-2550-host-copy"
 status checks_started 0
 for c in $CHECKS; do
     while [ ! -f "$G/checks/$c.exit" ] && [ "$(left)" -gt 900 ]; do sleep 10; done
