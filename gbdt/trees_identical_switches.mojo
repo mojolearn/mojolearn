@@ -141,7 +141,9 @@ comptime T26 = False
 comptime T30_ADABOOST = False
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime C45_GBDT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C45_GBDT"]()
+# TOMBSTONE: MOJOLEARN_TREES_C45_GBDT (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 92620cf9db.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C45_GBDT.patch
+comptime C45_GBDT = False
 
 # ---- Lane S3 trees-structural (2026-10-07), all default OFF ----
 
