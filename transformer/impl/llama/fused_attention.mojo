@@ -98,7 +98,7 @@ from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
 from std.sys._assembly import inlined_assembly
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
