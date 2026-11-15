@@ -2,7 +2,6 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
-from ensemble.tree_identical_ideas import T13, T13_BYTES
 from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
@@ -1726,11 +1725,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # common case this never regrows; past their `min(100000, ...)`
         # cap the batching loop reuses the same buffers anyway.
         self.leaf_capacity = min(100000, max_nodes(params.max_depth))
-        comptime if T13:
-            # Fit-owned cache, released with Builder; no input/state reuse across
-            # fits. Reserve a resource-bounded leaf page once for all its trees.
-            var bytes_per_leaf = 2 * (size_of[SparseTreeNode[Self.O.DataT]]() + size_of[InstanceRange]() + 4 * max(1, Int(num_outputs)))
-            self.leaf_capacity = max(self.leaf_capacity, min(max(1, 2*n_sampled_rows-1), T13_BYTES // bytes_per_leaf))
         self.leaf_host_capacity = self.leaf_capacity
         var n_out = Int(num_outputs)
         self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](

@@ -57,20 +57,17 @@ stays as its default constant so importers fold their dead arms.
 # the RF grid should start at 16; ET has no such record.
 # TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS (DROP, EXP:1582) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.patch
-comptime T11 = False
-comptime T11_LEVELS = 4
+# (Sweep 2026-11-15: T11 and T11_LEVELS removed; no reader.)
 # TOMBSTONE: MOJOLEARN_TREES_T12 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T12.patch
 # TOMBSTONE: MOJOLEARN_TREES_T12_BYTES (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T12_BYTES.patch (same patch as T12)
-comptime T12 = False
-comptime T12_BYTES = 256*1024*1024
+# (Sweep 2026-11-15: T12 and T12_BYTES removed; readers folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T13 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T13.patch
-comptime T13 = False
 # TOMBSTONE: MOJOLEARN_TREES_T13_BYTES (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T13_BYTES.patch
-comptime T13_BYTES = 16*1024*1024
+# (Sweep 2026-11-15: T13 and T13_BYTES removed; readers folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T14 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
 # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.

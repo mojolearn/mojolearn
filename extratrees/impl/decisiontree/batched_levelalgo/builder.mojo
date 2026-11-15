@@ -5,7 +5,7 @@
 from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
 # TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
-from ensemble.tree_identical_ideas import T12, T12_BYTES, T13, T13_BYTES, T14, C48
+from ensemble.tree_identical_ideas import T14, C48
 from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes
@@ -5473,12 +5473,6 @@ struct EtDeviceLoop(Movable):
         var chunks = (nb + ETL_TPB - 1) // ETL_TPB
         var fcap = f_cap if f_cap > 0 else 1
         var cap0 = g + 2 * ET_LOOP_K * nb
-        comptime if T13:
-            # Group-owned node/queue arena reserves one bounded capacity for
-            # reuse across all frontier batches and trees in this group.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            var bytes_per_node = size_of[SparseTreeNode[DType.float32]]() + 4*ETL_META_INTS + 4*ETL_Q_INTS
-            cap0 = max(cap0,T13_BYTES//max(1,bytes_per_node))
         self.g = g
         self.max_batch = nb
         self.n_chunks_cap = chunks
@@ -7113,11 +7107,6 @@ def train_forest_classification_device_timed(
             " (randomforest.cuh:69)"
         )
     var group_cap = row_slot_cap // Int(slot_rows)
-    comptime if T12:
-        # Account for both row-id streams plus each tree's bounded queue;
-        # immutable dataset remains shared. IDs/archive positions do not move.
-        var per_tree_bytes = max(1, 8 * Int(slot_rows) + Int(params.max_batch_size)*32)
-        group_cap = min(group_cap, max(1, T12_BYTES // per_tree_bytes))
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)
@@ -8227,11 +8216,6 @@ def train_forest_regression_device_timed(
             " (randomforest.cuh:69)"
         )
     var group_cap = row_slot_cap // Int(slot_rows)
-    comptime if T12:
-        # Account for both row-id streams plus each tree's bounded queue;
-        # immutable dataset remains shared. IDs/archive positions do not move.
-        var per_tree_bytes = max(1, 8 * Int(slot_rows) + Int(params.max_batch_size)*32)
-        group_cap = min(group_cap, max(1, T12_BYTES // per_tree_bytes))
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)
