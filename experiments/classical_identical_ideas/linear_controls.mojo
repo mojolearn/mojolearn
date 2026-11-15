@@ -288,7 +288,7 @@ comptime C25_PROJECTION_REUSE = CLASSICAL_IDN
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at f0d29c7b95.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch; record in docs/TOMBSTONES.md.
-comptime C27_FA_COMPONENTS = False
+# (Sweep 2026-11-15: comptime C27_FA_COMPONENTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_NORM_VECTOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 5bdab7e3c8.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch; record in docs/TOMBSTONES.md.
 comptime C27_NORM_VECTOR = False
