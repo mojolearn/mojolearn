@@ -89,7 +89,6 @@ def op_lp_iterate(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = degree^
     _ = a^
     _ = b^
     _ = nxt^
