@@ -27,11 +27,9 @@ comptime IDN_HDB_ONE_SYNC = _IDN_HDB_ON
 """The extract's eight output downloads and the runner's six under one wait
 each (`td_stage_*` / `td_take_*`, af-hdbscan2's HDB_ONE_SYNC route)."""
 
-comptime IDN_HDB_CONDENSE_TWO_READS = (
-    _IDN_HDB_ON
-    # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not is_defined["MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF (old path: eight waits in the condense; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 23823b30db.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HDB_CONDENSE_TWO_READS = _IDN_HDB_ON
 """The condense with two status readbacks instead of eight waits
 (`tree_device.mojo::_condensed_two_reads`): the same kernels in the same
 order, the refusals with the same messages and first indices."""
