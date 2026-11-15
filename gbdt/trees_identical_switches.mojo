@@ -169,7 +169,9 @@ comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # LG_LEVEL_ROUNDS (gbdt-lossguide): when the leaf budget cannot bind
 # (max_leaves >= 2^max_depth, a parameter test), one exact search round per
 # depth level with an uncapped frontier. Bit-neutral (see the call sites).
-comptime LG_LEVEL_ROUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_LG_LEVEL_ROUNDS"]()
+# TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at ce4ab6287e.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch
+comptime LG_LEVEL_ROUNDS = False
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # CTR_SORTFREE_SUMS (gbdt-categorical, gbdt-ordered non-symmetric leaves):
