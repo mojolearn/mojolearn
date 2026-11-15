@@ -658,6 +658,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KM_FAST_RBF_STAGED_OFF`](#mojolearn_km_fast_rbf_staged_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler projection download, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-rbf-q PASS) | 2026-11-15 | [MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch) |
 | [`MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`](#mojolearn_km_fast_rbf_resident_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler fit_transform in one binding call, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-kfeat-rbf-q-r1 PASS) | 2026-11-15 | [MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch) |
 | [`MOJOLEARN_KNN_FAST_MMA_K64_OFF`](#mojolearn_knn_fast_mma_k64_off-old-path-deleted-2026-11-15) | Neighbors (k-NN matrix-unit kernels at k <= 64, FAST Apple) | removed (old path; FAST+Apple default KEPT 857fd5804, core-knn-k64-istella) | 2026-11-15 | [MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch](../experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch) |
+| [`MOJOLEARN_KNN_FAST_REFINE`](#mojolearn_knn_fast_refine-loser-deleted-2026-11-15) | Neighbors (k-NN pool + exact re-rank, FAST opt-in) | NEUTRAL (REVERTED: no gain, rab5-knnref) | 2026-11-15 | [MOJOLEARN_KNN_FAST_REFINE.patch](../experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6391,4 +6392,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT 857fd5804, FAST+Apple default (EXPERIMENTS.md `KNN_FAST_MMA_K64`, core-knn-k64-istella): M3, knn istella 1,581 -> 352 ms (-78%), recall same. No bit change on any column.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `66ff49e5d5`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch`, then delete the `MOJOLEARN_KNN_FAST_MMA_K64_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_KNN_FAST_REFINE: loser deleted (2026-11-15)
+
+- **What it was**: a FAST opt-in quality candidate for Euclidean / sqeuclidean `knn_search_resident`: select a pool of min(n_index, 4 k, 1024) candidates by the expanded float32 distance, then re-rank the pool on the device by the compensated difference form and keep the k best (`neighbors/estimator.mojo`: KNN_FAST_REFINE, KNN_REFINE_POOL_MAX, `_knn_refine_sq`, `knn_refine_score_kernel`, `knn_refine_store_kernel`, `_knn_refine_pool`, `_knn_refine_applies`, `_knn_search_resident_refined`; the unused `fma` import). Default off; the expanded-form top-k default is untouched.
+- **Verdict**: NEUTRAL / REVERTED: no gain (EXPERIMENTS.md `KNN_FAST_REFINE` rows, rab5-knnref, M3 one run per arm): knn istella 365.03 -> 378.38 ms (+3.7%), taxi 400.67 -> 394.82 ms (-1.5%), recall_at_k identical (istella 0.982434, taxi 0.999773). No bit change on any column (default-off arm).
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1fadfcc7b3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch`, then delete the `MOJOLEARN_KNN_FAST_REFINE` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).

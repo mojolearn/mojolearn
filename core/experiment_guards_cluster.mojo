@@ -131,6 +131,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): IVF_FAST_SEED_DEVICE_OFF (FAST+Apple rollback of the IVF coarse k-means++ seeding to the host) is gone; the device seeding is the FAST+Apple path (ivf-pq istella 5,516 -> 5,243 ms, recall .6017 -> .6071, fastonly2-3-ivf-pq-istella-m3); restore: experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KNN_FAST_MMA_K64_OFF (FAST+Apple rollback of k <= 64 k-NN to the generic tiled arm) is gone; the K = 64 matrix-unit kernels are the FAST+Apple path (knn istella 1,581 -> 352 ms, core-knn-k64-istella); restore: experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_REFINE"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KNN_FAST_REFINE (FAST opt-in k-NN pool + exact re-rank) is gone: NEUTRAL, rab5-knnref istella +3.7%, taxi -1.5%, recall identical; restore: experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch"
     return True
 
 
