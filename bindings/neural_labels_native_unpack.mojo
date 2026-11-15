@@ -96,6 +96,7 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
             while count > 0 and words[count - 1] == 0:  # driver-loop: remove fixed-width unicode padding
                 count -= 1
             raw = unicode_from(c_int(4), Int(words.unsafe_ptr()), count)
+            _ = words^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
         if not raw:
             raise cpy.unsafe_get_error()
         var value = PythonObject(from_owned=raw)

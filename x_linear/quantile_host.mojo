@@ -227,6 +227,8 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
             for i in range(n):
                 st(fw, u + i, fm(ld(fw, u + i), inv))
             rhs_ready = False
+    _ = gs^  # read and written through their addresses above (Mojo frees a List at its last named use)
+    _ = ps^
     copy(res, 0, fw, z, d)
     st(res, d, ld(fw, beta + d) if fi else Float32(0))
     st(res, d + 1, i2f(iters))

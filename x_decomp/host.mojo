@@ -688,6 +688,7 @@ struct HostExec(Exec):
             F32Ptr(unsafe_from_address=Int(rt.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(vt.unsafe_ptr())), s, n,
             X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL,
         )
+        _ = rt^  # read and written through their addresses above (Mojo frees a List at its last named use)
         if not got[0]:
             raise Error("x_decomp svd: the round-robin one-sided Jacobi did not converge")
         host_es_unscale_ptr(s, n, fac)

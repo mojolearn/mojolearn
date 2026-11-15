@@ -1427,6 +1427,7 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
         for i in range(k + 1, n):
             for j in range(k + 1, n):
                 lu_update_elem(a, sp, k, i, j, n)
+    _ = scal^  # read and written through `sp` above: keep it past the last step
     lu_finish_host(a, n * n)
 
 

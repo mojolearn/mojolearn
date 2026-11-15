@@ -383,6 +383,7 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
             add_acc(fw, gg, sp, 0, d * d)
             add_acc(fw, xty, sp, d * d, d)
             lo = hi
+        _ = scr^  # read and written through their addresses above (Mojo frees a List at its last named use)
         for j in range(d):
             for k in range(j + 1, d):
                 st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
