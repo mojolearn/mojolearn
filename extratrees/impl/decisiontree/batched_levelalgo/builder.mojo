@@ -2,10 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
 # TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
-from ensemble.tree_identical_ideas import T14, C48
+from ensemble.tree_identical_ideas import C48
 from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes
@@ -1318,9 +1317,6 @@ def _exact_candidate(
         metric = gain_per_split(
             left_p, total_p, 0, g_ncls, g_len, g_left, g_msl
         )
-        comptime if T14:
-            if not is_classification and criterion == CRITERION_MSE and not weighted_reg:
-                metric = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(Float32(cell.n_total),Float32(cell.n_left),Float32(acc_total[0]),Float32(acc_left[0]))))
         num = cell.gini_num
         den = cell.gini_den
     _ = acc_left^
@@ -1431,10 +1427,6 @@ def set_leaf_predictions_exact_host(
         if not tree.sparsetree[node_id].IsLeaf():
             continue
         var rng = node_instances[node_id]
-        comptime if T14:
-            if not is_classification and row_w_addr == 0:
-                tree.vector_leaf[node_id*k] = et_leaf_moment_host(dataset.row_ids,labels_q,Int(rng.begin),Int(rng.count),inv_scale)
-                continue
         var acc = List[Int32](length=k, fill=Int32(0))
         var seen = Int32(0)
         var w_seen = Int32(0)
@@ -2026,11 +2018,6 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
                     g_left,
                     g_msl,
                 )
-                comptime if T14 and not WEIGHTED_REG:
-                    if criterion_in == CRITERION_MSE:
-                        cand_metric[unsafe_offset=idx] = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
-                            Float32(in_n_total[unsafe_offset=idx]),Float32(in_n_left[unsafe_offset=idx]),
-                            Float32(in_acc_total[unsafe_offset=idx]),Float32(in_acc_left[unsafe_offset=idx]))))
                 cand_num[unsafe_offset=idx] = in_gini_num[unsafe_offset=idx]
                 cand_den[unsafe_offset=idx] = in_gini_den[unsafe_offset=idx]
             cand_valid[unsafe_offset=idx] = Int32(1)

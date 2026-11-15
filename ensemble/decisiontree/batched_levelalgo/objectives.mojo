@@ -243,8 +243,6 @@ are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 """
 
 from std.collections import Array
-from ensemble.tree_identical_ideas import T14
-from ensemble.tree_moments import balanced_mse_gain
 from max.gpu import block_dim, thread_idx
 from max.gpu.memory import AddressSpace
 
@@ -427,10 +425,6 @@ trait ObjectiveLike(Copyable & Deinitable):
         with a non-negative `min_impurity_decrease` (a pure node's Gini and
         entropy gains are exactly 0 for every threshold). False for
         regression, whose single histogram plane cannot show purity."""
-        ...
-
-    def LabelMoment(self, bin: Self.BinT) -> Scalar[Self.DataT]:
-        """T14 per-partial first moment; classification never calls it."""
         ...
 
     def Scales(self) -> BinScales:
@@ -798,10 +792,6 @@ struct ClassificationObjectiveFunction[
         return self.min_impurity_decrease >= Scalar[Self.dtype](0)
 
     @always_inline
-    def LabelMoment(self, bin: Self.BinT) -> Scalar[Self.dtype]:
-        return Scalar[Self.dtype](0)
-
-    @always_inline
     def Scales(self) -> BinScales:
         """NOT theirs. DEVIATION 101b's fixed-point scales, which
         `SetLeafVector` needs and their two-argument static did not.
@@ -1056,8 +1046,6 @@ struct RegressionObjectiveFunction[
         )
         # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
         # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-        comptime if T14 and Self.dtype == DType.float32:
-            return balanced_mse_gain(parent_weight.cast[DType.float32](),left_weight.cast[DType.float32](),label_sum.cast[DType.float32](),left_label_sum.cast[DType.float32]()).cast[Self.dtype]()
         # `parent_obj = -label_sum * label_sum * invLen`
         var p1 = _ftz_seam(-label_sum * label_sum)
         var parent_obj = _ftz_seam(p1 * invLen)
@@ -1393,10 +1381,6 @@ struct RegressionObjectiveFunction[
     def PureNodeIsTerminal(self) -> Bool:
         """DEVIATION 2502: never marked; one plane shows no purity."""
         return False
-
-    @always_inline
-    def LabelMoment(self, bin: Self.BinT) -> Scalar[Self.dtype]:
-        return _ftz_seam(bin.LabelSum(self.scales).cast[Self.dtype]())
 
     @always_inline
     def Scales(self) -> BinScales:

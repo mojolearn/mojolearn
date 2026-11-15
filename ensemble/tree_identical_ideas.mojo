@@ -72,9 +72,8 @@ stays as its default constant so importers fold their dead arms.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
 # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch (same patch as T14)
-# Folded constants kept for importers in other lanes' files.
-comptime T14 = False
-comptime T14_EXACT = False
+# (Sweep 2026-11-15: T14 and T14_EXACT removed; readers folded, ensemble/tree_moments.mojo (T14 moment arithmetic)
+# and the ObjectiveLike.LabelMoment method removed.)
 # TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
 comptime T15 = False

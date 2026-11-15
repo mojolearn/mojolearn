@@ -378,9 +378,8 @@ which already priced the width for the reduction this scratch feeds.
 =================================================================
 """
 
-from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T14, C48
+from ensemble.tree_identical_ideas import C48
 from max.gpu import (
     WARP_SIZE,
     block_dim,
@@ -2148,48 +2147,6 @@ def leaf_kernel[
         if not node.IsLeaf():
             return
 
-    comptime if T14 and not O.BinT.is_classification:
-        # V1 row-ID keyed fixed logical partials, independent of row sorting,
-        # block/warp width, bootstrap order and vendor. EXACT sub-arm retains
-        # the incumbent numeric values but uses the balanced integer tree.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var partials = stack_allocation[128,O.BinT,address_space=AddressSpace.SHARED]()
-        var moments = stack_allocation[128,UInt64,address_space=AddressSpace.SHARED]()
-        var lane = Int(thread_idx.x)
-        while lane < 128:
-            partials[unsafe_offset=lane] = O.BinT()
-            lane += Int(block_dim.x)
-        barrier()
-        var pos = range.begin + Int(thread_idx.x)
-        while pos < range.begin + range.count:
-            var row = dataset.row_ids[unsafe_offset=pos]
-            var stat = row
-            comptime if sampled_labels:
-                stat = Int32(pos)
-            var label = dataset.labels[unsafe_offset=Int(stat)]
-            var logical = Int(row) % 128
-            objective.IncrementHistogram(partials.unsafe_offset(logical),Int32(1),Int32(0),label,dataset,stat)
-            pos += Int(block_dim.x)
-        barrier()
-        # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
-        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-        lane = Int(thread_idx.x)
-        while lane < 128:
-            moments[unsafe_offset=lane] = sf64_from_f32(objective.LabelMoment(partials[unsafe_offset=lane]).cast[DType.float32]())
-            lane += Int(block_dim.x)
-        barrier()
-        var distance = 64
-        while distance > 0:
-            lane = Int(thread_idx.x)
-            while lane < distance:
-                partials[unsafe_offset=lane] = partials[unsafe_offset=lane] + partials[unsafe_offset=lane+distance]
-                moments[unsafe_offset=lane] = moment_pair(moments[unsafe_offset=lane],moments[unsafe_offset=lane+distance])
-                lane += Int(block_dim.x)
-            barrier()
-            distance //= 2
-        if Int(thread_idx.x) == 0:
-            leaves[unsafe_offset=Int(dataset.num_outputs)*node_id] = moment_finish(moments[unsafe_offset=0],partials[unsafe_offset=0].Weight(objective.Scales()).cast[DType.float32]()).cast[O.DataT]()
-        return
 
     # `:228-232`
     var tid = Int(thread_idx.x)
