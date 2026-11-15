@@ -288,15 +288,12 @@ comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]
 #: task's leaf upload (the apply reads the device leaves), and the fold
 #: tasks' leaf readbacks; the estimation task's leaves come home on the
 #: learn-loss drain. Bits: none move. The partition settle drain stays (the
-#: oracle factory reads the host leaf sizes). `-D
-#: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF` (or the master `-D
-#: MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+#: oracle factory reads the host leaf sizes).
+# TOMBSTONE: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 632cd99677.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
-comptime IDN_ORD_ONE_STEP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF"]()
-)
+comptime IDN_ORD_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Lane ml-gbdt T5 (roadmap T5; IDENTICAL, every vendor; default ON): the
 #: tree's score-noise std dev and fixed-point scale are formed ON THE DEVICE
