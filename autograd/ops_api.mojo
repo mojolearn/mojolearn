@@ -2054,8 +2054,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # the pool winners (int32 words in float storage of the same width)
         var idx = self.tape.reserve(self.ex, count if pool else 1)
         var recording = self.tape.is_recording()
-        var keep = recording and cnn_block_keep(cprm)
-        var sz = cnn_block_saved_sizes(cprm)
+        var keep = recording and cnn_block_keep(cprm, Self.E.IS_DEVICE)
+        var sz = cnn_block_saved_sizes(cprm, Self.E.IS_DEVICE)
         # FP is non-nullable: without the saves, cols / yconv hold dst as a
         # placeholder that nothing reads (i10 = 0 says so), and the device
         # entry is handed address 0 ("not saved"), as before.

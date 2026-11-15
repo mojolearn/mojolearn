@@ -200,6 +200,14 @@
   "lars-grid-gram-off": {
    "define": "MOJOLEARN_IDN_LARS_GRID_GRAM_OFF",
    "status": "define in code (x_linear/lars.mojo LARS_GRID_GRAM, x_linear/device.mojo XL_IDN_LARS_GRID_GRAM): B = the moments grid (mg_means_kernel / mg_cross_kernel); A = the blocked moments (core/blocked_moments.mojo). Both arms take the kept LARS Cholesky factor of lane/fix-lars-grid-gram"
+  },
+  "ni12-fill-rule-off": {
+   "define": "MOJOLEARN_NI12_FILL_RULE_OFF",
+   "status": "define in code (x_cnn/device.mojo NI12_FILL_RULE): B = the implicit conv on every layer (the 2026-10-10 promoted default); A = implicit only when OC >= 32 and C*KH*KW >= 32"
+  },
+  "ni12-implicit-conv-off": {
+   "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
+   "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)"
   }
  },
  "rows": [
@@ -1254,6 +1262,68 @@
     "lars-grid-gram-off"
    ],
    "decides": "the lars istella row must fall below the moments-grid arm's 165.6 ms NV / 390.2 ms AMD-class recorded time and not regress lars / lasso-lars taxi or lasso-lars istella; keep the blocked moments (A) unless B is at least as fast on the NV + MI300X average; digests are expected not to move against the previous wheel (the kept factor writes the refactor's words); a moved digest is reported, not a hold"
+  },
+  {
+   "id": "ni12-fill-rule",
+   "source": "fix-cnn-clf-implicit-conv (2026-11-15; grid g50ebe26a5: NI12_IMPLICIT_CONV_OFF faster on cnn-clf NV 193.6 -> 173.9 ms v1446, AMD 303.5 -> 274.0 ms b0080; the 2026-10-10 promotion won conv2d / resnet-block 0.69x-0.74x)",
+   "kind": "ab",
+   "lane": [
+    "cnn-clf",
+    "conv2d",
+    "resnet-block"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ni12-fill-rule-off",
+    "ni12-implicit-conv-off"
+   ],
+   "decides": "keep the per-layer fill rule (A) when cnn-clf (fit and infer) is at least as fast as ni12-implicit-conv-off and conv2d / resnet-block at least as fast as ni12-fill-rule-off on the NVIDIA+AMD average; a loss on either side moves the rule's threshold (NI12_FILL_MIN), never a per-algorithm key; same contract words in all three arms, digests must not move"
+  },
+  {
+   "id": "ni12-fill-rule-neighbour",
+   "source": "fix-cnn-clf-implicit-conv (2026-11-15): the fill rule's unmeasured band (OC 32..63) and both sides of its threshold",
+   "kind": "driver",
+   "driver": "cnn_widths",
+   "shape": {
+    "rows": 20000,
+    "classes": 10,
+    "input_shape": [
+     1,
+     28,
+     28
+    ],
+    "batch_size": 128,
+    "max_iter": 2,
+    "conv_channels": [
+     [
+      16,
+      24
+     ],
+     [
+      16,
+      32
+     ],
+     [
+      32,
+      48
+     ],
+     [
+      48,
+      64
+     ]
+    ]
+   },
+   "arms": [
+    "candidate",
+    "ni12-fill-rule-off",
+    "ni12-implicit-conv-off"
+   ],
+   "b_arms": [
+    "ni12-fill-rule-off",
+    "ni12-implicit-conv-off"
+   ],
+   "decides": "NI12_FILL_MIN = 32 (half the 64-wide tile) holds on non-board widths: the candidate must be at least as fast as the faster B arm at every width on the NVIDIA L40S; a loss where a layer turned implicit (OC 32 / 48) raises the threshold, a loss where it stayed materialized (OC 16 / 24) lowers it, with the reason beside NI12_FILL_RULE"
   }
  ]
 }

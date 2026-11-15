@@ -67,6 +67,7 @@ from x_cnn.device import (
     BIAS_TPB,
     BIAS_WS_SLOT,
     NI12_IMPLICIT_CONV,
+    ni12_implicit_layer,
     NI12_KS,
     NI12_NCELL,
     NI12_RC,
@@ -382,7 +383,9 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var ddout = m_in(ctx, 2, a[2], rows * OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    var cols = ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else rows * ckk)
+    # one decision per layer (x_cnn/device.mojo NI12_FILL_RULE), the forward's
+    var implicit = ni12_implicit_layer(OC, ckk)
+    var cols = ws(ctx, 4, 1 if implicit else rows * ckk)
     var g = ws(ctx, 5, rows * OC)
     var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
@@ -393,7 +396,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
     var dcols = ws(ctx, 9, rows * ckk)
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
-    comptime if not NI12_IMPLICIT_CONV:
+    if not implicit:
         _im2col(ctx, dxin, cols, dp, rows, ckk, C)
     var tg = _tiled_grid(N, rows // N, OC)
     ctx.enqueue_function[dout_rows_tiled_kernel](
@@ -404,11 +407,14 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
+    var wgrad_done = False
     comptime if NI12_IMPLICIT_CONV:
-        # lane gap-gemm-layers: the cols operand gathered from x, the same
-        # leaf partials and fold launches as the GEMM's split plan
-        _implicit_wgrad(ctx, gw, g, dxin, dp, 18, rows, OC, ckk)
-    else:
+        if implicit:
+            # lane gap-gemm-layers: the cols operand gathered from x, the same
+            # leaf partials and fold launches as the GEMM's split plan
+            _implicit_wgrad(ctx, gw, g, dxin, dp, 18, rows, OC, ckk)
+            wgrad_done = True
+    if not wgrad_done:
         device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, g, ones, OC, rows)
     device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
@@ -514,8 +520,11 @@ def conv_block_backward_into[resident: Bool = False](
     var dp = put_prm(ctx, 5, cprm)
     var saved = resident and save_y != 0 and save_cols != 0
     var tile_rows = rows
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 7, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
-    var y2 = ws(ctx, 8, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
+    # one decision per layer (x_cnn/device.mojo NI12_FILL_RULE), the forward's; an
+    # implicit layer's save slot is one word (cnn_block_saved_sizes)
+    var implicit = ni12_implicit_layer(OC, ckk)
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), 1 if implicit else rows * ckk) if saved else ws(ctx, 7, 1 if implicit else tile_rows * ckk)
+    var y2 = ws(ctx, 8, 1 if implicit else tile_rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
     if not saved:
@@ -543,11 +552,14 @@ def conv_block_backward_into[resident: Bool = False](
     comptime if not ONES_CACHE:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
+    var wgrad_done = False
     comptime if NI12_IMPLICIT_CONV:
-        # lane gap-gemm-layers: cols never materialized (the forward wrote
-        # none); the same words as the GEMM on the saved cols
-        _implicit_wgrad(ctx, gw, grow, dx, dp, 18, rows, OC, ckk)
-    else:
+        if implicit:
+            # lane gap-gemm-layers: cols never materialized (the forward wrote
+            # none); the same words as the GEMM on the saved cols
+            _implicit_wgrad(ctx, gw, grow, dx, dp, 18, rows, OC, ckk)
+            wgrad_done = True
+    if not wgrad_done:
         device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
     if need_dx:

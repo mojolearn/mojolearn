@@ -156,6 +156,29 @@
         "peripheral"
       ],
       "note": "NN61 and NI29 were the same define pair. MOJOLEARN_STEP_GLUE_TRIAL=1 is a runtime-arm trial build (env), not a grid dimension."
+    },
+    "ni12_fill_rule": {
+      "define": "MOJOLEARN_NI12_FILL_RULE_OFF",
+      "kind": "switch",
+      "arms": {
+        "on": [],
+        "off": [
+          "MOJOLEARN_NI12_FILL_RULE_OFF=1"
+        ]
+      },
+      "default": "on",
+      "source": [
+        "x_cnn/device.mojo NI12_FILL_RULE / ni12_implicit_layer"
+      ],
+      "binding": "_mojolearn_x_cnn",
+      "bits_change": false,
+      "status": "new default 2026-11-15 (lane/fix-cnn-clf-implicit-conv), RUN OWED (owed-pre0867.json ni12-fill-rule, ni12-fill-rule-neighbour)",
+      "entries": [
+        "NI12"
+      ],
+      "board": "neural:cnn-clf, neural:conv2d, neural:resnet-block",
+      "note": "the implicit conv runs a layer only when OC >= 32 and C*KH*KW >= 32 (half the 64-wide tile axis); narrower layers keep the direct conv / im2col + GEMM. The off arm restores implicit on every layer (the 2026-10-10 default). Under MOJOLEARN_NI12_IMPLICIT_CONV_OFF the rule is moot.",
+      "reach": "x_cnn/device.mojo _conv_relu_on_device, conv2d_forward_m, conv_block_forward_into; autograd/kernels/cnn.mojo conv2d_backward_m, conv_block_backward_into; autograd/cnn_block_op.mojo cnn_block_saved_sizes"
     }
   },
   "algorithms": {
