@@ -1,0 +1,1446 @@
+diff --git a/training/afn_optim.mojo b/training/afn_optim.mojo
+index 484ebb0fdf..dcd17b45d8 100644
+--- a/training/afn_optim.mojo
++++ b/training/afn_optim.mojo
+@@ -1,19 +1,95 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The Apple FAST optimizer/loss candidates of lane afn-optim (2026-10-03)
+-are gone; what stays is the scratch pool IDENTICAL's resident optimizer step
+-uses (`training/estimator.mojo`) and the False aliases and refusing entry
+-points that other files still import (the integrator removes them with
+-their importers' dead branches).
++"""Apple FAST candidates for the optimizer step and the cross-entropy loss
++(lane afn-optim, 2026-10-03).
++
++Everything here is reached only when the build is FAST, the host has an
++Apple GPU and one of the `MOJOLEARN_AFN_*` defines below is named (the
++`AFN_*` aliases). IDENTICAL compiles main's `identical_optimizer_step` and
++`identical_ce_loss_resident` unchanged: the dispatch into this file sits
++inside `comptime if` guards on those aliases, and every kernel here is
++parametric, so an IDENTICAL build instantiates none of it.
++
++The mechanism of every candidate is FEWER LAUNCHES AND FEWER WAITS on
++Apple, where a launch costs ~20 us host time plus ~0.25 us per live Metal
++buffer and a launch + readback + wait round trip costs ~180 us (the lane
++brief's measured costs). The arithmetic per element is the FAST tier's
++own: `checks/numerics` helpers are plain operations under FAST (`ftz` is
++the identity, `identical_mul_add` is `a * b + c`, `identical_sqrt` is the
++stdlib sqrt), so these kernels spell the plain operations directly; f32
++accumulation everywhere; fold orders are free (the FAST tier makes no bit
++claim), no approximation anywhere.
++
++Candidates (one define each, default OFF; the bundle that turned on every
++one, MOJOLEARN_AFN_OPTIM_ALL, was deleted 2026-11-15: NEUTRAL):
++
++  (MOJOLEARN_AFN_OPT_FUSE_SCAN, the fused refusal scan, was deleted
++      2026-10-09: DROPPED-noise; see the TOMBSTONE at the guards below.)
++  MOJOLEARN_AFN_OPT_CLIP_FUSE      the global-norm clip: the squared norm
++      is folded in free order (one partials launch), one fold launch turns it
++      into `total_norm` and the clamped `coef` on the device, and the
++      update kernel multiplies the gradient by `coef` as it loads it and
++      writes the clipped gradient back. No per-tensor GEMVs, no sqrt
++      launch, no finish launch, no scale launch, no host read of the norm
++      inside the step (main's clip pays five waits).
++  MOJOLEARN_AFN_OPT_MULTITENSOR    SGD's per-tensor launches (one per
++      tensor, for the per-tensor momentum flag) become ONE launch over the
++      flat model: a device table of the tensor offsets and flags, and each
++      thread finds its tensor by a binary search over the offsets. Adam is
++      already one launch over the flat model in main; it is untouched.
++  (MOJOLEARN_AFN_OPT_VEC4, the 4-wide Adam update, was deleted 2026-10-09:
++      DROPPED-noise; see the TOMBSTONE at the guards below.)
++  (MOJOLEARN_AFN_OPT_RESIDENT_STATE, the FAST pooled per-step scratch, was
++      deleted 2026-10-09: DROPPED-noise; see the TOMBSTONE at the guards
++      below. The pool itself stays: IDENTICAL's resident step uses it.)
++  MOJOLEARN_AFN_LOSS_FUSED         cross-entropy forward + backward in ONE
++      launch, one block per row: the row max, the sum of exponentials, the
++      row loss (with label smoothing when spelled) and `dlogits` are
++      written together, with the non-finite scan of the row and the target
++      range check folded into the same pass (per-row flag cells); partial
++      and final fold launches reduce the row losses into the scalar loss
++      and the flag cells into the gate. Three launches, one wait
++      (vs ~12 launches, 2 vendor matmuls, 5 waits, ~16 buffers and
++      a host-built ones vector per call in main).
+ """
++from max.gpu import block_dim, block_idx, grid_dim, thread_idx
++from std.math import exp, fma, log, max, sqrt
++from std.memory import bitcast, stack_allocation
+ from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+-from max.gpu.host import DeviceBuffer, DeviceContext
++from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
++from max.gpu.memory import AddressSpace
++from max.gpu.sync import barrier
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+-from core.step_phase import step_count_device_alloc
+-from training.checks.loss_contract import CeConfig
+-from training.checks.optimizer_contract import OptimizerConfig, StepScalars
++from core.device_scan import NONFINITE_NONE, device_classify_nonfinite
++from core.step_phase import (
++    step_count_d2h,
++    step_count_device_alloc,
++    step_count_host_alloc,
++    step_count_launch,
++    step_count_sync,
++)
++from training.checks.loss_contract import (
++    REDUCTION_NONE,
++    CeConfig,
++    ce_divisor,
++    ce_nonfinite_message,
++    ce_one_minus_eps,
++    ce_refuse_shape,
++    ce_refuse_targets,
++    ce_smoothing_targets,
++    neg_by_bits,
++)
++from training.checks.optimizer_contract import (
++    OPT_ADAMW,
++    OPT_SGD,
++    OptimizerConfig,
++    StepScalars,
++    clip_eps,
++    opt_nonfinite_message,
++    refuse_nonfinite_scalar,
++)
+ from core.shared_slot import SharedSlot
+ 
+ 
+@@ -25,6 +101,10 @@ from core.shared_slot import SharedSlot
+ comptime AFN_APPLE_FAST = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+ )
++#: AFN_OPT_FUSE_SCAN / AFN_OPT_VEC4 / AFN_OPT_RESIDENT_STATE OUTCOME (M3
++#: afc_ab_def, full board size, 1 run per arm, 2026-10-05, rab19): adam within
++#: +-2%, the output digest changes, no quality metric. DROPPED: each stays off
++#: (opt-in only).
+ # TOMBSTONE: MOJOLEARN_AFN_OPTIM_ALL (NEUTRAL: M3 rab2-combo sgd/adam/adamw = TRAIN_OPT_FAST_PIPE_DOWN alone, the bundle
+ # adds nothing and moves the digest; EXPERIMENTS.md 2026-10-05 reconcile) deleted 2026-11-15 by lane/expdel-04-neural;
+ # code recoverable at 54b6a264fc. Each candidate keeps its own define.
+@@ -32,37 +112,101 @@ comptime AFN_APPLE_FAST = (
+ # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality
+ # metric) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2. Also retires its aliases
+ # MOJOLEARN_AFN26_OPT_FUSE_SCAN and the AFN_OPTIM_ALL share. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
++# T06 AFN26 alias: not tested in this campaign; select clipping independently.
++comptime AFN_OPT_CLIP_FUSE = AFN_APPLE_FAST and (
++    is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"]()
++    or is_defined["MOJOLEARN_AFN26_OPT_CLIP_FUSE"]()
++)
++# Same F20 task: multitensor trajectory B/A0.8528, losses equal and refusal
++# recovery passed. One small two-tensor caller alone leaves broader optimizer
++# contract pending; remain OFF until complete intended scope is assessed.
++# Evidence ab-20261006/repairs-f20-3e19f734e/F20/default.
++# T06 AFN26 alias: not tested in this campaign; historical evidence stands.
++comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
++    is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"]()
++    or is_defined["MOJOLEARN_AFN26_OPT_MULTITENSOR"]()
++)
+ # TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric)
+ # deleted 2026-10-09 on lane/owed-deletions-D2 (with alias MOJOLEARN_AFN26_OPT_VEC4); code recoverable at
+ # b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch
+ # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality
+ # metric) deleted 2026-10-09 on lane/owed-deletions-D2 (with alias MOJOLEARN_AFN26_OPT_RESIDENT_STATE); code
+ # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
+-# TOMBSTONE: MOJOLEARN_AFN_OPT_CLIP_FUSE (MERGED-UNMEASURED opt-in, EXP:647, never measured) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_CLIP_FUSE.patch
+-# TOMBSTONE: MOJOLEARN_AFN26_OPT_CLIP_FUSE (unmeasured alias of AFN_OPT_CLIP_FUSE) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_CLIP_FUSE.patch
+-# TOMBSTONE: MOJOLEARN_AFN_OPT_MULTITENSOR (MERGED-UNMEASURED opt-in, EXP:649, never measured) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_MULTITENSOR.patch
+-# TOMBSTONE: MOJOLEARN_AFN26_OPT_MULTITENSOR (unmeasured alias of AFN_OPT_MULTITENSOR) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_MULTITENSOR.patch
+-# TOMBSTONE: MOJOLEARN_AFN_LOSS_FUSED (MERGED-UNMEASURED opt-in, EXP:630, never measured) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_LOSS_FUSED.patch
+-# TOMBSTONE: MOJOLEARN_AFN26_LOSS_FUSED (unmeasured alias of AFN_LOSS_FUSED) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_FUSED.patch
+-# TOMBSTONE: MOJOLEARN_AFN26_OPT_BLOCK128 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_BLOCK128.patch
+-# TOMBSTONE: MOJOLEARN_AFN26_OPT_BLOCK512 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_BLOCK512.patch
+-# TOMBSTONE: MOJOLEARN_AFN26_LOSS_BLOCK128 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK128.patch
+-# TOMBSTONE: MOJOLEARN_AFN26_LOSS_BLOCK512 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK512.patch
+-#: The candidates' aliases, False on every build (imported by
+-#: training/estimator.mojo and training/checks/optimizer.mojo).
+-comptime AFN_OPT_CLIP_FUSE = False
+-comptime AFN_LOSS_FUSED = False
+-comptime AFN_OPT_ANY = False
++# T06 AFN26 alias: not tested in this campaign; loss is independent of optimizer.
++comptime AFN_LOSS_FUSED = AFN_APPLE_FAST and (
++    is_defined["MOJOLEARN_AFN_LOSS_FUSED"]()
++    or is_defined["MOJOLEARN_AFN26_LOSS_FUSED"]()
++)
++#: Any optimizer candidate: `identical_optimizer_step` dispatches here.
++comptime AFN_OPT_ANY = (
++    AFN_OPT_CLIP_FUSE
++    or AFN_OPT_MULTITENSOR
++)
++
++# T10: not tested. Optimizer scan/fold/update geometry only; powers of two
++# keep tree reductions complete. 128 trades more blocks for lower per-block
++# scratch, while 512 trades fewer blocks for larger scratch and lower possible
++# occupancy. Grid strides, shared reductions and launch dimensions use this
++# same constant. No parent mechanism is enabled by geometry alone.
++# Choose at most one BLOCK define per family (128 takes precedence if mixed).
++comptime AFN_TPB = (
++    128 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_OPT_BLOCK128"]()
++    else 512 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_OPT_BLOCK512"]()
++    else 256
++)
++# T11: not tested. Loss row/partial/final-fold geometry is independent of T10.
++# At most one Apple simdgroup of classes retains the incumbent 32-thread path;
++# beyond it these power-of-two alternatives trade loop work for occupancy.
++# The hardware boundary applies to all class counts, not a benchmark row.
++comptime AFN_CE_TPB = (
++    128 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_LOSS_BLOCK128"]()
++    else 512 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_LOSS_BLOCK512"]()
++    else 256
++)
++#: The grid cap of the scan and partial-sum launches; above it every
++#: thread grid-strides. The fold launch reads at most this many partials
++#: per buffer with one block.
++comptime AFN_SCAN_BLOCKS = 512
++
++#: Gate cell layout (Int32 x AFN_CELLS): 0..3 the smallest non-finite index
++#: in param, grad, m, v (or NONFINITE_NONE); 4 the gate (nonzero refuses
++#: the update); 5 nonzero when the clip's total norm is non-finite.
++comptime AFN_CELLS = 8
++comptime AFN_CELL_GATE = 4
++comptime AFN_CELL_CLIP_BAD = 5
++#: Float cells (Float32 x AFN_FCELLS): 0 total_norm, 1 coef.
++comptime AFN_FCELLS = 4
++
++#: Loss cells (Int32 x 4): 0 the smallest non-finite logit index, 1 the
++#: first row with a target out of range, 2 the gate.
++comptime AFN_LOSS_CELLS = 4
++#: the loss fold's first level: at most this many blocks, one partial each.
++comptime AFN_CE_PARTS = 64
++
++
++def _afn_grid(n: Int) -> Int:
++    """Blocks for `n` elements at `AFN_TPB`, never 0."""
++    if n <= 0:
++        return 1
++    return (n + AFN_TPB - 1) // AFN_TPB
++
++
++def _afn_scan_grid(n: Int) -> Int:
++    """Blocks for a grid-striding scan over `n` elements: one per
++    `AFN_TPB`, capped at `AFN_SCAN_BLOCKS`."""
++    var b = _afn_grid(n)
++    if b > AFN_SCAN_BLOCKS:
++        b = AFN_SCAN_BLOCKS
++    return b
++
++
++@always_inline
++def _nonfinite_bits(x: Float32) -> Bool:
++    """NaN or infinity BY BITS (the scan's predicate; Metal flushes compare
++    operands, bits do not flush)."""
++    return (bitcast[DType.uint32](x) & UInt32(0x7FFFFFFF)) >= UInt32(
++        0x7F800000
++    )
+ 
+ 
+ # ===========================================================================
+@@ -134,22 +278,326 @@ def afn_scratch_view(
+ 
+ 
+ # ===========================================================================
+-# THE REMOVED ENTRY POINTS (imported by dead branches of other files)
++# THE OPTIMIZER KERNELS
++# ===========================================================================
++
++
++def afn_clip_sums_kernel(
++    sums: MutPointer[Float32, MutAnyOrigin],
++    grad: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """ONE grid-striding pass over the gradient: each block writes its
++    partial sum of squared gradients to `sums[block]` (free fold order,
++    f32)."""
++    # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
++    # lane/owed-deletions-D2: the SCAN/FOUR refusal-scan arms of this kernel (was afn_scan4_kernel); code
++    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
++    var n = Int(n_in)
++    var redf = stack_allocation[
++        AFN_TPB,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var tid = Int(thread_idx.x)
++    var blocks = Int(grid_dim.x)
++    var stride = blocks * AFN_TPB
++    var i = Int(block_idx.x) * AFN_TPB + tid
++    var acc = Float32(0.0)
++    while i < n:
++        var gv = grad.unsafe_load(i)
++        acc = fma(gv, gv, acc)
++        i += stride
++    redf.unsafe_store(tid, acc)
++    barrier()
++    var activef = AFN_TPB // 2
++    while activef > 0:
++        if tid < activef:
++            redf.unsafe_store(
++                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + activef)
++            )
++        barrier()
++        activef = activef // 2
++    if tid == 0:
++        sums.unsafe_store(Int(block_idx.x), redf.unsafe_load(0))
++
++
++def afn_clip_fold_kernel(
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    out2: MutPointer[Float32, MutAnyOrigin],
++    sums: MutPointer[Float32, MutAnyOrigin],
++    blocks_in: Int32,
++    max_norm: Float32,
++    eps_clip: Float32,
++):
++    """ONE block (was afn_fold_kernel; its SCAN arm went with
++    MOJOLEARN_AFN_OPT_FUSE_SCAN, see the TOMBSTONE at afn_clip_sums_kernel).
++    `cells[0..3]` are written as NONFINITE_NONE. The sum of the partials
++    (free order), `total_norm = sqrt(sum)`, `coef = min(1, max_norm /
++    (total_norm + eps))` into `fcells[0..1]` and `out2[0..1]` (the cells
++    main's callers read `total_norm` and `coef` from), and `cells[5]` plus
++    the gate when `total_norm` is non-finite (main refuses that scalar on
++    the host; here the update is withheld on the device and the host
++    raises after its one wait)."""
++    var blocks = Int(blocks_in)
++    var redf = stack_allocation[
++        AFN_TPB,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var tid = Int(thread_idx.x)
++    var gate = Int32(0)
++    var bad = Int32(0)
++    var hits = SIMD[DType.int32, 4](NONFINITE_NONE)
++    var acc = Float32(0.0)
++    var bb = tid
++    while bb < blocks:
++        acc = acc + sums.unsafe_load(bb)
++        bb += AFN_TPB
++    redf.unsafe_store(tid, acc)
++    barrier()
++    var activef = AFN_TPB // 2
++    while activef > 0:
++        if tid < activef:
++            redf.unsafe_store(
++                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + activef)
++            )
++        barrier()
++        activef = activef // 2
++    var tn = sqrt(redf.unsafe_load(0))
++    var denom = tn + eps_clip
++    var coef = max_norm / denom
++    if not (coef < Float32(1.0)):
++        coef = Float32(1.0)
++    if _nonfinite_bits(tn):
++        bad = Int32(1)
++        gate = Int32(1)
++    if tid == 0:
++        fcells.unsafe_store(0, tn)
++        fcells.unsafe_store(1, coef)
++        out2.unsafe_store(0, tn)
++        out2.unsafe_store(1, coef)
++    if tid == 0:
++        cells.unsafe_store(0, hits[0])
++        cells.unsafe_store(1, hits[1])
++        cells.unsafe_store(2, hits[2])
++        cells.unsafe_store(3, hits[3])
++        cells.unsafe_store(AFN_CELL_GATE, gate)
++        cells.unsafe_store(AFN_CELL_CLIP_BAD, bad)
++
++
++@always_inline
++def _afn_adam_apply[W: Int, CLIP: Bool](
++    param: MutPointer[Float32, MutAnyOrigin],
++    grad: MutPointer[Float32, MutAnyOrigin],
++    m_state: MutPointer[Float32, MutAnyOrigin],
++    v_state: MutPointer[Float32, MutAnyOrigin],
++    i: Int,
++    coef: Float32,
++    is_adamw: Bool,
++    beta1: Float32,
++    beta2: Float32,
++    eps: Float32,
++    weight_decay: Float32,
++    c1: Float32,
++    c2: Float32,
++    step_size: Float32,
++    rt_bc2: Float32,
++    decay_mul: Float32,
++):
++    """Contract 7.2's arithmetic on `W` consecutive elements from `i`, the
++    FAST tier's spelling (plain operations, `fma` where main fuses). Under
++    `CLIP` the gradient is scaled by `coef` as loaded and the clipped
++    gradient is stored back (main's `clip_scale_kernel`, folded in)."""
++    comptime V = SIMD[DType.float32, W]
++    var g = grad.unsafe_load[width=W](i)
++    var p = param.unsafe_load[width=W](i)
++    var mp = m_state.unsafe_load[width=W](i)
++    var vp = v_state.unsafe_load[width=W](i)
++    comptime if CLIP:
++        g = g * V(coef)
++        grad.unsafe_store[width=W](i, g)
++    if weight_decay != Float32(0.0):
++        if is_adamw:
++            p = p * V(decay_mul)
++        else:
++            g = fma(V(weight_decay), p, g)
++    var m = fma(V(c1), g, mp * V(beta1))
++    var v = fma(V(c2), g * g, vp * V(beta2))
++    var dn = sqrt(v) / V(rt_bc2) + V(eps)
++    var q = m / dn
++    var p_out = fma(V(-step_size), q, p)
++    param.unsafe_store[width=W](i, p_out)
++    m_state.unsafe_store[width=W](i, m)
++    v_state.unsafe_store[width=W](i, v)
++
++
++def afn_adam_kernel[GATED: Bool, CLIP: Bool](
++    param: MutPointer[Float32, MutAnyOrigin],
++    grad: MutPointer[Float32, MutAnyOrigin],
++    m_state: MutPointer[Float32, MutAnyOrigin],
++    v_state: MutPointer[Float32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++    is_adamw_in: Int32,
++    beta1: Float32,
++    beta2: Float32,
++    eps: Float32,
++    weight_decay: Float32,
++    c1: Float32,
++    c2: Float32,
++    step_size: Float32,
++    rt_bc2: Float32,
++    decay_mul: Float32,
++):
++    """The Adam/AdamW update, one element per thread, one launch over the
++    flat model. Under `GATED` every thread reads the gate cell first and
++    returns when the step was refused (the fold kernel ran before this
++    launch on the same queue). Under `CLIP` the coefficient comes from the
++    float cells the fold kernel wrote."""
++    comptime if GATED:
++        if cells.unsafe_load(AFN_CELL_GATE) != Int32(0):
++            return
++    var n = Int(n_in)
++    var base = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if base >= n:
++        return
++    var coef = Float32(1.0)
++    comptime if CLIP:
++        coef = fcells.unsafe_load(1)
++    var is_adamw = is_adamw_in != Int32(0)
++    # TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
++    # lane/owed-deletions-D2: the W = 4 arm and its scalar tail; code recoverable at b639a2bd2.
++    # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch
++    _afn_adam_apply[1, CLIP](
++        param, grad, m_state, v_state, base, coef, is_adamw, beta1,
++        beta2, eps, weight_decay, c1, c2, step_size, rt_bc2, decay_mul,
++    )
++
++
++@always_inline
++def _afn_sgd_apply[CLIP: Bool](
++    param: MutPointer[Float32, MutAnyOrigin],
++    grad: MutPointer[Float32, MutAnyOrigin],
++    buf: MutPointer[Float32, MutAnyOrigin],
++    i: Int,
++    coef: Float32,
++    initialized: Bool,
++    nesterov: Bool,
++    momentum: Float32,
++    c_damp: Float32,
++    weight_decay: Float32,
++    neg_lr: Float32,
++):
++    """Contract 7.3's arithmetic on element `i`, the FAST spelling."""
++    var g = grad.unsafe_load(i)
++    var p = param.unsafe_load(i)
++    comptime if CLIP:
++        g = g * coef
++        grad.unsafe_store(i, g)
++    if weight_decay != Float32(0.0):
++        g = fma(weight_decay, p, g)
++    var b = buf.unsafe_load(i)
++    if momentum != Float32(0.0):
++        if not initialized:
++            b = g
++        else:
++            b = fma(c_damp, g, momentum * b)
++        buf.unsafe_store(i, b)
++        if nesterov:
++            g = fma(momentum, b, g)
++        else:
++            g = b
++    param.unsafe_store(i, fma(neg_lr, g, p))
++
++
++def afn_sgd_kernel[GATED: Bool, CLIP: Bool](
++    param: MutPointer[Float32, MutAnyOrigin],
++    grad: MutPointer[Float32, MutAnyOrigin],
++    buf: MutPointer[Float32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    begin_in: Int32,
++    count_in: Int32,
++    buf_initialized_in: Int32,
++    nesterov_in: Int32,
++    momentum: Float32,
++    c_damp: Float32,
++    weight_decay: Float32,
++    neg_lr: Float32,
++):
++    """Main's per-tensor SGD launch shape (one launch per tensor, the
++    tensor's momentum flag a scalar), with the gate and the clip
++    coefficient read from the cells."""
++    comptime if GATED:
++        if cells.unsafe_load(AFN_CELL_GATE) != Int32(0):
++            return
++    var count = Int(count_in)
++    var local = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if local >= count:
++        return
++    var coef = Float32(1.0)
++    comptime if CLIP:
++        coef = fcells.unsafe_load(1)
++    _afn_sgd_apply[CLIP](
++        param, grad, buf, Int(begin_in) + local, coef,
++        buf_initialized_in != Int32(0), nesterov_in != Int32(0), momentum,
++        c_damp, weight_decay, neg_lr,
++    )
++
++
++def afn_sgd_multi_kernel[GATED: Bool, CLIP: Bool](
++    param: MutPointer[Float32, MutAnyOrigin],
++    grad: MutPointer[Float32, MutAnyOrigin],
++    buf: MutPointer[Float32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    table: MutPointer[Int32, MutAnyOrigin],
++    j_count_in: Int32,
++    n_in: Int32,
++    nesterov_in: Int32,
++    momentum: Float32,
++    c_damp: Float32,
++    weight_decay: Float32,
++    neg_lr: Float32,
++):
++    """MOJOLEARN_AFN_OPT_MULTITENSOR: ONE launch over the flat model.
++    `table[0 .. J]` holds the tensor offsets (ascending, `table[J] == n`)
++    and `table[J + 1 .. 2J]` the per-tensor momentum flags; a thread finds
++    its tensor by a binary search over the offsets (`log2 J` loads of a
++    tiny, cached table) and takes that tensor's flag."""
++    comptime if GATED:
++        if cells.unsafe_load(AFN_CELL_GATE) != Int32(0):
++            return
++    var n = Int(n_in)
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= n:
++        return
++    var j_count = Int(j_count_in)
++    var lo = 0
++    var hi = j_count
++    while hi - lo > 1:
++        var mid = (lo + hi) // 2
++        if Int(table.unsafe_load(mid)) <= i:
++            lo = mid
++        else:
++            hi = mid
++    var flag = table.unsafe_load(j_count + 1 + lo)
++    var coef = Float32(1.0)
++    comptime if CLIP:
++        coef = fcells.unsafe_load(1)
++    _afn_sgd_apply[CLIP](
++        param, grad, buf, i, coef, flag != Int32(0), nesterov_in != Int32(0),
++        momentum, c_damp, weight_decay, neg_lr,
++    )
++
++
++# ===========================================================================
++# THE OPTIMIZER STEP (the device half, after main's refusal scan and clip
++# when their fused forms are off)
+ # ===========================================================================
+-# The earlier inline markers of the deleted kernels and step bodies, kept verbatim:
+-# TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+-# lane/owed-deletions-D2: the SCAN/FOUR refusal-scan arms of this kernel (was afn_scan4_kernel); code
+-# recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
+-# TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+-# lane/owed-deletions-D2: the W = 4 arm and its scalar tail; code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch
+-# TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
+-# the pooled arm; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
+-# TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+-# lane/owed-deletions-D2: the fused refusal-scan arms; code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
+-# TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
+-# the pooled loss scratch; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
+ 
+ 
+ def afn_optimizer_step(
+@@ -164,8 +612,645 @@ def afn_optimizer_step(
+     cfg: OptimizerConfig,
+     sc: StepScalars,
+ ) raises:
+-    """Removed (AFN_OPT_ANY is False on every build): refuses."""
+-    raise Error("afn_optimizer_step: the Apple FAST optimizer candidates were removed")
++    """One step under the `AFN_OPT_*` candidates that are on. The caller
++    (`identical_optimizer_step`) has already run main's refusal scan and
++    main's clip when `AFN_OPT_CLIP_FUSE` is
++    off, and has checked `offsets`. Synchronizes ONCE before it returns;
++    with the fused clip on, the host reads the gate cells
++    after that wait and raises the oracle's message when the step was
++    refused (the kernels withheld every write)."""
++    var j_count = len(offsets) - 1
++    var n = offsets[j_count]
++    var is_sgd = cfg.kind == OPT_SGD
++    var want_clip = cfg.max_norm > Float32(0.0)
++    var clipf = AFN_OPT_CLIP_FUSE and want_clip
++    var blocks = _afn_scan_grid(n)
++
++    # ---- scratch: fresh and kept alive past the wait by the lists below.
++    # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
++    # the pooled arm; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
++    var keep_i = List[DeviceBuffer[DType.int32]]()
++    var keep_f = List[DeviceBuffer[DType.float32]]()
++    var keep_h = List[HostBuffer[DType.int32]]()
++    var sums_n = blocks if clipf else 1
++    var table_n = 2 * j_count + 1 if (AFN_OPT_MULTITENSOR and is_sgd) else 1
++    var sums: MutPointer[Float32, MutAnyOrigin]
++    var cells: MutPointer[Int32, MutAnyOrigin]
++    var fcells: MutPointer[Float32, MutAnyOrigin]
++    var table: MutPointer[Int32, MutAnyOrigin]
++    var host: MutPointer[Int32, MutAnyOrigin]
++    step_count_device_alloc()
++    keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_CELLS))
++    step_count_device_alloc()
++    keep_i.append(ctx.enqueue_create_buffer[DType.int32](table_n))
++    step_count_device_alloc()
++    keep_f.append(ctx.enqueue_create_buffer[DType.float32](sums_n))
++    step_count_device_alloc()
++    keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_FCELLS))
++    step_count_host_alloc()
++    keep_h.append(ctx.enqueue_create_host_buffer[DType.int32](AFN_CELLS))
++    cells = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    table = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    sums = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    fcells = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++
++    # ---- the fused clip: the partial sums and the coefficient.
++    # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
++    # lane/owed-deletions-D2: the fused refusal-scan arms; code recoverable at b639a2bd2.
++    # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
++    var fused = clipf
++    if fused:
++        _afn_launch_clip_sums(ctx, sums, grad, n, blocks)
++        _afn_launch_clip_fold(ctx, cells, fcells, out2, sums, blocks, cfg.max_norm)
++
++    # ---- the update.
++    var p_ptr = param.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var g_ptr = grad.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var m_ptr = m_state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var v_ptr = v_state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var tab = List[Int32]()
++    if is_sgd:
++        var nest = Int32(1) if cfg.nesterov else Int32(0)
++        comptime if AFN_OPT_MULTITENSOR:
++            tab.reserve(table_n)
++            for j in range(j_count + 1):
++                tab.append(Int32(offsets[j]))
++            for j in range(j_count):
++                tab.append(Int32(1) if buf_initialized[j] else Int32(0))
++            ctx.enqueue_copy(dst_buf=keep_i[1], src_ptr=tab.unsafe_ptr())
++            _afn_launch_sgd_multi(
++                ctx, p_ptr, g_ptr, m_ptr, cells, fcells, table, j_count, n,
++                nest, cfg, sc, fused, clipf,
++            )
++        else:
++            for j in range(j_count):
++                var begin = offsets[j]
++                var count = offsets[j + 1] - begin
++                if count <= 0:
++                    continue
++                var init_flag = Int32(1) if buf_initialized[j] else Int32(0)
++                _afn_launch_sgd_one(
++                    ctx, p_ptr, g_ptr, m_ptr, cells, fcells, begin, count,
++                    init_flag, nest, cfg, sc, fused, clipf,
++                )
++    else:
++        var is_adamw = Int32(1) if cfg.kind == OPT_ADAMW else Int32(0)
++        _afn_launch_adam(
++            ctx, p_ptr, g_ptr, m_ptr, v_ptr, cells, fcells, n, is_adamw,
++            cfg, sc, fused, clipf,
++        )
++
++    # ---- the one wait, then the gate.
++    if fused:
++        step_count_d2h()
++        ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[0])
++    step_count_sync()
++    ctx.synchronize()
++    _ = tab^
++    if fused:
++        _afn_refuse_from_cells(ctx, host, param, grad, m_state, v_state, is_sgd)
++    if is_sgd and cfg.momentum != Float32(0.0):
++        for j in range(j_count):
++            buf_initialized[j] = True
++    _ = keep_i^
++    _ = keep_f^
++    _ = keep_h^
++    _ = param
++    _ = grad
++    _ = m_state
++    _ = v_state
++    _ = out2
++
++
++def _afn_launch_clip_sums(
++    ctx: DeviceContext,
++    sums: MutPointer[Float32, MutAnyOrigin],
++    mut grad: DeviceBuffer[DType.float32],
++    n: Int,
++    blocks: Int,
++) raises:
++    comptime kern = afn_clip_sums_kernel
++    step_count_launch()
++    ctx.enqueue_function[kern](
++        sums,
++        grad.unsafe_ptr(),
++        Int32(n),
++        grid_dim=(blocks, 1, 1),
++        block_dim=(AFN_TPB, 1, 1),
++    )
++
++
++def _afn_launch_clip_fold(
++    ctx: DeviceContext,
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    mut out2: DeviceBuffer[DType.float32],
++    sums: MutPointer[Float32, MutAnyOrigin],
++    blocks: Int,
++    max_norm: Float32,
++) raises:
++    comptime kern = afn_clip_fold_kernel
++    step_count_launch()
++    ctx.enqueue_function[kern](
++        cells,
++        fcells,
++        out2.unsafe_ptr(),
++        sums,
++        Int32(blocks),
++        max_norm,
++        clip_eps(),
++        grid_dim=(1, 1, 1),
++        block_dim=(AFN_TPB, 1, 1),
++    )
++
++
++def _afn_launch_adam(
++    ctx: DeviceContext,
++    p_ptr: MutPointer[Float32, MutAnyOrigin],
++    g_ptr: MutPointer[Float32, MutAnyOrigin],
++    m_ptr: MutPointer[Float32, MutAnyOrigin],
++    v_ptr: MutPointer[Float32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    n: Int,
++    is_adamw: Int32,
++    cfg: OptimizerConfig,
++    sc: StepScalars,
++    gated: Bool,
++    clipf: Bool,
++) raises:
++    """One launch of `afn_adam_kernel` at the width, gate and clip form the
++    step needs (the four runtime combinations are four instantiations)."""
++    var grid = _afn_grid(n)
++    if gated:
++        if clipf:
++            comptime k_gc = afn_adam_kernel[True, True]
++            step_count_launch()
++            ctx.enqueue_function[k_gc](
++                p_ptr, g_ptr, m_ptr, v_ptr, cells, fcells, Int32(n), is_adamw,
++                cfg.beta1, cfg.beta2, cfg.eps, cfg.weight_decay, sc.c1, sc.c2,
++                sc.step_size, sc.rt_bc2, sc.decay_mul,
++                grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++            )
++        else:
++            comptime k_g = afn_adam_kernel[True, False]
++            step_count_launch()
++            ctx.enqueue_function[k_g](
++                p_ptr, g_ptr, m_ptr, v_ptr, cells, fcells, Int32(n), is_adamw,
++                cfg.beta1, cfg.beta2, cfg.eps, cfg.weight_decay, sc.c1, sc.c2,
++                sc.step_size, sc.rt_bc2, sc.decay_mul,
++                grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++            )
++    else:
++        comptime k_p = afn_adam_kernel[False, False]
++        step_count_launch()
++        ctx.enqueue_function[k_p](
++            p_ptr, g_ptr, m_ptr, v_ptr, cells, fcells, Int32(n), is_adamw,
++            cfg.beta1, cfg.beta2, cfg.eps, cfg.weight_decay, sc.c1, sc.c2,
++            sc.step_size, sc.rt_bc2, sc.decay_mul,
++            grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++        )
++
++
++def _afn_launch_sgd_one(
++    ctx: DeviceContext,
++    p_ptr: MutPointer[Float32, MutAnyOrigin],
++    g_ptr: MutPointer[Float32, MutAnyOrigin],
++    m_ptr: MutPointer[Float32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    begin: Int,
++    count: Int,
++    init_flag: Int32,
++    nest: Int32,
++    cfg: OptimizerConfig,
++    sc: StepScalars,
++    gated: Bool,
++    clipf: Bool,
++) raises:
++    var grid = _afn_grid(count)
++    if gated:
++        if clipf:
++            comptime k_gc = afn_sgd_kernel[True, True]
++            step_count_launch()
++            ctx.enqueue_function[k_gc](
++                p_ptr, g_ptr, m_ptr, cells, fcells, Int32(begin), Int32(count),
++                init_flag, nest, cfg.momentum, sc.c_damp, cfg.weight_decay,
++                sc.neg_lr, grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++            )
++        else:
++            comptime k_g = afn_sgd_kernel[True, False]
++            step_count_launch()
++            ctx.enqueue_function[k_g](
++                p_ptr, g_ptr, m_ptr, cells, fcells, Int32(begin), Int32(count),
++                init_flag, nest, cfg.momentum, sc.c_damp, cfg.weight_decay,
++                sc.neg_lr, grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++            )
++    else:
++        comptime k_p = afn_sgd_kernel[False, False]
++        step_count_launch()
++        ctx.enqueue_function[k_p](
++            p_ptr, g_ptr, m_ptr, cells, fcells, Int32(begin), Int32(count),
++            init_flag, nest, cfg.momentum, sc.c_damp, cfg.weight_decay,
++            sc.neg_lr, grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++        )
++
++
++def _afn_launch_sgd_multi(
++    ctx: DeviceContext,
++    p_ptr: MutPointer[Float32, MutAnyOrigin],
++    g_ptr: MutPointer[Float32, MutAnyOrigin],
++    m_ptr: MutPointer[Float32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    fcells: MutPointer[Float32, MutAnyOrigin],
++    table: MutPointer[Int32, MutAnyOrigin],
++    j_count: Int,
++    n: Int,
++    nest: Int32,
++    cfg: OptimizerConfig,
++    sc: StepScalars,
++    gated: Bool,
++    clipf: Bool,
++) raises:
++    var grid = _afn_grid(n)
++    if gated:
++        if clipf:
++            comptime k_gc = afn_sgd_multi_kernel[True, True]
++            step_count_launch()
++            ctx.enqueue_function[k_gc](
++                p_ptr, g_ptr, m_ptr, cells, fcells, table, Int32(j_count),
++                Int32(n), nest, cfg.momentum, sc.c_damp, cfg.weight_decay,
++                sc.neg_lr, grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++            )
++        else:
++            comptime k_g = afn_sgd_multi_kernel[True, False]
++            step_count_launch()
++            ctx.enqueue_function[k_g](
++                p_ptr, g_ptr, m_ptr, cells, fcells, table, Int32(j_count),
++                Int32(n), nest, cfg.momentum, sc.c_damp, cfg.weight_decay,
++                sc.neg_lr, grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++            )
++    else:
++        comptime k_p = afn_sgd_multi_kernel[False, False]
++        step_count_launch()
++        ctx.enqueue_function[k_p](
++            p_ptr, g_ptr, m_ptr, cells, fcells, table, Int32(j_count),
++            Int32(n), nest, cfg.momentum, sc.c_damp, cfg.weight_decay,
++            sc.neg_lr, grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
++        )
++
++
++def _afn_refuse_from_cells(
++    ctx: DeviceContext,
++    host: MutPointer[Int32, MutAnyOrigin],
++    mut param: DeviceBuffer[DType.float32],
++    mut grad: DeviceBuffer[DType.float32],
++    mut m_state: DeviceBuffer[DType.float32],
++    mut v_state: DeviceBuffer[DType.float32],
++    is_sgd: Bool,
++) raises:
++    """After the wait: the oracle's refusal in the oracle's order (`param`,
++    `grad`, then the moments), with its message, from the gate cells. The
++    one 4 B classification readback runs on the error path only."""
++    if host.unsafe_load(AFN_CELL_GATE) == Int32(0):
++        return
++    var count = 3 if is_sgd else 4
++    for k in range(count):
++        var idx = host.unsafe_load(k)
++        if idx == NONFINITE_NONE:
++            continue
++        var hit = Int(idx)
++        var is_nan: Bool
++        var name: String
++        if k == 0:
++            is_nan = device_classify_nonfinite(ctx, param, hit)
++            name = String("param")
++        elif k == 1:
++            is_nan = device_classify_nonfinite(ctx, grad, hit)
++            name = String("grad")
++        elif k == 2:
++            is_nan = device_classify_nonfinite(ctx, m_state, hit)
++            name = String("momentum_buffer") if is_sgd else String("exp_avg")
++        else:
++            is_nan = device_classify_nonfinite(ctx, v_state, hit)
++            name = String("exp_avg_sq")
++        raise Error(opt_nonfinite_message(name, hit, is_nan))
++    if host.unsafe_load(AFN_CELL_CLIP_BAD) != Int32(0):
++        # the fold kernel saw a non-finite total norm: the scalar main
++        # refuses on the host, refused with the same name
++        refuse_nonfinite_scalar(
++            String("clip.total_norm"), bitcast[DType.float32](UInt32(0x7FC00000))
++        )
++    raise Error("optimizer step: the device gate refused the step")
++
++
++# ===========================================================================
++# THE FUSED CROSS-ENTROPY (MOJOLEARN_AFN_LOSS_FUSED)
++# ===========================================================================
++
++
++def afn_ce_row_kernel[TPB: Int](
++    row_out: MutPointer[Float32, MutAnyOrigin],
++    dlogits: MutPointer[Float32, MutAnyOrigin],
++    bad_nf: MutPointer[Int32, MutAnyOrigin],
++    bad_tg: MutPointer[Int32, MutAnyOrigin],
++    logits: MutPointer[Float32, MutAnyOrigin],
++    targets: MutPointer[Int32, MutAnyOrigin],
++    n_rows_in: Int32,
++    vocab_in: Int32,
++    ignore_index_in: Int32,
++    want_grad_in: Int32,
++    smoothing_in: Int32,
++    t_target: Float32,
++    t_other: Float32,
++    divisor: Float32,
++    one_minus_eps: Float32,
++    eps: Float32,
++):
++    """One block per row, seams L1 through L16 of the loss contract in one
++    pass, the FAST spelling. The block strides over the vocabulary three
++    times: max (with the non-finite scan of the row by bits), sum of
++    exponentials (and the sum of shifted logits when smoothing is
++    spelled), and, under `want_grad`, `dlogits`. Thread 0 writes the row's
++    loss and its two flag cells (smallest non-finite flat index or
++    `NONFINITE_NONE`; the row index when its target is out of range, else
++    `NONFINITE_NONE`). The fold orders are the block's trees; f32
++    throughout; `exp` and `log` are the stdlib's, which is what the FAST
++    tier's `identical_exp` / `identical_log` are."""
++    var row = Int(block_idx.x)
++    var n_rows = Int(n_rows_in)
++    if row >= n_rows:
++        return
++    var vocab = Int(vocab_in)
++    var base = row * vocab
++    var tid = Int(thread_idx.x)
++    var redf = stack_allocation[
++        TPB,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var red = stack_allocation[
++        TPB,
++        Scalar[DType.int32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    # ---- pass 1: the row maximum and the non-finite scan
++    var mx = bitcast[DType.float32](UInt32(0xFF800000))
++    var bad = NONFINITE_NONE
++    var v = tid
++    while v < vocab:
++        var x = logits.unsafe_load(base + v)
++        if bad == NONFINITE_NONE and _nonfinite_bits(x):
++            bad = Int32(base + v)
++        mx = max(mx, x)
++        v += TPB
++    redf.unsafe_store(tid, mx)
++    red.unsafe_store(tid, bad)
++    barrier()
++    var active = TPB // 2
++    while active > 0:
++        if tid < active:
++            redf.unsafe_store(
++                tid, max(redf.unsafe_load(tid), redf.unsafe_load(tid + active))
++            )
++            var o = red.unsafe_load(tid + active)
++            if o < red.unsafe_load(tid):
++                red.unsafe_store(tid, o)
++        barrier()
++        active = active // 2
++    var m = redf.unsafe_load(0)
++    var y = Int(targets.unsafe_load(row))
++    var ignored = y == Int(ignore_index_in)
++    if tid == 0:
++        bad_nf.unsafe_store(row, red.unsafe_load(0))
++        var tg = NONFINITE_NONE
++        if not ignored and (y < 0 or y >= vocab):
++            tg = Int32(row)
++        bad_tg.unsafe_store(row, tg)
++    barrier()
++    # ---- pass 2: the denominator (and the smoothing sum)
++    var smoothing = smoothing_in != Int32(0)
++    var se = Float32(0.0)
++    var ss = Float32(0.0)
++    v = tid
++    while v < vocab:
++        var s = logits.unsafe_load(base + v) - m
++        se = se + exp(s)
++        if smoothing:
++            ss = ss + s
++        v += TPB
++    redf.unsafe_store(tid, se)
++    barrier()
++    active = TPB // 2
++    while active > 0:
++        if tid < active:
++            redf.unsafe_store(
++                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + active)
++            )
++        barrier()
++        active = active // 2
++    var denom = redf.unsafe_load(0)
++    barrier()
++    var sum_shift = Float32(0.0)
++    if smoothing:
++        redf.unsafe_store(tid, ss)
++        barrier()
++        active = TPB // 2
++        while active > 0:
++            if tid < active:
++                redf.unsafe_store(
++                    tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + active)
++                )
++            barrier()
++            active = active // 2
++        sum_shift = redf.unsafe_load(0)
++        barrier()
++    var logdenom = log(denom)
++    # ---- the row loss (thread 0)
++    if tid == 0:
++        var yy = y
++        if ignored or yy < 0 or yy >= vocab:
++            yy = 0
++        var lp = (logits.unsafe_load(base + yy) - m) - logdenom
++        var nll = neg_by_bits(lp)
++        var out = Float32(0.0)
++        if not ignored:
++            if smoothing:
++                var logp_sum = sum_shift - Float32(vocab) * logdenom
++                var smooth = neg_by_bits(logp_sum / Float32(vocab))
++                out = one_minus_eps * nll + eps * smooth
++            else:
++                out = nll
++        row_out.unsafe_store(row, out)
++    # ---- pass 3: dlogits
++    if want_grad_in != Int32(0):
++        v = tid
++        while v < vocab:
++            var d = Float32(0.0)
++            if not ignored:
++                var w = exp(logits.unsafe_load(base + v) - m) / denom
++                var t = t_other
++                if v == y:
++                    t = t_target
++                d = (w - t) / divisor
++            dlogits.unsafe_store(base + v, d)
++            v += TPB
++
++
++def afn_ce_part_kernel[TPB: Int](
++    psum: MutPointer[Float32, MutAnyOrigin],
++    pnf: MutPointer[Int32, MutAnyOrigin],
++    ptg: MutPointer[Int32, MutAnyOrigin],
++    row: MutPointer[Float32, MutAnyOrigin],
++    bad_nf: MutPointer[Int32, MutAnyOrigin],
++    bad_tg: MutPointer[Int32, MutAnyOrigin],
++    n_rows_in: Int32,
++    want_total_in: Int32,
++):
++    """The loss fold's first level: block `b` folds rows `b * TPB + tid`,
++    stride `grid * TPB` (free order), into `psum[b]` (the row-loss sum
++    under `want_total`), `pnf[b]` and `ptg[b]` (the flag minima).
++    `afn_ce_fold_kernel` folds the partials."""
++    var n_rows = Int(n_rows_in)
++    var tid = Int(thread_idx.x)
++    var blk = Int(block_idx.x)
++    var stride = Int(grid_dim.x) * TPB
++    var redf = stack_allocation[
++        TPB,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var rnf = stack_allocation[
++        TPB,
++        Scalar[DType.int32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var rtg = stack_allocation[
++        TPB,
++        Scalar[DType.int32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var acc = Float32(0.0)
++    var nf = NONFINITE_NONE
++    var tg = NONFINITE_NONE
++    var want_total = want_total_in != Int32(0)
++    var r = blk * TPB + tid
++    while r < n_rows:
++        if want_total:
++            acc = acc + row.unsafe_load(r)
++        var a = bad_nf.unsafe_load(r)
++        if a < nf:
++            nf = a
++        var b = bad_tg.unsafe_load(r)
++        if b < tg:
++            tg = b
++        r += stride
++    redf.unsafe_store(tid, acc)
++    rnf.unsafe_store(tid, nf)
++    rtg.unsafe_store(tid, tg)
++    barrier()
++    var active = TPB // 2
++    while active > 0:
++        if tid < active:
++            redf.unsafe_store(
++                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + active)
++            )
++            var o = rnf.unsafe_load(tid + active)
++            if o < rnf.unsafe_load(tid):
++                rnf.unsafe_store(tid, o)
++            var o2 = rtg.unsafe_load(tid + active)
++            if o2 < rtg.unsafe_load(tid):
++                rtg.unsafe_store(tid, o2)
++        barrier()
++        active = active // 2
++    if tid == 0:
++        psum.unsafe_store(blk, redf.unsafe_load(0))
++        pnf.unsafe_store(blk, rnf.unsafe_load(0))
++        ptg.unsafe_store(blk, rtg.unsafe_load(0))
++
++
++def afn_ce_fold_kernel[TPB: Int](
++    loss_out: MutPointer[Float32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    row: MutPointer[Float32, MutAnyOrigin],
++    bad_nf: MutPointer[Int32, MutAnyOrigin],
++    bad_tg: MutPointer[Int32, MutAnyOrigin],
++    n_rows_in: Int32,
++    divisor: Float32,
++    want_total_in: Int32,
++):
++    """ONE block over `afn_ce_part_kernel`'s partials (at most
++    AFN_CE_PARTS of them; `row`, `bad_nf`, `bad_tg` are the partials and
++    `n_rows_in` their count): the batch fold (free order) divided
++    once by `divisor` into `loss_out[0]` (seam L13) under `want_total`, and
++    the minimum over the per-row flag cells into `cells[0]` (non-finite
++    logit index), `cells[1]` (first bad-target row) and the gate
++    `cells[2]`."""
++    var n_rows = Int(n_rows_in)
++    var tid = Int(thread_idx.x)
++    var redf = stack_allocation[
++        TPB,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var red = stack_allocation[
++        TPB,
++        Scalar[DType.int32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var acc = Float32(0.0)
++    var nf = NONFINITE_NONE
++    var tg = NONFINITE_NONE
++    var want_total = want_total_in != Int32(0)
++    var r = tid
++    while r < n_rows:
++        if want_total:
++            acc = acc + row.unsafe_load(r)
++        var a = bad_nf.unsafe_load(r)
++        if a < nf:
++            nf = a
++        var b = bad_tg.unsafe_load(r)
++        if b < tg:
++            tg = b
++        r += TPB
++    redf.unsafe_store(tid, acc)
++    red.unsafe_store(tid, nf)
++    barrier()
++    var active = TPB // 2
++    while active > 0:
++        if tid < active:
++            redf.unsafe_store(
++                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + active)
++            )
++            var o = red.unsafe_load(tid + active)
++            if o < red.unsafe_load(tid):
++                red.unsafe_store(tid, o)
++        barrier()
++        active = active // 2
++    var total = redf.unsafe_load(0)
++    var nf_min = red.unsafe_load(0)
++    barrier()
++    red.unsafe_store(tid, tg)
++    barrier()
++    active = TPB // 2
++    while active > 0:
++        if tid < active:
++            var o2 = red.unsafe_load(tid + active)
++            if o2 < red.unsafe_load(tid):
++                red.unsafe_store(tid, o2)
++        barrier()
++        active = active // 2
++    if tid == 0:
++        var tg_min = red.unsafe_load(0)
++        cells.unsafe_store(0, nf_min)
++        cells.unsafe_store(1, tg_min)
++        var gate = Int32(0)
++        if nf_min != NONFINITE_NONE or tg_min != NONFINITE_NONE:
++            gate = Int32(1)
++        cells.unsafe_store(2, gate)
++        if want_total:
++            loss_out.unsafe_store(0, total / divisor)
+ 
+ 
+ def afn_ce_loss_resident(
+@@ -181,5 +1266,206 @@ def afn_ce_loss_resident(
+     want_grad: Int,
+     cfg: CeConfig,
+ ) raises:
+-    """Removed (AFN_LOSS_FUSED is False on every build): refuses."""
+-    raise Error("afn_ce_loss_resident: the Apple FAST fused cross-entropy was removed")
++    """`identical_ce_loss_resident`'s contract under MOJOLEARN_AFN_LOSS_FUSED:
++    the same inputs, `dlogits` written on the device when `want_grad`,
++    `row_ptr` and `loss_ptr` written on the host, the shape / non-finite /
++    target refusals raised with the oracle's messages. Three launches, one
++    wait."""
++    var vocab = cfg.vocab
++    ce_refuse_shape(n_rows, n_rows * vocab, cfg)
++    if n_rows < 1 or vocab < 1:
++        loss_ptr.unsafe_store(0, Float32(0.0))
++        return
++    var want_total = reduction != REDUCTION_NONE
++    var divisor = Float32(1.0)
++    if want_total:
++        divisor = ce_divisor(reduction, count, cfg.num_items)
++    var tv = ce_smoothing_targets(cfg.eps, vocab)
++    var one_minus = ce_one_minus_eps(cfg.eps)
++    var smoothing = Int32(1) if cfg.smoothing_is_spelled() else Int32(0)
++
++    var keep_i = List[DeviceBuffer[DType.int32]]()
++    var keep_f = List[DeviceBuffer[DType.float32]]()
++    var keep_h = List[HostBuffer[DType.int32]]()
++    var row: MutPointer[Float32, MutAnyOrigin]
++    var loss: MutPointer[Float32, MutAnyOrigin]
++    var bad: MutPointer[Int32, MutAnyOrigin]
++    var cells: MutPointer[Int32, MutAnyOrigin]
++    var psum: MutPointer[Float32, MutAnyOrigin]
++    var pflag: MutPointer[Int32, MutAnyOrigin]
++    var host: MutPointer[Int32, MutAnyOrigin]
++    # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
++    # the pooled loss scratch; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
++    step_count_device_alloc()
++    keep_f.append(ctx.enqueue_create_buffer[DType.float32](n_rows))
++    step_count_device_alloc()
++    keep_f.append(ctx.enqueue_create_buffer[DType.float32](1))
++    step_count_device_alloc()
++    keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * n_rows))
++    step_count_device_alloc()
++    keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_LOSS_CELLS))
++    step_count_device_alloc()
++    keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_CE_PARTS))
++    step_count_device_alloc()
++    keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * AFN_CE_PARTS))
++    step_count_host_alloc()
++    keep_h.append(
++        ctx.enqueue_create_host_buffer[DType.int32](AFN_LOSS_CELLS)
++    )
++    row = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    loss = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    bad = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    psum = keep_f[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    pflag = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++
++    # T11: not tested; one simdgroup suffices when all classes fit its lanes.
++    # Three launches: row, partial reduction, final fold. Larger vocabularies
++    # use the CE-specific geometry, independent of optimizer block geometry.
++    if vocab <= 32:
++        _afn_launch_ce[32](
++            ctx, row, loss, bad, cells, psum, pflag, dlogits, logits, targets, n_rows,
++            vocab, cfg.ignore_index, want_grad, smoothing, tv[0], tv[1],
++            divisor, one_minus, cfg.eps, want_total,
++        )
++    else:
++        _afn_launch_ce[AFN_CE_TPB](
++            ctx, row, loss, bad, cells, psum, pflag, dlogits, logits, targets, n_rows,
++            vocab, cfg.ignore_index, want_grad, smoothing, tv[0], tv[1],
++            divisor, one_minus, cfg.eps, want_total,
++        )
++
++    # ---- the readbacks and the one wait
++    step_count_d2h()
++    ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=keep_f[0])
++    if want_total:
++        step_count_d2h()
++        ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=keep_f[1])
++    step_count_d2h()
++    ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[1])
++    step_count_sync()
++    ctx.synchronize()
++    if host.unsafe_load(2) != Int32(0):
++        _afn_ce_refuse(ctx, host, logits, targets, n_rows, cfg)
++    if not want_total:
++        loss_ptr.unsafe_store(0, Float32(0.0))
++    _ = keep_i^
++    _ = keep_f^
++    _ = keep_h^
++    _ = dlogits
++    _ = logits
++    _ = targets
++
++
++def _afn_launch_ce[TPB: Int](
++    ctx: DeviceContext,
++    row: MutPointer[Float32, MutAnyOrigin],
++    loss: MutPointer[Float32, MutAnyOrigin],
++    bad: MutPointer[Int32, MutAnyOrigin],
++    cells: MutPointer[Int32, MutAnyOrigin],
++    psum: MutPointer[Float32, MutAnyOrigin],
++    pflag: MutPointer[Int32, MutAnyOrigin],
++    mut dlogits: DeviceBuffer[DType.float32],
++    mut logits: DeviceBuffer[DType.float32],
++    mut targets: DeviceBuffer[DType.int32],
++    n_rows: Int,
++    vocab: Int,
++    ignore_index: Int,
++    want_grad: Int,
++    smoothing: Int32,
++    t_target: Float32,
++    t_other: Float32,
++    divisor: Float32,
++    one_minus: Float32,
++    eps: Float32,
++    want_total: Bool,
++) raises:
++    comptime row_kern = afn_ce_row_kernel[TPB]
++    comptime part_kern = afn_ce_part_kernel[TPB]
++    comptime fold_kern = afn_ce_fold_kernel[TPB]
++    step_count_launch()
++    ctx.enqueue_function[row_kern](
++        row,
++        dlogits.unsafe_ptr(),
++        bad,
++        bad + n_rows,
++        logits.unsafe_ptr(),
++        targets.unsafe_ptr(),
++        Int32(n_rows),
++        Int32(vocab),
++        Int32(ignore_index),
++        Int32(want_grad),
++        smoothing,
++        t_target,
++        t_other,
++        divisor,
++        one_minus,
++        eps,
++        grid_dim=(n_rows, 1, 1),
++        block_dim=(TPB, 1, 1),
++    )
++    # The batch fold in two levels: up to AFN_CE_PARTS blocks fold the
++    # rows into partials, then one block folds the partials.
++    var n_parts = min((n_rows + TPB - 1) // TPB, AFN_CE_PARTS)
++    step_count_launch()
++    ctx.enqueue_function[part_kern](
++        psum,
++        pflag,
++        pflag + AFN_CE_PARTS,
++        row,
++        bad,
++        bad + n_rows,
++        Int32(n_rows),
++        Int32(1) if want_total else Int32(0),
++        grid_dim=(n_parts, 1, 1),
++        block_dim=(TPB, 1, 1),
++    )
++    step_count_launch()
++    ctx.enqueue_function[fold_kern](
++        loss,
++        cells,
++        psum,
++        pflag,
++        pflag + AFN_CE_PARTS,
++        Int32(n_parts),
++        divisor,
++        Int32(1) if want_total else Int32(0),
++        grid_dim=(1, 1, 1),
++        block_dim=(TPB, 1, 1),
++    )
++
++
++def _afn_ce_refuse(
++    ctx: DeviceContext,
++    host: MutPointer[Int32, MutAnyOrigin],
++    mut logits: DeviceBuffer[DType.float32],
++    mut targets: DeviceBuffer[DType.int32],
++    n_rows: Int,
++    cfg: CeConfig,
++) raises:
++    """The error path: the oracle's refusals in the oracle's order (the
++    non-finite logit first, then the targets walk) with its messages. The
++    classification readback and the targets download happen here only."""
++    var nf = host.unsafe_load(0)
++    if nf != NONFINITE_NONE:
++        var idx = Int(nf)
++        var is_nan = device_classify_nonfinite(ctx, logits, idx)
++        raise Error(ce_nonfinite_message("logits", idx, is_nan))
++    step_count_host_alloc()
++    var ht = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
++    step_count_sync()
++    ctx.synchronize()
++    step_count_d2h()
++    ctx.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=targets)
++    step_count_sync()
++    ctx.synchronize()
++    var ht_l = List[Int32](capacity=n_rows)
++    var rows_n = n_rows
++    var r = 0
++    while r < rows_n:
++        ht_l.append(ht.unsafe_ptr().unsafe_load(r))
++        r += 1
++    _ = ht^
++    ce_refuse_targets(ht_l, cfg)
++    raise Error("ce: the device gate refused the call")
