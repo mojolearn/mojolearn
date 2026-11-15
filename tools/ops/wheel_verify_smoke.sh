@@ -25,11 +25,16 @@
 #              _verify_reference.admit() refuses: nothing here can become a record.
 #   test-deps  pytest (pinned like tools/cpu_wheel_checks.sh), scipy, scikit-learn, added AFTER (a)-(c)
 #   tests      (d) the pytest files of SOURCE_ROOT/python/mojolearn/tests against the installed runtime
-#              (tools/run_python_tests.py INSTALLED_BOOTSTRAP), one process per file; GPU tests skip themselves
-# Parallel plan: tools/ops/wheel_verify_smoke.py (workers = min(cores, MemAvailable / measured MB per unit)).
+#              (tools/run_python_tests.py INSTALLED_BOOTSTRAP), one process per file (one per test for a file
+#              longer than an even share of the pool); GPU and optional-dependency tests skip with their reason
+#              and a file of skips only is listed as `env` (tests/ENV.txt), never as passed
+# Parallel plan: tools/ops/wheel_verify_smoke.py (one worker per core; units longest first by the measured seconds
+# of tools/ops/wheel_verify_smoke_plan/<pool>.tsv or MEMORY_FROM; each unit starts when its measured peak RSS fits).
+# Crashes: a unit or step that dies by a signal is rerun under `python -X faulthandler` and gdb (when on PATH);
+# traces in OUT/crashes/<unit>.txt, the top frame per crash in SUMMARY.txt.
 # Environment: PYTHON (default python3), SOURCE_ROOT (the checkout whose tests run; default this script's tree),
 # SOURCE_COMMIT (the wheel's commit, for the harness's provenance), VENV (default a fresh mktemp dir),
-# MEMORY_FROM (an earlier OUT: plan each pool's memory from its results.tsv), STEPS (default all).
+# MEMORY_FROM (an earlier OUT: plan each pool from its results.tsv instead of the committed plan), STEPS (default all).
 # Exit 0 only when every step passed.
 set -u
 [ $# -eq 2 ] || { echo "usage: $0 WHEEL_DIR OUT" >&2; exit 2; }

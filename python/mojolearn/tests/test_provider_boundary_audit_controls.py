@@ -47,7 +47,7 @@ def artifact_program(tmp_path):
     'program_id', 'session_id', 'program_layout', 'session_layout',
 ])
 def test_public_run_torch_refuses_metadata_hooks_before_consuming_them(artifact_program, field):
-    import torch
+    torch = pytest.importorskip("torch")
 
     program = artifact_program
     tensor = torch.ones((2, 3), dtype=torch.float32)
@@ -126,7 +126,7 @@ def test_public_run_torch_refuses_metadata_hooks_before_consuming_them(artifact_
 
 
 def test_public_run_torch_accepts_ordinary_artifact_and_tensor(artifact_program):
-    import torch
+    torch = pytest.importorskip("torch")
 
     value = torch.tensor([[-2., -1., 0.], [1., 2., 3.]], dtype=torch.float32)
     result = artifact_program.run_torch(value)
@@ -138,7 +138,7 @@ def test_public_run_torch_accepts_ordinary_artifact_and_tensor(artifact_program)
 @pytest.mark.parametrize('method,dispatch_field', [('run', '_run_native'), ('run_torch', '_run_torch_native')])
 def test_public_execution_never_dispatches_through_mutable_instance_callable(artifact_program, method, dispatch_field):
     import numpy as np
-    import torch
+    torch = pytest.importorskip("torch")
 
     program = artifact_program
     operation = getattr(program, method)
@@ -164,7 +164,7 @@ def test_public_execution_never_dispatches_through_mutable_instance_callable(art
 @pytest.mark.parametrize('method', ['run', 'run_torch'])
 def test_bound_public_execution_admits_layout_before_instance_lookup(artifact_program, method):
     import numpy as np
-    import torch
+    torch = pytest.importorskip("torch")
 
     program = artifact_program
     # Resolve the method before test-only mutation: only product wrapper work is
