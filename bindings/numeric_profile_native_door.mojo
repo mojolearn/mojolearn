@@ -9,7 +9,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
-from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
+from bindings.backend_public_native_door import backend_public_operation
 from core.shared_slot import SharedSlot
 
 
@@ -111,7 +112,7 @@ def _state(context: PythonObject) raises -> PythonObject:
     dicts.append(context)
     dicts.append(fields)
     var cacheable = True
-    var names = Python.tuple("PROFILES", "REJECTED", "MEASURED", "_defaults", "USES")
+    var names = Python.tuple("PROFILES", "REJECTED", "MEASURED", "_defaults", "USES", "FAMILIES")
     for i in range(len(names)):  # driver-loop: fixed connected profile registries
         if cacheable and not _collect(fields[names[i]], dicts):
             cacheable = False
@@ -133,12 +134,15 @@ def _state_full(context: PythonObject) raises -> PythonObject:
         _passive(fields[names[i]])
     if fields["_defaults"] is not context["defaults"]:
         raise Error("TypeError: numeric profile defaults must retain their connected provider storage")
-    var strings = Python.tuple("DEFAULT", "TRAINING_DEFAULT", "BASELINE", "ENV")
+    var strings = Python.tuple("DEFAULT", "TRAINING_DEFAULT", "BASELINE", "ENV", "STATE_KEY")
     for i in range(len(strings)):  # driver-loop: fixed profile constant admission
         _ = _str(fields[strings[i]], "profile metadata")
     if py_type(fields["USES"]) is not native_loaded_module("builtins").tuple:
         raise Error("TypeError: numeric profile uses must be an ordinary tuple")
     _passive(fields["USES"])
+    if py_type(fields["FAMILIES"]) is not native_loaded_module("builtins").tuple:
+        raise Error("TypeError: numeric profile families must be an ordinary tuple")
+    _passive(fields["FAMILIES"])
     return fields
 
 
@@ -266,6 +270,164 @@ def _profiles(fields: PythonObject) raises -> PythonObject:
     return py_call(b.tuple, result)
 
 
+def _label(value: PythonObject, what: String) raises -> String:
+    # The caller's own label for its keyword (`what`): an exact str only.
+    if py_type(value) is not native_loaded_module("builtins").str:
+        raise Error("TypeError: numeric profile " + what + " requires an ordinary str")
+    return String(value)
+
+
+def _family(family: PythonObject, fields: PythonObject) raises:
+    # Was _numeric_profile._family (Python, until 2026-11-15).
+    if family is None:
+        return
+    _passive(family)
+    if not py_contains(fields["FAMILIES"], family):
+        raise Error("ValueError: mojolearn: family must be one of " + _repr(fields["FAMILIES"])
+                    + " or None, got " + _repr(family))
+
+
+def _row_families(key: PythonObject, column: String, fields: PythonObject) raises -> PythonObject:
+    var row = fields["PROFILES"][key]
+    _dict(row)
+    return py_item(row, PythonObject(column))
+
+
+def _covers(profile: PythonObject, family: PythonObject, column: String, fields: PythonObject) raises -> Bool:
+    # Was _numeric_profile.computes / default_reaches: `fams is None or
+    # _family(family) in fams`, the family checked only when fams is a tuple.
+    var key = _canonical(profile, "numeric_profile", fields)
+    var families = _row_families(key, column, fields)
+    if families is None:
+        return True
+    _family(family, fields)
+    _passive(families)
+    return py_contains(families, family)
+
+
+def _format_g(value: PythonObject) raises -> String:
+    # Python's f"{value:g}" on an admitted exact float or int.
+    _passive(value)
+    return String(py_call(native_loaded_module("builtins").format, value, PythonObject("g")))
+
+
+def _warn_if_slow(key: PythonObject, vendor: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Was _numeric_profile._warn_if_slow_here: once per (profile, vendor),
+    # NumericProfileSpeedWarning when the profile was measured slower than
+    # the baseline on `vendor`. Returns the message, or None.
+    if vendor is None:
+        return PythonObject(None)
+    _passive(vendor)
+    var rows = py_get(fields["MEASURED"], key, Python.dict())
+    _dict(rows)
+    var row = py_get(rows, vendor)
+    if row is None:
+        return PythonObject(None)
+    _dict(row)
+    var over = row["over"]
+    _passive(over)
+    if Bool(py=over[0] <= PythonObject(1.0)):
+        return PythonObject(None)
+    var warned = fields["_warned"]
+    if py_type(warned) is not native_loaded_module("builtins").set:
+        raise Error("TypeError: numeric profile warning record must be an ordinary set")
+    var seen = Python.tuple(key, vendor)
+    if py_contains(warned, seen):
+        return PythonObject(None)
+    _ = py_call(warned.add, seen)
+    var baseline = _str(fields["BASELINE"], "profile metadata")
+    var env = _str(fields["ENV"], "profile metadata")
+    var message = ("mojolearn: numeric profile " + _repr(key) + " was measured on "
+                   + _str(row["box"], "measured box") + " to take " + _format_g(over[0]) + " to "
+                   + _format_g(over[1]) + " times " + baseline + "'s time ("
+                   + _str(row["what"], "measured operation") + "; " + _str(row["source"], "measured source")
+                   + "). Its bits are the same on every vendor; on this one it costs time. numeric_profile="
+                   + _repr(fields["BASELINE"]) + " (or " + env + "=" + baseline
+                   + ") gives the previous arithmetic.")
+    var category = fields["NumericProfileSpeedWarning"]
+    if category is not context["speed_warning"]:
+        raise Error("TypeError: numeric profile warnings require the connected warning category")
+    # stacklevel 2: the frame above the one-call Python wrapper, as the old
+    # stacklevel=3 from _warn_if_slow_here inside resolve named.
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyErr_WarnEx")(category._obj_ptr, message.as_c_string_slice().unsafe_ptr(), Int(2)) != 0:
+        var failure = stash_python_error()
+        raise failure^
+    var published = PythonObject(message)
+    _ = message^
+    return published
+
+
+def _this_vendor(context: PythonObject) raises -> PythonObject:
+    # Was _numeric_profile._this_vendor: the native backend vendor read, None
+    # when the backend cannot answer (the old `except Exception`).
+    try:
+        return backend_public_operation("vendor", Python.tuple(), context["backend_context"])
+    except error:
+        _ = error^
+        return PythonObject(None)
+
+
+def _resolve(name: PythonObject, what: String, use: PythonObject, family: PythonObject,
+             fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Was _numeric_profile.resolve (Python, until 2026-11-15).
+    _family(family, fields)
+    var key: PythonObject
+    if name is None:
+        key = _default(use, fields, context)
+        if family is not None and not (_covers(key, family, "computes", fields)
+                                       and _covers(key, family, "default_for", fields)):
+            key = fields["BASELINE"]
+    else:
+        key = _canonical(name, what, fields)
+        if family is not None and not _covers(key, family, "computes", fields):
+            var computes = _row_families(key, "computes", fields)
+            var listed = String()
+            for i in range(len(computes)):  # driver-loop: over the row's few family names
+                if i > 0:
+                    listed += ", "
+                listed += _str(computes[i], "profile family")
+            raise Error("NotImplementedError: mojolearn: " + what + "=" + _repr(key)
+                        + " does not compute the " + _repr(family) + " family (it computes " + listed
+                        + "); it is never replaced by " + _repr(fields["BASELINE"])
+                        + " silently. Use numeric_profile=" + _repr(fields["BASELINE"]) + ".")
+    _ = _available(key, what, use, fields)
+    if String(key) != _str(fields["BASELINE"], "profile metadata"):
+        _ = _warn_if_slow(key, _this_vendor(context), fields, context)
+    return key
+
+
+def _saved(state: PythonObject, what: String, fields: PythonObject) raises -> PythonObject:
+    # Was _numeric_profile._saved: `state.get(STATE_KEY)` for a mapping. An
+    # exact dict is read natively; an admitted built-in value has no `get`
+    # and reads as the baseline; any other object would run a Python `get`
+    # and is refused.
+    var b = native_loaded_module("builtins")
+    var saved = PythonObject(None)
+    if py_type(state) is b.dict:
+        saved = py_get(state, fields["STATE_KEY"])
+    else:
+        try:
+            _passive(state)
+        except error:
+            _ = error^
+            raise Error("TypeError: mojolearn: " + what + " must be an ordinary dict to carry a numeric profile")
+    if saved is None:
+        return fields["BASELINE"]
+    return _canonical(saved, what + " " + _str(fields["STATE_KEY"], "profile metadata"), fields)
+
+
+def _check_saved(state: PythonObject, profile: PythonObject, what: String, fields: PythonObject) raises -> PythonObject:
+    # Was _numeric_profile.check_saved (Python, until 2026-11-15).
+    var saved = _saved(state, what, fields)
+    var mine = _canonical(profile, "numeric_profile", fields)
+    if String(saved) != String(mine):
+        raise Error("ValueError: mojolearn: " + what + " was written under numeric profile " + _repr(saved)
+                    + " and this object computes under " + _repr(mine) + "; a run keeps one arithmetic, "
+                    + "so build the object with numeric_profile=" + _repr(saved))
+    return saved
+
+
 def numeric_profile_operation(operation: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _state(context)
     if py_type(values) is not native_loaded_module("builtins").tuple:
@@ -287,6 +449,31 @@ def numeric_profile_operation(operation: String, values: PythonObject, context: 
         var value = _available(_canonical(values[0], "set_numeric_profile", fields), "set_numeric_profile", values[1], fields)
         py_setitem(fields["_defaults"], values[1], value)
         return previous
+    if operation == "canonical" and len(values) == 2:
+        return _canonical(values[0], _label(values[1], "label"), fields)
+    if (operation == "computes" or operation == "default_reaches") and len(values) == 2:
+        var column = "computes" if operation == "computes" else "default_for"
+        return PythonObject(_covers(values[0], values[1], column, fields))
+    if operation == "resolve" and len(values) == 4:
+        return _resolve(values[0], _label(values[1], "label"), values[2], values[3], fields, context)
+    if operation == "warn_if_slow" and len(values) == 2:
+        var key = _canonical(values[0], "numeric_profile", fields)
+        var vendor = _this_vendor(context) if values[1] is None else values[1]
+        return _warn_if_slow(key, vendor, fields, context)
+    if operation == "state_field" and len(values) == 1:
+        var key = _canonical(values[0], "numeric_profile", fields)
+        var field = Python.dict()
+        if String(key) != _str(fields["BASELINE"], "profile metadata"):
+            py_setitem(field, fields["STATE_KEY"], key)
+        return field
+    if operation == "check_saved" and len(values) == 3:
+        return _check_saved(values[0], values[1], _label(values[2], "label"), fields)
+    if operation == "adopt_saved" and len(values) == 4:
+        var what = _label(values[2], "label")
+        var saved = _saved(values[0], what, fields)
+        if values[1] is not None:
+            _ = _check_saved(values[0], values[1], what, fields)
+        return _available(saved, what + " " + _str(fields["STATE_KEY"], "profile metadata"), values[3], fields)
     raise Error("ValueError: unknown numeric profile operation or argument count")
 
 
