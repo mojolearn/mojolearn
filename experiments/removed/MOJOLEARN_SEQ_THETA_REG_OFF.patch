@@ -1,0 +1,57 @@
+diff --git a/sequence/theta.mojo b/sequence/theta.mojo
+index 7751aab609..1b1f120229 100644
+--- a/sequence/theta.mojo
++++ b/sequence/theta.mojo
+@@ -20,6 +20,7 @@ from sequence.nm import Objective, nelder_mead
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch (the theta level/trend updates go back to seq_madd).
+ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ 
+ #: lane/apple-fast-tier (2026-10-02). `theta_run` writes five state words
+@@ -33,7 +34,7 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ #: operations in the same order, four words written. Default on FAST + Apple
+ #: since the M3 A/B (lane/apple-fast-tier 78d5b99d1, theta taxi-hourly, n=1):
+ #: alone 1,770 -> 1,326 ms; with MOJOLEARN_SEQ_FAST_FMA 1,769 -> 220 ms,
+-#: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF (deleted 2026-11-15) restored the
++#: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF restores the
+ #: stored-row code; the old -D MOJOLEARN_SEQ_THETA_REG=1 is harmless.
+ #: IDENTICAL compiles the register form by default (MOJOLEARN_IDN_SEQ_REG,
+ #: lane/seq-reg 2026-10-11, PROMOTED 2026-10-11 by lane/i17-decide-linalg-seq;
+@@ -42,8 +43,8 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ #: / AMD 189.2 -> 122.4 (avg 0.62x); theta taxi-hourly 294.6 -> 173.5 /
+ #: 596.8 -> 397.6 (0.63x); dynamic-optimized-theta synthetic 476.5 -> 340.4
+ #: / 1117.1 -> 792.2 (0.71x), taxi-hourly 2161.6 -> 1807.9 / 6295.8 ->
+-#: 4603.4 (0.78x); damped-ets 1.00x). The IDN_ALL_OFF rollback to the
+-#: stored-row code was deleted 2026-11-15. The same register form on
++#: 4603.4 (0.78x); damped-ets 1.00x). MOJOLEARN_IDN_ALL_OFF restores the
++#: stored-row code. The same register form on
+ #: NVIDIA/AMD and the host binding. Structural reason: the stored-row run
+ #: makes ~1.4M dependent device-memory round trips per thread (five state
+ #: words and one error per step, the previous row read back) on a kernel of
+@@ -52,19 +53,19 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ #: construction, host column unchanged). Expected 2-4x on AMD theta
+ #: (latency bound; Apple's twin -25%). THETA_REG_FAST keeps the FAST-only
+ #: followers (THETA_SPEC) off IDENTICAL.
+-# TOMBSTONE: MOJOLEARN_SEQ_THETA_REG_OFF (old path; FAST+Apple default, EXP:548 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_SEQ_THETA_REG_OFF.patch
+ comptime THETA_REG_FAST = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
+ )
+ # TOMBSTONE: MOJOLEARN_IDN_SEQ_REG_OFF (superseded: IDN_SEQ_REG PROMOTED 2026-10-11, NV v0037/v0038 + AMD a1620/a1621,
+ # theta 0.62x, dynamic-optimized-theta 0.71x-0.78x, digests NV == AMD) deleted 2026-11-15 by lane/expdel-04-neural;
+ # code recoverable at 38664dbf45.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+-comptime THETA_REG = THETA_REG_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime THETA_REG = THETA_REG_FAST or (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ #: lane apple-fast-regress (2026-10-03; docs/apple-fast/notes/regress-oct3.md).
+ #: Since SEQ_FAST_FMA became the FAST + Apple default (95a09d1fd), the

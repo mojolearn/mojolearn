@@ -22,7 +22,6 @@ handle indexes the pool and a closed handle's slot is reused. The Python
 entries (`opt_resident_open_py` ...) are `providers/python/sequence_opt_resident_pyapi.mojo`'s;
 this file takes typed handles, addresses and parameters only."""
 from std.memory import bitcast, unsafe_memcpy
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer
 
@@ -57,8 +56,10 @@ comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_AP
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab2 @ 40027eb8e): RAW_UP measured as a pair with
 #: OPT_FAST_STREAM below (see there): KEEP, the FAST + Apple default since
-#: then; rollback -D MOJOLEARN_OPT_RAW_UP_OFF (the old -D name is harmless).
-comptime OPT_RAW_UP = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_RAW_UP_OFF"]()
+#: then (the rollback define was deleted 2026-11-15).
+# TOMBSTONE: MOJOLEARN_OPT_RAW_UP_OFF (old path; the FAST+Apple default is the measured pair with OPT_FAST_STREAM, EXP:1204) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_RAW_UP_OFF.patch
+comptime OPT_RAW_UP = _OPT_APPLE_FAST
 #: PIPE_DOWN and ZERO_OPEN are the FAST+Apple default since the M3 A/B of
 #: lane/apple-fast-optspeed f2b6491a8 (n=1, synthetic, output digest
 #: identical): all three switches adagrad 317 -> 187 ms, lamb 340 -> 206,
@@ -71,12 +72,18 @@ comptime OPT_RAW_UP = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_RAW_UP_O
 #: zeros: no bit moves). -D MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF /
 #: -D MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF restore IDENTICAL's old transport.
 comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime OPT_PIPE_DOWN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()) or (
-    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
-comptime OPT_ZERO_OPEN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()) or (
-    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_OPT_PIPE_DOWN_OFF (old path; FAST+Apple default, EXP:589 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_PIPE_DOWN_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF.patch
+# TOMBSTONE: MOJOLEARN_OPT_ZERO_OPEN_OFF (old path; FAST+Apple default, EXP:590 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_ZERO_OPEN_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST or _OPT_IDN
+comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST or _OPT_IDN
 #: the pipelined download's chunk, floats (8 MB), a transfer granularity.
 # TOMBSTONE: MOJOLEARN_OPT_FAST_PIPE_CH (=524288 arm; the rab7 optimizer read-back batch DROPPED-slower, this arm untried)
 # deleted 2026-10-09 on lane/owed-deletions-D2: the -D override of the chunk; the default 1 << 21 is unchanged;
@@ -105,12 +112,12 @@ comptime OPT_PIPE_CH = 1 << 21
 # Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 #: lane idn-opt-resident (2026-10-04): the IDENTICAL default on every
 #: vendor (the per-call entry moved P, G and the moment up and two of them
-#: down each step); -D MOJOLEARN_IDN_AF_RESIDENT_OFF restores the per-call
-#: entry (the Python side falls back when the entry points are absent).
+#: down each step; the -D MOJOLEARN_IDN_AF_RESIDENT_OFF rollback was deleted
+#: 2026-11-15).
 #: The same `adafactor_core` launches on the same values: no bit moves.
-comptime AF_RESIDENT = _OPT_APPLE_FAST or (
-    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_AF_RESIDENT_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_RESIDENT_OFF.patch
+comptime AF_RESIDENT = _OPT_APPLE_FAST or _OPT_IDN
 
 #: MOJOLEARN_OPT_FAST_STREAM (lane apple-fast-rec-optim, 2026-10-04), default OFF,
 #: FAST + Apple only: the element-wise resident step (rmsprop, adagrad, adamax,
@@ -139,7 +146,9 @@ comptime AF_RESIDENT = _OPT_APPLE_FAST or (
 #: default since then; rollback -D MOJOLEARN_OPT_FAST_STREAM_OFF and
 #: -D MOJOLEARN_OPT_RAW_UP_OFF, each on its own (STREAM_OFF alone leaves the
 #: measured-noise RAW_UP; RAW_UP_OFF alone leaves the slower staged STREAM).
-comptime OPT_STREAM = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_FAST_STREAM_OFF"]()
+# TOMBSTONE: MOJOLEARN_OPT_FAST_STREAM_OFF (old path; the FAST+Apple default is the measured pair with OPT_RAW_UP, EXP:1204) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_FAST_STREAM_OFF.patch
+comptime OPT_STREAM = _OPT_APPLE_FAST
 
 #: the handle kinds
 comptime RES_ELEMENTWISE = 1
@@ -702,7 +711,7 @@ def adafactor_resident_open(ip: List[Int]) raises -> List[Int]:
     col_var (C, matrices only), zero filled. Returns [handle, used mask]
     (and 1 under OPT_ZERO_OPEN)."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_open: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default)")
+        raise Error("adafactor_resident_open: not built (IDENTICAL default, FAST + Apple default)")
     if len(ip) != 2:
         raise Error("adafactor_resident_open: requires [R, C]")
     var R = ip[0]
@@ -724,7 +733,7 @@ def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
     fp = `adafactor_step`'s six. The parameter is updated in place.
     Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default)")
+        raise Error("adafactor_resident_step: not built (IDENTICAL default, FAST + Apple default)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(addrs) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step: requires 2 addresses, 3 integer and 6 float parameters")
@@ -933,7 +942,7 @@ def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
     `adafactor_step`'s six. The parameter is updated where it lives (the
     same `adafactor_core` launches). Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step_dev: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default)")
+        raise Error("adafactor_resident_step_dev: not built (IDENTICAL default, FAST + Apple default)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(handles) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step_dev: requires 2 handles, 3 integer and 6 float parameters")

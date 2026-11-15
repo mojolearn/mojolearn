@@ -1,0 +1,38 @@
+diff --git a/sequence/theta_spec.mojo b/sequence/theta_spec.mojo
+index a542d142cf..dc42e34b57 100644
+--- a/sequence/theta_spec.mojo
++++ b/sequence/theta_spec.mojo
+@@ -27,6 +27,7 @@ final runs, the forecast) runs on every lane identically; lane 0 stores
+ the outputs."""
+ from max.gpu.primitives.warp import shuffle_idx
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ 
+ from sequence.coop_lane import coop_src
+ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+@@ -48,7 +49,7 @@ comptime THETA_SPEC_FAST = THETA_REG_FAST
+ #: (lane/w2-decide-neural; A/B on main c8ef6c66d, one run per arm,
+ #: same bits NV==AMD: theta 0.178/0.118, optimized-theta 0.152/0.100,
+ #: dynamic-optimized-theta 0.251/0.339, damped-ets 0.141/0.126; nv2 v0098 / A v0097, amd a1680 / A a1679).
+-#: -D MOJOLEARN_IDN_NM_SPEC_OFF (deleted 2026-11-15) restored the serial Nelder-Mead. Structural reason: op_theta runs one thread per
++#: -D MOJOLEARN_IDN_NM_SPEC_OFF restores the serial Nelder-Mead. Structural reason: op_theta runs one thread per
+ #: series and its Nelder-Mead evaluates the reflection, then the expansion
+ #: or a contraction, back to back (2 + k whole-series passes on a shrink),
+ #: a latency-bound serial chain with 64 threads on the taxi-hourly cell.
+@@ -63,11 +64,11 @@ comptime THETA_SPEC_FAST = THETA_REG_FAST
+ #: (sequence/exec_device.mojo, SEQ_COOP_NVAMD). Expected: theta taxi-hourly
+ #: AMD 596 -> ~130 ms, optimized-theta 626 -> ~150 ms (critical path from
+ #: ~1.5-2 evaluations per iteration to 1, shrinks from 2 + k to 1).
+-# TOMBSTONE: MOJOLEARN_IDN_NM_SPEC_OFF (old path; EXP:2086 KEEP, the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.expdel2-30-neural.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+-comptime THETA_SPEC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime THETA_SPEC_IDN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_NM_SPEC_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime THETA_SPEC = THETA_SPEC_FAST or THETA_SPEC_IDN
+ 
+ 
