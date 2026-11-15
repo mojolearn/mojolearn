@@ -276,7 +276,7 @@ from transformer.experiments.norm_fixed_lanes import (
 )
 from transformer.experiments.attention_schedules import (
     NN25_RMS_SPLIT_SCALE, NN29_RING_PAIR,
-    rms_sumsq_kernel, rms_parallel_scale_kernel, training_swiglu_kernel,
+    rms_sumsq_kernel, rms_parallel_scale_kernel,
     kv_ring_pair_kernel, NN27_QK_ROPE_PAIR, qk_rope_pair_kernel,
     NN21_SCALE_MASK, score_scale_mask_kernel,
 )
@@ -289,9 +289,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from gemm.experiments.neural_tiled_v2 import NI07_GROUPED_PROJECTIONS, neural_projection_triplet
-from training.neural_identical_experiments import (
-    IDN_TRAIN_SWIGLU,
-)
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -5293,19 +5290,7 @@ def llama_mlp_forward(
         swiglu_fused = (forward_only and gated and opts.act_is_silu()
                         and not bias_silu_fused and not bias_gelu_fused
                         and not trace.enabled and swiglu_fused_enabled())
-    var training_swiglu = False
-    comptime if IDN_TRAIN_SWIGLU and not BLOCK_ANY_SABOTAGE:
-        training_swiglu = (not forward_only and gated and opts.act_is_silu()
-                           and not bias_silu_fused and not bias_gelu_fused)
-    if training_swiglu:
-        step_count_launch()
-        ctx.enqueue_function[training_swiglu_kernel](
-            stages.silu_out.unsafe_ptr(), stages.gated.unsafe_ptr(),
-            stages.gate_proj.unsafe_ptr(), stages.up_proj.unsafe_ptr(),
-            Int32(m * it), grid_dim=(_grid(m * it), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-    elif swiglu_fused:
+    if swiglu_fused:
         step_count_launch()
         ctx.enqueue_function[swiglu_fused_kernel](
             stages.gated.unsafe_ptr(),
@@ -5357,11 +5342,7 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21. Absent under an ungated MLP.
-    if training_swiglu:
-        trace.record_device[DType.float32](
-            ctx, prefix + ".mlp.gated", stages.gated, m * it
-        )
-    if swiglu_fused or training_swiglu:
+    if swiglu_fused:
         pass  # the selected fused kernel already wrote S21
     elif gated:
         step_count_launch()

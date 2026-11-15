@@ -74,26 +74,6 @@ def rms_parallel_scale_kernel(
     output.unsafe_store(i, ftz(identical_mul(ftz(weight.unsafe_load(i % dm)), inner)))
 
 
-def training_swiglu_kernel(
-    silu_out: MutPointer[Float32, MutAnyOrigin],
-    gated: MutPointer[Float32, MutAnyOrigin],
-    gate: MutPointer[Float32, MutAnyOrigin],
-    up: MutPointer[Float32, MutAnyOrigin], n_in: Int32,
-):
-    """NN26: fuse forward activation/product, retaining backward/trace state.
-
-    Unlike forward-only swiglu_fused_kernel, both S20 and S21 are written.
-    SiLU remains the portable single quotient, never x*sigmoid(x). The
-    existing paired backward can consume these unchanged saved words.
-    """
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(n_in):
-        return
-    var sil = ftz(identical_silu(ftz(gate.unsafe_load(i))))
-    silu_out.unsafe_store(i, sil)
-    gated.unsafe_store(i, ftz(identical_mul(sil, ftz(up.unsafe_load(i)))))
-
-
 def kv_ring_pair_kernel(
     ring_k: MutPointer[Float32, MutAnyOrigin],
     ring_v: MutPointer[Float32, MutAnyOrigin],

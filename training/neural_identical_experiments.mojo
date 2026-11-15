@@ -35,7 +35,7 @@ comptime _ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # launch): preserve both silu_out and gated for tracing and backward.
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_SWIGLU (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SWIGLU.patch
-comptime IDN_TRAIN_SWIGLU = False
+# (Sweep 2026-11-15: IDN_TRAIN_SWIGLU = False removed with its reader and training_swiglu_kernel.)
 # NI27: views are rebound to the current owned arena after optimizer swaps.
 # L11 (2026-10-07): NN60 and NI27 are arms of ONE switch,
 # -D MOJOLEARN_IDN_LM_VIEWS=0|1|2|3: 1 = block weight views (NN60 block),
