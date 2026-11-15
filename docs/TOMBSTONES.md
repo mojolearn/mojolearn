@@ -936,6 +936,44 @@ in the tables after the sections.
 | [`MOJOLEARN_PURITY_5_OFF`](#mojolearn_purity_5_off-old-path-deleted-2026-11-15) | Neighbors (SVGP bound fold) | removed (old path; default kept; V2 rule, no A/B recorded) | 2026-11-15 | [MOJOLEARN_PURITY_5_OFF.patch](../experiments/removed/MOJOLEARN_PURITY_5_OFF.patch) |
 | [`MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF`](#mojolearn_xn_fast_cls2_ocsvm_2l_off-old-path-deleted-2026-11-15) | Neighbors (OneClassSVM SMO, FAST Apple) | removed (old path; default kept; V2 rule, recorded default kept) | 2026-11-15 | [MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF.patch) |
 | [`MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF`](#mojolearn_xn_fast_cls2_ocsvm_chunk256_off-old-path-deleted-2026-11-15) | Neighbors (OneClassSVM SMO, FAST Apple) | removed (old path; default kept; V2 rule, recorded default kept) | 2026-11-15 | [MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch) |
+| [`MOJOLEARN_AFCL_G14`](#mojolearn_afcl_g14-never-run-card-deleted-2026-11-15) | hierarchy / hdbscan FAST MMA Boruvka | removed (never-run Apple FAST programme card; V2 rule g) | 2026-11-15 | [MOJOLEARN_AFCL_G14.patch](../experiments/removed/MOJOLEARN_AFCL_G14.patch) |
+| [`MOJOLEARN_BORUVKA_FAST_MMA_OFF`](#mojolearn_boruvka_fast_mma_off-old-path-deleted-2026-11-15) | hierarchy / hdbscan FAST MMA Boruvka | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_BORUVKA_FAST_MMA_OFF.patch](../experiments/removed/MOJOLEARN_BORUVKA_FAST_MMA_OFF.patch) |
+| [`MOJOLEARN_DBSCAN_FAST_CC_BATCH`](#mojolearn_dbscan_fast_cc_batch-unmeasured-arm-deleted-2026-11-15) | dbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_DBSCAN_FAST_CC_BATCH.patch](../experiments/removed/MOJOLEARN_DBSCAN_FAST_CC_BATCH.patch) |
+| [`MOJOLEARN_HDB_LINKAGE_DEVICE_OFF`](#mojolearn_hdb_linkage_device_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_HDB_LINKAGE_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_HDB_LINKAGE_DEVICE_OFF.patch) |
+| [`MOJOLEARN_HDB_ONE_SYNC`](#mojolearn_hdb_one_sync-unmeasured-arm-deleted-2026-11-15) | hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_HDB_ONE_SYNC.patch](../experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch) |
+| [`MOJOLEARN_HDB_SELECT_DEVICE`](#mojolearn_hdb_select_device-unmeasured-arm-deleted-2026-11-15) | hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_HDB_SELECT_DEVICE.patch](../experiments/removed/MOJOLEARN_HDB_SELECT_DEVICE.patch) |
+| [`MOJOLEARN_HDB_SMR_TILED`](#mojolearn_hdb_smr_tiled-unmeasured-arm-deleted-2026-11-15) | hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_HDB_SMR_TILED.patch](../experiments/removed/MOJOLEARN_HDB_SMR_TILED.patch) |
+| [`MOJOLEARN_HDB_SMR_TILED_OFF`](#mojolearn_hdb_smr_tiled_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_HDB_SMR_TILED_OFF.patch](../experiments/removed/MOJOLEARN_HDB_SMR_TILED_OFF.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_CHUNK16`](#mojolearn_idn_dbscan_cc_chunk16-unmeasured-arm-deleted-2026-11-15) | dbscan, hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_CHUNK16.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK16.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_CHUNK32`](#mojolearn_idn_dbscan_cc_chunk32-unmeasured-arm-deleted-2026-11-15) | dbscan, hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_CHUNK32.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK32.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_CHUNK4`](#mojolearn_idn_dbscan_cc_chunk4-unmeasured-arm-deleted-2026-11-15) | dbscan, hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_CHUNK4.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK4.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF`](#mojolearn_idn_dbscan_cc_gated_off-old-path-deleted-2026-11-15) | dbscan, hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF`](#mojolearn_idn_dbscan_cc_shortcut_off-old-path-deleted-2026-11-15) | dbscan, hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_SPLIT16`](#mojolearn_idn_dbscan_cc_split16-unmeasured-arm-deleted-2026-11-15) | dbscan, hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_SPLIT16.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT16.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_SPLIT4`](#mojolearn_idn_dbscan_cc_split4-unmeasured-arm-deleted-2026-11-15) | dbscan, hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_SPLIT4.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT4.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_SPLIT8`](#mojolearn_idn_dbscan_cc_split8-unmeasured-arm-deleted-2026-11-15) | dbscan, hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_CC_SPLIT8.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT8.patch) |
+| [`MOJOLEARN_IDN_DENDRO_HOOK_CHUNK`](#mojolearn_idn_dendro_hook_chunk-unmeasured-arm-deleted-2026-11-15) | hierarchy, hdbscan | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_DENDRO_HOOK_CHUNK.patch](../experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK.patch) |
+| [`MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF`](#mojolearn_idn_dendro_hook_chunk_off-old-path-deleted-2026-11-15) | hierarchy, hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF.patch) |
+| [`MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF`](#mojolearn_idn_dendro_radix_sort_off-old-path-deleted-2026-11-15) | hierarchy, hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF.patch) |
+| [`MOJOLEARN_IDN_DENDRO_UNION_OFF`](#mojolearn_idn_dendro_union_off-old-path-deleted-2026-11-15) | hierarchy, hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_DENDRO_UNION_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DENDRO_UNION_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF`](#mojolearn_idn_hdb_condense_two_reads_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF`](#mojolearn_idn_hdb_mr_fused_guard_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF`](#mojolearn_idn_hdb_mst_seed_knn_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_ONE_SYNC_OFF`](#mojolearn_idn_hdb_one_sync_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_ONE_SYNC_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_ONE_SYNC_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF`](#mojolearn_idn_hdb_out_memcpy_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF`](#mojolearn_idn_hdb_predict_device_cast_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF`](#mojolearn_idn_hdb_predict_lean_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF`](#mojolearn_idn_hdb_round_one_sync_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF`](#mojolearn_idn_hdb_select_one_read_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF.patch) |
+| [`MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF`](#mojolearn_idn_hdb_soft_lean_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF.patch) |
+| [`MOJOLEARN_IDN_MST_LABEL_JUMP_OFF`](#mojolearn_idn_mst_label_jump_off-old-path-deleted-2026-11-15) | hierarchy (sparse MST solver) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_MST_LABEL_JUMP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MST_LABEL_JUMP_OFF.patch) |
+| [`MOJOLEARN_IDN_MST_PAR_COMPACT_OFF`](#mojolearn_idn_mst_par_compact_off-old-path-deleted-2026-11-15) | hierarchy (sparse MST solver) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_MST_PAR_COMPACT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MST_PAR_COMPACT_OFF.patch) |
+| [`MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF`](#mojolearn_idn_mst_rounds_device_off-old-path-deleted-2026-11-15) | hierarchy (sparse MST solver) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_MST_SCAN_LANES`](#mojolearn_idn_mst_scan_lanes-unmeasured-arm-deleted-2026-11-15) | hierarchy (sparse MST solver) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_MST_SCAN_LANES.patch](../experiments/removed/MOJOLEARN_IDN_MST_SCAN_LANES.patch) |
+| [`MOJOLEARN_IDN_SL_SPARSE_MST`](#mojolearn_idn_sl_sparse_mst-unmeasured-arm-deleted-2026-11-15) | hierarchy (single linkage) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_SL_SPARSE_MST.patch](../experiments/removed/MOJOLEARN_IDN_SL_SPARSE_MST.patch) |
+| [`MOJOLEARN_IDN_SMR_RADIX_RANK_OFF`](#mojolearn_idn_smr_radix_rank_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch) |
+| [`MOJOLEARN_SL_FAST_BORUVKA_OFF`](#mojolearn_sl_fast_boruvka_off-old-path-deleted-2026-11-15) | hierarchy (single linkage) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_SL_FAST_BORUVKA_OFF.patch](../experiments/removed/MOJOLEARN_SL_FAST_BORUVKA_OFF.patch) |
+| [`MOJOLEARN_SMR_TILED_OFF`](#mojolearn_smr_tiled_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_SMR_TILED_OFF.patch](../experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -9160,3 +9198,311 @@ The owner lanes write these defines' sections; here the inline markers and `expe
 - `MOJOLEARN_TREES_T44_METADATA_CACHE`: `_TREE_SHAP_CACHE` is False; the create-args check refuses in providers/python/xtrees_api_pyapi_door.mojo; `3f0e029eb4`, recoverable at `adde5aacdd`; `experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.expdel2-08-base.patch`.
 
 Not deleted, contrary to the plan (KEEP set): `MOJOLEARN_NATIVE_CONV_BAD_GRADIENT`, `MOJOLEARN_NATIVE_OPTIMIZER_BAD_REFERENCE` and `MOJOLEARN_NATIVE_SVM_BAD_PREDICTION` (fixture-only negative controls of packaging/native_only/cases: sabotage arms); `MOJOLEARN_SCRATCH` (the A/B toggle of the standalone probe tools/lowbit_amd_tuned/scratch_first.mojo, built both ways by scratch_first.sh); `MOJOLEARN_UMAP_IDENTICAL_OPT_TPB_64` / `_256` (the launch-width builds of the UMAP fingerprint gate in tools/umap_lane_pod_run.sh); `MOJOLEARN_COLUMN_CPU` (coordinator correction) and the `MOJOLEARN_IDN_ALL_OFF` umbrella reads (kept as the plan's Method says). The remaining defines of the section are read in this lane's files only through mode-dependent aliases owned by other lanes' files, which stay as they are.
+
+## Experiment deletions: lane expdel2-11-cluster (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-11-cluster, "An unmeasured arm is deleted", Andrew 2026-11-15); each evidence row named in the plan was read before the deletion. No bit changes: every deletion removes a non-default arm or the rollback of a default, and the default path is unchanged. Non-owner folds in this lane's files (inline markers and `experiments/removed/<D>.expdel2-11-cluster.patch`): `MOJOLEARN_C33_FROZEN_CHUNKS`, `MOJOLEARN_C33_CHUNK_4`, `MOJOLEARN_C34_PARALLEL_EDGES`, `MOJOLEARN_C62_SAME_COMPONENT_SKIP` (owner expdel2-05-base) and the `MOJOLEARN_IDN_ALL_OFF` terms.
+
+### MOJOLEARN_AFCL_G14: never-run card deleted (2026-11-15)
+
+- **What it was**: Apple FAST classical programme card G14: 64 staged reference rows in the MMA Boruvka search instead of 128 (`hierarchy/impl/cluster/detail/fast_mma_boruvka.mojo`, `MB_T`).
+- **Verdict**: never-run Apple FAST programme card, no record (V2 rule g); `MB_T` is the constant 128. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b21ae6d074`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G14.patch`, then delete the `MOJOLEARN_AFCL_G14` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_BORUVKA_FAST_MMA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the FAST Apple MMA Boruvka search (`FAST_MMA_BORUVKA_ENABLED` in `hierarchy/impl/cluster/detail/fast_mma_boruvka.mojo`) to the route without it.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); `FAST_MMA_BORUVKA_ENABLED` is FAST and Apple. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3ce335dfc9`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_BORUVKA_FAST_MMA_OFF.patch`, then delete the `MOJOLEARN_BORUVKA_FAST_MMA_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_DBSCAN_FAST_CC_BATCH: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: FAST Apple opt-in: `WEAK_CC_FAST_BATCH` (4) label passes between two flag readbacks in `_weak_cc_passes_per_sync` (`dbscan/impl/sparse/detail/csr.mojo`), with `weak_cc_fast_batch_on`.
+- **Verdict**: EXPERIMENTS.md row OPEN, no A/B recorded (V2 rule a); one pass per readback stays. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4fc189058c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_CC_BATCH.patch`, then delete the `MOJOLEARN_DBSCAN_FAST_CC_BATCH` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_HDB_LINKAGE_DEVICE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the FAST Apple device linkage (`HDB_LINKAGE_DEVICE` in `hdbscan/impl/detail/fast_apple.mojo`) to the per-level hook loop and the eight-wait condense.
+- **Verdict**: EXPERIMENTS.md DROPPED-noise row read: the device linkage is the recorded F15 winner (cold B/A 0.66..0.81); `HDB_LINKAGE_DEVICE` is the constant `HDB_FAST_APPLE`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `f23100a40e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_HDB_LINKAGE_DEVICE_OFF.patch`, then delete the `MOJOLEARN_HDB_LINKAGE_DEVICE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_HDB_ONE_SYNC: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: FAST Apple opt-in: the extract's and the runner's output downloads staged under one wait each (`HDB_ONE_SYNC` in `hdbscan/impl/detail/fast_apple.mojo`, read in `extract.mojo` and `runner.mojo`). The same route stays the IDENTICAL default (`IDN_HDB_ONE_SYNC`).
+- **Verdict**: EXPERIMENTS.md row read: full-data M3 result inconclusive (taxi 424.7 -> 425.5, istella 3809 -> 3829 ms), F15 one-sample B/A 0.87..0.95, never timed with the promoted linkage; the owed row was withdrawn (V2 rule e). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `0aed7700fc`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch`, then delete the `MOJOLEARN_HDB_ONE_SYNC` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_HDB_SELECT_DEVICE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: FAST Apple opt-in: stabilities, selection, labels, scores and probabilities with one readback (`HDB_SELECT_DEVICE` in `hdbscan/impl/detail/fast_apple.mojo`, read in `extract.mojo`). The same route stays the IDENTICAL default (`IDN_HDB_SELECT_ONE_READ`).
+- **Verdict**: EXPERIMENTS.md row read: F15 B/A 0.92..1.03, mixed; retained off, owed row withdrawn (V2 rule e). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `aab954d195`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_HDB_SELECT_DEVICE.patch`, then delete the `MOJOLEARN_HDB_SELECT_DEVICE` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_HDB_SMR_TILED: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Force-on knob of the FAST Apple tiled sparse search (`HDB_SMR_TILED` in `hdbscan/impl/detail/fast_apple.mojo`), equal to the default.
+- **Verdict**: EXPERIMENTS.md row read: the tiled search is the FAST Apple default since 2026-10-03, so the force-on knob is default-equal (V2 rule e); `HDB_SMR_TILED` is the constant `HDB_FAST_APPLE`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `bb7c99f6b4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_HDB_SMR_TILED.patch`, then delete the `MOJOLEARN_HDB_SMR_TILED` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_HDB_SMR_TILED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the FAST Apple tiled sparse search to the per-pair search (`HDB_SMR_TILED` in `hdbscan/impl/detail/fast_apple.mojo`).
+- **Verdict**: EXPERIMENTS.md row read: the tiled kernel is the measured FAST Apple winner (istella 44,879 -> 3,800 ms, clusters equal); the old path goes (V2 rule e). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `bb7c99f6b4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_HDB_SMR_TILED_OFF.patch`, then delete the `MOJOLEARN_HDB_SMR_TILED_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_CHUNK16: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Candidate arm: 16 gated label passes per flag read (`IDN_DBSCAN_CC_CHUNK` in `dbscan/impl/sparse/detail/csr.mojo`).
+- **Verdict**: no isolated A/B (only the gated+shortcut bundle was timed against ungated, mixed) (V2 rule a); the chunk is the constant 8. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `eb75dc63d3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK16.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_CHUNK16` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_CHUNK32: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Candidate arm: 32 gated label passes per flag read (`IDN_DBSCAN_CC_CHUNK`).
+- **Verdict**: never run, no A/B recorded (V2 rule a); the chunk is the constant 8. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `eb75dc63d3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK32.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_CHUNK32` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_CHUNK4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Candidate arm: 4 gated label passes per flag read (`IDN_DBSCAN_CC_CHUNK`).
+- **Verdict**: never run, no A/B recorded (V2 rule a); the chunk is the constant 8. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `eb75dc63d3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK4.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_CHUNK4` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL gated weak-CC label passes (`IDN_DBSCAN_CC_GATED` in `dbscan/impl/sparse/detail/csr.mojo`) to one drain per pass.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); `IDN_DBSCAN_CC_GATED` is `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL` (FAST keeps the per-pass loop). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `08bc685fd4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL pointer-jump pass after each label pass (`IDN_DBSCAN_CC_SHORTCUT`).
+- **Verdict**: no A/B recorded for the old path (V2 rule b); `IDN_DBSCAN_CC_SHORTCUT` is `IDN_DBSCAN_CC_GATED`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `749db06dd7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_SPLIT16: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Candidate arm: 16 threads share a row of the gated edge pass (`IDN_DBSCAN_CC_SPLIT`, `weak_cc_label_gated_kernel`).
+- **Verdict**: never run, no A/B recorded (V2 rule a); one thread per row stays and the split arithmetic is gone. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c392832a0a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT16.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_SPLIT16` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_SPLIT4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Candidate arm: 4 threads share a row of the gated edge pass (`IDN_DBSCAN_CC_SPLIT`).
+- **Verdict**: never run, no A/B recorded (V2 rule a); one thread per row stays. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c392832a0a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT4.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_SPLIT4` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DBSCAN_CC_SPLIT8: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Candidate arm: 8 threads share a row of the gated edge pass (`IDN_DBSCAN_CC_SPLIT`).
+- **Verdict**: never run, no A/B recorded (V2 rule a); one thread per row stays. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c392832a0a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT8.patch`, then delete the `MOJOLEARN_IDN_DBSCAN_CC_SPLIT8` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DENDRO_HOOK_CHUNK: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Int knob: hook + jump pairs per flag read in the dendrogram's hook loop (`IDN_DENDRO_HOOK_CHUNK` in `hierarchy/impl/cluster/detail/dendrogram_device.mojo`, default 4).
+- **Verdict**: no A/B recorded for other widths (V2 rule a); the chunk is 4 under IDENTICAL, 1 otherwise. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `388f048dbb`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK.patch`, then delete the `MOJOLEARN_IDN_DENDRO_HOOK_CHUNK` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL hook chunk to the per-pair flag read (`IDN_DENDRO_HOOK_CHUNK`).
+- **Verdict**: no A/B recorded for the old path (V2 rule b). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `388f048dbb`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF.patch`, then delete the `MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL radix edge sort of the dendrogram (`IDN_DENDRO_RADIX_SORT`) to `_sort_rank_kernel`'s all-pairs count.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); `IDN_DENDRO_RADIX_SORT` is `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL` (FAST keeps the count). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `98ec4fc711`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF.patch`, then delete the `MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_DENDRO_UNION_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL lock-free dendrogram union (`IDN_DENDRO_UNION`) to the per-level hook loop.
+- **Verdict**: EXPERIMENTS.md row owed, no A/B recorded for the old path (V2 rule b); `IDN_DENDRO_UNION` is `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3922ce7ff9`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_DENDRO_UNION_OFF.patch`, then delete the `MOJOLEARN_IDN_DENDRO_UNION_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL two-read condense (`IDN_HDB_CONDENSE_TWO_READS` in `hdbscan/impl/detail/idn_switches.mojo`) to eight waits.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `_IDN_HDB_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `23823b30db`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL fused NaN / non-finite counts (`IDN_HDB_MR_FUSED_GUARD`) to two more m * m passes.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `_IDN_HDB_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b02cf6086f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL k-NN seeded round 1 of the sparse Boruvka (`IDN_HDB_MST_SEED_KNN` in `hdbscan/impl/cluster/detail/sparse_mr_mst.mojo`).
+- **Verdict**: EXPERIMENTS.md row read: the seed is the promoted default (fg2 nv2 v1023 -> v1048 / amd a1163 -> a1188: istella NV 0.68x / AMD 0.72x, taxi 0.82x / 0.83x); the old path goes (V2 rule e). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3e2ad2e67b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `grid_controls/fg-tsne-dbscan.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_ONE_SYNC_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL one-wait output downloads (`IDN_HDB_ONE_SYNC`) of the extract and the runner.
+- **Verdict**: EXPERIMENTS.md row read (owed row withdrawn): the default is the kept path (V2 rule e); the switch is `_IDN_HDB_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3513712600`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_ONE_SYNC_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_ONE_SYNC_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the fit outputs' memcpy into the caller's arrays (`IDN_HDB_OUT_MEMCPY` in `hdbscan/impl/hdbscan_door_impl.mojo`) to element loops.
+- **Verdict**: EXPERIMENTS.md row read: the _OFF arm was neutral (nv2 v1047 / amd a1187, istella NV 0.97x / AMD 0.98x); memcpy stays, unconditionally (V2 rule b). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `89d0ad23b5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `grid_controls/fg-tsne-dbscan.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of approximate_predict's device index narrowing (`IDN_HDB_PREDICT_DEVICE_CAST`) to a host loop.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `_IDN_HDB_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `675c1e06ae`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of approximate_predict's bulk staging and one-wait outputs (`IDN_HDB_PREDICT_LEAN`).
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `_IDN_HDB_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6260abe71f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the sparse Boruvka's two-drain rounds (`IDN_HDB_ROUND_ONE_SYNC` in `sparse_mr_mst.mojo`) to three status reads per round.
+- **Verdict**: EXPERIMENTS.md row owed, no A/B recorded for the old path (V2 rule b); the switch is IDENTICAL on NVIDIA and AMD. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c6e7fbabc8`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `grid_controls/fg-tsne-dbscan.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL one-readback selection (`IDN_HDB_SELECT_ONE_READ`) to the multi-read route.
+- **Verdict**: EXPERIMENTS.md row read (owed row withdrawn): the default is the kept path (V2 rule e); the switch is `_IDN_HDB_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7b7f05966a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of soft clustering's lean downloads and one wait (`IDN_HDB_SOFT_LEAN`).
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `_IDN_HDB_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9f04fe0661`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF.patch`, then delete the `MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_MST_LABEL_JUMP_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL bounded pointer-jump `label_prop` (`IDN_MST_LABEL_JUMP` in `hierarchy/impl/sparse/solver/detail/mst_kernels.mojo`) to the hop loop.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `_IDN_MST_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d25e55005d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_MST_LABEL_JUMP_OFF.patch`, then delete the `MOJOLEARN_IDN_MST_LABEL_JUMP_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_MST_PAR_COMPACT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL parallel stable compaction (`IDN_MST_PAR_COMPACT`) to one block.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `_IDN_MST_ON`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `947c1d1222`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_MST_PAR_COMPACT_OFF.patch`, then delete the `MOJOLEARN_IDN_MST_PAR_COMPACT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL device-decided round loop (`IDN_MST_ROUNDS_DEVICE`) to the per-round count read.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `IDN_MST_LABEL_JUMP`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `72b09a740d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF.patch`, then delete the `MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_MST_SCAN_LANES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Int knob: threads per row in `kernel_min_edge_per_vertex` (`IDN_MST_SCAN_LANES`, default 32).
+- **Verdict**: never timed, no A/B recorded (V2 rule a); the lane count is the constant 32. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `0845b95d23`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_MST_SCAN_LANES.patch`, then delete the `MOJOLEARN_IDN_MST_SCAN_LANES` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_SL_SPARSE_MST: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL candidate arm: single linkage on the pairwise graph from HDBSCAN's matrix-free Boruvka with zero core distances (`IDN_SL_SPARSE_MST` in `hierarchy/impl/cluster/detail/single_linkage.mojo`), with its row threshold knob `MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS` (read only by this arm, deleted with it).
+- **Verdict**: no A/B recorded for the opt-in arm (V2 rule a); the dense route stays. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a6f5a0c416`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_SL_SPARSE_MST.patch`, then delete the `MOJOLEARN_IDN_SL_SPARSE_MST` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_IDN_SMR_RADIX_RANK_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the IDENTICAL radix edge rank of the sparse MST (`IDN_SMR_RADIX_RANK` in `sparse_mr_mst.mojo`) to the all-pairs count.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); the switch is `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL` (FAST keeps the count). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a5d64c0368`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch`, then delete the `MOJOLEARN_IDN_SMR_RADIX_RANK_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_SL_FAST_BORUVKA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the FAST Apple matrix-free Boruvka single linkage (`SL_FAST_BORUVKA`) to the dense m * m graph.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); `SL_FAST_BORUVKA` is FAST and Apple. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `da90a32538`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SL_FAST_BORUVKA_OFF.patch`, then delete the `MOJOLEARN_SL_FAST_BORUVKA_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+### MOJOLEARN_SMR_TILED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: Rollback of the tiled sparse search on NVIDIA and AMD (`SMR_TILED` in `sparse_mr_mst.mojo`) to the per-pair kernel and its launch bound.
+- **Verdict**: no A/B recorded for the old path (V2 rule b); `SMR_TILED` is NVIDIA or AMD, or `HDB_SMR_TILED`. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column: the default path is unchanged.
+- **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4cadcc3fbd`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch`, then delete the `MOJOLEARN_SMR_TILED_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).

@@ -259,6 +259,86 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_DBSCAN_ADJ_BITMAP_OFF (old path of the PROMOTED IDENTICAL default) is gone; the default is kept; code at 6c9e7778e6; restore: experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_DBSCAN_EPS_TILE_OFF (old path of the PROMOTED IDENTICAL default) is gone; the default is kept; code at 4225a08bd5; restore: experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch"
+    # Lane expdel2-11-cluster (2026-11-15), removed under "An unmeasured arm is deleted" (docs/TOMBSTONES.md,
+    # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G14.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G14"](), "removed 2026-11-15 (lane/expdel2-11-cluster): AFCL_G14 (never-run Apple FAST programme card, hierarchy / hdbscan FAST MMA Boruvka) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_BORUVKA_FAST_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_BORUVKA_FAST_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): BORUVKA_FAST_MMA_OFF (old path beside the default, hierarchy / hdbscan FAST MMA Boruvka) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_CC_BATCH.patch
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_CC_BATCH"](), "removed 2026-11-15 (lane/expdel2-11-cluster): DBSCAN_FAST_CC_BATCH (opt-in arm, no A/B recorded, dbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_LINKAGE_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): HDB_LINKAGE_DEVICE_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch
+    comptime assert not is_defined["MOJOLEARN_HDB_ONE_SYNC"](), "removed 2026-11-15 (lane/expdel2-11-cluster): HDB_ONE_SYNC (opt-in arm, no A/B recorded, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_SELECT_DEVICE.patch
+    comptime assert not is_defined["MOJOLEARN_HDB_SELECT_DEVICE"](), "removed 2026-11-15 (lane/expdel2-11-cluster): HDB_SELECT_DEVICE (opt-in arm, no A/B recorded, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_SMR_TILED.patch
+    comptime assert not is_defined["MOJOLEARN_HDB_SMR_TILED"](), "removed 2026-11-15 (lane/expdel2-11-cluster): HDB_SMR_TILED (opt-in arm, no A/B recorded, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_SMR_TILED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_HDB_SMR_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): HDB_SMR_TILED_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK16.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK16"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_CHUNK16 (opt-in arm, no A/B recorded, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK32.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK32"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_CHUNK32 (opt-in arm, no A/B recorded, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK4.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK4"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_CHUNK4 (opt-in arm, no A/B recorded, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_GATED_OFF (old path beside the default, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_SHORTCUT_OFF (old path beside the default, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT16.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT16"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_SPLIT16 (opt-in arm, no A/B recorded, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT4.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT4"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_SPLIT4 (opt-in arm, no A/B recorded, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT8.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT8"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DBSCAN_CC_SPLIT8 (opt-in arm, no A/B recorded, dbscan, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DENDRO_HOOK_CHUNK"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DENDRO_HOOK_CHUNK (opt-in arm, no A/B recorded, hierarchy, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DENDRO_HOOK_CHUNK_OFF (old path beside the default, hierarchy, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DENDRO_RADIX_SORT_OFF (old path beside the default, hierarchy, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_UNION_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DENDRO_UNION_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_DENDRO_UNION_OFF (old path beside the default, hierarchy, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_CONDENSE_TWO_READS_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_MR_FUSED_GUARD_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_MST_SEED_KNN_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ONE_SYNC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_ONE_SYNC_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_ONE_SYNC_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_OUT_MEMCPY_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_PREDICT_DEVICE_CAST_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_PREDICT_LEAN_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_ROUND_ONE_SYNC_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_SELECT_ONE_READ_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_HDB_SOFT_LEAN_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MST_LABEL_JUMP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MST_LABEL_JUMP_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_MST_LABEL_JUMP_OFF (old path beside the default, hierarchy (sparse MST solver)) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MST_PAR_COMPACT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MST_PAR_COMPACT_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_MST_PAR_COMPACT_OFF (old path beside the default, hierarchy (sparse MST solver)) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_MST_ROUNDS_DEVICE_OFF (old path beside the default, hierarchy (sparse MST solver)) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MST_SCAN_LANES.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MST_SCAN_LANES"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_MST_SCAN_LANES (opt-in arm, no A/B recorded, hierarchy (sparse MST solver)) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SL_SPARSE_MST.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SL_SPARSE_MST"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_SL_SPARSE_MST (opt-in arm, no A/B recorded, hierarchy (single linkage)) (and MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS, read only by it) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SMR_RADIX_RANK_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_SMR_RADIX_RANK_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_SL_FAST_BORUVKA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SL_FAST_BORUVKA_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): SL_FAST_BORUVKA_OFF (old path beside the default, hierarchy (single linkage)) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SMR_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): SMR_TILED_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SL_SPARSE_MST.patch (its row knob)
+    comptime assert not is_defined["MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_SL_SPARSE_MIN_ROWS was the row knob of the deleted IDN_SL_SPARSE_MST arm"
     return True
 
 

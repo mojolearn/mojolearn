@@ -1,0 +1,44 @@
+diff --git a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+index 21c4e5fc9f..b5e8ecebf9 100644
+--- a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
++++ b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+@@ -52,6 +52,7 @@ from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
+ from std.atomic import Atomic
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.memory import bitcast, stack_allocation
++from std.sys.compile import is_defined
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
+diff --git a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+index 4274b4019b..33522f3840 100644
+--- a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
++++ b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+@@ -544,8 +544,9 @@ def smr_init_kernel(
+ 
+ #: fg-tsne-dbscan H2 (IDENTICAL, NVIDIA and AMD, lane fg-tsne-dbscan
+ #: 2026-10-09), MOJOLEARN_IDN_HDB_MST_SEED_KNN: the IDENTICAL DEFAULT since
+-#: 2026-10-10 (lane/postmerge-act-7; the old on-define is refused in
+-#: core/experiment_guards_cluster.mojo). fg2
++#: 2026-10-10 (lane/postmerge-act-7; `-D MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF`
++#: restores the k = min_samples k-NN and the all-points round 1; the old
++#: on-define is refused in core/six_lane_experiment_guards.mojo). fg2
+ #: board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023
+ #: -> v1048, MI325X a1163 -> a1188; ratio = arm / fg2 default on the same
+ #: vendor): hdbscan istella NV 0.68x / AMD 0.72x, taxi NV 0.82x / AMD 0.83x;
+@@ -571,13 +572,12 @@ def smr_init_kernel(
+ #: non-finite (the search then refuses it by name), or when v* >= d_kk. The
+ #: same MST: bits none. Cost: m x kk x d multiply-adds (the list) against the
+ #: listed share of round 1's m x m x d. Off with a trace, sabotage, a direct-
+-#: distance build or alpha > 1.
+-# TOMBSTONE: MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF (old path: k = min_samples k-NN and the all-points round 1; the seed is the measured default, EXP:2064) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3e2ad2e67b.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.patch; record in docs/TOMBSTONES.md.
++#: distance build or alpha > 1. -D MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.
+ comptime IDN_HDB_MST_SEED_KNN = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+     and not KNN_DIRECT_DISTANCE
++    and not is_defined["MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF"]()
+ )
+ 
+ 

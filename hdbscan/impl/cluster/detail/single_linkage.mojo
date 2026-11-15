@@ -449,7 +449,7 @@ def build_mr_linkage(
         print("HDB_STAGE edges_ms=" + String(Float64(now - st_t) / 1.0e6))
         st_t = now
     # `:107-117` Perform hierarchical labeling, on the device.
-    # lane af-hdbscan2 (-D MOJOLEARN_HDB_LINKAGE_DEVICE): the same three
+    # lane af-hdbscan2 (HDB_LINKAGE_DEVICE, the FAST Apple default): the same three
     # outputs with one lock-free union launch per level and no flag
     # readback (dendrogram_union.mojo).
     comptime if HDB_LINKAGE_DEVICE:

@@ -1,0 +1,19 @@
+diff --git a/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo b/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo
+index 994766d5a6..f68d22ad2c 100644
+--- a/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo
++++ b/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo
+@@ -95,10 +95,10 @@ comptime IDN_MST_ROUNDS_DEVICE = IDN_MST_LABEL_JUMP
+ #: `append_src_dst_pair`'s stable compaction as three parallel launches
+ #: (per-block counts, a scan of the block counts, per-block scan + scatter)
+ #: in place of ONE block walking all `2 v` slots chunk by chunk. Same
+-#: stable order.
+-# TOMBSTONE: MOJOLEARN_IDN_MST_PAR_COMPACT_OFF (old path: the one-block compaction under IDENTICAL; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 947c1d1222.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MST_PAR_COMPACT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_MST_PAR_COMPACT = _IDN_MST_ON
++#: stable order. `-D MOJOLEARN_IDN_MST_PAR_COMPACT_OFF=1` restores it.
++comptime IDN_MST_PAR_COMPACT = (
++    _IDN_MST_ON and not is_defined["MOJOLEARN_IDN_MST_PAR_COMPACT_OFF"]()
++)
+ 
+ #: CANDIDATE ARM (default 32 = the reference shape). Threads per row in
+ #: `kernel_min_edge_per_vertex`: a power of two, 32..1024. The row minimum

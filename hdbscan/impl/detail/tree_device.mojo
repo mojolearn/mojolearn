@@ -186,7 +186,7 @@ def td_download_f32(
 def td_stage_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32]
 ) raises -> HostBuffer[DType.int32]:
-    """lane af-hdbscan2 (HDB_ONE_SYNC): the WHOLE device buffer copied into a
+    """lane af-hdbscan2 (IDN_HDB_ONE_SYNC): the WHOLE device buffer copied into a
     host buffer with NO wait; the caller synchronizes once for every staged
     buffer and then takes the lists (`td_take_*`). No sub-buffer view is
     made, so nothing is freed before the copy runs."""
@@ -685,7 +685,7 @@ def _refuse_nonfinite_device(
 
 
 # ---------------------------------------- lane af-hdbscan2, FAST Apple ---
-# `-D MOJOLEARN_HDB_LINKAGE_DEVICE`: the same tree as `build_condensed_device`
+# `HDB_LINKAGE_DEVICE` (FAST Apple default): the same tree as `build_condensed_device`
 # below (the same kernels, in the same order, on the same values) with the
 # host's reads gathered into TWO status readbacks instead of eight waits:
 #   read 1: max child id, out-of-range count, first non-finite delta, n_split
@@ -1065,7 +1065,7 @@ def build_condensed_device(
             " filter and CondensedHierarchy.condense would read an empty"
             " minmax range"
         )
-    # lane af-hdbscan2 (-D MOJOLEARN_HDB_LINKAGE_DEVICE): the same tree
+    # lane af-hdbscan2 (HDB_LINKAGE_DEVICE, the FAST Apple default): the same tree
     # with two status readbacks instead of eight waits.
     # fam2-cluster: the same route under IDENTICAL on every vendor
     # (IDN_HDB_CONDENSE_TWO_READS).
