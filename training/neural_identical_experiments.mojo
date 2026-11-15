@@ -81,6 +81,9 @@ comptime IDN_CE_DENOM_ROWFOLD = False
 # (Sweep 2026-11-15: IDN_TRAIN_SCRATCH_ARM = 0 and IDN_TRAIN_BACKWARD_SCRATCH = False removed (no reader), and
 # training/neural_ab_lifetime.mojo deleted: NN62_LIFETIME_ARENA, NeuralLiveRange and the always-refusing
 # NeuralLifetimeArena had no importer.)
+# Marker moved from the deleted training/neural_ab_shards.mojo (sweep 2026-11-15; NN63_CANONICAL_SHARD_MERGE = False had no importer):
+# TOMBSTONE: MOJOLEARN_NN63_CANONICAL_SHARD_MERGE (opt-in canonical shard merge, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5f27699bee.
+# Restore: git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch
 # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # (NI35 256-token tree v2; bytes lm-forward NV/AMD 0.99x/1.01x, lm-train-step 1.01x/1.00x, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
