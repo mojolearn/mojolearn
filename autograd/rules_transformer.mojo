@@ -54,7 +54,7 @@
 #   TF_RMS_NORM_INPUT / TF_RMS_NORM_POST  [x, weight] -> norm out
 #                     bwd_rms_norm_routed[1|2] with the hand path's residual
 #                     join: norm2 fused (BWD_FUSE_NORM2_RESIDUAL) or S13's
-#                     add2, norm1 S36's add2 (or _AFN_NORM1_RESID's fusion)
+#                     add2, norm1 S36's add2
 #   TF_LINEAR         [X, W] -> X W^T (OP_NT): _route_b dW, _route_a dX; a
 #                     fan-in member writes dX to the hand path's tmp0/1/2 and
 #                     the last one runs S9's add2 or S32's add3
@@ -140,7 +140,6 @@ from autograd.kernels.transformer import (
     BWD_FUSE_NORM2_RESIDUAL,
     BWD_TPB,
     IDN_BWD_ENTRY_ALIAS,
-    _AFN_NORM1_RESID,
     LlamaBackwardStages,
     _rec,
     _route_a,
@@ -373,19 +372,16 @@ struct TransformerRules(BackwardRules):
             self._card(12, bst.norm2_dx, m * dm)
             self._card(13, bst.d_residual1, m * dm)
         else:
-            # S33-35, then S36 (or _AFN_NORM1_RESID's fused residual)
-            comptime if _AFN_NORM1_RESID:
-                bwd_rms_norm_routed[1](
-                    self.ctx, bst.gemm_workspace, dot, bst.norm1_dx, dw, bst.dh, bst.dprod, bst.rstd,
-                    bst.dvcoef, bst.ones, dy, x, weight, sumsq, total, branch, True, m, dm, self.eps,
-                )
-            else:
-                var own = _fp(bst.norm1_dx).unsafe_origin_cast[MutAnyOrigin]()
-                bwd_rms_norm_routed[1](
-                    self.ctx, bst.gemm_workspace, dot, bst.norm1_dx, dw, bst.dh, bst.dprod, bst.rstd,
-                    bst.dvcoef, bst.ones, dy, x, weight, sumsq, own, own, False, m, dm, self.eps,
-                )
-                self._add2(gradients[0], _fp(bst.norm1_dx), saved.p2, m * dm)
+            # S33-35, then S36
+            # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_NORM1_RESID (the fused residual arm) deleted 2026-11-15 by
+            # lane/expdel2-24-neural; code recoverable at d2c4643c6b.
+            # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_NORM1_RESID.patch
+            var own = _fp(bst.norm1_dx).unsafe_origin_cast[MutAnyOrigin]()
+            bwd_rms_norm_routed[1](
+                self.ctx, bst.gemm_workspace, dot, bst.norm1_dx, dw, bst.dh, bst.dprod, bst.rstd,
+                bst.dvcoef, bst.ones, dy, x, weight, sumsq, own, own, False, m, dm, self.eps,
+            )
+            self._add2(gradients[0], _fp(bst.norm1_dx), saved.p2, m * dm)
             # cards 33-36 (the add above writes none of 33-35)
             self._card(33, bst.norm1_dot, m)
             self._card(34, bst.dw_norm1, dm)
