@@ -155,9 +155,7 @@ SUBSTITUTIONS = (
     ("mamba/impl/modules/ssd_minimal.mojo",
      r"comptime IDN_SSD_OCCUPANCY = \([\s\S]*?\n\)",
      "comptime IDN_SSD_OCCUPANCY = False"),
-    ("mamba/impl/ops/selective_scan_interface.mojo",
-     r"comptime IDN_M1_STATE_WINDOW = \([\s\S]*?\n\)",
-     "comptime IDN_M1_STATE_WINDOW = False"),
+    # IDN_M1_STATE_WINDOW and its window arm were deleted by expdel2-28 (2026-11-15).
     ("mamba/impl/ops/mamba3_siso.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),
     ("autograd/kernels/mamba3.mojo",
