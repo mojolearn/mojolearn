@@ -2718,8 +2718,8 @@ struct DeviceOps(ClusterOps):
         mut steps_done: Int, tol: Float64, cum_w: List[Float64],
     ) raises -> Bool:
         # lane/apple-fast-cluster (2026-10-02), FAST on Apple only, ON by
-        # default (MINIBATCH_FAST_DEV; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1`
-        # turns it off); the driver (x_cluster/minibatch.mojo) asks under the same flag
+        # default (MINIBATCH_FAST_DEV); the driver (x_cluster/minibatch.mojo) asks
+        # under the same flag
         comptime if MINIBATCH_FAST_DEV:
             self._ph0()
             var took = minibatch_fast_steps(

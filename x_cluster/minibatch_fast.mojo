@@ -3,9 +3,8 @@
 """MiniBatchKMeans, FAST on Apple: the mini-batch steps resident on the
 device (lane/apple-fast-cluster, 2026-10-02). Switch: `MINIBATCH_FAST_DEV`
 below, taken by `x_cluster/minibatch.mojo` `minibatch_fit`: on by default
-in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it
-off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is harmless). No
-build reads the environment.
+in FAST on Apple (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is
+harmless). No build reads the environment.
 
 Cause: `minibatch_fit`'s step loop (x_cluster/minibatch.mojo, `for step in
 range(n_steps)`) gathers the batch on the host, uploads it (`ops.set`),
@@ -52,11 +51,9 @@ from checks.soft_f64 import sf64_from_int, sf64_lt, sf64_mul
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
 # n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
-# `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off.
-comptime MINIBATCH_FAST_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 336732d51d.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MINIBATCH_FAST_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # AFCL-G07: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Four Apple SIMD groups per block reduce the register/shared footprint and
 # increase independent assignment blocks. Keep the center chunk equal to

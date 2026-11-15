@@ -689,6 +689,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF`](#mojolearn_bisect_fast_zerocopy_off-old-path-deleted-2026-11-15) | Cluster (BisectingKMeans, FAST Apple) | removed (old path; FAST+Apple default KEPT) | 2026-11-15 | [MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch) |
 | [`MOJOLEARN_MBK_FAST_DEVSCAN_OFF`](#mojolearn_mbk_fast_devscan_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans NaN/inf scan, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-mbkdevscan) | 2026-11-15 | [MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF`](#mojolearn_x_cluster_fast_cls3_mbk_rowgrp_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans batch assignment, FAST Apple) | removed (old path; FAST+Apple default KEPT) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch) |
+| [`MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF`](#mojolearn_x_cluster_fast_minibatch_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans resident steps, FAST Apple) | removed (old path; FAST+Apple default KEPT 4b1311c12) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch) |
 
 ## Trees
 
@@ -5981,4 +5982,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `X_CLUSTER_FAST_CLS3_MBK_ROWGRP`, clus3-mbk-rowgrp-istella): M3 n=1, minibatch-kmeans istella 172 -> 148 ms (-14.0%), silhouette .1182 identical. No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `b5c9d4c9c7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch`, then delete the `MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MiniBatchKMeans from the device-resident mini-batch steps (`x_cluster/minibatch_fast.mojo` MINIBATCH_FAST_DEV, read in `x_cluster/minibatch.mojo`, `x_cluster/device_ops.mojo`, `x_cluster/minibatch_ptr.mojo`) to the generic per-step loop. Only the define read is deleted: the generic loop stays the path outside FAST+Apple and for the shapes the device steps refuse.
+- **Verdict**: KEPT 4b1311c12 (EXPERIMENTS.md `X_CLUSTER_FAST_MINIBATCH`, cluster-mb-istella): M3, minibatch-kmeans istella 388 -> 352 ms (-9.5%), silhouette .1167 -> .1182. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `336732d51d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch`, then delete the `MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).

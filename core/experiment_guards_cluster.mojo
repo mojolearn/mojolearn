@@ -106,6 +106,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_MBK_FAST_DEVSCAN_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): MBK_FAST_DEVSCAN_OFF (FAST+Apple rollback to the host NaN/inf scan of MiniBatchKMeans X) is gone; the device scan is the FAST+Apple path (istella 142.3 -> 83.5 ms, silhouette identical); restore: experiments/removed/MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF (FAST+Apple rollback to the thread-per-row MiniBatchKMeans assignment for k <= 16) is gone; the row-group kernel is the FAST+Apple path (istella 172 -> 148 ms, silhouette identical); restore: experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): X_CLUSTER_FAST_MINIBATCH_OFF (FAST+Apple rollback to the per-step MiniBatchKMeans loop) is gone; the device-resident steps are the FAST+Apple path (istella 388 -> 352 ms, KEPT 4b1311c12); restore: experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch"
     return True
 
 
