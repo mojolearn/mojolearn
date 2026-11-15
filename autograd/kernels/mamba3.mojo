@@ -289,9 +289,10 @@ def mamba3_s16_qkv_backward_kernel(
 #: each of them 64 times, once per p, from the same two operands: the
 #: same float); the two chains then run in the naive order (p outer, j /
 #: i inner) over staged values. SAME BITS: every fma has the same three
-#: operands in the same order. MOJOLEARN_MAMBA3_S16_QK_NAIVE=1 (a build
-#: define) keeps the naive kernel for the A/B and the digest gate.
-comptime M3_S16_QK_SHARED = not is_defined["MOJOLEARN_MAMBA3_S16_QK_NAIVE"]()
+#: operands in the same order. The host restatement runs the naive kernel.
+# TOMBSTONE: MOJOLEARN_MAMBA3_S16_QK_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 388a1c5306.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_S16_QK_NAIVE.patch; record in docs/TOMBSTONES.md.
+comptime M3_S16_QK_SHARED = True
 comptime M3_S16_QK_MAXQ = 64
 
 
