@@ -50,7 +50,9 @@ comptime AFT_G06 = False
 comptime AFT_G07 = False
 # G08: four independent cursor rows per leaf-update loop iteration.
 # No performance/quality evidence; same leaves, learning rate and row coverage.
-comptime AFT_G08 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G08"]()
+# TOMBSTONE: MOJOLEARN_AFT_G08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 0c740c97bb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G08.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G08 = False
 # G09: eight-row numerator preparation tiles for exact ordered CTR sums.
 # No performance/quality evidence; preserve segment signs and target predicates.
 comptime AFT_G09 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G09"]()
