@@ -1,0 +1,22 @@
+diff --git a/cluster/impl/detail/kmeans.mojo b/cluster/impl/detail/kmeans.mojo
+index c84469376b..f1dbfab37e 100644
+--- a/cluster/impl/detail/kmeans.mojo
++++ b/cluster/impl/detail/kmeans.mojo
+@@ -870,14 +870,14 @@ def _assign_to_candidates(
+ #: it too. Same argument as Apple IDENTICAL above (per-pair distance bits do
+ #: not depend on the launch's candidate set; strict `<` keeps the lowest
+ #: index), so no bit moves; the eight rounds plus step 7 stop paying
+-#: `n * |C so far| * d` each.
++#: `n * |C so far| * d` each. `-D MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF=1`
++#: reassigns in full there.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 38518c77d5.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_KMEANS_INCR_INIT = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
++    and not is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"]()
+ )
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
