@@ -38,8 +38,7 @@ RESTORED 2026-11-09 (lane r1-restore-measured-winners; AGENTS.md "A measured
 winner is never deleted on reasoning"): by default each conv block and the
 head are the hand classifier's tuned kernels as executor ops
 (OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR; autograd/cnn_block_op.mojo), captured
-by this same program; `-D MOJOLEARN_CNN_GENERIC_OPS` keeps lane x8's generic
-tape chain (the A/B's B arm). The loss and the optimizer stay the program's.
+by this same program. The loss and the optimizer stay the program's.
 
 Python reaches these through the x_sequence whole-model descriptor ABI
 (sequence/neural_model_dispatch.mojo CNN_FIT, CNN_PREDICT); no Python runs
@@ -253,8 +252,9 @@ def _forward[E: Exec & Movable & Deinitable](
     each block is ONE OPS_CNN_CONV_BLOCK (the hand classifier's fused conv +
     ReLU + max pool kernels and pinned GEMM plan) and the head is
     OPS_CNN_LINEAR (its pinned NT GEMM over the (k, flat) weight as stored),
-    autograd/cnn_block_op.mojo. `-D MOJOLEARN_CNN_GENERIC_OPS` captures lane
-    x8's generic tape chain below instead (the A/B's B arm)."""
+    autograd/cnn_block_op.mojo."""
+    # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm, EXP:2374 PENDING: lane x8's generic tape chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 27a9cc7339.
+    # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
     var none = List[Float32]()
     var h = x
     var nb = g.blocks()
