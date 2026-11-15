@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native user-composed graphs: independent gradient oracle, topology replay,
-physical optimizer residency, complete checkpoint/restart, failure behavior.
+"""Native user-composed graphs: topology replay, physical optimizer residency,
+complete checkpoint/restart with dropout, failure behavior. The analytic SGD
+step, the replica snapshot and the optimizer migration are native checks
+(checks/native_tests/training_distributed_program.mojo).
 
 Python here is an independent test/data controller. Product fit/run/save/load
 are single binding calls. Set MOJOLEARN_REQUIRE_DISTRIBUTED_PROGRAM=1 to fail
@@ -76,26 +78,6 @@ def _nonlinear(s, *, dropout=False):
     return s.capture([x], [s.matmul(h, w2)])
 
 
-@pytest.mark.parametrize("logical_shards", [1, 3])
-def test_independent_sgd_gradient_and_replica_snapshot(logical_shards):
-    # Analytic MSE: w=0, X=1, y=2 => gradient=-4; lr=1/8 => w=1/2.
-    x = np.ones((5, 1), np.float32)
-    y = np.full((5, 1), 2, np.float32)
-    with ops.Session(numeric_mode="identical") as s:
-        p, w = _linear(s)
-        o = s.optimizer("sgd", lr=0.125)
-        with p.distribute(_devices(), logical_shards=max(logical_shards, len(_devices())), optimizer=o) as d:
-            losses = d.fit(x, targets=y, epochs=1, batch_size=5, shuffle=False)
-            st = d.state()
-            np.testing.assert_array_equal(st["parameters"][0], [[0.5]])
-            np.testing.assert_array_equal(d.run(x), np.full((5, 1), 0.5, np.float32))
-            np.testing.assert_array_equal(losses, np.array([4], np.float32))
-            assert st["step"] == 1 and st["epoch"] == 1
-            # The independently owned source is never mutated by distributed fit.
-            np.testing.assert_array_equal(s.numpy(w), [[0]])
-            _emit("sgd_analytic", st)
-
-
 def test_adam_checkpoint_resume_includes_dropout_rng_schedule_and_uneven_batches(tmp_path):
     rng = np.random.default_rng(23)
     x = rng.normal(size=(17, 3)).astype(np.float32)
@@ -151,24 +133,6 @@ def test_physical_topology_replay_and_optimizer_range_witness(tmp_path):
         with s.load_distributed(path, devices=(0,)) as restored:
             _assert_same(actual, restored.state())
         _emit("physical_topology", actual)
-
-
-def test_optimizer_state_migrates_from_source():
-    x = np.ones((8, 1), np.float32)
-    y = np.full((8, 1), 2, np.float32)
-    with ops.Session(numeric_mode="identical") as s:
-        p, w = _linear(s)
-        o = s.optimizer("adam", lr=0.01)
-        p.fit(x, targets=y, optimizer=o, epochs=3, batch_size=4, shuffle=False)
-        before = s.numpy(w)
-        with p.distribute((0,), logical_shards=1, optimizer=o) as d:
-            st = d.state()
-            assert st["step"] == 6 and st["epoch"] == 3
-            np.testing.assert_array_equal(st["parameters"][0], before)
-            d.fit(x, targets=y, epochs=1, batch_size=4, shuffle=False)
-            actual = d.state()["parameters"][0]
-        p.fit(x, targets=y, optimizer=o, epochs=1, batch_size=4, shuffle=False)
-        np.testing.assert_array_equal(actual.view(np.uint32), s.numpy(w).view(np.uint32))
 
 
 def test_distributed_refusals_and_damaged_checkpoint(tmp_path):
