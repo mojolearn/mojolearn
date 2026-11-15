@@ -889,21 +889,8 @@ def frombytes(raw, dtype, shape):
 # --------------------------------------------------------------- scanning
 
 
-def shape_of(obj):
-    """The shape of an array-like WITHOUT converting it: `.shape` when the
-    object has one (ndarray, Array, memoryview), the nesting of a list or
-    tuple otherwise. Used only to raise an estimator's own message before
-    the converters here would raise their generic one."""
-    shape = getattr(obj, "shape", None)
-    if shape is not None:
-        return tuple(shape)
-    if isinstance(obj, (list, tuple)):
-        if obj and isinstance(obj[0], (list, tuple)):
-            return (len(obj), len(obj[0]))
-        return (len(obj),)
-    if hasattr(obj, "__len__"):
-        return (len(obj),)
-    return ()
+# TOMBSTONE: _buffer.shape_of (no product caller; the doors read shapes natively, the oracle copy is
+# tests/_legacy_neighbors_knn.py) deleted 2026-11-15 by lane py-buffer; code recoverable at 8579360a2e.
 
 
 def all_finite(arr):
@@ -930,12 +917,8 @@ def all_finite(arr):
 _NATIVE = {}
 _NATIVE_MISSING = set()
 
-def hotpath_enabled():
-    """Always True: the compiled helpers are the one route. The
-    `MOJOLEARN_HOTPATH=python` reference arm (lane/python-hotpath) is
-    deleted (cpu-gpu-cleanup c-core: an env switch picking a route). Kept
-    only so callers outside c-core still import it; they drop the call."""
-    return True
+# TOMBSTONE: _buffer.hotpath_enabled (always True, no caller) deleted 2026-11-15 by lane py-buffer;
+# code recoverable at 8579360a2e.
 
 
 def _native_optional(key):

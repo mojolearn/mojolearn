@@ -28,7 +28,7 @@ import os
 import struct
 
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
+from ._buffer import addr, addr_ro, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
@@ -61,18 +61,8 @@ _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "la
 _U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)
 
 
-def _dense(X):
-    """A scipy.sparse matrix densified (an exact copy: the implicit entries are
-    zeros), anything else unchanged. Every x_neighbors primitive is dense, so a
-    sparse input takes the same path, with the same bits, as its dense twin."""
-    if hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "tocsr"):
-        return X.toarray()
-    return X
-
-
-def _f32(X, name="X"):
-    a, _ = as_f32_c(_dense(X), ndim=2, name=name)
-    return a
+# TOMBSTONE: _expansion_neighbors._dense / _f32 (no caller; the neighbors doors admit X natively)
+# deleted 2026-11-15 by lane py-buffer; code recoverable at 8579360a2e.
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
@@ -83,14 +73,8 @@ def _accuracy(y_true, y_pred, sample_weight=None):
     return accuracy_fraction(y_true, y_pred, sample_weight)
 
 
-def _f32_1d(x, name):
-    a, _ = as_f32_c(x, ndim=1, name=name)
-    return a
-
-
-def _i32(x, name):
-    a, _ = as_i32_c(x, ndim=1, name=name)
-    return a
+# TOMBSTONE: _expansion_neighbors._f32_1d / _i32 (no caller) deleted 2026-11-15 by lane
+# py-buffer; code recoverable at 8579360a2e.
 
 
 def _f32_scalar(v):
@@ -226,17 +210,8 @@ class _XNeighbors(NumericModeMixin):
         self._op("knn_select", [(D, 0), (dist, 1), (idx, 1)], (n, m, k, 1 if exclude_self else 0))
         return dist, idx
 
-    def _take_rows(self, X, rows):
-        rows = _i32(rows, "rows")
-        out = _empty_out((len(rows), X.shape[1]), "<f4")
-        self._op("take_rows", [(X, 0), (rows, 0), (out, 1)], (len(rows), X.shape[1], X.shape[0]))
-        return out
-
-    def _take_cols(self, X, cols):
-        cols = _i32(cols, "cols")
-        out = _empty_out((X.shape[0], len(cols)), "<f4")
-        self._op("take_cols", [(X, 0), (cols, 0), (out, 1)], (X.shape[0], X.shape[1], len(cols)))
-        return out
+    # TOMBSTONE: _take_rows / _take_cols (no caller) deleted 2026-11-15 by lane py-buffer;
+    # code recoverable at 8579360a2e.
 
     def _knn_sq(self, Q, R, k, exclude_self):
         """(squared distances, indices) of the k nearest rows of R to each row

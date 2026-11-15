@@ -21,10 +21,17 @@
 #   LABELS_OP_UNIQUE_INVERSE   (y,)                       -> (classes, int32 codes)
 #   LABELS_OP_ARGMAX_ROWS      (scores,)                  -> int64 codes
 #   LABELS_OP_CLASS_INDEX      (classes, key)             -> labels
-#   ADMISSION_OP_CHECK_X       (X, est, shape, complex, scan) -> None (or the refusal)
 #   ADMISSION_OP_CHECK_Y       (y, est, flags, x_rows, y_rows) -> None (or the refusal)
-#   (operations 7-13: bindings/labels_admission_unpack.mojo, lane py-admission:
-#   the refusals and scans _labels and _sk_validate made in Python)
+#   ADMISSION_OP_DESCRIBE      (obj,)                     -> (container, shape, kind) codes or None
+#   ADMISSION_OP_X             (X, est, word)             -> (container, shape, kind) codes or None
+#                                                             (or the refusal)
+#   ADMISSION_OP_Y             (y, est, flags, x_rows)    -> None, or (flags, y_rows) for a
+#                                                             column vector (or the refusal)
+#   (operations 7-16: bindings/labels_admission_unpack.mojo, lanes py-admission
+#   and py-buffer: the refusals, scans and input descriptions _labels and
+#   _sk_validate made in Python; operation 12, the X refusals given a shape
+#   the shell read through `_buffer.Buf`, was folded into ADMISSION_OP_X by
+#   lane py-buffer 2026-11-15 and its code is retired)
 #
 # `kind` of ENCODE is LABELS_KIND_ORDER_RULE (0): the classes under the ORDER
 # RULE of python/mojolearn/_labels.py (Python label objects, sorted) and one
@@ -52,7 +59,8 @@ from bindings.classical_labels_door import (
 from bindings.labels_admission_unpack import (
     LABELS_BARE_EXCEPTION, LABELS_KEY_ERROR, LABELS_BARE_EXCEPTION_KIND, LABELS_KEY_ERROR_KIND,
     labels_prepare_targets_op, labels_encode_numeric_op, labels_unique_inverse_op, labels_argmax_op,
-    labels_class_index_op, labels_decode_any_op, admission_check_x_op, admission_check_y_op)
+    labels_class_index_op, labels_decode_any_op, admission_check_y_op,
+    admission_describe_op, admission_x_op, admission_y_op)
 
 comptime LABELS_OP_ENCODE = 0
 comptime LABELS_OP_UNION_ENCODE = 1
@@ -66,8 +74,11 @@ comptime LABELS_OP_ENCODE_NUMERIC = 8
 comptime LABELS_OP_UNIQUE_INVERSE = 9
 comptime LABELS_OP_ARGMAX_ROWS = 10
 comptime LABELS_OP_CLASS_INDEX = 11
-comptime ADMISSION_OP_CHECK_X = 12
+# 12 (ADMISSION_OP_CHECK_X) retired by lane py-buffer: ADMISSION_OP_X.
 comptime ADMISSION_OP_CHECK_Y = 13
+comptime ADMISSION_OP_DESCRIBE = 14
+comptime ADMISSION_OP_X = 15
+comptime ADMISSION_OP_Y = 16
 
 comptime LABELS_KIND_ORDER_RULE = 0
 
@@ -109,9 +120,13 @@ def _labels_operation(op: Int, args: PythonObject, context: PythonObject) raises
         return labels_argmax_op(args[0], context)
     if op == LABELS_OP_CLASS_INDEX:
         return labels_class_index_op(args[0], args[1], context)
-    if op == ADMISSION_OP_CHECK_X:
-        admission_check_x_op(args[0], String(args[1]), args[2], Bool(py=args[3]), Bool(py=args[4]), context)
-        return PythonObject(None)
+    if op == ADMISSION_OP_X:
+        # Hot path: every validated fit, predict, transform and score.
+        return admission_x_op(args[0], String(py=args[1]), Int(py=args[2]), context)
+    if op == ADMISSION_OP_Y:
+        return admission_y_op(args[0], String(py=args[1]), Int(py=args[2]), Int(py=args[3]), context)
+    if op == ADMISSION_OP_DESCRIBE:
+        return admission_describe_op(args[0], context)
     if op == ADMISSION_OP_CHECK_Y:
         admission_check_y_op(args[0], String(args[1]), Int(py=args[2]), Int(py=args[3]), Int(py=args[4]), context)
         return PythonObject(None)

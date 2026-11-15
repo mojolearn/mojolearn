@@ -3,7 +3,14 @@
 import numpy as np
 import pytest
 
-from mojolearn._arrays import as_f32_colmajor
+from mojolearn import _buffer
+
+
+def as_f32_colmajor(x, name):
+    """`(Array, flat, copied)`: the former `_arrays.as_f32_colmajor` shim
+    (deleted 2026-11-15 by lane py-buffer) over `_buffer.as_f32_colmajor`."""
+    a, copied = _buffer.as_f32_colmajor(x, name=name)
+    return a, a._flat(), copied
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])

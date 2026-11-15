@@ -37,48 +37,13 @@ The code map is a dict keyed by the label object, so encoding `y` is one
 dict lookup per row: O(rows) Python, the label-encoding loop the contract
 explicitly permits (NUMPY_FREE_CONTRACT.md, Rules). Decoding a prediction
 is the same loop in the other direction.
-
-`flat_view` is the ONE place a host-side scan takes a memoryview over an
-`Array`'s STORAGE (zero-copy, storage order, through the address the
-binding itself would read). It is here rather than in `_buffer` because it
-exists for the label routines and the input validators that share this
-module, and because it depends only on the contract's `addr_ro`.
 """
 
-import ctypes
-
 from ._array import Array
-from ._buffer import addr_ro
 
-_CTYPES = {
-    "f": ctypes.c_float,
-    "d": ctypes.c_double,
-    "i": ctypes.c_int32,
-    "I": ctypes.c_uint32,
-    "q": ctypes.c_int64,
-    "B": ctypes.c_uint8,
-}
-
-_FORMAT_OF_DTYPE = {
-    "<f4": "f", "<f8": "d", "<i4": "i", "<u4": "I", "<i8": "q", "<u1": "B",
-}
-
-
-def flat_view(arr, fmt=None):
-    """A writable 1-D memoryview over `arr`'s STORAGE, in storage order.
-
-    For a C-order `Array` that is row-major; for the F-order `Array`
-    `as_f32_colmajor` returns it is column-major, so column `f` of an
-    `[n_rows, n_cols]` matrix is the slice `[f * n_rows:(f + 1) * n_rows]`.
-    `fmt` is the struct format ('f', 'd', 'i', 'I', 'q', 'B'); omitted,
-    it follows `arr.dtype`. The caller MUST keep `arr` alive while the
-    view is used: nothing here owns the memory.
-    """
-    if fmt is None:
-        fmt = _FORMAT_OF_DTYPE[arr.dtype]
-    n = int(arr.size)
-    buf = (_CTYPES[fmt] * n).from_address(addr_ro(arr, name="host view"))
-    return memoryview(buf).cast("B").cast(fmt)
+# TOMBSTONE: _labels.flat_view / _CTYPES / _FORMAT_OF_DTYPE (a ctypes memoryview over an Array's
+# storage; no product caller since the label scans moved native) deleted 2026-11-15 by lane py-buffer;
+# code recoverable at 8579360a2e.
 
 
 def is_bool(value):

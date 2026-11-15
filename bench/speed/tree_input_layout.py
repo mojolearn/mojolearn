@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 
-from mojolearn._arrays import as_f32_colmajor
+from mojolearn._buffer import as_f32_colmajor
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
     for dtype in (np.float32, np.float64):
         source = np.random.default_rng(7).random((args.rows, args.cols), dtype=dtype)
         funcs = (lambda: np.asfortranarray(source, dtype=np.float32),
-                 lambda: as_f32_colmajor(source, "X")[0])
+                 lambda: as_f32_colmajor(source, name="X")[0])
         timings = [[], []]
         for round_id in range(args.rounds + 1):
             for arm in ((0, 1) if round_id % 2 == 0 else (1, 0)):

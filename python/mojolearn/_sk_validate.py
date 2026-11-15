@@ -99,14 +99,19 @@ _NONFINITE = re.compile(r"NaN|[Ii]nfinit|non-?finite|not finite|requires finite|
 #: A device fault is never an input refusal, whatever the input looked like.
 _DEVICE_FAULT = re.compile(r"device_context|CUDA|HIP|hipError|Metal|MTL")
 
-_RESHAPE_HINT = ("Reshape your data either using array.reshape(-1, 1) if your data has a "
-                 "single feature or array.reshape(1, -1) if it contains a single sample.")
-
 _MISSING = object()
 
-#: `bindings/labels_native_entry_pack.mojo` admission operations (lane py-admission).
-_OP_CHECK_X = 12
+#: `bindings/labels_native_entry_pack.mojo` admission operations (lanes py-admission
+#: and py-buffer). ADMISSION_OP_X describes X and makes every refusal in one call;
+#: ADMISSION_OP_Y does the same for y.
 _OP_CHECK_Y = 13
+_OP_DESCRIBE = 14
+_OP_X = 15
+_OP_Y = 16
+#: ADMISSION_OP_X words (bindings/labels_admission_unpack.mojo ADMISSION_X_*).
+_X_SPARSE_OK = 1
+_X_TABULAR = 2
+_X_SCAN = 4
 
 
 def _admission():
@@ -160,6 +165,39 @@ def input_tag_overrides(cls):
     if _names(cls) & _ACCEPTS_SPARSE:
         return {"sparse": True}
     return {}
+
+
+#: class -> (its __mro__ tuple, the fit word, the call word, has a NaN hook):
+#: the ADMISSION_OP_X words of `cls`, from tags that are class constants, read
+#: once per class (lane py-buffer). Before, each validated call read up to
+#: three input tags, the NaN hook and the scan sets.
+_X_WORDS_CACHE = weakref.WeakKeyDictionary()
+
+
+def _x_words(cls):
+    mro = cls.__mro__
+    try:
+        cached = _X_WORDS_CACHE.get(cls)
+    except TypeError:
+        cached = None
+    if cached is not None and cached[0] is mro:
+        return cached
+    names = _names(cls)
+    base = 0
+    if _input_tag(cls, "sparse", False):
+        base |= _X_SPARSE_OK
+    if _input_tag(cls, "two_d_array", True) and not _input_tag(cls, "one_d_array", False):
+        base |= _X_TABULAR
+    nan_ok = _input_tag(cls, "allow_nan", False)
+    fit_scan = not nan_ok and bool(names & _SCANS_X_HERE or names & _SCANS_X_AT_FIT)
+    call_scan = fit_scan or (not nan_ok and bool(names & _SCANS_X_AFTER_FIT))
+    hook = getattr(cls, "_mojolearn_allows_nan", None) is not None
+    words = (mro, base | (_X_SCAN if fit_scan else 0), base | (_X_SCAN if call_scan else 0), hook)
+    try:
+        _X_WORDS_CACHE[cls] = words
+    except TypeError:
+        pass
+    return words
 
 
 def _input_tag(cls, name, default):
@@ -237,35 +275,14 @@ def _put(args, kwargs, index, name, value):
 # ------------------------------------------------------------- inspection
 
 
-def _is_sparse(obj):
-    return hasattr(obj, "tocsr") and hasattr(obj, "nnz") and hasattr(obj, "shape")
+# TOMBSTONE: _sk_validate._is_sparse / _format_kind / _scalar_kind (describe's Python
+# probes) deleted 2026-11-15 by lane py-buffer: bindings/labels_admission_unpack.mojo
+# admission_describe reads them natively; code recoverable at 8579360a2e.
 
 
-_INT_LETTERS = frozenset("bBhHiIlLqQnN?")
-
-
-def _format_kind(fmt):
-    """'float', 'int', 'complex' or None for a PEP 3118 format or an Array
-    dtype string."""
-    f = fmt.lstrip("@=<>!|")
-    if f[:1] == "Z":
-        return "complex"
-    if f in ("f", "d", "e", "g", "f2", "f4", "f8"):
-        return "float"
-    if (len(f) == 1 and f in _INT_LETTERS) or f[:1] in ("i", "u", "b") and f[1:].isdigit():
-        return "int"
-    return None
-
-
-def _scalar_kind(value):
-    import numbers
-    if isinstance(value, bool) or isinstance(value, numbers.Integral):
-        return "int"
-    if isinstance(value, numbers.Real):
-        return "float"
-    if isinstance(value, numbers.Complex):
-        return "complex"
-    return None
+#: ADMISSION_OP_DESCRIBE codes -> describe's names.
+_CONTAINERS = (None, "sparse", "buffer", "list", "frame")
+_KINDS = (None, "float", "int", "complex")
 
 
 def describe(obj):
@@ -273,33 +290,15 @@ def describe(obj):
     export, its nesting or its `shape` attribute, never from its values:
     container is 'sparse', 'buffer', 'list' or 'frame'; value_kind is
     'float', 'int', 'complex' or None (strings, objects, records, or not
-    known). None for None and for anything without a shape."""
+    known). None for None and for anything without a shape. One native call
+    (bindings/labels_admission_unpack.mojo `admission_describe`)."""
     if obj is None:
         return None
-    if _is_sparse(obj):
-        return "sparse", tuple(obj.shape), None
-    if isinstance(obj, (list, tuple)):
-        shape = []
-        item = obj
-        while isinstance(item, (list, tuple)):  # glue: walks the nesting depth through first elements (rank-sized)
-            shape.append(len(item))
-            if not item:
-                return "list", tuple(shape), "int"
-            item = item[0]
-        return "list", tuple(shape), _scalar_kind(item)
-    if isinstance(obj, (str, bytes, dict)):
+    entry, context = _admission()
+    info = entry(_OP_DESCRIBE, (obj,), context)
+    if info is None:
         return None
-    from ._buffer import Buf, _device_array_kind
-    if _device_array_kind(obj) is None:
-        try:
-            with Buf(obj, name="X") as b:
-                return "buffer", tuple(b.shape) if b.ndim else (), _format_kind(b.format)
-        except (TypeError, ValueError, BufferError):
-            pass
-    shape = getattr(obj, "shape", None)
-    if isinstance(shape, tuple) and all(isinstance(s, int) for s in shape):  # glue: the shape tuple (rank-sized)
-        return "frame", tuple(shape), None
-    return None
+    return _CONTAINERS[info[0]], info[1], _KINDS[info[2]]
 
 
 def _column_names(X):
@@ -330,49 +329,31 @@ def _precomputed(est):
     return any(getattr(est, k, None) == "precomputed" for k in keys)  # glue: four parameter names
 
 
-def _scans_x(cls, fitting):
-    """True when the X finiteness scan runs here for this call."""
-    names = _names(cls)
-    if names & _SCANS_X_HERE or names & _SCANS_X_AT_FIT:
-        return True
-    return not fitting and bool(names & _SCANS_X_AFTER_FIT)
+# TOMBSTONE: _sk_validate._scans_x deleted 2026-11-15 by lane py-buffer: the scan sets are
+# folded into the per-class words of `_x_words`; code recoverable at 8579360a2e.
 
 
 def _check_X(est, X, fitting=True):
     """Refuse X as scikit-learn's `validate_data` does; return its
     description (or None when X is not tabular numeric input)."""
-    info = describe(X)
-    if info is None:
-        return None
-    container, shape, kind = info
+    # Hot path (AGENTS.md "No refactor adds cost on a hot path"): ONE native
+    # call per public call (fit, predict, transform, score, ...). It reads X's
+    # export once (shape and format), refuses sparse, complex, 0-D/1-D and
+    # empty X in scikit-learn's words, and runs the finiteness scan the class
+    # asks for (bindings/labels_admission_unpack.mojo `admission_x_op`). The
+    # class's tags are one cached word; only an estimator whose NaN handling
+    # is a parameter asks its hook. Lane py-buffer removed the Python
+    # description (`_buffer.Buf`: a ctypes buffer export, Python shape and
+    # stride tuples, two device probes) that ran before the native call.
+    # The description's container and kind are small-int codes; callers read
+    # only the shape (`info[1]`).
     cls = type(est)
-    name = cls.__name__
-    if container == "sparse":
-        if not _input_tag(cls, "sparse", False):
-            raise TypeError(
-                "Sparse data was passed for X, but dense data is required. Use "
-                f"'.toarray()' to convert to a dense numpy array. ({name} takes dense X only.)")
-        return info
-    complex_x = kind == "complex"
-    if not complex_x:
-        if container != "frame" and kind is None:
-            return None  # strings, objects, records: the estimator's own input step
-        if not _input_tag(cls, "two_d_array", True) or _input_tag(cls, "one_d_array", False):
-            return None
-    scan = (container in ("buffer", "list") and kind == "float"
-            and not _input_tag(cls, "allow_nan", False)
-            and not _allows_nan_now(est)
-            and _scans_x(cls, fitting))
-    # The refusals (complex, rank, no samples, no features) and the finiteness
-    # scan, in scikit-learn's words: one native call
-    # (bindings/labels_admission_unpack.mojo `admission_check_x_op`).
-    # Hot path (AGENTS.md "No refactor adds cost on a hot path"): this is ONE
-    # native call per public call (fit, predict, transform, score, ...) and
-    # nothing per row; the scan inside it is the one host finiteness pass
-    # the Python step already made (`_all_finite`), split across the cores.
+    words = _x_words(cls)
+    word = words[1] if fitting else words[2]
+    if words[3] and word & _X_SCAN and _allows_nan_now(est):
+        word &= ~_X_SCAN
     entry, context = _admission()
-    entry(_OP_CHECK_X, (X, name, shape, complex_x, scan), context)
-    return info
+    return entry(_OP_X, (X, cls.__name__, word), context)
 
 
 def _check_width(est, X, info):
@@ -408,8 +389,7 @@ def _check_y(est, y, x_rows=-1):
     """Refuse or reshape y as scikit-learn's `validate_data(..., y)` does,
     and refuse an X and y of different lengths (`check_consistent_length`,
     `x_rows` the rows of X or -1); return the y to fit on."""
-    from ._native_labels_bridge import (
-        ADMISSION_Y_COMPLEX, ADMISSION_Y_SCAN, ADMISSION_Y_CLASSIFIER, ADMISSION_Y_MISSING)
+    from ._native_labels_bridge import ADMISSION_Y_CLASSIFIER, ADMISSION_Y_MISSING
     cls = type(est)
     name = cls.__name__
     kind = _kind(est)
@@ -418,31 +398,24 @@ def _check_y(est, y, x_rows=-1):
         if _target_tag(cls, "required", kind in ("classifier", "regressor")):
             entry(_OP_CHECK_Y, (None, name, ADMISSION_Y_MISSING, -1, -1), context)
         return y
-    info = describe(y)
-    if info is None:
+    # Hot path: ONE native call per fit (bindings/labels_admission_unpack.mojo
+    # `admission_y_op`): y's description, its refusals (complex, NaN or
+    # infinity, a continuous y for a classifier) and the lengths, in
+    # scikit-learn's words. Lane py-buffer removed the `_buffer.Buf`
+    # description that ran before it.
+    column = entry(_OP_Y, (y, name, ADMISSION_Y_CLASSIFIER if kind == "classifier" else 0, x_rows),
+                   context)
+    if column is None:
         return y
-    container, shape, vkind = info
-    y_rows = shape[0] if shape else -1
-    if container == "sparse":
-        entry(_OP_CHECK_Y, (y, name, 0, x_rows, y_rows), context)
-        return y
-    if vkind == "complex":
-        entry(_OP_CHECK_Y, (y, name, ADMISSION_Y_COMPLEX, x_rows, y_rows), context)
-    if (len(shape) == 2 and shape[1] == 1 and container != "list"
-            and not _target_tag(cls, "multi_output", False, est) and hasattr(y, "reshape")):
+    # A column vector (n, 1) that is not a list: scikit-learn's column_or_1d
+    # warns and ravels it before the value checks.
+    flags, y_rows = column
+    if not _target_tag(cls, "multi_output", False, est) and hasattr(y, "reshape"):
         warnings.warn(
             "A column-vector y was passed when a 1d array was expected. Please change "
             "the shape of y to (n_samples, ), for example using ravel().",
             _conversion_warning(), stacklevel=4)
         y = y.reshape(-1)
-    # NaN or infinity in a float y, a continuous y for a classifier and the
-    # lengths, in scikit-learn's words: one native call
-    # (bindings/labels_admission_unpack.mojo `admission_check_y_op`).
-    # Hot path: ONE native call per fit and nothing per row (the y scans the
-    # Python step already made, plus the lengths compare).
-    flags = ADMISSION_Y_SCAN if container in ("buffer", "list") and vkind == "float" else 0
-    if kind == "classifier":
-        flags |= ADMISSION_Y_CLASSIFIER
     entry(_OP_CHECK_Y, (y, name, flags, x_rows, y_rows), context)
     return y
 

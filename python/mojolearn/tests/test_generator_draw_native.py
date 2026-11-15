@@ -15,6 +15,16 @@ from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
 
 
+def _c32(a, name, where):
+    """Frozen copy of the former `_training_impl._c32` (deleted from the
+    package 2026-11-15 by lane py-buffer): a float32 input as a float32 Array."""
+    from mojolearn._buffer import as_f32_c
+    from mojolearn._bufcheck import is_native_f32, probe
+    if not is_native_f32(probe(a).format):
+        raise TypeError('mojolearn.%s: %s must be float32' % (where, name))
+    return as_f32_c(a, ndim=None, name=name)[0]
+
+
 class LegacyDraws:
     def __init__(self, seed=7, counter=0, mode=None):
         self.seed, self.counter, self.numeric_mode = seed, counter, mode
@@ -58,7 +68,7 @@ class LegacyDraws:
         p = float(training._round_f32(p))
         if not 0 <= p < 1:
             raise ValueError('p must be in [0, 1)')
-        x = training._c32(x, 'x', 'Generator.dropout')
+        x = _c32(x, 'x', 'Generator.dropout')
         scale = float(training._round_f32(1/(1-p)))
         stream = self.next() if stream is None else int(stream)
         key = dict(seed=self.seed, stream=stream, p=p, scale=scale, offset=int(offset))
@@ -67,7 +77,7 @@ class LegacyDraws:
         return y.reshape(x.shape), key
 
     def dropout_backward(self, dy, key):
-        dy = training._c32(dy, 'dy', 'Generator.dropout_backward')
+        dy = _c32(dy, 'dy', 'Generator.dropout_backward')
         dx = training._rng_call(training._load(self.numeric_mode), 3, dy.size,
                                key['offset'], key['seed'], key['stream'], key['p'], key['scale'], dy.reshape(-1))
         return dx.reshape(dy.shape)

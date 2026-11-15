@@ -237,7 +237,7 @@ def test_public_embedding_does_not_reenter_python_preparation(monkeypatch, opera
     def hook(*args, **kwargs): calls.append(args); raise AssertionError('old preparation entered')
     source, ids = np.ones((4, 3), dtype='f4'), [2, 0, 2, 1]
     expected = reference(operation, source, ids)
-    for name in ('_c32', '_load', 'as_i32_c'):
+    for name in ('_load',):
         monkeypatch.setattr(T, name, hook)
     args = (source, ids, 4) if operation == 'embedding_backward' else (source, ids)
     assert_output(audit_native_call(getattr(T, operation), *args, numeric_mode='identical'), expected)

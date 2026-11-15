@@ -42,7 +42,6 @@ import os
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
 from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT, sklearn_tags as _sklearn_tags
