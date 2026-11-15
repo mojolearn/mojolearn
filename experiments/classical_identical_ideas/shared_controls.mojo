@@ -115,7 +115,9 @@ comptime C12_SPARSE_COUNTS = False
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch; record in docs/TOMBSTONES.md.
 # C08 independent grouped one-hot emission; immutable dictionary is unchanged.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime C08_GROUPED_OUTPUT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 9a0b339815.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch
+comptime C08_GROUPED_OUTPUT = False
 
 # Independent C02 linear sums and C56 LDA input reuse, default OFF.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.

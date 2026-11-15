@@ -75,6 +75,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C10_RANK_REUSE"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C10_RANK_REUSE (Metrics (rank reuse across metrics, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at cf7f3199b2; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C12_SPARSE_COUNTS (Metrics (sparse confusion counts, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 9f2212b4b1; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C08_GROUPED_OUTPUT (Prep (grouped one-hot emission, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 9a0b339815; see docs/TOMBSTONES.md"
     return True
 
 
