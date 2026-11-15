@@ -938,7 +938,9 @@ def gpc_ovr_combine_binding(
 # GPC, EVERY CLASS IN ONE CALL (lane fam2-kernel-gp, 2026-10-04;
 # gaussian_process/gpc_ovr.mojo). NEW entries: `gpc_fit`, `gpc_predict` and
 # `gpc_ovr_combine` above are unchanged. `gp_idn_caps` tells the Python glue
-# whether to take them (`-D MOJOLEARN_IDN_GPC_OVR_OFF` answers 0).
+# whether to take them (FAST builds answer 0).
+# TOMBSTONE: MOJOLEARN_IDN_GPC_OVR_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 5ebe54b4f8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.expdel2-01-base.patch
 # ===========================================================================
 
 
