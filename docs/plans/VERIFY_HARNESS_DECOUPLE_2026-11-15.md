@@ -4,8 +4,8 @@ Lane `verify-harness-decouple`. Scope: `tools/identity_break.py` (byte-copied in
 `_identity_break.py`), `tools/identity_lanes/**` and `tools/verify_coverage_audit.py`. Source of the site list:
 `docs/plans/VERIFY_COVERAGE_AUDIT_2026-11-15.md` section 4 and its `coupling_product.tsv` (85 rows under `tools/`).
 
-The audit's scanner (`coupling_scan.py` then `coupling_refine.py`), rerun over this branch, reports **44** sites under
-`tools/` where it reported 85: 41 removed. Every remaining site is listed below with its reason. Scan output:
+The audit's scanner (`coupling_scan.py` then `coupling_refine.py`), rerun over this branch, reports **45** sites under
+`tools/` where it reported 85: 40 removed. Every remaining site is listed below with its reason. Scan output:
 `~/mojolearn-evidence/briefs-20261115/verify-harness-decouple/scan/coupling_product.tsv`.
 
 ## What replaced each private read
@@ -16,7 +16,7 @@ The audit's scanner (`coupling_scan.py` then `coupling_refine.py`), rerun over t
 | `_portable_math` in the low-bit oracle (`inf`, `isinf`, `copysign`) | IEEE comparisons in the harness (`_LB_INF`, `_lb_isinf`, `-0.0 if v < 0 else 0.0` for a flushed subnormal). Same values. |
 | `_portable_math.fsum`/`sqrt` (x-ann-tsne-pca scaled start) | exact `fractions.Fraction` sums rounded once (what fsum returns) and NumPy's IEEE `sqrt`. Same bits. |
 | `_portable_math.exp` (GLM positive targets, `identity_lanes/linear.py`) | `decimal` software exp at 40 digits, rounded to binary64 then f32. See "Digest inputs". |
-| `_forest_host.host_model`, `binary_path`, `host._binding` / `est._binding` (3 guards) | `mojolearn.host_model` and `_require_named_forest_binding(ml)`, which compares `runtime_report()["bindings"]["_mojolearn_forest_host"]["path"]` (when `loaded`) with `MOJOLEARN_FOREST_HOST_BINARY`. |
+| `_forest_host.host_model`, `binary_path`, `host._binding` / `est._binding` (3 guards) | `mojolearn.host_model` and one helper `_require_named_forest_binding(ml)`: the LOADED path is `runtime_report()["bindings"]["_mojolearn_forest_host"]["path"]` (when `loaded`), compared, as before, with `_forest_host.binary_path()` (the variable, else the install's default binding), set or unset. The expected path stays a private read (one site): see needs product entry. |
 | `m._y_train_mean`, `m._y_train_std` (gp-normalize-y) | the public saved file: `reals[1:3]` of `m.save(...)` (`_saved_fields`), the same binary64 floats. |
 | `m.kernel_._free_values()` (gp optimizer lanes) | the saved kernel table `params` and `ls` (every node, binary64). See "Digest inputs". |
 | `c._gamma`, `r._gamma`, `f._params[0]` (x-neighbors gamma='scale') | saved `hyper` arrays: SVC `[3]`, SVR `[4]`, RBFSampler `[0]`. Same floats. |
@@ -29,7 +29,7 @@ The audit's scanner (`coupling_scan.py` then `coupling_refine.py`), rerun over t
 | `blk._bns()` (cnn basic block) | the public `bn1`, `bn2`, `downsample[1]`, in `_bns`'s order. |
 | `Tokenizer._from_json`, `Tokenizer._from_spelled` (hf-causal-lm-text) | `Tokenizer.from_pretrained(<tokenizer.json>)` and `from_pretrained(<its directory>)`. The fingerprint part does not read the source path (`tokenizer_vocab_fingerprint`). |
 
-## Remaining sites (44) and why
+## Remaining sites (45) and why
 
 **Verify fixtures that live in the product package (20).** `_causal_lm_fixtures` (`family_fixture`, `_llama_config`,
 `_write_checkpoint`, `write_safetensors`) at identity_break 6495-6872 and coverage 344-1133; `_tokenizer_synthetic`
@@ -38,12 +38,13 @@ product. Lane `verify-fixture-home` moves them to `_verify_fixtures_*.py`; after
 verify-internal. Integrator: `_synthetic_bpe` (identity_break, one new `from mojolearn._tokenizer_synthetic import
 vocabulary`) was added on this branch, so it must be renamed with the others when that lane merges.
 
-**Needs product entry (17).** No public read exists; the site is left as it is.
+**Needs product entry (18).** No public read exists; the site is left as it is.
 
 | site | value needed |
 |---|---|
 | identity_break `host_record` 1302, 1337 (`_backend.host_families_built`, `host_module_path`, `load_host_module`, `_HOST_MODULES`) | `runtime_report()` fields: per host family `{column, detected_column, sabotage}` (each the string/bool the binding's `<prefix>_column()`, `_detected_column()`, `_sabotage()` returns) and `host_routes` (the `_HOST_MODULES` routing table as a dict). `bindings[name].path` already covers the file digest. |
 | identity_break 6998, 6999 `ms._NATIVE(None, "family_msel_default_folds", ...)`, `ms._NATIVE_CONTEXT` (cross-val-folds) | a public route to cross_val_score's default folds for an integer cv, e.g. `model_selection.default_folds(y, cv, *, classifier)`. The public `check_cv(...).split` is NOT a replacement: it reaches `msel_stratified_split`, which does not apply `msel_sabotage()` (only `msel_default_folds` does, bindings/msel_split_door.mojo:512), so the msel sabotage arm could no longer move the cell; `tools/test_fold_lane_applicability.py` also holds the lane to this operation. |
+| identity_break `_require_named_forest_binding` `_forest_host.binary_path()` | `runtime_report()["bindings"][name]["expected_path"]`: the file the process loads or would load, `_backend.door_host_binary_path(name)` (the `MOJOLEARN_<PREFIX>_BINARY` override, else the install's host binding as `host_module_path` resolves it). The report as specified carries only the loaded `path`, so the old private read is kept at this one site rather than a weaker check. |
 | identity_break 2754 `m2._y_cols` (knn-clf) | KNeighborsClassifier: the fitted label columns, int32 `(n_outputs, n_samples)`, e.g. `y_fit_`. |
 | identity_break 5839 `m._optimizer_runs` (gp optimizer lanes) | GaussianProcessRegressor: per optimizer run `(iterations, evaluations, ..., log marginal likelihood)`, e.g. `optimizer_runs_`. |
 | cluster 43 `m._tree_nodes` | BisectingKMeans: the bisecting tree node table, e.g. `tree_nodes_` (or in `save`). |
@@ -63,9 +64,11 @@ product (the scanner's "defined in both" is a name clash).
 
 ## Digest inputs
 
-- `x-glm-*` lanes (`identity_lanes/linear.py` positive targets): decimal exp replaces the product polynomial. Both are
-  within a binary64 ulp of e^x on [-2, 2], so the rounded f32 targets are expected to be the same bytes; if any
-  differs, bits of the verify record change for those lanes (the fixture is the same on every column).
+- `x-glm-poisson`, `x-glm-gamma`, `x-glm-tweedie`, `x-glm-poisson-sw` (`identity_lanes/linear.py`
+  `_linear_pos_target`): decimal exp replaces the product polynomial. Equality of the f32 targets cannot be shown from
+  the arithmetic: the polynomial is not correctly rounded, so for an input whose e^x lies within its error of an f32
+  rounding midpoint the two can round differently. **Treat these four lanes' digests as changed and re-admit them.**
+  The fixture is the same on every column, so cross-vendor agreement is unaffected.
 - gp optimizer lanes (`gp-optimize*`): the `params` part now hashes the saved kernel table (`params`, `ls`, every
   node) instead of the free-entry list: **bits of the verify record change** for that part (the reference must be
   re-admitted at the release verification). It covers strictly more values.

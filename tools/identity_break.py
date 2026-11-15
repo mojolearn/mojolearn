@@ -11077,13 +11077,18 @@ FOREST_HOST_BINDING = "_mojolearn_forest_host"
 def _require_named_forest_binding(ml):
     """Refuse when the loaded forest host binding is not the file
     MOJOLEARN_FOREST_HOST_BINARY names (a sabotage build's binary must be the
-    one that predicts). Read from the public runtime report's binding table,
-    not from the model object's private `_binding` or `_forest_host`'s
-    `binary_path`. Without the variable nothing was asked for and nothing is
-    compared; a binding not loaded yet has answered nothing."""
-    want = os.environ.get("MOJOLEARN_FOREST_HOST_BINARY", "").strip()
-    if not want:
-        return
+    one that predicts), and, when the variable is unset, when it is not this
+    install's own forest host binding (the old check, unchanged in scope).
+    The LOADED path comes from the public runtime report's binding table, not
+    the model object's private `_binding`. The EXPECTED path is still the
+    private `_forest_host.binary_path()` (the variable, else the install's
+    binding as `_backend.host_module_path` resolves it): the report as
+    specified carries only the loaded path, so this one read stays private
+    until it gains `bindings[name]["expected_path"]`
+    (docs/plans/VERIFY_HARNESS_DECOUPLE_2026-11-15.md, needs product entry).
+    A binding not loaded yet has answered nothing."""
+    from mojolearn._forest_host import binary_path
+    want = binary_path()
     entry = (ml.runtime_report().get("bindings") or {}).get(FOREST_HOST_BINDING) or {}
     bound = entry.get("path")
     if entry.get("loaded") and bound and os.path.realpath(bound) != os.path.realpath(want):
