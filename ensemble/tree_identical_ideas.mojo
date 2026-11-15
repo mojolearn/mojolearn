@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Folded constants of the deleted 2026-10-06 tree source experiments.
+"""Tombstones of the deleted 2026-10-06 tree source experiments.
 
-Every switch here was deleted on 2026-11-15 (expdel2-39-trees); each name
-stays as its default constant so importers fold their dead arms.
+Every switch here was deleted on 2026-11-15 (expdel2-39-trees) and the
+sweep of the same day folded every importer, so the module holds no code.
 """
 
 # TOMBSTONE: MOJOLEARN_TREES_T01_ROWS (removed) deleted 2026-10-07 by e5ad4d891; code recoverable at e5ad4d891^.
@@ -76,8 +76,9 @@ stays as its default constant so importers fold their dead arms.
 # and the ObjectiveLike.LabelMoment method removed.)
 # TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
-comptime T15 = False
+# (Sweep 2026-11-15: T15 removed; no reader.)
 # TOMBSTONE: MOJOLEARN_TREES_C48 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48.patch
-comptime C48 = False
+# (Sweep 2026-11-15: C48 removed; RF and ET readers folded, publish_histogram_child_counts_kernel and the
+# partition_scatter_kernel FUSED_OFFSETS parameter removed.)
 

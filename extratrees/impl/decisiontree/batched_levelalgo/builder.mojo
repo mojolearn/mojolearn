@@ -4,7 +4,6 @@
 
 # TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
-from ensemble.tree_identical_ideas import C48
 from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes
@@ -6164,26 +6163,25 @@ def _et_enqueue_partition(
         grid_dim=(n_blocks, 1, 1),
         block_dim=(TPB, 1, 1),
     )
-    comptime if not C48:
-        ctx.enqueue_function[partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]](
-            ws.d_blk_off.unsafe_ptr(),
-            ws.d_blk_left.unsafe_ptr(),
-            ws.d_blk_base.unsafe_ptr(),
-            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            splits,
-            params.min_impurity_decrease,
-            params.min_samples_leaf,
-            PART_MB_SAB_NONE,
-            mismatch,
-            grid_dim=(n_part, 1, 1),
-            block_dim=(TPB, 1, 1),
-        )
+    ctx.enqueue_function[partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]](
+        ws.d_blk_off.unsafe_ptr(),
+        ws.d_blk_left.unsafe_ptr(),
+        ws.d_blk_base.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        splits,
+        params.min_impurity_decrease,
+        params.min_samples_leaf,
+        PART_MB_SAB_NONE,
+        mismatch,
+        grid_dim=(n_part, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
     ctx.enqueue_function[
-        partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS, C48]
+        partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS]
     ](
         ws.d_row_alt.unsafe_ptr(),
         d_row_ids.unsafe_ptr(),
-        ws.d_blk_left.unsafe_ptr() if C48 else ws.d_blk_off.unsafe_ptr(),
+        ws.d_blk_off.unsafe_ptr(),
         dataset.d_data.unsafe_ptr(),
         ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
         ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),

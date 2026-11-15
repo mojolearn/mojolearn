@@ -379,7 +379,6 @@ which already priced the width for the reduction this scratch feeds.
 """
 
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import C48
 from max.gpu import (
     WARP_SIZE,
     block_dim,
@@ -1777,52 +1776,46 @@ def launch_node_split_kernel[
     if n_blocks_dimx == 0:
         return
 
-    comptime if C48 and sabotage == 0:
-        ctx.enqueue_function[publish_histogram_child_counts_kernel[dtype]](
-            splits.unsafe_origin_cast[MutAnyOrigin](), Int32(n_work_items),
-            grid_dim=max(1,ceildiv(n_work_items,128)), block_dim=128,
-        )
-    else:
-        # `:155-160` -- `constexpr int reset_tpb = 128;`
-        comptime RESET_TPB = 128
-        var reset_grid = ceildiv(n_work_items, RESET_TPB)
-        comptime k_reset = reset_local_left_counts_kernel[dtype]
-        log_launch_ctx(ctx, "nodesplit_reset")
-        ctx.enqueue_function[k_reset](
-            splits.unsafe_origin_cast[MutAnyOrigin](),
-            scratch.local_nleft.unsafe_ptr(),
-            Int32(n_work_items),
-            grid_dim=reset_grid if reset_grid > 0 else 1,
-            block_dim=RESET_TPB,
-        )
+    # `:155-160` -- `constexpr int reset_tpb = 128;`
+    comptime RESET_TPB = 128
+    var reset_grid = ceildiv(n_work_items, RESET_TPB)
+    comptime k_reset = reset_local_left_counts_kernel[dtype]
+    log_launch_ctx(ctx, "nodesplit_reset")
+    ctx.enqueue_function[k_reset](
+        splits.unsafe_origin_cast[MutAnyOrigin](),
+        scratch.local_nleft.unsafe_ptr(),
+        Int32(n_work_items),
+        grid_dim=reset_grid if reset_grid > 0 else 1,
+        block_dim=RESET_TPB,
+    )
 
-        # `:161-164`
-        comptime count_sab = 1 if sabotage == 7 else 0
-        comptime k_count = count_local_left_kernel[
-            dtype, label_dtype, TPB, count_sab
-        ]
-        log_launch_ctx(ctx, "nodesplit_count_left")
-        ctx.enqueue_function[k_count](
-            argsp.unsafe_origin_cast[MutAnyOrigin](),
-            work_items.unsafe_origin_cast[MutAnyOrigin](),
-            splits.unsafe_origin_cast[MutAnyOrigin](),
-            workload_info.unsafe_origin_cast[MutAnyOrigin](),
-            scratch.local_nleft.unsafe_ptr(),
-            grid_dim=n_blocks_dimx,
-            block_dim=TPB,
-        )
+    # `:161-164`
+    comptime count_sab = 1 if sabotage == 7 else 0
+    comptime k_count = count_local_left_kernel[
+        dtype, label_dtype, TPB, count_sab
+    ]
+    log_launch_ctx(ctx, "nodesplit_count_left")
+    ctx.enqueue_function[k_count](
+        argsp.unsafe_origin_cast[MutAnyOrigin](),
+        work_items.unsafe_origin_cast[MutAnyOrigin](),
+        splits.unsafe_origin_cast[MutAnyOrigin](),
+        workload_info.unsafe_origin_cast[MutAnyOrigin](),
+        scratch.local_nleft.unsafe_ptr(),
+        grid_dim=n_blocks_dimx,
+        block_dim=TPB,
+    )
 
-        # DEVIATION 127: their 64-bit atomic landed straight in the field;
-        # ours widens the shadow into it here, before `:113` reads it.
-        comptime k_pub = publish_local_left_counts_kernel[dtype]
-        log_launch_ctx(ctx, "nodesplit_publish")
-        ctx.enqueue_function[k_pub](
-            splits.unsafe_origin_cast[MutAnyOrigin](),
-            scratch.local_nleft.unsafe_ptr(),
-            Int32(n_work_items),
-            grid_dim=reset_grid if reset_grid > 0 else 1,
-            block_dim=RESET_TPB,
-        )
+    # DEVIATION 127: their 64-bit atomic landed straight in the field;
+    # ours widens the shadow into it here, before `:113` reads it.
+    comptime k_pub = publish_local_left_counts_kernel[dtype]
+    log_launch_ctx(ctx, "nodesplit_publish")
+    ctx.enqueue_function[k_pub](
+        splits.unsafe_origin_cast[MutAnyOrigin](),
+        scratch.local_nleft.unsafe_ptr(),
+        Int32(n_work_items),
+        grid_dim=reset_grid if reset_grid > 0 else 1,
+        block_dim=RESET_TPB,
+    )
 
     # `:166-206` -- the fused segmented scan. "Each slot corresponds to
     # one thread lane in the tiled workload_info layout. workload_info is
@@ -3657,21 +3650,7 @@ def merge_split_candidates_kernel[
 # (Sweep 2026-11-15: clear_live_histogram_bins_kernel, launched only under the folded T04, removed.)
 
 
-def publish_histogram_child_counts_kernel[dtype: DType](
-    splits: MutPointer[Split[dtype], MutAnyOrigin], n: Int32,
-):
-    """C48: the single-device histogram already counted this exact row set.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    Reuse that exact count as the stable scan's right-child offset. This
-    removes reset/count/publish and its redundant feature-row pass. The scan
-    still scatters rows, labels and weights together in original child order.
-    """
-    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if i < Int(n):
-        var sp = splits[unsafe_offset=i]
-        sp.local_nLeft = sp.global_nLeft if sp.IsValid() else Int64(0)
-        splits[unsafe_offset=i] = sp
+# (Sweep 2026-11-15: publish_histogram_child_counts_kernel, launched only under the folded C48, removed.)
 
 
 # ===========================================================================
