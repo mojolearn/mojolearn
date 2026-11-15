@@ -135,58 +135,8 @@ def _(n, rng):
 
 
 # ------------------------------------------------------------------ _buffer
-@cell("_buffer.as_f32_c(list of lists [n,10] float)")
-def _(n, rng):
-    x = rng.random((n, 10)).tolist()
-    return lambda: _buffer.as_f32_c(x, ndim=2, name="X")
-
-
-@cell("_buffer.as_f32_c(flat list [n] float, ndim=1)")
-def _(n, rng):
-    x = rng.random(n).tolist()
-    return lambda: _buffer.as_f32_c(x, ndim=1, name="y")
-
-
-@cell("_buffer.as_i64_c(list [n] int)")
-def _(n, rng):
-    x = rng.integers(0, 1000, n).tolist()
-    return lambda: _buffer.as_i64_c(x, ndim=1, name="y")
-
-
-@cell("_buffer.as_f32_c(int64 buffer [n], ndim=1)")
-def _(n, rng):
-    x = rng.integers(0, 1000, n)
-    return lambda: _buffer.as_f32_c(x, ndim=1, name="y")
-
-
-@cell("_buffer.as_f32_c(int32 buffer [n,10])")
-def _(n, rng):
-    x = rng.integers(0, 1000, (n, 10)).astype(np.int32)
-    return lambda: _buffer.as_f32_c(x, ndim=2, name="X")
-
-
-@cell("_buffer.as_f32_c(strided f32 view [n,10] of [2n,10])")
-def _(n, rng):
-    x = rng.random((2 * n, 10), dtype=np.float32)[::2]
-    return lambda: _buffer.as_f32_c(x, ndim=2, name="X")
-
-
-@cell("_buffer.as_f32_c(bool buffer [n])")
-def _(n, rng):
-    x = rng.integers(0, 2, n).astype(bool)
-    return lambda: _buffer.as_f32_c(x, ndim=1, name="y")
-
-
-@cell("_buffer.as_i32_c(int64 buffer [n])")
-def _(n, rng):
-    x = rng.integers(0, 1000, n)
-    return lambda: _buffer.as_i32_c(x, ndim=1, name="y")
-
-
-@cell("_buffer.as_f32_c(f64 buffer [n,10]) native cast (control)")
-def _(n, rng):
-    x = rng.random((n, 10))
-    return lambda: _buffer.as_f32_c(x, ndim=2, name="X")
+# The `_buffer.as_*_c` cells went with the Python conversion layer (deleted 2026-11-15 by lane
+# py-tail-2; recoverable at 1a9d8c01bd): inputs are admitted natively by the doors.
 
 
 @cell("_buffer.all_finite(f32 [n,10]) native (control)")
