@@ -97,7 +97,7 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     FIVF_QPB,
     fast_ivf_scan_kernel,
 )
-from std.os import getenv
+from std.sys import is_defined
 from x_ann.io import upload_i32
 from core.device_fold import device_count_less_i32
 from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
@@ -279,25 +279,39 @@ def _sort_probes_host(
         sort_slots_by_distance_then_index(probe_dist, probe_ids, q * n_probes, n_probes)
 
 
+#: The identical scan grouped by list (identical_ivf_scan_grouped_kernel +
+#: identical_ivf_merge_kernel, lane neural-pass42): default on. B arm
+#: `-D MOJOLEARN_IVF_SCAN_GROUPED_OFF` keeps the per-query kernels; same bits.
+#: Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): the run-time
+#: `MOJOLEARN_IVF_SCAN_GROUPED=0`, a getenv per search (twice per batch).
+#: The default was never A/B-timed: RUN OWED (owed-pre0867.json
+#: "ivf-scan-grouped-off", docs/apple-fast/EXPERIMENTS.md).
+comptime IVF_SCAN_GROUPED_ON = not is_defined["MOJOLEARN_IVF_SCAN_GROUPED_OFF"]()
+
+#: The identical scan with its candidate rows staged through threadgroup
+#: memory (identical_ivf_scan_staged_kernel, lane neural-pass35): the default
+#: on NVIDIA and AMD, where the plain kernel's lanes each walk their own row
+#: (WARP_SIZE scattered rows per load); the plain kernel on Apple, where the
+#: staged kernel's barriers cost more than they save (M4, 200,000 x 220, 256
+#: lists, 2,000 queries: 3.4 -> 12.2 s). The same bits either way. A build
+#: constant per column (before: the run-time MOJOLEARN_IVF_SCAN_STAGED=0/1, a
+#: getenv per batch): `-D MOJOLEARN_IVF_SCAN_STAGED_OFF` takes the plain
+#: kernel on NVIDIA/AMD, `-D MOJOLEARN_IVF_SCAN_STAGED` the staged one on
+#: Apple.
+comptime IVF_SCAN_STAGED_ON = is_defined["MOJOLEARN_IVF_SCAN_STAGED"]() if TARGET_HAS_APPLE_GPU else not is_defined["MOJOLEARN_IVF_SCAN_STAGED_OFF"]()
+
+
+@always_inline
 def _ivf_scan_grouped() -> Bool:
-    """The identical scan grouped by list (identical_ivf_scan_grouped_kernel
-    + identical_ivf_merge_kernel, lane neural-pass42): default on;
-    MOJOLEARN_IVF_SCAN_GROUPED=0 keeps the per-query kernels. Same bits."""
-    return String(getenv("MOJOLEARN_IVF_SCAN_GROUPED")) != "0"
+    """`IVF_SCAN_GROUPED_ON`, a build constant."""
+    return IVF_SCAN_GROUPED_ON
 
 
+@always_inline
 def _ivf_scan_staged() -> Bool:
-    """The identical scan with its candidate rows staged through threadgroup
-    memory (identical_ivf_scan_staged_kernel, lane neural-pass35): the
-    default on NVIDIA and AMD, where the plain kernel's lanes each walk
-    their own row (WARP_SIZE scattered rows per load); the plain kernel on
-    Apple, where the staged kernel's barriers cost more than they save
-    (M4, 200,000 x 220, 256 lists, 2,000 queries: 3.4 -> 12.2 s). The same
-    bits either way; MOJOLEARN_IVF_SCAN_STAGED=0/1 forces either."""
-    var v = String(getenv("MOJOLEARN_IVF_SCAN_STAGED"))
-    comptime if TARGET_HAS_APPLE_GPU:
-        return v == "1"
-    return v != "0"
+    """`IVF_SCAN_STAGED_ON`, a build constant per column."""
+    return IVF_SCAN_STAGED_ON
 
 
 def _expanded_distances(
