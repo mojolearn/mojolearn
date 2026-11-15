@@ -141,7 +141,7 @@ the caller keeps it alive past `ctx.synchronize()`.
 
 from mamba.host.device_shim import host_launch, launch_count
 from std.math import exp2
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
@@ -259,12 +259,8 @@ comptime ANY_SABOTAGE = (
 # core/six_lane_experiment_guards.mojo), whose crosses were refused or inert.
 # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m1_scan=persistent vs today's defaults, one run per arm): mamba1-forward gaussian
 # NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
-# hash 602f9ec5 on both vendors. Default arm is now 3 (persistent).
-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN (the remaining arms 0 and 2 as a build switch; DELETE-ARM, EXP:2071) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch
-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
-comptime M1_SCAN = 3
+# hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
+comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
 comptime M1_SCAN_STATE_WINDOW = 2
@@ -279,6 +275,7 @@ comptime IDN_M1_STATE_WINDOW = False
 comptime IDN_M1_PERSISTENT_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and M1_SCAN == M1_SCAN_PERSISTENT
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not ANY_SABOTAGE
 )

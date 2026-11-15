@@ -665,6 +665,61 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-30-neural): SEQ_RNN_SCAN_OFF (unmeasured force arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_THETA_REG_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"](), "removed 2026-11-15 (lane/expdel2-30-neural): SEQ_THETA_REG_OFF (unmeasured old path) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_SEQ_THETA_REG_OFF.patch"
+    # Lane expdel2-27-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_EPI_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_EPI_ALL"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_EPI_ALL (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the w2-epi bundle) is gone; the default stays; code recoverable at 1d8bc94f90; restore: experiments/removed/MOJOLEARN_AFN_EPI_ALL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_CHUNKSCAN.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA1_CHUNKSCAN (neural MERGED-UNMEASURED FAST+Apple opt-in arm: chunked Mamba-1 scan) is gone; the default stays; code recoverable at 0c4cc7e8d7; restore: experiments/removed/MOJOLEARN_AFN_MAMBA1_CHUNKSCAN.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_FUSE_IN.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA1_FUSE_IN"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA1_FUSE_IN (neural MERGED-UNMEASURED FAST+Apple opt-in arm: fused Mamba-1 conv/split launches) is gone; the default stays; code recoverable at 1560ac92d7; restore: experiments/removed/MOJOLEARN_AFN_MAMBA1_FUSE_IN.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA2_SSD_MMA.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA2_SSD_MMA"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA2_SSD_MMA (neural MERGED-UNMEASURED FAST+Apple opt-in arm: simdgroup SSD tiles) is gone; the default stays; code recoverable at 1ef421ae42; restore: experiments/removed/MOJOLEARN_AFN_MAMBA2_SSD_MMA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_SISO_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA3_SISO_FUSED (neural MERGED-UNMEASURED FAST+Apple opt-in arm: fused Mamba-3 elementwise launches) is gone; the default stays; code recoverable at e4d76c4d0d; restore: experiments/removed/MOJOLEARN_AFN_MAMBA3_SISO_FUSED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA_ALL"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA_ALL (neural MERGED-UNMEASURED FAST+Apple opt-in bundle) is gone; the default stays; code recoverable at 28dd22a784; restore: experiments/removed/MOJOLEARN_AFN_MAMBA_ALL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_ARENA.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA_ARENA"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA_ARENA (neural MERGED-UNMEASURED FAST+Apple opt-in to the arena; the IDENTICAL arena default stays) is gone; the default stays; code recoverable at 96e566ce8d; restore: experiments/removed/MOJOLEARN_AFN_MAMBA_ARENA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA_DEVICE_REFUSAL (neural MERGED-UNMEASURED FAST+Apple opt-in; the device refusal is mandatory on every device column) is gone; the default stays; code recoverable at 6e1e884501; restore: experiments/removed/MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA_PROJ_EPILOGUE (neural MERGED-UNMEASURED FAST+Apple matrix-unit in_proj/out_proj route) is gone; the default stays; code recoverable at f98dbab5bb; restore: experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_SPLITK.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_MAMBA_PROJ_SPLITK"](), "removed 2026-11-15 (lane/expdel2-27-neural): AFN_MAMBA_PROJ_SPLITK (neural MERGED-UNMEASURED FAST+Apple out_proj split-k policy) is gone; the default stays; code recoverable at 590e7e3230; restore: experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_SPLITK.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ACT_RETAIN"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_ACT_RETAIN (the =3 NI48 forward-tape arm; the default 2 stays (EXP:2365)) is gone; the default stays; code recoverable at 2c7917382c; restore: experiments/removed/MOJOLEARN_IDN_ACT_RETAIN.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_ACT_RETAIN_OFF (old replay path beside the retained-activation default (EXP:2365)) is gone; the default stays; code recoverable at 85d71d91bc; restore: experiments/removed/MOJOLEARN_IDN_ACT_RETAIN_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_M1_PERSISTENT_SCAN_CH (unmeasured channels-per-block sweep; 4 stays) is gone; the default stays; code recoverable at b7061d02fc; restore: experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_M1_PERSISTENT_SCAN_TOKENS (unmeasured tokens-per-chunk sweep; 32 stays) is gone; the default stays; code recoverable at ba22935cb9; restore: experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CS_PT.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M2_CS_PT"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_M2_CS_PT (unmeasured C_state tile arm =16; 8 stays) is gone; the default stays; code recoverable at d51cd251ff; restore: experiments/removed/MOJOLEARN_IDN_M2_CS_PT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_RETAIN_GL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M2_RETAIN_GL_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_M2_RETAIN_GL_OFF (old recompute path beside the promoted retained G*L default (EXP:2013)) is gone; the default stays; code recoverable at a93584a744; restore: experiments/removed/MOJOLEARN_IDN_M2_RETAIN_GL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_SSD_TILES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M2_SSD_TILES_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_M2_SSD_TILES_OFF (unmeasured old path beside the SSD tile default) is gone; the default stays; code recoverable at 9bc4a91aba; restore: experiments/removed/MOJOLEARN_IDN_M2_SSD_TILES_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_YD_ROWS.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M2_YD_ROWS"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_M2_YD_ROWS (the =4 old tile beside the promoted 8-row default (EXP:2012)) is gone; the default stays; code recoverable at 0de19ddf45; restore: experiments/removed/MOJOLEARN_IDN_M2_YD_ROWS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_YOFF_EXP.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M2_YOFF_EXP"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_M2_YOFF_EXP (unmeasured Y_off exp arms 1 (NN36) and 2 (NI39); arm 0 stays) is gone; the default stays; code recoverable at 4e23c6d887; restore: experiments/removed/MOJOLEARN_IDN_M2_YOFF_EXP.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_ARENA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_MAMBA_ARENA_OFF (unmeasured old path beside the IDENTICAL arena default) is gone; the default stays; code recoverable at e437e599e6; restore: experiments/removed/MOJOLEARN_IDN_MAMBA_ARENA_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_MAMBA_GEMM_WS_OFF (unmeasured old path beside the retained GEMM workspace default) is gone; the default stays; code recoverable at 23341493ec; restore: experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SSD_OCCUPANCY"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_SSD_OCCUPANCY (unmeasured opt-in arm, A/B never run: coalesced / shared-tile SSD kernels) is gone; the default stays; code recoverable at 44ec9b2ec9; restore: experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"](), "removed 2026-11-15 (lane/expdel2-27-neural): MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: host-buffer staging of Mamba-3 transfers) is gone; the default stays; code recoverable at d57cf5cdab; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"](), "removed 2026-11-15 (lane/expdel2-27-neural): MAMBA3_LEGACY_DIRECT_TRANSFER (unmeasured old path: Mamba-3 transfers through host lists) is gone; the default stays; code recoverable at 9c516e8231; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN37_TRIANGLE_TASKS.patch
+    comptime assert not is_defined["MOJOLEARN_NN37_TRIANGLE_TASKS"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN37_TRIANGLE_TASKS (unmeasured opt-in arm: packed lower-triangle S12 tasks) is gone; the default stays; code recoverable at 617acefe68; restore: experiments/removed/MOJOLEARN_NN37_TRIANGLE_TASKS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch
+    comptime assert not is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN40_OWNED_WEIGHTS (unmeasured opt-in arm: owned Mamba-3 weight snapshots) is gone; the default stays; code recoverable at 8584e42dde; restore: experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch
+    comptime assert not is_defined["MOJOLEARN_NN40_WS_HEADROOM"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN40_WS_HEADROOM (unmeasured opt-in arm: GEMM workspace grow-ahead headroom) is gone; the default stays; code recoverable at 340d379a3c; restore: experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch"
     return True
 
 

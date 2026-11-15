@@ -10,9 +10,8 @@ touches Python: every entry takes buffer addresses, Ints and typed sessions.
 from core.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast, unsafe_memcpy
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
-from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
 from std.os import abort, getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -49,7 +48,7 @@ from mamba.impl.modeling.modeling_mamba import (
 from mamba.impl.modules.mamba_simple import mamba_step
 from mamba.impl.mamba_block_program import MambaBlockProgram, mamba_block_call, mamba_block_backward_call_abi
 from autograd.block_step_ops import OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP
-#: lane afn-mamba (2026-10-03): MOJOLEARN_AFN_MAMBA_ARENA / IDN_MAMBA_ARENA make
+#: lane afn-mamba (2026-10-03): IDN_MAMBA_ARENA (AFN_MAMBA_ARENA is its alias) makes
 #: the block structs views of one arena; the per-call `_mamba{1,2,3}_run_arena`
 #: bodies that used it here are gone with the per-call bodies (lane x5: the
 #: block step op builds its structs over the program's tensors the same way).
@@ -81,7 +80,6 @@ from mamba.checks.mamba3_fixture import (
     M3_HEADDIM,
     M3_NUM_ROPE_ANGLES,
     Mamba3Dims,
-    Mamba3Weights,
 )
 from mamba.impl.modules.mamba3 import (
     BLOCK3_ANY_SABOTAGE,
@@ -116,7 +114,9 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
 
 
-comptime M3_DIRECT_TRANSFER = not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"]()
+# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER (unmeasured old path: Mamba-3 transfers through host lists) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 9c516e8231.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER.patch
+comptime M3_DIRECT_TRANSFER = True
 
 
 def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
@@ -134,60 +134,45 @@ def _m3_upload_addr[wait: Bool = True](ctx: DeviceContext, addr: Int, n: Int) ra
     returns: the caller's array outlives the call, every reader is enqueued
     after it on the same in-order `ctx`, and the forward entry waits once
     at its end."""
-    comptime if not M3_DIRECT_TRANSFER:
-        return m3_upload(ctx, _m3_read_f32(addr, n))
-    else:
-        var src = _f32_ptr(addr)
-        var count = max(n, 1)
-        var dev = mamba_device_alloc(ctx, count)
-        # DeviceContext accepts ordinary host pointers; the Python frame
-        # retains each NumPy array until the synchronized copy completes.
-        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"]():
-            if n > 0:
-                mamba_copy_in(ctx, dev, src, count)
-                comptime if wait:
-                    ctx.synchronize()
-                return dev^
-        var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-        ctx.synchronize()
-        if n > 0:
-            unsafe_memcpy(dest=host.unsafe_ptr(), src=src, count=n)
-        else:
-            host.unsafe_ptr().unsafe_store(0, Float32(0.0))
-        mamba_copy_in(ctx, dev, host.unsafe_ptr(), count)
-        ctx.synchronize()
-        _ = host^
+    var src = _f32_ptr(addr)
+    var count = max(n, 1)
+    var dev = mamba_device_alloc(ctx, count)
+    # DeviceContext accepts ordinary host pointers; the Python frame
+    # retains each NumPy array until the synchronized copy completes.
+    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
+    if n > 0:
+        mamba_copy_in(ctx, dev, src, count)
+        comptime if wait:
+            ctx.synchronize()
         return dev^
+    # n == 0: one +0.0 word staged through a host buffer.
+    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
+    ctx.synchronize()
+    if n > 0:
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+    else:
+        host.unsafe_ptr().unsafe_store(0, Float32(0.0))
+    mamba_copy_in(ctx, dev, host.unsafe_ptr(), count)
+    ctx.synchronize()
+    _ = host^
+    return dev^
 
 
 def _m3_download_addr[wait: Bool = True](ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int) raises:
     """`wait=False` (lane/neural-apple, 2026-09-28) enqueues the copy into
     the caller's array and returns; the caller waits once after its last
     download, before any buffer is released or the host reads."""
-    comptime if not M3_DIRECT_TRANSFER:
-        _m3_write_f32(addr, m3_download(ctx, buf, n))
+    var dst = _f32_ptr(addr)
+    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
+    if n == len(buf):
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
     else:
-        var dst = _f32_ptr(addr)
-        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"]():
-            if n == len(buf):
-                ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
-            else:
-                var direct_view = buf.create_sub_buffer[DType.float32](0, n)
-                ctx.enqueue_copy(dst_ptr=dst, src_buf=direct_view)
-            comptime if wait:
-                ctx.synchronize()
-            return
-        var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+        var direct_view = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=direct_view)
+    comptime if wait:
         ctx.synchronize()
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-        else:
-            var view = buf.create_sub_buffer[DType.float32](0, n)
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
-        ctx.synchronize()
-        if n > 0:
-            unsafe_memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
-        _ = host^
 
 
 
@@ -428,29 +413,16 @@ def _m3_load_weights[wait: Bool = True](ctx: DeviceContext, a: List[Int], dims: 
     var di = dims.d_inner
     var dip = dims.d_in_proj()
     var nh = dims.nheads
-    comptime if M3_DIRECT_TRANSFER:
-        var norm_w = _m3_upload_addr[wait](ctx, a[1], dm)
-        var w_in = _m3_upload_addr[wait](ctx, a[2], dip * dm)
-        var dt_bias = _m3_upload_addr[wait](ctx, a[3], nh)
-        var bnorm_w = _m3_upload_addr[wait](ctx, a[4], M3_D_STATE)
-        var cnorm_w = _m3_upload_addr[wait](ctx, a[5], M3_D_STATE)
-        var b_bias = _m3_upload_addr[wait](ctx, a[6], nh * M3_D_STATE)
-        var c_bias = _m3_upload_addr[wait](ctx, a[7], nh * M3_D_STATE)
-        var d_skip = _m3_upload_addr[wait](ctx, a[8], nh)
-        var w_out = _m3_upload_addr[wait](ctx, a[9], dm * di)
-        return Mamba3DeviceWeights(dims, norm_w^, w_in^, dt_bias^, bnorm_w^, cnorm_w^, b_bias^, c_bias^, d_skip^, w_out^)
-    else:
-        var w = Mamba3Weights(dims)
-        w.norm_w = _m3_read_f32(a[1], dm)
-        w.w_in = _m3_read_f32(a[2], dip * dm)
-        w.dt_bias = _m3_read_f32(a[3], nh)
-        w.bnorm_w = _m3_read_f32(a[4], M3_D_STATE)
-        w.cnorm_w = _m3_read_f32(a[5], M3_D_STATE)
-        w.b_bias = _m3_read_f32(a[6], nh * M3_D_STATE)
-        w.c_bias = _m3_read_f32(a[7], nh * M3_D_STATE)
-        w.d_skip = _m3_read_f32(a[8], nh)
-        w.w_out = _m3_read_f32(a[9], dm * di)
-        return Mamba3DeviceWeights(ctx, w)
+    var norm_w = _m3_upload_addr[wait](ctx, a[1], dm)
+    var w_in = _m3_upload_addr[wait](ctx, a[2], dip * dm)
+    var dt_bias = _m3_upload_addr[wait](ctx, a[3], nh)
+    var bnorm_w = _m3_upload_addr[wait](ctx, a[4], M3_D_STATE)
+    var cnorm_w = _m3_upload_addr[wait](ctx, a[5], M3_D_STATE)
+    var b_bias = _m3_upload_addr[wait](ctx, a[6], nh * M3_D_STATE)
+    var c_bias = _m3_upload_addr[wait](ctx, a[7], nh * M3_D_STATE)
+    var d_skip = _m3_upload_addr[wait](ctx, a[8], nh)
+    var w_out = _m3_upload_addr[wait](ctx, a[9], dm * di)
+    return Mamba3DeviceWeights(dims, norm_w^, w_in^, dt_bias^, bnorm_w^, cnorm_w^, b_bias^, c_bias^, d_skip^, w_out^)
 
 
 # TOMBSTONE: _mamba3_run, _mamba3_check_state_words, _mamba3_run_on, _mamba3_run_arena (the per-call Mamba-3 body: nine weight and ten state uploads, fifteen downloads per call) and the Mamba-3 decode session body (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 844ea17a80; code recoverable at 25e5650c14.
@@ -556,22 +528,7 @@ def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
     (stable while it is installed, so the cached program keeps it on the
     device and never compares a changed byte). `a` is the 25-slot list; its
     nine weight slots are not read."""
-    comptime if not NN40_OWNED_WEIGHTS:
-        raise Error("mamba3 owned weights: NN40 arm is disabled")
-    if not s.owned_weights or not s.w or s.dm != dm:
-        raise Error("mamba3 owned weights: install a matching snapshot first")
-    var lens = _m3_weight_lens(Mamba3Dims.of(dm))
-    var weights = List[Int](capacity=9)
-    var off = 0
-    for i in range(9):  # small-loop(the nine Mamba-3 weight pieces of the snapshot copy)
-        weights.append(Int(s.w_host.unsafe_ptr()) + 4 * off)
-        off += lens[i]
-    var state = List[Int](capacity=10)
-    for i in range(10):  # small-loop(the ten Mamba-3 state addresses)
-        state.append(a[10 + i])
-    var words = mamba_block_call(OPS_M3_STEP, weights, state, [q0, pend], a[0], a[20],
-                                 [a[21], a[22], a[23], a[24]], b, l, dm, List[Float32](), False)
-    return words[0]
+    raise Error("mamba3 owned weights: NN40 arm is disabled")
 
 
 # ===========================================================================
@@ -596,7 +553,10 @@ def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
 # NN40 explicit owned snapshots, not pointer identity or caller promises.
 # A snapshot is copied into session-owned device storage by install/update;
 # owned forward/backward never read the original external weight addresses.
-comptime NN40_OWNED_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (unmeasured opt-in arm: owned weight snapshots of the Mamba-3 prefill session) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 8584e42dde.
+# Restore: git apply experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch
+# The name stays False for its importers (bindings, mamba/native_block_dispatch.mojo).
+comptime NN40_OWNED_WEIGHTS = False
 
 struct Mamba3PrefillSession(Movable, Writable):
     var ctx: Optional[DeviceContext]
@@ -760,13 +720,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     """Leave `s.w` holding this call's weights: reused, recopied, or freshly
     uploaded (see the section header)."""
     if use_owned:
-        comptime if NN40_OWNED_WEIGHTS:
-            if not s.owned_weights or not s.w or s.dm != dims.d_model:
-                raise Error("mamba3 owned weights: install a matching snapshot first")
-            s.weight_reuses += 1
-            return
-        else:
-            raise Error("mamba3 owned weights: NN40 arm is disabled")
+        raise Error("mamba3 owned weights: NN40 arm is disabled")
     # Normal APIs continue inspecting the weights passed on THIS call.
     # They relinquish the explicit snapshot route instead of silently
     # ignoring changed external buffers supplied through the ordinary API.
@@ -1081,12 +1035,12 @@ def _m3_export_weights_run(mut s: Mamba3PrefillSession, a: List[Int], dm: Int, d
 # This removes both forward recomputation and device-to-host input comparison.
 # Arithmetic is unchanged; CPU retains its equivalent recompute path. No
 # compilation, identity, quality or end-to-end measurements have been run.
-comptime IDN_SAMBA_M3_FORWARD_TAPE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]()
-    and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3  # NI48 arm (default 2 since 2026-10-08)
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ACT_RETAIN (the =3 NI48 owned forward tape arm beside the default 2, EXP:2365 superseded) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 2c7917382c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN.patch
+# TOMBSTONE: MOJOLEARN_IDN_ACT_RETAIN_OFF (old path beside the retained-activation default, EXP:2365) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 85d71d91bc.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN_OFF.patch
+# The name stays False for its importers (bindings, mamba/native_tape_dispatch.mojo).
+comptime IDN_SAMBA_M3_FORWARD_TAPE = False
 
 
 struct Mamba3ForwardTape(Movable, Writable):

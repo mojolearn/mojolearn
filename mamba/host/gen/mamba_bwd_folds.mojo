@@ -38,25 +38,23 @@ upstream changes in later steps.
 Generator-friendly: plain cell kernels, no shared memory, no atomics, no float
 crossing a thread except through the global partials a later launch reads.
 """
-from mamba.host.device_shim import host_launch, launch_count
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 
+from mamba.host.device_shim import host_launch, launch_count
 from checks.numerics import (
     ftz,
     identical_mul,
     identical_mul_add,
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
 )
 from mamba.checks.mamba_rms_fold import MAMBA_RMS_LANES, mamba_rms_tree
 
 
-# TOMBSTONE: MOJOLEARN_IDN_MAMBA_BWD_FOLDS (DELETE-ARM, EXP:2271 PENDING, never measured) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.expdel2-26-neural.patch
-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
-# The alias and the kernels stay False/unlaunched: mamba2_backward.mojo and
-# mamba3_backward.mojo import them; the integrator removes them with their
-# importers' dead branches.
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA_BWD_FOLDS (unmeasured opt-in arm, EXP:2271 PENDING) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 52ec70d943.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.patch; record in docs/TOMBSTONES.md.
+# IDN_MAMBA_BWD_FOLDS stays False and the kernels below stay for
+# autograd/kernels/mamba2.mojo (another lane's file); they go with its branch
+# after the wave.
 comptime IDN_MAMBA_BWD_FOLDS = False
 
 #: Threads per block. Execution plan only (no float crosses a thread inside a

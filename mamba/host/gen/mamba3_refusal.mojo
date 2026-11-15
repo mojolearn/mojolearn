@@ -12,7 +12,6 @@ Other numeric modes keep the original host refusal and transfer helpers.
 from std.os import abort
 from mamba.host.device_shim import host_launch, launch_count
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from mamba.host.gen.mamba3_transfer import m3_download
 from mamba.host.gen.modeling_mamba import _refuse_nonfinite_named_host
@@ -20,6 +19,9 @@ from mamba.host.gen.modeling_mamba import _refuse_nonfinite_named_host
 comptime M3_REFUSAL_THREADS = 256
 comptime M3_REFUSAL_BLOCKS = 128
 comptime M3_REFUSAL_NONE: Int64 = 9223372036854775807
+# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_REFUSAL (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at e81ebf2572.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_REFUSAL.patch; record in docs/TOMBSTONES.md.
+# The host refusal arm stays: the generated host column sets this False.
 comptime M3_DEVICE_REFUSAL = False
 
 

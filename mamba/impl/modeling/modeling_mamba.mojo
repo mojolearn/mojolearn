@@ -201,7 +201,6 @@ from mamba.checks.mamba_fixture import (
 #: lane afn-mamba (2026-10-03): Apple FAST experiment switches. Every use
 #: below is a `comptime if` whose other arm is main's spelling unchanged.
 from mamba.impl.modules.afn_defines import (
-    AFN_MAMBA1_FUSE_IN,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
     IDN_MAMBA_ALLOC_NOWAIT,
@@ -215,15 +214,12 @@ from mamba.checks.mamba_rms_fold import (
     mamba_rms_tree,
 )
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
-from mamba.impl.modeling.afn_mamba1_fused import afn_m1_conv_token, afn_m1_split_a
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
 #: the residual folded into out_proj. Every use is a `comptime if` whose
 #: other arm is main's spelling unchanged.
-from mamba.impl.modules.afn_proj_gemm import (
-    AFN_MAMBA_PROJ_ROUTE,
-    afn_proj_gemm_into,
-    afn_proj_gemm_resid_into,
-)
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (with _SPLITK and AFN_EPI_ALL: neural MERGED-UNMEASURED FAST+Apple matrix-unit
+# in_proj/out_proj route; AFN_MAMBA_PROJ_ROUTE folded False) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 21b1e860c2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
 from mamba.impl.ops.selective_scan_interface import (
     selective_scan_fn,
 )
@@ -401,7 +397,8 @@ comptime BLOCK_ANY_SABOTAGE = (
 # 12.860 ms, AMD MI325X 9.934 -> 9.922 ms, avg 1.52x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at b056f35e0.
 # Only the IDENTICAL arm (NI46) is gone: the fused kernels stay for the Apple FAST AFN_MAMBA1_FUSE_IN route.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED.patch; record in docs/TOMBSTONES.md.
-comptime MAMBA1_ELEMENTWISE_FUSED = AFN_MAMBA1_FUSE_IN
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA1_FUSE_IN (neural MERGED-UNMEASURED FAST+Apple arm: the fused conv/split launches) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 3ae6bf9245.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_FUSE_IN.patch
 
 
 def mamba_block_sabotage_name() -> String:
@@ -874,11 +871,9 @@ struct MambaDeviceStages(Movable):
           scan_h: a whole-buffer copy of state.h;
           residual_out [M,dm]: residual_add_kernel over m*dm, or the fused
             out_proj seeded by a whole copy of x.
-        KEPT: out_proj under AFN_MAMBA_PROJ_ROUTE, where the fused
-        out_proj+residual launch (trace off) never writes it; the tape still
-        names it as the PROJ_OUT value."""
-        comptime if AFN_MAMBA_PROJ_ROUTE:
-            self.out_proj.enqueue_fill(Float32(0.0))
+        out_proj [M,dm]: mamba_proj_gemm on every route.
+        So no stage is refilled."""
+        pass
 
     def __init__(
         out self,
@@ -1241,66 +1236,8 @@ def causal_conv1d_fn_kernel(
         silu_out.unsafe_store((bb * l + li) * di + d, ftz(identical_silu(acc)))
 
 
-# NN35: two adjacent tokens share their convolution input window and
-# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
-# it saves D_CONV-1 loads per pair without changing either tap chain.
-# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
-comptime NN35_CONV_PAIR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-
-def nn35_causal_pair_kernel(
-    conv_out: MutPointer[Float32, MutAnyOrigin],
-    silu_out: MutPointer[Float32, MutAnyOrigin],
-    in_proj: MutPointer[Float32, MutAnyOrigin],
-    conv_w: MutPointer[Float32, MutAnyOrigin],
-    conv_b: MutPointer[Float32, MutAnyOrigin],
-    win: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, di_in: Int32,
-):
-    var b = Int(b_in)
-    var l = Int(l_in)
-    var di = Int(di_in)
-    var nt = (l + 1) // 2
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nt * di:
-        return
-    var d = cell % di
-    var ti = cell // di
-    var bb = ti // nt
-    var li = (ti % nt) * 2
-    var inputs = stack_allocation[D_CONV + 1, Float32]()
-    var weights = stack_allocation[D_CONV, Float32]()
-    var valid = min(2, l - li)
-    # Only valid outputs' taps are loaded; no read past the odd tail.
-    for k in range(D_CONV + valid - 1):
-        var pos = li - (D_CONV - 1) + k
-        var v: Float32
-        if pos >= 0:
-            v = in_proj.unsafe_load((bb * l + pos) * (2 * di) + d)
-        else:
-            v = win.unsafe_load((bb * di + d) * D_CONV + D_CONV + pos)
-        inputs[k] = ftz(v)
-    for k in range(D_CONV):
-        weights[k] = ftz(conv_w.unsafe_load(d * D_CONV + k))
-    var bias = ftz(conv_b.unsafe_load(d))
-    for j in range(valid):
-        var acc = bias
-        comptime if SAB_S13_BIAS_LAST:
-            acc = Float32(0.0)
-        for kk in range(D_CONV):
-            var k = kk
-            comptime if SAB_S13_TAPS_REVERSED:
-                k = D_CONV - 1 - kk
-            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
-        comptime if SAB_S13_BIAS_LAST:
-            acc = ftz(acc + bias)
-        var out_i = (bb * l + li + j) * di + d
-        conv_out.unsafe_store(out_i, acc)
-        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
+# TOMBSTONE: MOJOLEARN_NN35_CONV_PAIR (unmeasured opt-in arm: two tokens per conv thread) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at d54d3d8b00.
+# Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.expdel2-27-neural.patch
 
 
 def causal_conv1d_cell_kernel(
@@ -1402,21 +1339,7 @@ def causal_conv1d_fn(
     """`causal_conv1d_fn(hidden_states, weight, bias, activation="silu")`
     (:81-100) plus the cache's window update (`update_conv_state`, MM:415).
     ASYNCHRONOUS."""
-    comptime if NN35_CONV_PAIR:
-        ctx.enqueue_function[nn35_causal_pair_kernel](
-            conv_out.unsafe_ptr(),
-            silu_out.unsafe_ptr(),
-            in_proj.unsafe_ptr(),
-            conv_w.unsafe_ptr(),
-            conv_b.unsafe_ptr(),
-            old_win.unsafe_ptr(),
-            Int32(b),
-            Int32(l),
-            Int32(d_inner),
-            grid_dim=(_grid(b * ((l + 1) // 2) * d_inner), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
-    elif IDN_MAMBA_CONV_CELL:
+    comptime if IDN_MAMBA_CONV_CELL:
         ctx.enqueue_function[causal_conv1d_cell_kernel](
             conv_out.unsafe_ptr(),
             silu_out.unsafe_ptr(),
@@ -1899,85 +1822,48 @@ def mamba_mixer_forward(
     #      GEMM v1 OP_NT: C[M, 2di] = norm_out[M, dm] . w_in[2di, dm]^T.
     #      `k = d_model <= 128` so `P == 1` -- gemm contract 7.1's serial
     #      ascending chain with nothing to fold.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): the
-    #      FAST matrix-unit kernel, main's GEMM if it declines.
-    comptime if AFN_MAMBA_PROJ_ROUTE:
-        if not afn_proj_gemm_into(
-            ctx, stages.in_proj, stages.norm_out, w.w_in, m, 2 * di, dm, _gemm_op_nt()
-        ):
-            mamba_proj_gemm(
-                ctx,
-                stages.in_proj,
-                stages.norm_out,
-                w.w_in,
-                m,
-                2 * di,
-                dm,
-                _gemm_op_nt(),
-            )
-    else:
-        mamba_proj_gemm(
-            ctx,
-            stages.in_proj,
-            stages.norm_out,
-            w.w_in,
-            m,
-            2 * di,
-            dm,
-            _gemm_op_nt(),
-        )
+    mamba_proj_gemm(
+        ctx,
+        stages.in_proj,
+        stages.norm_out,
+        w.w_in,
+        m,
+        2 * di,
+        dm,
+        _gemm_op_nt(),
+    )
     trace.record_device[DType.float32](
         ctx, prefix + ".in_proj.out", stages.in_proj, m * 2 * di
     )
 
     # ---- A = -exp(A_log) (:373). S15.
-    #      lane afn-mamba (MOJOLEARN_AFN_MAMBA1_FUSE_IN): computed in the
-    #      split launch below instead (same arithmetic, one launch fewer);
-    #      `A.out` is then recorded there.
-    comptime if not MAMBA1_ELEMENTWISE_FUSED:
-        ctx.enqueue_function[mamba_a_from_a_log_kernel](
-            stages.a_out.unsafe_ptr(),
-            w.a_log.unsafe_ptr(),
-            Int32(di * D_STATE),
-            grid_dim=(_grid(di * D_STATE), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
-        _m1_stage_sync(ctx, trace)
-        trace.record_device[DType.float32](
-            ctx, prefix + ".A.out", stages.a_out, di * D_STATE
-        )
+    ctx.enqueue_function[mamba_a_from_a_log_kernel](
+        stages.a_out.unsafe_ptr(),
+        w.a_log.unsafe_ptr(),
+        Int32(di * D_STATE),
+        grid_dim=(_grid(di * D_STATE), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    _m1_stage_sync(ctx, trace)
+    trace.record_device[DType.float32](
+        ctx, prefix + ".A.out", stages.a_out, di * D_STATE
+    )
 
     # ---- chunk(2, dim=1) (:396): DEVIATION 730, a column offset, no copy.
     # ---- causal_conv1d_fn (:410-416) + the window update (:415). S13.
-    comptime if MAMBA1_ELEMENTWISE_FUSED:
-        # ONE token-parallel launch: conv + SiLU + the window update.
-        afn_m1_conv_token(
-            ctx,
-            stages.conv_out,
-            stages.silu_out,
-            stages.conv_win,
-            stages.in_proj,
-            w.conv_w,
-            w.conv_b,
-            state.conv_win,
-            b,
-            l,
-            di,
-        )
-    else:
-        causal_conv1d_fn(
-            ctx,
-            stages.conv_out,
-            stages.silu_out,
-            stages.conv_win,
-            stages.in_proj,
-            w.conv_w,
-            w.conv_b,
-            state.conv_win,
-            b,
-            l,
-            di,
-        )
+    causal_conv1d_fn(
+        ctx,
+        stages.conv_out,
+        stages.silu_out,
+        stages.conv_win,
+        stages.in_proj,
+        w.conv_w,
+        w.conv_b,
+        state.conv_win,
+        b,
+        l,
+        di,
+    )
     _m1_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".conv.out", stages.conv_out, m * di
@@ -2004,38 +1890,18 @@ def mamba_mixer_forward(
     )
 
     # ---- torch.split (:437-441). DEVIATION 728: materialized. Copies.
-    comptime if MAMBA1_ELEMENTWISE_FUSED:
-        # ONE launch: the split per element and A = -exp(A_log) (S15).
-        afn_m1_split_a(
-            ctx,
-            stages.dt_low,
-            stages.b_mat,
-            stages.c_mat,
-            stages.x_proj,
-            stages.a_out,
-            w.a_log,
-            m,
-            r,
-            xr,
-            di,
-        )
-        _m1_stage_sync(ctx, trace)
-        trace.record_device[DType.float32](
-            ctx, prefix + ".A.out", stages.a_out, di * D_STATE
-        )
-    else:
-        ctx.enqueue_function[split_x_proj_kernel](
-            stages.dt_low.unsafe_ptr(),
-            stages.b_mat.unsafe_ptr(),
-            stages.c_mat.unsafe_ptr(),
-            stages.x_proj.unsafe_ptr(),
-            Int32(m),
-            Int32(r),
-            Int32(xr),
-            grid_dim=(_grid(m), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
-        _m1_stage_sync(ctx, trace)
+    ctx.enqueue_function[split_x_proj_kernel](
+        stages.dt_low.unsafe_ptr(),
+        stages.b_mat.unsafe_ptr(),
+        stages.c_mat.unsafe_ptr(),
+        stages.x_proj.unsafe_ptr(),
+        Int32(m),
+        Int32(r),
+        Int32(xr),
+        grid_dim=(_grid(m), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    _m1_stage_sync(ctx, trace)
 
     # ---- dt_proj (:443), WITHOUT the bias: their line is
     #      `self.dt_proj.weight @ time_step.transpose(1, 2)`, the weight
@@ -2063,33 +1929,16 @@ def mamba_mixer_forward(
 
     # ---- out_proj (:481). `nn.Linear(d_inner, d_model, bias=use_bias)` with
     #      `use_bias` False. C[M, dm] = gate_out[M, di] . w_out[dm, di]^T.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): an
-    #      untraced call runs out_proj in `mamba_block_forward`, fused with
-    #      the residual add (`residual_out = x + gate_out . w_out^T`); a
-    #      traced call keeps main's GEMM here so `out_proj.out` is recorded.
-    comptime if AFN_MAMBA_PROJ_ROUTE:
-        if trace.enabled:
-            mamba_proj_gemm(
-                ctx,
-                stages.out_proj,
-                stages.gate_out,
-                w.w_out,
-                m,
-                dm,
-                di,
-                _gemm_op_nt(),
-            )
-    else:
-        mamba_proj_gemm(
-            ctx,
-            stages.out_proj,
-            stages.gate_out,
-            w.w_out,
-            m,
-            dm,
-            di,
-            _gemm_op_nt(),
-        )
+    mamba_proj_gemm(
+        ctx,
+        stages.out_proj,
+        stages.gate_out,
+        w.w_out,
+        m,
+        dm,
+        di,
+        _gemm_op_nt(),
+    )
     trace.record_device[DType.float32](
         ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
     )
@@ -2182,58 +2031,14 @@ def mamba_block_forward(
     mamba_mixer_forward(ctx, stages, state, w, b, l, trace, prefix)
 
     # ---- residual + hidden_states (:527). S16.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): untraced,
-    #      out_proj and this add are ONE matrix-unit launch seeded with `x`
-    #      (the mixer skipped its out_proj GEMM); if the fused route declines,
-    #      main's out_proj GEMM then main's add.
-    comptime if AFN_MAMBA_PROJ_ROUTE:
-        if trace.enabled:
-            ctx.enqueue_function[residual_add_kernel](
-                stages.residual_out.unsafe_ptr(),
-                x.unsafe_ptr(),
-                stages.out_proj.unsafe_ptr(),
-                Int32(m * dm),
-                grid_dim=(_grid(m * dm), 1, 1),
-                block_dim=(MAMBA_TPB, 1, 1),
-            )
-        elif not afn_proj_gemm_resid_into(
-            ctx,
-            stages.residual_out,
-            x,
-            stages.gate_out,
-            w.w_out,
-            m,
-            dm,
-            dims.d_inner,
-            _gemm_op_nt(),
-        ):
-            mamba_proj_gemm(
-                ctx,
-                stages.out_proj,
-                stages.gate_out,
-                w.w_out,
-                m,
-                dm,
-                dims.d_inner,
-                _gemm_op_nt(),
-            )
-            ctx.enqueue_function[residual_add_kernel](
-                stages.residual_out.unsafe_ptr(),
-                x.unsafe_ptr(),
-                stages.out_proj.unsafe_ptr(),
-                Int32(m * dm),
-                grid_dim=(_grid(m * dm), 1, 1),
-                block_dim=(MAMBA_TPB, 1, 1),
-            )
-    else:
-        ctx.enqueue_function[residual_add_kernel](
-            stages.residual_out.unsafe_ptr(),
-            x.unsafe_ptr(),
-            stages.out_proj.unsafe_ptr(),
-            Int32(m * dm),
-            grid_dim=(_grid(m * dm), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
+    ctx.enqueue_function[residual_add_kernel](
+        stages.residual_out.unsafe_ptr(),
+        x.unsafe_ptr(),
+        stages.out_proj.unsafe_ptr(),
+        Int32(m * dm),
+        grid_dim=(_grid(m * dm), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
     _m1_final_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm

@@ -142,6 +142,8 @@ for _src in (*HOST_OPT_FUNCTIONS, *HOST_OPT_STRUCTS, HOST_OPT_DEFINES):
 #: The shared-memory kernels those arms bypass are stubbed (rule 4 of the
 #: module docstring) and abort by name if ever reached.
 SUBSTITUTIONS = (
+    # 2026-11-15 (expdel2 deletion program): the M3_* switch lines are now plain
+    # constants after their NAIVE defines were deleted; match the whole line.
     # NN36 uses GPU shared memory only. Its host column retains the exact
     # cell exp/dot expression; generation and all checks are still pending.
     ("mamba/impl/modules/ssd_minimal.mojo",
@@ -160,11 +162,10 @@ SUBSTITUTIONS = (
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),
     ("autograd/kernels/mamba3.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, [A-Za-z0-9_]+\]\(\)", "False"),
-    ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_ANGLE_DT_SHARED = not is_defined\["MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE"\]\(\)',
-     "comptime M3_ANGLE_DT_SHARED = False"),
+    # M3_ANGLE_DT_SHARED and its shared kernel were deleted with
+    # MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE (2026-11-15); the suffix path is the only one.
     ("autograd/kernels/mamba_refusal.mojo",
-     r'comptime M3_DEVICE_REFUSAL = not is_defined\["MOJOLEARN_MAMBA3_LEGACY_REFUSAL"\]\(\)',
+     r'comptime M3_DEVICE_REFUSAL = [^\n]+',
      "comptime M3_DEVICE_REFUSAL = False"),
     # CPU SPEED (lane neural-cpu, 2026-09-28): the S16 q/k/v backward launch
     # runs mamba/host/mamba3_s16_host.mojo, the kernel's per-cell arithmetic
@@ -172,16 +173,16 @@ SUBSTITUTIONS = (
     # lane/neural-apple2: the host takes the naive S16 launch below (its
     # host restatement), never the shared-memory d_v split.
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S16_V_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S16_V_NAIVE"\]\(\)',
+     r'comptime M3_S16_V_SHARED = [^\n]+',
      "comptime M3_S16_V_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S17_TAIL_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S17_TAIL_NAIVE"\]\(\)',
+     r'comptime M3_S17_TAIL_SHARED = [^\n]+',
      "comptime M3_S17_TAIL_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S16_QK_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S16_QK_NAIVE"\]\(\)',
+     r'comptime M3_S16_QK_SHARED = [^\n]+',
      "comptime M3_S16_QK_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S17_OPERANDS_SHARED = \(\n    not is_defined\["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"\]\(\)\n    and M3_S17_TAIL_SHARED\n    and False\n\)',
+     r"comptime M3_S17_OPERANDS_SHARED = \([\s\S]*?\n\)",
      "comptime M3_S17_OPERANDS_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
      r"ctx\.enqueue_function\[mamba3_s16_qkv_backward_kernel\]\(",

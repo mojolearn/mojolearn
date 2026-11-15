@@ -14,30 +14,29 @@ from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.host.gen.modeling_mamba import mamba_zeros
 
-# TOMBSTONE: MOJOLEARN_AFN_MAMBA3_BWD_ARENA (DELETE-ARM, neural MERGED-UNMEASURED opt-in) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_ARENA.expdel2-26-neural.patch
-# TOMBSTONE: MOJOLEARN_AFN_SAMBA_ALL (DELETE-ARM, neural MERGED-UNMEASURED opt-in) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.expdel2-26-neural.patch
-# TOMBSTONE: MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF (DELETE-OLD-PATH, no A/B for the old path) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF.expdel2-26-neural.patch
-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
-# `_AfnM3Arena` and `_m3_scratch` stay (importers use them): the arena arm is
-# gone, so the scratch is always `mamba_zeros[False]` and the arena id -1.
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA3_BWD_ARENA (MERGED-UNMEASURED opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at cca09a09f6.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_ARENA.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_ALL (MERGED-UNMEASURED opt-in umbrella) read deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at cca09a09f6.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.patch; record in docs/TOMBSTONES.md.
+# `_AfnM3Arena` and `_m3_scratch` keep their signatures for their importers
+# (autograd/rules_mamba3.mojo, mamba/host/mamba3_prefill_chain.mojo): the
+# arena is never opened and every scratch is `mamba_zeros[False]`.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 
-#: lane nr-mamba (2026-10-04) IDN_M3_BWD_SKIP_DEAD (IDENTICAL, default ON;
-#: `-D MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
-#: restores main): the Mamba-3 prefill backward ran its angle stage twice,
+#: lane nr-mamba (2026-10-04) IDN_M3_BWD_SKIP_DEAD (IDENTICAL): the Mamba-3
+#: prefill backward ran its angle stage twice,
 #: once on the pre-join d_theta whose results (and those of the join
 #: current, dt partial, dt_bias reduce and adt product around it) no
 #: returned gradient reads. Every column skips them; no bit moves.
-comptime IDN_M3_BWD_SKIP_DEAD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
+# TOMBSTONE: MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 8e12418241.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_M3_BWD_SKIP_DEAD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 struct _AfnM3Arena(Movable):
-    """A plain -1 id and the scratch kept alive past the pass's wait."""
+    """No arena: a plain -1 (the Apple FAST arena arm was deleted
+    2026-11-15). `keep` holds scratch kept alive past the pass's wait."""
 
     var id: Int
     #: scratch the AFN arms enqueue work on, kept alive past the pass's wait
@@ -58,7 +57,8 @@ struct _AfnM3Arena(Movable):
 def _m3_scratch(
     own: Bool, ctx: DeviceContext, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    """A zero-filled scratch of `n` floats (`mamba_zeros[False]`)."""
+    """A zero-filled scratch of `n` floats: `mamba_zeros[False]` (`own` is
+    always False now)."""
     return mamba_zeros[False](ctx, n)
 
 
