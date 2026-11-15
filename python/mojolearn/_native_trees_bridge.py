@@ -262,15 +262,11 @@ def register(cls, kind, **tables):
 
 
 def _connect_public_iforest(cls):
-    # glue: import-time removal of the former validation/output decorators;
-    # iforest_public_lifecycle owns the complete public operation natively.
-    import inspect
-    for name in ('fit', 'fit_predict', 'score_samples', 'decision_function', 'predict'):  # glue: fixed native public doors
-        setattr(cls, name, inspect.unwrap(getattr(cls, name)))
-    # The native archive loader already publishes fitted state; no Python
-    # loader callback is needed after the one archive binding call.
-    loader = inspect.getattr_static(cls, 'load')
-    cls.load = classmethod(inspect.unwrap(loader.__func__))
+    # glue: iforest_public_lifecycle owns the complete public operation
+    # natively, and the native archive loader publishes the fitted state. A
+    # package class gets no Python validation/output/loader wrappers at its
+    # definition (`_mode`, lane py-mode-wrappers 2026-11-15), so the former
+    # unwrap loop here is deleted; only the marker remains.
     cls._mojolearn_native_public = True
 
 
@@ -310,8 +306,9 @@ def connect_gbdt_parameters(base, classes, metadata):
         context['trees_state_layouts'][cls] = {
             'classical_public_layouts': {cls: layout}, 'classical_public_installed': True}
     context['trees_gbdt_parameter_metadata'] = metadata
-    # glue: each adapter's public owner now performs validation, tracking and
-    # output conversion; remove only the former package-installed decorators.
+    # glue: each adapter's public owner performs validation, tracking and
+    # output conversion; the package installs no Python decorators on these
+    # classes (`_mode`), so nothing is unwrapped here.
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     module = _binding()._module
@@ -320,13 +317,6 @@ def connect_gbdt_parameters(base, classes, metadata):
         raise TypeError('native GBDT adapters require compiled attribute entries')
     descriptor = factory(MethodType(attribute, context))
     for cls in (base,) + tuple(classes):  # glue: fixed adapter public classes
-        for name in ('fit', 'predict', 'predict_proba', 'decision_function', 'score'):  # glue: public native doors
-            method = getattr(cls, name, None)
-            if inspect.isfunction(method):
-                setattr(cls, name, inspect.unwrap(method))
-        loader = inspect.getattr_static(cls, 'load', None)
-        if isinstance(loader, classmethod):
-            cls.load = classmethod(inspect.unwrap(loader.__func__))
         cls.__getattribute__ = descriptor
         cls._mojolearn_native_public = True
         layout = _layout(cls, descriptor)
@@ -340,17 +330,13 @@ def connect_gbdt_parameters(base, classes, metadata):
 
 def _connect_public_forest(cls, context):
     # Connect the existing native fit/predict owner to the exact built-in
-    # classes. Unwrap only the known mode/validation/output decorators: their
-    # semantics now live in trees_public_lifecycle_native, not Python frames.
+    # classes. Validation, fit tracking and output conversion live in
+    # trees_public_lifecycle_native; the package installs no Python
+    # decorators on these classes (`_mode`), so nothing is unwrapped here.
     rows, getter, previous = context['trees_constructors'][cls]
-    import inspect
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     from ._native_classical_bridge import _layout
-    for name in ('fit', '_fit_with_tree_start', 'predict', 'predict_proba', 'score', 'apply', 'predict_with_leaves', 'staged_predict'):  # glue: fixed public tree doors
-        method = getattr(cls, name, None)
-        if inspect.isfunction(method):
-            setattr(cls, name, inspect.unwrap(method))
     module = _binding()._module
     attribute = module.standard_scaler_attribute_call
     factory = module.classical_attribute_descriptor
@@ -392,13 +378,17 @@ def register_meta(cls, kind):
     if "trees_unavailable" in context:
         return
     context["trees_meta_classes"][cls] = kind
-    # These classes already completed their constructor/numeric-mode setup.
-    # Replace the old fit/validation/output decorators only on these public
-    # methods; trees_public_meta_lifecycle now owns their runtime semantics.
-    # Keep constructors and the still-unported parameter setter visible.
+    # These classes already completed their constructor/numeric-mode setup;
+    # trees_public_meta_lifecycle owns their runtime semantics. The package
+    # installs no Python decorators on them (`_mode`, lane py-mode-wrappers
+    # 2026-11-15), so nothing is unwrapped: each public door is bound as the
+    # class's own plain function. getattr on the class returns an
+    # `available_if`'s function, so VotingClassifier.predict_proba becomes
+    # plain too (as before): its availability is the native door's call-time
+    # refusal under voting='hard', with no Python __get__ per access.
     import inspect
     for name in ('fit', 'fit_transform', 'predict', 'predict_proba', 'transform', 'score'):  # glue: fixed public meta-estimator doors
         method = getattr(cls, name, None)
         if inspect.isfunction(method):
-            setattr(cls, name, inspect.unwrap(method))
+            setattr(cls, name, method)
     cls._mojolearn_native_public = True

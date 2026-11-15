@@ -48,12 +48,13 @@ from . import _sk_validate
 
 
 def _guard_cpu_training(method):
-    # Import-time native-method declaration: the complete operation already
-    # owns its validation and lifecycle. require_training has no runtime
-    # refusal, so adding a Python wrapper would only reintroduce orchestration.
     # CPU training is public: `_cpu_reference.require_training` refuses
-    # nothing, so the former per-fit wrapper (an import statement and a no-op
-    # call on every fit) is gone and the method is returned unchanged.
+    # nothing, so the former per-fit wrapper is gone and nothing calls this
+    # any more (its class-definition loop in `_install_numeric_mode` set every
+    # fit method to itself; deleted by lane py-mode-wrappers, 2026-11-15).
+    # Kept only as the fixed warning location: `_native_classical_warnings`
+    # reads this function's final line as the `mojolearn/_mode.py:<line>` the
+    # native warnings report.
     return method
 
 
@@ -217,10 +218,13 @@ def _needs_fit(method, name, require_fit=True):
 
 
 def _loader(method):
-    # P1 (audit B #2): RBFSampler, Nystroem and KernelRidge.load are marked
-    # `native_method` (kernel_methods.py), so they take the first branch and
-    # no Python post-load wrapper runs; the wrapper below remains only for
-    # loaders whose native owner does not publish the fitted state.
+    # Only an application subclass's loaders reach this (`install_fit_tracking`
+    # runs for application subclasses only). Every package loader is the one
+    # archive binding call, and the native loader publishes `_mojolearn_fitted`
+    # itself (bindings/host_archive_native_door.mojo `host_archive_load` for the
+    # registered classes, `host_archive_public_forest` for RF/ET/DT; the GBDT
+    # adapters' load is a native refusal), so no package `load` runs this
+    # Python frame (lane py-mode-wrappers, 2026-11-15).
     if getattr(method, "_mojolearn_tracks_fit", False):
         # The native archive owner publishes fitted state and admits any
         # after-fit hook before returning; no Python post-load callback.
@@ -235,14 +239,17 @@ def _loader(method):
                 after()
         return out
 
+    load._mojolearn_loader = True
     return classmethod(load)
 
 
 def _application_subclass(cls):
-    """A class written outside the package (or in its tests) that derives from
-    a one-call native public class: its own overrides are ordinary
-    application code and keep the inherited fit tracking and fitted checks;
-    the package's own native methods stay unwrapped."""
+    """A class written outside the package (or in its tests): its own
+    overrides are ordinary application code and keep fit tracking, fitted
+    checks and NumPy outputs (`install_fit_tracking`). A package class is
+    never wrapped: each of its public methods is the native owner's one
+    binding call, which owns validation, fit tracking, the fitted check and
+    the public result itself."""
     module = getattr(cls, "__module__", "") or ""
     return ("_mojolearn_native_public" not in cls.__dict__
             and (not module.startswith("mojolearn.") or module.startswith("mojolearn.tests")))
@@ -253,6 +260,9 @@ def install_fit_tracking(cls, own_only=False):
     transform and score methods before that (see `is_fitted`). A class with
     `_sklearn_requires_fit = False` (a stateless transformer) is not guarded.
     Also installs the NumPy outputs (`install_public_outputs`).
+
+    Called for application subclasses only (`SklearnTagsMixin`); a package
+    class keeps its one-call native methods unwrapped.
     """
     install_public_outputs(cls, own_only)
     for name in _FITS:  # glue: wraps the fit method names
@@ -262,8 +272,11 @@ def install_fit_tracking(cls, own_only=False):
         elif inspect.isfunction(method):
             setattr(cls, name, _track_fit(method))
     for name in _LOADS:  # glue: wraps the loader method names
-        method = cls.__dict__.get(name)
-        if isinstance(method, classmethod):
+        # A full install also wraps an inherited package loader (package
+        # classes carry no `_loader` wrapper of their own any more), so an
+        # application subclass's `load` still marks the instance fitted.
+        method = cls.__dict__.get(name) if own_only else inspect.getattr_static(cls, name, None)
+        if isinstance(method, classmethod) and not getattr(method.__func__, "_mojolearn_loader", False):
             setattr(cls, name, _loader(method.__func__))
     if not getattr(cls, "_sklearn_requires_fit", True):
         for name in _NEEDS_FIT:  # glue: unwraps the method names that need a fit
@@ -309,22 +322,28 @@ class available_if:
     def __call__(self, fn):
         self.fn = fn
         functools.update_wrapper(self, fn)
+        # The name the refusal reports, resolved once here (and by
+        # `__set_name__` for a class attribute), not read on every access.
+        self.attribute_name = fn.__name__
         return self
 
     def __set_name__(self, owner, name):
         self.attribute_name = name
 
+    # Per access: the one parameter check and the bound method. The answer
+    # depends on a constructor parameter that `set_params` may change
+    # (novelty, voting, probability, loss, prediction_data), so it cannot be
+    # resolved at class creation.
     def __get__(self, obj, owner=None):
         if obj is None:
             return self.fn
-        name = getattr(self, "attribute_name", self.fn.__name__)
         try:
             ok = self.check(obj)
         except AttributeError as exc:
             raise AttributeError(
-                f"This {type(obj).__name__!r} has no attribute {name!r}") from exc
+                f"This {type(obj).__name__!r} has no attribute {self.attribute_name!r}") from exc
         if not ok:
-            raise AttributeError(f"This {type(obj).__name__!r} has no attribute {name!r}")
+            raise AttributeError(f"This {type(obj).__name__!r} has no attribute {self.attribute_name!r}")
         return self.fn.__get__(obj, owner)
 
 
@@ -449,8 +468,14 @@ class PublicOutputsMixin:
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
-        if getattr(cls, "_mojolearn_native_public", False):
-            return  # one-call native methods: no Python wrappers
+        # Resolved once, at class creation: a package class's public methods
+        # are one-call native doors whose packs return the public result
+        # (bindings/classical_caller_unpack.mojo reads the caller natively), so
+        # they get no Python `public` wrapper and no per-call frame walk. Before
+        # 2026-11-15 a package class not yet marked native was wrapped here and
+        # the trees bridges unwrapped it again after registration.
+        if getattr(cls, "_mojolearn_native_public", False) or not _application_subclass(cls):
+            return
         install_public_outputs(cls)
 
 
@@ -460,13 +485,14 @@ class SklearnTagsMixin(PublicOutputsMixin):
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
-        if getattr(cls, "_mojolearn_native_public", False):
-            # the native owner tracks fits and validates inputs itself; an
-            # application subclass's own overrides are still guarded
-            if _application_subclass(cls):
-                install_fit_tracking(cls, own_only=True)
+        # A package class: the native owner tracks fits, validates inputs and
+        # refuses an unfitted call itself; no `tracked`/`guarded`/`load`
+        # wrapper is installed. An application subclass's own overrides are
+        # still guarded (all inherited methods too when it derives from a class
+        # not marked native).
+        if not _application_subclass(cls):
             return
-        install_fit_tracking(cls)
+        install_fit_tracking(cls, own_only=bool(getattr(cls, "_mojolearn_native_public", False)))
 
     def __sklearn_tags__(self):
         return sklearn_tags(self)
@@ -600,20 +626,9 @@ def _install_numeric_mode(cls, *, native_constructor=False):
     # glue: NumericModeMixin.__init_subclass__'s class-definition wrapper
     if getattr(cls, "_mojolearn_native_public", False):
         return  # the constructor takes numeric_mode itself
-    # Guard even passive fits (e.g. k-NN/KDE storing samples). Inherited
-    # fit methods retain their guard, including explicit host subclasses
-    # used on a machine that also has a GPU. `_fit_with_tree_start` is
-    # the forests' shard fit, which `parallel_ensemble.fit_forest`'s
-    # worker calls without `fit`; since the rf and trees host bindings
-    # serve it (lane/cpu-training-par-wave2, 2026-09-15) it is guarded
-    # like `fit`, so a CPU-only install trains a shard only inside
-    # `reference_training()`.
-    for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):  # glue: wraps five estimator method names
-        method = cls.__dict__.get(method_name)
-        if isinstance(method, available_if):
-            setattr(cls, method_name, available_if(method.check)(_guard_cpu_training(method.fn)))
-        elif method is not None:
-            setattr(cls, method_name, _guard_cpu_training(method))
+    # The former CPU-training guard loop over the five fit names is deleted
+    # (lane py-mode-wrappers, 2026-11-15): `_guard_cpu_training` returns the
+    # method unchanged, so the loop set each fit method to itself.
     orig = cls.__dict__.get("__init__")
     if orig is None:
         return
