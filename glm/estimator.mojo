@@ -31,14 +31,12 @@ those shapes raise; it is that the host surface takes the same DISPATCH --
 that a wide fit through this door lands on the min-norm route and leaves the
 min-norm card, which a bypass to `lstsq_eig` cannot do.
 """
-from experiments.classical_identical_ideas.shared_controls import C05_OLS_PHASE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 
 from core.identity_trace import IdentityTrace
 from glm.impl.ols import (
@@ -93,16 +91,9 @@ def ols_fit_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # C05: Jacobi and diagonal extraction finish before inv is first written;
-    # cov has no later consumer. The inverse GEMM overwrites every cell.
-    # Two DeviceBuffer handles own one per-invocation allocation, as in
-    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var inv: DeviceBuffer[DType.float32]
-    comptime if C05_OLS_PHASE:
-        inv = cov
-    else:
-        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (unmeasured opt-in arm; owner lane/expdel2-07-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3c2a7a6d60.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -182,16 +173,9 @@ def ols_fit_resident_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # C05: Jacobi and diagonal extraction finish before inv is first written;
-    # cov has no later consumer. The inverse GEMM overwrites every cell.
-    # Two DeviceBuffer handles own one per-invocation allocation, as in
-    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var inv: DeviceBuffer[DType.float32]
-    comptime if C05_OLS_PHASE:
-        inv = cov
-    else:
-        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (unmeasured opt-in arm; owner lane/expdel2-07-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3c2a7a6d60.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var splitk = gram_splitk_applies(n_features, n_features, n_rows)
     var alias2_n = 1 if splitk else cells
     var xa2 = ctx.enqueue_create_buffer[DType.float32](alias2_n)
@@ -208,35 +192,21 @@ def ols_fit_resident_host(
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
-        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
-        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
-            ctx.synchronize()
-            var rows_f = Float64(n_rows)
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
-                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
-        else:
-            # lane apple-fast-purity: the means on the device (soft binary64,
-            # center_device.col_means_buf), downloaded once as the fit's outputs.
-            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
-            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
-            ctx.synchronize()
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            _ = d_m64^
+        # TOMBSTONE: MOJOLEARN_PURITY_1_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at a3181ec16f.
+        # Restore: git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch; record in docs/TOMBSTONES.md.
+        # lane apple-fast-purity: the means on the device (soft binary64,
+        # center_device.col_means_buf), downloaded once as the fit's outputs.
+        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+        col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+        ctx.synchronize()
+        for j in range(n_features + 1):
+            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+            if j < n_features:
+                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+            else:
+                ymean_ptr.unsafe_store(0, mean)
+        _ = d_m64^
         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
@@ -248,7 +218,6 @@ def ols_fit_resident_host(
             n_rows, n_features, trace, OLS_ALGO_EIG,
         )
         _ = h_s^
-        _ = h_m^
         _ = d_sx^
         _ = d_sy^
         _ = d_mx^
@@ -314,16 +283,9 @@ def ols_fit_weighted_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # C05: Jacobi and diagonal extraction finish before inv is first written;
-    # cov has no later consumer. The inverse GEMM overwrites every cell.
-    # Two DeviceBuffer handles own one per-invocation allocation, as in
-    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var inv: DeviceBuffer[DType.float32]
-    comptime if C05_OLS_PHASE:
-        inv = cov
-    else:
-        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (unmeasured opt-in arm; owner lane/expdel2-07-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3c2a7a6d60.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -449,35 +411,21 @@ def ridge_fit_resident_host(
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
-        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
-        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
-            ctx.synchronize()
-            var rows_f = Float64(n_rows)
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
-                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
-        else:
-            # lane apple-fast-purity: the means on the device (soft binary64,
-            # center_device.col_means_buf), downloaded once as the fit's outputs.
-            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
-            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
-            ctx.synchronize()
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            _ = d_m64^
+        # TOMBSTONE: MOJOLEARN_PURITY_1_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at a3181ec16f.
+        # Restore: git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch; record in docs/TOMBSTONES.md.
+        # lane apple-fast-purity: the means on the device (soft binary64,
+        # center_device.col_means_buf), downloaded once as the fit's outputs.
+        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+        col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+        ctx.synchronize()
+        for j in range(n_features + 1):
+            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+            if j < n_features:
+                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+            else:
+                ymean_ptr.unsafe_store(0, mean)
+        _ = d_m64^
         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
@@ -489,7 +437,6 @@ def ridge_fit_resident_host(
         # d_x is dead from here: the Gram's gemm_tn scratch.
         ridge_eig_scratch_traced(ctx, d_cx, n_rows, n_features, d_cy, alpha, w, d_x, trace)
         _ = h_s^
-        _ = h_m^
         _ = d_sx^
         _ = d_sy^
         _ = d_mx^
@@ -595,12 +542,10 @@ def qn_fit_host(
 #: whole design and a host-built 0/1 target). `qn_fit_ovr_host` uploads X and
 #: the int32 class codes once, builds every 0/1 target on the device and
 #: hands each class's solver a device copy of X. Same fits, same bits.
-#: `-D MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF` (or the master
-#: `MOJOLEARN_IDN_ALL_OFF`) leaves the entry unregistered and the Python
-#: layer keeps one `qn_fit` call per class.
-comptime QN_OVR_ONE_UPLOAD = not (
-    is_defined["MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 021105e119.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+# QN_OVR_ONE_UPLOAD stays as the constant its importers read.
+comptime QN_OVR_ONE_UPLOAD = True
 
 
 def _ovr_target_kernel(
@@ -833,12 +778,11 @@ def qn_predict_binary_host(
 #: took the row argmax on the host (`_labels.argmax_rows`) after the device
 #: scored. The argmax now runs on the device (one thread per row) and the
 #: int64 codes download straight into the caller's buffer.
-#: `-D MOJOLEARN_QN_DEV_ARGMAX_OFF` (or the master `MOJOLEARN_IDN_ALL_OFF`)
-#: leaves the entry unregistered, and the Python layer falls back to the host
-#: scan. No bit moves: the same strict `>` from column 0.
-comptime QN_DEV_ARGMAX = not (
-    is_defined["MOJOLEARN_QN_DEV_ARGMAX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: No bit moves: the same strict `>` from column 0.
+# TOMBSTONE: MOJOLEARN_QN_DEV_ARGMAX_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 4218560b53.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch; record in docs/TOMBSTONES.md.
+# QN_DEV_ARGMAX stays as the constant its importers read.
+comptime QN_DEV_ARGMAX = True
 
 
 # Lane a8c: the code kernels (`_positive_code_kernel`, `_argmax_key`,

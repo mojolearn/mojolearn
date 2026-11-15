@@ -13,9 +13,6 @@ layout; FAST arithmetic (a different summation order).
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -27,14 +24,10 @@ comptime FX_CELLS_PER_THREAD = 4
 comptime FX_MAX_CELLS = FX_TPB * FX_CELLS_PER_THREAD
 comptime FX_MAX_C = 64
 
-# AFCL-L05: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
-# Halve rows per partial and double the partial limit: more independent
-# groups, with at most twice the existing partial workspace and fold work.
-# Both workspace sizing and launch planning use this one schedule.
-comptime AFCL_L05 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-                    and is_defined["MOJOLEARN_AFCL_L05"]())
-comptime FX_CHUNK_ROWS = 1024 if AFCL_L05 else 2048
-comptime FX_BLOCK_LIMIT = 512 if AFCL_L05 else 256
+# TOMBSTONE: MOJOLEARN_AFCL_L05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-20-linear (the halved-rows schedule); code recoverable at 1f4bbd3047.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L05.patch; record in docs/TOMBSTONES.md.
+comptime FX_CHUNK_ROWS = 2048
+comptime FX_BLOCK_LIMIT = 256
 
 
 #: lane apple-fast-no-narrow-2 (2026-10-04): `d <= FX_MAX_D` (256, which
@@ -43,9 +36,9 @@ comptime FX_BLOCK_LIMIT = 512 if AFCL_L05 else 256
 #: (FX_ROWS * FX_MAX_D floats, 16 KB); a wider row stages fewer rows per
 #: pass (`_fx_stage_rows`), same per-cell order. The remaining limits are
 #: the kernel's: `d * c <= FX_MAX_CELLS` (FX_CELLS_PER_THREAD register cells
-#: per thread) and c <= FX_MAX_C (the dz tile). `-D
-#: MOJOLEARN_LEGACY_NARROW_FX_D` restores the d <= 256 gate.
-comptime LEGACY_NARROW_FX_D = is_defined["MOJOLEARN_LEGACY_NARROW_FX_D"]()
+#: per thread) and c <= FX_MAX_C (the dz tile).
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_FX_D (old path, no A/B recorded; EXP:1336 OWED) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at fd8a1ee12a.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_FX_D.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -56,8 +49,6 @@ def _fx_stage_rows(d: Int) -> Int:
 
 
 def fast_xtdz_applies(d: Int, c: Int) -> Bool:
-    comptime if LEGACY_NARROW_FX_D:
-        return d <= FX_MAX_D and c <= FX_MAX_C and d * c <= FX_MAX_CELLS
     return d >= 1 and c <= FX_MAX_C and d * c <= FX_MAX_CELLS
 
 

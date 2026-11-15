@@ -186,11 +186,12 @@ comptime CD_SQUARED_GUARD = Float32(1.0e-5)
 #: same soft-threshold / (G_jj + l2) update and guard, c -= G[:, j] dw --
 #: instead of two axpys and a dot over all n_rows per coordinate. The same
 #: cyclic algorithm and convergence test on the same objective; only the
-#: rounding differs. `-D MOJOLEARN_CD_FAST_GRAM_OFF` keeps the row sweeps.
+#: rounding differs.
+# TOMBSTONE: MOJOLEARN_CD_FAST_GRAM_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at d75e2fbb7a.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_FAST_GRAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"]()
 )
 #: Widest design the Gram path takes. Was 256 (just above istella's 220
 #: features); removed as benchmark-tuned on 2026-10-04, replacement
@@ -204,61 +205,12 @@ comptime CD_FAST_GRAM = (
 comptime CD_GRAM_MAX_COLS = 256 if is_defined[
     "MOJOLEARN_LEGACY_NARROW_CD_GRAM"
 ]() else 2 * 8192
-comptime CD_GRAM_CELLS = 1024
 # TOMBSTONE: MOJOLEARN_CD_FAST_GRID_GRAM_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear (cd_gram_partial_kernel, CD_GRAM_ROWS and the staged [X ; y] copy + gemm_nt Gram arm of cd_fit_traced); code recoverable at e592fb6e9f.
 # Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
 
 
-#: lane/linear-apple3 (WIP, opt-in `-D MOJOLEARN_CD_GRAM_BLOCKS=1`): the
-#: CD_FAST_GRAM product from blocks of CD_GB_ROWS rows and CD_GB_TPB
-#: threads, one thread per cell of the UPPER triangle of [X ; y]^T [X ; y],
-#: read straight from x (column-major) and the labels: no (p + 1) x n copy,
-#: no staging in threadgroup memory, a quarter of the partials to read
-#: back, and no block of 1024 threads (the M2 Pro drops a dispatch above its
-#: pipeline limit with no error). The partition is fixed by n_rows alone.
-comptime CD_GRAM_BLOCKS = CD_FAST_GRAM and is_defined["MOJOLEARN_CD_GRAM_BLOCKS"]()
-comptime CD_GB_ROWS = 1024
-comptime CD_GB_TPB = 256
-
-
-def cd_gram_blocks_kernel(
-    x: MutPointer[Float32, MutAnyOrigin],
-    y: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[Float32, MutAnyOrigin],
-    p_in: Int32,
-    n_in: Int32,
-):
-    """Block k's float32 partial of every upper-triangle cell (a, b), b >= a,
-    row by row, of [X ; y]^T [X ; y] over rows [k * CD_GB_ROWS, ...)."""
-    var p = Int(p_in)
-    var n = Int(n_in)
-    var p1 = p + 1
-    var cells = p1 * (p1 + 1) // 2
-    var blk = Int(block_idx.x)
-    var r0 = blk * CD_GB_ROWS
-    var r1 = r0 + CD_GB_ROWS
-    if r1 > n:
-        r1 = n
-    var c = Int(thread_idx.x)
-    while c < cells:
-        var a = 0
-        var q = c
-        while q >= p1 - a:
-            q -= p1 - a
-            a += 1
-        var bb = a + q
-        var acc = Float32(0)
-        if bb < p:
-            for i in range(r0, r1):
-                acc += x[a * n + i] * x[bb * n + i]
-        elif a < p:
-            for i in range(r0, r1):
-                acc += x[a * n + i] * y[i]
-        else:
-            for i in range(r0, r1):
-                acc += y[i] * y[i]
-        part[blk * cells + c] = acc
-        c += CD_GB_TPB
+# TOMBSTONE: MOJOLEARN_CD_GRAM_BLOCKS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear (cd_gram_blocks_kernel, CD_GB_ROWS, CD_GB_TPB, CD_GRAM_CELLS and its branch in cd_fit_traced); code recoverable at 6e1b6c3514.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch; record in docs/TOMBSTONES.md.
 
 
 
@@ -521,12 +473,12 @@ def cd_grid_gram_red_kernel(
 # Round 1's two-launch form (06ef7f558, reverted) put the axpys inside the
 # leaf chains and lengthened them; here the axpys stay a coalesced
 # elementwise pass. The last coordinate's closing axpy stays its own launch.
-# -D MOJOLEARN_CD_THREE_LAUNCH_OFF=1 restores the six-launch sweep.
 
+# TOMBSTONE: MOJOLEARN_CD_THREE_LAUNCH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at b7039f2e07.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_THREE_LAUNCH_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_THREE_LAUNCH = (
     APPLE_LEAF_PREFETCH
     and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_CD_THREE_LAUNCH_OFF"]()
 )
 
 
@@ -555,15 +507,16 @@ def cd_axpy_pair_kernel(
 
 comptime CD_STEP_TPB = 256
 comptime CD_STEP_MAX_BLOCKS = 64
+# TOMBSTONE: MOJOLEARN_CD_TWO_STEP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at f2dad24e5a.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_TWO_STEP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_TWO_STEP = (
     CD_THREE_LAUNCH
     and not SAB_SOFT_SWAP
     and not SAB_ZERO_FOLD_MAX
     and not SAB_ZERO_FOLD_MAX_SWAPPED
-    and not is_defined["MOJOLEARN_CD_TWO_STEP_OFF"]()
 )
 """lane/linear-apple2: TWO launches per coordinate (Apple, IDENTICAL, on by
-default; -D MOJOLEARN_CD_TWO_STEP_OFF=1 returns to three). The fold and the
+default). The fold and the
 update of coordinate `prev` move into the NEXT coordinate's axpy launch,
 `cd_step_kernel`: every block folds the P partials itself (the same tree)
 and runs the update body on its own copy, so every block holds the same -r
@@ -707,18 +660,19 @@ def cd_step_kernel(
 # on the same words. The leaf partials go to the other half of a two-buffer
 # workspace, which the NEXT coordinate's launch folds with the same tree.
 # Every stored word is the same expression of the same words, so no bit
-# moves. -D MOJOLEARN_CD_FUSED_OFF=1 restores the six-launch sweep.
+# moves.
 comptime CD_FUSED_LEAVES = 4
 comptime CD_FUSED_STEPS = 128
 comptime CD_FUSED_TPB = 128
 comptime CD_FUSED_PER_THREAD = CD_FUSED_LEAVES * CD_FUSED_STEPS // CD_FUSED_TPB
+# TOMBSTONE: MOJOLEARN_CD_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 1048118370.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_FUSED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not SAB_SOFT_SWAP
     and not SAB_ZERO_FOLD_MAX
     and not SAB_ZERO_FOLD_MAX_SWAPPED
-    and not is_defined["MOJOLEARN_CD_FUSED_OFF"]()
 )
 
 
@@ -1034,8 +988,8 @@ def cd_sweep_end_kernel(
 # arithmetic, and `solver/impl/cd_gram_rule.mojo` is the one shape rule both
 # read. A traced fit (MOJOLEARN_IDENTITY_TRACE) and a fit that wants the
 # residual keep the row sweeps on both columns, so the stage card and its
-# checks are unchanged. `-D MOJOLEARN_CD_IDN_GRAM_OFF` restores the row
-# sweeps (pass it to the host build too).
+# checks are unchanged. MOJOLEARN_CD_IDN_GRAM_OFF is deleted (TOMBSTONE in
+# solver/impl/cd_gram_rule.mojo).
 comptime CD_IDN_GRAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and CD_IDN_GRAM_ON
@@ -1533,95 +1487,65 @@ def cd_fit_traced(
             var gsum = List[Float64](capacity=p1 * p1)
             for _ in range(p1 * p1):
                 gsum.append(0.0)
-            var blocks_done = False
-            comptime if CD_GRAM_BLOCKS:
-                if p1 * p1 <= CD_GRAM_CELLS:
-                    # lane/linear-apple3: the upper triangle straight from x
-                    # and the labels, CD_GB_ROWS rows a block (no staged copy)
-                    blocks_done = True
-                    var gcells = p1 * (p1 + 1) // 2
-                    var gnb = (n_rows + CD_GB_ROWS - 1) // CD_GB_ROWS
-                    var gp = ctx.enqueue_create_buffer[DType.float32](gnb * gcells)
-                    var hgp = ctx.enqueue_create_host_buffer[DType.float32](gnb * gcells)
-                    ctx.enqueue_function[cd_gram_blocks_kernel](
-                        x.unsafe_ptr(), labels.unsafe_ptr(), gp.unsafe_ptr(), Int32(p),
-                        Int32(n_rows), grid_dim=(gnb, 1, 1),
-                        block_dim=(CD_GB_TPB, 1, 1),
-                    )
-                    ctx.enqueue_copy(dst_buf=hgp, src_buf=gp)
-                    ctx.synchronize()
-                    var gc = 0
-                    for a in range(p1):
-                        for bb in range(a, p1):
-                            var acc = 0.0
-                            for k in range(gnb):
-                                acc += Float64(hgp.unsafe_ptr().unsafe_load(k * gcells + gc))
-                            gsum[a * p1 + bb] = acc
-                            gsum[bb * p1 + a] = acc
-                            gc += 1
-                    _ = gp^
-                    _ = hgp^
             var gmu = List[Float64](capacity=p1)
-            if not blocks_done:
-                # lane/apple-fast-linear: the product on the grid (see
-                # cd_grid_gram_kernel's banner); row_major also takes the
-                # means from the chunks and centers the tiles at them
-                blocks_done = True
-                var nch = (n_rows + CD_GG_CH - 1) // CD_GG_CH
-                var nt = (p1 + CD_GG_TS - 1) // CD_GG_TS
-                var npairs = nt * (nt + 1) // 2
-                var rm = Int32(1) if row_major else Int32(0)
-                var dps = ctx.enqueue_create_buffer[DType.float32](nch * p1)
-                var dmu = ctx.enqueue_create_buffer[DType.float32](p1)
-                var dpg = ctx.enqueue_create_buffer[DType.float32](
-                    nch * npairs * CD_GG_TS * CD_GG_TS
+            # lane/apple-fast-linear: the product on the grid (see
+            # cd_grid_gram_kernel's banner); row_major also takes the
+            # means from the chunks and centers the tiles at them
+            var nch = (n_rows + CD_GG_CH - 1) // CD_GG_CH
+            var nt = (p1 + CD_GG_TS - 1) // CD_GG_TS
+            var npairs = nt * (nt + 1) // 2
+            var rm = Int32(1) if row_major else Int32(0)
+            var dps = ctx.enqueue_create_buffer[DType.float32](nch * p1)
+            var dmu = ctx.enqueue_create_buffer[DType.float32](p1)
+            var dpg = ctx.enqueue_create_buffer[DType.float32](
+                nch * npairs * CD_GG_TS * CD_GG_TS
+            )
+            var dgram = ctx.enqueue_create_buffer[DType.float32](p1 * p1)
+            var hgram = ctx.enqueue_create_host_buffer[DType.float32](p1 * p1)
+            var hmu = ctx.enqueue_create_host_buffer[DType.float32](p1)
+            if row_major and fit_intercept:
+                ctx.enqueue_function[cd_grid_sums_kernel](
+                    x.unsafe_ptr(), labels.unsafe_ptr(), dps.unsafe_ptr(),
+                    Int32(p), Int32(n_rows), rm,
+                    grid_dim=(nch, 1, 1), block_dim=(CD_GG_TPB, 1, 1),
                 )
-                var dgram = ctx.enqueue_create_buffer[DType.float32](p1 * p1)
-                var hgram = ctx.enqueue_create_host_buffer[DType.float32](p1 * p1)
-                var hmu = ctx.enqueue_create_host_buffer[DType.float32](p1)
-                if row_major and fit_intercept:
-                    ctx.enqueue_function[cd_grid_sums_kernel](
-                        x.unsafe_ptr(), labels.unsafe_ptr(), dps.unsafe_ptr(),
-                        Int32(p), Int32(n_rows), rm,
-                        grid_dim=(nch, 1, 1), block_dim=(CD_GG_TPB, 1, 1),
-                    )
-                    ctx.enqueue_function[cd_grid_means_kernel](
-                        dps.unsafe_ptr(), dmu.unsafe_ptr(), Int32(p1), Int32(nch),
-                        Int32(n_rows),
-                        grid_dim=((p1 + CD_GG_TPB - 1) // CD_GG_TPB, 1, 1),
-                        block_dim=(CD_GG_TPB, 1, 1),
-                    )
-                else:
-                    # the columns are centered already (pre_process_data),
-                    # or there is no intercept to center for
-                    ctx.enqueue_memset(dmu, Float32(0.0))
-                ctx.enqueue_function[cd_grid_gram_kernel](
-                    x.unsafe_ptr(), labels.unsafe_ptr(), dmu.unsafe_ptr(),
-                    dpg.unsafe_ptr(), Int32(p), Int32(n_rows), rm, Int32(npairs),
-                    Int32(nt),
-                    grid_dim=(nch * npairs, 1, 1), block_dim=(CD_GG_TPB, 1, 1),
-                )
-                ctx.enqueue_function[cd_grid_gram_red_kernel](
-                    dpg.unsafe_ptr(), dgram.unsafe_ptr(), Int32(p1), Int32(nch),
-                    Int32(npairs), Int32(nt),
-                    grid_dim=(
-                        (npairs * CD_GG_TS * CD_GG_TS + CD_GG_TPB - 1) // CD_GG_TPB, 1, 1
-                    ),
+                ctx.enqueue_function[cd_grid_means_kernel](
+                    dps.unsafe_ptr(), dmu.unsafe_ptr(), Int32(p1), Int32(nch),
+                    Int32(n_rows),
+                    grid_dim=((p1 + CD_GG_TPB - 1) // CD_GG_TPB, 1, 1),
                     block_dim=(CD_GG_TPB, 1, 1),
                 )
-                ctx.enqueue_copy(dst_buf=hgram, src_buf=dgram)
-                ctx.enqueue_copy(dst_buf=hmu, src_buf=dmu)
-                ctx.synchronize()
-                for q in range(p1 * p1):
-                    gsum[q] = Float64(hgram.unsafe_ptr().unsafe_load(q))
-                for q in range(p1):
-                    gmu.append(Float64(hmu.unsafe_ptr().unsafe_load(q)))
-                _ = dps^
-                _ = dmu^
-                _ = dpg^
-                _ = dgram^
-                _ = hgram^
-                _ = hmu^
+            else:
+                # the columns are centered already (pre_process_data),
+                # or there is no intercept to center for
+                ctx.enqueue_memset(dmu, Float32(0.0))
+            ctx.enqueue_function[cd_grid_gram_kernel](
+                x.unsafe_ptr(), labels.unsafe_ptr(), dmu.unsafe_ptr(),
+                dpg.unsafe_ptr(), Int32(p), Int32(n_rows), rm, Int32(npairs),
+                Int32(nt),
+                grid_dim=(nch * npairs, 1, 1), block_dim=(CD_GG_TPB, 1, 1),
+            )
+            ctx.enqueue_function[cd_grid_gram_red_kernel](
+                dpg.unsafe_ptr(), dgram.unsafe_ptr(), Int32(p1), Int32(nch),
+                Int32(npairs), Int32(nt),
+                grid_dim=(
+                    (npairs * CD_GG_TS * CD_GG_TS + CD_GG_TPB - 1) // CD_GG_TPB, 1, 1
+                ),
+                block_dim=(CD_GG_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_buf=hgram, src_buf=dgram)
+            ctx.enqueue_copy(dst_buf=hmu, src_buf=dmu)
+            ctx.synchronize()
+            for q in range(p1 * p1):
+                gsum[q] = Float64(hgram.unsafe_ptr().unsafe_load(q))
+            for q in range(p1):
+                gmu.append(Float64(hmu.unsafe_ptr().unsafe_load(q)))
+            _ = dps^
+            _ = dmu^
+            _ = dpg^
+            _ = dgram^
+            _ = hgram^
+            _ = hmu^
             var G = List[Float64](capacity=p * p)
             var c = List[Float64](capacity=p)
             for a in range(p):

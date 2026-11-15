@@ -151,9 +151,9 @@ comptime QN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: QN_TILED (`glm/impl/qn/glm_base.mojo`): the `C == 1` objective's loss
 #: sum, bias mean and `X^T dZ` in the row-tile order every GPU runs.
-#: `-D MOJOLEARN_QN_TILED_OFF=1` restores the 256-chain order (the device
-#: build must take the same define).
-comptime HOST_QN_TILED = not is_defined["MOJOLEARN_QN_TILED_OFF"]()
+# TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime HOST_QN_TILED = True
 comptime HOST_QNT_ROWS = 256
 
 

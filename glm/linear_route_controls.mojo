@@ -2,7 +2,6 @@
 """The existing linear solver switches, shared by native and address doors."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST as _OLS_FAST
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from std.sys.compile import is_defined
 
 #: Lane apple-fast-olsne (2026-10-03): LinearRegression.fit takes the
 #: equilibrated normal equations (DEVIATION 2620) with X and y uploaded once
@@ -22,11 +21,10 @@ comptime OLS_FAST_NORMAL_EQ = GLOBAL_NUMERIC_MODE == _OLS_FAST and TARGET_HAS_AP
 #: centering route. FAST on Apple only; same kernels and words. Read by
 #: Python through `ridge_resident_default`. Default since the M3 A/B
 #: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
-#: taxi 57.1 -> 24.5 ms, istella 1,405 -> 724 ms). Off with
-#: -D MOJOLEARN_RIDGE_RESIDENT_OFF (which also turns RIDGE_NO_U off); the
-#: old -D MOJOLEARN_RIDGE_RESIDENT define is now harmless.
+#: taxi 57.1 -> 24.5 ms, istella 1,405 -> 724 ms).
+# TOMBSTONE: MOJOLEARN_RIDGE_RESIDENT_OFF (old path; EXP:247 promoted on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3fcdcb78f6.
+# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime RIDGE_FAST_RESIDENT = (
     GLOBAL_NUMERIC_MODE == _OLS_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
 )

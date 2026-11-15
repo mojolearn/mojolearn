@@ -24,30 +24,6 @@
    "status": "new",
    "grid": "exclude",
    "note": "FAST + Apple only (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()); not an IDENTICAL switch, so the NVIDIA + AMD IDENTICAL grid does not apply; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). Reaches fast sgd-reg / sgd-clf (batch 4096) on Apple."
-  },
-  "x_prep_fast_fit_transform_fused": {
-   "define": "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "preprocessing/estimator.mojo:344",
-    "bindings/_mojolearn_preprocessing.mojo:191",
-    "python/mojolearn/preprocessing.py:658"
-   ],
-   "binding": "_mojolearn_preprocessing",
-   "bits_change": false,
-   "status": "new",
-   "grid": "exclude",
-   "tags": [
-    "off_board"
-   ],
-   "note": "FAST + Apple only (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()); not an IDENTICAL switch, so the NVIDIA + AMD IDENTICAL grid does not apply; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). not on the board lane list as a reached route: the board standard-scaler times fit(X) then transform(Xq); reached by StandardScaler.fit_transform."
   }
  },
  "algorithms": {},
@@ -61,6 +37,11 @@
    "define": "MOJOLEARN_PSHAP_FAST_DEVICE_MODEL",
    "control": "pshap_fast_device_model",
    "reason": "DELETED 2026-11-09 (lane k1-delete-unverdicted-fast; recoverable at f59d913b0b; patch experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch): never measured (OPEN, Apple FAST investment stopped)"
+  },
+  {
+   "define": "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED",
+   "control": "x_prep_fast_fit_transform_fused",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-20-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 23c6c58415; patch experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch): opt-in arm, no A/B recorded; EXP:1597 OPEN (no A/B recorded). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
   }
  ]
 }

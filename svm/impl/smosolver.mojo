@@ -155,13 +155,12 @@ tile and reading it back; RBF and linear kernels, n_cols <= 64."""
 #: of writing the `nnz x batch` kernel tile (identical GEMM + RBF epilogue
 #: launch) and reading it back: RBF and linear kernels, n_cols <= 64, one
 #: device. Same expressions in the same order per cell, so no bit moves and
-#: the host column is untouched. `-D MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF`
-#: (or the master `MOJOLEARN_IDN_ALL_OFF`) keeps the tile path; the sabotage
-#: builds keep it too, so each still fails its gate through the kernels it
-#: names.
+#: the host column is untouched. The sabotage builds keep the tile path, so
+#: each still fails its gate through the kernels it names.
+# TOMBSTONE: MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 30ab49dcd7.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SVM_IDN_FUSED_UPDATE_F = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
     and not SAB_FOLD_ROTATE
     and not SAB_NO_FTZ
     and not is_defined["MOJOLEARN_SVM_SABOTAGE_STD_EXP"]()
@@ -173,12 +172,9 @@ comptime SVM_IDN_FUSED_UPDATE_F = (
 #: flag, scan alpha, scan f); it is one: the flag is cleared once before the
 #: loop, and a set flag raises, so nothing ever needs it cleared again. The
 #: same verdict on the same words; no arithmetic.
-#: `-D MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`)
-#: restores the three launches.
-comptime SVM_IDN_NAN_SCAN_ONE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 788f90f025.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVM_IDN_NAN_SCAN_ONE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def flag_nan2_f32_kernel(
@@ -323,16 +319,13 @@ def update_f_kernel(
 #: smaller training index), so the winner, and every word, is the same at any
 #: block width (the launch-invariance gate already passes 1024); the host
 #: oracle is unchanged. Expected ~6.5 -> ~2.5 us per inner iteration: svc taxi
-#: NV ~1202 -> ~750 ms. -D MOJOLEARN_IDN_SVC_ONE_BLOCK turns it on;
-#: MOJOLEARN_IDN_ALL_OFF wins.
+#: NV ~1202 -> ~750 ms.
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): svc istella 0.720 (NV 0.685, AMD 0.755),
-#: taxi 0.663 (NV 0.629, AMD 0.697); same bits; runs v0127/a1709 vs A v0126/a1708. -D
-#: MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF restores the old path.
-comptime IDN_SVC_ONE_BLOCK = not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF"]() and not is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
-comptime SMO_GRID_TPB_CAP = 1024 if IDN_SVC_ONE_BLOCK else SMO_GRID_TPB
+#: taxi 0.663 (NV 0.629, AMD 0.697); same bits; runs v0127/a1709 vs A v0126/a1708.
+# TOMBSTONE: MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF (old path of the promoted default, EXP:2062) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at ed4cab202e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SMO_GRID_TPB_CAP = 1024
 
 
 def _block_solve_threads_for(n_ws: Int, requested: Int) -> Int:

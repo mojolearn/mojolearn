@@ -102,10 +102,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
 
+# TOMBSTONE: MOJOLEARN_QN_FAST_XTDZ_OFF (old path; EXP:1930 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 83e86f6d61.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_XTDZ_OFF.patch; record in docs/TOMBSTONES.md.
 comptime QN_FAST_XTDZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_QN_FAST_XTDZ_OFF"]()
 )
 """FAST on Apple: the gradient's `X^T dZ` through `fast_xtdz` (rows split
 across blocks, X read once) instead of one block per output cell walking
@@ -472,15 +473,12 @@ def qn_block_fold_kernel(
 # pinned halving tree. The epilogues (cuBLAS's alpha/beta, the bias
 # `sum * (1 / N)`, the loss store) are unchanged. The words differ from the
 # 256-chain order and are the same on NVIDIA, AMD, Apple and the host column
-# (`glm/host/qn_oracle.mojo::host_qnt_*`). `-D MOJOLEARN_QN_TILED_OFF=1`
-# restores the 256-chain kernels (the A/B define; pass it to the host build
-# too).
+# (`glm/host/qn_oracle.mojo::host_qnt_*`).
 # ---------------------------------------------------------------------------
 
-comptime QN_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_QN_TILED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime QNT_ROWS = 256
 comptime QNT_TPB = 256
 
@@ -504,7 +502,7 @@ comptime QNT_TPB = 256
 #                    identical; M2 linsvr-lsbatch-taxi-x -38.8%.
 #                    `-D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF` reverts.
 #   QN_LSVR_ALL      DEFAULT at every width since 2026-10-04 (the old
-#                    n_features <= 32 bound is MOJOLEARN_LEGACY_NARROW_QN_ALL;
+#                    n_features <= 32 bound is deleted;
 #                    dconv keeps the fused register bound QNF_MAX_D); on top
 #                    of the two above: QN_FAST_TILED (the tiled objective,
 #                    FAST arithmetic) and QN_FAST_DCONV (the line search's
@@ -517,8 +515,6 @@ comptime QNT_TPB = 256
 #                    (`qn_tiled_applies` and `dconv_applies` test d; the same
 #                    pattern as SGD_FAST_PS_SIMD's SPS_MAX_D). M2
 #                    linsvr-all-taxi-x 292.2 -> 58.6 ms.
-#                    `-D MOJOLEARN_LSVR_ALL_OFF` reverts to LS_BATCH + SLIM;
-#                    either part's _OFF also turns ALL off.
 #
 # Dropped (code on lane/apple-fast-linsvr @ c649076a4; docs/apple-fast/
 # EXPERIMENTS.md): FASTPATH_FIX alone (M3 istella +1.5%), FUSED_GRAD alone
@@ -527,32 +523,29 @@ comptime QNT_TPB = 256
 # ---------------------------------------------------------------------------
 
 comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-comptime QN_FAST_SLIM = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_EVAL_SLIM_OFF"]()
-comptime QN_FAST_LS_BATCH = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF"]()
+# TOMBSTONE: MOJOLEARN_LSVR_EVAL_SLIM_OFF (old path; EXP:285 promoted on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at e9b815205e.
+# Restore: git apply experiments/removed/MOJOLEARN_LSVR_EVAL_SLIM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_FAST_SLIM = QN_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF (old path; EXP:288 promoted on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 07f25ee298.
+# Restore: git apply experiments/removed/MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_FAST_LS_BATCH = QN_FAST_APPLE
 comptime QN_FAST_FUSED = QN_FAST_LS_BATCH
-comptime QN_LSVR_ALL = QN_FAST_SLIM and QN_FAST_LS_BATCH and not is_defined["MOJOLEARN_LSVR_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_LSVR_ALL_OFF (old path; EXP:283 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at ff4bf11f19.
+# Restore: git apply experiments/removed/MOJOLEARN_LSVR_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_LSVR_ALL = QN_FAST_SLIM and QN_FAST_LS_BATCH
 comptime QN_FAST_TILED = QN_LSVR_ALL
 #: lane/apple-fast-linsvr: device-side line-search decision + convergence
 #: test, one host read per QN_DCONV_POLL iterations (`qn_dconv.mojo`)
 comptime QN_FAST_DCONV = QN_LSVR_ALL
-#: LEGACY, default OFF: QN_LSVR_ALL's old width bound admitted only
-#: n_features <= 32, chosen between taxi (d ~ 11, -77%) and istella (d ~ 220,
-#: +6.2%). Removed as benchmark-tuned on 2026-10-04: the tiled objective now
-#: serves every d (UNMEASURED). The device line search (dconv) keeps only the
-#: fused pass's register bound QNF_MAX_D.
-comptime QN_ALL_LEGACY_WIDTH = is_defined["MOJOLEARN_LEGACY_NARROW_QN_ALL"]()
+#: QN_LSVR_ALL's old n_features <= 32 bound was removed as benchmark-tuned on
+#: 2026-10-04: the tiled objective serves every d. The device line search
+#: (dconv) keeps only the fused pass's register bound QNF_MAX_D.
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_QN_ALL (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear (QN_ALL_LEGACY_WIDTH and its two reads); code recoverable at e1833e6a98.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_QN_ALL.patch; record in docs/TOMBSTONES.md.
 #: the fused pass: threads per block, rows per thread, the register bound on d
 comptime QNF_TPB = 256
 comptime QNF_RPT = 16
 comptime QNF_MAX_D = 32
-#: QN_LSVR_ALL's width bound, a size rule tied to the fused pass's register
-#: bound rather than to a board row: ALL's tiled objective and device line
-#: search pay off when one thread keeps the whole weight vector in registers
-#: (d <= QNF_MAX_D); wider d spills to per-column loops, where LS_BATCH + SLIM
-#: is the better plan (one wide-d A/B, d ~ 220: +6.2% under ALL). Same value
-#: as before (32): no route or bit moves. Needs neighbor-shape validation
-#: (d 24, 32, 33, 48, 64).
-comptime QN_ALL_MAX_D = QNF_MAX_D
 #: line-search candidates one fused pass sums: the point itself and the next
 #: QNF_LS_K - 1 backtracking steps
 comptime QNF_LS_K = 4
@@ -564,8 +557,6 @@ def qn_tiled_applies(d: Int, c: Int) -> Bool:
     comptime if QN_TILED:
         return c == 1
     comptime if QN_FAST_TILED:
-        comptime if QN_ALL_LEGACY_WIDTH:
-            return c == 1 and d <= QN_ALL_MAX_D
         return c == 1
     return False
 
@@ -1033,11 +1024,9 @@ def qn_slim_epilogue_gated_kernel(
 # NO BIT MOVES: `g[j] = ftz(sc + ftz(l2 * w_j))` is the sum the beta = 1
 # fold formed (an addition, commuted); the regularizer value, `dot_self` /
 # `nrm1` / `nrm_max` and the l1 term are those kernels' chains and folds.
-# `-D MOJOLEARN_QN_IDN_SLIM_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
-# separate launches.
-comptime QN_IDN_SLIM = QN_TILED and not (
-    is_defined["MOJOLEARN_QN_IDN_SLIM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_IDN_SLIM_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at cf050feb2f.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_SLIM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_IDN_SLIM = QN_TILED
 
 
 @always_inline
@@ -1213,13 +1202,11 @@ def qnt_fold_kernel(
 # outputs o, o + 256, ... when D + 2 > 256), X now cache-resident.
 # `qnt_fold_kernel` follows unchanged. NO BIT MOVES: every chain is the one
 # the four launches ran, so the host column is untouched.
-# `-D MOJOLEARN_QN_IDN_FUSED_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
-# four launches.
 # ---------------------------------------------------------------------------
 
-comptime QN_IDN_FUSED = QN_TILED and not (
-    is_defined["MOJOLEARN_QN_IDN_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_IDN_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 42a2855cbe.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_IDN_FUSED = QN_TILED
 # Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
 # NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
 # linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
@@ -1504,15 +1491,11 @@ def qn_tile_sum(
     is_mean: Bool,
 ) raises:
     """out_v[0] = sum(v[0:n]) (or its mean) in the tile order; partials in
-    ws[0, qnt_tiles(n)), which the caller sizes. FAST A/B arm: `-D
-    MOJOLEARN_PURITY2_2_OFF` folds the n rows as ONE tile (one chain, the
-    old one-block cost class); IDENTICAL ignores it (the host column folds
-    QNT_ROWS tiles)."""
+    ws[0, qnt_tiles(n)), which the caller sizes."""
+    # TOMBSTONE: MOJOLEARN_PURITY2_2_OFF (old path, no A/B recorded; EXP:721 OPEN) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at eb10315ddd.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY2_2_OFF.patch; record in docs/TOMBSTONES.md.
     var tiles = qnt_tiles(n)
     var rows = QNT_ROWS
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_PURITY2_2_OFF"]():
-        tiles = 1
-        rows = max(n, 1)
     ctx.enqueue_function[qn_tile_sum_partial_kernel](
         ws.unsafe_ptr(), v, Int32(n), Int32(tiles), Int32(rows),
         grid_dim=((tiles + QNT_TPB - 1) // QNT_TPB, 1, 1),
@@ -2086,16 +2069,9 @@ struct GLMWithData(Movable):
         were two (three with `grad_norm`, four under OWL-QN). The host
         arithmetic on them is unchanged."""
         if not drain:
-            # The deferred (no-drain) evaluation is the exact-trials line
-            # search's (qn_linesearch.mojo:171), which either define admits:
-            # MOJOLEARN_CLASSICAL_C17_LS_TRIALS (2 trials) or
-            # MOJOLEARN_IDN_QN_EXACT_TRIALS (4 trials, I12 loser, kept off).
-            # Lane grid-fixups-1 (2026-10-08): this gate named only the second,
-            # so every C17 cell raised at round 0 (grid ge123e6f9, logreg /
-            # linearsvc / linearsvr on NVIDIA and AMD). Same predicate as the
-            # line-search gate now; nothing else reads the define here.
-            comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"]() or is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]())):
-                raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
+            # TOMBSTONE: MOJOLEARN_IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded; I12 loser) deleted 2026-11-15 by lane/expdel2-20-linear, with the MOJOLEARN_CLASSICAL_C17_LS_TRIALS reads here (non-owner, owner expdel2-06-base); code recoverable at fb9523bf09.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch (and MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch); record in docs/TOMBSTONES.md.
+            raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
         self.n_evals += 1
         self.gnorm_at = 0
         var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
@@ -2401,7 +2377,6 @@ struct GLMWithData(Movable):
             return (
                 qn_fused_applies(self.dims.D, self.dims.C)
                 and not self.weighted
-                and (not QN_ALL_LEGACY_WIDTH or self.dims.D <= QN_ALL_MAX_D)
                 and self.dims.n_param <= STATS_TPB
             )
         return False

@@ -39,8 +39,8 @@ This implementation, both modes the same association, the pins under IDENTICAL:
 # =========================================================================
 """
 
-from experiments.classical_identical_ideas.linear_controls import C22_TRIANGLE
-from svm.impl.classical_kernel_device import classical_triangle_kernel
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C22_TRIANGLE (unmeasured opt-in arm; owner lane/expdel2-06-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at efe4d2c321.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
 from max.gpu import block_dim, block_idx, thread_idx
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import exp
@@ -106,11 +106,11 @@ def row_norm_l2sq_kernel(
 #: Apple IDENTICAL: the RBF epilogue on a (columns, rows) grid, so no cell
 #: divides its flat index by `cols` (a 64-bit integer division, emulated on
 #: Apple's GPU). Same per-cell arithmetic.
-#: `-D MOJOLEARN_SVM_RBF_EPILOGUE_1D` keeps the flat grid.
+# TOMBSTONE: MOJOLEARN_SVM_RBF_EPILOGUE_1D (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 58cc0078e2.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch; record in docs/TOMBSTONES.md.
 comptime RBF_EPILOGUE_2D = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SVM_RBF_EPILOGUE_1D"]()
 )
 
 
@@ -384,13 +384,13 @@ def rbf_fused_tile(
 # so DEVIATION 2492's kernel shape can evaluate the same cell in one launch
 # with the pinned arithmetic: the chain over exactly k terms, then
 # `rbf_kernel_expanded_kernel`'s expression character for character. No bit
-# moves, on any vendor, and the host column is untouched. Every vendor;
-# `-D MOJOLEARN_SVM_IDN_FUSED_TILE_OFF` (or the master
-# `MOJOLEARN_IDN_ALL_OFF`) keeps the two launches, and so do the two sabotage
-# builds, which must keep failing through the kernels they name.
+# moves, on any vendor, and the host column is untouched. Every vendor; the
+# two sabotage builds keep the two launches, which must keep failing through
+# the kernels they name.
+# TOMBSTONE: MOJOLEARN_SVM_IDN_FUSED_TILE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 8398142558.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SVM_IDN_FUSED_TILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_TILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
     and not SAB_STD_EXP
     and not SAB_NO_FTZ
 )
@@ -514,14 +514,10 @@ def kernel_op_takes_triangle(
     m: Int,
     n: Int,
 ) -> Bool:
-    """True when `kernel_op` answers with its C22 symmetric triangle launch.
-
-    Pointer equality proves one immutable dataset on both sides; a square
-    cross-kernel between distinct datasets is not symmetric. The multi-device
-    dispatcher (svm/multi_gpu.mojo) asks the same question before it shards,
-    because the triangle used to run ahead of the device-count branch."""
-    comptime if C22_TRIANGLE:
-        return m == n and Int(a.unsafe_ptr()) == Int(b.unsafe_ptr()) and (kp.kernel == KERNEL_LINEAR or kp.kernel == KERNEL_RBF or kp.kernel == KERNEL_POLYNOMIAL or kp.kernel == KERNEL_TANH)
+    """True when `kernel_op` answers with its C22 symmetric triangle launch:
+    never, since the C22 arm is deleted. The multi-device dispatcher
+    (svm/multi_gpu.mojo) still asks before it shards; the integrator drops
+    the question with this function."""
     return False
 
 
@@ -545,15 +541,6 @@ def kernel_op(
     `kernel_workspace_floats(m, n, k)` floats."""
     if m <= 0 or n <= 0:
         return
-    comptime if C22_TRIANGLE:
-        # Pointer equality proves one immutable dataset on both sides; a
-        # square cross-kernel between distinct datasets is not symmetric.
-        if kernel_op_takes_triangle(kp, a, b, m, n):
-            ctx.enqueue_function[classical_triangle_kernel](
-                a.unsafe_ptr(), norm_a.unsafe_ptr(), output.unsafe_ptr(), Int32(n), Int32(k), Int32(kp.kernel),
-                Float32(kp.gamma), Float32(kp.coef0), Int32(kp.degree), grid_dim=_grid(n * n), block_dim=KM_TPB,
-            )
-            return
     # DEVIATION 2492: FAST RBF in one fused kernel when k fits a register row.
     # Apple only. 0.8.19's NVPTX/AMDGPU FAST hang was NOT these kernels: it was the
     # kernel_op -> _kernel_rows -> kernel_op cycle reaching MAX matmul (now gated
