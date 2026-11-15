@@ -7,7 +7,7 @@ from ensemble.rf_notices import (
     rf_notice, RF_NOTICE_OOB_PARTIAL, RF_NOTICE_BINS_CLAMPED,
     RF_NOTICE_MAX_SAMPLES_IGNORED,
 )
-from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED
+from ensemble.tree_identical_ideas import RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED
 from std.math import fma
 from max.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
@@ -2878,7 +2878,7 @@ def fit_forest_prepared[
     # same data session left is used as it is (its quantile sample was
     # drawn with THAT fit's seed); otherwise the table is this fit's own.
     var t_stage = instr.times.start()
-    var use_bins = Int(rf_params.tree_params.max_n_bins) <= (65536 if T08 and T08_BITS == 16 else 256)
+    var use_bins = Int(rf_params.tree_params.max_n_bins) <= 256
     # RF_BINS_ROW_MAJOR (Apple): row-major bins when a row's bins fit one
     # 64-byte line, or (FAST only, RF_BINS_ROW_MAJOR_WIDE) the trees
     # sample at least half the features.
@@ -2892,10 +2892,8 @@ def fit_forest_prepared[
                     rf_params.tree_params.max_features, n_cols
                 ) >= n_cols
             )
-    comptime if T08:
-        # Existing uint8 quantile IDs are exact, including boundary behavior.
-        # A layout experiment never enables ET's lossy uint16 quantization.
-        bins_row_major = use_bins and T08_LAYOUT == 1
+    # TOMBSTONE: MOJOLEARN_TREES_T08 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08.patch (with _LAYOUT and _BITS)
     var prep_kept = False
     if keep_prep and len(prep) == 1:
         if (
@@ -2925,11 +2923,6 @@ def fit_forest_prepared[
             row_major,
         )
         var bin_bytes = n_rows*n_cols
-        comptime if T08:
-            comptime if T08_LAYOUT == 3:
-                bin_bytes = ((n_rows+31)//32)*32*n_cols
-            comptime if T08_BITS == 16:
-                bin_bytes *= 2
         var d_bins_new = ctx.enqueue_create_buffer[DType.uint8](bin_bytes if use_bins else 1)
         prep.append(
             ForestPrep(
