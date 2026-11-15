@@ -20,7 +20,6 @@ from core.host_parallel import host_parallelize
 from core.identity_trace import IdentityTrace
 from std.sys import is_defined
 from isolation_forest.impl.isolation_forest import (
-    IF_C50_PACKED,
     IFLaunchKnobs,
     IFModelShard,
     IF_params,
@@ -64,8 +63,6 @@ def fit_dispatch(
         raise Error("parallel IsolationForest requires 1..64 devices")
     if trace.enabled:
         raise Error("parallel IsolationForest does not export diagnostic traces")
-    comptime if IF_C50_PACKED:
-        raise Error("C50 IF packed model requires one device; pooled packed models remain pending")
     _fit_tree_shards(plan, ctx, input_colmajor, src_addr, n_rows, n_cols,
                      forest.params, model, knobs, count)
 
