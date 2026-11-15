@@ -700,6 +700,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CD_FAST_ROWMAJOR_OFF`](#mojolearn_cd_fast_rowmajor_off-old-path-deleted-2026-11-15) | Solver (CD row-major grid Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch) |
 | [`MOJOLEARN_C31_DEVICE_BUCKETS`](#mojolearn_c31_device_buckets-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C31_DEVICE_BUCKETS.patch](../experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch) |
 | [`MOJOLEARN_C32_COUNT_FUSION`](#mojolearn_c32_count_fusion-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C32_COUNT_FUSION.patch](../experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch) |
+| [`MOJOLEARN_C32_EMIT_FUSION`](#mojolearn_c32_emit_fusion-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C32_EMIT_FUSION.patch](../experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6775,4 +6776,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `0445dd8786`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch`, then delete the `MOJOLEARN_C32_COUNT_FUSION` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C32_EMIT_FUSION: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C32): the ball-cover register pass fused with its emit pass. The alias `C32_EMIT_FUSION` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (neighbors/impl/ball_cover/registers.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `330982c9db`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch`, then delete the `MOJOLEARN_C32_EMIT_FUSION` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

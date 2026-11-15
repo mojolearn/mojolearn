@@ -75,7 +75,9 @@ comptime C31_DEVICE_BUCKETS = False
 # TOMBSTONE: MOJOLEARN_C32_COUNT_FUSION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 0445dd8786.
 # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch; record in docs/TOMBSTONES.md.
 comptime C32_COUNT_FUSION = False
-comptime C32_EMIT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_EMIT_FUSION"]()
+# TOMBSTONE: MOJOLEARN_C32_EMIT_FUSION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 330982c9db.
+# Restore: git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch; record in docs/TOMBSTONES.md.
+comptime C32_EMIT_FUSION = False
 comptime C33_FROZEN_CHUNKS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C33_FROZEN_CHUNKS"]()
 comptime C33_CHUNK = 4 if is_defined["MOJOLEARN_C33_CHUNK_4"]() else 16
 comptime C34_PARALLEL_EDGES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C34_PARALLEL_EDGES"]()

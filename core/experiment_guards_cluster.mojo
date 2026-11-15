@@ -139,6 +139,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"](), "removed 2026-11-15 (lane/expdel2-05-base): C31_DEVICE_BUCKETS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch
     comptime assert not is_defined["MOJOLEARN_C32_COUNT_FUSION"](), "removed 2026-11-15 (lane/expdel2-05-base): C32_COUNT_FUSION (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch
+    comptime assert not is_defined["MOJOLEARN_C32_EMIT_FUSION"](), "removed 2026-11-15 (lane/expdel2-05-base): C32_EMIT_FUSION (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     return True
 
 
