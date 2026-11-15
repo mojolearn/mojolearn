@@ -6,7 +6,6 @@ Existing algorithms enqueue their exact kernels against the typed device slots.
 Public calls require serialized host ownership. Never mutate internal banks.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -124,8 +123,12 @@ struct IdenticalCallSession(Movable):
     var u8: CallBufferBank[DType.uint8]
 
     def __init__(out self, device_id: Int = -1) raises:
-        comptime if not is_defined["MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH"]():
-            raise Error("shared callpath requires explicit experimental opt-in")
+        # TOMBSTONE: MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at d1343040f6.
+        # Restore: git apply experiments/removed/MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH.patch; record in docs/TOMBSTONES.md.
+        # The opt-in is gone, so the session always refuses (the constant keeps the
+        # default build's form; experiments/identical_callpath/* still import the type).
+        comptime if True:
+            raise Error("shared callpath experiment was removed (MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH)")
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             raise Error("shared callpath requires IDENTICAL numerical mode")
         if device_id < -1:
