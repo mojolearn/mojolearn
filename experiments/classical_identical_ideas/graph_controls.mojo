@@ -116,7 +116,7 @@ comptime XCLUSTER_ROW_ASSIGN_ROWS = 0
 # behavior under this name.
 # TOMBSTONE: MOJOLEARN_XCLUSTER_KPP_DISTINCT (dropped / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at c3dc42fd2c.
 # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch; record in docs/TOMBSTONES.md.
-comptime XCLUSTER_KPP_DISTINCT = False
+# (Sweep 2026-11-15: comptime XCLUSTER_KPP_DISTINCT removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C39_RETAIN_STATE (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 9ac1d53067.
 # Restore: git apply experiments/removed/MOJOLEARN_C39_RETAIN_STATE.patch; record in docs/TOMBSTONES.md.
 comptime C39_RETAIN_STATE = False
