@@ -40,11 +40,11 @@ REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the
 }
 # extra reach keys checked as well (lane apple-fast-w3-kfeat)
 REACH_EXTRA = {
-    "kernel_methods": ("rbf_staged", lambda ds: 1 if ("MOJOLEARN_KM_FAST_RBF_STAGED_OFF" not in ds
-                                                      and "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds) else 0),
+    # RBF_STAGED_OFF deleted 2026-11-15 (lane expdel-06-base-cluster-kernel): STAGED rides RBF_RESIDENT.
+    "kernel_methods": ("rbf_staged", lambda ds: 1 if "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds else 0),
 }
 ALLOWED = {
-    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF", "MOJOLEARN_KM_FAST_RBF_STAGED_OFF"},
+    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"},
     "x_neighbors": set(),
     "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
 }

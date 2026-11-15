@@ -73,8 +73,8 @@ comptime KM_FAST_RBF_RESIDENT = (
 )
 
 
-# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (rollback -D MOJOLEARN_KM_FAST_RBF_STAGED_OFF;
-# needs KM_FAST_RBF_RESIDENT). M3, source ea6b2035e, one run per arm:
+# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (wherever KM_FAST_RBF_RESIDENT is).
+# M3, source ea6b2035e, one run per arm:
 # rbf-sampler istella 77.6 -> 57.1 ms; w2-w3kf-rbf-q PASS (byte-identical).
 # Lane apple-fast-w3-kfeat, 2026-10-04: the
 # projection (m x q; 100,000 x 256 = 102 MB at the board's istella shape)
@@ -91,7 +91,10 @@ comptime KM_FAST_RBF_RESIDENT = (
 # first wait (which therefore also covers the GEMM and the epilogue).
 # The output stays the caller's ordinary (mapped) memory: handing out the
 # pinned stage itself would leave the caller reading write-combined memory.
-comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"]()
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_STAGED_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1c52d8514e.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch; record in docs/TOMBSTONES.md.
+# The raw one-copy projection download in `_rbf_unpiped` went with it.
+comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT
 comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
 
 
@@ -232,12 +235,8 @@ def _rbf_unpiped(
     ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
-    comptime if KM_FAST_RBF_STAGED:
-        # waits inside (its first wait covers everything queued above)
-        download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
-    else:
-        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=z_addr), src_buf=dz)
-        ctx.synchronize()
+    # waits inside (its first wait covers everything queued above)
+    download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
     _ = psub^
 
 

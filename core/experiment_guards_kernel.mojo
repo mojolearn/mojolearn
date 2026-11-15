@@ -34,6 +34,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KM_FAST_PTR_IN_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_PTR_IN_OFF (FAST+Apple rollback of the transforms' X to an owned host copy and host finiteness walk) is gone; the caller-pointer upload is the FAST+Apple path (rbf-sampler istella 121 -> 94 ms, kap2-km-ptrin-rbf-istella); IDENTICAL keeps MOJOLEARN_IDN_KM_PTR_IN_OFF; restore: experiments/removed/MOJOLEARN_KM_FAST_PTR_IN_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KM_FAST_RBF_PIPE_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_RBF_PIPE_OFF (FAST+Apple rollback of RBFSampler fit_transform to the unpiped STAGED sequence) is gone; the row-block pipeline is the FAST+Apple path (rbf-sampler istella 56.7 -> 43.0 ms, rab12-rbfpipe); restore: experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_RBF_STAGED_OFF (FAST+Apple rollback of the RBFSampler projection to one raw host-pointer copy) is gone; the staged download is the path wherever KM_FAST_RBF_RESIDENT is (rbf-sampler istella 77.6 -> 57.1 ms, w2-w3kf-rbf-q PASS); restore: experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch"
     return True
 
 
