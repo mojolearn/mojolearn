@@ -134,6 +134,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C16_GLM_FUSED (Linear (GLM loss, gradient and Hessian in one pass, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 2a301a3aa3; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C17_LS_TRIALS (Linear (quasi-Newton line search with two speculative trials, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 10e3cad6a6; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C17_OVR"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C17_OVR (Linear (SGD one-vs-rest in waves of four, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 8c1b568a83; see docs/TOMBSTONES.md"
     return True
 
 
