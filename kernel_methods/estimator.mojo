@@ -1783,16 +1783,15 @@ def nystroem_fit_host(
 
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF` unregisters the pointer binding, so
-#: `kernel_methods.py` takes the list route again): Nystroem fit reads X
+#: (FAST keeps the list route): Nystroem fit reads X
 #: from the caller's memory straight to the device, scans it for NaN /
 #: infinity there (`_upload_checked`) and gathers the basis rows there
 #: (`km_gather_rows_kernel`), instead of an owned host copy of X
 #: (`read_f32`), a serial host finiteness walk over n x d and a host gather.
 #: The same component words reach the same kernels: no bit moves.
-comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 1c49bdcfcc.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
 #: (`-D MOJOLEARN_IDN_NYS_DEV_BASIS_OFF` restores the host draw and radix
