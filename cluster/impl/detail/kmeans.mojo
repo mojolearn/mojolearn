@@ -393,15 +393,14 @@ def init_random(
 #: k - 1 picks each synchronized and read the costs back (ivf's 1024-list
 #: coarse quantizer: ~3,000 syncs; IVF-PQ's 55 codebooks: ~42,000). The same
 #: draws and the same first-strict-minimum pick on the device.
-#: -D MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY=1 restores the Apple-only gate.
 comptime KMEANS_FAST_PP_NOSYNC = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+    # TOMBSTONE: MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY (unmeasured opt-in Apple-only gate) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 879a63ceab.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY.patch; record in docs/TOMBSTONES.md.
     and (
         TARGET_HAS_APPLE_GPU
-        or (
-            (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-            and not is_defined["MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY"]()
-        )
+        or TARGET_COLUMN == COLUMN_NVIDIA
+        or TARGET_COLUMN == COLUMN_AMD
     )
     and not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"]()
 )
