@@ -687,6 +687,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CAGRA_FAST_IVFG_OFF`](#mojolearn_cagra_fast_ivfg_off-old-path-deleted-2026-11-15) | ANN (CAGRA build graph, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch) |
 | [`MOJOLEARN_AP_EXACT`](#mojolearn_ap_exact-loser-deleted-2026-11-15) | Cluster (AffinityPropagation, FAST opt-in) | removed (SUPERSEDED: its steps are in every build) | 2026-11-15 | [MOJOLEARN_AP_EXACT.patch](../experiments/removed/MOJOLEARN_AP_EXACT.patch) |
 | [`MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF`](#mojolearn_bisect_fast_zerocopy_off-old-path-deleted-2026-11-15) | Cluster (BisectingKMeans, FAST Apple) | removed (old path; FAST+Apple default KEPT) | 2026-11-15 | [MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch) |
+| [`MOJOLEARN_MBK_FAST_DEVSCAN_OFF`](#mojolearn_mbk_fast_devscan_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans NaN/inf scan, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-mbkdevscan) | 2026-11-15 | [MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch) |
 
 ## Trees
 
@@ -5963,4 +5964,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `BISECT_FAST_ZEROCOPY`, clus3-bisect-zc-istella): M3 n=1, bisecting-kmeans istella 2,033 -> 848 ms (-58.3%), silhouette .1183 identical. No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a8d747b743`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch`, then delete the `MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_MBK_FAST_DEVSCAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MiniBatchKMeans' NaN/inf refusal from the scan of the uploaded device copy (`device_first_nonfinite`) back to Python's single-thread host `all_finite_f32` over all of X (`x_cluster/minibatch_ptr.mojo` MBK_FAST_DEVSCAN). Deleted: the define read and the `comptime if MBK_FAST_DEVSCAN` wrapper inside the MBK_ZEROCOPY path (MBK_FAST_DEVSCAN is now MBK_ZEROCOPY); MBK_DEVSCAN_ANY and the binding's `mbk_devscan_binding` are unchanged in value.
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `MBK_FAST_DEVSCAN`, rab15-mbkdevscan): M3 one run per arm, minibatch-kmeans istella 142.3 -> 83.5 ms, taxi 40.4 -> 37.2 ms, silhouette identical. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a16e423aa4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch`, then delete the `MOJOLEARN_MBK_FAST_DEVSCAN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
