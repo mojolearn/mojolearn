@@ -5,7 +5,8 @@ Sequence optimizer refusals (`RMSprop.square_avg`, `Adagrad.sum`, `Lion.exp_avg`
 `Adafactor`, the `StepLR` / `ExponentialLR` / `OneCycleLR` constructor refusals,
 `SmallMLPTrainer` (`weights_`, refusals, `train_steps`),
 `training.mlp_inference_sessions` refusals and the `Mamba3Block` owned
-weight snapshot. No binding is replaced: every call is the public path.
+weight snapshot, and the keyword-to-option mapping of the optimizer and
+schedule constructors. No binding is replaced: every call is the public path.
 
 Moved to native checks (lane tmig-training, 2026-11-14): the one-step state
 values of RMSprop, Adagrad and Lion (checks/native_tests/sequence_optimizer_*),
@@ -34,6 +35,31 @@ def _stepped(optimizer, **kw):
 
 
 # ---------------------------------------------------------------- optimizer state
+
+
+# ---------------------------------------------------------------- keyword mapping
+# The public classes hand their keywords to the native constructor as one
+# positional tuple; these check only that every keyword lands under its own
+# name (the update values are native checks).
+def test_rmsprop_keywords_reach_their_options():
+    opt = ml.RMSprop([np.zeros(3, np.float32)], lr=0.03, alpha=0.5, eps=1e-6, weight_decay=0.25,
+                     momentum=0.125, centered=True)
+    assert opt.lr == pytest.approx(0.03)
+    assert opt.options == dict(alpha=0.5, eps=1e-6, weight_decay=0.25, momentum=0.125, centered=True)
+
+
+def test_adagrad_keywords_reach_their_options_and_the_accumulator():
+    opt = ml.Adagrad([np.zeros(3, np.float32)], lr=0.03, lr_decay=0.5, weight_decay=0.25,
+                     initial_accumulator_value=0.1, eps=1e-6)
+    assert opt.lr == pytest.approx(0.03)
+    assert opt.options == dict(lr_decay=0.5, weight_decay=0.25, initial_accumulator_value=0.1, eps=1e-6)
+    np.testing.assert_array_equal(np.asarray(opt.sum).ravel(), np.full(3, 0.1, np.float32))
+
+
+def test_lion_keywords_reach_their_options():
+    opt = ml.Lion([np.zeros(3, np.float32)], lr=0.1, betas=(0.8, 0.95), weight_decay=0.25)
+    assert opt.lr == pytest.approx(0.1)
+    assert opt.options == dict(betas=(0.8, 0.95), weight_decay=0.25)
 
 
 @pytest.mark.parametrize("optimizer,state", [(ml.RMSprop, "square_avg"), (ml.Adagrad, "sum"), (ml.Lion, "exp_avg")],
@@ -69,6 +95,18 @@ def test_adafactor_init_refusals(params, kw, err):
 
 
 # ---------------------------------------------------------------- schedules
+
+
+def test_schedule_keywords_reach_their_fields():
+    step = ml.StepLR(0.1, step_size=2, gamma=0.5)
+    assert (step.base_lr, step.step_size, step.gamma) == (pytest.approx(0.1), 2, pytest.approx(0.5))
+    exp = ml.ExponentialLR(0.2, gamma=0.25)
+    assert (exp.base_lr, exp.gamma) == (pytest.approx(0.2), pytest.approx(0.25))
+    cyc = ml.OneCycleLR(1.5, total_steps=10, pct_start=0.25, anneal_strategy="linear", div_factor=10.0,
+                        final_div_factor=100.0, three_phase=True)
+    assert (cyc.max_lr, cyc.total_steps, cyc.pct_start) == (pytest.approx(1.5), 10, pytest.approx(0.25))
+    assert (cyc.anneal_strategy, cyc.div_factor, cyc.final_div_factor, cyc.three_phase) == (
+        "linear", pytest.approx(10.0), pytest.approx(100.0), True)
 
 
 @pytest.mark.parametrize("build,err,match", [
