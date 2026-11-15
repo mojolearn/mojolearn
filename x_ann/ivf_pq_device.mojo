@@ -42,7 +42,9 @@ from x_ann.ivf_pq_core import (
 
 comptime TPB = 128
 
-comptime PQ_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_PQ_FAST_TRAINSET_OFF"]()
+# TOMBSTONE: MOJOLEARN_PQ_FAST_TRAINSET_OFF (old path, no A/B recorded beside the fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 1657e37f94.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_FAST_TRAINSET_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PQ_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """FAST (lane ann-apple, 2026-09-28): each subspace codebook trains on at
 most `PQ_FAST_ROWS_PER_CODE` rows per code, a seeded uniform sample of the
 residuals (FAISS's `max_points_per_centroid` rule; the coarse quantizer
