@@ -1605,12 +1605,11 @@ def multiclass_hessian_batch_for[column: Int]() -> Bool:
     Element values are the row kernel's; the reduce over more columns can
     move FAST bits. IDENTICAL compiles main's loop.
     Default since the M3 A/B 2026-10-03 (gbdt-multiclass taximc, n=2,
-    mlogloss 1.012595, acc .59938 identical): 18,603 -> 17,857 ms (-4.0%).
-    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF` restores main's loop; the old
-    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH` is accepted and changes nothing."""
-    comptime if not is_defined["MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF"]():
-        comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
-            return True
+    mlogloss 1.012595, acc .59938 identical): 18,603 -> 17,857 ms (-4.0%)."""
+    # TOMBSTONE: MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF (DELETE-OLD-PATH, EXP:116 KEPT 28adffe85 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 0415c68a0f.
+    # Restore: git apply experiments/removed/MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        return True
     return False
 
 
