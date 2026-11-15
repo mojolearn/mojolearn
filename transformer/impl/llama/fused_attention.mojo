@@ -383,7 +383,7 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 # the status.
 #
 # `-D MOJOLEARN_ATTN_PHASE_TIMERS=1` compiles per-kernel timers into both
-# launchers; they print under the SAME run-time switch as the block timers
+# launchers; they print under the SAME define as the block timers
 # (`-D MOJOLEARN_TRANSFORMER_TIMING`), one `timing attn.<kernel> <ms> ms`
 # line per launch on fd 1, so the LM step's `--component-timing` step folds
 # them into result.json with no harness change (the probe already excludes
