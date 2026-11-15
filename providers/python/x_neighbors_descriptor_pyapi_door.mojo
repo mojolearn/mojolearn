@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # One shared provider admission for the x_neighbors backend's existing packed
 # CPU/GPU ABI. This introduces no provider class or estimator-specific transport.
-from std.os import getenv
+from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module_door import native_loaded_module
@@ -21,7 +21,10 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
     if not xn_is_module(binding):
         _ = xn_module(binding)
         return binding
-    if getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") != "1":
+    # A module (fast mode, explicit internal callers) keeps its by-name
+    # entries unless the build admits it natively (CLASSICAL_NATIVE_DISPATCH,
+    # the B arm); identical public calls arrive as the admitted snapshot.
+    if not CLASSICAL_NATIVE_DISPATCH:
         return binding
     return xn_admit_checked(binding)
 
