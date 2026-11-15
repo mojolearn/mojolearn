@@ -74,6 +74,7 @@ from transformer.impl.llama.modeling_llama import (
     _download,
     _upload,
     llama_decoder_layer_forward,
+    timing_on,
 )
 from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE,
@@ -827,7 +828,7 @@ def _transformer_run[discard_cache: Bool = False](
     var cache_n = b * nkv * cap * hd
 
     var ctx = neural_ctx[_NEURAL_CTX]()
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = timing_on()
     var tk = Int(perf_counter_ns())
     # Host weights THROUGH the lane's own struct (its length table is the
     # reference shape authority, and its constructor is where the weights
@@ -1649,7 +1650,7 @@ def _transformer_backward_run(
     var kw = dims.kv_width()
     var m = b * l
     var ctx = neural_ctx[_NEURAL_CTX]()
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = timing_on()
     var tk = Int(perf_counter_ns())
     var w = _load_transformer_weights(ctx, dims, a)
     var kv = LlamaKVCache(ctx, b, dims, l, window)
