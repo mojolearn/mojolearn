@@ -148,7 +148,7 @@ from providers.python.training_samba_afn_pyapi_pack import (
 # lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
 # train step, registered only when IDN_SAMBA_RESIDENT_STEP holds (IDENTICAL
 # default since 2026-10-08, lane grid-act-4; off under
-# -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
+# MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
 # shell can ask (training/samba_resident.mojo).
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
 from core.philox_neural import neural_rng_host
@@ -753,7 +753,7 @@ def samba_head_loss_binding(
 # ===========================================================================
 # THE DEVICE-RESIDENT SAMBA FORWARD AND TRAIN STEP (lane S1 samba-resident,
 # 2026-10-07; IDENTICAL default since 2026-10-08 (lane grid-act-4, grid
-# ge123e6f9); -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route).
+# ge123e6f9); its _OFF rollback was deleted 2026-11-15, lane expdel-04-neural).
 # One SambaResidentSession per SambaStack (the primitive entry's op 12; the
 # Python entries samba_resident_open/step/accumulated_step and
 # samba_resident_native_handle_v1 were deleted by lane samba-sessions-native,

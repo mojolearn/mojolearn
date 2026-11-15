@@ -636,6 +636,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF`](#mojolearn_seq_fast_theta_spec_off) | Series on x_sequence (Apple FAST theta speculative Nelder-Mead) | superseded (SEQ_FAST_THETA_SPEC default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch) |
 | [`MOJOLEARN_IDN_SEQ_REG_OFF`](#mojolearn_idn_seq_reg_off) | Series on x_sequence (IDENTICAL theta register form) | superseded (IDN_SEQ_REG promoted) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_REG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_VAR_COOP_OFF`](#mojolearn_seq_fast_var_coop_off) | Series on x_sequence (Apple FAST VAR coop folds) | superseded (SEQ_FAST_VAR_COOP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch) |
+| [`MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF`](#mojolearn_idn_samba_resident_step_off) | Neural (IDENTICAL Samba resident forward and train step) | superseded (IDN_SAMBA_RESIDENT_STEP promoted) | 2026-11-15 | [MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5995,3 +5996,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/ops.mojo, sequence/ops_impl.mojo.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `72b582962f`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF
+
+- Tried: the rollback of `IDN_SAMBA_RESIDENT_STEP` (`training/neural_identical_experiments.mojo`): an IDENTICAL build without the device-resident Samba forward / train step entries, so every Samba call takes the per-op route.
+- Verdict: the resident step won on both vendors (`grid_controls/samba-resident.json` `samba_resident_step`, PROMOTED 2026-10-08, lane grid-act-4, grid ge123e6f9, one run per arm): samba-forward NV 12.0 -> 5.3 ms, AMD 8.8 -> 5.8 ms; samba-train-step NV 96.0 -> 39.2 ms, AMD 147.2 -> 114.2 ms (0.551x combined); output hashes equal to the incumbent on both vendors.
+- Removed: the `_OFF` term of `IDN_SAMBA_RESIDENT_STEP` and the two binding comments that named it. The per-op route is not deleted: `MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2` and `IDN_ALL_OFF` builds still take it, as do accumulation_steps > 1 and dropout > 0 at run time. No bits move.
+- Files: training/neural_identical_experiments.mojo, bindings/_mojolearn_training.mojo (comments); grid entry `samba_resident_step` moved to `removed` in samba-resident.json.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `5bfce25001`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo` and move the entry back to `controls` in `experiments/six_lane_integration/grid_controls/samba-resident.json`.

@@ -328,6 +328,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_COOP_OFF (superseded (SEQ_FAST_VAR_COOP default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 72b582962f.
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_FAST_VAR_COOP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_VAR_COOP_OFF rolled back SEQ_FAST_VAR_COOP, the FAST + Apple default (M3 rab13-varcoop var synthetic 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms, forecast_rmse identical); drop the define; recoverable at 72b582962f; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF (superseded (IDN_SAMBA_RESIDENT_STEP promoted)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 5bfce25001.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF rolled back the device-resident Samba step, PROMOTED 2026-10-08 on NVIDIA and AMD (grid ge123e6f9: samba-forward 0.44x / 0.66x, samba-train-step 0.41x / 0.78x, hashes equal); drop the define; recoverable at 5bfce25001; see docs/TOMBSTONES.md"
     # ---- end lane expdel-04-neural
     return True
 
