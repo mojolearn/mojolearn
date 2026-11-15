@@ -1,20 +1,20 @@
 """Read the exact shared route switches used by GPU and host columns."""
 from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
-from solver.impl.cd_gram_rule import CD_IDN_GRAM_ON, cd_idn_gram_cost_ok, cd_idn_gram_shape
+from solver.impl.cd_gram_rule import cd_idn_gram_cost_ok, cd_idn_gram_shape
 from mixture.chol_order import IDN_GMM_FUSED_CHOL, gmm_idn_chol_applies
 from gbdt.models.kernel.add_bin_values import IDN_PREDICT_FOUR
-from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
+from x_decomp.rr_block import rb_use
 
 
 def main() raises:
     # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
-    comptime assert not IDN_EIGH_BLOCK, "Unsafe block eigh candidate must remain disabled in the default wave"
+    # IDN_EIGH_BLOCK and CD_IDN_GRAM_ON are constants since their switches were deleted (2026-11-15,
+    # docs/TOMBSTONES.md); the routes are checked through rb_use and cd_idn_gram_shape below.
     if rb_use(4096) or rb_use(513):
         raise Error("default wave must use established rotation eigh on all columns")
     comptime assert PCA_RR_SWEEPS == 60, "PCA budget changed; review quality coverage"
     comptime assert PCA_RR_EIGH
-    comptime assert CD_IDN_GRAM_ON
     comptime assert IDN_GMM_FUSED_CHOL
     comptime assert IDN_PREDICT_FOUR
     if not cd_idn_gram_shape(4096, 16):
@@ -31,5 +31,5 @@ def main() raises:
     if not gmm_idn_chol_applies(16):
         raise Error("GMM quality fixture does not take expected fused branch")
     print("WAVE_ROUTES PASS pca_sweeps", PCA_RR_SWEEPS,
-          "gram", CD_IDN_GRAM_ON, "gmm_fused", IDN_GMM_FUSED_CHOL,
+          "gmm_fused", IDN_GMM_FUSED_CHOL,
           "gbdt_four", IDN_PREDICT_FOUR)

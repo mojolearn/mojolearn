@@ -131,7 +131,6 @@ check-native-device-concurrency = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I 
 # Lane tmig-lm-1 (2026-11-14): byte LM and embedding tests moved from Python.
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
-check-device-zero-memset = "mojo run -D MOJOLEARN_2560_MEMSET_FILL=1 -I . core/device_zero_check.mojo"
 # Host-only runtime byte-model shape/registry checks; no GPU import or context.
 check-byte-lm-config = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/byte_lm_config_check.mojo"
 
@@ -524,7 +523,6 @@ check-leaf-partition = "mojo run -I . checks/leaf_partition_check.mojo"
 check-gbdt-per-round = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/gbdt_per_round_check.mojo"
 check-gbdt-per-round-fast = "mojo run -I . checks/gbdt_per_round_check.mojo"
 check-gbdt-per-round-2550-host-copy = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2550_HOST_COPY=1 -I . checks/gbdt_per_round_check.mojo"
-check-gbdt-per-round-2551-host-partition = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1 -I . checks/gbdt_per_round_check.mojo"
 
 # `nan_mode`: NaN gets a bin of its own at one end of the grid, and CatBoost
 # does it entirely in quantization -- one border of the column's budget is

@@ -41,7 +41,7 @@
 # and MOJOLEARN_MOJO_BUILD_FLAGS apply to every member as they apply to every
 # per-binding script. Defines that only SOME per-binding scripts read
 # (MOJOLEARN_EXTRA_DEFINES, MOJOLEARN_BUILD_EXTRA_DEFINES on a GPU set,
-# MOJOLEARN_MAMBA_DEFINES, MOJOLEARN_ATTENTION_MEMORY_PROFILE, and build.sh's
+# MOJOLEARN_MAMBA_DEFINES, and build.sh's
 # MOJOLEARN_ALLOW_NO_GPU) are refused: one compile cannot scope them to one
 # member. Run that A/B with the per-binding scripts.
 #
@@ -103,10 +103,6 @@ refuse_env() {
 }
 [ -z "${MOJOLEARN_EXTRA_DEFINES:-}" ] || refuse_env MOJOLEARN_EXTRA_DEFINES "$MOJOLEARN_EXTRA_DEFINES"
 [ -z "${MOJOLEARN_MAMBA_DEFINES:-}" ] || refuse_env MOJOLEARN_MAMBA_DEFINES "$MOJOLEARN_MAMBA_DEFINES"
-case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
-    estash) ;;
-    *) refuse_env MOJOLEARN_ATTENTION_MEMORY_PROFILE "$MOJOLEARN_ATTENTION_MEMORY_PROFILE" ;;
-esac
 [ "${MOJOLEARN_ALLOW_NO_GPU:-0}" != 1 ] || refuse_env MOJOLEARN_ALLOW_NO_GPU 1
 if [ "$kind" = gpu ] && [ -n "${MOJOLEARN_BUILD_EXTRA_DEFINES:-}" ]; then
     refuse_env MOJOLEARN_BUILD_EXTRA_DEFINES "$MOJOLEARN_BUILD_EXTRA_DEFINES"

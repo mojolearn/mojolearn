@@ -445,7 +445,7 @@ def build_environment(mode, env, plat=None):
             raise BuildError(f"{key} is not supported by merged development groups")
     if mode == "identical" and env.get("MOJOLEARN_BUILD_EXTRA_DEFINES"):
         raise BuildError("MOJOLEARN_BUILD_EXTRA_DEFINES is host-only")
-    if env.get("MOJOLEARN_ATTENTION_MEMORY_PROFILE", "estash") != "estash" or env.get("MOJOLEARN_ALLOW_NO_GPU") == "1":
+    if env.get("MOJOLEARN_ALLOW_NO_GPU") == "1":
         raise BuildError("unsupported per-binding option in development group environment")
     if bincache.SABOTAGE_RE.search(canonical(bincache.build_env(env)).decode()):
         raise BuildError("fault-injection builds use their dedicated controller, not the development cache")

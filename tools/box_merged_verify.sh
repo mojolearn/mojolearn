@@ -32,9 +32,8 @@
 #   dist      physical multi-GPU checks, only with 2+ GPUs on the box
 #   graphopt  captured-graph optimizer A/B on the saved full workloads (both vendors)
 #   witness   native NVIDIA witness: four PTX discrepancies + four tree batch probes
-#   stage64   NVIDIA MOJOLEARN_IDN_GEMM_STAGE64 A/B (MLP + recurrent, HIGGS)
 # The Mac stages the data first (tools/stage_from_r2.sh): corpus/enwik8/input.txt
-# for dist, gbm-bench/higgs/higgs_speed.npz for stage64.
+# for dist.
 set -uo pipefail
 CONTROLLER=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
 PLAN=0
@@ -96,7 +95,7 @@ for b in $BOX_BUILDS; do case $b in
 esac; done
 [ "$have_gpu:$have_host" = 1:1 ] || die "qualification requires both gpu-identical and host; stale sets cannot be reused"
 case ${BOX_RECORD:-1} in 0|1) ;; *) die "BOX_RECORD must be 0 or 1";; esac
-for j in ${BOX_JOBS:-}; do case $j in dist|graphopt|witness|stage64) ;; *) die "unknown BOX_JOBS entry $j";; esac; done
+for j in ${BOX_JOBS:-}; do case $j in dist|graphopt|witness) ;; *) die "unknown BOX_JOBS entry $j";; esac; done
 # A wheel/plugin set or explicit binding override would shadow the fresh flat set.
 for d in cuda hip cpu; do
   [ ! -d "python/mojolearn/$d" ] || [ -z "$(find "python/mojolearn/$d" -name '*.so' -print -quit)" ] || die "vendor binaries in $d shadow checkout builds"
@@ -187,7 +186,7 @@ printf 'variable\tvalue\n' > "$O/build-environment.tsv"
 for name in MOJOLEARN_LINUX_CPU MOJOLEARN_COMPILE_JOBS MOJOLEARN_BUILD_DEFINE_FLAGS \
   MOJOLEARN_AMD_COMPILE_JOBS BOX_GPU_COMPILE_JOBS BOX_HOST_COMPILE_JOBS \
   MOJOLEARN_BUILD_EXTRA_DEFINES MOJOLEARN_MOJO_BUILD_FLAGS MOJOLEARN_MERGED_PYTHON \
-  MOJOLEARN_EXTRA_DEFINES MOJOLEARN_MAMBA_DEFINES MOJOLEARN_ATTENTION_MEMORY_PROFILE \
+  MOJOLEARN_EXTRA_DEFINES MOJOLEARN_MAMBA_DEFINES \
   MOJOLEARN_ALLOW_NO_GPU CC CFLAGS LDFLAGS LD_LIBRARY_PATH TMPDIR; do
   printf '%s\t%s\n' "$name" "${!name-<unset>}" >> "$O/build-environment.tsv"
 done
@@ -276,7 +275,6 @@ fi
 [ -n "${RUNPOD_POD_ID:-}" ] || export RUNPOD_POD_ID=$(tr '\0' '\n' < /proc/1/environ 2>/dev/null | sed -n 's/^RUNPOD_POD_ID=//p')
 [ -n "$RUNPOD_POD_ID" ] || unset RUNPOD_POD_ID
 CORPUS=$PWD/training/corpus/enwik8/input.txt
-HIGGS=/root/datasets/gbm-bench/higgs/higgs_speed.npz
 # run <dir> <name> <seconds> cmd...: one logged step; rc 124 is a timeout. Never aborts the chain.
 run() { local d=$1 n=$2 t=$3; shift 3; mkdir -p $d; timeout -k 30 $t "$@" > $d/$n.log 2>&1; local rc=$?
   printf '%s\t%s\n' "$n" "$rc" >> $d/status.tsv; st "$(basename $d) $n rc=$rc $(grep -v '^\s*$' $d/$n.log | tail -n 1 | cut -c1-160)"; return $rc; }
@@ -412,40 +410,10 @@ EOF
   st "WITNESS rows=$(($(wc -l < $X/witness.tsv)-1)) native==ptx: $(awk -F'\t' 'NR>1 && $8=="yes"{y++} NR>1 && $8=="NO"{n++} END{printf "yes=%d NO=%d", y, n}' $X/witness.tsv)"
 }
 
-# 4. NVIDIA STAGE64 A/B (sequence/ops.mojo GEMM_STAGE_V2: default off since 2026-10-19 on the AMD numbers;
-# NVIDIA never measured). Per-binding x_sequence builds into python/mojolearn/identical, where a member's own
-# file shadows the merged one; both arms build the same way, one run per arm, then the own file is removed so
-# the merged binding serves again. Same bits is the contract (one fold chain): a digest that moves is a bug.
-job_stage64() {
-  [ $V = nvidia ] || { st "STAGE64 SKIP: NVIDIA only (AMD measured 2026-10-19)"; return 0; }
-  local S=$O/stage64; mkdir -p $S
-  [ -f $HIGGS ] || { st "STAGE64 SKIP: $HIGGS not staged (tools/stage_from_r2.sh ... gbm-bench/higgs/higgs_speed.npz)"; return 0; }
-  local own=python/mojolearn/identical/_mojolearn_x_sequence.so pair tag defs algos
-  for pair in "default:" "stage64:MOJOLEARN_IDN_GEMM_STAGE64=1" "stage64-rec:MOJOLEARN_IDN_GEMM_STAGE64=1,MOJOLEARN_SEQ_REC_STAGE64=1"; do
-    tag=${pair%%:*}; defs=${pair#*:}; rm -f $own
-    MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_TARGET_COLUMN=nvidia MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_DEFINES=$defs \
-      run $S build-$tag 2400 pixi run -q sh bindings/build_x_sequence.sh || continue
-    for algos in lstm,gru,rnn mlp; do
-      MOJOLEARN_NUMERIC_MODE=identical run $S race-$tag-${algos//,/-} 2400 $PY tools/sequence_speed.py --algos $algos --data $HIGGS \
-        --rows 1000000 --out $S/race-$tag-${algos//,/-}.json
-      $PY -c "import json,sys; d=json.load(open(sys.argv[1])); [print('$tag\t%s\t%.4f\t%s' % (r['algo'], r['fit_s'], r['digest'])) for r in d['records']]" \
-        $S/race-$tag-${algos//,/-}.json >> $S/ab.tsv 2>> $S/ab.err
-    done
-  done
-  rm -f $own; st "STAGE64 own x_sequence removed; merged serves again"
-  $PY - $S/ab.tsv > $S/verdict.tsv 2>> $S/ab.err <<'EOF'
-import sys
-rows = [l.rstrip("\n").split("\t") for l in open(sys.argv[1]) if l.strip()]
-base = {a: (float(s), d) for t, a, s, d in rows if t == "default"}
-print("arm\talgo\tdefault_s\tarm_s\tarm/default\tsame_bits")
-for t, a, s, d in rows:
-    if t != "default" and a in base:
-        print("%s\t%s\t%.4f\t%.4f\t%.4f\t%s" % (t, a, base[a][0], float(s), float(s) / base[a][0], "yes" if d == base[a][1] else "NO"))
-EOF
-  while read -r line; do st "STAGE64 $line"; done < <(tail -n +2 $S/verdict.tsv)
-}
+# (job stage64, the NVIDIA MOJOLEARN_IDN_GEMM_STAGE64 / SEQ_REC_STAGE64 A/B, is gone: both defines were deleted
+# 2026-11-15, docs/TOMBSTONES.md.)
 
 for j in ${BOX_JOBS:-}; do
-  case $j in dist|graphopt|witness|stage64) st "JOB $j start"; job_$j; st "JOB $j end";; *) st "JOB $j unknown; skipped";; esac
+  case $j in dist|graphopt|witness) st "JOB $j start"; job_$j; st "JOB $j end";; *) st "JOB $j unknown; skipped";; esac
 done
 st "qualification complete; optional job results remain separate in their status.tsv files"

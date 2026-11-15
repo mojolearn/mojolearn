@@ -142,13 +142,8 @@ export MOJOLEARN_SKIP_BUILD_GATE=1
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi
-case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
-    estash) MEMORY_DEFINE= ;;
-    recompute) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=1" ;;
-    packed) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=2" ;;
-    alias-y) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=3" ;;
-    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, alias-y, or recompute' >&2; exit 2 ;;
-esac
+# MOJOLEARN_ATTENTION_MEMORY_PROFILE (recompute / packed / alias-y) is gone: it only selected
+# -D MOJOLEARN_IDN_ATTN_STASH, deleted 2026-11-15 (docs/TOMBSTONES.md); estash is the one profile.
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-transformer.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -161,7 +156,7 @@ out="$tmpdir/_mojolearn_transformer.so"
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 # compiles the entry bindings/entry/entry__mojolearn_transformer.mojo, which imports the module body bindings/_mojolearn_transformer.mojo
 pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
-    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE $MEMORY_DEFINE \
+    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/entry/entry__mojolearn_transformer.mojo \

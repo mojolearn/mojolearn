@@ -74,13 +74,8 @@ if [ -e "$byte_lm_destination" ] || [ -L "$byte_lm_destination" ]; then
 fi
 byte_lm_tmpdir=$(mktemp -d "$byte_lm_outdir/.byte-lm-build.XXXXXX")
 trap 'rm -rf "$byte_lm_tmpdir"' EXIT HUP INT TERM
-case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
-    estash) ;;
-    recompute) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_IDN_ATTN_STASH=1" ;;
-    packed) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_IDN_ATTN_STASH=2" ;;
-    alias-y) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_IDN_ATTN_STASH=3" ;;
-    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, alias-y, or recompute' >&2; exit 2 ;;
-esac
+# MOJOLEARN_ATTENTION_MEMORY_PROFILE is gone: it only selected -D MOJOLEARN_IDN_ATTN_STASH,
+# deleted 2026-11-15 (docs/TOMBSTONES.md); estash is the one profile.
 # MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
 # appended verbatim, word-split, for trial builds (for example
 # -D MOJOLEARN_BYTE_LM_FAULT_INJECT=1 for the session gate's native faults),

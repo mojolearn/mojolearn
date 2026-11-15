@@ -7,8 +7,8 @@
                                                         since 2026-09-11)
     pixi run check-gbdt-per-round-2550-host-copy        -D MOJOLEARN_2550_HOST_COPY=1,
                                                         the 2550 OPT-OUT side
-    pixi run check-gbdt-per-round-2551-host-partition   -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1,
-                                                        the 2551 OPT-OUT side
+    (the 2551 opt-out side, -D MOJOLEARN_2551_DEVICE_PARTITION_OFF, was deleted 2026-11-15;
+    docs/TOMBSTONES.md)
 
 CLAIM 1, every build. `DeviceLeafPartitioner.partition` returns the same
 `row_index`, `offsets` and `sizes` as the host `partition_from_bins` over a
