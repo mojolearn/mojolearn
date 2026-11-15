@@ -1,0 +1,141 @@
+diff --git a/x_linear/device.mojo b/x_linear/device.mojo
+index f1c8f386ed..fcf8f0dcaa 100644
+--- a/x_linear/device.mojo
++++ b/x_linear/device.mojo
+@@ -938,11 +938,9 @@ comptime SGD_CHUNK_DEFAULT = 64
+ # the words do not depend on the width: at batch 256 and istella's 220
+ # columns the 1,792 dots and 1,776 partials were 7 tasks a thread.
+ # `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+ comptime SGD_IDN_CHUNK_WIDE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
+-    and not is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]()
++    and not (is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
+ 
+@@ -957,7 +955,7 @@ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
+ # `-D MOJOLEARN_SGD_IDN_MB_FUSE_OFF` restores three launches a batch.
+ comptime SGD_IDN_MB_FUSE = (
+     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]()
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ 
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS (removed: never measured, default off; a per-epoch
+@@ -1152,7 +1150,7 @@ def sgd_mb_fast_batch_kernel(
+ # restores the host walk on Apple only.
+ comptime SGD_IDN_DEV_FINITE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]()
++    and not (is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+     and not (TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"]())
+ )
+ comptime SGD_FIN_RUN = 64
+@@ -1370,12 +1368,12 @@ def sgd_mb_chunk_kernel(
+ # launch a live problem, and ONE read brings every problem's stop words
+ # home. Each problem's statements are the sequential driver's on its own
+ # words: NO BIT MOVES, the host column is untouched.
+-# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` restores
++# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
+ # the sequential problems.
+ comptime SGD_IDN_OVR_PAR = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+-    and not is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]()
++    and not (is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ #: `cf` words a problem (`_sgd_mb_chunk_kernel_body`'s nine)
+ comptime SGD_OVR_CF = 9
+@@ -2944,7 +2942,7 @@ def _sgd_ps_simd_body(
+ # as the block form and the host's `sgd_one`: no bit moves.
+ comptime SGD_IDN_PS_WARP = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
+-    and not is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]()
++    and not (is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ 
+ 
+diff --git a/x_linear/finite_device.mojo b/x_linear/finite_device.mojo
+index 297ae7843f..d35ac830a6 100644
+--- a/x_linear/finite_device.mojo
++++ b/x_linear/finite_device.mojo
+@@ -13,7 +13,8 @@ walk's (exponent all ones = NaN or infinity), the error text is the
+ binding's, X is named before y. One witness-guarded unit: the flags are
+ rebuilt from inputs the launches do not write, so a cut Apple launch reruns.
+ 
+-`-D MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF` restores the binding's host walk on every vendor.
++`-D MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF` (or the master
++`MOJOLEARN_IDN_ALL_OFF`) restores the binding's host walk on every vendor.
+ No bit moves: the check reads, it does not compute a fitted word.
+ """
+ 
+@@ -25,11 +26,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from x_linear.ops import FP, IP, ld, sti
+ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+ comptime XLIN_IDN_DEV_FINITE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF"]()
++    and not (is_defined["MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ comptime XF_TPB = 256
+ #: words one thread tests
+diff --git a/x_linear/lars.mojo b/x_linear/lars.mojo
+index b50499ed6e..09f1ef9d47 100644
+--- a/x_linear/lars.mojo
++++ b/x_linear/lars.mojo
+@@ -33,7 +33,7 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
+ 
+ # lane/lars-grid-gram (2026-10-11), PROMOTED to the default (lane
+ # i17-decide-nbr-lin-prep, 2026-10-11); `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`
+-# restores main's moments grid. A/B one run per arm,
++# (or MOJOLEARN_IDN_ALL_OFF) restores main's moments grid. A/B one run per arm,
+ # main@b2657cc89 (runs v0045/v0046, a1628/a1629), NV L40S / AMD MI325X ms:
+ #   lars taxi          59.1 -> 3.1 (0.05)    / 126.1 -> 3.3 (0.03)
+ #   lasso-lars taxi    58.9 -> 3.0 (0.05)    / 125.7 -> 3.3 (0.03)
+@@ -59,9 +59,9 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
+ # `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple runs the same
+ # blocked fold (lane/apple-lars, 2026-10-12; x_linear/device.mojo
+ # `XL_IDN_LARS_GRID_GRAM`), so its column matches NVIDIA == AMD == host.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+-comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]()
++comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]() and not is_defined[
++    "MOJOLEARN_IDN_ALL_OFF"
++]()
+ 
+ 
+ def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, gg: Int, xty: Int) -> Float32:
+diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
+index 301234ade6..8fdc0d6d92 100644
+--- a/x_linear/sgd.mojo
++++ b/x_linear/sgd.mojo
+@@ -968,13 +968,11 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
+ # float-float explicit step (sample weights, or no intercept), 2 the
+ # implicit step. New bits for the one-class minibatch on every column
+ # (host `sgd_mb_one` and every device driver take the same `ocm`).
+-# `-D MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF` restores
++# `-D MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores
+ # the explicit single-word step. IDENTICAL only (FAST keeps its form).
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+ comptime SGD_OC_MB_IMPLICIT = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"]()
++    and not (is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ 
+ # fix-l1-linear (lane/neural-pass139's default): SGDOneClassSVM's default
+@@ -987,7 +985,7 @@ comptime SGD_OC_MB_IMPLICIT = (
+ # restores the per-sample default. An explicit batch_size is always kept.
+ comptime SGD_OC_IDN_MB_DEFAULT = (
+     SGD_OC_MB_IMPLICIT
+-    and not is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]()
++    and not (is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ 
+ 

@@ -172,6 +172,69 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): CHOL_FAST_DEVIO_OFF (unmeasured old path beside the FAST Apple and IDENTICAL default) is gone; the default is kept; code at 70d6bad292; restore: experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch
     comptime assert not is_defined["MOJOLEARN_CHOL_HOST_SCALAR"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): CHOL_HOST_SCALAR (unmeasured opt-in before arm) is gone; the default is kept; code at 61bd06b986; restore: experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch"
+    # Lane expdel2-21-linear (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L01.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L01"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L01 (never-run Apple FAST programme card) is gone; the default is kept; code at a6680ec95a; restore: experiments/removed/MOJOLEARN_AFCL_L01.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L02.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L02"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L02 (never-run Apple FAST programme card) is gone; the default is kept; code at 35e386db98; restore: experiments/removed/MOJOLEARN_AFCL_L02.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L03.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L03"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L03 (never-run Apple FAST programme card) is gone; the default is kept; code at d8fe5831ff; restore: experiments/removed/MOJOLEARN_AFCL_L03.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L04.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L04"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L04 (never-run Apple FAST programme card) is gone; the default is kept; code at 91fed31806; restore: experiments/removed/MOJOLEARN_AFCL_L04.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L14.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L14"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L14 (never-run Apple FAST programme card) is gone; the default is kept; code at 190fb2a092; restore: experiments/removed/MOJOLEARN_AFCL_L14.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ARD_SIGMA_QOLD.patch
+    comptime assert not is_defined["MOJOLEARN_ARD_SIGMA_QOLD"](), "removed 2026-11-15 (lane/expdel2-21-linear): ARD_SIGMA_QOLD (unmeasured old path) is gone; the default is kept; code at 085dcde095; restore: experiments/removed/MOJOLEARN_ARD_SIGMA_QOLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BAYES_GRID_GUARD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_BAYES_GRID_GUARD_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): BAYES_GRID_GUARD_OFF (old path of the FAST Apple default) is gone; the default is kept; code at f7077f3ddc; restore: experiments/removed/MOJOLEARN_BAYES_GRID_GUARD_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_GLM_CELLS_MIXED.patch
+    comptime assert not is_defined["MOJOLEARN_GLM_CELLS_MIXED"](), "removed 2026-11-15 (lane/expdel2-21-linear): GLM_CELLS_MIXED (unmeasured opt-in arm) is gone; the default is kept; code at a602b53e45; restore: experiments/removed/MOJOLEARN_GLM_CELLS_MIXED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): HUBER_DEVICE_LBFGS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at a1003b0db5; restore: experiments/removed/MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512.patch
+    comptime assert not is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"](), "removed 2026-11-15 (lane/expdel2-21-linear): HUBER_FAST_BLOCK512 (force-on knob of the FAST Apple default) is gone; the default is kept; code at e7c79bbf05; restore: experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch
+    comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD"](), "removed 2026-11-15 (lane/expdel2-21-linear): LEGACY_NARROW_SGD_PS_SIMD (unmeasured old path) is gone; the default is kept; code at 51a85b3df6; restore: experiments/removed/MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SVM_WS.patch
+    comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_SVM_WS"](), "removed 2026-11-15 (lane/expdel2-21-linear): LEGACY_NARROW_SVM_WS (old path, EXP:1344 NEUTRAL) is gone; the default is kept; code at ab40e72f25; restore: experiments/removed/MOJOLEARN_LEGACY_NARROW_SVM_WS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_FF_ALWAYS.patch
+    comptime assert not is_defined["MOJOLEARN_RIDGE_FF_ALWAYS"](), "removed 2026-11-15 (lane/expdel2-21-linear): RIDGE_FF_ALWAYS (unmeasured opt-in arm) is gone; the default is kept; code at 67fe970eba; restore: experiments/removed/MOJOLEARN_RIDGE_FF_ALWAYS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_LONG.patch
+    comptime assert not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGDOC_FAST_TAIL_LONG (unmeasured opt-in arm) is gone; the default is kept; code at ea2d15591a; restore: experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_LONG.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_ADAPTIVE_BATCH_OFF (unmeasured old path) is gone; the default is kept; code at 5d8783f621; restore: experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_AUTO_STEPS_256_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_AUTO_STEPS_256_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_AUTO_STEPS_256_OFF (unmeasured old path) is gone; the default is kept; code at 735cd099cb; restore: experiments/removed/MOJOLEARN_SGD_AUTO_STEPS_256_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_FAST_EPOCH_RESIDENT (unmeasured opt-in arm) is gone; the default is kept; code at 639da56218; restore: experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_IDN_CHUNK_WIDE_OFF (unmeasured old path) is gone; the default is kept; code at 2c034b8d40; restore: experiments/removed/MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_IDN_DEV_FINITE_APPLE_OFF (unmeasured old path) is gone; the default is kept; code at 1d51928517; restore: experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_IDN_DEV_FINITE_OFF (unmeasured old path) is gone; the default is kept; code at 2040a5c03e; restore: experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_MB_FUSE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_IDN_MB_FUSE_OFF (unmeasured old path) is gone; the default is kept; code at f3550a03d5; restore: experiments/removed/MOJOLEARN_SGD_IDN_MB_FUSE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_IDN_OVR_PAR_OFF (unmeasured old path) is gone; the default is kept; code at 255a84c8ff; restore: experiments/removed/MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_IDN_PS_WARP_OFF (unmeasured old path) is gone; the default is kept; code at 29555cd114; restore: experiments/removed/MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_OC_IDN_MB_DEFAULT_OFF (unmeasured old path) is gone; the default is kept; code at 51028ea5eb; restore: experiments/removed/MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SGD_OC_MB_IMPLICIT_OFF (unmeasured old path) is gone; the default is kept; code at 561bfcf338; restore: experiments/removed/MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVM_FAST_SORT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVM_FAST_SORT_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): SVM_FAST_SORT_OFF (unmeasured old path) is gone; the default is kept; code at 7684b61797; restore: experiments/removed/MOJOLEARN_SVM_FAST_SORT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVM_WS1024.patch
+    comptime assert not is_defined["MOJOLEARN_SVM_WS1024"](), "removed 2026-11-15 (lane/expdel2-21-linear): SVM_WS1024 (unmeasured opt-in arm) is gone; the default is kept; code at a4bd9fe9ae; restore: experiments/removed/MOJOLEARN_SVM_WS1024.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): XLIN_IDN_DEV_FINITE_OFF (unmeasured old path) is gone; the default is kept; code at 784535aaec; restore: experiments/removed/MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_ARD_LEAD.patch
+    comptime assert not is_defined["MOJOLEARN_X_LINEAR_ARD_LEAD"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_LINEAR_ARD_LEAD (unmeasured opt-in arm) is gone; the default is kept; code at a33761f577; restore: experiments/removed/MOJOLEARN_X_LINEAR_ARD_LEAD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch
+    comptime assert not is_defined["MOJOLEARN_X_LINEAR_FAST_FMA"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_LINEAR_FAST_FMA (unmeasured opt-in arm) is gone; the default is kept; code at f19d6bd79f; restore: experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch
+    comptime assert not is_defined["MOJOLEARN_X_LINEAR_NO_STAGED_FOLD"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_LINEAR_NO_STAGED_FOLD (unmeasured opt-in arm) is gone; the default is kept; code at 51eabe26ef; restore: experiments/removed/MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch"
     return True
 
 

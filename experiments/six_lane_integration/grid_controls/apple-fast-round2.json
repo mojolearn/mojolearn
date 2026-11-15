@@ -5,26 +5,6 @@
  "head": "db19e2107",
  "head_note": "FAST + Apple experiments; listed so the planner records them as excluded, not as IDENTICAL grid arms",
  "controls": {
-  "sgd_fast_epoch_resident": {
-   "define": "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_linear/device.mojo:969",
-    "x_linear/device.mojo:975"
-   ],
-   "binding": "_mojolearn_x_linear",
-   "bits_change": false,
-   "status": "new",
-   "grid": "exclude",
-   "note": "FAST + Apple only (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()); not an IDENTICAL switch, so the NVIDIA + AMD IDENTICAL grid does not apply; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). Reaches fast sgd-reg / sgd-clf (batch 4096) on Apple."
-  },
   "x_prep_fast_fit_transform_fused": {
    "define": "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED",
    "kind": "switch",
@@ -61,6 +41,11 @@
    "define": "MOJOLEARN_PSHAP_FAST_DEVICE_MODEL",
    "control": "pshap_fast_device_model",
    "reason": "DELETED 2026-11-09 (lane k1-delete-unverdicted-fast; recoverable at f59d913b0b; patch experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch): never measured (OPEN, Apple FAST investment stopped)"
+  },
+  {
+   "define": "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT",
+   "control": "sgd_fast_epoch_resident",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-21-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): FAST Apple opt-in arm, EXPERIMENTS.md row 1596 OPEN, never measured; sgd_mb_fast_batch_kernel and its arm are gone (no bit change); define refused in core/experiment_guards_linear.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
   }
  ]
 }

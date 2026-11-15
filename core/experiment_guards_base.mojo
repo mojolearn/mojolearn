@@ -162,6 +162,13 @@ def _check_configuration() -> Bool:
     # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GATES_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_GATES_OFF (old path) is gone; the default is kept; code at d224fbc6f5; restore: experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch"
+    # Lane expdel2-21-linear (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_CALIB_GNB_FOLDS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CALIB_GNB_FOLDS_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): CALIB_GNB_FOLDS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 8bfe803d02; restore: experiments/removed/MOJOLEARN_CALIB_GNB_FOLDS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_PREP_FAST_CLS2_PACK_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 7cab9d3674; restore: experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_PREP_FAST_CLS2_PRESENT_OFF (old path of the FAST Apple default) is gone; the default is kept; code at f70ab5bcc0; restore: experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch"
     return True
 
 

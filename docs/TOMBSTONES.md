@@ -717,6 +717,40 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_EIGH_BLOCK_OFF`](#mojolearn_idn_eigh_block_off) | Decomposition (block eigh override) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch) |
 | [`MOJOLEARN_IDN_EIGH_BLOCK_ON`](#mojolearn_idn_eigh_block_on) | Decomposition (block eigh candidate) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_ON.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch) |
 | [`MOJOLEARN_PCA_RR_EIGH_OFF`](#mojolearn_pca_rr_eigh_off) | Decomposition (PCA / TruncatedSVD eigensolver, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_PCA_RR_EIGH_OFF.patch](../experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch) |
+| [`MOJOLEARN_AFCL_L01`](#mojolearn_afcl_l01) | Linear (Ridge FAST Gram chunks, FAST Apple) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L01.patch](../experiments/removed/MOJOLEARN_AFCL_L01.patch) |
+| [`MOJOLEARN_AFCL_L02`](#mojolearn_afcl_l02) | Linear (Ridge FAST Gram fold, FAST Apple) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L02.patch](../experiments/removed/MOJOLEARN_AFCL_L02.patch) |
+| [`MOJOLEARN_AFCL_L03`](#mojolearn_afcl_l03) | Linear (ElasticNetCV FAST mse, FAST Apple) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L03.patch](../experiments/removed/MOJOLEARN_AFCL_L03.patch) |
+| [`MOJOLEARN_AFCL_L04`](#mojolearn_afcl_l04) | Linear (Huber FAST partials, FAST Apple) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L04.patch](../experiments/removed/MOJOLEARN_AFCL_L04.patch) |
+| [`MOJOLEARN_AFCL_L14`](#mojolearn_afcl_l14) | Linear (SGD row blocks, FAST Apple) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L14.patch](../experiments/removed/MOJOLEARN_AFCL_L14.patch) |
+| [`MOJOLEARN_ARD_SIGMA_QOLD`](#mojolearn_ard_sigma_qold) | Linear (ARDRegression sigma) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_ARD_SIGMA_QOLD.patch](../experiments/removed/MOJOLEARN_ARD_SIGMA_QOLD.patch) |
+| [`MOJOLEARN_BAYES_GRID_GUARD_OFF`](#mojolearn_bayes_grid_guard_off) | Linear (BayesianRidge grid sse, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_BAYES_GRID_GUARD_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_GRID_GUARD_OFF.patch) |
+| [`MOJOLEARN_CALIB_GNB_FOLDS_OFF`](#mojolearn_calib_gnb_folds_off) | Prep (CalibratedClassifierCV(GaussianNB), FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_CALIB_GNB_FOLDS_OFF.patch](../experiments/removed/MOJOLEARN_CALIB_GNB_FOLDS_OFF.patch) |
+| [`MOJOLEARN_GLM_CELLS_MIXED`](#mojolearn_glm_cells_mixed) | Linear (GLM Newton cells) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_GLM_CELLS_MIXED.patch](../experiments/removed/MOJOLEARN_GLM_CELLS_MIXED.patch) |
+| [`MOJOLEARN_HUBER_DEVICE_LBFGS_OFF`](#mojolearn_huber_device_lbfgs_off) | Linear (HuberRegressor device L-BFGS, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch](../experiments/removed/MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch) |
+| [`MOJOLEARN_HUBER_FAST_BLOCK512`](#mojolearn_huber_fast_block512) | Linear (HuberRegressor partials, FAST Apple) | removed (force-on knob of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_HUBER_FAST_BLOCK512.patch](../experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD`](#mojolearn_legacy_narrow_sgd_ps_simd) | Linear (SGD per-sample simdgroup, FAST Apple) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_SVM_WS`](#mojolearn_legacy_narrow_svm_ws) | SVM (working-set floor, FAST Apple) | removed (old path, EXP:1344 NEUTRAL) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_SVM_WS.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_SVM_WS.patch) |
+| [`MOJOLEARN_RIDGE_FF_ALWAYS`](#mojolearn_ridge_ff_always) | Linear (Ridge float-float fallback) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_RIDGE_FF_ALWAYS.patch](../experiments/removed/MOJOLEARN_RIDGE_FF_ALWAYS.patch) |
+| [`MOJOLEARN_SGDOC_FAST_TAIL_LONG`](#mojolearn_sgdoc_fast_tail_long) | Linear (SGDOneClassSVM tail, FAST Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_SGDOC_FAST_TAIL_LONG.patch](../experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_LONG.patch) |
+| [`MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF`](#mojolearn_sgd_adaptive_batch_off) | Linear (SGD family auto batch) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch) |
+| [`MOJOLEARN_SGD_AUTO_STEPS_256_OFF`](#mojolearn_sgd_auto_steps_256_off) | Linear (SGD family auto batch) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_AUTO_STEPS_256_OFF.patch](../experiments/removed/MOJOLEARN_SGD_AUTO_STEPS_256_OFF.patch) |
+| [`MOJOLEARN_SGD_FAST_EPOCH_RESIDENT`](#mojolearn_sgd_fast_epoch_resident) | Linear (SGD minibatch epoch, FAST Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch](../experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch) |
+| [`MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF`](#mojolearn_sgd_idn_chunk_wide_off) | Linear (SGD chunk kernel width, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch](../experiments/removed/MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch) |
+| [`MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF`](#mojolearn_sgd_idn_dev_finite_apple_off) | Linear (SGD finite check, IDENTICAL Apple) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF.patch](../experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF.patch) |
+| [`MOJOLEARN_SGD_IDN_DEV_FINITE_OFF`](#mojolearn_sgd_idn_dev_finite_off) | Linear (SGD finite check, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_IDN_DEV_FINITE_OFF.patch](../experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_OFF.patch) |
+| [`MOJOLEARN_SGD_IDN_MB_FUSE_OFF`](#mojolearn_sgd_idn_mb_fuse_off) | Linear (SGD minibatch launches, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_IDN_MB_FUSE_OFF.patch](../experiments/removed/MOJOLEARN_SGD_IDN_MB_FUSE_OFF.patch) |
+| [`MOJOLEARN_SGD_IDN_OVR_PAR_OFF`](#mojolearn_sgd_idn_ovr_par_off) | Linear (SGD one-vs-rest, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch](../experiments/removed/MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch) |
+| [`MOJOLEARN_SGD_IDN_PS_WARP_OFF`](#mojolearn_sgd_idn_ps_warp_off) | Linear (SGD per-sample warp, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch](../experiments/removed/MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch) |
+| [`MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF`](#mojolearn_sgd_oc_idn_mb_default_off) | Linear (SGDOneClassSVM auto batch, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch](../experiments/removed/MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch) |
+| [`MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF`](#mojolearn_sgd_oc_mb_implicit_off) | Linear (SGDOneClassSVM minibatch step, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF.patch](../experiments/removed/MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF.patch) |
+| [`MOJOLEARN_SVM_FAST_SORT_OFF`](#mojolearn_svm_fast_sort_off) | SVM (working-set sort) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_SVM_FAST_SORT_OFF.patch](../experiments/removed/MOJOLEARN_SVM_FAST_SORT_OFF.patch) |
+| [`MOJOLEARN_SVM_WS1024`](#mojolearn_svm_ws1024) | SVM (working-set size, FAST Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_SVM_WS1024.patch](../experiments/removed/MOJOLEARN_SVM_WS1024.patch) |
+| [`MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF`](#mojolearn_xlin_idn_dev_finite_off) | Linear (x_linear finite check, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF.patch](../experiments/removed/MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF.patch) |
+| [`MOJOLEARN_X_LINEAR_ARD_LEAD`](#mojolearn_x_linear_ard_lead) | Linear (ARD sigma on the team) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_X_LINEAR_ARD_LEAD.patch](../experiments/removed/MOJOLEARN_X_LINEAR_ARD_LEAD.patch) |
+| [`MOJOLEARN_X_LINEAR_FAST_FMA`](#mojolearn_x_linear_fast_fma) | Linear (xmad, FAST Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_X_LINEAR_FAST_FMA.patch](../experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch) |
+| [`MOJOLEARN_X_LINEAR_NO_STAGED_FOLD`](#mojolearn_x_linear_no_staged_fold) | Linear (team fold) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch](../experiments/removed/MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch) |
+| [`MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF`](#mojolearn_x_prep_fast_cls2_pack_off) | Prep (categorical distinct values, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF.patch) |
+| [`MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF`](#mojolearn_x_prep_fast_cls2_present_off) | Prep (categorical distinct values, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -10892,3 +10926,326 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - `MOJOLEARN_IDN_ALL_OFF`: the umbrella term of CHOL_FAST_DEVIO, PCA_RR_EIGH, PCA_RR_FLAG_TEST, the eight x_decomp/api bits, IDN_XD_SWEEP, IDN_QR_R_DIRECT, EIGH_TD_IDN and the route gate tool; `e98f1fff82`, recoverable at `af37fc8403`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch`.
 
 Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; plan correction). The other non-owner defines of the section (`AFN_GEMM_KB`, `CD_IDN_GRAM_OFF`, `CLASSICAL_RSVD_TSQR_ORTHO_OFF`, `IDN_*_RESIDENT_OFF`, `IDN_GBDT_PREDICT_FOUR_OFF`, `IDN_GMM_FUSED_CHOL_OFF`, `LU_FAST_MMA_OFF`, `LU_FAST_STEP1_OFF`, `LU_QOLD`, `TSVD_QOLD`) are read in this lane's files only through aliases owned by other lanes' files whose value stays the default (an int knob or a mode term), so those reads are unchanged; comments naming them were updated.
+
+## Experiment deletions: lane expdel2-21-linear (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-21-linear), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte.
+
+### MOJOLEARN_AFCL_L01
+
+- Tried: programme card AFCL-L01: half-sized row chunks (4096 / 1024) for the FAST Apple Ridge Gram.
+- Evidence: no EXPERIMENTS.md row, no A/B: the card was never run (rule g of the V2 plan).
+- Removed: the alias; FG_CH and FG_CH_SMALL are 8192 and 2048. Default unchanged: no bits move.
+- Files: x_linear/fast_gram.mojo.
+- Deleted by: lane/expdel2-21-linear `35e386db98` (2026-11-15); code recoverable at `a6680ec95a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L01.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_AFCL_L02
+
+- Tried: programme card AFCL-L02: four accumulators in `_fg_fold`.
+- Evidence: no EXPERIMENTS.md row, no A/B: the card was never run (rule g of the V2 plan).
+- Removed: the alias and the four-lane branch of `_fg_fold`. Default unchanged: no bits move.
+- Files: x_linear/fast_gram.mojo.
+- Deleted by: lane/expdel2-21-linear `d8fe5831ff` (2026-11-15); code recoverable at `35e386db98`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L02.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_AFCL_L03
+
+- Tried: programme card AFCL-L03: two held-out rows a thread in `ef_mse_kernel`.
+- Evidence: no EXPERIMENTS.md row, no A/B: the card was never run (rule g of the V2 plan).
+- Removed: the alias and the two-row branch of `ef_mse_kernel`. Default unchanged: no bits move.
+- Files: x_linear/enetcv_fast.mojo.
+- Deleted by: lane/expdel2-21-linear `e7c79bbf05` (2026-11-15); code recoverable at `d8fe5831ff`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L03.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_AFCL_L04
+
+- Tried: programme card AFCL-L04: 256-row Huber partials.
+- Evidence: no EXPERIMENTS.md row, no A/B: the card was never run (rule g of the V2 plan).
+- Removed: the alias; HF_FOLD is 512. Default unchanged: no bits move.
+- Files: x_linear/huber_fast.mojo.
+- Deleted by: lane/expdel2-21-linear `190fb2a092` (2026-11-15); code recoverable at `91fed31806`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L04.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_AFCL_L14
+
+- Tried: programme card AFCL-L14: 128-thread SGD row-prediction blocks.
+- Evidence: no EXPERIMENTS.md row, no A/B: the card was never run (rule g of the V2 plan).
+- Removed: the alias; SGD_ROW_TPB is XG_TPB. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `9ff89ae635` (2026-11-15); code recoverable at `190fb2a092`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L14.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_ARD_SIGMA_QOLD
+
+- Tried: old path: the failure-ignoring float32 factor of diag(lambda) + alpha G for ARD's sigma, beside the equilibrated default.
+- Evidence: EXPERIMENTS.md row 2124 owed (boxes down): no A/B recorded for the old path (rule b).
+- Removed: ARD_EQ and the non-equilibrated bodies of `_ard_sigma` and `_t_ard_sigma` (the team factor at d >= ARD_TEAM_MIN). Default unchanged: no bits move.
+- Files: x_linear/bayes.mojo.
+- Deleted by: lane/expdel2-21-linear `a33761f577` (2026-11-15); code recoverable at `085dcde095`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ARD_SIGMA_QOLD.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_BAYES_GRID_GUARD_OFF
+
+- Tried: old path: main's unguarded Gram sse on the FAST Apple grid driver.
+- Evidence: EXPERIMENTS.md row 249 KEPT 269ffa57a (M3: istella NaN -> finite, r2 equal). FAST is Apple only: no NVIDIA/AMD A/B owed (rule e).
+- Removed: the `_OFF` term: BAYES_GRID_GUARD = FAST and Apple. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `e6671383da` (2026-11-15); code recoverable at `f7077f3ddc`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BAYES_GRID_GUARD_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_CALIB_GNB_FOLDS_OFF
+
+- Tried: old path: the multi-call reference route instead of the one-program fold units.
+- Evidence: EXPERIMENTS.md row 237 KEPT 24ed76679 (M3 taxi 839.9 -> 49.8 ms, acc and logloss identical). Promoted on Apple only; FAST is Apple only, so no NVIDIA/AMD A/B is owed (rule d).
+- Removed: the `_OFF` term: CALIB_FOLDS = FAST and Apple. Default unchanged: no bits move.
+- Files: x_prep/calib.mojo.
+- Deleted by: lane/expdel2-21-linear `f70ab5bcc0` (2026-11-15); code recoverable at `8bfe803d02`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CALIB_GNB_FOLDS_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_GLM_CELLS_MIXED
+
+- Tried: opt-in arm: the GLM gradient / Hessian cells in cell order instead of the slot order.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the two gates in the team cell loop. Default unchanged: no bits move.
+- Files: x_linear/glm_host.mojo.
+- Deleted by: lane/expdel2-21-linear `51eabe26ef` (2026-11-15); code recoverable at `a602b53e45`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GLM_CELLS_MIXED.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_HUBER_DEVICE_LBFGS_OFF
+
+- Tried: old path: the host-driven line search (x_linear/huber_grid.mojo) on FAST Apple.
+- Evidence: EXPERIMENTS.md row 1256 ACCEPT/DEFAULT (M3: huber taxi 219.8 -> 189.9 ms, digest identical). Promoted on Apple only; FAST is Apple only, so no NVIDIA/AMD A/B is owed (rule d).
+- Removed: the `_OFF` term: HUBER_DEVICE_LBFGS = FAST and Apple. Default unchanged: no bits move.
+- Files: x_linear/huber_fast.mojo.
+- Deleted by: lane/expdel2-21-linear `91fed31806` (2026-11-15); code recoverable at `a1003b0db5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_HUBER_FAST_BLOCK512
+
+- Tried: force-on knob: it forced HUBER_DEVICE_LBFGS on past its `_OFF` rollback; the 512-row partials are the default.
+- Evidence: EXPERIMENTS.md row 1423 KEEP (FAST+Apple default, `_OFF` deleted by expdel-03). Rule e: deleting the read leaves the default byte-identical.
+- Removed: the `or is_defined` term of HUBER_DEVICE_LBFGS. Default unchanged: no bits move.
+- Files: x_linear/huber_fast.mojo.
+- Deleted by: lane/expdel2-21-linear `a1003b0db5` (2026-11-15); code recoverable at `e7c79bbf05`.
+- Restore: `git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD
+
+- Tried: old path: the benchmark-tuned d <= 32 gate of the simdgroup per-sample SGD.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: SPS_LEGACY_NARROW, SPS_LEGACY_MAX_D and their gate. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `ea2d15591a` (2026-11-15); code recoverable at `51a85b3df6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_LEGACY_NARROW_SVM_WS
+
+- Tried: old path: the benchmark-tuned 8192-row floor for the 2048 working set.
+- Evidence: EXPERIMENTS.md row 1344 NEUTRAL, not merged (rule e): the SVM_WS_MAX floor is the default.
+- Removed: the `is_defined` choice: SVM_WS_BIG_MIN = SVM_WS_MAX. Default unchanged: no bits move.
+- Files: svm/impl/workingset.mojo.
+- Deleted by: lane/expdel2-21-linear `65630c0c9f` (2026-11-15); code recoverable at `ab40e72f25`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SVM_WS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_RIDGE_FF_ALWAYS
+
+- Tried: opt-in arm: float-float for every ridge fit (the cost A/B of the fallback).
+- Evidence: no EXPERIMENTS.md row, grid control classical-fixes ridge_ff_always never run: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: RIDGE_FF_ALWAYS and its gate in `chol_trusted`. Default unchanged: no bits move.
+- Files: x_linear/ridge.mojo.
+- Deleted by: lane/expdel2-21-linear `a602b53e45` (2026-11-15); code recoverable at `67fe970eba`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RIDGE_FF_ALWAYS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGDOC_FAST_TAIL_LONG
+
+- Tried: opt-in arm: the 4x (262,144-step) SGDOneClassSVM tail.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the choice: SGDOC_TAIL_K = 65536. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `f7077f3ddc` (2026-11-15); code recoverable at `ea2d15591a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_LONG.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF
+
+- Tried: old path: the fixed `cap` minibatch for 'auto'.
+- Evidence: EXPERIMENTS.md row 16 PENDING: no A/B recorded for the old path (rule b).
+- Removed: SGD_ADAPTIVE_BATCH and the fixed-cap return in `sgd_batch`. Default unchanged: no bits move.
+- Files: x_linear/sgd.mojo.
+- Deleted by: lane/expdel2-21-linear `735cd099cb` (2026-11-15); code recoverable at `5d8783f621`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_AUTO_STEPS_256_OFF
+
+- Tried: old path: the 32-step floor of the auto batch.
+- Evidence: EXPERIMENTS.md row 17 names the rule; no A/B recorded for the old path (rule b).
+- Removed: the choice: SGD_AUTO_STEPS = 256. Default unchanged: no bits move.
+- Files: x_linear/sgd.mojo.
+- Deleted by: lane/expdel2-21-linear `2eae8f41e9` (2026-11-15); code recoverable at `735cd099cb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_AUTO_STEPS_256_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_FAST_EPOCH_RESIDENT
+
+- Tried: opt-in arm: one launch per minibatch (`sgd_mb_fast_batch_kernel`) on FAST Apple.
+- Evidence: EXPERIMENTS.md row 1596 OPEN; grid control apple-fast-round2 sgd_fast_epoch_resident never run (rule a).
+- Removed: `sgd_mb_fast_batch_kernel`, the SGD_ARM_FAST_RESIDENT arm (selection, epoch_launches count, epoch body) and the dparts2 buffer. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `51a85b3df6` (2026-11-15); code recoverable at `639da56218`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF
+
+- Tried: old path: the XG_TPB-wide chunk kernel on NVIDIA / AMD IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SGD_IDN_CHUNK_WIDE. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `f3550a03d5` (2026-11-15); code recoverable at `2c034b8d40`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF
+
+- Tried: old path: the host finite walk on Apple only.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the Apple `_OFF` term of SGD_IDN_DEV_FINITE. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `255a84c8ff` (2026-11-15); code recoverable at `1d51928517`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_IDN_DEV_FINITE_OFF
+
+- Tried: old path: the binding's host finite walk before an IDENTICAL SGD fit.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SGD_IDN_DEV_FINITE. Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `1d51928517` (2026-11-15); code recoverable at `2040a5c03e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_IDN_MB_FUSE_OFF
+
+- Tried: old path: three launches a minibatch in IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SGD_IDN_MB_FUSE (the three-launch arm stays for FAST). Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `2040a5c03e` (2026-11-15); code recoverable at `f3550a03d5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_IDN_MB_FUSE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_IDN_OVR_PAR_OFF
+
+- Tried: old path: the one-vs-rest problems one after another in IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SGD_IDN_OVR_PAR (the sequential driver stays for FAST). Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `29555cd114` (2026-11-15); code recoverable at `255a84c8ff`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_IDN_PS_WARP_OFF
+
+- Tried: old path: the block form of the per-sample SGD on NVIDIA / AMD IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SGD_IDN_PS_WARP (the block form stays for Apple and FAST). Default unchanged: no bits move.
+- Files: x_linear/device.mojo.
+- Deleted by: lane/expdel2-21-linear `639da56218` (2026-11-15); code recoverable at `29555cd114`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF
+
+- Tried: old path: SGDOneClassSVM's per-sample 'auto' in IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SGD_OC_IDN_MB_DEFAULT. Default unchanged: no bits move.
+- Files: x_linear/sgd.mojo.
+- Deleted by: lane/expdel2-21-linear `5d8783f621` (2026-11-15); code recoverable at `51028ea5eb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF
+
+- Tried: old path: the explicit single-word one-class minibatch step in IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SGD_OC_MB_IMPLICIT (ocm 0 stays for FAST). Default unchanged: no bits move.
+- Files: x_linear/sgd.mojo.
+- Deleted by: lane/expdel2-21-linear `51028ea5eb` (2026-11-15); code recoverable at `561bfcf338`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SVM_FAST_SORT_OFF
+
+- Tried: old path: the one-bit working-set sort (128 launches) beside the radix sort default in FAST and IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of FAST_WS_SORT (the one-bit sort stays for builds outside FAST and IDENTICAL). Default unchanged: no bits move.
+- Files: svm/impl/workingset.mojo.
+- Deleted by: lane/expdel2-21-linear `a4bd9fe9ae` (2026-11-15); code recoverable at `7684b61797`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SVM_FAST_SORT_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_SVM_WS1024
+
+- Tried: opt-in arm: the 1024 working set on FAST Apple.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the `is_defined` term of SVM_WS_MAX. Default unchanged: no bits move.
+- Files: svm/impl/workingset.mojo.
+- Deleted by: lane/expdel2-21-linear `ab40e72f25` (2026-11-15); code recoverable at `a4bd9fe9ae`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SVM_WS1024.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF
+
+- Tried: old path: the binding's host finite walk before every IDENTICAL x_linear fit.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of XLIN_IDN_DEV_FINITE (the alias stays for its importers; the host walk stays for FAST). Default unchanged: no bits move.
+- Files: x_linear/finite_device.mojo.
+- Deleted by: lane/expdel2-21-linear `8bfe803d02` (2026-11-15); code recoverable at `784535aaec`.
+- Restore: `git apply experiments/removed/MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_X_LINEAR_ARD_LEAD
+
+- Tried: opt-in arm: ARD's sigma on the team lead only.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the lead-only branch of `_t_ard_sigma`. Default unchanged: no bits move.
+- Files: x_linear/bayes.mojo.
+- Deleted by: lane/expdel2-21-linear `a6680ec95a` (2026-11-15); code recoverable at `a33761f577`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_LINEAR_ARD_LEAD.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_X_LINEAR_FAST_FMA
+
+- Tried: opt-in arm: one fused multiply-add in `xmad` on FAST Apple.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the fma branch of `xmad`. Default unchanged: no bits move.
+- Files: x_linear/ops.mojo.
+- Deleted by: lane/expdel2-21-linear `561bfcf338` (2026-11-15); code recoverable at `f19d6bd79f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_X_LINEAR_NO_STAGED_FOLD
+
+- Tried: opt-in arm: the lead-only `fold_fa` on a GPU team in `t_fold_fa_staged`.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the `or is_defined` term of the gate (the lead fold stays for the host). Default unchanged: no bits move.
+- Files: x_linear/tops.mojo.
+- Deleted by: lane/expdel2-21-linear `f19d6bd79f` (2026-11-15); code recoverable at `51eabe26ef`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF
+
+- Tried: old path: main's host-arena run scan and full download for OneHot / Ordinal distinct values.
+- Evidence: EXPERIMENTS.md row 406 KEEP, FAST+Apple default (M3 onehot taxi 32.2 -> 5.6 ms with PRESENT). FAST is Apple only: no NVIDIA/AMD A/B owed (rule e).
+- Removed: the `_OFF` term: CAT_CLS2_PACK = FAST and Apple (main's program stays as the in-run fallback). Default unchanged: no bits move.
+- Files: x_prep/cat_cls2.mojo.
+- Deleted by: lane/expdel2-21-linear `2d86e27c6c` (2026-11-15); code recoverable at `7cab9d3674`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF
+
+- Tried: old path: the radix sort instead of the presence flags under PACK.
+- Evidence: EXPERIMENTS.md row 407 KEEP, FAST+Apple default. FAST is Apple only: no NVIDIA/AMD A/B owed (rule e).
+- Removed: the `_OFF` term: CAT_CLS2_PRESENT = CAT_CLS2_PACK. Default unchanged: no bits move.
+- Files: x_prep/cat_cls2.mojo.
+- Deleted by: lane/expdel2-21-linear `7cab9d3674` (2026-11-15); code recoverable at `f70ab5bcc0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### Non-owner folds in this lane's files
+
+- `MOJOLEARN_IDN_ALL_OFF`: the umbrella term of SGD_IDN_CHUNK_WIDE, SGD_IDN_MB_FUSE, SGD_IDN_DEV_FINITE, SGD_IDN_OVR_PAR, SGD_IDN_PS_WARP (x_linear/device.mojo), XLIN_IDN_DEV_FINITE (x_linear/finite_device.mojo), LARS_GRID_GRAM (x_linear/lars.mojo), SGD_OC_MB_IMPLICIT and SGD_OC_IDN_MB_DEFAULT (x_linear/sgd.mojo); `2c034b8d40`, recoverable at `9ff89ae635`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch`.
+- `MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE`: `_ard_factor_coef` and its two gates in `_t_ard_coef` / `_ard_coef` (x_linear/bayes.mojo); `085dcde095`, recoverable at `65630c0c9f`; `experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.expdel2-21-linear.patch`.
+- `MOJOLEARN_CLASSICAL_C17_OVR`: the four-problem class waves in the one-vs-rest SGD driver and its epoch_launches count (x_linear/device.mojo); `ff5b5b6e52`, recoverable at `e6671383da`; `experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.expdel2-21-linear.patch`.
+- `MOJOLEARN_CLASSICAL_C16_GLM_FUSED`: the fused loss-and-derivative map in `glm_map_kernel` and `_objective_host`, the derivative-pass gates and the `_unit_all` imports (x_linear/device.mojo, x_linear/glm_host.mojo); `5ff76a71a1`, recoverable at `ff5b5b6e52`; `experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.expdel2-21-linear.patch`.
+- `MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED`: the blocked float-float statistics launches of `_ridge_kfold_grid` and `_ridge_ff_grid`, their partial tables, gate, team slots and witness caps, the rff_* imports, and the rff_stats_host branches (x_linear/device.mojo, x_linear/ridge.mojo, x_linear/ridgecv.mojo); `469f436a42`, recoverable at `5ff76a71a1`; `experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.expdel2-21-linear.patch`.
+- `MOJOLEARN_CLASSICAL_C14_GROUP_RHS`: the grouped four-RHS solves of the ridge best-alpha solve, host and team, and the chol_solve_group import (x_linear/ridge.mojo); `e7b27dab14`, recoverable at `469f436a42`; `experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-21-linear.patch`.
+- `MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS`: the disjoint fold-weight cache: classical_lcv_weight_kernel, the fold_weights buffer and kernel arguments (x_linear/logcv_grid.mojo), the host cache words (x_linear/logcv_host.mojo, x_linear/x_linear_host_impl.mojo), lcv_disjoint_weight and lcv_retained_weight (x_linear/logcv.mojo) and the non-partition refusals (x_linear/device.mojo, x_linear/x_linear_host_impl.mojo); `96b9d412f1`, recoverable at `e7b27dab14`; `experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch`.
+- `MOJOLEARN_CLASSICAL_C19_SGD_CHUNK`: SGD_PS_CHUNK is the incumbent 2048 directly (x_linear/device.mojo); `67fe970eba`, recoverable at `96b9d412f1`; `experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.expdel2-21-linear.patch`.
+
+Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; plan correction). `MOJOLEARN_IDN_LARS_GRID_GRAM_OFF` (KEEP, reported): its old path, main's moments grid for LARS / LassoLars, is the measured winner on lars istella (NV 165.6 vs 340.7 ms, AMD 390.2 vs 1155.2 ms; x_linear/lars.mojo, OPEN FOLLOW-UP), so under "A measured winner is never deleted on reasoning" it stays until the blocked default is at least as fast there on NVIDIA and AMD.

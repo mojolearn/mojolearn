@@ -3,29 +3,7 @@
  "lane": "classical-fixes",
  "branch": "lane/classical-fixes",
  "head": "1ea312322",
- "controls": {
-  "ridge_ff_always": {
-   "define": "MOJOLEARN_RIDGE_FF_ALWAYS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_RIDGE_FF_ALWAYS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_linear/ridge.mojo:77",
-    "x_linear/ridge.mojo:83",
-    "x_linear/ridgecv.mojo:89",
-    "x_linear/ridge_grid.mojo:159"
-   ],
-   "binding": "_mojolearn_x_linear",
-   "bits_change": true,
-   "status": "kept",
-   "note": "Existing A/B arm, now registered: chol_trusted returns False, so every Ridge solve takes the float-float route (x_linear/ff.mojo) instead of the float32 Cholesky with the 2^-12 pivot gate. Reached by expanded:ridge-clf (ridge_fit_grid ra_factor_kernel / t_ridge_solve_best) and expanded:ridge-cv (kf_solve_kernel via kf_solve, and the refit). Where the float32 factor is already untrusted (istella) it is the incumbent route; where it is trusted (taxi) it moves bits to the float-float answer on device and host column together (_ridge_fit_host and the host kf_solve read the same define), so NVIDIA and AMD still agree. Its purpose is the cost B arm for float-float work (e.g. a blocked RidgeCV float-float fallback); expected slower, quality equal or better."
-  }
- },
+ "controls": {},
  "algorithms": {
   "classical:kmeans": {
    "binding": "_mojolearn (host twin _mojolearn_core_host)",
@@ -60,17 +38,13 @@
   "expanded:ridge-clf": {
    "binding": "_mojolearn_x_linear",
    "route": "fit: _ridge_run -> x_linear_fit(ALGO_RIDGE) -> ridge_fit_grid -> ra_factor_kernel (ridge_grid.mojo:159 chol_trusted) -> t_ridge_solve_best",
-   "controls": [
-    "ridge_ff_always"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "expanded:ridge-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "fit: _ridge_kfold_grid -> kf_solve_kernel -> kf_solve (ridgecv.mojo:89 chol_trusted, float-float fallback); refit -> t_ridge_solve_best",
-   "controls": [
-    "ridge_ff_always"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },
@@ -102,6 +76,11 @@
    "define": "MOJOLEARN_IDN_KMEANS_CONV_CHUNK",
    "control": "kmeans_conv_chunk",
    "reason": "DELETED 2026-11-15 (lane/expdel2-10-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): the int sweep of the device-stop chunk; A08 mixed on NVIDIA, default 8 retained, never promoted; KMEANS_CONV_CHUNK = 8 (no bit depends on the chunk); define refused in core/experiment_guards_cluster.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_RIDGE_FF_ALWAYS",
+   "control": "ridge_ff_always",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-21-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): opt-in arm (float-float for every ridge fit), never measured; RIDGE_FF_ALWAYS and its gate in chol_trusted are gone (no bit change); define refused in core/experiment_guards_linear.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
   }
  ]
 }
