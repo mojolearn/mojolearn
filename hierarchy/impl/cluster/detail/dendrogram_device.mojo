@@ -61,15 +61,12 @@ comptime U32P = MutPointer[UInt32, MutAnyOrigin]
 #: radix sorts of the 64-bit key's halves (low, then high; `core/
 #: fast_radix_sort.mojo`) instead of `_sort_rank_kernel`'s all-pairs count
 #: (nnz^2 compares). The keys are distinct, so the sorted position IS the
-#: counted rank: same permutation. `-D MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF=1`
-#: restores the count.
-comptime IDN_DENDRO_RADIX_SORT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: counted rank: same permutation. FAST keeps the count.
+# TOMBSTONE: MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF (old path: the all-pairs rank count under IDENTICAL; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 98ec4fc711.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 98ec4fc711.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_DENDRO_RADIX_SORT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every vendor: the per-level hook loop
 #: replaced by ONE lock-free union launch (`hdbscan/impl/cluster/detail/
