@@ -1,0 +1,17 @@
+diff --git b/bindings/_mojolearn_x_ann.mojo a/bindings/_mojolearn_x_ann.mojo
+index d32d3ee4c8..92fc67f6f5 100644
+--- b/bindings/_mojolearn_x_ann.mojo
++++ a/bindings/_mojolearn_x_ann.mojo
+@@ -395,10 +395,8 @@ def build__mojolearn_x_ann() -> PythonObject:
+         m.def_function[x_ann_index_release_binding]("x_ann_index_release")
+         comptime if IVF_PQ_RESIDENT_FIT:
+             # lane fg-ivf A7: the resident IVF-PQ fit and its codes export
+-            # (absent under FAST: fit takes x_ann_ivf_pq_build and the first
+-            # search prepares the handle)
+-            # TOMBSTONE: MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF (old path; one-vendor promotion, grid fg-ivf.json A7: the other vendor's A/B is owed) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 699d5e93a1.
+-            # Restore: git apply experiments/removed/MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF.expdel2-01-base.patch
++            # (absent under -D MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF: fit takes
++            # x_ann_ivf_pq_build and the first search prepares the handle)
+             m.def_function[ivf_pq_build_resident_binding]("x_ann_ivf_pq_build_resident")
+             m.def_function[x_ann_index_export_codes_binding]("x_ann_index_export_codes")
+         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
