@@ -177,7 +177,12 @@ comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_ID_DEFER_COPY.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 7be6f0b80e.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY.patch; record in docs/TOMBSTONES.md.
-comptime DEFER_HIST_COPY_1903 = not SPLIT_COST_IDENTICAL or TARGET_HAS_APPLE_GPU
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: MOJOLEARN_GBDT_ID_DEFER_COPY, RUN #8 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S). Its MOJOLEARN_IDN_ALL_OFF companion term is not restored (that define stays deleted).
+comptime DEFER_HIST_COPY_1903 = (
+    not SPLIT_COST_IDENTICAL
+    or TARGET_HAS_APPLE_GPU
+    or is_defined["MOJOLEARN_GBDT_ID_DEFER_COPY"]()
+)
 """DEVIATION 1903's schedule (the parent-histogram copy deferred to the
 plan-time pairs that need it, the zero pass over dirty slots only): FAST
 everywhere, and Apple IDENTICAL since trees-apple2 (2026-09-28). Its bit
@@ -187,8 +192,9 @@ leaves the tree memset's +0.0 where the kernel would write +0.0) -- so it
 holds under IDENTICAL too. The other SPLIT_COST_IDENTICAL arms (1901's
 propagated partition stats, which re-associate; 1904's device fold) stay
 as they were. NVIDIA and AMD IDENTICAL keep the split-time copy and the
-full zero pass (the opt-in arms that changed this were deleted
-2026-11-15, see docs/TOMBSTONES.md)."""
+full zero pass by default. Lane gap-trees-nv: `-D MOJOLEARN_GBDT_ID_DEFER_COPY`
+takes the same schedule under IDENTICAL on NVIDIA and AMD (opt-in until
+its A/B)."""
 
 # Cache unchanged partitions under IDENTICAL without propagating histogram
 # sums (which would change rounding). CatBoost updates only split children
