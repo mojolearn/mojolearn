@@ -853,7 +853,9 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 #: Apple only for now: Apple's step glue keeps `param` in place (no swap);
 #: NVIDIA's out-of-place arm swaps it every step, which the re-bind handles,
 #: but that column has not run this yet.
-#: `-D MOJOLEARN_BYTE_LM_COPY_EMB_HEAD` restores the copies.
+# TOMBSTONE: MOJOLEARN_BYTE_LM_COPY_EMB_HEAD (opt-in revert to the emb/head copies, no A/B recorded) deleted 2026-11-15
+# by lane/expdel2-31-neural; code recoverable at 9cc10dddc6.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch
 # NN60: two independently selectable, default-OFF IDENTICAL view arms.
 # Existing sub-buffer APIs supply the mechanism; no new vendor capability is
 # assumed. These source drafts have no compile/identity/full-model A/B evidence.
@@ -874,8 +876,7 @@ comptime NN60_BLOCK_VIEWS = (
 )
 comptime BYTE_LM_BLOCK_VIEWS = NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
-    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS)
-    and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
+    TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS
 )
 # TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS (every parameter and gradient of the hand train step a view of the flat owners; default off, never promoted; its step went with lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
@@ -890,7 +891,7 @@ comptime BYTE_LM_EMB_HEAD_VIEWS = (
 
 def _bind_emb_head(ctx: DeviceContext, mut tb: ByteBuffers, config: ByteConfig) raises:
     """`emb_w` and `lm_w` read the CURRENT flat parameters: fresh views of
-    `param` (after any handle swap), or the two copies under the revert arm."""
+    `param` (after any handle swap), or the two copies where the views are not taken."""
     var n = config.vocab_size * config.d_model
     comptime if BYTE_LM_EMB_HEAD_VIEWS:
         tb.emb_w = tb.param.create_sub_buffer[DType.float32](0, n)
