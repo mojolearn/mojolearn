@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """HuberRegressor with the L-BFGS line search batched on the device
 (lane/apple-fast-robust@cfdb95e48, 2026-10-02; recovered onto main
-2026-10-04 by lane/apple-fast-rec-fa-robust; FAST + Apple only, behind
-the FAST + Apple default since 2026-10-04; rollback
-`-D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF`).
+2026-10-04 by lane/apple-fast-rec-fa-robust; FAST + Apple only, the
+FAST + Apple default since 2026-10-04).
 
 Main's x_linear/huber_grid.mojo now runs the minimizer on the device too
 (x_linear/lbfgs_device.mojo), but the host still drives the line search:
@@ -63,13 +62,12 @@ from x_linear.lbfgs import LBFGS_M
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab3 @ 0ca521cc5): huber taxi 219.8 -> 189.9 ms; r2/rmse
 #: identical, output digest identical. KEEP: the FAST + Apple default since
-#: then; rollback -D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.
+#: then.
+# TOMBSTONE: MOJOLEARN_HUBER_DEVICE_LBFGS_OFF (old path of the FAST Apple default, EXP:1256; FAST is Apple only, so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a1003b0db5.
+# Restore: git apply experiments/removed/MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_HUBER_FAST_BLOCK512 (force-on knob of the FAST Apple default, EXP:1423 KEEP; the default is unchanged) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7c79bbf05.
 # Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512.patch; record in docs/TOMBSTONES.md.
-comptime HUBER_DEVICE_LBFGS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS_OFF"]()
-)
+comptime HUBER_DEVICE_LBFGS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: (FAST + Apple, default ON since 2026-10-05; needs HUBER_DEVICE_LBFGS) the partials of
 #: the fast fit over 512-row blocks instead of FOLD_BLOCK: eight times the
 #: threads in the partials launch (taxi: 21 tasks x 366 blocks under
