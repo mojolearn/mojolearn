@@ -716,6 +716,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C43_RESIDENT_NORMALIZATION`](#mojolearn_c43_resident_normalization-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (spectral, x_neighbors graphs) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch](../experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch) |
 | [`MOJOLEARN_C44_SAMPLING_DESCRIPTORS`](#mojolearn_c44_sampling_descriptors-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (umap) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch](../experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch) |
 | [`MOJOLEARN_KDE_DIRECT_DISTANCE`](#mojolearn_kde_direct_distance-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (kde) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_KDE_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch) |
+| [`MOJOLEARN_KMEANS_ROW_ASSIGN`](#mojolearn_kmeans_row_assign-unmeasured-arm-deleted-2026-11-15) | Cluster (KMeans row-register assignment, IDENTICAL) | removed (unmeasured opt-in arm; KEPT row withdrawn, no own verdict) | 2026-11-15 | [MOJOLEARN_KMEANS_ROW_ASSIGN.patch](../experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6920,3 +6921,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1fef4f5d4a`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch`, then delete the `MOJOLEARN_KDE_DIRECT_DISTANCE` refusal in `core/experiment_guards_kernel.mojo`.
 - **Records**: refusal in `core/experiment_guards_kernel.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `kde_direct` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_KMEANS_ROW_ASSIGN: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: The `kmeans_assign` grid control's rows2 / rows4 arms: `-D MOJOLEARN_KMEANS_ROW_ASSIGN=2|4` ran the Lloyd / k-means++ / transform nearest center as a row-register kernel (R rows a thread, expanded L2, incumbent bits). `KMEANS_ROW_ASSIGN_ROWS` (read by cluster/impl/detail/classical_assignment.mojo) stays as the constant 0 and `KMEANS_ROW_ASSIGN` as `False`; the incumbent tiled fused L2-NN is the only arm.
+- **Verdict**: EXPERIMENTS.md KMEANS_ROW_ASSIGN row: KEPT (owed row withdrawn): the DROP row belonged to KMEANS_DIRECT_DISTANCE; the rows arms had no own verdict. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b97e8ccd99`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch`, then delete the `MOJOLEARN_KMEANS_ROW_ASSIGN` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `kmeans_assign` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
