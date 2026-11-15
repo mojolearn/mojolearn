@@ -319,6 +319,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF (superseded (SEQ_FAST_THETA_SNAP default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at e382ce0c14.
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF rolled back SEQ_FAST_THETA_SNAP, the FAST + Apple default KEPT f6a9e7c04 (M3 dynamic-optimized-theta taxi-hourly 2,088 -> 562 ms, same bits); drop the define; recoverable at e382ce0c14; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF (superseded (SEQ_FAST_THETA_SPEC default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at c5925a0e35.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF rolled back SEQ_FAST_THETA_SPEC, the FAST + Apple default KEPT 6c0ba4379 (M3 theta taxi-hourly 218 -> 20.3 ms, quality identical); drop the define; recoverable at c5925a0e35; see docs/TOMBSTONES.md"
     # ---- end lane expdel-04-neural
     return True
 

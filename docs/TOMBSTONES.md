@@ -633,6 +633,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_PIPE_UP_OFF`](#mojolearn_seq_fast_pipe_up_off) | Neural (Apple FAST x_sequence executor uploads) | superseded (SEQ_FAST_PIPE_UP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF`](#mojolearn_seq_fast_pipe_down_off) | Neural (Apple FAST x_sequence executor downloads) | superseded (SEQ_FAST_PIPE_DOWN default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF`](#mojolearn_seq_fast_theta_snap_off) | Series on x_sequence (Apple FAST theta Nelder-Mead cycle watch) | superseded (SEQ_FAST_THETA_SNAP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF`](#mojolearn_seq_fast_theta_spec_off) | Series on x_sequence (Apple FAST theta speculative Nelder-Mead) | superseded (SEQ_FAST_THETA_SPEC default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5965,3 +5966,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/theta.mojo.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `e382ce0c14`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF
+
+- Tried: the rollback of `SEQ_FAST_THETA_SPEC` in `sequence/theta_spec.mojo`: under FAST + Apple (on THETA_REG), the serial one-thread-per-series Nelder-Mead instead of one simdgroup per series evaluating the candidates side by side.
+- Verdict: the speculative default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_THETA_SPEC`, lane/apple-fast-gap-tsa @ e9da47064, M3 gaptsa-thetaspec-theta-taxi-hourly: theta taxi-hourly 218 -> 20.3 ms (-91%), quality identical). KEPT 6c0ba4379. Apple FAST only.
+- Removed: the `_OFF` term of `THETA_SPEC_FAST` (now `THETA_REG_FAST`). The serial `op_theta` stays (IDENTICAL with `MOJOLEARN_IDN_NM_SPEC_OFF`, FAST off Apple, the host column). No bits move.
+- Files: sequence/theta_spec.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `c5925a0e35`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
