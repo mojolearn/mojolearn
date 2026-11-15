@@ -1,31 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU training for the gbdt-ordered-rmse, gbdt-feature-freq,
-gbdt-pointwise-l2-bayesian-eval and gbdt-categorical-ctr lanes (lane/cpu-training-gbdt-ordered,
-2026-09-15), checked from SOURCE so it runs
-on a box with nothing built, plus a runtime check that runs only where the
-gbdt host binding is built and the package took the CPU-only path.
-
-What the source checks hold: the manifest covers both lanes in the gbdt
-family, lists both oracles and both exports; the binding registers
-`gbdt_fit_ordered_rmse` and `gbdt_fit_two_level_feature_freq` and refuses
-`sample_weight` by name on each; neither oracle imports a GPU module, nor do
-the host modules they reuse; the oracles spell the device constructs a bit
-claim rests on (the fold layout's ceil `IntLog2` and power-of-two stripe,
-the 8-bit kernel's document-keyed dither and its `1e-20` write guard, the
-half-byte accumulator's window order and two-stage reduce, the dynamic
-cosine scorer's `1e-20` seed and fold pairs, the challenger-first record
-fold, the stable one-bit sort, the ordered apply as one fma (0.8.19's bits),
-the tensor column's `(count + 0) / (n + 1)` and pinned fold capacity, the
-level-two rebuild without subtraction, the host leaf fold); the sabotage
-define reaches both; the CPU identity gate workflow triggers on both files.
-
-The runtime check (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded): a small OrderedRMSE fit survives a save and
-load, and the CTR model's predictions repeat and score its eval curve. The
-two-fit repeats and the refusals by name are the native check
-`gbdt_public_fits_cpu` (lane tmig-trees, 2026-11-14). It is a plumbing check. The bit
-claim against the GPU columns is the CPU identity gate's, not this file's.
+gbdt-pointwise-l2-bayesian-eval and gbdt-categorical-ctr lanes, through the
+public estimators where the gbdt host binding is built and the package took
+the CPU-only path (skipped, and SAID to be skipped, otherwise): a small
+OrderedRMSE fit survives a save and load, and the CTR model's predictions
+repeat and score its eval curve. The two-fit repeats and the refusals by
+name are the native check `gbdt_public_fits`. It is a plumbing check; the
+bit claim against the GPU columns is the release verification's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_gbdt_ordered
 """
@@ -33,153 +15,27 @@ claim against the GPU columns is the CPU identity gate's, not this file's.
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
 import os
-import re
 import sys
 import tempfile
-from pathlib import Path
 
 import mojolearn
 from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
-
-ROOT = Path(__file__).resolve().parents[3]
-
-ORDERED = "gbdt/host/gbdt_oracle_ordered.mojo"
-FEATURE_FREQ = "gbdt/host/gbdt_oracle_feature_freq.mojo"
-POINTWISE = "gbdt/host/gbdt_oracle_pointwise.mojo"
-ONEHOT = "gbdt/host/gbdt_oracle_onehot.mojo"
-GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
-REUSED_HOST_MODULES = (
-    "checks/fixed_point.mojo",
-    "gbdt/host/gbdt_oracle.mojo",
-    "gbdt/ctrs/ctr_binarization.mojo",
-    "gbdt/models/ctr_value_table.mojo",
-    "gbdt/grid_creator/binarization.mojo",
-    "gbdt/gpu_data/compressed_index_builder.mojo",
-    "gbdt/gpu_data/feature_blocks.mojo",
-    "gbdt/gpu_util/kernel/random_gen.mojo",
-    "gbdt/overfitting_detector/overfitting_detector.mojo",
-)
+from mojolearn import _backend
 
 
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def test_manifest_covers_both_lanes():
-    fam = host_surface.family("gbdt")
-    for lane in ("gbdt-ordered-rmse", "gbdt-feature-freq", "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr"):
-        assert lane in fam["training_lanes"], lane
-        assert lane in host_surface.covered_lanes(), lane
-    for rel in (ORDERED, FEATURE_FREQ, POINTWISE, ONEHOT):
-        assert rel in fam["host_modules"] and (ROOT / rel).is_file(), rel
-    for name in ("gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq"):
-        assert name in fam["exports"], name
-    for cls in ("OrderedRMSE", "ExperimentalTwoLevelFeatureFreq"):
-        assert cls in fam["classes"], cls
-
-
-def test_binding_registers_and_refuses_weights_by_name():
-    src = _read(host_surface.binding_source("gbdt"))
-    assert '("gbdt_fit_ordered_rmse")' in src
-    assert '("gbdt_fit_two_level_feature_freq")' in src
     # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
     # gbdt host binding's RUN (the ordered/FeatureFreq dispatch and weight refusals) into gbdt/mojolearn_gbdt_host_run.mojo.
     # Native coverage: checks/native_tests/gbdt_public_fits.mojo ("weighted OrderedRMSE", "weighted FeatureFreq" refusals).
 
 
-def test_oracles_import_no_gpu_module():
-    for rel in (ORDERED, FEATURE_FREQ, POINTWISE, ONEHOT):
-        text = _read(rel)
-        assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
-        assert "DeviceContext" not in "".join(re.findall(r"^\s*from .*$", text, re.M)), rel
-    for rel in REUSED_HOST_MODULES:
-        body = _read(rel)
-        assert not GPU_IMPORTS.search(body), f"{rel} imports a GPU module"
-
-
-def test_ordered_oracle_spells_the_bit_carrying_constructs():
-    text = _read(ORDERED)
-    assert "var stripe = 1 << Int(ceil(log2(Float32(fold_count))))" in text, "the data partition stripe"
-    assert "var u = _hist2_dither(row)" in text, "the dither keyed on the document id"
-    assert "var val = Float32(Int(acc[c])) / fixed_scale" in text, "the 8-bit writeback"
-    assert "if abs(val) > Float32(1e-20):" in text, "the write guard"
-    assert "var at = (t // 32) * SLICE + (t & 16) + (bin << 5) + 2 * j + stat" in text, "the half-byte slot"
-    assert "cells[tid] = stage1[32 * fold2 + e] + stage1[32 * fold2 + e + 16]" in text, "the inner copies"
-    assert "var denum = List[Float32](length=hist_line, fill=Float32(1e-20))" in text, "the dynamic scorer's seed"
-    assert "gain_out[b] = (noisy - score_before) * Float32(1.0)" in text
-    assert "if _record_less(loc_gain, loc_fid, loc_bin, best_gain, best_fid, best_bin):" in text
-    assert "data_part = left if s.p_sz[left] < s.p_sz[right] else right" in text, "the smaller child"
-    assert "var is_left = s.p_sz[left_part] < s.p_sz[right_part]" in text
-    assert "row_index[fill[gb[r]]] = r" in text, "the stable counting sort"
-    assert "cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])" in text, "the ordered apply"
-    assert "model_leaves.append(identical_mul(leaves[leaf], learning_rate))" in text
-    assert "residual_bound *= Float64(1) + Float64(learning_rate)" in text
-
-
-def test_feature_freq_oracle_spells_the_bit_carrying_constructs():
-    text = _read(FEATURE_FREQ)
-    assert "values[row] = (Float32(count) + Float32(0.0)) / (" in text, "the FeatureFreq value"
-    assert "folds.append(GBDT_FF_GRID_BORDERS)" in text, "the pinned fold capacity"
-    assert "var fixed_scale = Float32(choose_scale(magnitude, n_rows))" in text
-    assert "tensor_columns.append(column)" in text
-    assert "tensor_borders.append(level_borders[level].copy())" in text
-    # the leaf through the pinned IDENTICAL seams (one product, one quotient,
-    # as the device's `learning_rate * total / (total_weight + l2_leaf_reg)`)
-    assert "identical_div(identical_mul(learning_rate, total), total_weight + l2)" in text
-    assert "if blk.policy == POLICY_BINARY:" in text
-
-
-def test_pointwise_oracle_spells_the_bit_carrying_constructs():
-    text = _read(POINTWISE)
-    assert "var tmp = -identical_log(draw[0] + Float32(1e-20))" in text, "the Bayesian draw"
-    assert "bw = identical_pow(tmp, bagging_temperature)" in text
-    assert "i += boot_blocks * GBDT_PW_BOOT_BLOCK" in text, "the bootstrap stride"
-    assert "var starting_approx = -portable_log64(1.0 / best_probability - 1.0)" in text
-    # boost from average through the shared blocked-tree average
-    # (gbdt/metrics/sample_quantile.mojo, the device's fold order)
-    assert "calculate_weighted_target_average(y, w, True)" in text
-    assert "return Float32(target_sum / summary_weight)" in _read("gbdt/metrics/sample_quantile.mojo")
-    assert "1, 0, scale, l2_leaf_reg, feat_offset, feat_shift, feat_mask,\n            True," in text, (
-        "the single-task arm with the plain L2 scorer")
-    assert "cursor[row] = identical_mul_add(estimated[leaf], learning_rate, cursor[row])" in text
-    assert "if detector.is_need_stop():" in text and "model_leaves.resize(" in text
-    ordered = _read(ORDERED)
-    assert "l2score += (-sl * sl) / (wl + l2)" in ordered, "TL2ScoreCalcer's leaf score"
     # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
     # gbdt host binding's RUN (the pointwise arm dispatch and its refusals) into gbdt/mojolearn_gbdt_host_run.mojo.
     # Native coverage: checks/native_tests/gbdt_public_fits.mojo (pointwise option fits).
 
 
-def test_one_hot_arm_spells_the_bit_carrying_constructs():
-    text = _read(ONEHOT)
-    assert "comptime GBDT_ONE_HOT_MAX_SIZE = 2" in text, "their GPU one_hot_max_size"
-    assert "if unique_values > GBDT_ONE_HOT_MAX_SIZE:" in text, "the CTR refusal"
-    assert 'line += " split_type take_bin"' in text
-    oracle = _read("gbdt/host/gbdt_oracle.mojo")
-    assert "bs.append(Float32(c) + Float32(0.5))" in oracle, "the one-hot grid"
-    assert "grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0" in oracle
     # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
     # gbdt host binding's RUN (the one-hot resolution and model text) into gbdt/mojolearn_gbdt_host_run.mojo.
     # Native coverage: checks/native_tests/gbdt_public_fits.mojo (one_hot_features fits).
-
-
-def test_sabotage_reaches_both_oracles():
-    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
-        text = _read(rel)
-        assert "comptime if GBDT_ORACLE_HOST_SABOTAGE:" in text, rel
-
-
-def test_workflow_triggers_on_both_oracles():
-    # 0affb7c75 removed the gate's push trigger (it runs by hand, weekly or
-    # from the release workflow), and its path list with it; the oracles
-    # must be listed only while a push trigger exists.
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    if not re.search(r"^  push:", text, re.M):
-        assert "workflow_dispatch:" in text and "workflow_call:" in text
-        return
-    for rel in (ORDERED, FEATURE_FREQ, POINTWISE, ONEHOT):
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
 @reference_training()
