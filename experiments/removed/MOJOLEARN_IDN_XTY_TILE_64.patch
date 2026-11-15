@@ -1,0 +1,30 @@
+diff --git a/core/host_tile_fold.mojo b/core/host_tile_fold.mojo
+index 67a13f4958..102b019a45 100644
+--- a/core/host_tile_fold.mojo
++++ b/core/host_tile_fold.mojo
+@@ -17,8 +17,9 @@ Apple and the host column together.
+ 
+ The order is the only one of those launches, in every mode (lane
+ debt-block-per-n, 2026-10-21, retired `-D MOJOLEARN_IDN_XTY_TILED_OFF`).
+-Candidate arm for the tile size (default 256 rows):
+-`-D MOJOLEARN_IDN_XTY_TILE_1024`. Pass the same define to the host build.
++Candidate arms for the tile size (default 256 rows):
++`-D MOJOLEARN_IDN_XTY_TILE_64`, `-D MOJOLEARN_IDN_XTY_TILE_1024`. Pass the
++same define to the host build.
+ """
+ 
+ from std.sys.compile import is_defined
+@@ -44,9 +45,10 @@ from checks.numerics import (
+ #: oracles' `comptime if`.
+ comptime IDN_XTY_TILED = True
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_XTY_TILE_64 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 792ad25b28.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILE_64.patch; record in docs/TOMBSTONES.md.
+-comptime XTY_TILE_ROWS = 1024 if is_defined["MOJOLEARN_IDN_XTY_TILE_1024"]() else 256
++comptime XTY_TILE_ROWS = (
++    64 if is_defined["MOJOLEARN_IDN_XTY_TILE_64"]()
++    else (1024 if is_defined["MOJOLEARN_IDN_XTY_TILE_1024"]() else 256)
++)
+ 
+ #: `core/column_stats.mojo::STATS_TPB`, restated because that file imports
+ #: the GPU (the same read `decomposition/host/pca_oracle.mojo` makes).

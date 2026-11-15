@@ -1,0 +1,76 @@
+diff --git a/core/row_norms.mojo b/core/row_norms.mojo
+index e5594ba268..5ee341c0ff 100644
+--- a/core/row_norms.mojo
++++ b/core/row_norms.mojo
+@@ -119,11 +119,47 @@ def row_norm_kernel(
+         out_norm.unsafe_store(row, total)
+ 
+ 
++# C06 schedules independent rows in one block. Each row retains NORM_TPB
++# logical lanes and the incumbent halving fold. One control,
++# MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2|4 (shared_controls.mojo); no
++# shape-specific route. NOT MEASURED.
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 20f2cfb2d5.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C06_NORM_ROWS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 80cae4b607.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
++from experiments.classical_identical_ideas.shared_controls import C06_NORM_ROWS, C06_ROWS_ON
+ from max.gpu.host import DeviceContext, DeviceBuffer
++comptime CLASSICAL_NORM_ROWS = C06_NORM_ROWS
++def batched_row_norm_kernel[rows_per_block: Int](
++    out_norm: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin], n_rows_in: Int32,
++    n_cols_in: Int32, take_sqrt_in: Int32,
++):
++    var lane = Int(thread_idx.x)
++    var local_row = Int(thread_idx.y)
++    var row = Int(block_idx.x) * rows_per_block + local_row
++    var slab = stack_allocation[NORM_TPB * rows_per_block, Float32, address_space=AddressSpace.SHARED]()
++    var acc = Float32(0)
++    if row < Int(n_rows_in):
++        var col = lane
++        while col < Int(n_cols_in):
++            var v = ftz(a.unsafe_load(row * Int(n_cols_in) + col))
++            acc = ftz(identical_mul_add(v, v, acc))
++            col += NORM_TPB
++    var at = local_row * NORM_TPB + lane
++    slab[at] = acc
++    barrier()
++    var step = NORM_TPB // 2
++    while step > 0:
++        if lane < step:
++            slab[at] = ftz(slab[at] + slab[at + step])
++        barrier()
++        step //= 2
++    if lane == 0 and row < Int(n_rows_in):
++        var total = ftz(slab[at])
++        if take_sqrt_in != 0:
++            if total <= Float32(0):
++                total = Float32(0)
++            total = ftz(identical_sqrt(total))
++        out_norm.unsafe_store(row, total)
+ 
+ 
+ def enqueue_row_norms(
+@@ -133,7 +169,17 @@ def enqueue_row_norms(
+ ) raises:
+     if rows <= 0:
+         return
+-    ctx.enqueue_function[row_norm_kernel](
+-        output.unsafe_ptr(), values.unsafe_ptr(), Int32(cols), Int32(take_sqrt),
+-        grid_dim=rows, block_dim=NORM_TPB,
+-    )
++    comptime if C06_ROWS_ON:
++        comptime assert CLASSICAL_NORM_ROWS == 2 or CLASSICAL_NORM_ROWS == 4, (
++            "MOJOLEARN_CLASSICAL_C06_NORM_ROWS takes 2 or 4"
++        )
++        ctx.enqueue_function[batched_row_norm_kernel[CLASSICAL_NORM_ROWS]](
++            output.unsafe_ptr(), values.unsafe_ptr(), Int32(rows), Int32(cols), Int32(take_sqrt),
++            grid_dim=(rows + CLASSICAL_NORM_ROWS - 1) // CLASSICAL_NORM_ROWS,
++            block_dim=(NORM_TPB, CLASSICAL_NORM_ROWS),
++        )
++    else:
++        ctx.enqueue_function[row_norm_kernel](
++            output.unsafe_ptr(), values.unsafe_ptr(), Int32(cols), Int32(take_sqrt),
++            grid_dim=rows, block_dim=NORM_TPB,
++        )

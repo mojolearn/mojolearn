@@ -1,0 +1,91 @@
+diff --git a/core/forest_inference_model.mojo b/core/forest_inference_model.mojo
+index d701f110c5..3238876260 100644
+--- a/core/forest_inference_model.mojo
++++ b/core/forest_inference_model.mojo
+@@ -16,14 +16,12 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COL
+ from max.gpu.host import DeviceContext, DeviceBuffer
+ from core.forest_inference import (
+     _forest_shape_checks, forest_pack_device, forest_validate_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
+-    device_all_finite,
++    device_all_finite, forest_labels_kernel, launch_forest_leaf_labels,
+ )
+ from core.forest_inference_pool import PooledForest, forest_device_count
+ from core.neural_context import process_ctx
+ from core.admitted_finite_status import enqueue_finite_status
+-from core.forest_experiments import T34_CHUNK_FOLD, T36_FINITE_STAGE
+-# TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1caa34cfb3.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
++from core.forest_experiments import T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS
+ # TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 9d8b51b0a6.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+ from core.shared_slot import SharedSlot
+@@ -266,7 +264,7 @@ struct ResidentForest(Movable):
+         self.left = Optional[DeviceBuffer[DType.int32]]()
+         self.leaves = Optional[DeviceBuffer[DType.float32]]()
+         var device_count = forest_device_count()
+-        comptime if T34_CHUNK_FOLD or T36_FINITE_STAGE:
++        comptime if T34_CHUNK_FOLD or T36_FINITE_STAGE or T38_FUSED_LABELS:
+             if device_count != 1:
+                 raise Error("selected TREES inference experiment requires one device; pooled integration remains pending")
+         comptime if FOREST_PACKED_NODES:
+@@ -518,6 +516,39 @@ struct ResidentForest(Movable):
+             self.ctx.value().enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
+             if not T36_FINITE_STAGE and not device_all_finite(self.ctx.value(), dx, rows * features):
+                 raise Error("resident forest requires finite Float32 values")
++        comptime if T38_FUSED_LABELS and (T35_LEAF_REUSE or T36_FINITE_STAGE):
++            if self.ordered:
++                launch_forest_leaf_labels[RF_INPUT, False, FOREST_PACKED_NODES](self.ctx.value(), self.offsets.value(), self.columns.value(),
++                    self.thresholds.value(), self.left.value(), self.leaves.value(), dx, dlab, rows, features, outputs, self.trees)
++            else:
++                launch_forest_leaf_labels[RF_INPUT, True, FOREST_PACKED_NODES](self.ctx.value(), self.offsets.value(), self.columns.value(),
++                    self.thresholds.value(), self.left.value(), self.leaves.value(), dx, dlab, rows, features, outputs, self.trees)
++            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
++            self.ctx.value().synchronize()
++            return
++        comptime if T38_FUSED_LABELS:
++            var bad = self.ctx.value().enqueue_create_buffer[DType.int32](1)
++            self.ctx.value().enqueue_memset(bad, Int32(0))
++            if self.ordered:
++                self.ctx.value().enqueue_function[forest_labels_kernel[RF_INPUT, False, FOREST_PACKED_NODES]](
++                    self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(), self.thresholds.value().unsafe_ptr(),
++                    self.left.value().unsafe_ptr(), self.leaves.value().unsafe_ptr(), dx.unsafe_ptr(), dlab.unsafe_ptr(), bad.unsafe_ptr(),
++                    Int32(rows), Int32(features), Int32(outputs), Int32(self.trees), grid_dim=(rows+127)//128, block_dim=128)
++            else:
++                self.ctx.value().enqueue_function[forest_labels_kernel[RF_INPUT, True, FOREST_PACKED_NODES]](
++                    self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(), self.thresholds.value().unsafe_ptr(),
++                    self.left.value().unsafe_ptr(), self.leaves.value().unsafe_ptr(), dx.unsafe_ptr(), dlab.unsafe_ptr(), bad.unsafe_ptr(),
++                    Int32(rows), Int32(features), Int32(outputs), Int32(self.trees), grid_dim=(rows+127)//128, block_dim=128)
++            var host_bad = self.ctx.value().enqueue_create_host_buffer[DType.int32](1)
++            self.ctx.value().enqueue_copy(dst_ptr=host_bad.unsafe_ptr(), src_buf=bad)
++            self.ctx.value().synchronize()
++            if host_bad.unsafe_ptr().unsafe_load(0) != 0:
++                raise Error("resident forest requires finite Float32 scores")
++            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
++            self.ctx.value().synchronize()
++            _ = host_bad^
++            _ = bad^
++            return
+         if self.ordered:
+             launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
+                 self.ctx.value(), self.offsets.value(), self.columns.value(),
+diff --git a/core/forest_inference_run.mojo b/core/forest_inference_run.mojo
+index 3eb35ec01d..5fb31860f5 100644
+--- a/core/forest_inference_run.mojo
++++ b/core/forest_inference_run.mojo
+@@ -93,8 +93,11 @@ def forest_gpu_resident_caps() -> Int:
+     """The resident capability bits both GPU forest images report through
+     XF_CAPS (core/forest_fit_request.mojo; lane calltable-forest): the
+     ordered word (`forest_ordered_resident`), the resident label query
+-    (`forest_predict_resident_labels_gpu`)."""
+-    from core.forest_fit_request import XF_CAP_ORDERED_RESIDENT, XF_CAP_RESIDENT_LABELS
+-    # TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1caa34cfb3.
+-    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+-    return XF_CAP_ORDERED_RESIDENT | XF_CAP_RESIDENT_LABELS
++    (`forest_predict_resident_labels_gpu`) and, when compiled, the T38 fused
++    labels (`forest_identical_fused_labels`)."""
++    from core.forest_experiments import T38_FUSED_LABELS
++    from core.forest_fit_request import XF_CAP_ORDERED_RESIDENT, XF_CAP_RESIDENT_LABELS, XF_CAP_FUSED_LABELS
++    var caps = XF_CAP_ORDERED_RESIDENT | XF_CAP_RESIDENT_LABELS
++    comptime if T38_FUSED_LABELS:
++        caps |= XF_CAP_FUSED_LABELS
++    return caps

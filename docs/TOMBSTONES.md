@@ -555,6 +555,36 @@ in the tables after the sections.
 | [`x_decomp_dev_eigh` branch of the linalg kit's eigh](#dead-code-found-by-the-python-audits-2026-11-09) | Linalg (eigh, svd hermitian) | removed (dead code: unreachable) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
 | [`_take` (Mamba weight-dict order helper)](#dead-code-found-by-the-python-audits-2026-11-09) | Neural (Mamba blocks) | removed (dead code: no caller) | 2026-11-09 | none (recoverable at `78dffe4a08`^) |
 | [the manifold kit's 35 named x_decomp entries (`x_decomp_graph_*` / `_dev_graph_*`, `_barycenter_rows`, `_lle_apply`, `_lle_local`, `_lle_iterate`, `_lle_gemm_ordered`, `_lle_lu_ordered`, `_mds_fit`, `_lanczos`, `_dev_lanczos`, `_eigh_tridiag`, `_dev_eigh_tridiag`, `_trisolve`, `_dev_trisolve`, `_dsum_sq`, `_dev_dsum_sq`, `_order_f`, `_dev_order_f`) and 8 `*_pyapi.mojo` door files](#the-manifold-kits-named-x_decomp-entries-2026-11-12) | Decomposition / manifold (both bindings) | removed (superseded: x_decomp table operations 120-150, no live caller) | 2026-11-12 | [x_decomp_mani_named_entries.patch](../experiments/removed/x_decomp_mani_named_entries.patch) |
+| [`MOJOLEARN_2711_GRAM_STRIDED_DEAD`](#mojolearn_2711_gram_strided_dead-opt-in-arm-deleted-2026-11-15) | Decomposition (split-K Gram, IDENTICAL) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_2711_GRAM_STRIDED_DEAD.patch](../experiments/removed/MOJOLEARN_2711_GRAM_STRIDED_DEAD.patch) |
+| [`MOJOLEARN_537_GEMM_IDENT_SWAP`](#mojolearn_537_gemm_ident_swap-opt-in-arm-deleted-2026-11-15) | GEMM (IDENTICAL operand swap) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_537_GEMM_IDENT_SWAP.patch](../experiments/removed/MOJOLEARN_537_GEMM_IDENT_SWAP.patch) |
+| [`MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF`](#mojolearn_apple_fast_step_unroll_off-old-path-deleted-2026-11-15) | Strided walks (FAST Apple) | removed (old path; default kept, unmeasured: no A/B recorded beside the FAST Apple default) | 2026-11-15 | [MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF.patch) |
+| [`MOJOLEARN_APPLE_GEMM_NT_MMA_OFF`](#mojolearn_apple_gemm_nt_mma_off-old-path-deleted-2026-11-15) | GEMM (Apple IDENTICAL simdgroup gemm_nt) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_APPLE_GEMM_NT_MMA_OFF.patch](../experiments/removed/MOJOLEARN_APPLE_GEMM_NT_MMA_OFF.patch) |
+| [`MOJOLEARN_APPLE_GEMM_NT_TILED_OFF`](#mojolearn_apple_gemm_nt_tiled_off-old-path-deleted-2026-11-15) | GEMM (IDENTICAL tiled gemm_nt) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_APPLE_GEMM_NT_TILED_OFF.patch](../experiments/removed/MOJOLEARN_APPLE_GEMM_NT_TILED_OFF.patch) |
+| [`MOJOLEARN_APPLE_STEP_UNROLL_OFF`](#mojolearn_apple_step_unroll_off-old-path-deleted-2026-11-15) | Strided walks (IDENTICAL) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_APPLE_STEP_UNROLL_OFF.patch](../experiments/removed/MOJOLEARN_APPLE_STEP_UNROLL_OFF.patch) |
+| [`MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH`](#mojolearn_experiment_identical_callpath-opt-in-arm-deleted-2026-11-15) | Shared IDENTICAL call session (experiment programme) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH.patch](../experiments/removed/MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH.patch) |
+| [`MOJOLEARN_FAST_LCG_MODULO`](#mojolearn_fast_lcg_modulo-opt-in-arm-deleted-2026-11-15) | Shuffle iterator (FAST) | removed (opt-in arm, unmeasured: no A/B recorded (Apple fast opt-in, rule a)) | 2026-11-15 | [MOJOLEARN_FAST_LCG_MODULO.patch](../experiments/removed/MOJOLEARN_FAST_LCG_MODULO.patch) |
+| [`MOJOLEARN_FOREST_ORDERED_RESIDENT`](#mojolearn_forest_ordered_resident-opt-in-arm-deleted-2026-11-15) | Forest inference (ordered resident policy) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_FOREST_ORDERED_RESIDENT.patch](../experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT.patch) |
+| [`MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF`](#mojolearn_forest_ordered_resident_off-old-path-deleted-2026-11-15) | Forest inference (ordered resident policy) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_FOREST_PER_MODEL_IO`](#mojolearn_forest_per_model_io-opt-in-arm-deleted-2026-11-15) | Forest inference (shared registry IO) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_FOREST_PER_MODEL_IO.patch](../experiments/removed/MOJOLEARN_FOREST_PER_MODEL_IO.patch) |
+| [`MOJOLEARN_FOREST_PINNED_STAGE`](#mojolearn_forest_pinned_stage-opt-in-arm-deleted-2026-11-15) | Forest inference (pinned host stage) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_FOREST_PINNED_STAGE.patch](../experiments/removed/MOJOLEARN_FOREST_PINNED_STAGE.patch) |
+| [`MOJOLEARN_GEMV_FAST_VENDOR`](#mojolearn_gemv_fast_vendor-opt-in-arm-deleted-2026-11-15) | GEMV (FAST Apple) | removed (opt-in arm, unmeasured: no A/B recorded (Apple fast opt-in, rule a)) | 2026-11-15 | [MOJOLEARN_GEMV_FAST_VENDOR.patch](../experiments/removed/MOJOLEARN_GEMV_FAST_VENDOR.patch) |
+| [`MOJOLEARN_IDN_HPDEV_CAST_OFF`](#mojolearn_idn_hpdev_cast_off-old-path-deleted-2026-11-15) | Hotpath device steps (IDENTICAL cast) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_CAST_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_CAST_OFF.patch) |
+| [`MOJOLEARN_IDN_HPDEV_ELEM_OFF`](#mojolearn_idn_hpdev_elem_off-old-path-deleted-2026-11-15) | Hotpath device steps (IDENTICAL element ops) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_ELEM_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_ELEM_OFF.patch) |
+| [`MOJOLEARN_IDN_HPDEV_ISUM_OFF`](#mojolearn_idn_hpdev_isum_off-old-path-deleted-2026-11-15) | Hotpath device steps (IDENTICAL integer sum) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_ISUM_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_ISUM_OFF.patch) |
+| [`MOJOLEARN_IDN_HPDEV_LABELS_OFF`](#mojolearn_idn_hpdev_labels_off-old-path-deleted-2026-11-15) | Hotpath device steps (IDENTICAL label encode) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_LABELS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_LABELS_OFF.patch) |
+| [`MOJOLEARN_IDN_HPDEV_REDUCE_OFF`](#mojolearn_idn_hpdev_reduce_off-old-path-deleted-2026-11-15) | Hotpath device steps (IDENTICAL reduce) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_REDUCE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.patch) |
+| [`MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD`](#mojolearn_idn_mamba3_forward_door_old-old-path-deleted-2026-11-15) | Mamba-3 prefill forward door (IDENTICAL) | removed (old path; default kept, unmeasured: EXPERIMENTS.md PENDING row (owed row fix-mamba-forward-doors, never run)) | 2026-11-15 | [MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch) |
+| [`MOJOLEARN_IDN_OLS_PREDICT_TILED`](#mojolearn_idn_ols_predict_tiled-opt-in-arm-deleted-2026-11-15) | OLS predict gemv (IDENTICAL) | removed (opt-in arm, unmeasured: EXPERIMENTS.md RUN OWED row (owed row ols-predict-tiled, never run)) | 2026-11-15 | [MOJOLEARN_IDN_OLS_PREDICT_TILED.patch](../experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch) |
+| [`MOJOLEARN_IDN_QUERY_X_HELD_OFF`](#mojolearn_idn_query_x_held_off-old-path-deleted-2026-11-15) | Resident kernel query buffers (IDENTICAL) | removed (old path; default kept, unmeasured: EXPERIMENTS.md RUN OWED row (owed row fix-svc-query-resident, never run)) | 2026-11-15 | [MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch) |
+| [`MOJOLEARN_IDN_SCRATCH_POOL`](#mojolearn_idn_scratch_pool-opt-in-arm-deleted-2026-11-15) | Scratch buffer pool (IDENTICAL) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_SCRATCH_POOL.patch](../experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL.patch) |
+| [`MOJOLEARN_IDN_SCRATCH_POOL_OFF`](#mojolearn_idn_scratch_pool_off-old-path-deleted-2026-11-15) | Scratch buffer pool (IDENTICAL) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_SCRATCH_POOL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL_OFF.patch) |
+| [`MOJOLEARN_IDN_SEG_RADIX8_OFF`](#mojolearn_idn_seg_radix8_off-old-path-deleted-2026-11-15) | Segmented sort (IDENTICAL 8-bit radix) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_SEG_RADIX8_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEG_RADIX8_OFF.patch) |
+| [`MOJOLEARN_IDN_XTY_TILE_1024`](#mojolearn_idn_xty_tile_1024-opt-in-arm-deleted-2026-11-15) | Host tile fold (X^T y tile size) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_XTY_TILE_1024.patch](../experiments/removed/MOJOLEARN_IDN_XTY_TILE_1024.patch) |
+| [`MOJOLEARN_IDN_XTY_TILE_64`](#mojolearn_idn_xty_tile_64-opt-in-arm-deleted-2026-11-15) | Host tile fold (X^T y tile size) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_XTY_TILE_64.patch](../experiments/removed/MOJOLEARN_IDN_XTY_TILE_64.patch) |
+| [`MOJOLEARN_NV_AMD_STEPS_OFF`](#mojolearn_nv_amd_steps_off-old-path-deleted-2026-11-15) | Strided walks and gemv_n (NVIDIA / AMD IDENTICAL) | removed (old path; default kept, unmeasured: no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_NV_AMD_STEPS_OFF.patch](../experiments/removed/MOJOLEARN_NV_AMD_STEPS_OFF.patch) |
+| [`MOJOLEARN_RF_FAST_BATCH32K`](#mojolearn_rf_fast_batch32k-opt-in-arm-deleted-2026-11-15) | RandomForest fit node batch (FAST Apple) | removed (opt-in arm, unmeasured: no A/B recorded (Apple fast opt-in, rule a)) | 2026-11-15 | [MOJOLEARN_RF_FAST_BATCH32K.patch](../experiments/removed/MOJOLEARN_RF_FAST_BATCH32K.patch) |
+| [`MOJOLEARN_SEG_SUMS_SERIAL`](#mojolearn_seg_sums_serial-opt-in-arm-deleted-2026-11-15) | Segmented sort block-sum scan (FAST Apple) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm on current source) | 2026-11-15 | [MOJOLEARN_SEG_SUMS_SERIAL.patch](../experiments/removed/MOJOLEARN_SEG_SUMS_SERIAL.patch) |
+| [`MOJOLEARN_STEP_GLUE_TRIAL`](#mojolearn_step_glue_trial-opt-in-arm-deleted-2026-11-15) | Byte LM step glue (trial build) | removed (opt-in arm, unmeasured: no A/B recorded for the opt-in arm) | 2026-11-15 | [MOJOLEARN_STEP_GLUE_TRIAL.patch](../experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -6754,3 +6784,247 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7d40f892a7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_2711_GRAM_STRIDED_DEAD: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the define that brought back arm 0 of `GRAM_STRIDED_ARM` (the strided per-lane accumulator the sm_120a AOT build corrupts) in every build. `GRAM_STRIDED_ARM` is now the constant 1; arm 0 stays reachable only through the explicit `STRIDED_ARM` parameter the jacobi_sm120a probe passes. (core/gram_splitk.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `7b75b0819e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_2711_GRAM_STRIDED_DEAD.patch`, then delete the `MOJOLEARN_2711_GRAM_STRIDED_DEAD` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_537_GEMM_IDENT_SWAP: opt-in arm deleted (2026-11-15)
+
+- **What it was**: an opt-in operand swap for the IDENTICAL GEMM; `GEMM_IDENT_SWAP_537` stays as the constant False because bench/speed/gemm_speed_main.mojo imports it. (core/gemm.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `33a25f5e7e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_537_GEMM_IDENT_SWAP.patch`, then delete the `MOJOLEARN_537_GEMM_IDENT_SWAP` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the FAST+Apple unrolled walks (glm/impl/qn loss sums and bias means) to the plain loop. `APPLE_FAST_STEP_UNROLL` is now FAST and Apple. (core/strided_walk.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the FAST Apple default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `c34327db85`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF.patch`, then delete the `MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_APPLE_GEMM_NT_MMA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the Apple IDENTICAL simdgroup-matrix `gemm_nt` to the tiled kernel. `APPLE_GEMM_NT_MMA` is now `APPLE_GEMM_NT_TILED and APPLE_MMA`. (core/gemm.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `ea1e949b3d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_APPLE_GEMM_NT_MMA_OFF.patch`, then delete the `MOJOLEARN_APPLE_GEMM_NT_MMA_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_APPLE_GEMM_NT_TILED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the IDENTICAL tiled `gemm_nt` (every GPU) to `pinned_gemm_nt_kernel`. `APPLE_GEMM_NT_TILED` is now IDENTICAL. (core/gemm.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_APPLE_GEMM_NT_TILED_OFF.patch`, then delete the `MOJOLEARN_APPLE_GEMM_NT_TILED_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_APPLE_STEP_UNROLL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the IDENTICAL unrolled strided walks to the plain loop. `APPLE_IDENTICAL_STEP_UNROLL` is now IDENTICAL. (core/strided_walk.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `853900db5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_APPLE_STEP_UNROLL_OFF.patch`, then delete the `MOJOLEARN_APPLE_STEP_UNROLL_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the opt-in that let `IdenticalCallSession` construct (the experiments/identical_callpath programme). The session now always refuses, as in every default build; the type stays because experiments/identical_callpath/* import it (experiments/identical_callpath/storage.mojo still reads the define: another lane). (core/identical_callpath.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `d1343040f6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH.patch`, then delete the `MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_FAST_LCG_MODULO: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the FAST rollback of `lcg_next` from the Mersenne fold to a 64-bit `%` (same integers). `LCG_MERSENNE_REDUCE` is now FAST. (core/shuffle_iterator.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded (Apple fast opt-in, rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `b086331d7a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FAST_LCG_MODULO.patch`, then delete the `MOJOLEARN_FAST_LCG_MODULO` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_FOREST_ORDERED_RESIDENT: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the force-on of the strict ordered resident kernel for IDENTICAL columns outside Apple / NVIDIA / AMD. The `forced` argument of `forest_ordered_resident_policy` is now False at the compiled default (the policy function and its check keep the parameter). (core/forest_inference_model.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `39d9cbb242`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT.patch`, then delete the `MOJOLEARN_FOREST_ORDERED_RESIDENT` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback to the sequential IDENTICAL AUTO policy and the resident FAST 32-grove graph. The `disabled` argument of `forest_ordered_resident_policy` is now False at the compiled default. (core/forest_inference_model.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `057d3cc56b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_FOREST_PER_MODEL_IO: opt-in arm deleted (2026-11-15)
+
+- **What it was**: main's former arm: a context and an X-sized device workspace per resident snapshot. Every snapshot now always borrows the registry's process context and `ForestIOWorkspace`; `resident_stage_input` no longer has a per-model-IO refusal. (core/forest_inference_model.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `c9c333f2d7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_PER_MODEL_IO.patch`, then delete the `MOJOLEARN_FOREST_PER_MODEL_IO` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_FOREST_PINNED_STAGE: opt-in arm deleted (2026-11-15)
+
+- **What it was**: a pinned host stage kept beside the resident device workspaces that the upload no longer read (`_predict_into_buffers` already ignored it). The `stage` / `input_stage` fields, their allocations and the `HostBuffer` import go. (core/forest_inference_model.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `28a3c1be2b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_PINNED_STAGE.patch`, then delete the `MOJOLEARN_FOREST_PINNED_STAGE` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_GEMV_FAST_VENDOR: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple opt-in that kept the vendor gemv for k <= GEMV_FAST_PINNED_MAX_K instead of `pinned_gemv_n_kernel`. (core/gemm.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded (Apple fast opt-in, rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `8fc20d312b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_GEMV_FAST_VENDOR.patch`, then delete the `MOJOLEARN_GEMV_FAST_VENDOR` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_HPDEV_CAST_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the IDENTICAL device element cast to the host kernel. `LABELS_DEVICE_CAST` is now `LABELS_DEVICE_BASE`. (core/label_device_steps.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b); classical-cv.json profiles name it only inside global-rollback bundles. No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `8159159cc4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_CAST_OFF.patch`, then delete the `MOJOLEARN_IDN_HPDEV_CAST_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_HPDEV_ELEM_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the IDENTICAL device element steps (threshold labels, finite scans) to the host kernels. `LABELS_DEVICE_ELEM` is now `LABELS_DEVICE_BASE`. (core/label_device_steps.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `18a80bdd0b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_ELEM_OFF.patch`, then delete the `MOJOLEARN_IDN_HPDEV_ELEM_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_HPDEV_ISUM_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the IDENTICAL device integer sum to the host kernel. `LABELS_DEVICE_ISUM` is now `LABELS_DEVICE_BASE`. (core/label_device_steps.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `8f026542e3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_ISUM_OFF.patch`, then delete the `MOJOLEARN_IDN_HPDEV_ISUM_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_HPDEV_LABELS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the IDENTICAL device `encode_labels` to the host encoder. `IDN_HPDEV_LABELS` is now `_HPDEV_BASE`. (core/hotpath_device_run.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `7fe1ce981e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_LABELS_OFF.patch`, then delete the `MOJOLEARN_IDN_HPDEV_LABELS_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_HPDEV_REDUCE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the IDENTICAL device reductions to the host kernel. `LABELS_DEVICE_REDUCE` is now `LABELS_DEVICE_BASE`. (core/label_device_steps.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `8ec3732a1b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.patch`, then delete the `MOJOLEARN_IDN_HPDEV_REDUCE_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD: old path deleted (2026-11-15)
+
+- **What it was**: the B arm that kept a caps table call per forward and the reserve / run / release triple instead of the one held forward call. `IDN_MAMBA3_FORWARD_DOOR_OLD` stays as the constant False because mamba/native_block_dispatch.mojo and bindings/neural_prefill_native_door.mojo import it. (core/neural_entry_table.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): EXPERIMENTS.md PENDING row (owed row fix-mamba-forward-doors, never run); no A/B recorded for the old path (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `39aa5d2695`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch`, then delete the `MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_OLS_PREDICT_TILED: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the B arm that sent OLS predict through the tiled `gemv_n` instead of the plain `pinned_gemv_n_kernel`. (core/gemm.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): EXPERIMENTS.md RUN OWED row (owed row ols-predict-tiled, never run); no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `1900f1d297`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch`, then delete the `MOJOLEARN_IDN_OLS_PREDICT_TILED` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_QUERY_X_HELD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the B arm that allocated a resident kernel model's query, status pair and pinned pair per call. `IDN_QUERY_X_HELD` stays as the constant True for its importers. (core/query_x_held.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): EXPERIMENTS.md RUN OWED row (owed row fix-svc-query-resident, never run); no A/B recorded for the old path (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `a75f345253`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch`, then delete the `MOJOLEARN_IDN_QUERY_X_HELD_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_SCRATCH_POOL: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the process pool of pinned host and device scratch buffers (default-off candidate, never timed on current source). `_ScratchPool`, its slot, `_pick` and every pooled take / give branch go: take allocates and give frees, as in the default. `IDN_SCRATCH_POOL` stays as the constant False because core/device_scan.mojo imports it. (core/scratch_pool.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `25fca5d3e3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL.patch`, then delete the `MOJOLEARN_IDN_SCRATCH_POOL` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_SCRATCH_POOL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the redundant "keep the pool off" switch beside the pool's own opt-in. (core/scratch_pool.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `2ec9cce908`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL_OFF.patch`, then delete the `MOJOLEARN_IDN_SCRATCH_POOL_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_SEG_RADIX8_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of `segmented_sort_keys_f32` from the 8-bit digit passes to the 32 one-bit passes. `IDN_SEG_RADIX8` is now IDENTICAL (the one-bit kernels stay for ensemble/randomforest.mojo and small segments). (core/segmented_sort.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `af0618e292`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_SEG_RADIX8_OFF.patch`, then delete the `MOJOLEARN_IDN_SEG_RADIX8_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_XTY_TILE_1024: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the 1024-row tile candidate for the X^T y / column-mean tile order. `XTY_TILE_ROWS` is now 256. (core/host_tile_fold.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `444a21c6a3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_XTY_TILE_1024.patch`, then delete the `MOJOLEARN_IDN_XTY_TILE_1024` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_IDN_XTY_TILE_64: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the 64-row tile candidate for the X^T y / column-mean tile order. `XTY_TILE_ROWS` is now 256. (core/host_tile_fold.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `792ad25b28`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_XTY_TILE_64.patch`, then delete the `MOJOLEARN_IDN_XTY_TILE_64` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_NV_AMD_STEPS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the NVIDIA / AMD IDENTICAL unrolled walks, row-coalesced X^T dZ and shared-memory `gemv_n` to main's kernels. `NV_AMD_IDENTICAL_STEPS` is now IDENTICAL on NVIDIA or AMD. (core/strided_walk.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded beside the default (rule b). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `d1fe4369a6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_NV_AMD_STEPS_OFF.patch`, then delete the `MOJOLEARN_NV_AMD_STEPS_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_RF_FAST_BATCH32K: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple widening of the default 4096-node batch to 32768 for deep unbudgeted trees. `RF_FAST_BATCH`, `RF_FAST_BATCH_BYTES`, `RF_CUML_DEFAULT_BATCH` and the widening in `_rf_batch_size` go; slot 15 is the batch. (core/mojolearn_rf_run.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded (Apple fast opt-in, rule a). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `1f8a4570c6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RF_FAST_BATCH32K.patch`, then delete the `MOJOLEARN_RF_FAST_BATCH32K` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_SEG_SUMS_SERIAL: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple opt-in that kept the one-thread-per-segment scan of block totals. `SEG_SUMS_BLOCK_SCAN` is now FAST and Apple. (core/segmented_sort.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm on current source (rule a; the block scan's own M3 win is recorded beside it). No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `28ac8cfd29`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SEG_SUMS_SERIAL.patch`, then delete the `MOJOLEARN_SEG_SUMS_SERIAL` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## MOJOLEARN_STEP_GLUE_TRIAL: opt-in arm deleted (2026-11-15)
+
+- **What it was**: the trial build that compiled every glue launch arm and read `MOJOLEARN_STEP_GLUE_ARM` / `MOJOLEARN_STEP_GLUE_ARM_SABOTAGE` from the environment. `STEP_GLUE_TRIAL` stays as the constant False for its importers; `step_glue_trial_build` returns False, `step_glue_arm_from_env` returns the column default and `step_glue_sabotage` returns False, as in every shipped build. (core/step_glue.mojo)
+- **Verdict**: DELETED, unmeasured (AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15; docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, section expdel2-04-base): no A/B recorded for the opt-in arm (rule a, "NEVER RUN, PENDING MEASUREMENT"); neural-seq-train-dedupe.json names it only in a note. No bit change on any column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `6027e14ec1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch`, then delete the `MOJOLEARN_STEP_GLUE_TRIAL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+
+## Experiment deletions: lane expdel2-04-base, non-owner sites (2026-11-15)
+
+The lane folded these defines (or their aliases) in its own files; each owner lane writes the index row and section. Inline markers and per-lane patches: `MOJOLEARN_CLASSICAL_C06_NORM_ROWS` (`experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.expdel2-04-base.patch`, owner expdel2-07-base, recoverable at `80cae4b607`), `MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD` (`experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.expdel2-04-base.patch`, owner expdel2-07-base, recoverable at `20f2cfb2d5`), `MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT` (`experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `f6ce043de1`), `MOJOLEARN_IDN_ALL_OFF` (`experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch`, owner expdel2-37-series, recoverable at `7d3bf6d8e8`), `MOJOLEARN_IDN_HPDEV_FOLDS_OFF` (`experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `8adf7b05f6`), `MOJOLEARN_KDE_FAST_IMMUTABLE_FIT` (`experiments/removed/MOJOLEARN_KDE_FAST_IMMUTABLE_FIT.expdel2-04-base.patch`, owner expdel2-19-kernel, recoverable at `6b64b91b3f`), `MOJOLEARN_TREES_C50_GB_PACKED` (`experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `4f4b2b1ba8`), `MOJOLEARN_TREES_T34_CHUNK_FOLD` (`experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `08081353e1`), `MOJOLEARN_TREES_T37_WORKSPACE` (`experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `9d8b51b0a6`), `MOJOLEARN_TREES_T38_FUSED_LABELS` (`experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `1caa34cfb3`). No bit changes.

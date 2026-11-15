@@ -332,6 +332,12 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF rolled back the device-resident Samba step, PROMOTED 2026-10-08 on NVIDIA and AMD (grid ge123e6f9: samba-forward 0.44x / 0.66x, samba-train-step 0.41x / 0.78x, hashes equal); drop the define; recoverable at 5bfce25001; see docs/TOMBSTONES.md"
     # ---- end lane expdel-04-neural
+    # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD"](), "removed 2026-11-15 (lane/expdel2-04-base): IDN_MAMBA3_FORWARD_DOOR_OLD (old path, Mamba-3 prefill forward door (IDENTICAL); EXPERIMENTS.md PENDING row (owed row fix-mamba-forward-doors, never run)) is gone; the default stays; code recoverable at 39aa5d2695; restore: experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch
+    comptime assert not is_defined["MOJOLEARN_STEP_GLUE_TRIAL"](), "removed 2026-11-15 (lane/expdel2-04-base): STEP_GLUE_TRIAL (opt-in arm, Byte LM step glue (trial build); no A/B recorded for the opt-in arm (rule a, 'NEVER RUN, PENDING MEASUREMENT')) is gone; the default stays; code recoverable at 6027e14ec1; restore: experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch"
+    # ---- end lane expdel2-04-base
     return True
 
 
