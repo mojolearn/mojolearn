@@ -13,8 +13,10 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
   * the correlations are recomputed as X'y - G coef every step instead of
     their incremental `Cov -= gamma * corr_eq_dir` (the same quantity), and
     their `np.around(corr_eq_dir, cov_precision)` is not applied;
-  * the Cholesky of G_AA is refactored each step (x_linear/ops.mojo) instead
-    of updated/downdated; ties in argmax|Cov| go to the lowest feature index
+  * the Cholesky of G_AA is kept across steps and grown by one row per
+    addition (theirs too); after a LassoLars drop the rows from the first
+    dropped position on are refactored instead of downdated (`_chol_rows`);
+    ties in argmax|Cov| go to the lowest feature index
     (theirs: the lowest position in their permuted Cov array);
   * float32 throughout; equality tolerance float32 eps, tiny32 as theirs;
   * DEVIATION 5010: the lar method lets an active coefficient cross zero
@@ -23,11 +25,11 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
-    fill, copy, cholesky, chol_solve, centered_gram, centered_xty, add_acc,
+    fill, copy, centered_gram, centered_xty, add_acc,
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
-from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty, t_cholesky
+from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty
 from std.sys.compile import is_defined
 from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cell, bm_column_mean_cell
 
@@ -40,10 +42,27 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 #   lasso-lars istella 112.8 -> 83.4 (0.74)  / 191.6 -> 74.6 (0.39)
 #   lars istella       165.6 -> 340.7 (2.06) / 390.2 -> 1155.2 (2.96)  SLOWER
 # Digests NV == AMD on both arms; quality equal or better (lars istella r2
-# 0.3090 -> 0.3287, the rest equal to 1e-4). OPEN FOLLOW-UP: the lars istella
-# regression (one cell of four; the net is a large win). Find its structural
-# cause and fix it by size/cost reasoning that covers neighboring shapes; no
-# dataset- or dimension-keyed dodge (CLAUDE.md, No dimension targeting).
+# 0.3090 -> 0.3287, the rest equal to 1e-4).
+# The lars istella regression (lane/fix-lars-grid-gram, 2026-11-15): the
+# route changes only the moments, and lasso-lars istella, on the same moments,
+# got faster; the time went into the PATH. With the new Gram's bits, Lars on
+# istella's 220 features runs further along its path (r2 0.3090 -> 0.3287),
+# and each step cost O(k^3) with k barriers: the path re-copied G_AA and
+# refactored it twice a step (the (k+1) factor of the addition, then the k
+# factor of the direction, `t_cholesky`: k barriers each, every thread
+# re-summing every pivot), O(d^4) over a full path, all of it on one block.
+# The pivots of the last steps dominate, so a path that goes ~20% further
+# costs ~2x (k^4). Fix, for every shape: the factor is kept across steps
+# (stride d in fw[ll]); an addition factors row k only (a lead forward
+# substitution, O(k^2), no barrier but its broadcast), the direction reuses
+# it (no second factorization), a LassoLars drop refactors only the rows
+# from the first dropped position. Every entry is computed by `cholesky`'s
+# own statements from the same words, so the bits do not change on any
+# column (host and devices run the same helpers), and no switch is kept for
+# the old path. Both arms of `_OFF` take the kept factor, so that A/B now
+# isolates the moments again. RUN OWED: lars and lasso-lars on istella and
+# taxi, NV + MI300X, this arm against `_OFF` and against the rows above
+# (bench/results/paper_compare/owed-pre0867.json); numbers pending.
 # The route takes LARS / LassoLars' moments from the
 # row-parallel blocked moments (core/blocked_moments.mojo: leaf column sums +
 # binary-counter fold for the means of X and y, `bm_centered_gram_panels` and
@@ -88,6 +107,96 @@ def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, x
 comptime BIG = Float32(3.0e38)
 comptime TINY32 = Float32(1.1754944e-38)
 comptime EQ_TOL = Float32(1.1920929e-07)
+
+
+# lane/fix-lars-grid-gram (2026-11-15): the Cholesky of G_AA is kept across
+# steps at a fixed row stride d in fw[ll] and only its changed rows are
+# factored. `cholesky` (x_linear/ops.mojo) computes entry (i, j) from G[i, j]
+# and rows i and j of L in columns < j only, so the leading rows of the
+# factor of a grown active set are the words the smaller factor already
+# holds; factoring rows [lo, m) alone, by the same statements, leaves the
+# same words as refactoring all m rows. Rows below the first dropped
+# position (LassoLars) are kept for the same reason.
+@always_inline
+def _chol_rows(a: FP, ll: Int, s: Int, gg: Int, d: Int, iw: IP, act: Int, lo: Int, m: Int) -> Bool:
+    """Rows [lo, m) of the lower Cholesky of G_AA (A = the active list at
+    iw[act]) into a[ll] at row stride s; rows < lo already hold it. Column j
+    ascending, every inner sum ascending: `cholesky`'s statements per entry.
+    False on a non-positive pivot (the factor stops where `cholesky` stops)."""
+    for j in range(m):
+        var gj = ldi(iw, act + j)
+        if j >= lo:
+            var sv = ld(a, gg + gj * d + gj)
+            for k in range(j):
+                var l = ld(a, ll + j * s + k)
+                sv = fs(sv, fm(l, l))
+            if not (sv > 0):
+                return False
+            st(a, ll + j * s + j, fsqrt(sv))
+        var r = ld(a, ll + j * s + j)
+        for i in range(max(j + 1, lo), m):
+            var tv = ld(a, gg + ldi(iw, act + i) * d + gj)
+            for k in range(j):
+                tv = fs(tv, fm(ld(a, ll + i * s + k), ld(a, ll + j * s + k)))
+            st(a, ll + i * s + j, fd(tv, r))
+    return True
+
+
+def _t_chol_rows(t: Team, a: FP, ll: Int, s: Int, gg: Int, d: Int, iw: IP, act: Int, lo: Int, m: Int) -> Bool:
+    """`_chol_rows` on the team (the result uniform). One row (the step that
+    adds a feature) is a forward substitution with nothing to split: the lead
+    runs it and broadcasts the result (two barriers, not m). Several rows (a
+    LassoLars drop) split the rows below each pivot across the team as
+    `t_cholesky` does, one barrier a column; the same statements per entry."""
+    if t.nt <= 1:
+        return _chol_rows(a, ll, s, gg, d, iw, act, lo, m)
+    if m - lo <= 1:
+        var ok = 0
+        if t.lead():
+            ok = 1 if _chol_rows(a, ll, s, gg, d, iw, act, lo, m) else 0
+        return t.bcast_int(ok, 4) == 1
+    for j in range(m):
+        var gj = ldi(iw, act + j)
+        var r: Float32
+        if j >= lo:
+            var sv = ld(a, gg + gj * d + gj)
+            for k in range(j):
+                var l = ld(a, ll + j * s + k)
+                sv = fs(sv, fm(l, l))
+            if not (sv > 0):
+                t.sync()
+                return False
+            r = fsqrt(sv)
+            t.sync()
+            if t.lead():
+                st(a, ll + j * s + j, r)
+        else:
+            r = ld(a, ll + j * s + j)
+        for i in range(max(j + 1, lo) + t.tid, m, t.nt):
+            var tv = ld(a, gg + ldi(iw, act + i) * d + gj)
+            for k in range(j):
+                tv = fs(tv, fm(ld(a, ll + i * s + k), ld(a, ll + j * s + k)))
+            st(a, ll + i * s + j, fd(tv, r))
+        t.sync()
+    return True
+
+
+@always_inline
+def _chol_solve_rows(l: FP, loff: Int, m: Int, s: Int, b: FP, boff: Int):
+    """`chol_solve` (x_linear/ops.mojo) for a factor at row stride s: the
+    same statements, the same words."""
+    for i in range(m):
+        var tv = ld(b, boff + i)
+        for k in range(i):
+            tv = fs(tv, fm(ld(l, loff + i * s + k), ld(b, boff + k)))
+        st(b, boff + i, fd(tv, ld(l, loff + i * s + i)))
+    var i = m - 1
+    while i >= 0:
+        var tv = ld(b, boff + i)
+        for k in range(i + 1, m):
+            tv = fs(tv, fm(ld(l, loff + k * s + i), ld(b, boff + k)))
+        st(b, boff + i, fd(tv, ld(l, loff + i * s + i)))
+        i -= 1
 
 
 def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
@@ -155,6 +264,7 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
     for j in range(d):
         sti(iw, state + j, 0)
     var k = 0
+    var lv = 0  # rows of the kept Cholesky factor (stride d at fw[ll]) that hold G_AA's
     var n_iter = 0
     var drop = False
     var alpha = Float32(0)
@@ -196,26 +306,26 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
                 break
             sti(iw, act + k, c_idx)
             st(fw, sgn + k, Float32(1) if positive else fsign(ld(fw, cov + c_idx)))
-            # the new pivot of the Cholesky of G_AA
-            for a in range(k + 1):
-                for b in range(k + 1):
-                    st(fw, ll + a * (k + 1) + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
-            var okc = cholesky(fw, ll, k + 1)
-            if not okc or ld(fw, ll + k * (k + 1) + k) < Float32(1e-7):
+            # the new pivot of the Cholesky of G_AA: row k only (rows < lv
+            # are kept; lv == k unless a refactor after a drop failed)
+            var okc = _chol_rows(fw, ll, d, gg, d, iw, act, lv, k + 1)
+            if not okc or ld(fw, ll + k * d + k) < Float32(1e-7):
                 sti(iw, state + c_idx, 2)  # their degenerate-regressor skip
                 continue
             sti(iw, state + c_idx, 1)
             k += 1
+            lv = k
         if lasso and n_iter > 0 and prev_alpha < alpha:
             break
-        # equiangular direction over the active set
-        for a in range(k):
-            for b in range(k):
-                st(fw, ll + a * k + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
-        _ = cholesky(fw, ll, k)
+        # equiangular direction over the active set; the factor of G_AA is
+        # the one the addition just finished (no second factorization), or
+        # rows [lv, k) are refactored after a LassoLars drop
+        if lv < k:
+            if _chol_rows(fw, ll, d, gg, d, iw, act, lv, k):
+                lv = k
         for a in range(k):
             st(fw, ls + a, ld(fw, sgn + a))
-        chol_solve(fw, ll, k, fw, ls)
+        _chol_solve_rows(fw, ll, k, d, fw, ls)
         var aa: Float32
         if k == 1 and ld(fw, ls) == 0:
             st(fw, ls, Float32(1))
@@ -278,6 +388,8 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
                 if z == z_pos:
                     sti(iw, state + j, 0)
                     st(res, j, Float32(0))
+                    if a < lv:
+                        lv = a  # factor rows from the first dropped position on are stale
                 else:
                     sti(iw, act + w, j)
                     st(fw, sgn + w, ld(fw, sgn + a))
@@ -307,12 +419,12 @@ def _lars_path_team(
     same words (read after a barrier), so the control flow is uniform; the
     lead alone writes the shared state. The O(d^2) and O(k^3) parts are split
     across the team, each value by the lead loop's own statements: the
-    correlations (one j a thread, its chain over l ascending), the two
-    Cholesky factors a step (`t_cholesky`) and the d x k products of the step
-    search (cj, one j a thread); the minimum over j stays the lead's scan.
-    The device ran the whole path on the lead thread: Lars on istella 100k x
-    220 took 9.4 s on the M4's GPU. `-D MOJOLEARN_X_LINEAR_LARS_LEAD=1`
-    restores the lead-only loop."""
+    correlations (one j a thread, its chain over l ascending), the refactor
+    of the kept Cholesky after a LassoLars drop (`_t_chol_rows`) and the d x k
+    products of the step search (cj, one j a thread); the new factor row of an
+    addition and the minimum over j stay the lead's. The device ran the whole
+    path on the lead thread: Lars on istella 100k x 220 took 9.4 s on the M4's
+    GPU."""
     if t.lead():
         fill(res, 0, d, Float32(0))
         fill(fw, prev, d, Float32(0))
@@ -320,6 +432,7 @@ def _lars_path_team(
             sti(iw, state + j, 0)
     t.sync()
     var k = 0
+    var lv = 0  # rows of the kept Cholesky factor (stride d at fw[ll]); uniform
     var n_iter = 0
     var drop = False
     var alpha = Float32(0)
@@ -360,13 +473,9 @@ def _lars_path_team(
                 sti(iw, act + k, c_idx)
                 st(fw, sgn + k, Float32(1) if positive else fsign(ld(fw, cov + c_idx)))
             t.sync()
-            for a in range(t.tid, k + 1, t.nt):
-                for b in range(k + 1):
-                    st(fw, ll + a * (k + 1) + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
-            t.sync()
-            var okc = t_cholesky(t, fw, ll, k + 1)
-            t.sync()
-            if not okc or ld(fw, ll + k * (k + 1) + k) < Float32(1e-7):
+            # row k of the kept factor (lars_fit's lead loop: rows < lv kept)
+            var okc = _t_chol_rows(t, fw, ll, d, gg, d, iw, act, lv, k + 1)
+            if not okc or ld(fw, ll + k * d + k) < Float32(1e-7):
                 if t.lead():
                     sti(iw, state + c_idx, 2)
                 t.sync()
@@ -374,19 +483,20 @@ def _lars_path_team(
             if t.lead():
                 sti(iw, state + c_idx, 1)
             k += 1
+            lv = k
             t.sync()
         if lasso and n_iter > 0 and prev_alpha < alpha:
             break
-        for a in range(t.tid, k, t.nt):
-            for b in range(k):
-                st(fw, ll + a * k + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
-        t.sync()
-        _ = t_cholesky(t, fw, ll, k)
+        # no second factorization: the addition finished G_AA's factor; a
+        # LassoLars drop refactors rows [lv, k) on the team
+        if lv < k:
+            if _t_chol_rows(t, fw, ll, d, gg, d, iw, act, lv, k):
+                lv = k
         var aa = Float32(0)
         if t.lead():
             for a in range(k):
                 st(fw, ls + a, ld(fw, sgn + a))
-            chol_solve(fw, ll, k, fw, ls)
+            _chol_solve_rows(fw, ll, k, d, fw, ls)
             if k == 1 and ld(fw, ls) == 0:
                 st(fw, ls, Float32(1))
                 aa = Float32(1)
@@ -411,6 +521,7 @@ def _lars_path_team(
         var z_pos = BIG
         drop = False
         var kk = k
+        var lvl = lv
         if t.lead():
             for j in range(d):
                 if ldi(iw, state + j) != 0:
@@ -448,6 +559,8 @@ def _lars_path_team(
                     if z == z_pos:
                         sti(iw, state + j, 0)
                         st(res, j, Float32(0))
+                        if a < lvl:
+                            lvl = a
                     else:
                         sti(iw, act + w, j)
                         st(fw, sgn + w, ld(fw, sgn + a))
@@ -455,6 +568,7 @@ def _lars_path_team(
                 kk = w
         drop = t.bcast_int(1 if drop else 0, 1) == 1
         k = t.bcast_int(kk, 3)
+        lv = t.bcast_int(lvl, 5)
         n_iter += 1
         prev_alpha = alpha
     if not t.lead():

@@ -196,6 +196,10 @@
   "mamba3-forward-door-old": {
    "define": "MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD",
    "status": "define in code (core/neural_entry_table.mojo IDN_MAMBA3_FORWARD_DOOR_OLD; bindings/neural_prefill_native_door.mojo _prefill_mamba3_reports, providers/python/mamba3_prefill_session_pyapi_door.mojo, core/mamba3_prefill_session.mojo, mamba/native_block_dispatch.mojo): B = a caps table call per forward and the session's reserve / run / release as three table calls (three registry leases); A = the caps read once when the block's session opens and the forward as ONE table call that reserves, runs and releases in the image under one busy lock (MAMBA3_CAP_HELD_FORWARD). Same session, same weight compare, same _m3_prefill_run body, same bits"
+  },
+  "lars-grid-gram-off": {
+   "define": "MOJOLEARN_IDN_LARS_GRID_GRAM_OFF",
+   "status": "define in code (x_linear/lars.mojo LARS_GRID_GRAM, x_linear/device.mojo XL_IDN_LARS_GRID_GRAM): B = the moments grid (mg_means_kernel / mg_cross_kernel); A = the blocked moments (core/blocked_moments.mojo). Both arms take the kept LARS Cholesky factor of lane/fix-lars-grid-gram"
   }
  },
  "rows": [
@@ -1235,6 +1239,21 @@
     "mamba3-forward-door-old"
    ],
    "decides": "keep the restored arena / direct door (A) unless mamba12-forward-door-old (mamba1-forward, mamba2-forward) or mamba3-forward-door-old (mamba3-forward) is at least as fast on the NVIDIA L40S; also read arms.ours.mamba3_session_info from the mamba3-forward row (weight_uploads must stay 1 and stages_held 1 across rounds; if not, the session is rebuilt per call and that is the next fix); same kernels, digests must not move in either arm"
+  },
+  {
+   "id": "fix-lars-grid-gram",
+   "source": "fix-lars-grid-gram (2026-11-15; promoted grid-gram route A/B 2026-10-11: lars istella 165.6 -> 340.7 ms NV L40S, 390.2 -> 1155.2 ms AMD MI325X; cause: the path refactored G_AA twice a step, O(d^4); fix keeps the factor, one row per addition)",
+   "kind": "ab",
+   "lane": [
+    "lars",
+    "lasso-lars"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "lars-grid-gram-off"
+   ],
+   "decides": "the lars istella row must fall below the moments-grid arm's 165.6 ms NV / 390.2 ms AMD-class recorded time and not regress lars / lasso-lars taxi or lasso-lars istella; keep the blocked moments (A) unless B is at least as fast on the NV + MI300X average; digests are expected not to move against the previous wheel (the kept factor writes the refactor's words); a moved digest is reported, not a hold"
   }
  ]
 }
