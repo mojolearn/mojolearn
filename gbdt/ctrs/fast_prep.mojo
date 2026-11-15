@@ -8,9 +8,9 @@ Every entry point here is reached from `gbdt/train.mojo` only under a
 own `-D MOJOLEARN_...` define (or SYM_CTR_ALL, the FAST + Apple default since
 2026-10-04; its rollback define was deleted 2026-11-15). IDENTICAL and
 every non-Apple build compile main's CTR prep unchanged by those historical
-FAST switches. NEW T28/T28_SORT/T28_PREFIX independently opt IDENTICAL into the
-shared preparation, stable-segment frequency and exclusive-prefix reuse paths below. They do
-not enable the other Apple FAST switches and remain default OFF.
+FAST switches. T28 opts IDENTICAL into the shared preparation below; it
+does not enable the other Apple FAST switches and remains default OFF
+(T28_SORT and T28_PREFIX were deleted 2026-11-15).
 NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 
 What each flag changes, against the read-profile in
@@ -49,7 +49,7 @@ What each flag changes, against the read-profile in
 Bits: FeatureFreq counts and table counts are integers; Borders values are
 the same kernels over the same sorted order; borders are the same host
 arithmetic over the same min/max. The historical FAST outcomes below are
-not evidence for the new IDENTICAL T28/T28_SORT arms; all-column identity and
+not evidence for the IDENTICAL T28 arm; all-column identity and
 quality remain unverified.
 """
 
