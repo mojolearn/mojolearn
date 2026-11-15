@@ -26,7 +26,7 @@ comptime KNN_DIRECT_DISTANCE = False
 # TOMBSTONE: MOJOLEARN_DBSCAN_DIRECT_DISTANCE (DELETE-noise: dbscan taxi on main ef1e7e9f9 NV L40S 13336 -> 13184 ms (v1462 vs v1234),
 # AMD MI325X 7108 -> 7118 ms (a1599 vs a1593), 0.99x / 1.00x; istella 1.00x / 1.00x; hash d6fa652f / 7494ce8e unchanged) turned off
 # 2026-10-11 by lane/grid-act-16; code recoverable at 49a19b003. Reader branches are dead comptime code: CLEANUP OWED.
-comptime DBSCAN_DIRECT_DISTANCE = False
+# (Sweep 2026-11-15: comptime DBSCAN_DIRECT_DISTANCE removed; its readers in dbscan/ folded.)
 # KNN covers the brute-force/RBC kNN primitive and its
 # host twin wherever it is called (KNN, the kNN graphs of HDBSCAN/UMAP/Spectral,
 # DBSCAN's RBC eps route through rbc_cmp_dist). KDE covers kde/impl/distance,
