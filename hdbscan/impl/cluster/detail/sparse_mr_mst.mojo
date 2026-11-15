@@ -45,7 +45,6 @@ reported by its point and refused by name (DEVIATION 1607's rule).
 from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 from checks.numerics import identical_sqrt
 from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -890,43 +889,8 @@ def smr_merge_kernel(
         pj[i] = jj
 
 
-def _c34_component_edge(comp: _I32P,pk: _I32P,pj: _I32P,state: _I32P,ckey: _I32P,clo: _I32P,chi: _I32P,m: Int32):
-    # One component owns a canonical triple reduction. 128 lanes and 1536
-    # shared bytes are scheduling choices; weight/endpoints define the key.
-    var component=Int(block_idx.x)
-    var lane=Int(thread_idx.x)
-    var ks=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-    var ls=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-    var hs=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-    var key=WEIGHT_KEY_SENTINEL
-    var lo=Int32.MAX
-    var hi=Int32.MAX
-    for row in range(lane,Int(m),128):
-        if Int(comp[row])==component and state[row]!=SMR_DROPPED and pj[row]>=0:
-            var lk=min(Int32(row),pj[row])
-            var hk=max(Int32(row),pj[row])
-            if pk[row]<key or (pk[row]==key and (lk<lo or (lk==lo and hk<hi))):
-                key=pk[row]
-                lo=lk
-                hi=hk
-    ks[lane]=key
-    ls[lane]=lo
-    hs[lane]=hi
-    barrier()
-    var width=64
-    while width>0:
-        if lane<width:
-            var other=lane+width
-            if ks[other]<ks[lane] or (ks[other]==ks[lane] and (ls[other]<ls[lane] or (ls[other]==ls[lane] and hs[other]<hs[lane]))):
-                ks[lane]=ks[other]
-                ls[lane]=ls[other]
-                hs[lane]=hs[other]
-        barrier()
-        width//=2
-    if lane==0:
-        ckey[component]=ks[0]
-        clo[component]=ls[0]
-        chi[component]=hs[0]
+# TOMBSTONE: MOJOLEARN_C34_PARALLEL_EDGES (its alias use here: _c34_component_edge, one block per component; owner lane expdel2-05-base) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at fc4d559503.
+# Restore: git apply experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.expdel2-11-cluster.patch.
 
 
 def smr_cmin_key_kernel(
@@ -1499,25 +1463,22 @@ def sparse_mr_mst_device(
             n_b, m, d, inv_alpha, sabotage, launch_macs,
         )
         # Each component's cheapest edge under (key, lo, hi).
-        comptime if C34_PARALLEL_EDGES:
-            ctx.enqueue_function[_c34_component_edge](comp_d.unsafe_ptr(),pk_d.unsafe_ptr(),pj_d.unsafe_ptr(),state_d.unsafe_ptr(),ckey_d.unsafe_ptr(),clo_d.unsafe_ptr(),chi_d.unsafe_ptr(),Int32(m),grid_dim=(m,1,1),block_dim=128)
-        else:
-            ctx.enqueue_function[smr_cmin_key_kernel](
-                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), Int32(m),
-                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-            )
-            ctx.enqueue_function[smr_cmin_lo_kernel](
-                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
-                Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-            )
-            ctx.enqueue_function[smr_cmin_hi_kernel](
-                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
-                chi_d.unsafe_ptr(), Int32(m),
-                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-            )
+        ctx.enqueue_function[smr_cmin_key_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_cmin_lo_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_cmin_hi_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+            chi_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
         ctx.enqueue_function[smr_winner_kernel](
             comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
             state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
