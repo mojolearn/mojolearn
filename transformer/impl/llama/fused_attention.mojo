@@ -2191,9 +2191,7 @@ def _absmax_blocks(n: Int) -> Int:
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at f8340c9fd3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF.patch
-comptime IDN_ATTN_SCAN_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime IDN_ATTN_SCAN_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/fam-lm (2026-10-04), default ON under IDENTICAL: the fused
 attention's regime scan (`device_absmax4`) and corner flag (`_zero_flag`,
 `_read_flags`) take their partials buffer, their flag buffer and their
@@ -2699,9 +2697,7 @@ def deferred_checks_at(addr: Int) -> MutPointer[LlamaDeferredChecks, MutAnyOrigi
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at f0d7af0f4d.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF.patch
-comptime IDN_ATTN_BWD_SCAN_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime IDN_ATTN_BWD_SCAN_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/nr-attn (2026-10-04), default ON under IDENTICAL (the review's
 "backward regime scan re-reads q_rope/k_cache/v_cache", fused_attention
 :10770). The fused backward's regime scan read q_rope, k_cache, v_cache and
@@ -4580,7 +4576,6 @@ def fused_bwd_dkdv_stash_kernel[HD: Int, BJ: Int, SABOTAGE: Bool](
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ16.patch
 # TOMBSTONE: MOJOLEARN_ATTN_DKDV_BJ32 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at a5bc5b1913.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ32.patch
-comptime ATTN_DKDV_BJ_R32 = 16 if TARGET_COLUMN == COLUMN_AMD else 32
 
 comptime TILED_TK = 16
 #: Query rows per block of `fused_bwd_dq_tiled_pf_kernel` (lane
@@ -4623,16 +4618,11 @@ comptime TILED_TT = 16
 #: device for every other shape. Which thread or block holds a cell's chain
 #: is an execution-plan choice the contract does not read: same bits at
 #: every tile, on every vendor (no host-column change).
-#: lane/review-fixes: off under MOJOLEARN_IDN_ALL_OFF too (the wave's OFF arm).
 # TOMBSTONE: MOJOLEARN_ATTN_TILE_RULE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 3a02a72be4.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_TILE_RULE_OFF.patch
-comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime ATTN_DQ_TQ_PINNED = (
-    ATTN_TILE_RULE_OFF
-)
-comptime ATTN_DKDV_BJ_PINNED = (
-    ATTN_TILE_RULE_OFF
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) deleted 2026-11-15 by lane/expdel2-34-neural (non-owner, owner expdel2-37-series); code recoverable at 3e964079d5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-34-neural.patch; record in docs/TOMBSTONES.md.
+# With it ATTN_TILE_RULE_OFF and the DQ/DKDV pinned forms go: the tile rule always runs.
 
 
 def attn_device_units(ctx: DeviceContext) -> Int:
@@ -4647,7 +4637,7 @@ def attn_device_units(ctx: DeviceContext) -> Int:
 def attn_rows_tile_rule(
     groups: Int, rows: Int, hd: Int, units: Int, waves: Int, lo: Int, hi: Int
 ) -> Int:
-    """The tile rule stated above `ATTN_TILE_RULE_OFF`. Pure: the checks call
+    """The tile rule stated above. Pure: the checks call
     it at neighbor shapes."""
     var per_sm = waves * 64 // max(hd, 64)
     if per_sm < 1:
@@ -4665,15 +4655,11 @@ def attn_rows_tile_rule(
 
 def attn_dq_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int, hd: Int) -> Int:
     """Query rows per block of `fused_bwd_dq_tiled_pf_kernel` for this launch."""
-    comptime if ATTN_DQ_TQ_PINNED:
-        return ATTN_DQ_TQ
     return attn_rows_tile_rule(b * nh, l, hd, attn_device_units(ctx), 4, 16, 64)
 
 
 def attn_dkdv_keys_r32_for(ctx: DeviceContext, b: Int, nkv: Int, s: Int, hd: Int) -> Int:
     """Keys per block of the `_r32` dk/dv arm (16 or 32) for this launch."""
-    comptime if ATTN_DKDV_BJ_PINNED:
-        return ATTN_DKDV_BJ_R32
     return attn_rows_tile_rule(b * nkv, s, hd, attn_device_units(ctx), 2, 16, 32)
 
 
@@ -9449,9 +9435,7 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 5f78ca38ed.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF.patch
-comptime IDN_ATTN_SCRATCH_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime IDN_ATTN_SCRATCH_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/fam-lm (2026-10-04), default ON under IDENTICAL: the Apple scratch
 cache below on NVIDIA and AMD too. The forward's `[B, n_heads, L, S]`
 score/exp stash and the backward's y and dy stashes were a fresh device
@@ -9478,7 +9462,6 @@ comptime IDN_ATTN_ONE_FLAG_WAIT = (
     and TARGET_COLUMN != COLUMN_APPLE
     # TOMBSTONE: MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at e348b403be.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF.patch
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 """lane/nr-attn (2026-10-04), default ON under IDENTICAL on NVIDIA and AMD
 (the review's "double waits", fused_attention :8161 / :10870). The corner
@@ -10345,8 +10328,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         _enqueue_dq_tiled_pf[HD, SWZ](ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st, k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx, v_cache)
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     if keys == 32:
-        # Keys per block by `attn_dkdv_keys_r32_for` (the comptime
-        # `ATTN_DKDV_BJ_R32` under the OFF / explicit defines); same bits.
+        # Keys per block by `attn_dkdv_keys_r32_for`; same bits.
         if attn_dkdv_keys_r32_for(ctx, b, nkv, s, HD) == 16:
             comptime if ATTN_V1_ALIAS_Y_ESTASH:
                 _estash_dkdv_launch[HD, 16, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
