@@ -15,8 +15,12 @@ forward and the decode step, `transformer_forward`'s 13 + 11 layout).
   3, 4 the same block, window 0 and 8: the decode is the prefill: a (2, 12,
        32) sequence decoded one position at a time on a carried 12-token
        state equals the fresh forward, bitwise, at every position.
-  5    the comparison can fail: one ULP added to v_cache word 7 before step 6
-       moves position 6 (and no earlier one).
+  5    the comparison can fail: one ULP added to one cached v_cache word
+       before step 6 moves position 6 (and no earlier one). The word is the
+       first of batch row 0's six cached positions whose ULP is not absorbed
+       (the Python test named cell 7 for its own inputs; on this LCG stream
+       cell 7 is absorbed, and a fixed cell would break whenever the fold
+       order, and so the bits, change between versions).
 
 Inputs and weights are a fixed 64-bit LCG stream (transformer_host_block's;
 the claims are equalities between routes). The ragged-lengths forward, the
@@ -137,10 +141,10 @@ def _rows(x: List[Float32], l_all: Int, b_first: Int, b_count: Int, t_first: Int
     return out^
 
 
-def _decode_mismatch(blk: _Block, x: List[Float32], b: Int, l: Int, bump: Int) raises -> Int:
+def _decode_mismatch(blk: _Block, x: List[Float32], b: Int, l: Int, bump: Int, word: Int = 7) raises -> Int:
     """The first position whose decode step differs from the fresh forward
-    (-1: none); with `bump` >= 0, one ULP is added to v_cache word 7 before
-    the step at position `bump`."""
+    (-1: none); with `bump` >= 0, one ULP is added to v_cache word `word`
+    before the step at position `bump`."""
     var full = blk.forward(x, b, l)
     var k = blk.cache(b, l)
     var v = blk.cache(b, l)
@@ -148,9 +152,9 @@ def _decode_mismatch(blk: _Block, x: List[Float32], b: Int, l: Int, bump: Int) r
     var first = -1
     for t in range(l):  # driver-loop: over decode positions (each step reads the last one's state)
         if t == bump:
-            var before = bitcast[DType.uint32](v[7])
-            v[7] = bitcast[DType.float32](before + 1)
-            require(bitcast[DType.uint32](v[7]) == before + 1, "the cache word moved by one ULP")
+            var before = bitcast[DType.uint32](v[word])
+            v[word] = bitcast[DType.float32](before + 1)
+            require(bitcast[DType.uint32](v[word]) == before + 1, "the cache word moved by one ULP")
         var one = List[Float32](length=b * _DM, fill=0)
         cached = blk.step(_rows(x, l, 0, b, t, 1), b, l, k, v, cached, one)
         require(cached == t + 1, "the state holds every decoded token")
@@ -197,8 +201,20 @@ def run_neural_inference_case(unit: Int) raises:
     else:
         require(unit == 5, "unknown neural inference case")
         var blk = _Block(0)
-        var moved = _decode_mismatch(blk, x, 2, 12, 6)
-        require(moved == 6, "one ULP in the cache moved position " + String(moved) + ", not 6")
+        # v_cache is (b, n_kv, smax, head_dim): batch row 0's positions 0..5 are
+        # words 0 .. 6 * _HD - 1. The search stops at the first word whose ULP
+        # is not absorbed (in order, so the named word is deterministic); each
+        # try is one 12-token decode of the tiny block.
+        var word = -1
+        var moved = -1
+        for w in range(6 * _HD):  # driver-loop: over cache words, first-hit search
+            moved = _decode_mismatch(blk, x, 2, 12, 6, w)
+            if moved >= 0:
+                word = w
+                break
+        require(word >= 0, "one ULP in any of batch row 0's first six cached v words moved no position")
+        require(moved == 6, "one ULP in v_cache word " + String(word) + " moved position " + String(moved)
+                + ", not 6")
     _ = x^
 
 
