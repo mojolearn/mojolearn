@@ -481,7 +481,9 @@ def test_every_trainer_resolves_fp32_v1_under_the_default_and_refuses_fixed15_by
     g._defaults["training"] = "fixed15_v1"
     try:
         with pytest.raises(NotImplementedError) as e:
-            T._Optimizer([], "AdamW")
+            # the private T._Optimizer base initializer was deleted (c88a1beef1); the public
+            # constructor's native admission resolves the training profile first
+            T.AdamW([])
         assert "fixed15_v1" in str(e.value) and "refused for training" in str(e.value)
     finally:
         g._defaults["training"] = "fp32_v1"

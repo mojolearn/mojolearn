@@ -79,7 +79,7 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
 
 from std.math import isfinite
 from sequence.exec_trait import Exec
-from sequence.ops import FP, OPT_ADAMW, Args, OP_FILL, OP_MLP_NONFINITE
+from sequence.ops import FP, OPT_ADAMW, Args, OP_COPY, OP_FILL, OP_MLP_NONFINITE
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 from core.cast_in import CastIn, CAST_KIND_SIGNED
 from autograd.ops_api import (
@@ -429,6 +429,14 @@ def _flag[E: Exec](mut ex: E, src: FP, n: Int, dflag: FP, slot: Int) raises:
     ex.launch[OP_MLP_NONFINITE](a, n)
 
 
+def _copy[E: Exec](mut ex: E, src: FP, dst: FP, n: Int) raises:
+    """dst[0:n] = src[0:n] on the executor (OP_COPY: p0 source, p1 destination)."""
+    var a = Args()
+    a.p0 = src
+    a.p1 = dst
+    ex.launch[OP_COPY](a, n)
+
+
 def _refuse(flags: List[Float32]) raises:
     """The refusal the binding's host scans raised, from the device flags."""
     if flags[0] != 0:
@@ -477,8 +485,54 @@ def small_mlp_program_run[E: Exec & Movable & Deinitable, KIND: Int](
         var grads = List[FP]()
         for i in range(4):  # driver-loop: over the four weight tensors
             grads.append(g + _offset(i))
+        # Transactional (as the host update before a4b8145c9b was): keep the weights, the two moments and the
+        # running scalars, update, flag a non-finite weight or moment on the device, and on a flag put every
+        # word back and refuse whole. 3 x 195 floats of device copies and one flag word; apply_gradients is
+        # the public one-update call, not the train_step loop.
+        var oi = s[]._opt_index(e.opt)
+        var keep = s[].ex.alloc(3 * _TOTAL)
+        var dflag = s[].ex.alloc(1)
+        var flag = List[Float32](length=1, fill=Float32(0))
+        var fa = Args()
+        fa.p0 = dflag
+        fa.f0 = Float32(0)
+        s[].ex.launch[OP_FILL](fa, 1)
+        var kept_t = List[Int]()
+        var kept_f = List[Float32]()
+        for i in range(4):  # driver-loop: over the four weight tensors
+            var si = s[]._state_of(oi, e.weight(i), _size(i))
+            kept_t.append(s[].opt_states[si].t)
+            kept_f.append(s[].opt_states[si].pw1)
+            kept_f.append(s[].opt_states[si].pw2)
+            kept_f.append(s[].opt_states[si].mu_prod)
+            _copy(s[].ex, s[].buffer(e.weight(i)), keep + _offset(i), _size(i))
+            _copy(s[].ex, s[].opt_states[si].s1, keep + _TOTAL + _offset(i), _size(i))
+            _copy(s[].ex, s[].opt_states[si].s2, keep + 2 * _TOTAL + _offset(i), _size(i))
         _update(s[], e, grads)
+        for i in range(4):  # driver-loop: over the four weight tensors
+            var si = s[]._state_of(oi, e.weight(i), _size(i))
+            _flag(s[].ex, s[].buffer(e.weight(i)), _size(i), dflag, 0)
+            _flag(s[].ex, s[].opt_states[si].s1, _size(i), dflag, 0)
+            _flag(s[].ex, s[].opt_states[si].s2, _size(i), dflag, 0)
+        s[].ex.download_async(FP(unsafe_from_address=Int(flag.unsafe_ptr())), dflag, 1)
         s[].ex.sync()
+        var refused = flag[0] != 0
+        _ = flag^  # named after the download that writes it through its address
+        if refused:
+            for i in range(4):  # driver-loop: over the four weight tensors
+                var si = s[]._state_of(oi, e.weight(i), _size(i))
+                _copy(s[].ex, keep + _offset(i), s[].buffer(e.weight(i)), _size(i))
+                _copy(s[].ex, keep + _TOTAL + _offset(i), s[].opt_states[si].s1, _size(i))
+                _copy(s[].ex, keep + 2 * _TOTAL + _offset(i), s[].opt_states[si].s2, _size(i))
+                s[].opt_states[si].t = kept_t[i]
+                s[].opt_states[si].pw1 = kept_f[3 * i]
+                s[].opt_states[si].pw2 = kept_f[3 * i + 1]
+                s[].opt_states[si].mu_prod = kept_f[3 * i + 2]
+            s[].ex.sync()
+        s[].ex.free(keep)
+        s[].ex.free(dflag)
+        if refused:
+            raise Error("ValueError: SmallMLPTrainer parameters must be finite after the update; the update is refused whole")
         return _TOTAL
     if op != SMALL_MLP_PROGRAM_STEP:
         raise Error("small MLP program: unknown operation " + String(op))

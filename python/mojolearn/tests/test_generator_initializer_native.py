@@ -87,8 +87,8 @@ def test_initializer_invokes_cached_c_abi_without_python_math_or_loader(monkeypa
         raise AssertionError('Python portable-math wrapper or loader executed')
 
     with monkeypatch.context() as patch:
-        patch.setattr(training.math, 'sqrt', poison)
-        patch.setattr(training.math, '_load', poison)
+        patch.setattr(_pm, 'sqrt', poison)  # _training_impl no longer imports _portable_math (b53aac9ac4)
+        patch.setattr(_pm, '_load', poison)
         bits(checked(gen.kaiming_uniform, shape, **options), expected)
 
 

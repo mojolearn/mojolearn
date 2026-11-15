@@ -286,8 +286,5 @@ def test_public_rms_refuses_replaced_native_entry(monkeypatch, operation):
     assert not calls
 
 
-def test_existing_rms_primitive_contract():
-    from mojolearn.tests import test_training_primitives_surface as existing
-    report = existing.Report("native_rms_existing_primitive")
-    existing.arm_rms_norm(report)
-    assert report.rows and not report.failures, report.failures
+# test_existing_rms_primitive_contract DELETED: its subject, test_training_primitives_surface.arm_rms_norm, moved to
+# the Mojo suites training_primitives_{cases,cpu_suite,gpu_suite}.mojo in aea4ac877e.

@@ -99,6 +99,8 @@ def _reference_update(model, gradients):
     expected.update(parameters=flat, exp_avg=optimizer.exp_avg,
                     exp_avg_sq=optimizer.exp_avg_sq,
                     buf_initialized=optimizer.buf_initialized, t=optimizer.t)
+    # a scheduled step overwrites `lr` with the step's rate (as Samba's own step does)
+    expected["optimizer"]["lr"] = optimizer.lr
     model.load_state_dict(expected)
     return norm, optimizer.lr_
 

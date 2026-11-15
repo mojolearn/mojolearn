@@ -88,6 +88,8 @@ def test_binding_exports_no_training_entry(binding):
     assert names == {"neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
                      "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
                      "transformer_forward", "transformer_decode_step",
+                     # N decode tokens in one host call (1738c764c8); inference, not training
+                     "transformer_decode_steps",
                      "mamba1_forward", "mamba1_decode_step",
                      "mamba2_forward", "mamba2_decode_step",
                      "mamba3_forward_fresh",

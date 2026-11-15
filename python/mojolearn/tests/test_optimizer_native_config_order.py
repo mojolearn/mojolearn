@@ -31,9 +31,15 @@ def test_optimizer_parameter_names_ignore_mutable_sorted(monkeypatch, cls, opera
         patch.setattr(dis, "sorted", builtins.sorted, raising=False)
         patch.setattr(builtins, "sorted", forbidden)
         result = audit_native_call(method, **kwargs)
-    # The replaced connected builtin refuses before any hook or state change;
-    # with the setup-time export back the fixed order is native.
-    assert_connection_refusal(result, "sorted", calls)
+    if operation == "get_params":
+        # get_params reads no builtin since 29110fb7a5 (names are a native constant list,
+        # training/optimizer_config.mojo optimizer_parameter_names): no refusal, no hook
+        result.assert_native()
+        assert not calls
+    else:
+        # The replaced connected builtin refuses before any hook or state change;
+        # with the setup-time export back the fixed order is native.
+        assert_connection_refusal(result, "sorted", calls)
     assert owner.lr == lr_before and owner.t == 0
     output = audit_native_call(method, **kwargs).assert_native()
     actual = output if operation == "get_params" else owner.get_params()

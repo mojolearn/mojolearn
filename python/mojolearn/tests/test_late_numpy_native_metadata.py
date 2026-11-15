@@ -13,6 +13,9 @@ if order == 'numpy_first':
     import numpy as np
 import mojolearn
 from mojolearn import _arena_io
+# model_selection connects the DeviceRows door (_native_arena_rows.connect); families load on
+# first touch since b6aa87e41d
+from mojolearn import model_selection
 from mojolearn._array import Array
 from mojolearn._verify_native_runtime import audit_native_call
 # Package dependencies may import NumPy; explicit user import order does not

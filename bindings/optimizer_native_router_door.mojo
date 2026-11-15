@@ -97,7 +97,7 @@ def optimizer_profile(context: PythonObject) raises:
         var env = String(getenv("MOJOLEARN_NUMERIC_PROFILE", "")).strip()
         profile = PythonObject(String(env) if env.byte_length() > 0 else String("fp32_v1"))
     opt_scalar(profile, context)
-    optimizer_profile_available(optimizer_truth(context["profiles"][profile]["training"], context))
+    optimizer_profile_available(optimizer_truth(context["profiles"][profile]["training"], context), String(profile))
 
 
 def optimizer_constructor_start(kind: Int, betas_value: PythonObject,

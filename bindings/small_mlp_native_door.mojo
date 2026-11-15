@@ -644,7 +644,7 @@ def _step_error(error: Error) -> Error:
     """The program refuses a non-finite loss on the device; that refusal
     surfaces as a RuntimeError naming the step."""
     var message = String(error)
-    if message.startswith("RuntimeError: ") or message.startswith("ImportError: "):
+    if message.startswith("RuntimeError: ") or message.startswith("ImportError: ") or message.startswith("ValueError: "):
         return Error(message)
     if message.find("nonfinite") >= 0 or message.find("not finite") >= 0:
         return Error("RuntimeError: SmallMLPTrainer step returned an invalid result: " + message)

@@ -215,6 +215,7 @@ struct NativeSambaModel(Movable):
             var words = self.dropout_words.copy()
             words[5] = 2
             _ = self.primitive.call(6, [Int(dropped.unsafe_ptr()), Int(hidden.unsafe_ptr())], words, self.dropout_scalars)
+            _ = len(hidden)  # named after the call that reads it through its address (Mojo frees a List at its last named use; the reassignment below is not a use, so the dropout read freed storage: "non-finite dropout input at 0")
             hidden = dropped^
         for i in range(len(self.layers)):  # driver-loop: native ordered mixed-layer descriptors
             var state_index = self.layers[i].state_index

@@ -31,7 +31,9 @@ def test_host_native_provider_reuse_and_transactional_outputs():
     provider = model._native_provider
     audit_native_call(model.loss, ids).assert_native()
     assert model._native_provider is provider
-    assert _HOST_TRAIN(model, 'native_provider_info', (), _HOST_TRAIN_CONTEXT)[1][3] == 2
+    # one step (operation 3) and one loss: since 78d248303b `loss` is the forward alone (operation 2)
+    counts = _HOST_TRAIN(model, 'native_provider_info', (), _HOST_TRAIN_CONTEXT)[1]
+    assert counts[3] == 1 and counts[2] == 1, counts
     before = tuple(np.asarray(x).tobytes() for x in (model.parameters_, model.m_, model.v_))
     completed = model.completed_steps
     factory = model._binding.byte_lm_host_api_v1

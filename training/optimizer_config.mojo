@@ -77,9 +77,11 @@ def optimizer_parameter_update(kind: Int, key: String) raises:
         raise Error("TypeError: optimizer nested Python set_params hooks cannot execute; pass a complete native schedule or buffer configuration")
 
 
-def optimizer_profile_available(available: Bool) raises:
+def optimizer_profile_available(available: Bool, profile: String) raises:
     if not available:
-        raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")
+        # names the profile, as the trainer refusal did before 7109a1204d moved it into Mojo
+        raise Error("NotImplementedError: mojolearn optimizer: numeric profile '" + profile
+            + "' has not passed its training gates and is refused for training")
 
 
 def optimizer_keyword_refusal(key: String, where: String) raises:

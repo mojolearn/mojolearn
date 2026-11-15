@@ -152,11 +152,20 @@ def test_npy_bytes_identical_to_numpy():
                             writes.append(type(value))
                             return super().write(value)
 
-                    streamed_array = RecordingBytesIO()
+                    # A Python `write` override is a file protocol the native archive writer refuses
+                    # before any write (bindings/classical_archive_door.mojo _archive_methods, no calls
+                    # back into Python); an exact BytesIO streams the Array natively.
+                    try:
+                        _serialize.write_npy(RecordingBytesIO(), Array.from_buffer(x))
+                    except TypeError as refusal:
+                        assert "Python file protocols cannot execute" in str(refusal), refusal
+                    else:
+                        raise AssertionError("a Python write override was accepted")
+                    assert writes == []
+                    streamed_array = io.BytesIO()
                     _serialize.write_npy(streamed_array, Array.from_buffer(x))
                     _assert_same_bytes(streamed_array.getvalue(), want,
                                        f"write_npy(Array {dt.__name__} {shape} {order})")
-                    assert memoryview in writes, "Array payload must stay borrowed while streaming"
                 back = np.load(io.BytesIO(got_arr))
                 assert back.dtype == dt and back.shape == shape
                 assert np.array_equal(back, x)
@@ -213,7 +222,9 @@ def test_numeric_npy_decode_borrows_payload_until_owned_copy():
         got = _serialize.decode_npy(payload)
     finally:
         _buffer.frombytes = original
-    assert seen == [memoryview]
+    # decode is native: the payload is copied into the returned Array without the Python
+    # `_buffer.frombytes` boundary (so it is never sliced into a second `bytes` there either)
+    assert seen == []
     assert got.tobytes() == np.arange(1024, dtype=np.float32).tobytes()
     assert _serialize.decode_npy(_serialize.encode_npy("identity")) == "identity"
 
