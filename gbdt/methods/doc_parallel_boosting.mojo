@@ -104,7 +104,6 @@ from gbdt.methods.greedy_subsets_searcher.structure_searcher_options import (
     TTreeStructureSearcherOptions,
 )
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
-from gbdt.models.ns_bitvector_predict import GBDT_NS_BITVEC
 from gbdt.models.add_non_symmetric_tree_doc_parallel import (
     IDN_NS_PREDICT_PACKED,
     add_non_symmetric_tree_to_cursor,
@@ -5823,9 +5822,10 @@ def predict(
         # below takes is the fix if anyone measures a need.
         # lane/fam-gbdt (IDN_NS_PREDICT_PACKED): the ensemble packed once,
         # the same kernels back to back, one drain
-        # lane/trees-predict-ideas: MOJOLEARN_GBDT_NS_PREDICT_BITVEC takes
-        # the packed staging in every numeric mode (its apply lives there)
-        comptime if IDN_NS_PREDICT_PACKED or GBDT_NS_BITVEC:
+        # TOMBSTONE: MOJOLEARN_GBDT_NS_PREDICT_BITVEC (DELETE-ARM, opt-in arm, never tested or measured, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 4cdd684efa.
+        # Restore: git apply experiments/removed/MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch; record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: its folded False read and gbdt/models/ns_bitvector_predict.mojo removed.)
+        comptime if IDN_NS_PREDICT_PACKED:
             add_non_symmetric_trees_packed(
                 ctx, layout, model.non_symmetric_models, cindex, n_rows,
                 cursor,

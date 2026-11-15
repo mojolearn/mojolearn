@@ -21317,6 +21317,8 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-predict-ideas.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
 
+- Sweep (lane/expdel2-sweep, 2026-11-15): the last reader (gbdt/methods/doc_parallel_boosting.mojo, the non-symmetric predict branch, `IDN_NS_PREDICT_PACKED or GBDT_NS_BITVEC`) folded to `IDN_NS_PREDICT_PACKED`; the inline marker moved there; gbdt/models/ns_bitvector_predict.mojo (only the False constant `GBDT_NS_BITVEC`) deleted. Dead after lane expdel2-44-trees (lane 42 had listed the define as kept). No bits change.
+
 ### MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF
 
 - Tried: Trees (GBDT Ordered per-tree buffer allocation rollback).
