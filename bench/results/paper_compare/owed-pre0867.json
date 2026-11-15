@@ -256,6 +256,10 @@
   "neural-native-dispatch-off": {
    "define": "MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF",
    "status": "define in code (providers/python/neural_descriptor_pyapi_door.mojo NEURAL_NATIVE_DISPATCH, read by bindings/mamba_public_native_door.mojo, bindings/neural_block_public_door.mojo, bindings/causal_lm_construct_door.mojo, bindings/causal_lm_public_door.mojo, providers/python/transformer_decode_pyapi_door.mojo): B = every neural door finds each compiled entry by name and calls it through CPython per token / layer / call (the former MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 environment default of every door but CausalLM); A = the native descriptor tables connected once at construction (the former =1). Same numerical functions and words: digests must not move."
+  },
+  "classical-native-dispatch": {
+   "define": "MOJOLEARN_CLASSICAL_NATIVE_DISPATCH",
+   "status": "define in code (providers/python/classical_native_dispatch.mojo CLASSICAL_NATIVE_DISPATCH, read by bindings/svc_kernel_native_door.mojo _svc_provider, providers/python/x_neighbors_descriptor_pyapi_door.mojo xn_admit, providers/python/estimator_binding_pyapi_door.mojo estimator_checked_mode): B = SVC/SVR through the svm_binary_api_v1 descriptor table (no CPython entry call per pair/fold/epilogue, but no device-resident predict and no device-X fit), x_neighbors modules admitted natively, no SVM mode readback (the former MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1, never timed); A = by-name entries with the resident fitted state and device X (the former default \"0\", what every board row ran). Same numerical owners and words: digests must not move."
   }
  },
  "rows": [
@@ -1726,6 +1730,32 @@
     "neural-native-dispatch-off"
    ],
    "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "classical-native-dispatch-svc",
+   "source": "lane flag-classical-dispatch-gate (2026-11-15): the run-time MOJOLEARN_CLASSICAL_NATIVE_DISPATCH gate (32d1319e93, 2026-10-27, default \"0\") became the build define CLASSICAL_NATIVE_DISPATCH, default off (the measured route); the descriptor arm was never timed",
+   "kind": "ab",
+   "lane": "svc",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "classical-native-dispatch"
+   ],
+   "decides": "keep the by-name/resident route (A) unless the descriptor arm (B) is at least as fast on fit and infer at equal quality; digests must not move; read each arm's classical_route (tools/classical_route.py: svc_dispatch 'by-name' on A, 'descriptor' on B) to prove which arm ran"
+  },
+  {
+   "id": "classical-native-dispatch-svr",
+   "source": "lane flag-classical-dispatch-gate (2026-11-15): the run-time MOJOLEARN_CLASSICAL_NATIVE_DISPATCH gate (32d1319e93, 2026-10-27, default \"0\") became the build define CLASSICAL_NATIVE_DISPATCH, default off (the measured route); the descriptor arm was never timed",
+   "kind": "ab",
+   "lane": "svr",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "classical-native-dispatch"
+   ],
+   "decides": "keep the by-name/resident route (A) unless the descriptor arm (B) is at least as fast on fit and infer at equal quality; digests must not move; read each arm's classical_route (tools/classical_route.py: svc_dispatch 'by-name' on A, 'descriptor' on B) to prove which arm ran"
   }
  ]
 }
