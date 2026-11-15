@@ -52,7 +52,9 @@ comptime ARD_CLS1_STATS = C1_FAST_APPLE and not is_defined["MOJOLEARN_ARD_FAST_C
 # TOMBSTONE: MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at a656258c20.
 # Restore: git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ARD_CLS1_PARTS = C1_FAST_APPLE
-comptime ARD_CLS1_BATCH = C1_FAST_APPLE and not is_defined["MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF"]()
+# TOMBSTONE: MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at d30f8b724f.
+# Restore: git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ARD_CLS1_BATCH = C1_FAST_APPLE
 comptime RIDGE_CLS1_CODES = C1_FAST_APPLE and not is_defined["MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF"]()
 
 comptime C1_TPB = 256
