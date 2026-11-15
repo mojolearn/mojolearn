@@ -217,11 +217,9 @@ from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
 #: the residual folded into out_proj. Every use is a `comptime if` whose
 #: other arm is main's spelling unchanged.
-from mamba.impl.modules.afn_proj_gemm import (
-    AFN_MAMBA_PROJ_ROUTE,
-    afn_proj_gemm_into,
-    afn_proj_gemm_resid_into,
-)
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (with _SPLITK and AFN_EPI_ALL: neural MERGED-UNMEASURED FAST+Apple matrix-unit
+# in_proj/out_proj route; AFN_MAMBA_PROJ_ROUTE folded False) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 21b1e860c2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
 from mamba.impl.ops.selective_scan_interface import (
     selective_scan_fn,
 )
@@ -873,11 +871,9 @@ struct MambaDeviceStages(Movable):
           scan_h: a whole-buffer copy of state.h;
           residual_out [M,dm]: residual_add_kernel over m*dm, or the fused
             out_proj seeded by a whole copy of x.
-        KEPT: out_proj under AFN_MAMBA_PROJ_ROUTE, where the fused
-        out_proj+residual launch (trace off) never writes it; the tape still
-        names it as the PROJ_OUT value."""
-        comptime if AFN_MAMBA_PROJ_ROUTE:
-            self.out_proj.enqueue_fill(Float32(0.0))
+        out_proj [M,dm]: mamba_proj_gemm on every route.
+        So no stage is refilled."""
+        pass
 
     def __init__(
         out self,
@@ -1828,31 +1824,16 @@ def mamba_mixer_forward(
     #      ascending chain with nothing to fold.
     #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): the
     #      FAST matrix-unit kernel, main's GEMM if it declines.
-    comptime if AFN_MAMBA_PROJ_ROUTE:
-        if not afn_proj_gemm_into(
-            ctx, stages.in_proj, stages.norm_out, w.w_in, m, 2 * di, dm, _gemm_op_nt()
-        ):
-            mamba_proj_gemm(
-                ctx,
-                stages.in_proj,
-                stages.norm_out,
-                w.w_in,
-                m,
-                2 * di,
-                dm,
-                _gemm_op_nt(),
-            )
-    else:
-        mamba_proj_gemm(
-            ctx,
-            stages.in_proj,
-            stages.norm_out,
-            w.w_in,
-            m,
-            2 * di,
-            dm,
-            _gemm_op_nt(),
-        )
+    mamba_proj_gemm(
+        ctx,
+        stages.in_proj,
+        stages.norm_out,
+        w.w_in,
+        m,
+        2 * di,
+        dm,
+        _gemm_op_nt(),
+    )
     trace.record_device[DType.float32](
         ctx, prefix + ".in_proj.out", stages.in_proj, m * 2 * di
     )
@@ -1954,29 +1935,16 @@ def mamba_mixer_forward(
     #      untraced call runs out_proj in `mamba_block_forward`, fused with
     #      the residual add (`residual_out = x + gate_out . w_out^T`); a
     #      traced call keeps main's GEMM here so `out_proj.out` is recorded.
-    comptime if AFN_MAMBA_PROJ_ROUTE:
-        if trace.enabled:
-            mamba_proj_gemm(
-                ctx,
-                stages.out_proj,
-                stages.gate_out,
-                w.w_out,
-                m,
-                dm,
-                di,
-                _gemm_op_nt(),
-            )
-    else:
-        mamba_proj_gemm(
-            ctx,
-            stages.out_proj,
-            stages.gate_out,
-            w.w_out,
-            m,
-            dm,
-            di,
-            _gemm_op_nt(),
-        )
+    mamba_proj_gemm(
+        ctx,
+        stages.out_proj,
+        stages.gate_out,
+        w.w_out,
+        m,
+        dm,
+        di,
+        _gemm_op_nt(),
+    )
     trace.record_device[DType.float32](
         ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
     )
@@ -2073,54 +2041,14 @@ def mamba_block_forward(
     #      out_proj and this add are ONE matrix-unit launch seeded with `x`
     #      (the mixer skipped its out_proj GEMM); if the fused route declines,
     #      main's out_proj GEMM then main's add.
-    comptime if AFN_MAMBA_PROJ_ROUTE:
-        if trace.enabled:
-            ctx.enqueue_function[residual_add_kernel](
-                stages.residual_out.unsafe_ptr(),
-                x.unsafe_ptr(),
-                stages.out_proj.unsafe_ptr(),
-                Int32(m * dm),
-                grid_dim=(_grid(m * dm), 1, 1),
-                block_dim=(MAMBA_TPB, 1, 1),
-            )
-        elif not afn_proj_gemm_resid_into(
-            ctx,
-            stages.residual_out,
-            x,
-            stages.gate_out,
-            w.w_out,
-            m,
-            dm,
-            dims.d_inner,
-            _gemm_op_nt(),
-        ):
-            mamba_proj_gemm(
-                ctx,
-                stages.out_proj,
-                stages.gate_out,
-                w.w_out,
-                m,
-                dm,
-                dims.d_inner,
-                _gemm_op_nt(),
-            )
-            ctx.enqueue_function[residual_add_kernel](
-                stages.residual_out.unsafe_ptr(),
-                x.unsafe_ptr(),
-                stages.out_proj.unsafe_ptr(),
-                Int32(m * dm),
-                grid_dim=(_grid(m * dm), 1, 1),
-                block_dim=(MAMBA_TPB, 1, 1),
-            )
-    else:
-        ctx.enqueue_function[residual_add_kernel](
-            stages.residual_out.unsafe_ptr(),
-            x.unsafe_ptr(),
-            stages.out_proj.unsafe_ptr(),
-            Int32(m * dm),
-            grid_dim=(_grid(m * dm), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
+    ctx.enqueue_function[residual_add_kernel](
+        stages.residual_out.unsafe_ptr(),
+        x.unsafe_ptr(),
+        stages.out_proj.unsafe_ptr(),
+        Int32(m * dm),
+        grid_dim=(_grid(m * dm), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
     _m1_final_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
