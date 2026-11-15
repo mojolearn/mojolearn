@@ -913,6 +913,33 @@ in the tables after the sections.
 | [`MOJOLEARN_NN50_OWNED_RUNS`](#mojolearn_nn50_owned_runs) | Neural (embedding retained token groups, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN50_OWNED_RUNS.patch](../experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch) |
 | [`MOJOLEARN_TRANSFORMER_GENERIC_PREFILL`](#mojolearn_transformer_generic_prefill) | Neural (attention step fresh prefill) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch) |
 
+| [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
+| [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
+| [`MOJOLEARN_IDN_M3_ANGLE_BLOCK_128`](#mojolearn_idn_m3_angle_block_128) | Neural (Mamba-3 parallel angle block size, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M3_ANGLE_BLOCK_128.patch](../experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_128.patch) |
+| [`MOJOLEARN_IDN_M3_ANGLE_BLOCK_32`](#mojolearn_idn_m3_angle_block_32) | Neural (Mamba-3 parallel angle block size, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.patch](../experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.patch) |
+| [`MOJOLEARN_IDN_M3_ANGLE_PARALLEL`](#mojolearn_idn_m3_angle_parallel) | Neural (Mamba-3 S10 angle chain, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M3_ANGLE_PARALLEL.patch](../experiments/removed/MOJOLEARN_IDN_M3_ANGLE_PARALLEL.patch) |
+| [`MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE`](#mojolearn_idn_m3_yintra_resource_tile) | Neural (Mamba-3 y_intra tile, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.patch](../experiments/removed/MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.patch) |
+| [`MOJOLEARN_IDN_NEURAL_FILL_BLOCKS`](#mojolearn_idn_neural_fill_blocks) | Neural (GEMM cost-plan fill budget, IDENTICAL) | removed (opt-in knob, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_FILL_BLOCKS.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_FILL_BLOCKS.patch) |
+| [`MOJOLEARN_IDN_NEURAL_FOLD_SHARED`](#mojolearn_idn_neural_fold_shared) | Neural (GEMM fold-capacity arm, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_FOLD_SHARED.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_FOLD_SHARED.patch) |
+| [`MOJOLEARN_IDN_NEURAL_GEMM_ARM`](#mojolearn_idn_neural_gemm_arm) | Neural (GEMM schedule arm, IDENTICAL) | removed (opt-in knob, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_GEMM_ARM.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_ARM.patch) |
+| [`MOJOLEARN_IDN_NEURAL_GEMM_CONTROL`](#mojolearn_idn_neural_gemm_control) | Neural (GEMM experiment B arm, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_GEMM_CONTROL.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_CONTROL.patch) |
+| [`MOJOLEARN_IDN_NEURAL_PAIR_CONTROL`](#mojolearn_idn_neural_pair_control) | Neural (GEMM pair B arm, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_PAIR_CONTROL.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_PAIR_CONTROL.patch) |
+| [`MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS`](#mojolearn_idn_neural_retained_floats) | Neural (GEMM workspace budget, IDENTICAL) | removed (opt-in knob, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS.patch) |
+| [`MOJOLEARN_IDN_NEURAL_STAGE_DEPTH`](#mojolearn_idn_neural_stage_depth) | Neural (GEMM staging depth, IDENTICAL) | removed (opt-in knob, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_STAGE_DEPTH.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_DEPTH.patch) |
+| [`MOJOLEARN_IDN_NEURAL_STAGE_PAD`](#mojolearn_idn_neural_stage_pad) | Neural (GEMM staging pad, IDENTICAL) | removed (opt-in knob, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_STAGE_PAD.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_PAD.patch) |
+| [`MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE`](#mojolearn_idn_neural_stage_swizzle) | Neural (GEMM staging swizzle, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE.patch) |
+| [`MOJOLEARN_IDN_NEURAL_STREAM_GROUP`](#mojolearn_idn_neural_stream_group) | Neural (GEMM streaming group, IDENTICAL) | removed (opt-in knob, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch) |
+| [`MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE`](#mojolearn_mamba3_balanced_increment_tile) | Neural (Mamba-3 state increment tile) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.patch](../experiments/removed/MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT`](#mojolearn_mamba3_legacy_angle_increment) | Neural (Mamba-3 S10 increment) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE`](#mojolearn_mamba3_legacy_increment_tile) | Neural (Mamba-3 state increment tile) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V`](#mojolearn_mamba3_legacy_increment_v) | Neural (Mamba-3 shared-V increment) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_QKS`](#mojolearn_mamba3_legacy_qks) | Neural (Mamba-3 qk_s tile) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_QKS.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_QKS.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_STATEPASS`](#mojolearn_mamba3_legacy_statepass) | Neural (Mamba-3 S20 state pass) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_STATEPASS.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_YINTRA`](#mojolearn_mamba3_legacy_yintra) | Neural (Mamba-3 y_intra tile) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_YINTRA.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_YSTATE`](#mojolearn_mamba3_legacy_ystate) | Neural (Mamba-3 y_state tile) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_YSTATE.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YSTATE.patch) |
+| [`MOJOLEARN_MAMBA3_TILED_INCREMENT`](#mojolearn_mamba3_tiled_increment) | Neural (Mamba-3 state increment tile) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_TILED_INCREMENT.patch](../experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.patch) |
+| [`MOJOLEARN_MAMBA3_TILED_YINTRA`](#mojolearn_mamba3_tiled_yintra) | Neural (Mamba-3 y_intra tile) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_TILED_YINTRA.patch](../experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.patch) |
+| [`MOJOLEARN_NN35_CONV_PAIR`](#mojolearn_nn35_conv_pair) | Neural (Mamba-1/2 causal conv, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN35_CONV_PAIR.patch](../experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N128`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -13619,3 +13646,294 @@ Inline TOMBSTONE markers only; the owner lane of each define writes its section,
 - `MOJOLEARN_NN14_BOUNDED_IM2COL` (owner the x_cnn/ops.mojo lane): NN14_BOUNDED_IM2COL is False: the bounded tiles and nn14 grad launches in autograd/kernels/cnn.mojo and the one-word saved cols in autograd/cnn_block_op.mojo; `f96a014a39`, recoverable at `f839bce651`; `experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-23-neural.patch`.
 
 Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP; coordinator correction 2026-11-15) and `MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL` (a negative control: tools/check_embedding_plan_sort.sh builds with it, and embedding/checks/embedding_identical.mojo reads it; KEEP). No edit was needed in this lane's files for `MOJOLEARN_IDN_M2_SSD_TILES_OFF`, `MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF` and `MOJOLEARN_IDN_NEURAL_CHAINS`: their reads are in other lanes' files and the aliases this lane's files use (IDN_M2_SSD_TILES, MOE_GROUPED_GEMM, NEURAL_PROFILE_CHANGED / NEURAL_CHAINS) stay mode, page or other-define expressions after the fold.
+## Experiment deletions: lane expdel2-26-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-26-neural), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes: each deletion folds a non-default arm or a rollback to its default constant and keeps the default branch byte for byte. One commit per file: a patch restores its files' state at `5fc464dce4` (it also carries the other defines folded in the same file). Aliases that other files import stay as constants (M3_ANGLE_PARALLEL, AFN_M3_BWD_CHUNK, IDN_MAMBA_BWD_FOLDS, _AfnM3Arena / _m3_scratch); the integrator removes them with their importers' dead branches.
+
+### MOJOLEARN_IDN_M1_SCAN
+
+- Tried: the build-time choice of the Mamba-1 scan (0 old serial scan, 2 state_window) beside the promoted arm 3 (persistent).
+- Evidence: EXP:2071 LOSER (deleted); arms 0 and 2 never measured as defaults (rule e). Verdict: deleted unmeasured.
+- Removed: the define read; M1_SCAN is the constant 3, so the persistent scan stays the IDENTICAL default and the serial scan stays the other modes' path. Default unchanged: no bits move.
+- Files: mamba/host/gen/selective_scan_interface.mojo.
+- Deleted by: lane/expdel2-26-neural `8dd515bf83` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control m1_scan in neural-seq-train-dedupe.json moved to removed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_M2_CB_LOWER_OFF
+
+- Tried: the rollback of IDN_M2_CB_LOWER (+0.0 above the diagonal) in the Mamba-2 oracle.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the define read; IDN_M2_CB_LOWER_ORACLE is the IDENTICAL mode test. Default unchanged: no bits move.
+- Files: mamba/checks/mamba2_oracle.mojo.
+- Deleted by: lane/expdel2-26-neural `59f866a733` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_M3_ANGLE_BLOCK_128
+
+- Tried: 128-token blocks for the integer angle chain of IDN_M3_ANGLE_PARALLEL.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the block-size constant with the parallel angle arm. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_128.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control m3_angle_block in neural-small.json moved to removed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_M3_ANGLE_BLOCK_32
+
+- Tried: 32-token blocks for the integer angle chain of IDN_M3_ANGLE_PARALLEL.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the block-size constant with the parallel angle arm. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control m3_angle_block in neural-small.json moved to removed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_M3_ANGLE_PARALLEL
+
+- Tried: S10 as an exact integer chain of 2pi/2**23 counts split into blocks (four launches) instead of the serial float chain.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the forward branch and m3_angle_q_block/chain/finish/last kernels (host column), the oracle's count chain (M3O_ANGLE_COUNTS, m3o_* helpers); M3_ANGLE_PARALLEL stays the constant False with the count helpers mamba3.mojo's decode imports. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo, mamba/checks/mamba3_oracle.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf, 4e3c9bb990` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_PARALLEL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control m3_angle_parallel in neural-small.json moved to removed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE
+
+- Tried: the y_intra tile on every GPU whose page limits admit it.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define branch of the y_intra tile choice (host column). Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control m3_yintra_tile in neural-seq-train-dedupe.json moved to removed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_FILL_BLOCKS
+
+- Tried: an explicit hardware fill budget for the cost schedule.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; _FILL_BLOCKS is the constant 1. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_FILL_BLOCKS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; named only inside neural_gemm_schedule (owner of IDN_NEURAL_GEMM_SCHEDULE); left there; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_FOLD_SHARED
+
+- Tried: shared-memory folds in neural_fold_capacity_ab.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; the fold arm takes False. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_FOLD_SHARED.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_GEMM_ARM
+
+- Tried: choosing the GEMM arm of neural_schedule_ab.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; _ARM is GEMM_ARM_KPACK. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_ARM.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; named only inside neural_gemm_schedule; left there; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_GEMM_CONTROL
+
+- Tried: the B (control) arm of the NN01/02/09/10/11/12/15 schedule experiments: fresh scratch per product, incumbent plan.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a); not a sabotage control. Verdict: deleted unmeasured.
+- Removed: _CONTROL and every branch it selected (NN12 fresh-scratch run/run_pair, the NN10 incumbent plan); the experiments take their A arm. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_CONTROL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry (experiments/neural_identical_ab/arms.json names it: tooling lane); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_PAIR_CONTROL
+
+- Tried: the NN07 pair B arm that repacks the shared operand.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a); not a sabotage control. Verdict: deleted unmeasured.
+- Removed: _PAIR_CONTROL and its repack branch in identical_gemm_pair_into. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_PAIR_CONTROL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry (arms.json names it: tooling lane); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS
+
+- Tried: a different retained-workspace budget for NN12.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; _RETAINED is the constant 16777216. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_STAGE_DEPTH
+
+- Tried: the staging depth of neural_tiled_ab.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; _DEPTH is the constant 2. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_DEPTH.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; named only inside neural_gemm_schedule; left there; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_STAGE_PAD
+
+- Tried: the staging pad of neural_tiled_ab.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; _PAD is the constant 0. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_PAD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE
+
+- Tried: a swizzled staging page in neural_tiled_ab.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; _SWIZZLE is False. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_IDN_NEURAL_STREAM_GROUP
+
+- Tried: the streaming group size of neural_streaming_ab.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define read; _STREAM_GROUP is the constant 8. Default unchanged: no bits move.
+- Files: gemm/neural_dispatch.mojo.
+- Deleted by: lane/expdel2-26-neural `3a2aeb9d45` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE
+
+- Tried: forcing the balanced increment tile on columns other than NVIDIA/AMD.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define term; NVIDIA and AMD keep the balanced tile (measured there), the host column is unchanged. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT
+
+- Tried: the angle chain recomputing rate*dt inline instead of reading m3_angle_increment_kernel's output.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the inline-increment branch of m3_angle_kernel and the guard around the increment launch (host column); the oracle term. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo, mamba/checks/mamba3_oracle.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf, 4e3c9bb990` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE
+
+- Tried: keeping the untiled increment on NVIDIA/AMD.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the define term of the increment tile choice. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V
+
+- Tried: the pre-shared-V increment.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the define term (the branch was already compiled out on the host column). Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_LEGACY_QKS
+
+- Tried: the untiled qk_s.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the define term (branch already compiled out on the host column). Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_QKS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_LEGACY_STATEPASS
+
+- Tried: the one-kernel state pass instead of decay + increment + scan.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the branch and m3_statepass_kernel (host column). Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_LEGACY_YINTRA
+
+- Tried: the untiled y_intra on NVIDIA.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the define term. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_LEGACY_YSTATE
+
+- Tried: the untiled y_state.
+- Evidence: no record: no A/B recorded for the old path (rule b). Verdict: deleted unmeasured.
+- Removed: the define term (branch already compiled out on the host column). Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YSTATE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_TILED_INCREMENT
+
+- Tried: forcing the increment tile at every size.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define branch. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_MAMBA3_TILED_YINTRA
+
+- Tried: forcing the y_intra tile at every size.
+- Evidence: no record: no A/B recorded for the opt-in arm (rule a). Verdict: deleted unmeasured.
+- Removed: the define branch. Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba3_siso.mojo.
+- Deleted by: lane/expdel2-26-neural `1417a657cf` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### MOJOLEARN_NN35_CONV_PAIR
+
+- Tried: two adjacent tokens sharing the conv input window (pair kernels).
+- Evidence: no record: uncompiled/unmeasured opt-in (rule a). Verdict: deleted unmeasured.
+- Removed: nn35_m2_pair_kernel and nn35_causal_pair_kernel with their launches (host column). Default unchanged: no bits move.
+- Files: mamba/host/gen/mamba2.mojo, mamba/host/gen/modeling_mamba.mojo.
+- Deleted by: lane/expdel2-26-neural `b8ff337c94` (2026-11-15); code recoverable at `5fc464dce4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control nn35_conv_pair in neural-seq-train-dedupe.json moved to removed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-26-neural section).
+
+### Non-owner deletions in lane expdel2-26-neural
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and rows. Recoverable at `5fc464dce4`; patch `experiments/removed/<DEFINE>.expdel2-26-neural.patch`.
+
+- `MOJOLEARN_AFN_MAMBA3_BWD_ARENA`
+- `MOJOLEARN_AFN_MAMBA3_BWD_CHUNK`
+- `MOJOLEARN_AFN_SAMBA_ALL`
+- `MOJOLEARN_IDN_ALL_OFF`
+- `MOJOLEARN_IDN_M2_BWD_CELL_OFF`
+- `MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF`
+- `MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF`
+- `MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF`
+- `MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF`
+- `MOJOLEARN_IDN_MAMBA_BWD_FOLDS`
+- `MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE`
+
+Not deleted here: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP). `MOJOLEARN_IDN_M2_GRAD_FOLD`, `MOJOLEARN_IDN_M2_SSD_TILES_OFF`, `MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF`, `MOJOLEARN_IDN_NEURAL_CHAINS`, `MOJOLEARN_IDN_NEURAL_NN07`, `MOJOLEARN_IDN_NEURAL_NN12` have no read in this lane's files (they arrive only through imported aliases that their owners fold). The sabotage arms read in these files are KEEP.
