@@ -63,6 +63,7 @@ from checks.native_tests.gp_theta import register as register_gp_theta
 from checks.native_tests.gpc_score import register as register_gpc_score
 from checks.native_tests.gpr_score import register as register_gpr_score
 from checks.native_tests.hdbscan_native import register as register_hdbscan_native
+from checks.native_tests.hdbscan_surface import register as register_hdbscan_surface
 from checks.native_tests.holtwinters_state import register as register_holtwinters_state
 from checks.native_tests.iforest_forest_export import register as register_iforest_forest_export
 from checks.native_tests.int8_linalg import register as register_int8_linalg
@@ -223,6 +224,7 @@ def all_checks() -> List[Check]:
     checks.append(register_gpc_score())
     checks.append(register_gpr_score())
     checks.append(register_hdbscan_native())
+    checks.append(register_hdbscan_surface())
     checks.append(register_holtwinters_state())
     checks.append(register_iforest_forest_export())
     checks.append(register_int8_linalg())
