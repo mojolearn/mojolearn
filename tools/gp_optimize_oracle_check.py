@@ -363,7 +363,7 @@ def fit_lane(ml, kind, restarts, random_state, X, y, start=None):
     `start` replaces the kernel's own hyperparameters, which is how the far
     sweep asks where the optimizer lands from a point it did not choose.
     """
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     kernel = build_kernel(ml, kind) if start is None else build_kernel_at(ml, kind, start)
     kw = dict(kernel=kernel, optimizer="fmin_l_bfgs_b")
     if restarts:

@@ -144,8 +144,8 @@ def main(out=sys.stdout):
     bind_or_exit("_mojolearn_hdbscan", "build_hdbscan.sh")
     rep = Report("test_hdbscan_surface")
     # A CPU-only install fits only inside the verifier's scope
-    # (_cpu_reference.py); on a GPU binding the scope changes nothing.
-    from mojolearn._cpu_reference import reference_training
+    # (a no-op scope since CPU training became public); on a GPU binding the scope changes nothing.
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     with reference_training():
         return _run(rep, out)
 

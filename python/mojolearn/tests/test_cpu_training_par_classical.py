@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
-from mojolearn._cpu_reference import reference_training
+from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend
 
 
@@ -56,8 +56,8 @@ def test_the_gpc_class_fit_worker_follows_the_public_fit_guard():
     """THE GPC SHARD CARRIES THE PUBLIC FIT'S GUARD (lane/unlaned-public-
     algorithms, 2026-09-20). The other admitted fit operations run their
     estimator's PUBLIC `fit` and inherit `_mode._guard_cpu_training`; the GPC
-    shard calls `_fit_binary`, below that decorator, so the worker calls
-    `_cpu_reference.require_training` itself. The two routes must answer
+    shard calls `_fit_binary`, below that decorator (the worker's own
+    refusal check is gone with CPU training public). The two routes must answer
     the same way on a CPU-only install. Since dac6e4d15 (CPU training is
     public) that answer is "train": the plain fit and the driver both fit,
     outside `reference_training()`, and agree byte for byte."""

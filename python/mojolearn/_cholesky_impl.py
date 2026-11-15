@@ -138,7 +138,7 @@ class Cholesky(NumericModeMixin):
     _BINDING = _GPU_BINDING
 
     #: `fit` factors a given matrix; that is inference, so a CPU-only
-    #: install runs it publicly (`_cpu_reference.require_training`).
+    #: install runs it publicly.
     _CPU_FIT_IS_INFERENCE = True
 
     def __init__(self, jitter=None, *, numeric_mode=None):

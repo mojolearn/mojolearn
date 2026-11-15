@@ -32,7 +32,7 @@ def _series(np, n, b, f):
 
 def _fit_or_skip(np, seasonal, n=96, b=2, f=12):
     import mojolearn
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     y = _series(np, n, b, f)
     try:
         with reference_training():

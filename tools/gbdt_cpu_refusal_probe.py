@@ -14,9 +14,9 @@ closed shows up as OK.
     MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR=/path/to/host python3 tools/gbdt_cpu_refusal_probe.py
 
 Select CPU before importing the package; installed GPU bindings may remain
-present. Public CPU training has been available since 2026-09-20. The retained
-`mojolearn._cpu_reference.reference_training()` context is a compatibility
-no-op, not an authorization gate for these fits. This file is a test probe.
+present. Public CPU training has been available since 2026-09-20; the
+`reference_training()` scope below is a no-op (`contextlib.nullcontext`), not an
+authorization gate for these fits. This file is a test probe.
 
 READ THE `## A` BLOCK FIRST. It is the control: those configurations must
 print OK. If any of them refuses, the probe is measuring a broken or stale
@@ -216,7 +216,7 @@ def main():
 
     import mojolearn
     from mojolearn import _backend
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     from mojolearn.ensemble import GradientBoosting
 
     if _backend._CPU_ONLY is None and not args.allow_gpu:

@@ -38,7 +38,7 @@ def main():
         sys.path.insert(0, str(root / 'python'))
     import mojolearn as ml
     from mojolearn import _verify_all as suite, _verify_small as profile, _verify
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     if ml.vendor() != args.require_backend or ml.numeric_mode() != 'identical':
         parser.error(f'expected {args.require_backend}/identical, got {ml.vendor()}/{ml.numeric_mode()}')
     harness = suite.load_harness()

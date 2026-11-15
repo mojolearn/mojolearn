@@ -31,7 +31,7 @@ import mojolearn
 from mojolearn import _backend, _serialize
 from mojolearn._array import Array
 from mojolearn._buffer import frombytes
-from mojolearn._cpu_reference import reference_training
+from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._gbdt_host import GBDT_FORMAT, HostGBDT, parse_model_text
 
 ROOT = Path(__file__).resolve().parents[3]

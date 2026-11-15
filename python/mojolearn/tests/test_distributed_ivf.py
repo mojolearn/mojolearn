@@ -28,7 +28,7 @@ def identical(monkeypatch):
 
 
 def fitted(metric, rows=33, features=3):
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     x = np.random.default_rng(rows + features).normal(size=(rows, features)).astype(np.float32)
     x[1] = x[0]
     with reference_training():

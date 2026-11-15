@@ -101,7 +101,7 @@ def test_parallel_rbf_copy_order_and_cleanup(monkeypatch, request, shard_rows, f
     from mojolearn._native_parallel_shard import _native_parallel_shard
     rows = np.arange(35, dtype='<f4').reshape(7, 5)[::-1]
     x = Array.from_list(rows.tolist(), '<f4')
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     with reference_training():
         model = RBFSampler(n_components=5, random_state=3).fit(x)
     expected = model.transform(x)

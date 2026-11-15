@@ -48,8 +48,7 @@ from . import _sk_validate
 
 
 def _guard_cpu_training(method):
-    # CPU training is public: `_cpu_reference.require_training` refuses
-    # nothing, so the former per-fit wrapper is gone and nothing calls this
+    # CPU training is public: nothing refuses it, so the former per-fit wrapper is gone and nothing calls this
     # any more (its class-definition loop in `_install_numeric_mode` set every
     # fit method to itself; deleted by lane py-mode-wrappers, 2026-11-15).
     # Kept only as the fixed warning location: `_native_classical_warnings`

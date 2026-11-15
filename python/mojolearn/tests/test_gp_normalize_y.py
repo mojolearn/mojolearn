@@ -27,7 +27,7 @@ def _data():
 def _fit_or_skip(x, y, normalize_y=True):
     kernel = ConstantKernel(1.0) * RBF(1.0) + WhiteKernel(0.1)
     try:
-        from mojolearn._cpu_reference import reference_training
+        from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
         with reference_training():
             return GaussianProcessRegressor(kernel=kernel, normalize_y=normalize_y).fit(x, y)
     except (ImportError, NotImplementedError) as exc:

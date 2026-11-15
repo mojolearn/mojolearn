@@ -78,7 +78,7 @@ def test_mojolearn_metrics_is_importable_as_a_submodule():
 def _svc_or_skip(x, y, **kw):
     from mojolearn._svm_impl import SVC
     try:
-        from mojolearn._cpu_reference import reference_training
+        from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
         with reference_training():
             return SVC(**kw).fit(x, y)
     except (ImportError, NotImplementedError, OSError) as exc:
@@ -187,7 +187,7 @@ def test_cross_val_score_takes_mojolearn_ridge():
     x = rng.normal(size=(60, 3)).astype(np.float32)
     y = (x @ np.array([1.0, -2.0, 0.5], np.float32) + 0.1).astype(np.float32)
     try:
-        from mojolearn._cpu_reference import reference_training
+        from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
         with reference_training():
             scores = mojolearn.cross_val_score(mojolearn.Ridge(alpha=1e-3), x, y, cv=3)
     except (ImportError, OSError) as exc:

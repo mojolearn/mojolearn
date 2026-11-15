@@ -167,7 +167,7 @@ def test_equals_the_reference_path_when_present(binding):
     """A CPU identity column only: the source reference bindings are there."""
     if not _reference_present():
         pytest.skip("the source reference training and transformer host bindings are not built here (a wheel has neither)")
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     X = _x(64, seed=9)
     t = np.random.default_rng(9).integers(0, 3, 64).astype(np.int32)
     with reference_training():
@@ -329,7 +329,7 @@ def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):
         pytest.skip("the source reference mamba host binding is not built here (a wheel has none)")
     if not _reference_present():
         pytest.skip("the source reference training and transformer host bindings are not built here")
-    from mojolearn._cpu_reference import reference_training
+    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     x = np.random.default_rng(13).standard_normal((2, 16, 32)).astype(np.float32)
     for kind, cls, kw in _MAMBA:
         w = _mamba_weights(kind, seed=17)

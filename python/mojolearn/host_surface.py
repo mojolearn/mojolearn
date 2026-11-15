@@ -48,9 +48,8 @@ objection was size, and size was measured rather than guessed: the sixteen add
 7.66 MB uncompressed and 2.19 MB compressed to a wheel whose weight is GPU
 bindings (312 MB uncompressed on Linux, 91 files). `ships_in_wheel=False` now
 means a deliberate, stated exclusion, and nothing carries one. CPU training became public on 2026-09-20 for estimators
-with a supported CPU training binding. `_cpu_reference.py` retains
-`reference_training()` as a compatibility context; it no longer enables or
-forbids training. Each family declares its compiled CPU capabilities below. The two wheel builders and the packer read
+with a supported CPU training binding; nothing enables or forbids it (the
+no-op `_cpu_reference` compatibility module was deleted 2026-11-15). Each family declares its compiled CPU capabilities below. The two wheel builders and the packer read
 `--wheel-families` and `--wheel-bindings` below instead of naming the byte
 LM's binding by hand, and packaging/check_ext_lists.py fails when any of
 them carries a host list of its own.
@@ -3482,7 +3481,7 @@ FAMILIES = (
             "runtime_classical_host_numeric_mode", "runtime_classical_host_vendor",
             "runtime_classical_host_column", "runtime_classical_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing classical native entries and their single resident tree owner.",
         ships_in_wheel=True,
     ),
@@ -3506,7 +3505,7 @@ FAMILIES = (
             "trees_native_call",
             "runtime_trees_host_numeric_mode", "runtime_trees_host_vendor", "runtime_trees_host_column", "runtime_trees_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3533,7 +3532,7 @@ FAMILIES = (
             "host_svc_attribute_call",
             "runtime_family_host_numeric_mode", "runtime_family_host_vendor", "runtime_family_host_column", "runtime_family_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3567,7 +3566,7 @@ FAMILIES = (
             "standard_scaler_attribute_call",
             "runtime_prep_host_numeric_mode", "runtime_prep_host_vendor", "runtime_prep_host_column", "runtime_prep_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3600,7 +3599,7 @@ FAMILIES = (
             "tsvd_native_call",
             "runtime_decomp_host_numeric_mode", "runtime_decomp_host_vendor", "runtime_decomp_host_column", "runtime_decomp_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3626,7 +3625,7 @@ FAMILIES = (
             "x_linear_native_call",
             "runtime_linear_host_numeric_mode", "runtime_linear_host_vendor", "runtime_linear_host_column", "runtime_linear_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3650,7 +3649,7 @@ FAMILIES = (
             "lm_corpus_public_call",
             "runtime_catalog_host_numeric_mode", "runtime_catalog_host_vendor", "runtime_catalog_host_column", "runtime_catalog_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3674,7 +3673,7 @@ FAMILIES = (
             "xcnn_native_call",
             "runtime_xseq_host_numeric_mode", "runtime_xseq_host_vendor", "runtime_xseq_host_column", "runtime_xseq_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3701,7 +3700,7 @@ FAMILIES = (
             "parallel_byte_call",
             "runtime_byte_trainer_host_numeric_mode", "runtime_byte_trainer_host_vendor", "runtime_byte_trainer_host_column", "runtime_byte_trainer_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3736,7 +3735,7 @@ FAMILIES = (
             "parallel_causal_call",
             "runtime_parallel_host_numeric_mode", "runtime_parallel_host_vendor", "runtime_parallel_host_column", "runtime_parallel_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
@@ -3765,7 +3764,7 @@ FAMILIES = (
             "samba_native_call",
             "runtime_neural_host_numeric_mode", "runtime_neural_host_vendor", "runtime_neural_host_column", "runtime_neural_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),

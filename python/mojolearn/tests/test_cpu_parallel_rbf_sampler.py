@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from mojolearn import RBFSampler, _backend
-from mojolearn._cpu_reference import reference_training
+from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._native_parallel_shard import _native_parallel_shard
 from mojolearn.parallel_classical import transform_rbf_sampler
 

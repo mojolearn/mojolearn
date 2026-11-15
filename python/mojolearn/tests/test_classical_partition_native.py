@@ -9,7 +9,7 @@ import os
 import numpy as np
 import pytest
 from mojolearn import parallel_forecasting as pf, parallel_gaussian_process as pg
-from mojolearn._cpu_reference import reference_training
+from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 pytestmark = pytest.mark.skipif(os.environ.get('MOJOLEARN_NATIVE_CLASSICAL_PARTITIONS') != '1',
                                 reason='opt-in native check; requires shared slot')

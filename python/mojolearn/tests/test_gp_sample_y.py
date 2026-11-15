@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from mojolearn._cpu_reference import reference_training
+from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._gp_impl import RBF, ConstantKernel, GaussianProcessRegressor, WhiteKernel
 from mojolearn.tests._expose_d_harness import Report, bind_or_exit, run
 
