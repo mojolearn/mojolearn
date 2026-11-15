@@ -209,9 +209,9 @@ def test_host_load_does_not_call_constructor_or_serialize_helpers(tmp_path, name
         raise AssertionError("Python reconstruction was invoked")
 
     monkeypatch.setattr(cls, "__init__", poisoned)
-    monkeypatch.setattr(host._serialize, "read_npz", poisoned)
-    monkeypatch.setattr(host._serialize, "peek_npz", poisoned)
-    monkeypatch.setattr(host._serialize, "exact", poisoned)
+    # The `_serialize` poisons were deleted: 678c41ca83 removed the host
+    # module's `_serialize` import (no product module imports it); the audit
+    # below already refuses any Python frame during the load.
     audit_native_call(cls.load, path).assert_native()
 
 
@@ -275,7 +275,9 @@ def test_host_load_refuses_custom_finalizer_before_instantiation(tmp_path):
     assert calls == []
 
 
-@pytest.mark.parametrize("name", ["Embedding", "KernelDensity", "IVFIndex", "NearestNeighbors"])
+# KernelDensity left this list: dfba3d8b00 removed its Python `__del__` (its
+# typed resident owner's native destructor releases the fit).
+@pytest.mark.parametrize("name", ["Embedding", "IVFIndex", "NearestNeighbors"])
 def test_loaded_host_model_finalizes_without_python(tmp_path, name):
     cls = getattr(host, "Host" + name)
     obj = audit_native_call(cls.load, _archive(tmp_path, name)).assert_native()

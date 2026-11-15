@@ -248,15 +248,22 @@ class Selection(Install):
             self.assertIs(self.B.load_set("identical"), marker)
 
     def test_a_ptx_process_with_no_binary_never_selects_cpu(self):
+        # Since 153a13ac6c (lazy family import, 2026-11-12) select() only
+        # records the chosen PTX file per canonical name; the binary is loaded
+        # on the binding's first import, so an unloadable binary is refused
+        # there, and neither step ever selects the CPU set.
         with patch.object(self.B, "_exec_binding", side_effect=ImportError("inert fixture binary")):
             self.reset()
             with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
                 with patch.object(self.B, "host_binding_built", return_value=True):
                     with patch.object(self.B, "_select_cpu_only") as cpu:
+                        self.assertEqual(self.B.select(), "fast")
+                        self.assertIsNone(self.B._CPU_ONLY)
                         with self.assertRaises(ImportError):
-                            self.B.select()
+                            importlib.import_module(ALIAS + "._mojolearn_gbdt")
                         cpu.assert_not_called()
         self.assertIsNone(self.B._CPU_ONLY)
+        self.assertNotIn(ALIAS + "._mojolearn_gbdt", sys.modules)
 
 
 class Provenance(Install):

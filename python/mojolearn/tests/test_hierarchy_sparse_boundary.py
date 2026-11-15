@@ -18,9 +18,9 @@ def _graph(format):
 
 
 def _model(graph):
-    return ml.AgglomerativeClustering(
-        n_clusters=2, linkage="single", connectivity=graph, numeric_mode="identical",
-    )
+    # AgglomerativeClustering takes no `numeric_mode=` (c8539dd9b1); it fits in
+    # the process default mode, set publicly with `mojolearn.set_numeric_mode`.
+    return ml.AgglomerativeClustering(n_clusters=2, linkage="single", connectivity=graph)
 
 
 def _x():

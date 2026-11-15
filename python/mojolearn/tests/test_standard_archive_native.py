@@ -78,11 +78,11 @@ def test_standard_archive_owns_writable_statistics_and_preserves_count_types(rou
         assert np.asarray(count).flags.writeable
         expected = [-0.0, 1.25] if count_kind == "float_vector" else [-1, 9007199254740993]
         np.testing.assert_array_equal(np.asarray(count), expected)
-        count[0] = 2
-    model.mean_[0] = 3.0
+        np.asarray(count)[0] = 2  # Array's public write path: its zero-copy NumPy view
+    np.asarray(model.mean_)[0] = 3.0
     assert np.asarray(model.var_).view("<u4")[0] == 0x80000000
     model.mean_ = model.scale_  # public rebinding to another admitted owner
-    model.scale_[0] = 4.0
+    np.asarray(model.scale_)[0] = 4.0
     saved = io.BytesIO()
     audit_native_call(model.save, saved).assert_native()
     assert not saved.closed

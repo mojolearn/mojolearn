@@ -85,7 +85,9 @@ def test_generic_minmax_preserves_writable_owners_after_input_release(tmp_path, 
         view = np.asarray(value)
         assert view.flags.writeable
         np.testing.assert_array_equal(view.view("<u4"), [0x80000000, 0x7FC12345])
-    model.scale_[0] = 2.0
+    # Array has no item assignment; its public write path is the zero-copy
+    # NumPy view, so the edit reaches the model's own storage.
+    np.asarray(model.scale_)[0] = 2.0
     assert float(model.data_min_[0]) == 0.0
     assert np.signbit(float(model.data_min_[0]))
     saved = io.BytesIO()

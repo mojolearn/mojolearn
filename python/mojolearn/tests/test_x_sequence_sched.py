@@ -6,6 +6,8 @@ Independent closed forms moved to checks/native_tests/lr_schedule_check.mojo.
 These calls preserve Python constructor and scalar/array publication behavior,
 plus actual schedule assignment on the public Adamax optimizer.
 """
+import array
+
 import numpy as np
 
 import mojolearn as ml
@@ -19,8 +21,10 @@ def test_schedule_public_scalar_and_array_results():
         value = schedule.lr_at(3)
         assert type(value) is float
         assert np.float32(value) == value
+        # The documented result: lr_at(1) .. lr_at(n) as an array('f').
         values = schedule.lr_values(4)
-        assert values.shape == (4,) and values.dtype == np.dtype("float32")
+        assert isinstance(values, array.array) and values.typecode == "f" and len(values) == 4
+        assert list(values) == [schedule.lr_at(t) for t in range(1, 5)]
 
 
 def test_schedule_drives_an_optimizer():

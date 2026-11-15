@@ -50,9 +50,12 @@ def test_kde_python_descriptor_factory_is_refused_before_invocation(operation, m
         calls.append(True)
         raise AssertionError("Python KDE descriptor factory was called")
 
-    binding = _backend.binding("_mojolearn_estimators", "identical")
+    # The operation reads the exact compiled module connected at import
+    # (`_backend.exact_host_module`: the host extension on a CPU-only install,
+    # never its `_HostBinding` facade), so the replacement goes there.
+    binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
     monkeypatch.setattr(binding, "kde_native_api_v1", forbidden)
-    with pytest.raises(TypeError, match="compiled extension entry"):
+    with pytest.raises(TypeError, match="requires compiled entry kde_native_api_v1"):
         getattr(model, operation)(_x())
     assert calls == []
 

@@ -124,7 +124,10 @@ def test_lof_novelty_refusal_precedes_query_finite_check(method):
     model.novelty = False
     bad = _query()
     bad[0, 0] = np.nan
-    with pytest.raises(AttributeError, match="novelty=False"):
+    # The novelty-only methods are unavailable under novelty=False; the refusal
+    # now uses scikit-learn's available_if wording and still precedes the
+    # finite check on the query.
+    with pytest.raises(AttributeError, match=f"has no attribute '{method}'"):
         getattr(model, method)(bad)
 
 

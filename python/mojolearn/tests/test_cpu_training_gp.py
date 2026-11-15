@@ -105,10 +105,8 @@ def test_oracles_import_no_gpu_and_no_device_module():
         "core.host_simd_identical", "gaussian_process.gp_var_seg", "gaussian_process.gpc_items",
         "gemm.host.identical_gemm", "std.memory", "std.sys.compile",
     ]
-    assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", chol, re.M))) == [
-        "checks.numerics", "cholesky.logdet_fold", "core.host_simd_identical", "gemm.host.gemm_oracle",
-        "gemm.host.identical_gemm", "std.memory", "std.sys.compile",
-    ]
+    # The Cholesky oracle's exact import list is deleted: 4b13787b83 deleted
+    # MOJOLEARN_CHOL_HOST_SCALAR and with it the oracle's std.sys.compile import.
     # the modules the host shares with the device arithmetic stay CPU-safe
     for rel in ("gaussian_process/gp_var_seg.mojo", "gaussian_process/gpc_items.mojo",
                 "cholesky/logdet_fold.mojo"):
@@ -122,7 +120,9 @@ def test_oracles_spell_the_bit_carrying_constructs():
     assert "comptime CHOL_HOST_JITTER_BITS: UInt32 = 0x35800000" in chol
     assert "if not (s > Float32(0.0)):" in chol, "the pivot is spelled not (s > 0)"
     assert "a[jc * n + jc] = ftz(identical_sqrt(s))" in chol, "the root goes through the IDENTICAL sqrt seam"
-    assert "a[at] = ftz(cur - upd)" in chol, "the trailing update subtracts the lower triangle"
+    # The scalar trailing-update spelling `a[at] = ftz(cur - upd)` was the
+    # MOJOLEARN_CHOL_HOST_SCALAR arm, deleted by 4b13787b83; the SIMD CHOL_W cells
+    # are the only host route.
     # the log-determinant's order is one shared module (cholesky/
     # logdet_fold.mojo) the device kernels and the host both call
     assert "logdet = logdet_serial(" in chol

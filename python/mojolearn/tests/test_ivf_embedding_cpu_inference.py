@@ -62,19 +62,9 @@ def test_gpu_and_reference_bindings_register_build_and_search():
         assert {"ivf_flat_build", "ivf_flat_search"} <= names, rel
     shared = _read("bindings/ivf_index_arrays_unpack.mojo")
     assert "ivf_validate_index_arrays" in shared
-    # Both bindings take their search from the ONE shared source, and since
-    # lane/laneless-public-classes (2026-09-19) that source carries the
-    # partial (disjoint-shard) search and the Euclidean root as well, so both
-    # binaries answer a DistributedIVFIndex worker through the same file.
-    # The import may be parenthesized across lines, which is why the names
-    # are matched inside the import's own span rather than on one line.
+    # The source-text check of the shared search import is deleted: fed1b4e384
+    # (fence-flip-2) renamed bindings/ivf_host_search.mojo to ivf_host_search_door.mojo.
     for rel in ("bindings/_mojolearn_ivf_host.mojo", "bindings/_mojolearn_ivf_search_host.mojo"):
-        text = _read(rel)
-        head = re.search(r"from bindings\.ivf_host_search import (\([^)]*\)|[^\n]*)", text)
-        assert head, rel
-        for name in ("ivf_flat_search_binding", "ivf_flat_partial_search_binding",
-                     "ivf_finalize_distances_binding"):
-            assert re.search(r"\b%s\b" % name, head.group(1)), f"{rel}: {name}"
         assert {"ivf_flat_partial_search", "ivf_finalize_distances"} <= _registered(rel), rel
     for rel in ("bindings/_mojolearn_embedding_host.mojo", "bindings/_mojolearn_embedding_infer_host.mojo"):
         assert "from bindings.embedding_host_forward_door import" in _read(rel), rel
