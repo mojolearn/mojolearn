@@ -1,0 +1,25 @@
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index ed79c3f1cd..e2b337f505 100644
+--- a/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -316,11 +316,10 @@ arm that must move: the plain path adds one to every count it publishes."""
+ 
+ comptime SAB_PLAIN_PUBLISH = is_defined["MOJOLEARN_ET_SAB_PLAIN_PUBLISH"]()
+ 
+-# TOMBSTONE: MOJOLEARN_ET_RELAXED_PUBLISH (DELETE-ARM, opt-in for other columns, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 05759052d0.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_RELAXED_PUBLISH.patch; record in docs/TOMBSTONES.md.
+ comptime RELAXED_PUBLISH = (
+     TARGET_HAS_NVIDIA_GPU
+     or TARGET_HAS_AMD_GPU
++    or is_defined["MOJOLEARN_ET_RELAXED_PUBLISH"]()
+ ) and not is_defined["MOJOLEARN_ET_SEQCST_PUBLISH"]()
+ """DEVIATION 3022 (lane/forest-train-speed, 2026-09-17): the search's publish
+ atomics are RELAXED on an NVIDIA build, and on an AMD build since
+@@ -362,6 +361,7 @@ relaxed. `-D MOJOLEARN_ET_SAB_RELAXED_PUBLISH=1` is the arm that must move:
+ the relaxed `_publish_add` adds one to every count it publishes.
+ 
+ NVIDIA AND AMD by default (AMD's Mojo default is seq_cst too).
++`-D MOJOLEARN_ET_RELAXED_PUBLISH=1` opts any other column in;
+ `-D MOJOLEARN_ET_SEQCST_PUBLISH=1` restores the default ordering for the
+ A/B. Apple's default is already relaxed."""
+ 

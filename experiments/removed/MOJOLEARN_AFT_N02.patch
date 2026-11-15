@@ -1,0 +1,15 @@
+diff --git a/gbdt/apple_fast_tree_experiments.mojo b/gbdt/apple_fast_tree_experiments.mojo
+index 9bf61c9576..d7d896c6df 100644
+--- a/gbdt/apple_fast_tree_experiments.mojo
++++ b/gbdt/apple_fast_tree_experiments.mojo
+@@ -14,9 +14,7 @@ comptime _APPLE_FAST = (
+ # TOMBSTONE: MOJOLEARN_AFT_N01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 33b61e5bf8.
+ # Restore: git apply experiments/removed/MOJOLEARN_AFT_N01.patch; record in docs/TOMBSTONES.md.
+ comptime AFT_N01 = False
+-# TOMBSTONE: MOJOLEARN_AFT_N02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at e601839e30.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_N02 = False
++comptime AFT_N02 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N02"]()
+ comptime AFT_N03 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N03"]()
+ comptime AFT_N04 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N04"]()
+ comptime AFT_N05 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N05"]()

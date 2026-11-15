@@ -2136,6 +2136,8 @@ Files: `extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_i
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `AFCL_T01`, `AFCL_T02`, `AFCL_T03`, `AFCL_T04`, `AFCL_T05`, `AFCL_T06`, `AFCL_T07`, `AFCL_T12`, `AFT_F09`, `AFT_N01`, `AFT_N02`, `AFT_N03`, `AFT_N04`, `AFT_N05`, `AFT_N06`, `AFT_N07`, `AFT_N08`, `AFT_N09`, `AFT_N10`, `AFT_N11`, `AFT_N12`, `CTR_INDEX_FUSED`, `CTR_ONEHOT_DEVICE`, `CTR_PREP_SHARED`, `CTR_SORT_ONCE`, `ET_EXP_NO_SEARCH_BARRIER`, `ET_EXP_RACY_RANGE_PUBLISH`, `ET_NO_SHARED_CLASS_COUNTS`, `ET_RELAXED_PUBLISH`, `ET_SEARCH_RPT_1`, `ET_SEARCH_RPT_128`, `ET_SEARCH_RPT_16`, `ET_SEARCH_RPT_2`, `ET_SEARCH_RPT_256`, `ET_SEARCH_RPT_32`, `ET_SEARCH_RPT_4`, `ET_SEARCH_RPT_64`, `ET_SEARCH_RPT_8`, `ET_SEQCST_PUBLISH`, `ET_SHARED_CLASS_COUNTS`, `ET_TIE_MAX_COLID`, `SYM_CTR_ALL_OFF`
 
+Lane result (expdel2-41-trees, 2026-11-15): 40 of the 42 owned deleted with records; 3 non-owner folds (TREES_T14_EXACT, TREES_T28_SORT, TREES_T28_PREFIX). KEPT: `ET_SHARED_CLASS_COUNTS` and `ET_NO_SHARED_CLASS_COUNTS` (the arms of extratrees/tools/check_shared_score.sh and the trees_shared_counts_mask witness) and `COLUMN_CPU`.
+
 ### expdel2-42-trees (44 defines, 13 code files)
 
 | define | decision | rule | sites | lines | evidence / why |

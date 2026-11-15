@@ -1,0 +1,35 @@
+diff --git a/gbdt/ctrs/fast_prep.mojo b/gbdt/ctrs/fast_prep.mojo
+index 9c28cf66bd..ac779571ba 100644
+--- a/gbdt/ctrs/fast_prep.mojo
++++ b/gbdt/ctrs/fast_prep.mojo
+@@ -6,7 +6,7 @@ Every entry point here is reached from `gbdt/train.mojo` only under a
+ `comptime if` on one of the four flags below, each of which is
+ `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()` and its
+ own `-D MOJOLEARN_...` define (or SYM_CTR_ALL, the FAST + Apple default since
+-2026-10-04; its rollback define was deleted 2026-11-15). IDENTICAL and
++2026-10-04; rollback `-D MOJOLEARN_SYM_CTR_ALL_OFF`). IDENTICAL and
+ every non-Apple build compile main's CTR prep unchanged by those historical
+ FAST switches. NEW T28/T28_SORT/T28_PREFIX independently opt IDENTICAL into the
+ shared preparation, stable-segment frequency and exclusive-prefix reuse paths below. They do
+@@ -114,8 +114,8 @@ comptime _SYM_CTR_FAST_APPLE = (
+ #: 0.631129 -> 0.630830 (noise), logloss 0.528503 -> 0.528440 (better). KEEP:
+ #: the umbrella is the FAST + Apple default since then (each flag below
+ #: still ANDs _SYM_CTR_FAST_APPLE, so IDENTICAL and non-Apple are
+-#: unchanged); the rollback define and the single-flag defines were deleted
+-#: 2026-11-15 (lane/expdel2-41-trees). Per-flag rab7 rows:
++#: unchanged); rollback -D MOJOLEARN_SYM_CTR_ALL_OFF, after which the single
++#: defines select flags one by one again. Per-flag rab7 rows:
+ #: CTR_INDEX_FUSED -6.4%, CTR_SORT_ONCE -4.7% (covered by this umbrella).
+ #: SUPERSEDED PART (merge 2026-10-05): CTR_INDEX_FUSED's train arm (the
+ #: `_build_cindex_fused` walk) was replaced by main's device CTR column build
+@@ -123,9 +123,7 @@ comptime _SYM_CTR_FAST_APPLE = (
+ #: the flag now only selects the device CTR output (`device_out`). The
+ #: -8.0% above was measured with the old arm: gbdt-categorical taxi needs a
+ #: re-measure of SYM_CTR_ALL on current main.
+-# TOMBSTONE: MOJOLEARN_SYM_CTR_ALL_OFF (DELETE-OLD-PATH, rule d: EXP:1274 FAST+Apple default; FAST is Apple only, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 2497c8a9cf.
+-# Restore: git apply experiments/removed/MOJOLEARN_SYM_CTR_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime SYM_CTR_ALL = True
++comptime SYM_CTR_ALL = not is_defined["MOJOLEARN_SYM_CTR_ALL_OFF"]()
+ 
+ #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+ #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two

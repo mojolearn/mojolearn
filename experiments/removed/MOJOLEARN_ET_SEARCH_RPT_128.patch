@@ -1,0 +1,15 @@
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index 5ce787d0e3..89c8bd0316 100644
+--- a/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -63,8 +63,8 @@ def _search_rows_per_thread() -> Int:
+     """
+     # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_256 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 6641db4b18.
+     # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_256.patch; record in docs/TOMBSTONES.md.
+-    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_128 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at f0fbe787cf.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_128.patch; record in docs/TOMBSTONES.md.
++    if is_defined["MOJOLEARN_ET_SEARCH_RPT_128"]():
++        return 128
+     if is_defined["MOJOLEARN_ET_SEARCH_RPT_64"]():
+         return 64
+     if is_defined["MOJOLEARN_ET_SEARCH_RPT_32"]():
