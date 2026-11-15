@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""2026-10-06 tree source experiments. A opts in; absence preserves B.
+"""Folded constants of the deleted 2026-10-06 tree source experiments.
 
-NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-No symbol in this module is evidence of runtime reach or qualification.
-The source integration ledger is experiments/trees_identical_20261006/forest/.
+Every switch here was deleted on 2026-11-15 (expdel2-39-trees); each name
+stays as its default constant so importers fold their dead arms.
 """
-from std.sys.compile import is_defined, get_defined_int
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # TOMBSTONE: MOJOLEARN_TREES_T01_ROWS (removed) deleted 2026-10-07 by e5ad4d891; code recoverable at e5ad4d891^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T01_REPLICAS.patch; record in docs/TOMBSTONES.md.
