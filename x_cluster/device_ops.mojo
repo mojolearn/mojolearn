@@ -2343,11 +2343,6 @@ struct DeviceOps(ClusterOps):
         ctx.enqueue_copy(dst_ptr=children.unsafe_ptr(), src_buf=ch)
         ctx.enqueue_copy(dst_ptr=dist.unsafe_ptr(), src_buf=dv)
         self._sync()
-        _ = packed^
-        _ = active^
-        _ = live_flag^
-        _ = live_scan^
-        _ = live_bsum^
         _ = live^
         _ = nn^
         _ = node^
