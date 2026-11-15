@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """predict_proba as float64 words (lane apple-fast-q-clf, 2026-10-04,
-QUALITY-FIX, FAST default; -D MOJOLEARN_PROBA64_QOLD restores the float32
-`row_softmax` probabilities).
+QUALITY-FIX, FAST default; IDENTICAL keeps the float32 `row_softmax`
+probabilities).
 
 WHY. A float32 probability cannot hold 1 - c for c below 2^-24: every row
 whose joint log likelihood gap passes about 16.6 nats comes back as exactly
@@ -34,14 +34,15 @@ complement-nb 3.767 -> 3.165, qda 3.609 -> 3.478, nearest-centroid 4.299 ->
 4.118), accuracy identical, time within +-5% (-0.2% to +5.3%). KEEP.
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, ld
 from x_prep.prims import add, sub, div, expf
 from checks.f64_words import widen_bits, one_minus_bits, put64
 
 #: The switch the binding's `x_prep_proba64` export reports (Python's probe).
-comptime PROBA64 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_PROBA64_QOLD"]()
+# TOMBSTONE: MOJOLEARN_PROBA64_QOLD (old path, EXP:1284 QUALITY-FIX KEPT FAST default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at e349f843b5.
+# Restore: git apply experiments/removed/MOJOLEARN_PROBA64_QOLD.patch; record in docs/TOMBSTONES.md.
+comptime PROBA64 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
 
 def q64_softmax_unit(t: Int, f: FP, q: IP):

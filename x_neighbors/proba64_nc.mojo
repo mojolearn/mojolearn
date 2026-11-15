@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """NearestCentroid.predict_proba as float64 words (lane apple-fast-q-clf,
-2026-10-04, QUALITY-FIX, FAST default; -D MOJOLEARN_PROBA64_QOLD keeps the
-float32 `softmax_item`). The x_prep/proba64.mojo fix for this binding: a
+2026-10-04, QUALITY-FIX, FAST default; the float32 `softmax_item` stays for
+IDENTICAL). The x_prep/proba64.mojo fix for this binding: a
 float32 probability is exactly 1.0 past a ~16.6-nat decision gap, so
 proba[:, 1] loses the winner's confidence. Audit (board-quality-audit-
 2026-10-04): nearest-centroid istella log loss FAST 4.299 vs scikit-learn
@@ -13,13 +13,14 @@ res holds 2 * n * c float32 words, (low, high) per value.
 OUTCOME (M3 afc_ab_def, 1 run per arm, 2026-10-04, tag rab5-proba64):
 nearest-centroid istella log loss 4.299 -> 4.118, accuracy identical, 143.96
 -> 142.92 ms. KEEP."""
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_exp, identical_div
 from checks.f64_words import widen_bits, one_minus_bits, put64
 from x_neighbors.items import FP
 
 #: The switch: the bindings register `xn_softmax64` only under it (Python's probe).
-comptime NC_PROBA64 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_PROBA64_QOLD"]()
+# TOMBSTONE: MOJOLEARN_PROBA64_QOLD (old path, EXP:1284 QUALITY-FIX KEPT FAST default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at e349f843b5.
+# Restore: git apply experiments/removed/MOJOLEARN_PROBA64_QOLD.patch; record in docs/TOMBSTONES.md.
+comptime NC_PROBA64 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
 
 def softmax64_item(t: Int, x: FP, res: FP, n: Int, c: Int):
