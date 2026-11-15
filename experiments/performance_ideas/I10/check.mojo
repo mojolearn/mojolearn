@@ -6,6 +6,7 @@ also be emitted directly by an update kernel while values are live.
 Opt-in OOP Adam now emits status while words are live and the full
 byte-LM step validates it before completion, preserving existing rollback."""
 from max.gpu import block_idx, thread_idx
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from training.checks.optimizer_check import clause_f
@@ -75,7 +76,13 @@ def check_live_reach(ctx: DeviceContext) raises:
             _ = byte_train_step_resident(ctx,tr,_ids(config,step))
         # TOMBSTONE: MOJOLEARN_TRAIN_LIVE_STATUS (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c38a3b0613.
         # Restore: git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch
-        if tr.live_status_steps!=0:
+        # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+        var expected = 0
+        # NEVER RUN — PENDING MEASUREMENT
+        comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
+            if arm==String("noshadow"):
+                expected = 2
+        if tr.live_status_steps!=expected:
             raise Error("I10 live-status candidate did not reach expected full steps")
     _set_arm(String(""),False)
 

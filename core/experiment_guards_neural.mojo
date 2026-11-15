@@ -354,8 +354,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_MEASURE_I06_GQA"](), "removed 2026-11-15 (lane/expdel2-07-base): MEASURE_I06_GQA (Neural (I06 forward GQA reuse timing arm of the attention driver)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at dbdaaf2c5e; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch
     comptime assert not is_defined["MOJOLEARN_MEASURE_I07_LIFETIME"](), "removed 2026-11-15 (lane/expdel2-07-base): MEASURE_I07_LIFETIME (Neural (I07 retained-estash lifetime timing arm of the attention driver)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 6ada715def; see docs/TOMBSTONES.md"
-    # Restore: git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch
-    comptime assert not is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"](), "removed 2026-11-15 (lane/expdel2-07-base): TRAIN_LIVE_STATUS (Neural (byte LM train step live-status candidate, I10)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at c38a3b0613; see docs/TOMBSTONES.md"
+    # MOJOLEARN_TRAIN_LIVE_STATUS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # MOJOLEARN_PROGRAM_RUN_ENTRY: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_SESSION_CALL_DESCRIPTOR: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)

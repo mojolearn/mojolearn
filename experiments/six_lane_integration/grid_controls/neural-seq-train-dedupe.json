@@ -130,9 +130,44 @@
         "off_board"
       ],
       "note": "bits_change not re-assessed by L11 (unchanged switch)"
+    },
+    "train_live_status": {
+      "define": "MOJOLEARN_TRAIN_LIVE_STATUS",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_TRAIN_LIVE_STATUS=1"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "training/byte_lm.mojo:2172"
+      ],
+      "binding": "_mojolearn_byte_lm",
+      "bits_change": false,
+      "status": "kept",
+      "entries": [
+        "NN61",
+        "NI29"
+      ],
+      "board": "lm-train-step",
+      "tags": [
+        "peripheral"
+      ],
+      "note": "NN61 and NI29 were the same define pair. MOJOLEARN_STEP_GLUE_TRIAL=1 is a runtime-arm trial build (env), not a grid dimension."
     }
   },
-  "algorithms": {},
+  "algorithms": {
+    "neural:lm-train-step": {
+      "binding": "_mojolearn_byte_lm",
+      "route": "fit step: training/byte_lm.mojo train step -> embedding (embedding/checks/embedding_identical) -> blocks -> identical_ce_forward_into/backward_into (training/checks/loss.mojo) -> optimizer (_byte_neural_group_update | identical_optimizer_step)",
+      "controls": [
+        "train_live_status"
+      ],
+      "interaction_groups": []
+    }
+  },
   "removed": [
     {
       "define": "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS",
@@ -304,11 +339,6 @@
     {
       "define": "MOJOLEARN_NN64_SESSION_PACK",
       "reason": "removed 2026-11-09 (lane m2-neural-leftovers): chose per-session vs packed forwards of the training binding's mlp_sessions entry, which is deleted; the inference sessions run packed as one forward of the small-MLP program (docs/TOMBSTONES.md M2_SMALL_MLP_PRIMITIVES); never measured, never promoted"
-    },
-    {
-      "define": "MOJOLEARN_TRAIN_LIVE_STATUS",
-      "control": "train_live_status",
-      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c38a3b0613; patch experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
     },
     {
       "define": "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF",

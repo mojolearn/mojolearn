@@ -2159,6 +2159,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_SMALL_MLP_GENERIC_OPS`](#mojolearn_small_mlp_generic_ops) | Neural (small MLP program capture) | 2026-11-15 (`c46456261f`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch](../experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch) |
 | [`MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR`](#mojolearn_transformer_decode_per_token_door) | Neural (TransformerDecodeSession door) | 2026-11-15 (`adde5aacdd`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch) |
 | [`MOJOLEARN_TRANSFORMER_GENERIC_PREFILL`](#mojolearn_transformer_generic_prefill) | Neural (attention step fresh prefill) | 2026-11-15 (`b4f0e643f7`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch) |
+| [`MOJOLEARN_TRAIN_LIVE_STATUS`](#mojolearn_train_live_status-unmeasured-arm-deleted-2026-11-15) | Neural (byte LM train step live-status candidate, I10) | 2026-11-15 (`c38a3b0613`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha (I10 L40S scoped win live/base 0.960 in training/byte_lm.mojo) | [MOJOLEARN_TRAIN_LIVE_STATUS.patch](../experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -9849,6 +9850,7 @@ The lane folded these defines (or their aliases) in its own files; each owner la
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c38a3b0613`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch`, then delete the `MOJOLEARN_TRAIN_LIVE_STATUS` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-seq-train-dedupe.json` control `train_live_status`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ## MOJOLEARN_IDN_TSQR_REUSE: unmeasured arm deleted (2026-11-15)
 
