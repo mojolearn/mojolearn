@@ -191,10 +191,9 @@ comptime ROWS_SORTED_MIN_COLS = 64
 # AMD and Apple keep the two-launch route.
 # TOMBSTONE: MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER.patch
-comptime FUSED_BOOTSTRAP_GATHER = (
-    not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
-    and TARGET_HAS_NVIDIA_GPU
-)
+# TOMBSTONE: MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF (unmeasured old path) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF.patch
+comptime FUSED_BOOTSTRAP_GATHER = TARGET_HAS_NVIDIA_GPU
 comptime FUSED_BOOTSTRAP_GATHER_SABOTAGE = is_defined[
     "MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_SABOTAGE"
 ]()
