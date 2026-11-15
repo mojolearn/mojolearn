@@ -260,6 +260,18 @@
   "classical-native-dispatch": {
    "define": "MOJOLEARN_CLASSICAL_NATIVE_DISPATCH",
    "status": "define in code (providers/python/classical_native_dispatch.mojo CLASSICAL_NATIVE_DISPATCH, read by bindings/svc_kernel_native_door.mojo _svc_provider, providers/python/x_neighbors_descriptor_pyapi_door.mojo xn_admit, providers/python/estimator_binding_pyapi_door.mojo estimator_checked_mode): B = SVC/SVR through the svm_binary_api_v1 descriptor table (no CPython entry call per pair/fold/epilogue, but no device-resident predict and no device-X fit), x_neighbors modules admitted natively, no SVM mode readback (the former MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1, never timed); A = by-name entries with the resident fitted state and device X (the former default \"0\", what every board row ran). Same numerical owners and words: digests must not move."
+  },
+  "ivf-scan-grouped-off": {
+   "define": "MOJOLEARN_IVF_SCAN_GROUPED_OFF",
+   "status": "define in code (ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo IVF_SCAN_GROUPED_ON): B = the per-query identical scan kernels (the former MOJOLEARN_IVF_SCAN_GROUPED=0); A = the scan grouped by list (identical_ivf_scan_grouped_kernel + identical_ivf_merge_kernel, the default since 0e5cf49a28). Same bits: digests must not move."
+  },
+  "xc-sqdist-tiled-off": {
+   "define": "MOJOLEARN_XC_SQDIST_TILED_OFF",
+   "status": "define in code (x_cluster/device_ops.mojo SQDIST_TILED): B = the per-cell `_sqdist_kernel` (the former MOJOLEARN_XC_SQDIST_TILED=0); A = the tiled `_sqdist_tiled_kernel` where its page fits (the default since bda43f7250). Every word is the same: digests must not move."
+  },
+  "nc-split-ops": {
+   "define": "MOJOLEARN_NC_SPLIT_OPS",
+   "status": "define in code (neighbors/neighbors_local_run.mojo NC_SPLIT_OPS): B = NearestCentroid fit as the three separate ops (the former MOJOLEARN_NC_SPLIT_OPS=1); A = the fused fit (the default since c0047c99be). Digests must not move."
   }
  },
  "rows": [
@@ -1756,6 +1768,84 @@
     "classical-native-dispatch"
    ],
    "decides": "keep the by-name/resident route (A) unless the descriptor arm (B) is at least as fast on fit and infer at equal quality; digests must not move; read each arm's classical_route (tools/classical_route.py: svc_dispatch 'by-name' on A, 'descriptor' on B) to prove which arm ran"
+  },
+  {
+   "id": "ivf-scan-grouped-off-ivf",
+   "source": "lane envgate-classical-deviceplan (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time getenv gate became a build constant with today's default; the other side was never A/B-timed",
+   "kind": "ab",
+   "lane": "ivf",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "ivf-scan-grouped-off"
+   ],
+   "decides": "keep the grouped scan (A) unless the per-query kernels (B) are at least as fast on search at equal recall; digests must not move"
+  },
+  {
+   "id": "ivf-scan-grouped-off-ivf-filter",
+   "source": "lane envgate-classical-deviceplan (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time getenv gate became a build constant with today's default; the other side was never A/B-timed",
+   "kind": "ab",
+   "lane": "ivf-filter",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "ivf-scan-grouped-off"
+   ],
+   "decides": "keep the grouped scan (A) unless the per-query kernels (B) are at least as fast on search at equal recall; digests must not move"
+  },
+  {
+   "id": "xc-sqdist-tiled-off-affinity-prop",
+   "source": "lane envgate-classical-deviceplan (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time getenv gate became a build constant with today's default; the other side was never A/B-timed",
+   "kind": "ab",
+   "lane": "affinity-prop",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xc-sqdist-tiled-off"
+   ],
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+  },
+  {
+   "id": "xc-sqdist-tiled-off-agglomerative",
+   "source": "lane envgate-classical-deviceplan (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time getenv gate became a build constant with today's default; the other side was never A/B-timed",
+   "kind": "ab",
+   "lane": "agglomerative",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xc-sqdist-tiled-off"
+   ],
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+  },
+  {
+   "id": "xc-sqdist-tiled-off-meanshift",
+   "source": "lane envgate-classical-deviceplan (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time getenv gate became a build constant with today's default; the other side was never A/B-timed",
+   "kind": "ab",
+   "lane": "meanshift",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xc-sqdist-tiled-off"
+   ],
+   "decides": "keep the tiled sqdist (A) unless the per-cell kernel (B) is at least as fast on fit at equal quality; digests must not move"
+  },
+  {
+   "id": "nc-split-ops-nearest-centroid",
+   "source": "lane envgate-classical-deviceplan (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time getenv gate became a build constant with today's default; the other side was never A/B-timed",
+   "kind": "ab",
+   "lane": "nearest-centroid",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "nc-split-ops"
+   ],
+   "decides": "keep the fused fit (A) unless the split ops (B) are at least as fast on fit at equal quality; digests must not move"
   }
  ]
 }
