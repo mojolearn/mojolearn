@@ -183,6 +183,23 @@ def disk_verdict(text, tag, commit12, min_free_gb=MIN_FREE_GB, headroom_gb=HEADR
     return free_kb / 1048576, need, sorted(prune, reverse=True)
 
 
+def check_built(wheel_dir, vendor):
+    """Refuse to stage VENDOR from a measurement build whose --targets did not build its sets (candidate.json
+    `targets` / `wheels_built`, tools/release_candidate.py). A dir without them (a release, or a candidate made
+    before --targets) built every set."""
+    try:
+        import json
+        doc = json.loads((Path(wheel_dir) / "candidate.json").read_text())
+    except (OSError, ValueError):
+        return
+    built = doc.get("wheels_built")
+    if built is not None and vendor not in built:
+        raise SystemExit(f"measure-candidate: {wheel_dir} is a measurement build of the targets "
+                         f"{','.join(doc.get('targets') or [])}, which packed no {vendor} wheel (it built "
+                         f"{','.join(built) or 'none'}); rebuild with tools/release.py candidate --targets naming "
+                         f"the {vendor} sets, or stage {' or '.join(built) or 'another build'}")
+
+
 def pick_wheels(wheel_dir, vendor, version):
     """[core wheel, vendor wheel] of VERSION in WHEEL_DIR (exactly one each; the meta wheel is left out)."""
     d = Path(wheel_dir)
@@ -265,6 +282,7 @@ def cmd_stage(a):
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise SystemExit("measure-candidate: --source-commit must be the full frozen sha")
     wdir = Path(a.wheel_dir) if a.wheel_dir else default_wheel_dir(version, commit)
+    check_built(wdir, vendor)
     wheels = pick_wheels(wdir, vendor, version)
     manifest = C.build_manifest(version, vendor, wheels, commit)     # refuses a wheel of another freeze
     print(f"candidate {version} {commit[:12]} {vendor}: " + ", ".join(
@@ -284,6 +302,7 @@ def cmd_stage(a):
     b_lines = []
     for name, bdir, bsha in specs:
         bver = dir_version(bdir, a.b_version or version)     # a B candidate has its own local version
+        check_built(bdir, vendor)
         bw = pick_wheels(bdir, vendor, bver)
         C.build_manifest(bver, vendor, bw, bsha)
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]

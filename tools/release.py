@@ -856,11 +856,11 @@ def default_build_backend(commit):
     return "github"
 
 
-#: The Linux build legs, one per release set (release_reuse.LINUX_SETS): native sm_89, the
-#: PTX slot sm_80 and gfx942. sm_90a out for 0.8.37 (gpu_plugins.py). Andrew 2026-10-10:
-#: PTX is a normal target; no flag. The PTX leg builds through the same route as any arch
-#: (release061_remote_build.sh gives cuda/sm_80 the ptx code format); it needs no GPU.
-RELEASE_LEG_SETS = tuple(release_reuse.LINUX_SETS)
+#: The Linux build legs are one per set of release_reuse.LINUX_SETS, read at call time: native sm_89, the
+#: PTX slot sm_80 and gfx942 for a release; a measurement build's --targets scopes it (scope_linux_sets).
+#: sm_90a out for 0.8.37 (gpu_plugins.py). Andrew 2026-10-10: PTX is a normal target; no flag. The PTX leg
+#: builds through the same route as any arch (release061_remote_build.sh gives cuda/sm_80 the ptx code
+#: format); it needs no GPU.
 
 
 def cpu_legs(ctx):
@@ -880,7 +880,7 @@ def cpu_legs(ctx):
     legs_dir = ctx.rel / "legs"
     legs = []
     pod = cpu_box_pod(ctx)
-    for vendor, arch in RELEASE_LEG_SETS:
+    for vendor, arch in release_reuse.LINUX_SETS:
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "cpu-box", name)
         legs.append(Leg(name, vendor, arch,
@@ -904,7 +904,7 @@ def github_legs(ctx):
     overlay, like cpu-box."""
     legs_dir = ctx.rel / "legs"
     legs = []
-    for vendor, arch in RELEASE_LEG_SETS:
+    for vendor, arch in release_reuse.LINUX_SETS:
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "github", name)
         defines = candidate_defines(ctx)
@@ -930,6 +930,14 @@ SELF_OVERLAID = ("cpu-box", "github")
 #: Routes whose linux-builds step rents a box: there linux-builds waits for the free cross-compile
 #: (Release.__init__); on `github` the two compile at once (STEP_TABLE, 2026-11-07).
 RENTED_BUILD_BACKENDS = ("cpu-box", "gpu-legs")
+
+
+def scoped_sets():
+    """["vendor/arch", ...] of a measurement build scoped by --targets (release_reuse.scope_linux_sets); None
+    when every set is built (a release, or a candidate of every target), so a release's plan.json is unchanged."""
+    if release_reuse.LINUX_SETS == release_reuse.ALL_LINUX_SETS:
+        return None
+    return [f"{v}/{a}" for v, a in release_reuse.LINUX_SETS]
 
 
 def candidate_defines(ctx):
@@ -1563,6 +1571,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def __init__(self, args, runner=None):
         self.args = args
         self.version = args.version
+        if release_reuse.LINUX_SETS != release_reuse.ALL_LINUX_SETS and not getattr(args, "candidate_version", ""):
+            # --targets (release_reuse.scope_linux_sets) is a measurement build's; a release builds every set
+            raise SystemExit("release: the Linux sets are scoped to "
+                             + ",".join(a for _, a in release_reuse.LINUX_SETS) + "; a release builds every set")
         self.release_modes = release_reuse.parse_modes(getattr(args, "release_modes", None)
                                                        or release_reuse.release_modes())
         ev = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
@@ -2713,7 +2725,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
     XCC_WORKFLOW = "cross-compile-check.yml"
     # sm_90a out for 0.8.37 (gpu_plugins.py); sm_80 is the PTX slot, compiled like any arch
     # (Andrew 2026-10-10: PTX is a normal target; no flag).
-    XCC_ARCHS = ",".join(arch for _, arch in RELEASE_LEG_SETS)
+    XCC_ARCHS = ",".join(arch for _, arch in release_reuse.ALL_LINUX_SETS)
 
     def gh(self, *args, log=None):
         """(exit code, stdout) of one `gh` call; stdout also to `log` when given."""
@@ -2835,7 +2847,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
             doc = read_json(self.plan_path)
             if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
                     and release_reuse.record_modes(doc) == self.release_modes
-                    and (doc.get("candidate_defines") or "") == candidate_defines(self)):
+                    and (doc.get("candidate_defines") or "") == candidate_defines(self)
+                    and doc.get("linux_sets") == scoped_sets()):
                 if self.readonly:
                     self._plan = doc
                     return doc
@@ -2851,6 +2864,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
                                                  builders_override=override or None, evidence_root=self.evidence,
                                                  modes=self.release_modes, defines=candidate_defines(self))
+            if scoped_sets():
+                self._plan["linux_sets"] = scoped_sets()   # a plan of other targets is not reused (above)
             return self._plan
 
     def step_reuse_plan(self):
@@ -2869,7 +2884,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         old = read_json(self.plan_path) or {}
         if (old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override")
                 or release_reuse.record_modes(old) != self.release_modes
-                or old.get("candidate_defines") != plan.get("candidate_defines")):
+                or old.get("candidate_defines") != plan.get("candidate_defines")
+                or old.get("linux_sets") != plan.get("linux_sets")):
             write_json(self.plan_path, plan)
         return (f"against {prev.get('version', 'no published release')}"
                 f"{' ' + (prev.get('channel') or 'pypi') if prev else ''}: {summary}; {self.plan_path}")
@@ -3774,8 +3790,16 @@ class Release(release_identity_wheels.IdentityOnWheels):
         found = sorted((self.rel / "linux" / "final").glob(f"{prefix}-*-manylinux*.whl"))
         return found[-1] if found else None
 
+    def split_packages(self):
+        """The split packages the Linux sets pack: every one for a release; for a measurement build scoped by
+        --targets (release_reuse.scope_linux_sets) the core, the vendor wheels of its sets, and the meta wheel only
+        when every vendor is in (pack_wheel.split_kinds packs exactly these from the sets it is given)."""
+        wheels = release_reuse.scoped_wheels()
+        meta = set(release_reuse.SET_WHEELS.values()) <= set(wheels)
+        return [k for k in SPLIT_PACKAGES if k == "linux" or k in wheels or (k == "linux-meta" and meta)]
+
     def split_finals(self):
-        return {k: self.split_final(k) for k in SPLIT_PACKAGES}
+        return {k: self.split_final(k) for k in self.split_packages()}
 
     def assembled_marker(self):
         return self.rel / "reuse" / "sets" / "assembled.json"
@@ -3976,7 +4000,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         final_dir = dist / "final"
         if not self.dry:
             final_dir.mkdir(parents=True, exist_ok=True)
-        for package, (project, prefix) in SPLIT_PACKAGES.items():
+        for package in self.split_packages():
+            project, prefix = SPLIT_PACKAGES[package]
             packed = sorted(dist.glob(f"{prefix}-*.whl")) if not self.dry else [dist / f"<packed {prefix}>.whl"]
             if len(packed) != 1:
                 raise StepFailed(f"expected one packed {project} wheel in {dist}, found {packed}")
@@ -3990,7 +4015,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                        final_dir / repaired[0].name, "--receipt", final_dir / f"dir-entry-strip-{package}.json"],
                       what=f"strip_wheel_dir_entries.py {project}")
         if self.dry:
-            return "would pack the core, the plugins and the Linux mojolearn, audit and strip each"
+            return ("would pack " + ", ".join(SPLIT_PACKAGES[k][0] for k in self.split_packages())
+                    + " from the sets " + ",".join(f"{v}/{a}" for v, a in release_reuse.LINUX_SETS)
+                    + ", audit and strip each")
         finals = self.split_finals()
         sys.path.insert(0, str(ROOT / "tools"))
         from wheel_api_audit import split_audit

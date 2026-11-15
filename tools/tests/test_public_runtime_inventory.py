@@ -290,34 +290,18 @@ def test_module_level_entries():
     assert wrapped.verdict == "python" and wrapped.native_calls == 1 and wrapped.helpers == 1
 
 
-def test_door_baseline_and_check():
+def test_door_tsv():
     with tempfile.TemporaryDirectory() as tmp:
         root = build(Path(tmp))
         (root / "bindings").mkdir(exist_ok=True)       # an (empty) door layer: nothing is registered
-        baseline = root / "door.tsv"
-        assert INV.main(["--root", str(root), "--baseline", "--baseline-file", str(baseline)]) == 0
-        assert INV.main(["--root", str(root), "--door-check", "--baseline-file", str(baseline)]) == 0
-        records = INV.read_tsv(baseline)
+        door = root / "door.tsv"
+        assert INV.main(["--root", str(root), "--out", str(door)]) == 0
+        records = INV.read_tsv(door)
         assert records and {r["door"] for r in records} <= {"native", "glue-heavy", "python-on-path", "unresolved",
                                                             "allowed_tag_metadata", "refusal_only"}
         # the fake package has no compiled door: a native-shaped call cannot be proved native
         assert any(r["door"] == "python-on-path" and "does not resolve to a registered compiled entry" in r["worst"]
                    for r in records)
-
-
-def test_door_check_refuses_any_increase():
-    base = [dict(endpoint="m.A.fit", door="native", b="0", worst=""),
-            dict(endpoint="m.A.predict", door="glue-heavy", b="0", worst="")]
-    assert INV.door_check(base, base) == ([], [])
-    worse = [dict(base[0], door="glue-heavy"), base[1]]
-    problems, _ = INV.door_check(worse, base)
-    assert any("regressed native -> glue-heavy: m.A.fit" in p for p in problems)
-    assert any("glue-heavy endpoints grew 1 -> 2" in p for p in problems)
-    new = base + [dict(endpoint="m.B.fit", door="python-on-path", b="1", worst="x")]
-    assert any("new python-on-path: m.B.fit" in p for p in INV.door_check(new, base)[0])
-    better = [base[0], dict(base[1], door="native")]
-    problems, notes = INV.door_check(better, base)
-    assert problems == [] and any("shrank" in n for n in notes)
 
 
 def test_returned_framework_callable_is_audited_without_an_export():

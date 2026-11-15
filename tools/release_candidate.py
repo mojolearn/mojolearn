@@ -6,8 +6,8 @@ candidate-build, 2026-11-09; docs/plans/PRE_0867_MEASUREMENT.md; AGENTS.md "Fix 
 it never touches main, tags or PyPI, and no release happens until everything is fixed and measured clean). The
 subcommand keeps the name `candidate`.
 
-    python3 tools/release.py candidate --commit <sha40> [--vendors nvidia,amd] [--defines "-D A=1 -D B=2"]
-        [--label NAME] [--base-version 0.8.67] [--ref <pushed tooling branch>] [--dry-run]
+    python3 tools/release.py candidate --commit <sha40> [--targets sm_89,sm_80] [--vendors nvidia,amd]
+        [--defines "-D A=1 -D B=2"] [--label NAME] [--base-version 0.8.67] [--ref <pushed tooling branch>] [--dry-run]
 
 Builds the Linux wheels of one exact commit with the release's own steps and nothing else: tools/release.py's
 reuse-plan, linux-builds (.github/workflows/release-linux-build.yml on GitHub's free runners for that commit,
@@ -35,7 +35,14 @@ the A set (tools/bincache.py scope_build_defines), so those are cache hits on th
 first. The label defaults to `d` + 8 hex of the defines, so each define set has its own version and work dir.
 
 --vendors names the vendor wheels validated and staged (tools/candidate_wheel_install.py build_manifest). The
-packer packs the core and both plugins from one set of legs, so the legs the plan needs always run.
+packer packs the core and the plugins of the targets from one set of legs, so the legs the plan needs always run.
+
+--targets (2026-11-15; AGENTS.md part 8: measure on the NVIDIA L40S only) scopes the build to some Linux sets
+(release_reuse.scope_linux_sets): `--targets sm_89,sm_80` plans, dispatches, assembles and packs only the NVIDIA
+sets (and the host bindings their legs build), packs the core and the mojolearn-nvidia wheel, and no AMD or meta
+wheel. sm_89 alone is refused: the NVIDIA wheel does not import without its PTX slot sm_80, even on an sm_89 GPU.
+Default: every set, as a release. candidate.json records the targets; tools/ops/measure_candidate.py stage refuses a
+vendor the build did not pack. A release has no --targets.
 
 At the end it asserts that origin/main and the tag lists (origin and local) are what they were at the start.
 """
@@ -177,7 +184,10 @@ def parse(argv):
     ap = argparse.ArgumentParser(prog="release.py candidate", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("--commit", required=True, help="the exact source commit (40 hex), pushed to origin")
-    ap.add_argument("--vendors", default="nvidia,amd", help="vendor wheels to validate and stage (default nvidia,amd)")
+    ap.add_argument("--targets", default="", help="Linux sets to build, a comma list of sm_89, sm_80, gfx942 (default "
+                    "all three; sm_89,sm_80 is the NVIDIA-only build: the nvidia wheel needs its PTX slot)")
+    ap.add_argument("--vendors", default="", help="vendor wheels to validate and stage (default: the wheels of the "
+                    "targets, nvidia,amd for every target)")
     ap.add_argument("--defines", default="", help="B set: '-D NAME=V -D NAME2' or NAME=V,NAME2 (MOJOLEARN_BUILD_DEFINES)")
     ap.add_argument("--label", default="", help="the version's label (lower case [a-z0-9.]; a '-' becomes '.', so an "
                     "owed arm's name is a label; default: none for an A set, d<8 hex of the defines> for a B set)")
@@ -208,9 +218,14 @@ def main(argv=None, release=None):
         raise SystemExit(f"candidate: {a.commit} is not a commit here; git fetch origin first")
     if not sh("git", "branch", "-r", "--contains", a.commit, check=False):
         raise SystemExit(f"candidate: {a.commit[:12]} is on no origin branch; the runners check out a pushed commit")
-    vendors = [v for v in a.vendors.split(",") if v]
+    targets = [s for _, s in release_reuse.scope_linux_sets(a.targets)]    # every set unless --targets
+    built = release_reuse.scoped_wheels()
+    vendors = [v for v in (a.vendors or ",".join(built)).split(",") if v]
     if not vendors or any(v not in VENDORS for v in vendors):
         raise SystemExit("candidate: --vendors is a comma list of nvidia, amd")
+    if [v for v in vendors if v not in built]:
+        raise SystemExit(f"candidate: --vendors {','.join(vendors)} names a wheel --targets {','.join(targets)} "
+                         f"does not build (it builds {','.join(built)})")
     defines = release_github_build.normalize_defines(a.defines)
     label, defines, owed_arm = resolve_owed(a.label, a.owed_arm, defines, a.owed_file)
     for entry in [e for e in defines.split(",") if e]:
@@ -247,9 +262,14 @@ def main(argv=None, release=None):
     state = release.read_json(state_path) or {}
     if state and (state.get("commit") != a.commit or (state.get("candidate") or {}).get("defines") != defines):
         raise SystemExit(f"candidate: {state_path} is another candidate's state; pick another --label")
+    # a state of every target predates --targets (no "targets" key) and is a candidate of all three sets
+    had = (state.get("candidate") or {}).get("targets") or [s for _, s in release_reuse.ALL_LINUX_SETS]
+    if state and had != targets:
+        raise SystemExit(f"candidate: {state_path} built the targets {','.join(had)}, not {','.join(targets)}; "
+                         "pick another --label")
     if not state:
         state = dict(version=version, commit=a.commit, steps={}, release_modes=["identical"],
-                     candidate=dict(version=version, commit=a.commit, defines=defines, label=label,
+                     candidate=dict(version=version, commit=a.commit, defines=defines, label=label, targets=targets,
                                     base_version=base, committed_version=committed[1] if committed else None,
                                     owed_arm=owed_arm, made=release.now()))
     # THE TOOLING SHA, recorded at the first launch: a resume dispatches from the same pushed ref while it still
@@ -275,6 +295,7 @@ def main(argv=None, release=None):
     if r.commit != a.commit:
         raise SystemExit(f"measurement build: the Release resolved {r.commit}, not {a.commit}")
     print(f"measurement build {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
+          + f"; targets {','.join(targets)}; wheels core,{','.join(built)}"
           + f"; work dir {work}; steps {', '.join(STEPS)} (every other release step is skipped)")
     rc = r.go()
 
@@ -305,7 +326,7 @@ def main(argv=None, release=None):
                 raise SystemExit(f"measurement build: {f['file']} does not record this build's version and defines")
     doc = dict(schema="mojolearn.release-candidate.v1", version=version, source_commit=a.commit, defines=defines,
                label=label, owed_arm=cand.get("owed_arm"), tooling_sha=tooling_sha, refs_moved=moved,
-               wheel_dir=str(final), vendors=vendors, steps=list(STEPS),
+               wheel_dir=str(final), vendors=vendors, targets=targets, wheels_built=built, steps=list(STEPS),
                wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
                manifests=manifests, refs_before=before, refs_after=after, made=release.now())
     release.write_json(final / "candidate.json", doc)

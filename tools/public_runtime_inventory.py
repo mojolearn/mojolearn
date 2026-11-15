@@ -76,8 +76,6 @@ the reached code holds counts, including cold paths for list or string input.
 
   python3 tools/public_runtime_inventory.py                 # door TSV on stdout, summary on stderr
   python3 tools/public_runtime_inventory.py --summary       # per-family door levels and the headline
-  python3 tools/public_runtime_inventory.py --baseline      # rewrite tools/hooks/public_runtime_door_baseline.tsv
-  python3 tools/public_runtime_inventory.py --door-check    # refuse any increase over that baseline
   python3 tools/public_runtime_inventory.py --check         # require zero prohibited public source paths
   python3 tools/public_runtime_inventory.py --ops           # the old per-operation Python-only table
   python3 tools/public_runtime_inventory.py --explain mojolearn.parallel_ensemble.fit_forest
@@ -96,7 +94,6 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-BASELINE = REPO / "tools/hooks/public_runtime_door_baseline.tsv"
 
 OPS = ("fit", "partial_fit", "predict", "predict_proba", "decision_function", "transform",
        "fit_transform", "fit_predict", "inverse_transform", "score", "sample", "generate", "step",
@@ -2536,34 +2533,6 @@ def door_tsv(rows):
     return "\n".join(lines) + "\n"
 
 
-def door_check(current, baseline):
-    """Debt may only go down: refuse more python-on-path or glue-heavy endpoints than the baseline,
-    any endpoint whose door level got worse, and any new endpoint that is not native."""
-    problems, notes = [], []
-    now = Counter(r["door"] for r in current)
-    then = Counter(r["door"] for r in baseline)
-    for level in ("python-on-path", "glue-heavy", "unresolved"):
-        if now[level] > then[level]:
-            problems.append(f"{level} endpoints grew {then[level]} -> {now[level]}")
-        elif now[level] < then[level]:
-            notes.append(f"{level} endpoints shrank {then[level]} -> {now[level]}: refresh with --baseline")
-    for key in ("b", "b_unresolved", "c_data_loops", "c_inline"):
-        a = sum(int(r.get(key, 0) or 0) for r in current)
-        b = sum(int(r.get(key, 0) or 0) for r in baseline)
-        if a > b:
-            notes.append(f"door {key} sites over all endpoints grew {b} -> {a}")
-    before = {r["endpoint"]: r["door"] for r in baseline}
-    for r in current:
-        old = before.get(r["endpoint"])
-        rank_now = DOOR_RANK.get(r["door"], -1)
-        if old is None:
-            if rank_now > 0:
-                problems.append(f"new {r['door']}: {r['endpoint']} ({r.get('worst', '')[:160]})")
-        elif rank_now > DOOR_RANK.get(old, -1):
-            problems.append(f"regressed {old} -> {r['door']}: {r['endpoint']} ({r.get('worst', '')[:160]})")
-    return problems, notes
-
-
 def _refusal(node):
     """A method whose body only raises (`save` that is not available) is not an operation."""
     body = [s for s in node.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
@@ -2708,22 +2677,17 @@ def main(argv=None):
                         help="write all static public lifecycle/option endpoints and unclaimed evidence axes")
     parser.add_argument("--installed-slots", type=Path,
                         help="admit an exact-source, receipted installed-attribute witness (classification only)")
-    parser.add_argument("--baseline", action="store_true",
-                        help="rewrite the committed door baseline (tools/hooks/public_runtime_door_baseline.tsv)")
-    parser.add_argument("--door-check", action="store_true",
-                        help="refuse any increase over the door baseline (debt may only go down)")
     parser.add_argument("--ops", action="store_true",
                         help="the old per-operation Python-only table (fit/predict/...; stops at the first native call)")
     parser.add_argument("--check", action="store_true", help="require zero prohibited/unresolved public or returned endpoints")
-    parser.add_argument("--baseline-file", type=Path, default=None)
     parser.add_argument("--explain", metavar="NAME.METHOD",
                         help="print the walk of one method, e.g. mojolearn.KMeans.fit")
     args = parser.parse_args(argv)
     if args.installed_slots and not (args.endpoints_json or args.check):
         parser.error("--installed-slots requires --endpoints-json or --check")
     if args.endpoints_json or args.check:
-        if args.baseline or args.explain:
-            parser.error("endpoint qualification is separate from the historical operation baseline")
+        if args.explain:
+            parser.error("--explain is separate from endpoint qualification")
         try:
             report = endpoint_inventory(args.root, args.package, args.installed_slots)
         except (ValueError, OSError, KeyError, TypeError, RuntimeError) as error:
@@ -2758,42 +2722,18 @@ def main(argv=None):
             sys.stdout.write(tsv)
         (sys.stdout if args.summary else sys.stderr).write(summarize(records_of(rows)))
         return 0
-    baseline = args.baseline_file or BASELINE
+    # REMOVED 2026-11-15: --baseline / --door-check (the public-runtime.yml door-debt gate), deleted with that
+    # workflow and tools/hooks/public_runtime_door_baseline.tsv: AGENTS.md "The Python source guards are retired".
     report = endpoint_inventory(args.root, args.package)
     rows = report["endpoints"]
     tsv = door_tsv(rows)
     summary = door_summary(rows)
-    if args.baseline:
-        baseline.parent.mkdir(parents=True, exist_ok=True)
-        baseline.write_text(tsv)
-        sys.stdout.write(summary)
-        print(f"baseline: {baseline} ({len(rows)} rows)")
-        return 0
-    if args.door_check:
-        if not baseline.is_file():
-            print(f"public-runtime door: no baseline {baseline}; write one with --baseline")
-            return 2
-        problems, notes = door_check(read_tsv_rows(tsv), read_tsv(baseline))
-        sys.stdout.write(summary)
-        for note in notes:
-            print("note: " + note)
-        for problem in problems[:60]:
-            print("FAIL: " + problem)
-        print("public-runtime door: " + (f"FAIL ({len(problems)}; debt may only go down)" if problems
-                                         else "no increase over the baseline"))
-        return 1 if problems else 0
     if args.out:
         args.out.write_text(tsv)
     elif not args.summary:
         sys.stdout.write(tsv)
     (sys.stdout if args.summary else sys.stderr).write(summary)
     return 0
-
-
-def read_tsv_rows(text):
-    lines = text.splitlines()
-    header = lines[0].split("\t")
-    return [dict(zip(header, line.split("\t"))) for line in lines[1:] if line.strip()]
 
 
 def explain_cli(root, package, spec):

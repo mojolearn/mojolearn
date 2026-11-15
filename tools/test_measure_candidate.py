@@ -39,6 +39,18 @@ class BArms(unittest.TestCase):
                 MC.check_b_arms(["em-check-1", "em-check-1"], self.owed(d))
 
 
+class Built(unittest.TestCase):
+    def test_stage_refuses_a_vendor_the_targets_did_not_build(self):
+        with tempfile.TemporaryDirectory() as d:
+            MC.check_built(d, "amd")    # no candidate.json: a release or an older candidate built every set
+            (Path(d) / "candidate.json").write_text(json.dumps(
+                {"version": "v", "targets": ["sm_89", "sm_80"], "wheels_built": ["nvidia"]}))
+            MC.check_built(d, "nvidia")
+            with self.assertRaises(SystemExit) as cm:
+                MC.check_built(d, "amd")
+            self.assertIn("packed no amd wheel", str(cm.exception))
+
+
 class Disk(unittest.TestCase):
     OUT = "\n".join([
         "FREE_KB %d" % (26 * GB),

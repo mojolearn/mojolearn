@@ -133,6 +133,49 @@ PTX_WITNESSES = {"proof": "build/build-provenance.json",
                  "stage": "build/sets/cuda/sm_80/manifest.json"}
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
+#: Every Linux set a release builds; LINUX_SETS is this unless a measurement build scoped it (scope_linux_sets).
+ALL_LINUX_SETS = LINUX_SETS
+#: The vendor wheel each vendor's sets pack into (python/mojolearn/gpu_plugins.py PLUGINS).
+SET_WHEELS = {"cuda": "nvidia", "hip": "amd"}
+
+
+def scope_linux_sets(targets):
+    """THE MEASUREMENT BUILD'S TARGETS (tools/release.py candidate --targets; AGENTS.md part 8: measure on the
+    NVIDIA L40S only). Rebinds LINUX_SETS for this process to the sets of TARGETS (a comma list of arches, in
+    ALL_LINUX_SETS order), so the plan, the legs, the assembly and the pack see only those sets and no wheel of
+    another vendor is packed. Empty TARGETS keeps every set. Returns the scoped tuple.
+
+    A vendor is built whole or not at all: the nvidia wheel refuses to import, on an sm_89 device too, without its
+    PTX slot (python/mojolearn/_backend.py "is missing its PTX set" / "PTX slot metadata"), so sm_89,sm_80 is the
+    smallest NVIDIA set. The host-owner leg (HOST_LEG) is always in: it builds the core's host bindings.
+    A release never calls this (Release refuses a scoped LINUX_SETS without a candidate version)."""
+    global LINUX_SETS
+    arches = [t.strip() for t in (targets or "").split(",") if t.strip()]
+    if not arches:
+        LINUX_SETS = ALL_LINUX_SETS
+        return LINUX_SETS
+    by_arch = {arch: (vendor, arch) for vendor, arch in ALL_LINUX_SETS}
+    unknown = [a for a in arches if a not in by_arch]
+    if unknown or len(set(arches)) != len(arches):
+        raise SystemExit(f"--targets is a comma list of {', '.join(by_arch)}, each once; not {targets!r}")
+    chosen = {by_arch[a] for a in arches}
+    for vendor in {v for v, _ in chosen}:
+        whole = {s for s in ALL_LINUX_SETS if s[0] == vendor}
+        if not whole <= chosen:
+            raise SystemExit(
+                f"--targets {targets}: the {SET_WHEELS[vendor]} wheel needs every {vendor} set "
+                f"({','.join(a for _, a in sorted(whole))}); it refuses to import without its PTX slot "
+                f"(python/mojolearn/_backend.py), so the smallest NVIDIA set is sm_89,sm_80")
+    if HOST_LEG not in chosen:
+        raise SystemExit(f"--targets {targets}: the host-owner set {HOST_LEG[1]} builds the core's host bindings "
+                         "and must be in")
+    LINUX_SETS = tuple(s for s in ALL_LINUX_SETS if s in chosen)
+    return LINUX_SETS
+
+
+def scoped_wheels():
+    """The vendor wheels ('nvidia', 'amd') the current LINUX_SETS pack."""
+    return [w for v, w in SET_WHEELS.items() if any(s[0] == v for s in LINUX_SETS)]
 LINUX_BUILDERS = ("packaging/native_library_sources.py", "packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
                   "tools/release061_remote_build.sh", "tools/linux_surface_qualification.sh",
                   "packaging/linux/binding_timeout.sh", "packaging/linux/ptx_contract.py",

@@ -104,6 +104,46 @@ class Steps(unittest.TestCase):
         self.assertTrue(all("--defines" not in l.command and "--ref" not in l.command for l in plain))
 
 
+class Targets(unittest.TestCase):
+    """--targets (release_reuse.scope_linux_sets): the NVIDIA-only measurement build plans, launches and packs only
+    the cuda sets; a vendor is whole (the nvidia wheel does not import without its PTX slot); a release refuses it."""
+
+    def tearDown(self):
+        release_reuse.scope_linux_sets("")
+
+    def test_nvidia_only(self):
+        self.assertEqual(release_reuse.scope_linux_sets("sm_80,sm_89"), (("cuda", "sm_89"), ("cuda", "sm_80")))
+        self.assertEqual(release_reuse.scoped_wheels(), ["nvidia"])
+        legs = release.github_legs(SimpleNamespace(rel=Path("/w/c"), commit=SHA, args=SimpleNamespace()))
+        self.assertEqual([l.name for l in legs], ["cuda-sm_89", "cuda-sm_80"])
+        self.assertEqual(release.scoped_sets(), ["cuda/sm_89", "cuda/sm_80"])
+        r = SimpleNamespace(split_packages=release.Release.split_packages)
+        self.assertEqual(release.Release.split_packages(r), ["linux", "nvidia"])
+        names = {(b.vendor, b.arch) for b in release_reuse.bindings(release_reuse.LINUX) if b.tier != "host"}
+        self.assertEqual(names, {("cuda", "sm_89"), ("cuda", "sm_80")})
+
+    def test_default_is_every_set(self):
+        self.assertEqual(release_reuse.scope_linux_sets(""), release_reuse.ALL_LINUX_SETS)
+        self.assertIsNone(release.scoped_sets())
+        r = SimpleNamespace()
+        self.assertEqual(release.Release.split_packages(r), list(release.SPLIT_PACKAGES))
+
+    def test_partial_vendor_and_no_host_owner_refused(self):
+        for bad in ("sm_89", "sm_80", "gfx942", "sm_89,gfx942", "sm_90a", "sm_89,sm_89,sm_80"):
+            with self.assertRaises(SystemExit, msg=bad):
+                release_reuse.scope_linux_sets(bad)
+            self.assertEqual(release_reuse.LINUX_SETS, release_reuse.ALL_LINUX_SETS)
+
+    def test_release_refuses_scoped_sets(self):
+        release_reuse.scope_linux_sets("sm_89,sm_80")
+        args = release.release_parser().parse_args(["0.8.67", "--state-dir", "/nonexistent-x"])
+        with self.assertRaises(SystemExit) as cm:
+            release.Release(args)
+        self.assertIn("a release builds every set", str(cm.exception))
+        with self.assertRaises(SystemExit):
+            release.release_parser().parse_args(["0.8.67", "--targets", "sm_89,sm_80"])
+
+
 class OursOnlyVenv(unittest.TestCase):
     def test_pins_come_from_the_lock(self):
         import bench_board
