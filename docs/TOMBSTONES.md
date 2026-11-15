@@ -774,6 +774,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_ET_SCALAR_STAGE_COMPARE`](#mojolearn_et_scalar_stage_compare-unmeasured-arm-deleted-2026-11-15) | Trees (ExtraTrees batched level builder staging copy) | removed (unmeasured opt-in arm; AGENTS.md 2026-11-15) | 2026-11-15 | [MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch](../experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch) |
 | [`MOJOLEARN_DT_BINS_QOLD`](#mojolearn_dt_bins_qold-old-path-deleted-2026-11-15) | Trees (DecisionTreeRegressor default n_bins, FAST) | removed (old path; FAST default 256 bins QUALITY-FIX KEPT, rab5-dtbins) | 2026-11-15 | [MOJOLEARN_DT_BINS_QOLD.patch](../experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch) |
 | [`MOJOLEARN_IDN_IF_RESIDENT_OFF`](#mojolearn_idn_if_resident_off-old-path-deleted-2026-11-15) | Trees (IsolationForest resident forest between binding calls) | removed (old path, no A/B recorded; resident default kept) | 2026-11-15 | [MOJOLEARN_IDN_IF_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL`](#mojolearn_mamba3_legacy_fresh_prefill-old-path-deleted-2026-11-15) | Neural (Mamba-3 fresh prefill entries, GPU binding) | removed (old path, no A/B recorded; fresh prefill default kept) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch) |
 
 ## Trees
 
@@ -6781,3 +6782,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e51e8748dd`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_IDN_IF_RESIDENT_OFF` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL: old path deleted (2026-11-15)
+
+- **What it was**: the opt-out that left `mamba3_forward_fresh`, the prefill-session weight install and the B-arm entries unregistered in `bindings/_mojolearn_mamba.mojo` and zeroed `mamba3_prefill_image_caps` in `mamba/native_block_dispatch.mojo`. This lane removed the binding's read; the read in `mamba/native_block_dispatch.mojo` belongs to another lane of the wave (its own inline tombstone and patch).
+- **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default registration is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7d80876e08`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch`, then delete the `MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
