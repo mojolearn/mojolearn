@@ -39,8 +39,7 @@ from std.memory import bitcast
 
 # TOMBSTONE: MOJOLEARN_NN42_INPUT_BIAS_FUSED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at c906dcaf57.
 # Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
-# Kept False for autograd/rules_recurrent.mojo (the input bias stays in GX).
-comptime NN42_INPUT_BIAS_FUSED = False
+# (Sweep 2026-11-15: NN42_INPUT_BIAS_FUSED = False removed; autograd/rules_recurrent.mojo keeps the bias in GX.)
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 
