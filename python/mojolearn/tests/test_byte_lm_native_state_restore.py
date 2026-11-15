@@ -137,8 +137,13 @@ def test_attention_report_reads_native_metadata_without_computation():
     n = len(report.get('forward_status', []))
     assert len(report.get('backward_status', [])) == n
     assert audit_native_call(model.attention_stage_report).assert_native() == report
-    assert sum(report['forward_status_counts'].values()) == n
-    assert sum(report['backward_status_counts'].values()) == n
+    # The per-layer status lists and their counts come together, only when the session reports
+    # layer statuses (bindings/byte_lm_trainer_native_door.mojo:1797; the CPU column's host session
+    # has no fused-attention statuses, so neither key is present there).
+    for key in ('forward_status', 'backward_status'):
+        assert (key in report) == (key + '_counts' in report), sorted(report)
+        if key in report:
+            assert sum(report[key + '_counts'].values()) == n
     _same(model.export_state(), before)
     model.close()
     assert model.attention_stage_report() is None
