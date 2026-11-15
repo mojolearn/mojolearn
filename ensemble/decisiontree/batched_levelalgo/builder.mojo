@@ -83,7 +83,7 @@ from ensemble.decisiontree.decisiontree import (
 )
 from ensemble.flatnode import SparseTreeNode
 
-# I18: real forest caller, restricted to exact unweighted integer counts.
+# I18 (history; the builder caller was removed by the 2026-11-15 sweep): real forest caller, restricted to exact unweighted integer counts.
 # PENDING qualification; default OFF. Explicit IDENTICAL opt-in only.
 # No feature resampling or weighted/fixed-point algebra is admitted. The
 # cache's byte cap is a resource bound; it never selects benchmark shapes.
@@ -210,8 +210,8 @@ comptime ALIGN_VALUE = 512
 # vendors (MI325X candidate/baseline 0.993/0.995/0.998; L40S <1.1%; generated
 # 100000x32, 100001x33, 65537x17; overnight-ab-20261006 amd/live/
 # repair-summary.json and nvidia/default-repair-normalized-measurements.json),
-# and a second define on the histogram task-row knob `MOJOLEARN_TREES_T02`
-# sweeps by cost (`histogram_task_rows`). docs/apple-fast/EXPERIMENTS.md row.
+# and the later histogram task-row knob `MOJOLEARN_TREES_T02` was deleted
+# 2026-11-15 (the task rows are HIST_WORKLOAD_GRANULARITY). docs/apple-fast/EXPERIMENTS.md row.
 # TOMBSTONE: MOJOLEARN_AFT_F02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F02.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_2011_HIST_ITEMS1 (old one-item mapping; four items measured faster 2026-09-10) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
