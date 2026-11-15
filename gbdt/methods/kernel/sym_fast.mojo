@@ -27,16 +27,8 @@ comptime SYM_FAST_APPLE = (
 # lane/expdel-05-trees; code recoverable at 1805cb6b73.
 # Restore: git apply experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch
 
-#: `pw_resolve_pack_bins_kernel` folds the per-block score records ONCE
-#: per threadgroup (threads stride the records, then a shared-memory tree
-#: reduce under the same three-key order) instead of once per thread
-#: (`pointwise_split_resolve.mojo`).
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
-#: arms never reached the queue).
-comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_RESOLVE_BLOCK"]()
-)
+# TOMBSTONE: MOJOLEARN_SYM_RESOLVE_BLOCK (DELETE-EXPERIMENT, EXP:1303 NEUTRAL alone, never built or timed as its own arm, rule g) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e301d611ef.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch; record in docs/TOMBSTONES.md.
 
 #: TOMBSTONE: MOJOLEARN_SYM_GATHER_FUSED (DROPPED-noise: symhist-gather istella/taxi noise, old base) deleted 2026-10-09 on
 #: lane/owed-deletions-D1 (sizes + both gathers in one launch); code recoverable at b639a2bd2.
