@@ -30,7 +30,6 @@ phase of every estimator that sorts.
 """
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -78,7 +77,7 @@ comptime RADIX_MIN_ROWS = 8192
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): ordinal NV/AMD 0.744/0.782, onehot
 #: 0.816/0.808, kbins taxi 0.712 (istella 1.127, NV 1.308 vs AMD 0.946); mean over 14 prep cells 0.945
 #: (AMD 0.59-0.69 on ordinal/onehot); same bits; runs v0125/a1707 vs A v0124/a1706. -D
-#: MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF restores the old path.
+#: the _OFF rollback was deleted 2026-11-15.
 # TOMBSTONE: MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF (old path; the range passes are the IDENTICAL default, EXP:2060) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 26ab6baddf.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch
 comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

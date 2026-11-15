@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Exact Apple FAST label preprocessing default; LABEL_DIRECT_OFF restores baseline.
+"""Exact Apple FAST label preprocessing default.
 
 LABEL_PRESENT exposes existing parallel GPU presence stages to label fitting.
 LABEL_SCATTER clears the dense indicator with a device memset and scatters
@@ -9,7 +9,6 @@ Lane idn-int-prep (2026-10-04): IDENTICAL takes the same bundle on every vendor
 and in the host column (IDN_LABEL below); FAST off Apple is unchanged.
 """
 from max.gpu import block_idx, block_dim, thread_idx
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, sti
@@ -21,7 +20,6 @@ comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_
 # gap26-label-quality: both arms PASS, 41,697,776 checked indicator cells,
 # plus fitted classes, encoder codes and LabelBinarizer inverse values.
 # Reviewed against main61ea51757: relevant source drift is comments only.
-# MOJOLEARN_LABEL_DIRECT_OFF restores both old paths for rollback / A/B.
 # TOMBSTONE: MOJOLEARN_LABEL_DIRECT_OFF (old path; the direct label paths are the FAST+Apple default, EXP:762) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 2ec4e389be.
 # Restore: git apply experiments/removed/MOJOLEARN_LABEL_DIRECT_OFF.patch
 comptime LABEL_DIRECT = _FAST_APPLE
@@ -29,7 +27,7 @@ comptime LABEL_DIRECT = _FAST_APPLE
 #: IDENTICAL on every vendor and in the host column (ON by default). The
 #: presence flags, the ascending flag scan and the scattered indicator are
 #: integer words, so the classes, codes and indicator are the sort route's
-#: words. -D MOJOLEARN_IDN_LABEL_OFF restores the device sort + per-cell lookup.
+#: words.
 # TOMBSTONE: MOJOLEARN_IDN_LABEL_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 886a739db7.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LABEL_OFF.patch
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.

@@ -31,15 +31,12 @@ BITS: a new order for every fold longer than one position (te_global /
 te_enc at more than 1 row of a category or fold; ii_gram at n > IIG_ROWS).
 All four columns run it together.
 
-SWITCHES (IDENTICAL only, ON by default; the rollbacks below were deleted 2026-11-15):
-  -D MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF  te_global's old serial unit
-  -D MOJOLEARN_IDN_TE_ENC_TREE_OFF     te_enc's old serial unit / host pass
-  -D MOJOLEARN_IDN_II_GRAM_TILE_OFF    ii_gram's old serial unit
-  -D MOJOLEARN_IDN_II_CONV_TREE_OFF    ii_conv's one-thread unit on the device
-                                       (no bits: a max is order-free)
+IDENTICAL only, always on (the _OFF rollbacks to the serial units were
+deleted 2026-11-15); ii_conv's tree changes no bits (a max is order-free).
 
-THE BLOCKED ORDER (`BLT`, lane classical-te-gmm 2026-10-07, IDENTICAL,
-default OFF, A/B define -D MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD): the
+THE BLOCKED ORDER (`BLT`, lane classical-te-gmm 2026-10-07, IDENTICAL; the
+unmeasured A/B arm and its device kernels were deleted 2026-11-15, the host
+spelling below stays in x_prep/target.mojo): the
 positions r are cut into TEB-wide blocks m = r // TEB. Block m's partial
 is the lane tree LT over its positions, lane r mod TREE_W (TEB is a
 multiple of TREE_W, so the lane is the position's, not the block's); the
@@ -73,7 +70,6 @@ vendors and the host column change together: x_prep/target.mojo
 kernels in x_prep/idn_blocked.mojo). It REPLACES the lane-tree order
 above for te_global and te_enc (the two TREE_OFF defines are moot with it).
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.prims import add
 

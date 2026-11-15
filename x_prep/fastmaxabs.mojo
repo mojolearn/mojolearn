@@ -27,9 +27,6 @@ from x_prep.prims import zero_to_one
 from x_prep.device import x_prep_ctx
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from core.device_pool import pool_give, pool_take
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # TOMBSTONE: MOJOLEARN_AFCL_P02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at d837f02ccf.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P02.patch

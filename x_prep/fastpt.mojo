@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Lane af-ptimpute (2026-10-03): PowerTransformer's evaluation and the
 `col_stats` stage as ROW-TILED grids. FAST + Apple only, each switch behind its
-own define (default off except SI_ONEPASS, a FAST + Apple default with
-_OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
+own switch (SI_ONEPASS is the FAST + Apple default since lane/apple-fast-batchv;
+its defines were deleted 2026-11-15; docs/apple-fast/ab/ptimpute.md):
 
   (-D MOJOLEARN_PT_FOLD_NOX, pt_fold_fast_kernel reading X only at K = 0,
    was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
@@ -15,7 +15,7 @@ _OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
    deleted 2026-10-09: DROP; see the TOMBSTONE at the guards below.)
   (-D MOJOLEARN_PT_FUSED_TRANSFORM, the standardize tail fused into
    `cs_tile_kernel`, was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
-  -D MOJOLEARN_SI_ONEPASS         every col_stats stage as `cs_tile_kernel` +
+  SI_ONEPASS                      every col_stats stage as `cs_tile_kernel` +
                                   `cs_tile_finish_kernel`: one coalesced pass
                                   instead of two strided ones.
   (-D MOJOLEARN_PTIMPUTE_ALL, all of the above, was deleted 2026-10-09:
@@ -35,7 +35,6 @@ call to this file (x_prep/device.mojo gates every launch).
 """
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
@@ -86,7 +85,6 @@ comptime PT_COLBATCH = _FAST_APPLE and PT_SCORE
 #: SI_ONEPASS: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs main:
 #: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
 #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
-#: -D MOJOLEARN_SI_ONEPASS_OFF: main's two-pass col_stats.
 # TOMBSTONE: MOJOLEARN_SI_ONEPASS (force-on knob; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 11e4797706.
 # Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch
 # TOMBSTONE: MOJOLEARN_SI_ONEPASS_OFF (old path; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8193833d2e.

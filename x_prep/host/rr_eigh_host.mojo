@@ -32,10 +32,8 @@ or when the matrix is smaller than IDN_RR_MIN_N (a shape-only rule, the same
 on every column): below it the fixed launch budget of the round-robin costs
 more than the one-thread solve.
 
--D MOJOLEARN_IDN_RR_EIGH_OFF restores `eigh_unit` everywhere.
 No accelerator import: the CPU-only host binding compiles this file.
 """
-from std.sys.compile import is_defined
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import spectrum_rank_desc
@@ -51,13 +49,8 @@ from x_prep.eigh import eigh_unit
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
 comptime IDN_RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the smallest matrix the round-robin takes under IDN_RR_EIGH (shape only).
-#: Lane fam2-prep-metrics: CANDIDATE ARMS for the threshold, each default OFF
-#: (the default stays 24): -D MOJOLEARN_IDN_RR_MIN_8, _16, _48 or _96 builds
-#: the device and the host column with that threshold (the first defined of
-#: 8, 16, 48, 96 wins), so they can be timed against each other on LDA / QDA.
 #: Below the threshold the cyclic one-thread unit runs; both are Jacobi to the
-#: same tolerance, so an arm moves eigenvalues within float32 round-off only
-#: for the sizes whose route it changes, on all four columns together.
+#: same tolerance (the unmeasured threshold arms were deleted 2026-11-15).
 # TOMBSTONE: MOJOLEARN_IDN_RR_MIN_8 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at e71d35eb21.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_8.patch
 # TOMBSTONE: MOJOLEARN_IDN_RR_MIN_16 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 52d1c6b87e.

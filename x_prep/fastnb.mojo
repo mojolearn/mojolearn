@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CategoricalNB's count table in ONE launch over (row, feature) (lane
-apple-fast-nb, 2026-10-02). FAST + Apple ONLY, behind -D MOJOLEARN_NB_CAT_ATOMIC:
-the IDENTICAL binding, the other vendors and a FAST build without the define
-compile x_prep/device.mojo's unit path unchanged (`cat_hpart_unit` and
+apple-fast-nb, 2026-10-02). The IDENTICAL default on every vendor (the FAST +
+Apple opt-in arm was deleted 2026-11-15); FAST builds compile
+x_prep/device.mojo's unit path unchanged (`cat_hpart_unit` and
 `cat_hfold_unit`, x_prep/blocked.mojo).
 
 `cat_hpart_unit` is one thread per (2048-row block, feature) folding its
@@ -20,9 +20,7 @@ the dispatcher only intercepts W < 0.
 """
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, st
 
 # TOMBSTONE: MOJOLEARN_AFCL_P03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5f02f5b9e3.
@@ -31,8 +29,7 @@ from x_prep.common import FP, IP, p, ld, st
 #: lane idn-int-prep (2026-10-04): IDENTICAL on every vendor, ON by default.
 #: The table is an integer count: the atomic adds give the units' words at any
 #: row count (`cat_hfold_unit` also sums integers and converts once), and the
-#: host column keeps the units. -D MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF restores
-#: the unit path on the device.
+#: host column keeps the units.
 # TOMBSTONE: MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 7cf272e256.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.

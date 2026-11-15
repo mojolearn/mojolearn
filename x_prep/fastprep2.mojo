@@ -48,7 +48,6 @@ from std.atomic import Atomic
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
