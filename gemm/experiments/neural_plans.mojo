@@ -31,7 +31,9 @@ from gemm.experiments.neural_switches import (
 # Arms of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE: 1 geometry, 10 cost (8 async deleted, lane/grid-prune).
 comptime NN01 = NEURAL_EXPERIMENTS_ALLOWED and NEURAL_GEMM_SCHEDULE == SCHED_GEOMETRY
 comptime NN10 = NEURAL_EXPERIMENTS_ALLOWED and NEURAL_GEMM_SCHEDULE == SCHED_COST
-comptime NN12 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN12"]()
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN12 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at a9cf951197.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN12.patch; record in docs/TOMBSTONES.md.
+comptime NN12 = False
 
 
 def neural_schedule_ab[CANDIDATE: Bool = False](
