@@ -1,0 +1,28 @@
+diff --git a/cluster/impl/detail/kmeans.mojo b/cluster/impl/detail/kmeans.mojo
+index 8b0ba26980..6e4d078cda 100644
+--- a/cluster/impl/detail/kmeans.mojo
++++ b/cluster/impl/detail/kmeans.mojo
+@@ -863,7 +863,8 @@ def _assign_to_candidates(
+ #: 2026-09-27): each (point, candidate) distance comes from the same
+ #: `_assign_to_candidates` (its bits do not depend on which candidates share
+ #: the launch), and the fold's strict `<` returns the full argmin's
+-#: (value, lowest index).
++#: (value, lowest index). `-D MOJOLEARN_KMEANS_ID_INCR_INIT_OFF` reassigns in
++#: full there.
+ #: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
+ #: it too. Same argument as Apple IDENTICAL above (per-pair distance bits do
+ #: not depend on the launch's candidate set; strict `<` keeps the lowest
+@@ -884,9 +885,10 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
+         # TOMBSTONE: MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3f8a07d350.
+         # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+-        # TOMBSTONE: MOJOLEARN_KMEANS_ID_INCR_INIT_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at c954d92f8b.
+-        # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ID_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++        or (
++            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++            and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
++        )
+     )
+ )
+ 
