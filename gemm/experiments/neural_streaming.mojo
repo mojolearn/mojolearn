@@ -30,7 +30,9 @@ from gemm.experiments.neural_profile import (
 # 2 stream, 4 stream + exact slots, 11 exact slots alone.
 comptime NN02 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_SCHEDULE == SCHED_STREAM or NEURAL_GEMM_SCHEDULE == SCHED_STREAM_EXACT)
 comptime NN11 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_SCHEDULE == SCHED_STREAM_EXACT or NEURAL_GEMM_SCHEDULE == SCHED_FOLD_EXACT)
-comptime NN16 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN16"]()
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN16 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 1362c86435.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch; record in docs/TOMBSTONES.md.
+comptime NN16 = False
 
 
 def neural_fold_levels(leaves: Int) -> Int:
