@@ -104,13 +104,11 @@ comptime HOST_BWD_TWO: Float32 = 2.0
 comptime HOST_RMS_PARALLEL_CELLS = 32768
 """Keep small normalization calls serial; split meaningful tensors by rows."""
 
-comptime HOST_RMS_FORCE_SERIAL = is_defined["MOJOLEARN_HOST_RMS_FORCE_SERIAL"]()
-"""Benchmark control for the previous serial row schedule."""
+# TOMBSTONE: MOJOLEARN_HOST_RMS_FORCE_SERIAL (opt-in serial row schedule, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at a7c1f95c40.
+# Restore: git apply experiments/removed/MOJOLEARN_HOST_RMS_FORCE_SERIAL.patch
 
 
 def _host_rms_tasks(m: Int, dm: Int) -> Int:
-    comptime if HOST_RMS_FORCE_SERIAL:
-        return 1
     if m * dm < HOST_RMS_PARALLEL_CELLS:
         return 1
     return max(1, min(m, num_physical_cores()))
