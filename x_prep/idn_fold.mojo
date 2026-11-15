@@ -88,12 +88,3 @@ def iig_chunks(n: Int) -> Int:
     """ii_gram's chunks of IIG_ROWS rows (at least one)."""
     return max(1, (n + IIG_ROWS - 1) // IIG_ROWS)
 
-
-@always_inline
-def blt_close(mut a: LTLanes, mut b: LTLanes, m: Int):
-    """`BLT`: block m's lanes `a` close into lane m mod TREE_W of the outer
-    lanes `b` (the block's tree, then one `add`); `a` is zero afterwards.
-    The serial spelling the units and the host column share; the device
-    kernels (x_prep/idn_blocked.mojo) spell the same two trees."""
-    b[m % TREE_W] = add(b[m % TREE_W], lt_tree(a))
-    lt_zero(a)

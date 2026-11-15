@@ -12,7 +12,6 @@ continuous target, one per class (one-vs-rest) for a multiclass one.
 Where the reference's lambda is NaN (an empty category, or zero variance and
 zero spread) it returns the target mean; so does this, by test, not by NaN.
 """
-from std.memory import bitcast
 from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, RUN, run_block
 from checks.numerics import ftz
 from x_prep.prims import add, acc_add, sub, mul, div
@@ -23,7 +22,6 @@ from x_prep.idn_fold import (
     LTLanes,
     lt_zero,
     lt_tree,
-    blt_close,
 )
 
 
