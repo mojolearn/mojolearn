@@ -331,15 +331,14 @@ comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
 #: buffer, so the boosting loop no longer drains once per tree to read two
 #: floats back. Same bits: the kernel is the host `choose_scale` as an exact
 #: integer search (its docstring), reading the same two magnitudes.
-#: `-D MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-tree drain and host scale.
+#: FAST keeps the per-tree drain and host scale.
 comptime IDN_NS_SCALE_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 608bbc1936.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+
 
 comptime DW2_SCAN_SMEM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
