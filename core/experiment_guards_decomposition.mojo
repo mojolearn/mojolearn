@@ -227,8 +227,7 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_IDN_TSQR_WY_PAIR_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_LU_FAST_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): LU_FAST_RESIDENT_OFF (old path) is gone; the default is kept; code at 82c5c6ef43; restore: experiments/removed/MOJOLEARN_LU_FAST_RESIDENT_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch
-    comptime assert not is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): RSVD_FAST_DEVSCAN_OFF (old path) is gone; the default is kept; code at c18df7df06; restore: experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch"
+    # MOJOLEARN_RSVD_FAST_DEVSCAN_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): XD_FAST_CLS2_GRP_DEVSCAN_OFF (old path) is gone; the default is kept; code at 772bf55066; restore: experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch

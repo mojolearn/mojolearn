@@ -5,13 +5,14 @@ the kit's device routes. Python reads which are compiled through
 `x_decomp_s_flags()`. All three are the FAST + Apple default since
 verdicts batch 6 (2026-10-05), each with an _OFF rollback:
 
-  bit 1  RSVD_FAST_DEVSCAN   (deleted 2026-11-08, restored 2026-11-09; its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
+  bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`; deleted 2026-11-08, restored 2026-11-09)
   bit 2  DECOMP_FAST_ORTH_WS (its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
   bit 4  LU_FAST_RESIDENT    (its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
   bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11; its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
 
 IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries.
 """
+from std.sys.compile import is_defined
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -53,10 +54,11 @@ from x_decomp.resident import pool_buffer, _ptr
 #: RSVD_FAST_DEVSCAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab15-rsvdbundle, with DECOMP_FAST_ORTH_WS): randomized-svd
 #: istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14.
-#: KEEP: the FAST + Apple default.
+#: KEEP: the FAST + Apple default; rollback -D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.
 # TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN_OFF (old path beside the FAST + Apple default, EXP:2377 KEPT) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at c18df7df06.
 # Restore: git apply experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
-comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and not is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"]()
 
 #: What: `Kit.orth` on a device matrix (`x_decomp_dev_orth`, resident.mojo
 #: `dev_orth_py` -> device.mojo `orth_on_device_diag`) copies A into the
