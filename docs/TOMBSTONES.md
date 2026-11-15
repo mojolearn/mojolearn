@@ -635,6 +635,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_SORT_SWAP`](#mojolearn_sym_sort_swap) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_SORT_SWAP.patch](../experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch) |
 | [`MOJOLEARN_SYM_ITER_ALL`](#mojolearn_sym_iter_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_ITER_ALL.patch](../experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch) |
 | [`MOJOLEARN_SYM_BUF_ARENA`](#mojolearn_sym_buf_arena) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_BUF_ARENA.patch](../experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch) |
+| [`MOJOLEARN_SYM_MULTI_ALL`](#mojolearn_sym_multi_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_MULTI_ALL.patch](../experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5989,3 +5990,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `gbdt/methods/sym_iter_fast.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`, `gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 187, 211, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_MULTI_ALL
+
+- Tried: one umbrella define for the FAST + Apple multiclass / pairlogit / yetirank switches, narrowed to PL_GROUP_NARROW + YR_TASK_FUSED; PL_GROUP_NARROW then became the default on its own and the umbrella no longer selected it, so it selected YR_TASK_FUSED only.
+- Verdict: NEUTRAL. rab4-symmulti (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-rank-yetirank istella 3390.8 -> 3395.46 ms (+0.1%); stays off. Apple FAST only. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `16f9e02852`. Patch: `experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/targets/kernel/yeti_rank.mojo`, `gbdt/targets/kernel/pair_logit_group.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 198, 222, 1302; appended row in the "Lane expdel-05-trees" section.

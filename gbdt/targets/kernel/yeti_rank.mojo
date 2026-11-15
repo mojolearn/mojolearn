@@ -227,8 +227,8 @@ comptime YETI_EST_REUSE_SEARCH = yeti_est_reuse_search_for[TARGET_COLUMN]()
 
 
 def yeti_task_fused_for[column: Int]() -> Bool:
-    """Lane af-sym-multi (2026-10-03), `-D MOJOLEARN_YR_TASK_FUSED` (or
-    `-D MOJOLEARN_SYM_MULTI_ALL`), FAST + Apple, on top of the block kernel:
+    """Lane af-sym-multi (2026-10-03), `-D MOJOLEARN_YR_TASK_FUSED`, FAST +
+    Apple, on top of the block kernel:
     ONE launch per YetiRank call. `launch_yeti_rank_with` runs five:
     `compute_group_ids` (the same row -> query map every call), the gather
     (estimation), `compute_group_means`, the centering, the task kernel and
@@ -245,10 +245,10 @@ def yeti_task_fused_for[column: Int]() -> Bool:
     repeatable); the pair arithmetic is the block kernel's. A fit with more
     tasks than 256-row blocks (never on the board data) keeps the five
     launches."""
-    comptime if (
-        is_defined["MOJOLEARN_YR_TASK_FUSED"]()
-        or is_defined["MOJOLEARN_SYM_MULTI_ALL"]()
-    ):
+    # TOMBSTONE: MOJOLEARN_SYM_MULTI_ALL (NEUTRAL: rab4-symmulti yetirank 3390.8 -> 3395.46 ms, +0.1%) umbrella of
+    # YR_TASK_FUSED deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 16f9e02852.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch
+    comptime if is_defined["MOJOLEARN_YR_TASK_FUSED"]():
         comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
             return True
     return False
@@ -256,7 +256,7 @@ def yeti_task_fused_for[column: Int]() -> Bool:
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
-#: unchecked), never timed. `-D MOJOLEARN_YR_TASK_FUSED` (or SYM_MULTI_ALL).
+#: unchecked), never timed. `-D MOJOLEARN_YR_TASK_FUSED`.
 #: Port: the fused kernel now sorts with main's YETI_FAST_SORT arm (the
 #: block kernel's sort, both arms).
 comptime YETI_TASK_FUSED = yeti_task_fused_for[TARGET_COLUMN]()
