@@ -37,11 +37,11 @@ comptime DART_PIN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: The IDENTICAL route's gate, default ON on every column (device kernels in
 #: xtrees/dart_device.mojo, host twin in xtrees/dart_host.mojo).
-#: `-D MOJOLEARN_IDN_DART_DEVICE_OFF` restores
-#: main's `_boost_loop` everywhere (the entries are then not registered).
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
-comptime IDN_DART_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_DART_DEVICE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_DART_DEVICE_OFF (old path; IDN_DART_DEVICE default kept, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 4a48287b38.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DART_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DART_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: rows per leaf-sum chunk: one unit per (node, chunk) scans the chunk's
 #: leaf indices in row order.

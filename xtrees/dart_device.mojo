@@ -4,7 +4,7 @@
 
 FAST on every GPU vendor (Apple first, NVIDIA and AMD since lane cpu2-l5-trees)
 and, since fam2-forests, IDENTICAL on every
-vendor (`IDN_DART_DEVICE`, off: `-D MOJOLEARN_IDN_DART_DEVICE_OFF`); nothing here is
+vendor (`IDN_DART_DEVICE`); nothing here is
 instantiated otherwise (`DART_DEVICE` guards every entry body and the
 binding's registration), so IDENTICAL compiles main's code unchanged.
 
@@ -71,8 +71,8 @@ from std.memory import bitcast
 # row-order chains), on all four columns together.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
-# `-D MOJOLEARN_IDN_DART_DEVICE_OFF` restores
-# main's loop on every column.
+# TOMBSTONE: MOJOLEARN_IDN_DART_DEVICE_OFF (old path; IDN_DART_DEVICE default kept, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 4a48287b38.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DART_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 # The gate itself is `xtrees/dart_units.mojo: IDN_DART_DEVICE` (shared with the host twin).
 
 # FAST default since the M3 A/B (lane/apple-fast-dart 443f4b3cc,
@@ -449,7 +449,7 @@ def dart_open(
         ))
         return id
     else:
-        raise Error("x_trees dart_open: built without DART_DEVICE (MOJOLEARN_IDN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_open: built without DART_DEVICE (no accelerator)")
 
 
 def dart_step(
@@ -507,7 +507,7 @@ def dart_step(
         ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=reg[].sessions[idx].bad)
         ctx.synchronize()
     else:
-        raise Error("x_trees dart_step: built without DART_DEVICE (MOJOLEARN_IDN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_step: built without DART_DEVICE (no accelerator)")
 
 
 def dart_add(
@@ -594,7 +594,7 @@ def dart_add(
         var vsub = reg[].sessions[idx].values.create_sub_buffer[DType.float32](j * node_cap, n_nodes)
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=values_out), src_buf=vsub)
     else:
-        raise Error("x_trees dart_add: built without DART_DEVICE (MOJOLEARN_IDN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_add: built without DART_DEVICE (no accelerator)")
 
 
 def dart_close(id: Int, bad_out: Int) raises:
@@ -609,7 +609,7 @@ def dart_close(id: Int, bad_out: Int) raises:
         var gone = reg[].sessions.pop(idx)
         _ = gone^
     else:
-        raise Error("x_trees dart_close: built without DART_DEVICE (MOJOLEARN_IDN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_close: built without DART_DEVICE (no accelerator)")
 
 
 @always_inline
