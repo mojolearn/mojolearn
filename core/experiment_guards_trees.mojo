@@ -84,6 +84,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SYM_SORT_SWAP"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_SORT_SWAP, the FAST Apple one-pass level sort with a handle swap, was NEUTRAL: rab7-symsortswap istella +0.3%, taxi +0.1%; code at 1805cb6b73; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch
     comptime assert not is_defined["MOJOLEARN_SYM_ITER_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_ITER_ALL, the FAST Apple umbrella of SYM_BUF_ARENA, was NEUTRAL: rab4-symiter 1000-taxi +0.2%, quality identical; code at a768195223; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_BUF_ARENA"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_BUF_ARENA, the FAST Apple per-fit buffer pool of the pointwise symmetric arm, was NEUTRAL: rab7-symbufarena 1000-taxi 18897.66 -> 18865.75 ms (-0.2%); F12 M3 B/A 0.93..1.01 mixed; code at 0f457a0c03; see docs/TOMBSTONES.md"
     return True
 
 

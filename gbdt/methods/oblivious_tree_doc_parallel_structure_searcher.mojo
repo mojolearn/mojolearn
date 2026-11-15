@@ -133,9 +133,6 @@ from gbdt.gpu_util.kernel.transform import (
     launch_split_planes_f32,
 )
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
-#: lane/apple-fast-sym-iter: FAST + Apple aliases, default OFF
-#: (`gbdt/methods/sym_iter_fast.mojo`); every use below sits under one
-from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
 from gbdt.trees_identical_switches import (
@@ -711,13 +708,10 @@ def fit_oblivious_tree_structure_traced(
     # one entry each when `shared_index`
     var e_perm_ids = List[DeviceBuffer[DType.uint32]]()
     var e_index = List[DeviceBuffer[DType.uint32]]()
-    # lane/apple-fast-sym-iter, SYM_BUF_ARENA: the plain arm never reads
-    # `d_doc_ids`, `d_fold_cindex` or `d_observations` (all three are the
-    # fold arm's), so a handle onto a pooled word stands in for the three
-    # allocations main makes per tree (one of them `doc_count` wide).
+    # TOMBSTONE: MOJOLEARN_SYM_BUF_ARENA (NEUTRAL: rab7-symbufarena 1000-taxi -0.2%; F12 M3 B/A 0.93..1.01 mixed) pooled fold dummies
+    # deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 0f457a0c03.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
     var sym_pooled_dummies = False
-    comptime if SYM_BUF_ARENA:
-        sym_pooled_dummies = fold_count == 1
     # lane t2-trees-on-executor: TREE_OP_SEARCH returns without a drain, so a
     # per-call allocation would be released while the level launches are
     # still queued; the plain arm never reads the three, so it takes the

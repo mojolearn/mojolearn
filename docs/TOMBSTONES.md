@@ -634,6 +634,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_HIST_ALL`](#mojolearn_sym_hist_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_HIST_ALL.patch](../experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch) |
 | [`MOJOLEARN_SYM_SORT_SWAP`](#mojolearn_sym_sort_swap) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_SORT_SWAP.patch](../experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch) |
 | [`MOJOLEARN_SYM_ITER_ALL`](#mojolearn_sym_iter_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_ITER_ALL.patch](../experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch) |
+| [`MOJOLEARN_SYM_BUF_ARENA`](#mojolearn_sym_buf_arena) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_BUF_ARENA.patch](../experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5979,3 +5980,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `gbdt/methods/sym_iter_fast.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 196, 220, 1301; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_BUF_ARENA
+
+- Tried: a per-fit pool of one (`SymIterPool`) for every buffer the pointwise SymmetricTree arm made per tree (the two split planes, the bins staging, the leaf partitioner, the oracle's host staging, the searcher's three fold-arm dummies) and the magnitudes readback into the fit's `h_mags`, FAST + Apple only.
+- Verdict: NEUTRAL. rab7-symbufarena (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric-1000 taxi 18897.66 -> 18865.75 ms (-0.2%); F12/arena M3 2026-10-06: 6 scored caller times, B/A 0.9336..1.0082 (mixed/regressing); stays off. Deleted with it: `SymIterPool`, `sym_pool_get`, `sym_split_planes`, `sym_scale_from_mags`, `sym_compute_bins_pooled`, the `SYM_ITER_ANY` alias, the fit's `h_mags` host buffer (read only by this arm), the pooled oracle host staging and the searcher's pooled-dummy arm. `sym_objective_is_pointwise` stays in `gbdt/methods/sym_iter_fast.mojo` (the default leaf estimator and the device rounds read it). Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `0f457a0c03`. Patch: `experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/sym_iter_fast.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`, `gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 187, 211, 1303; appended row in the "Lane expdel-05-trees" section.
