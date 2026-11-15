@@ -161,7 +161,9 @@ comptime C45_GBDT = False
 # `-D MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF` restores the 256 lane chains on
 # the device and in the host column together (the grid's "off" arm). The old
 # opt-in define is refused in core/six_lane_experiment_guards.mojo.
-comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"]()
+# TOMBSTONE: MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF (DELETE-OLD-PATH, rule e, EXP:1637 PROMOTED: the full-grid fold above is the measured default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 56ec6a17df.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF.patch
+comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # LG_LEVEL_ROUNDS (gbdt-lossguide): when the leaf budget cannot bind
