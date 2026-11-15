@@ -85,8 +85,6 @@ from glm.estimator import (
     ols_fit_host,
     ols_fit_resident_host,
     qn_fit_ovr_host,
-    QN_OVR_ONE_UPLOAD,
-    QN_DEV_ARGMAX,
     ridge_fit_host,
     ridge_fit_resident_host,
 )
@@ -1654,12 +1652,10 @@ def build__mojolearn_estimators() -> PythonObject:
         # TOMBSTONE: ridge_fit_multi / ridge_predict_multi registrations deleted 2026-11-11 by lane
         # calltable-base-helpers (see above); code recoverable at 17b0a91b04.
         m.def_function[qn_fit_binding]("qn_fit")
-        comptime if QN_OVR_ONE_UPLOAD:
-            m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")
+        m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")
-        comptime if QN_DEV_ARGMAX:
-            m.def_function[qn_predict_multiclass_binding]("qn_predict_multiclass")
+        m.def_function[qn_predict_multiclass_binding]("qn_predict_multiclass")
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
         var published_module = m.finalize()
