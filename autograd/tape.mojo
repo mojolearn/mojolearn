@@ -23,7 +23,7 @@ from autograd.ops import (
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
     OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI,
-    LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_CURVE_WORD,
+    LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED,
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
@@ -1798,10 +1798,8 @@ struct Tape(Movable):
         var count = n.rows * n.cols if axis == -1 else (n.rows if axis == 0 else n.cols)
         var output = self._alloc(ex, rows * cols)
         var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
-        var word = False
-        comptime if AUTOGRAD_CURVE_WORD:
-            # arm_fold_word: this fold's launch also stores the curve word
-            word = self._word_armed and axis == AXIS_ALL
+        # arm_fold_word: this fold's launch also stores the curve word
+        var word = self._word_armed and axis == AXIS_ALL
         if word:
             var partials = self._alloc(ex, fold_partials(n.rows, n.cols, axis))
             blocked_fold(ex, output, n.value, n.rows, n.cols, axis, factor, partials,
@@ -1919,9 +1917,7 @@ struct Tape(Movable):
         var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
         var output = self._alloc(ex, 1)
         var partials = self._alloc(ex, fold_partials(a.rows, a.cols, AXIS_ALL))
-        var word = False
-        comptime if AUTOGRAD_CURVE_WORD:
-            word = self._word_armed
+        var word = self._word_armed
         if word:
             loss_fold(ex, output, a.value, b.value, a.rows, a.cols, kind, delta, factor, partials,
                       self._word_dst, self._word_factor, True)

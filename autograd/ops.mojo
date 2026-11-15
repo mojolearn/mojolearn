@@ -156,11 +156,13 @@ def agk_colsum_args(a: Args) -> Args:
 #     times the batch rows) is stored by the loss's own fold launch
 #     (mul(loss, B) on the loss's stored word, as tape.scale computes it)
 #     instead of a scale launch and a copy launch: 2 launches a batch fewer.
-#     -D MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.
+#     The only route: MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF is deleted (TOMBSTONE below).
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF (old path, no A/B recorded) deleted 2026-11-15 by
 # lane/expdel2-24-neural with the AUTOGRAD_TRANSPOSE_VIEW alias; code recoverable at 5b147f4046.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.patch
-comptime AUTOGRAD_CURVE_WORD = not is_defined["MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_CURVE_WORD alias; code recoverable at fdb70ce42d.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.patch
 
 # Node kinds recorded by the tape. Binary and unary kinds also travel as a
 # runtime integer (a.i1 / a.i0) inside their operation's body.

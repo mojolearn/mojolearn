@@ -20,7 +20,7 @@ from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from sequence.recurrent import OptConfig, OptState, opt_step
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
 from autograd.tape import Tape, Tensor
-from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, AUTOGRAD_CURVE_WORD
+from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
 from autograd.layers import NeuralRules, layer_norm
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
@@ -1127,13 +1127,12 @@ def model_fit_state[E: Exec](
             var x = tape.variable(ex, xb, B, D, False)
             var target = tape.variable(ex, yb, B, TW, False)
             var out = _model_forward_prepared(tape, ex, spec, P, Gr, x, True, cfg.seed, step, topology)
-            comptime if AUTOGRAD_CURVE_WORD:
-                # lane ag-pass6-fold (PASS6 idea H(1)): the loss's own fold
-                # launch stores the batch's curve word mul(loss, B), the word
-                # tape.scale stores; cross-entropy's loss is not a fold
-                # output (a scale of one), so it keeps the two launches below
-                if cfg.loss != LOSS_CROSS_ENTROPY:
-                    tape.arm_fold_word(dloss + bi, Float32(B))
+            # lane ag-pass6-fold (PASS6 idea H(1)): the loss's own fold
+            # launch stores the batch's curve word mul(loss, B), the word
+            # tape.scale stores; cross-entropy's loss is not a fold
+            # output (a scale of one), so it keeps the two launches below
+            if cfg.loss != LOSS_CROSS_ENTROPY:
+                tape.arm_fold_word(dloss + bi, Float32(B))
             var loss = model_loss(tape, ex, cfg, out, target)
             var word_done = tape.disarm_fold_word(loss)
             if spec.version == SPEC2_VERSION:
