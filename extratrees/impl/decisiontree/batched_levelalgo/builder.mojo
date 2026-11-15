@@ -88,7 +88,6 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     phase_setup_b_kernel,
 )
 from std.time import perf_counter_ns
-from std.os import getenv
 
 from core.device_liveness import assert_device_alive
 from core.identity_trace import IdentityTrace
@@ -3988,17 +3987,19 @@ struct PhaseClock(Movable):
         return "?"
 
 
-comptime STAGE_TIMES_ENV = "MOJOLEARN_STAGE_TIMES"
-"""Set `MOJOLEARN_STAGE_TIMES=1` and the shipping forest entry points run
-their fit under an ENABLED `PhaseClock` and print stage -> seconds at fit
-end. Read ONCE PER FIT, in the wrapper; unset (the shipping state), the
-wrappers construct the same inert clock they always did and the fit is
-byte-for-byte the untimed program."""
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 def stage_times_enabled() -> Bool:
-    """The one place `STAGE_TIMES_ENV` is read: once, at fit entry."""
-    return String(getenv(STAGE_TIMES_ENV)) == "1"
+    """Built with `-D MOJOLEARN_STAGE_TIMES`: the shipping forest entry points
+    run their fit under an ENABLED `PhaseClock` and print stage -> seconds at
+    fit end. Without it (the shipping build) the wrappers construct the same
+    inert clock they always did and the fit is byte-for-byte the untimed
+    program."""
+    return STAGE_TIMES_ON
 
 
 def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
@@ -6964,8 +6965,8 @@ def train_forest_classification_device(
     """The shipping entry point: an INERT clock, so no synchronize is ever
     added -- see `PhaseClock`. `_timed` below is the same function with the
     micro-step clock threaded; `bench/fit_once.mojo` calls it directly.
-    `MOJOLEARN_STAGE_TIMES=1` (read once, here) enables the clock and prints
-    stage -> seconds at fit end -- see `STAGE_TIMES_ENV`.
+    A `-D MOJOLEARN_STAGE_TIMES` build enables the clock and prints
+    stage -> seconds at fit end -- see `STAGE_TIMES_ON`.
 
     `bootstrap` / `n_sampled_rows` (DEVIATION 460): with `bootstrap` each
     tree's row slot is a with-replacement sample of `n_sampled_rows` rows
@@ -8133,7 +8134,7 @@ def train_forest_regression_device(
     bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock -- see `PhaseClock` and the
-    classification twin above. `MOJOLEARN_STAGE_TIMES=1` (read once, here)
+    classification twin above. A `-D MOJOLEARN_STAGE_TIMES` build
     enables the clock and prints stage -> seconds at fit end. `bootstrap` /
     `n_sampled_rows` as in the classification twin (DEVIATION 460)."""
     var clock = PhaseClock(stage_times_enabled())

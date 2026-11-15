@@ -16,6 +16,7 @@
 from std.memory import unsafe_memcpy
 from std.builtin.sort import sort
 from std.os import getenv
+from core.shared_slot import SharedSlot
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.msel_common_door import msel_signed32
@@ -236,9 +237,33 @@ def _splitter_value(fields: PythonObject, defaults: PythonObject, name: String,
     return value
 
 
+struct _MselSabotage(Defaultable, Movable):
+    #: -1 until the first read, then 0 or 1.
+    var state: Int
+
+    def __init__(out self):
+        self.state = -1
+
+
+comptime _MSEL_SABOTAGE = SharedSlot[_MselSabotage, "MojolearnMselFoldSabotageV1"]
+
+
 def msel_sabotage() -> Bool:
-    """`_sabotage_requested()`: both variables set to 1."""
-    return getenv("MOJOLEARN_FOLD_ORDER_SABOTAGE", "") == "1" and getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE", "") == "1"
+    """`_sabotage_requested()`: both MOJOLEARN_FOLD_ORDER_SABOTAGE and
+    MOJOLEARN_HOST_ALLOW_SABOTAGE set to 1 in the process environment, read
+    once per process (lane envgate-classical-deviceplan,
+    docs/plans/ENV_GATES_2026-11-15.md; before: two getenv per split, cv and
+    search call). The verify tools set both for the process they start
+    (pixi `check-cross-val-folds-oracle-sabotage`, tools/identity_break.py)."""
+    try:
+        var slot = _MSEL_SABOTAGE.get_or_create_ptr()
+        if slot[].state < 0:
+            var on = (getenv("MOJOLEARN_FOLD_ORDER_SABOTAGE", "") == "1"
+                      and getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE", "") == "1")
+            slot[].state = 1 if on else 0
+        return slot[].state == 1
+    except:
+        return False
 
 
 def msel_check_splits(n_splits: PythonObject, context: PythonObject) raises -> Int:

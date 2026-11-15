@@ -113,7 +113,11 @@ def test_svm_kernel_rows_take_a_plan_value_read_at_the_entries():
 def test_device_plan_falls_back_to_the_environment_and_the_rank():
     plan = _read("core/device_plan.mojo")
     setting = plan[plan.index("def device_plan_setting("):]
-    assert "return String(getenv(name, default))" in setting
+    # the environment is read once per process (`_env_once`), never per call
+    assert "var kind = _env_once(table, index, name)" in setting
+    assert "if kind == _ENV_UNSET:\n        return default" in setting
+    once = plan[plan.index("def _env_once("):plan.index("def _env_once_is_one(")]
+    assert "Atomic.load[ordering=Ordering.ACQUIRE](states + index)" in once and "String(getenv(name))" in once
     device = plan[plan.index("def device_plan_device("):plan.index("def device_plan_root(")]
     assert re.search(r"if slot < 0:\n\s+return rank", device)
     # the plan is keyed by the calling thread, never process-wide

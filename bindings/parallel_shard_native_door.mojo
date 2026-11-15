@@ -85,7 +85,7 @@ from bindings.parallel_shard_common_door import (
     shard_store_drop,
     shard_resolve_stored,
 )
-from bindings.parallel_shard_common_run import shard_read_shift, shard_faults_take, shard_store_token
+from bindings.parallel_shard_common_run import shard_read_shift, shard_faults_take, shard_store_token, shard_faults_arm, shard_sabotage_arm
 from bindings.kernel_methods_native_door import _rbf_transform
 from bindings.gp_classifier_native_door import (
     gpc_validate, gpc_worker_fit, gpc_worker_latent, _gpc_binary_result, GPCFitPublication, _gpc_set_fitted, _gpc_ovr_combine,
@@ -1513,6 +1513,16 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         return shard_trace_take()
     if operation == "faults_take":
         return PythonObject(shard_faults_take())
+    if operation == "faults_arm":
+        # The verifier's transport negative control (lane
+        # envgate-classical-deviceplan: replaces MOJOLEARN_PAR_TRANSPORT_FAULT,
+        # read per numerical batch): "drop_result", "reverse_results" or "".
+        shard_faults_arm(String(args[0]))
+        return PythonObject(None)
+    if operation == "sabotage_arm":
+        # The driver read-shift negative control inside a running process.
+        shard_sabotage_arm(Bool(py=args[0]))
+        return PythonObject(None)
     if operation == "pool_open":
         return _pool_open(args[0])
     if operation == "reference_init" or operation == "queries_init":

@@ -11,6 +11,7 @@ to see this gate fail; MOJOLEARN_CHOLESKY_CHECK_FACTOR_ONLY=1 skips the
 solves so that build shows the trailing-row partition failing on its own.
 """
 from std.os import getenv, setenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_CHOLESKY
 from std.memory import bitcast
 
 from core.identity_trace import first_divergence
@@ -56,8 +57,7 @@ def _clear(path: String) raises:
 
 
 def _set(count: Int, path: String) raises:
-    if not setenv("MOJOLEARN_CHOLESKY_DEVICE_COUNT", String(count), True):
-        raise Error("setenv failed")
+    device_plan_check_count(count, DEVICE_PLAN_CHOLESKY)
     _clear(path)
     if not setenv("MOJOLEARN_IDENTITY_TRACE", path, True):
         raise Error("setenv failed")

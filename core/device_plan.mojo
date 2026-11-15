@@ -80,6 +80,16 @@ comptime DEVICE_PLAN_CHOLESKY = 1 << 16
 #: what the cooperative worker's environment set (`DEVICE_COUNT_VARIABLES`)
 comptime DEVICE_PLAN_WORKER = (1 << 16) - 1
 
+#: Words of the read-once environment cache (`_DevicePlanTable.env_state`).
+comptime _ENV_FAMILIES = 17
+comptime _ENV_LOGICAL = 17
+comptime _ENV_GBDT_ONE_DEVICE = 18
+comptime _ENV_WORDS = 19
+comptime _ENV_UNREAD = 0
+comptime _ENV_UNSET = 1
+comptime _ENV_INT = 2
+comptime _ENV_TEXT = 3
+
 
 def _family_bit(name: String) -> Int:
     """The DEVICE_PLAN_* bit of `MOJOLEARN_<FAMILY>_DEVICE_COUNT`, 0 for any
@@ -155,6 +165,16 @@ struct _DevicePlanTable(Defaultable, Movable):
     # 2- or 3-device arm that ran on fewer than two ranks (lane
     # perf3-cluster-gp-gate). Integer flags only.
     var used: List[Int64]
+    # THE ENVIRONMENT, READ ONCE PER PROCESS (lane envgate-classical-deviceplan,
+    # docs/plans/ENV_GATES_2026-11-15.md). env_state[i]: 0 until word i was
+    # read, then 1 (unset or empty), 2 (a canonical integer, in env_value[i])
+    # or 3 (other text: parsed again only on that error path). Words 0..16
+    # are the `MOJOLEARN_<FAMILY>_DEVICE_COUNT` settings in DEVICE_PLAN_* bit
+    # order, 17 is MOJOLEARN_DEVICE_PLAN_LOGICAL, 18 is
+    # MOJOLEARN_GBDT_SHARD_ONE_DEVICE. Before, each was a `getenv` per call,
+    # per fit, per predict or per shard.
+    var env_state: List[Int64]
+    var env_value: List[Int64]
 
     def __init__(out self):
         self.owners = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
@@ -167,13 +187,16 @@ struct _DevicePlanTable(Defaultable, Movable):
         self.log_used = List[Int64](length=1, fill=Int64(0))
         self.log_lock = List[Int64](length=1, fill=Int64(0))
         self.used = List[Int64](length=DEVICE_PLAN_MAX_DEVICES, fill=Int64(0))
+        self.env_state = List[Int64](length=_ENV_WORDS, fill=Int64(0))
+        self.env_value = List[Int64](length=_ENV_WORDS, fill=Int64(0))
 
 
 #: Layout version of `_DevicePlanTable` (core/shared_slot.mojo rule). V2:
-#: the table gained `used` (lane perf3-cluster-gp-gate); V3: the layout word.
-comptime _DEVICE_PLAN_LAYOUT = 4
-comptime _DEVICE_PLAN_NAME_IDN: StaticString = "MojolearnDevicePlanIdenticalV4"
-comptime _DEVICE_PLAN_NAME_OTHER: StaticString = "MojolearnDevicePlanOtherV4"
+#: the table gained `used` (lane perf3-cluster-gp-gate); V3: the layout word;
+#: V5: `env_state` / `env_value` (lane envgate-classical-deviceplan).
+comptime _DEVICE_PLAN_LAYOUT = 5
+comptime _DEVICE_PLAN_NAME_IDN: StaticString = "MojolearnDevicePlanIdenticalV5"
+comptime _DEVICE_PLAN_NAME_OTHER: StaticString = "MojolearnDevicePlanOtherV5"
 comptime _DEVICE_PLAN_NAME: StaticString = _DEVICE_PLAN_NAME_IDN if GLOBAL_NUMERIC_MODE == 1 else _DEVICE_PLAN_NAME_OTHER
 comptime _DEVICE_PLAN_TABLE = SharedSlot[_DevicePlanTable, _DEVICE_PLAN_NAME, _DEVICE_PLAN_LAYOUT]
 
@@ -195,7 +218,12 @@ def _words(mut list: List[Int64]) -> MutPointer[Int64, MutUntrackedOrigin]:
 
 def _own_slot() raises -> Int:
     """The calling thread's slot, or -1 when it has no plan."""
-    var table = _plan_table()
+    return _own_slot_in(_plan_table())
+
+
+def _own_slot_in(table: UnsafePointer[_DevicePlanTable, MutAnyOrigin]) -> Int:
+    """`_own_slot` on a table pointer the caller already holds (one slot
+    lookup per call)."""
     var active = _words(table[].active)
     if Atomic.load[ordering=Ordering.ACQUIRE](active) == 0:
         return -1
@@ -218,13 +246,68 @@ def _own_slot() raises -> Int:
 #: bindings/parallel_plan_door.mojo `plan_devices`,
 #: bindings/parallel_public_native.mojo `_devices`); no dispatcher, split or
 #: fold reads it, so the logical run takes exactly the real multi-GPU path.
+#: Read once per process (`_env_once`): the tool sets it in the environment
+#: of the process it starts, never inside a running process.
 comptime DEVICE_PLAN_LOGICAL_VARIABLE = "MOJOLEARN_DEVICE_PLAN_LOGICAL"
+
+
+def _env_once(table: UnsafePointer[_DevicePlanTable, MutAnyOrigin], index: Int, name: String) -> Int:
+    """The state of environment word `index` (`_DevicePlanTable.env_state`),
+    read with `getenv(name)` the first time any thread of the process asks
+    and never again. Two threads racing on the first read store the same
+    words; the state word is published last with a release store."""
+    var states = _words(table[].env_state)
+    var state = Atomic.load[ordering=Ordering.ACQUIRE](states + index)
+    if state != Int64(_ENV_UNREAD):
+        return Int(state)
+    var text = String(getenv(name))
+    var kind = _ENV_UNSET
+    var value = Int64(0)
+    if text != "":
+        kind = _ENV_TEXT
+        try:
+            var n = Int(text)
+            if String(n) == text:
+                kind = _ENV_INT
+                value = Int64(n)
+        except:
+            pass
+    _words(table[].env_value)[index] = value
+    Atomic.store[ordering=Ordering.RELEASE](states + index, Int64(kind))
+    return kind
+
+
+def _env_once_is_one(index: Int, name: String) -> Bool:
+    """True when environment word `index` holds the integer 1 (the "=1" test
+    options), read once per process."""
+    try:
+        var table = _plan_table()
+        if _env_once(table, index, name) != _ENV_INT:
+            return False
+        return _words(table[].env_value)[index] == Int64(1)
+    except:
+        return False
 
 
 def device_plan_logical() -> Bool:
     """True when the logical-device test option is set (repeated device
-    indices admitted)."""
-    return String(getenv(DEVICE_PLAN_LOGICAL_VARIABLE)) == "1"
+    indices admitted). Read once per process, at the first device plan."""
+    return _env_once_is_one(_ENV_LOGICAL, DEVICE_PLAN_LOGICAL_VARIABLE)
+
+
+#: THE GBDT ONE-DEVICE TEST OPTION: with MOJOLEARN_GBDT_SHARD_ONE_DEVICE=1 in
+#: the process environment every GBDT shard maps to device 0
+#: (core/multi_gpu.mojo `gbdt_shard_device_id`,
+#: gbdt/methods/pointwise_multi_gpu.mojo `gbdt_plan_shard_device`). Set only
+#: by tools/logical_shard_identity.py in the environment of the process it
+#: starts; read once per process here (before: a getenv per shard).
+comptime GBDT_SHARD_ONE_DEVICE_VARIABLE = "MOJOLEARN_GBDT_SHARD_ONE_DEVICE"
+
+
+def device_plan_gbdt_one_device() -> Bool:
+    """True when MOJOLEARN_GBDT_SHARD_ONE_DEVICE=1 was in the process
+    environment at the first ask."""
+    return _env_once_is_one(_ENV_GBDT_ONE_DEVICE, GBDT_SHARD_ONE_DEVICE_VARIABLE)
 
 
 def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) raises:
@@ -278,6 +361,24 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
     _words(table[].depths)[slot] = Int64(1)
     _ = Atomic[Int64].fetch_add(_words(table[].active), Int64(1))
     _log_plan(devices)
+
+
+def device_plan_check_count(count: Int, families: Int) raises:
+    """CHECKS ONLY: run the calling thread's next calls on `count` devices
+    (ranks 0..count-1 on devices 0..count-1) for the owner families in
+    `families`, replacing any plan the thread holds. This is what a check's
+    `setenv("MOJOLEARN_<FAMILY>_DEVICE_COUNT", count)` did before the
+    variables were read once per process (lane envgate-classical-deviceplan):
+    `device_plan_setting` answers `String(count)` for those families, the
+    rank is the device, exactly as the variable gave."""
+    if count < 1:
+        raise Error("ValueError: a check runs on at least one device, got " + String(count))
+    while _own_slot() >= 0:  # driver-loop: over the plan levels the thread holds
+        device_plan_exit()
+    var devices = List[Int]()
+    for r in range(count):  # driver-loop: over the plan's ranks
+        devices.append(r)
+    device_plan_enter(devices, families)
 
 
 def device_plan_exit() raises:
@@ -358,15 +459,46 @@ def device_plan_root() raises -> Int:
     return Int(_words(table[].ids)[slot * DEVICE_PLAN_MAX_DEVICES])
 
 
+def _family_index(bit: Int) -> Int:
+    """The environment word of the family `bit` (a DEVICE_PLAN_* bit):
+    its bit position."""
+    var index = 0
+    var rest = bit
+    while rest > 1:  # driver-loop: over the 17 family bit positions
+        rest >>= 1
+        index += 1
+    return index
+
+
 def device_plan_setting(name: String, default: String = "") raises -> String:
     """What an owner loop parses as its device count: the plan's size as text
     while a plan driving `name`'s family is bound to the calling thread, else
-    `getenv(name, default)`."""
-    var slot = _own_slot()
+    the process environment's `name` (read once per process, `_env_once`),
+    else `default`.
+
+    Before (lane envgate-classical-deviceplan): `getenv(name, default)` on
+    every call, i.e. per fit, per predict and per kernel-method transform of
+    every family entry. The variables are USER-SETTINGs of the process
+    (docs/plans/ENV_GATES_2026-11-15.md): a worker or tool sets them in the
+    environment of the process it starts. A check that changes the device
+    count inside one process binds a plan (`device_plan_enter`) instead. An
+    empty value counts as unset."""
+    var bit = _family_bit(name)
+    if bit == 0:
+        raise Error("device plan: " + name + " is not a MOJOLEARN_<FAMILY>_DEVICE_COUNT setting")
+    var table = _plan_table()
+    var slot = _own_slot_in(table)
     if slot >= 0:
-        var table = _plan_table()
-        if (Int(_words(table[].masks)[slot]) & _family_bit(name)) != 0:
+        if (Int(_words(table[].masks)[slot]) & bit) != 0:
             return String(Int(_words(table[].counts)[slot]))
+    var index = _family_index(bit)
+    var kind = _env_once(table, index, name)
+    if kind == _ENV_UNSET:
+        return default
+    if kind == _ENV_INT:
+        return String(Int(_words(table[].env_value)[index]))
+    # Text that is not a canonical integer: the callers' own parse raises or
+    # refuses on it, so this error path reads the text again.
     return String(getenv(name, default))
 
 

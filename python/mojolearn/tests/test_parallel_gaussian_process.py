@@ -41,12 +41,12 @@ def test_fit_targets_state_and_predictions_equal_plain(labels):
         assert np.asarray(actual).shape == np.asarray(wanted).shape
 
 
-def test_failure_does_not_publish_partial_fit(monkeypatch):
+def test_failure_does_not_publish_partial_fit(monkeypatch, request):
     model = GPC().fit(np.ones((3, 2), np.float32), [1, 2, 3])
     before = dict(model.__dict__)
     # the transport negative control drops one class's result
-    monkeypatch.setenv('MOJOLEARN_PAR_TRANSPORT_FAULT', 'drop_result')
-    monkeypatch.setenv('MOJOLEARN_HOST_ALLOW_SABOTAGE', '1')
+    _native_parallel_shard('faults_arm', ('drop_result',))
+    request.addfinalizer(lambda: _native_parallel_shard('faults_arm', ('',)))
     _native_parallel_shard('faults_take', ())
     with pytest.raises(ValueError, match='incomplete'):
         pg.fit_gaussian_process_classifier(model, np.ones((3, 2), np.float32), [3, 4, 5])

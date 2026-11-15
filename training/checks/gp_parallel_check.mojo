@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only covariance cells, including structural WhiteKernel diagonals."""
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_GP
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
@@ -31,12 +32,10 @@ def main() raises:
             var dls = upload_f32(ctx, spec.length_scales)
             for self_case in range(2):
                 var trace = IdentityTrace.disabled()
-                if not setenv("MOJOLEARN_GP_DEVICE_COUNT", "1", True):
-                    raise Error("setenv failed")
+                device_plan_check_count(1, DEVICE_PLAN_GP)
                 gp_kernel_matrix(ctx, one, x, x, dls, stack, m, m, 3, spec, self_case == 1, trace, "one")
                 ctx.synchronize()
-                if not setenv("MOJOLEARN_GP_DEVICE_COUNT", "2", True):
-                    raise Error("setenv failed")
+                device_plan_check_count(2, DEVICE_PLAN_GP)
                 gp_kernel_matrix(ctx, many, x, x, dls, stack, m, m, 3, spec, self_case == 1, trace, "many")
                 ctx.synchronize()
                 var a = download_f32(ctx, one, m * m)

@@ -17,7 +17,8 @@ runs on rank i % len(devices), as `DevicePool.map` did.
 
 The driver negative control is the old `_parallel_pool.driver_read_shift`,
 word for word: with MOJOLEARN_PAR_DRIVER_SABOTAGE=1 and
-MOJOLEARN_HOST_ALLOW_SABOTAGE=1 every shard on an owner above rank 0 whose
+MOJOLEARN_HOST_ALLOW_SABOTAGE=1 in the process environment (read once per
+process) or after `_native_parallel_shard('sabotage_arm', (True,))`, every shard on an owner above rank 0 whose
 true start is above 0 READS one position early while its block is still
 PLACED at the true offset. Inert at one device.
 
@@ -25,7 +26,6 @@ No floating-point value is computed here: copies only.
 """
 from std.ffi import external_call
 from std.memory import unsafe_memcpy
-from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
@@ -39,6 +39,9 @@ from bindings.parallel_shard_common_run import (
     shard_fault_mark,
     shard_read_shift,
     shard_faults_take,
+    shard_transport_fault,
+    SHARD_FAULT_NONE,
+    SHARD_FAULT_DROP_RESULT,
     _numerical,
     shard_store_token,
     shard_item,
@@ -250,11 +253,13 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
     operation added to the pool's trace record.
 
     THE TRANSPORT NEGATIVE CONTROL (python/mojolearn/_verify_distributed.py):
-    with MOJOLEARN_PAR_TRANSPORT_FAULT=drop_result or reverse_results and
-    MOJOLEARN_HOST_ALLOW_SABOTAGE=1, the first numerical batch of more than
-    one result in this process is returned without its last result or in
-    reverse order, once. The driver's own checks or the hash must catch it.
-    No build, workflow or gate sets either variable."""
+    armed by `_native_parallel_shard('faults_arm', ('drop_result',))` or
+    ('reverse_results',) (`shard_faults_arm`), the first numerical batch of
+    more than one result in this process is returned without its last result
+    or in reverse order, once. The driver's own checks or the hash must catch
+    it. Before (lane envgate-classical-deviceplan): MOJOLEARN_PAR_TRANSPORT_FAULT
+    with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, two getenv per numerical batch; now
+    one slot read, no environment."""
     var b = shard_b()
     var results = process_pool_map(pool, requests)
     var record = py_get(pool, PythonObject("trace_record"), PythonObject(None))
@@ -266,12 +271,10 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
             py_setitem(call, "operation", _operation(requests[i]))
             _ = py_call(record["calls"].append, call)
     if len(results) > 1 and len(requests) > 0 and _numerical(_operation(requests[0])):
-        var fault = String()
-        if String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1":
-            fault = String(getenv("MOJOLEARN_PAR_TRANSPORT_FAULT"))
-        if (fault == "drop_result" or fault == "reverse_results") and shard_fault_mark():
+        var fault = shard_transport_fault()
+        if fault != SHARD_FAULT_NONE and shard_fault_mark():
             var altered = py_call(b.list, results)
-            if fault == "drop_result":
+            if fault == SHARD_FAULT_DROP_RESULT:
                 _ = py_call(altered.pop)
             else:
                 _ = py_call(altered.reverse)

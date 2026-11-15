@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only TSQR panel, destroyed-input, stacked-R and final-R bits."""
-from std.os import getenv,setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_QR
 from std.memory import bitcast
 from max.gpu.host import DeviceContext,DeviceBuffer
 from core.householder_qr import qr_factor,qr_slice_count
@@ -36,9 +37,9 @@ def check(m: Int,n: Int) raises:
     enqueue_fill(ctx,sa,Float32(42))
     enqueue_fill(ctx,sb,Float32(42))
     ctx.synchronize()
-    _ = setenv("MOJOLEARN_QR_DEVICE_COUNT","1",True)
+    device_plan_check_count(1, DEVICE_PLAN_QR)
     var one = qr_factor(ctx,a,sa,ra,m,n)
-    _ = setenv("MOJOLEARN_QR_DEVICE_COUNT","2",True)
+    device_plan_check_count(2, DEVICE_PLAN_QR)
     var many = qr_factor(ctx,b,sb,rb,m,n)
     if one != ns or many != ns:
         raise Error("TSQR slice count changed")

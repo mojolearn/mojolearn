@@ -318,6 +318,11 @@ from neighbors.impl.distance.detail.distance_ops import (
     metric_uses_norms,
 )
 
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
+
 
 # DEVIATION 2667 (kernel-matrix row `knn_fused_distance_select_for`): the
 # transposed IDENTICAL arm computes each column tile's distances inside the
@@ -2359,7 +2364,7 @@ def certified_mma_knn(
     # device (ascending, by an exclusive scan), not downloaded and walked
     var rows = ctx.enqueue_create_buffer[DType.int32](n_queries)
     var nf = device_compact_equal_i32(ctx, flags, n_queries, Int32(0), rows)
-    if getenv("MOJOLEARN_STAGE_TIMES") == "1":
+    if STAGE_TIMES_ON:
         print("CERT_KNN queries=" + String(n_queries) + " kc=" + String(kc)
               + " tiled_fallback=" + String(nf))
     _ = cand_d^

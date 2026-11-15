@@ -21,8 +21,7 @@ from std.math import abs, floor, fma, max, min
 from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import simd_width_of
 
-from std.os import getenv
-from std.sys import llvm_intrinsic
+from std.sys import llvm_intrinsic, is_defined
 from std.time import perf_counter_ns
 
 from core.host_parallel import host_parallelize
@@ -404,11 +403,18 @@ def host_f32_copy(dst: HostF32Ptr, src: HostF32Ptr, n: Int):
     host_parallelize(_copy, tasks)
 
 
+#: `-D MOJOLEARN_HOST_BLOCK_TIMING` builds time the host block oracles.
+#: Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per oracle call.
+comptime HOST_BLOCK_TIMING_ON = is_defined["MOJOLEARN_HOST_BLOCK_TIMING"]()
+
+
 def host_block_timing_on() -> Bool:
-    """MOJOLEARN_HOST_BLOCK_TIMING set: the block oracles print a wall per
-    stage (`timing hblk.<stage> <ms> ms`, lane neural-pass8), the host twin
-    of MOJOLEARN_MAMBA_TIMING. Off, nothing is read or printed."""
-    return String(getenv("MOJOLEARN_HOST_BLOCK_TIMING")) != ""
+    """Built with `-D MOJOLEARN_HOST_BLOCK_TIMING`: the block oracles print a
+    wall per stage (`timing hblk.<stage> <ms> ms`, lane neural-pass8), the
+    host twin of MOJOLEARN_MAMBA_TIMING. Off (the default build), nothing is
+    read or printed."""
+    return HOST_BLOCK_TIMING_ON
 
 
 def host_tick(on: Bool, mut t: Int, name: StaticString):

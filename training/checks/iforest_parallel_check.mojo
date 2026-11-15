@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only resident forest buffers, root allocation and ordered path checks."""
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_IFOREST
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
@@ -39,14 +40,12 @@ def main() raises:
             var one = IsolationForestModel(ctx)
             var many = IsolationForestModel(ctx)
             var trace = IdentityTrace.disabled()
-            if not setenv("MOJOLEARN_IFOREST_DEVICE_COUNT", "1", True):
-                raise Error("setenv failed")
+            device_plan_check_count(1, DEVICE_PLAN_IFOREST)
             var plan_one = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
             fit_dispatch(plan_one, estimator, ctx, x, 257, 7, one, trace)
             # Exercise release of a previously fitted full root model too.
             fit_dispatch(plan_one, estimator, ctx, x, 257, 7, many, trace)
-            if not setenv("MOJOLEARN_IFOREST_DEVICE_COUNT", "2", True):
-                raise Error("setenv failed")
+            device_plan_check_count(2, DEVICE_PLAN_IFOREST)
             var plan_many = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
             fit_dispatch(plan_many, estimator, ctx, x, 257, 7, many, trace)
             if len(many.shards) != 2 or len(one.shards) != 0:

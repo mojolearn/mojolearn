@@ -77,8 +77,13 @@ from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 comptime GRAPH_BUILD_BRUTE_FORCE_KNN = 0
@@ -309,7 +314,7 @@ def fit_hdbscan(
     var sizes = ctx.enqueue_create_buffer[DType.int32](n_edges)
     ctx.synchronize()
 
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var st_t = Int(perf_counter_ns())
     # `:120-133` helpers::build_linkage(..., mutual_reachability_params)
     var rounds = build_mr_linkage(

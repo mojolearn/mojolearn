@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only bit comparisons of original Gram output contractions."""
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_GRAM
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from core.gemm import gemm_tn_identical_v1, gemm_nt_gram
@@ -22,13 +23,13 @@ def check(m: Int,k: Int,tn: Bool) raises:
     var many = ctx.enqueue_create_buffer[DType.float32](m*m)
     var scratch = ctx.enqueue_create_buffer[DType.float32](m*k)
     ctx.synchronize()
-    _ = setenv("MOJOLEARN_GRAM_DEVICE_COUNT","1",True)
+    device_plan_check_count(1, DEVICE_PLAN_GRAM)
     if tn:
         gemm_tn_identical_v1(ctx,one,x,scratch,m,k)
     else:
         gemm_nt_gram(ctx,one,x,m,m,k)
     ctx.synchronize()
-    _ = setenv("MOJOLEARN_GRAM_DEVICE_COUNT","2",True)
+    device_plan_check_count(2, DEVICE_PLAN_GRAM)
     if tn:
         gemm_tn_identical_v1(ctx,many,x,scratch,m,k)
     else:
@@ -65,7 +66,7 @@ def main() raises:
     var x = ctx.enqueue_create_buffer[DType.float32](1)
     var z = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
-    _ = setenv("MOJOLEARN_GRAM_DEVICE_COUNT","2",True)
+    device_plan_check_count(2, DEVICE_PLAN_GRAM)
     for arm in range(2):
         var refused = False
         try:
