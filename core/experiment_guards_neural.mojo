@@ -720,8 +720,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch
     comptime assert not is_defined["MOJOLEARN_NN40_WS_HEADROOM"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN40_WS_HEADROOM (unmeasured opt-in arm: GEMM workspace grow-ahead headroom) is gone; the default stays; code recoverable at 340d379a3c; restore: experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch"
     # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch
-    comptime assert not is_defined["MOJOLEARN_CNN_PREDICT_PROGRAM_COPY"](), "removed 2026-11-15 (lane/expdel2-28-neural): CNN_PREDICT_PROGRAM_COPY (unmeasured B arm) is gone; the default is kept; code at cc4a5c63c4; restore: experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch"
+    # MOJOLEARN_CNN_PREDICT_PROGRAM_COPY: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch
     comptime assert not is_defined["MOJOLEARN_IDN_AF_COL_CHUNK_FOLD"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm) is gone; the default is kept; code at ab421749bb; restore: experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch
