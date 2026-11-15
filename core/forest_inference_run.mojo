@@ -93,11 +93,8 @@ def forest_gpu_resident_caps() -> Int:
     """The resident capability bits both GPU forest images report through
     XF_CAPS (core/forest_fit_request.mojo; lane calltable-forest): the
     ordered word (`forest_ordered_resident`), the resident label query
-    (`forest_predict_resident_labels_gpu`) and, when compiled, the T38 fused
-    labels (`forest_identical_fused_labels`)."""
-    from core.forest_experiments import T38_FUSED_LABELS
-    from core.forest_fit_request import XF_CAP_ORDERED_RESIDENT, XF_CAP_RESIDENT_LABELS, XF_CAP_FUSED_LABELS
-    var caps = XF_CAP_ORDERED_RESIDENT | XF_CAP_RESIDENT_LABELS
-    comptime if T38_FUSED_LABELS:
-        caps |= XF_CAP_FUSED_LABELS
-    return caps
+    (`forest_predict_resident_labels_gpu`)."""
+    from core.forest_fit_request import XF_CAP_ORDERED_RESIDENT, XF_CAP_RESIDENT_LABELS
+    # TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1caa34cfb3.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+    return XF_CAP_ORDERED_RESIDENT | XF_CAP_RESIDENT_LABELS
