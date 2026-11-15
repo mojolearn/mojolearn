@@ -113,9 +113,10 @@ moves.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the rf-clf and rf-reg lanes is the measurement.
 """
-from ensemble.tree_identical_ideas import T14, T14_EXACT
-from ensemble.tree_moments import balanced_mse_gain, moment_pair, moment_finish
-from checks.soft_f64 import sf64_from_f32
+# TOMBSTONE: MOJOLEARN_TREES_T14 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
+# TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch (same patch as T14)
 from std.math import ceildiv, floor
 from std.memory import bitcast
 from std.builtin.sort import sort
@@ -1040,8 +1041,6 @@ def host_mse_gain(
     var inv_len = ftz(Float32(1.0) / parent_weight.cast[DType.float32]())
     var label_sum = ftz(_dequantize(label_sums[n_bins - 1], scale))
     var left_label_sum = ftz(_dequantize(label_sums[i], scale))
-    comptime if T14 and not T14_EXACT:
-        return balanced_mse_gain(parent_weight.cast[DType.float32](),left_weight.cast[DType.float32](),label_sum,left_label_sum)
     var p1 = ftz(-label_sum * label_sum)
     var parent_obj = ftz(p1 * inv_len)
     var lsq = ftz(left_label_sum * left_label_sum)
@@ -1111,8 +1110,6 @@ def host_weighted_reg_gain(
         return ftz(gain * inv_len)
     # MSE
     var inv_len = ftz(Float32(1.0) / parent_weight)
-    comptime if T14 and not T14_EXACT:
-        return balanced_mse_gain(parent_weight, left_weight, label_sum, left_label_sum)
     var p1 = ftz(-label_sum * label_sum)
     var parent_obj = ftz(p1 * inv_len)
     var lsq = ftz(left_label_sum * left_label_sum)
@@ -2163,33 +2160,9 @@ def _rf_host_tree(
         else:
             var label_sum = Int32(0)
             var cnt = UInt32(0)
-            comptime if T14:
-                # Same V1 row-ID partial membership and reduction as GPU.
-                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                var partial = List[Int32](length=128,fill=Int32(0))
-                for j in range(begin,begin+count):
-                    var row = Int(row_ids[j])
-                    partial[row%128] += Int32(labels_f[row]*label_scale)
-                var moments = List[UInt64](length=128,fill=UInt64(0))
-                comptime if not T14_EXACT:
-                    for logical in range(128):
-                        moments[logical] = sf64_from_f32(ftz(_dequantize(partial[logical],label_scale)))
-                var distance = 64
-                while distance > 0:
-                    for logical in range(distance):
-                        partial[logical] += partial[logical+distance]
-                        comptime if not T14_EXACT:
-                            moments[logical] = moment_pair(moments[logical],moments[logical+distance])
-                    distance //= 2
-                label_sum = partial[0]
-                cnt = UInt32(count)
-                comptime if not T14_EXACT:
-                    vleaf[node*n_out] = moment_finish(moments[0],Float32(count))
-                    continue
-            else:
-                for j in range(begin, begin + count):
-                    label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
-                    cnt = cnt + UInt32(1)
+            for j in range(begin, begin + count):
+                label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
+                cnt = cnt + UInt32(1)
             # `SetLeafVector` (`objectives.mojo:1354-1376`).
             var weight = Int64(Int(cnt))
             if weight > 0:
