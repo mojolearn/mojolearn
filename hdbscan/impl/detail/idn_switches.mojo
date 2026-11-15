@@ -63,10 +63,9 @@ comptime IDN_HDB_PREDICT_DEVICE_CAST = _IDN_HDB_ON
 """approximate_predict: the k-NN's UInt32 indices are narrowed to Int32 by
 the fit's device kernel instead of a host loop over nq * k cells."""
 
-comptime IDN_HDB_PREDICT_LEAN = (
-    # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF (old path: per-element staging and waits in approximate_predict; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 6260abe71f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HDB_PREDICT_LEAN = _IDN_HDB_ON
 """approximate_predict (lane fix-c1-cluster): every host staging buffer is
 allocated under one wait, the training matrix, the queries and the model
 arrays are staged with bulk copies instead of per-element loops (and without
