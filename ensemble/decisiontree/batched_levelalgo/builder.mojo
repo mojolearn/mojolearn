@@ -223,8 +223,6 @@ comptime ALIGN_VALUE = 512
 # candidates' whole range below the baseline's minimum;
 # bench/results/trees_identical/h100_2026-09-10/).
 # The old opt-in `MOJOLEARN_2011_HIST_ITEMS4` is now the default.
-# TOMBSTONE: MOJOLEARN_2011_HIST_ITEMS1 (old one-item mapping; four items measured faster 2026-09-10) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
-# Restore: git apply experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch; record in docs/TOMBSTONES.md.
 # A07 `MOJOLEARN_IDN_RF_TASK_ROWS256` (two items/lane, 256-row histogram
 # tasks) DELETED by lane trees-small (2026-10-07): measured NEUTRAL on both
 # vendors (MI325X candidate/baseline 0.993/0.995/0.998; L40S <1.1%; generated
@@ -234,6 +232,8 @@ comptime ALIGN_VALUE = 512
 # sweeps by cost (`histogram_task_rows`). docs/apple-fast/EXPERIMENTS.md row.
 # TOMBSTONE: MOJOLEARN_AFT_F02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F02.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_2011_HIST_ITEMS1 (old one-item mapping; four items measured faster 2026-09-10) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch; record in docs/TOMBSTONES.md.
 comptime HIST_ITEMS_PER_THREAD = 4
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
