@@ -102,8 +102,9 @@ def forest_resident_layout_binding() raises -> PythonObject:
 
 
 def forest_identical_fused_labels_binding() raises -> PythonObject:
-    """T38 capability; absent define preserves incumbent classification."""
-    from core.forest_experiments import T38_FUSED_LABELS
-    return PythonObject(T38_FUSED_LABELS)
+    """T38 capability: the incumbent classification (no fused labels)."""
+    # TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 6819bded14.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    return PythonObject(False)
 
 
