@@ -31,7 +31,7 @@ THE FIXED-ORDER DESIGN vs cuVS's NONDETERMINISM
 """
 
 from checks.numerics import ftz, identical_mul_add
-from x_ann.fast_env import CAGRA_FAST_SEEDS, CAGRA_FAST_SEED_WORK, CAGRA_FAST_ITERS
+from x_ann.fast_env import CAGRA_FAST_SEED_WORK
 
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
@@ -41,7 +41,7 @@ comptime I32P = MutPointer[Int32, MutAnyOrigin]
 @always_inline
 def cg_search_budget(n: Int, d: Int, deg: Int, L: Int, n_seeds_in: Int, max_iter_in: Int) -> Tuple[Int, Int]:
     """The search's (n_seeds, max_iter) after the seed and iteration floors
-    of x_ann/fast_env.mojo (`CAGRA_FAST_SEEDS`, `CAGRA_FAST_ITERS`): at least
+    of x_ann/fast_env.mojo (`CAGRA_FAST_SEED_WORK`): at least
     CAGRA_FAST_SEED_WORK / d seeds (never above n), so the start set covers
     graphs that split into near-isolated components, and at least
     2 * itopk + log_{deg/2}(n) iterations (cuVS's auto rule adds the log
@@ -49,21 +49,23 @@ def cg_search_budget(n: Int, d: Int, deg: Int, L: Int, n_seeds_in: Int, max_iter
     search and the host column."""
     var n_seeds = n_seeds_in
     var max_iter = max_iter_in
-    comptime if CAGRA_FAST_SEEDS:
-        var floor = CAGRA_FAST_SEED_WORK // (d if d > 0 else 1)
-        if floor > n:
-            floor = n
-        if n_seeds < floor:
-            n_seeds = floor
-    comptime if CAGRA_FAST_ITERS:
-        var it = 2 * L
-        var reach = 1
-        var fan = deg // 2 if deg // 2 > 2 else 2
-        while reach < n:
-            reach *= fan
-            it += 1
-        if max_iter < it:
-            max_iter = it
+    # TOMBSTONE: MOJOLEARN_CAGRA_FAST_SEEDS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at b978a9b483.
+    # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS_OFF.patch; record in docs/TOMBSTONES.md.
+    var floor = CAGRA_FAST_SEED_WORK // (d if d > 0 else 1)
+    if floor > n:
+        floor = n
+    if n_seeds < floor:
+        n_seeds = floor
+    # TOMBSTONE: MOJOLEARN_CAGRA_FAST_ITERS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at e5aba92ace.
+    # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_ITERS_OFF.patch; record in docs/TOMBSTONES.md.
+    var it = 2 * L
+    var reach = 1
+    var fan = deg // 2 if deg // 2 > 2 else 2
+    while reach < n:
+        reach *= fan
+        it += 1
+    if max_iter < it:
+        max_iter = it
     return (n_seeds, max_iter)
 
 

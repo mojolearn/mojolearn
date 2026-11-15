@@ -29,7 +29,6 @@ from ivf.estimator import ivf_flat_build_host, ivf_flat_build_resident_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_trainset_rows
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
-from std.sys.compile import is_defined
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue_query_status
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
@@ -42,7 +41,9 @@ from x_ann.ivf_pq_core import (
 
 comptime TPB = 128
 
-comptime PQ_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_PQ_FAST_TRAINSET_OFF"]()
+# TOMBSTONE: MOJOLEARN_PQ_FAST_TRAINSET_OFF (old path, no A/B recorded beside the fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 1657e37f94.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_FAST_TRAINSET_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PQ_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """FAST (lane ann-apple, 2026-09-28): each subspace codebook trains on at
 most `PQ_FAST_ROWS_PER_CODE` rows per code, a seeded uniform sample of the
 residuals (FAISS's `max_points_per_centroid` rule; the coarse quantizer
@@ -151,15 +152,16 @@ def _enqueue_assign(
     ctx: DeviceContext, n: Int, r: F32P, cb: F32P, pq_dim: Int, rot_dim: Int, pq_len: Int, n_codes: Int,
     codes: I32P,
 ) raises:
-    """The encode launch: the staged kernel when the subspace codebook fits
-    (`-D MOJOLEARN_PQ_ASSIGN_UNSTAGED` keeps the one-thread-per-cell kernel)."""
-    comptime if not is_defined["MOJOLEARN_PQ_ASSIGN_UNSTAGED"]():
-        if n_codes * pq_len <= ASSIGN_CB_MAX and pq_len <= ASSIGN_LEN_MAX:
-            ctx.enqueue_function[assign_staged_kernel](
-                Int32(n), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
-                grid_dim=((n + TPB - 1) // TPB, pq_dim), block_dim=TPB,
-            )
-            return
+    """The encode launch: the staged kernel when the subspace codebook fits,
+    the one-thread-per-cell kernel otherwise."""
+    # TOMBSTONE: MOJOLEARN_PQ_ASSIGN_UNSTAGED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 5243764241.
+    # Restore: git apply experiments/removed/MOJOLEARN_PQ_ASSIGN_UNSTAGED.patch; record in docs/TOMBSTONES.md.
+    if n_codes * pq_len <= ASSIGN_CB_MAX and pq_len <= ASSIGN_LEN_MAX:
+        ctx.enqueue_function[assign_staged_kernel](
+            Int32(n), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
+            grid_dim=((n + TPB - 1) // TPB, pq_dim), block_dim=TPB,
+        )
+        return
     ctx.enqueue_function[assign_kernel](
         Int32(n * pq_dim), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
         grid_dim=_grid(n * pq_dim), block_dim=TPB,

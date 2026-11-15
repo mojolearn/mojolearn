@@ -1,0 +1,28 @@
+diff --git a/umap/optimizer_fast.mojo b/umap/optimizer_fast.mojo
+index 136cc96e50..6950fa3318 100644
+--- a/umap/optimizer_fast.mojo
++++ b/umap/optimizer_fast.mojo
+@@ -5,6 +5,7 @@
+ from max.gpu.host import DeviceContext
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.math import isfinite
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from umap.optimizer_identical_device import umap_dense_graph_to_device
+@@ -200,9 +201,12 @@ def optimize_layout_fast(
+ #: (the per-component kernel above walks the edges, their pow and their
+ #: negative samples once PER component). Every component's sum takes the
+ #: same terms in the same order, so the layout is the same bytes.
+-# TOMBSTONE: MOJOLEARN_UMAP_FUSED_EPOCH_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 507a0aa5ac.
+-# Restore: git apply experiments/removed/MOJOLEARN_UMAP_FUSED_EPOCH_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime UMAP_FUSED_EPOCH = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++#: `-D MOJOLEARN_UMAP_FUSED_EPOCH_OFF` keeps the per-component kernel.
++comptime UMAP_FUSED_EPOCH = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_UMAP_FUSED_EPOCH_OFF"]()
++)
+ 
+ 
+ def umap_jacobi_epoch_fused_kernel[C: Int](

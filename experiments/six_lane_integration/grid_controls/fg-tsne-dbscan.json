@@ -4,53 +4,19 @@
   "branch": "lane/fg-tsne-dbscan",
   "head": "566f78ab1",
   "head_note": "code only, uncompiled (lanes never compile); T3 (FFT), D3 (denseball) skipped this round; H4 already on main as IDN_DENDRO_UNION",
-  "controls": {
-    "tsne_knn_tile_select": {
-      "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_ann/knn_device.mojo:354",
-        "x_ann/knn_device.mojo:knn_enqueue"
-      ],
-      "binding": [
-        "_mojolearn_x_ann"
-      ],
-      "bits_change": false,
-      "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-      "note": "T1. IDENTICAL, NVIDIA+AMD. Block-wide mark/rank/merge top-k per 64x64 distance tile instead of the serial owner insertion; every d takes the 64x64 tile. Same (dist, idx) lists for finite/inf distances. Also the CAGRA build's exact graph. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF) restores the serial owner insertion."
-    }
-  },
+  "controls": {},
   "algorithms": {
     "algos:tsne": {
       "binding": "_mojolearn_x_ann",
       "route": "_expansion_ann.py TSNE.fit -> x_ann_tsne_fit -> tsne_device.tsne_fit_device -> knn_enqueue (T1) -> perplexity -> symmetrize -> _ts_iter/_enq_repulse_split (T2)",
-      "controls": [
-        "tsne_knn_tile_select"
-      ],
-      "interaction_groups": [
-        [
-          "tsne_knn_tile_select"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "algos:cagra": {
       "binding": "_mojolearn_x_ann",
       "route": "cagra_device.cagra_knn_enqueue -> knn_enqueue (T1)",
-      "controls": [
-        "tsne_knn_tile_select"
-      ],
-      "interaction_groups": [
-        [
-          "tsne_knn_tile_select"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "classical:hdbscan": {
       "binding": "_mojolearn_hdbscan",
@@ -99,6 +65,11 @@
       "define": "MOJOLEARN_IDN_TSNE_REP_TILE_OFF",
       "control": "tsne_rep_tile",
       "reason": "DELETED 2026-11-15 (lane/expdel2-14-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 98ec52101e; patch experiments/removed/MOJOLEARN_IDN_TSNE_REP_TILE_OFF.patch): old path beside the default; the default is kept, no bit change. Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF",
+      "control": "tsne_knn_tile_select",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-13-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7e06e9c43e; patch experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch): old path of the promoted IDENTICAL default (EXP:1822 PROMOTED, post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106). Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
     }
   ]
 }

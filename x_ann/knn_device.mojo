@@ -26,7 +26,6 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 
 from checks.numerics import ftz, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -41,12 +40,12 @@ from x_ann.fast_env import FAST_KNN_BIGD
 #: ascending j, so every listed index is below j, and (dist >= ld, j > li)
 #: never beats (ld, li) under `ts_knn_beats`; a NaN never beats either. A
 #: pruned candidate is exactly one the full fold would reject: the same list,
-#: the same bits. Tested every KNP_EVERY features. `-D
-#: MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF` (or MOJOLEARN_IDN_ALL_OFF) folds every
-#: feature.
-comptime IDN_ANN_KNN_PRUNE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: the same bits. Tested every KNP_EVERY features.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 9817a8d9b9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ANN_KNN_PRUNE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: features between two prune tests (a multiple of 4)
 comptime KNP_EVERY = 16
 
@@ -203,12 +202,10 @@ def knn_tiled_bigd_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn
 # `ts_ftz_nonneg(fma(diff, diff, acc))`, diff = ftz(ftz(x_i) - ftz(x_j)),
 # c ascending over exactly d; then row i's owner offers the tile's
 # candidates in ascending j through the same `ts_knn_beats` /
-# `ts_knn_offer`. The same bits. -D MOJOLEARN_KNN_WIDE_OFF=1 restores the
-# cell kernel.
-comptime KNN_WIDE = (
-    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not is_defined["MOJOLEARN_KNN_WIDE_OFF"]()
-)
+# `ts_knn_offer`. The same bits.
+# TOMBSTONE: MOJOLEARN_KNN_WIDE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 7778cba4e1.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_WIDE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KNN_WIDE = TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
 comptime KW_TI = 64
 comptime KW_TJ = 64
 comptime KW_KC = 16
@@ -348,16 +345,14 @@ def knn_wide_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I3
 #: 0.86x. Vendor split: NV taxi 1.17x slower with both on (the average of
 #: the two vendors decides). Trustworthiness@15 equal and digests identical
 #: in every arm on both vendors (istella ce69cdffd6f889b6, taxi
-#: cee32a8a52defb1c): no bit change. -D MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF
-#: (or MOJOLEARN_IDN_ALL_OFF) restores the serial owner insertion (and the
-#: one-thread-per-row tile for d <= 64).
+#: cee32a8a52defb1c): no bit change.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF (old path; EXP:1822 promoted the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 7e06e9c43e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_TSNE_KNN_TILE_SELECT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 #: candidates of a row per thread in steps A and B (4 threads per row)
 comptime KS_PER = KW_TJ * KW_TI // KW_TPB
