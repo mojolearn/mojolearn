@@ -108,14 +108,11 @@ def pairlogit_est_reuse_for[column: Int]() -> Bool:
     per-group value partials (scattered to bin order) instead of
     re-enumerating the pairs. Same point, same sample (PairLogit draws
     nothing), so only FAST bits move with the fold. Needs the group kernel
-    (the accumulators are its stores), so `..._GROUP_FUSED_OFF` turns it
-    off too. Default since the M3 A/B 2026-10-03 (same data, same hash):
-    3,765 -> 3,480 ms on top of the group kernel.
-    `-D MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF` turns it off alone; the old
-    `-D MOJOLEARN_PAIRLOGIT_EST_REUSE` is accepted and changes nothing."""
-    comptime if not is_defined["MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"]():
-        return pairlogit_group_fused_for[column]()
-    return False
+    (the accumulators are its stores). Default since the M3 A/B 2026-10-03
+    (same data, same hash): 3,765 -> 3,480 ms on top of the group kernel."""
+    # TOMBSTONE: MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF (DELETE-OLD-PATH, EXP:118 KEPT 28adffe85 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 6d03f59f60.
+    # Restore: git apply experiments/removed/MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF.patch; record in docs/TOMBSTONES.md.
+    return pairlogit_group_fused_for[column]()
 
 
 comptime PAIRLOGIT_GROUP_FUSED = pairlogit_group_fused_for[TARGET_COLUMN]()
