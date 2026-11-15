@@ -1,7 +1,7 @@
-diff --git b/kernel_methods/rbf_resident.mojo a/kernel_methods/rbf_resident.mojo
+diff --git a/kernel_methods/rbf_resident.mojo b/kernel_methods/rbf_resident.mojo
 index 7b4af83375..eea1802831 100644
---- b/kernel_methods/rbf_resident.mojo
-+++ a/kernel_methods/rbf_resident.mojo
+--- a/kernel_methods/rbf_resident.mojo
++++ b/kernel_methods/rbf_resident.mojo
 @@ -73,8 +73,8 @@ comptime KM_FAST_RBF_RESIDENT = (
  )
  
@@ -40,10 +40,10 @@ index 7b4af83375..eea1802831 100644
      _ = psub^
  
  
-diff --git b/tools/kfeat_pair.py a/tools/kfeat_pair.py
+diff --git a/tools/kfeat_pair.py b/tools/kfeat_pair.py
 index 2c2844b120..031f3de476 100644
---- b/tools/kfeat_pair.py
-+++ a/tools/kfeat_pair.py
+--- a/tools/kfeat_pair.py
++++ b/tools/kfeat_pair.py
 @@ -40,11 +40,11 @@ REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the
  }
  # extra reach keys checked as well (lane apple-fast-w3-kfeat)

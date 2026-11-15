@@ -1,7 +1,7 @@
-diff --git b/core/gemm.mojo a/core/gemm.mojo
+diff --git a/core/gemm.mojo b/core/gemm.mojo
 index 97217f6931..cf2e0cdc29 100644
---- b/core/gemm.mojo
-+++ a/core/gemm.mojo
+--- a/core/gemm.mojo
++++ b/core/gemm.mojo
 @@ -121,11 +121,14 @@ Only which thread owns a chain and where its operands are read from move."""
  #:   lane/apple-fast-tier @ 95a09d1fd (docs/apple-fast/EXPERIMENTS.md).
  #: Default since the M3 A/B tier-ols-tnv1b (lane/apple-fast-tier 0a2048a44,

@@ -1,7 +1,7 @@
-diff --git b/kernel_methods/rbf_resident.mojo a/kernel_methods/rbf_resident.mojo
+diff --git a/kernel_methods/rbf_resident.mojo b/kernel_methods/rbf_resident.mojo
 index eea1802831..b8b1a2ae43 100644
---- b/kernel_methods/rbf_resident.mojo
-+++ a/kernel_methods/rbf_resident.mojo
+--- a/kernel_methods/rbf_resident.mojo
++++ b/kernel_methods/rbf_resident.mojo
 @@ -96,7 +96,7 @@ comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
  
  

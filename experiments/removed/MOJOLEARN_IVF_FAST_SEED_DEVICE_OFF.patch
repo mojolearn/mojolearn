@@ -1,7 +1,7 @@
-diff --git b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
 index bfb72ecac2..dd51cdeec9 100644
---- b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
-+++ a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
 @@ -126,6 +126,7 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
  from std.memory import unsafe_memcpy
  from x_ann.stage_timer import AnnStages

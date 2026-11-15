@@ -1,7 +1,7 @@
-diff --git b/bindings/_mojolearn_x_sequence.mojo a/bindings/_mojolearn_x_sequence.mojo
+diff --git a/bindings/_mojolearn_x_sequence.mojo b/bindings/_mojolearn_x_sequence.mojo
 index fa372b85f8..405cf042d2 100644
---- b/bindings/_mojolearn_x_sequence.mojo
-+++ a/bindings/_mojolearn_x_sequence.mojo
+--- a/bindings/_mojolearn_x_sequence.mojo
++++ b/bindings/_mojolearn_x_sequence.mojo
 @@ -839,8 +839,9 @@ def build__mojolearn_x_sequence() -> PythonObject:
          m.def_function[optimizer_resident_move_binding]("optimizer_resident_move")
          m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
@@ -14,10 +14,10 @@ index fa372b85f8..405cf042d2 100644
          comptime if AF_RESIDENT:
              m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
              m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")
-diff --git b/sequence/opt_resident.mojo a/sequence/opt_resident.mojo
+diff --git a/sequence/opt_resident.mojo b/sequence/opt_resident.mojo
 index 0bb28c5627..4ff61b5a26 100644
---- b/sequence/opt_resident.mojo
-+++ a/sequence/opt_resident.mojo
+--- a/sequence/opt_resident.mojo
++++ b/sequence/opt_resident.mojo
 @@ -100,15 +100,14 @@ comptime OPT_PIPE_CH = 1 << 21
  #:    (`sequence/ops_impl.mojo::adafactor_core`) on the same values.
  #: AF_FAST_RESIDENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,

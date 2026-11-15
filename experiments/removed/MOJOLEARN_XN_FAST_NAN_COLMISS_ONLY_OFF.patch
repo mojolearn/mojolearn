@@ -1,7 +1,7 @@
-diff --git b/x_neighbors/nan_cells_device.mojo a/x_neighbors/nan_cells_device.mojo
+diff --git a/x_neighbors/nan_cells_device.mojo b/x_neighbors/nan_cells_device.mojo
 index c941ba60dc..8a34b86817 100644
---- b/x_neighbors/nan_cells_device.mojo
-+++ a/x_neighbors/nan_cells_device.mojo
+--- a/x_neighbors/nan_cells_device.mojo
++++ b/x_neighbors/nan_cells_device.mojo
 @@ -212,10 +212,9 @@ def nan_colmiss_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
  # download) is the transform's. With colmiss_only=1 the op runs the column
  # count kernel alone and stores their sum as the total (integer adds, the

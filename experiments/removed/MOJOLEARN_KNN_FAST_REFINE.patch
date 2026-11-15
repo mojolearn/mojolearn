@@ -1,7 +1,7 @@
-diff --git b/neighbors/estimator.mojo a/neighbors/estimator.mojo
+diff --git a/neighbors/estimator.mojo b/neighbors/estimator.mojo
 index 588f51ece2..e4e78dfdeb 100644
---- b/neighbors/estimator.mojo
-+++ a/neighbors/estimator.mojo
+--- a/neighbors/estimator.mojo
++++ b/neighbors/estimator.mojo
 @@ -126,14 +126,33 @@ from neighbors.impl.multi_gpu import knn_device_count, neighbors_device_plan, pa
  from std.sys.compile import is_defined
  from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST

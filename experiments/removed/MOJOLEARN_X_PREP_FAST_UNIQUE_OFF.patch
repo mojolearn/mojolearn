@@ -1,7 +1,7 @@
-diff --git b/bindings/_mojolearn_x_prep.mojo a/bindings/_mojolearn_x_prep.mojo
+diff --git a/bindings/_mojolearn_x_prep.mojo b/bindings/_mojolearn_x_prep.mojo
 index 0983ef8729..6521ba48da 100644
---- b/bindings/_mojolearn_x_prep.mojo
-+++ a/bindings/_mojolearn_x_prep.mojo
+--- a/bindings/_mojolearn_x_prep.mojo
++++ b/bindings/_mojolearn_x_prep.mojo
 @@ -190,11 +190,13 @@ def vendor_binding() raises -> PythonObject:
  #: n=1, output digests identical: onehot taxi 69.7 -> 30.4 ms, ordinal taxi
  #: 67.2 -> 25.3 ms). It was the env switch MOJOLEARN_X_PREP_FAST_UNIQUE=1;

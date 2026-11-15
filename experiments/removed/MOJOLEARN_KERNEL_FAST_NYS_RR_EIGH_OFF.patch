@@ -1,7 +1,7 @@
-diff --git b/kernel_methods/estimator.mojo a/kernel_methods/estimator.mojo
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
 index f4dd91b381..97033b552c 100644
---- b/kernel_methods/estimator.mojo
-+++ a/kernel_methods/estimator.mojo
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
 @@ -1315,7 +1315,8 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
  
  #: lane/apple-fast-kernel (2026-10-02), FAST on Apple only, the default since

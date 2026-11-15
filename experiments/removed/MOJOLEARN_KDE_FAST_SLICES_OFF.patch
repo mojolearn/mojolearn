@@ -1,7 +1,7 @@
-diff --git b/kde/impl/neighbors/kernel_density.mojo a/kde/impl/neighbors/kernel_density.mojo
+diff --git a/kde/impl/neighbors/kernel_density.mojo b/kde/impl/neighbors/kernel_density.mojo
 index 894ad28d07..1dbcf0de46 100644
---- b/kde/impl/neighbors/kernel_density.mojo
-+++ a/kde/impl/neighbors/kernel_density.mojo
+--- a/kde/impl/neighbors/kernel_density.mojo
++++ b/kde/impl/neighbors/kernel_density.mojo
 @@ -4416,16 +4416,18 @@ def kde_score_samples_device(
  # changes, which FAST may do. FAST + Apple only; the two slice kernels are
  # the two fused kernels with slice bounds and partial outputs.

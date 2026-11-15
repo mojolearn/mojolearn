@@ -1,7 +1,7 @@
-diff --git b/bindings/_mojolearn_x_prep.mojo a/bindings/_mojolearn_x_prep.mojo
+diff --git a/bindings/_mojolearn_x_prep.mojo b/bindings/_mojolearn_x_prep.mojo
 index a42eb73225..0983ef8729 100644
---- b/bindings/_mojolearn_x_prep.mojo
-+++ a/bindings/_mojolearn_x_prep.mojo
+--- a/bindings/_mojolearn_x_prep.mojo
++++ b/bindings/_mojolearn_x_prep.mojo
 @@ -199,15 +199,17 @@ comptime X_PREP_FAST_UNIQUE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS
  
  #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since

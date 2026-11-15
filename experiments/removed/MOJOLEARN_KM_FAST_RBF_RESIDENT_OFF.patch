@@ -1,7 +1,7 @@
-diff --git b/kernel_methods/rbf_resident.mojo a/kernel_methods/rbf_resident.mojo
+diff --git a/kernel_methods/rbf_resident.mojo b/kernel_methods/rbf_resident.mojo
 index 731b9487cf..7b4af83375 100644
---- b/kernel_methods/rbf_resident.mojo
-+++ a/kernel_methods/rbf_resident.mojo
+--- a/kernel_methods/rbf_resident.mojo
++++ b/kernel_methods/rbf_resident.mojo
 @@ -1,7 +1,8 @@
  # SPDX-License-Identifier: Apache-2.0
  # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -29,10 +29,10 @@ index 731b9487cf..7b4af83375 100644
      and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
  )
  
-diff --git b/tools/kfeat_pair.py a/tools/kfeat_pair.py
+diff --git a/tools/kfeat_pair.py b/tools/kfeat_pair.py
 index 12ccfa68e7..2c2844b120 100644
---- b/tools/kfeat_pair.py
-+++ a/tools/kfeat_pair.py
+--- a/tools/kfeat_pair.py
++++ b/tools/kfeat_pair.py
 @@ -32,9 +32,7 @@ FIXTURE = "kfeat-v2"  # lane apple-fast-w3-kfeat: gate, lazy-weights and staged
  REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the defines)
      # RBF_RESIDENT, SRP_STRAT, SCHI2_MOJO_MT, ACHI2_DEVSCAN, SCHI2_LAZYW and RBF_STAGED are
@@ -58,10 +58,10 @@ index 12ccfa68e7..2c2844b120 100644
      "x_neighbors": set(),
      "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
  }
-diff --git b/tools/kfeat_quality.py a/tools/kfeat_quality.py
+diff --git a/tools/kfeat_quality.py b/tools/kfeat_quality.py
 index fdb8fe1836..f72e1ac610 100644
---- b/tools/kfeat_quality.py
-+++ a/tools/kfeat_quality.py
+--- a/tools/kfeat_quality.py
++++ b/tools/kfeat_quality.py
 @@ -7,8 +7,8 @@
    compare kernel_methods|x_neighbors|x_decomp A.npz B.npz
  

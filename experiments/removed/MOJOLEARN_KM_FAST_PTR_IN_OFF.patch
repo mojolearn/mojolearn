@@ -1,7 +1,7 @@
-diff --git b/kernel_methods/estimator.mojo a/kernel_methods/estimator.mojo
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
 index 70adbbad46..f4dd91b381 100644
---- b/kernel_methods/estimator.mojo
-+++ a/kernel_methods/estimator.mojo
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
 @@ -265,7 +265,7 @@ def _upload(
  
  #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since

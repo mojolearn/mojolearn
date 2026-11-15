@@ -1,7 +1,7 @@
-diff --git b/neighbors/impl/detail/fast_mma_knn.mojo a/neighbors/impl/detail/fast_mma_knn.mojo
+diff --git a/neighbors/impl/detail/fast_mma_knn.mojo b/neighbors/impl/detail/fast_mma_knn.mojo
 index cf6c38360e..b9055cedaf 100644
---- b/neighbors/impl/detail/fast_mma_knn.mojo
-+++ a/neighbors/impl/detail/fast_mma_knn.mojo
+--- a/neighbors/impl/detail/fast_mma_knn.mojo
++++ b/neighbors/impl/detail/fast_mma_knn.mojo
 @@ -126,11 +126,13 @@ def _k64_on() -> Bool:
      for `K <= 32`).
  
