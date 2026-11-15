@@ -32,7 +32,7 @@ five off):
   IDN_HPDEV_INIT    (always on; its _OFF was deleted)  uniform_init_f32
   IDN_HPDEV_ISUM    -D MOJOLEARN_IDN_HPDEV_ISUM_OFF    reduce_stat's exact
                     integer sum (lane fix-s1-shared)
-  IDN_HPDEV_NORMAL  -D MOJOLEARN_IDN_HPDEV_NORMAL_OFF  normal_init_f32
+  IDN_HPDEV_NORMAL  (always on; its _OFF was deleted)  normal_init_f32
                     (lane fix-s1-shared)
   IDN_HPDEV_CAST    -D MOJOLEARN_IDN_HPDEV_CAST_OFF    cast_elements between
                     two different dtypes (lane fix-s1-shared; a same-dtype
@@ -127,7 +127,9 @@ comptime IDN_HPDEV_INIT = _HPDEV_BASE
 #: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
 #: lane fix-s1-shared: cast_elements between two dtypes on the device.
 #: lane fix-s1-shared: normal_init_f32 drawn on the device.
-comptime IDN_HPDEV_NORMAL = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_NORMAL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 31aef6de0f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HPDEV_NORMAL = _HPDEV_BASE
 #: lane cpu2-l1-input: the input fixes (see the module docstring). On in
 #: every numeric mode; only the sabotage builds keep the host loops.
 
