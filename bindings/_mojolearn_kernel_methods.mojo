@@ -53,7 +53,6 @@ from kernel_methods.estimator import (
     nystroem_fit_host,
     nystroem_transform_host_into,
     KM_FAST_PTR_IN,
-    KRR_IDN_PTR_IN,
     NYS_IDN_FIT_PTR_IN,
     nystroem_fit_ptr,
     kernel_ridge_predict_ptr_into,
@@ -808,12 +807,13 @@ def build__mojolearn_kernel_methods() -> PythonObject:
         m.def_function[kernel_methods_api_v1_binding]("kernel_methods_api_v1")
         m.def_function[kernel_ridge_fit_binding]("kernel_ridge_fit")
         m.def_function[kernel_ridge_predict_binding]("kernel_ridge_predict")
-        comptime if KRR_IDN_PTR_IN:
-            m.def_function[kernel_ridge_fit_ptr_binding]("kernel_ridge_fit_ptr")
-            m.def_function[kernel_ridge_predict_ptr_binding]("kernel_ridge_predict_ptr")
-            m.def_function[kernel_ridge_resident_prepare_binding]("kernel_ridge_resident_prepare")
-            m.def_function[kernel_ridge_resident_release_binding]("kernel_ridge_resident_release")
-            m.def_function[kernel_ridge_predict_resident_binding]("kernel_ridge_predict_resident")
+        # TOMBSTONE: MOJOLEARN_IDN_KRR_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 25dea25b3b.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_KRR_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+        m.def_function[kernel_ridge_fit_ptr_binding]("kernel_ridge_fit_ptr")
+        m.def_function[kernel_ridge_predict_ptr_binding]("kernel_ridge_predict_ptr")
+        m.def_function[kernel_ridge_resident_prepare_binding]("kernel_ridge_resident_prepare")
+        m.def_function[kernel_ridge_resident_release_binding]("kernel_ridge_resident_release")
+        m.def_function[kernel_ridge_predict_resident_binding]("kernel_ridge_predict_resident")
         m.def_function[nystroem_fit_binding]("nystroem_fit")
         comptime if NYS_IDN_FIT_PTR_IN:
             m.def_function[nystroem_fit_ptr_binding]("nystroem_fit_ptr")

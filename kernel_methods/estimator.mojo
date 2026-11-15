@@ -435,9 +435,7 @@ def krr_weight_kernel(
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KRR_DEV_SCALE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KRR_IDN_DEV_SCALE = True
 
-#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KRR_PTR_IN_OFF` unregisters the pointer bindings, so
-#: `kernel_methods.py` takes the list route again): KernelRidge fit and
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default: KernelRidge fit and
 #: predict read X, y, X_fit and the dual from the caller's memory straight
 #: to the device, X and y are scanned for NaN / infinity there
 #: (`_upload_checked`) and the result is copied into the caller's output,
@@ -450,9 +448,10 @@ comptime KRR_IDN_DEV_SCALE = True
 #: tier and vendor (FAST included), so no fast build stages X, y or the
 #: sample-weight factors through host lists. Same kernels at the same
 #: default scheduling as the list route: FAST bits do not move either.
-comptime KRR_IDN_PTR_IN = not (
-    is_defined["MOJOLEARN_IDN_KRR_PTR_IN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_KRR_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 25dea25b3b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KRR_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+# KRR_IDN_PTR_IN stays as a constant: kernel_methods/native_descriptor_dispatch.mojo reads it.
+comptime KRR_IDN_PTR_IN = True
 
 #: SCHEDULING: one thread per target cell.
 comptime KRR_SCALE_TPB = 256
