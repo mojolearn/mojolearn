@@ -2,7 +2,7 @@
 device, run in a loop on the caller's arena (x_prep/host/program.mojo), with
 the GPU binding's export names and address contract."""
 from core.experiment_guards_base import BASE_GUARDS_OK
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C56_LDA_INPUT
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -109,12 +109,14 @@ def c08_routes_binding() raises -> PythonObject:
 def classical_shared_binding() raises -> PythonObject:
     """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
     1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 retired (C04 LDA, deleted 2026-11-15),
-    8 C56_LDA_INPUT; 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
+    8 retired (C56 LDA input, deleted 2026-11-15); 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
     after grid ge123e6f9: slower on both vendors, quality same)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C56_LDA_INPUT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 859362ebd3.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     # TOMBSTONE: MOJOLEARN_CLASSICAL_C04_LDA (opt-in arm, EXP:1532 DROPPED-serial) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 93b7a49f96.
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     return PythonObject(
-        Int(C08_DICTIONARY) | (Int(C56_LDA_INPUT) << 3)
+        Int(C08_DICTIONARY)
     )
 
 
