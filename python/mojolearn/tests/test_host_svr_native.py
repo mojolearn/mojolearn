@@ -255,16 +255,16 @@ def test_svr_dataframe_and_feature_name_warning_are_preserved(tmp_path):
 
 
 def test_svr_inherited_fit_is_native_and_precomputed_matches_linear():
-    """The inherited fit publishes a fitted model whose predict is one native
+    """For every kernel the inherited fit publishes a fitted model whose predict is one native
     call; a precomputed linear Gram predicts the linear kernel's words in the same
     build, and the linear coef_ equals the independent legacy reading."""
     x = np.asarray([[-2., -1.], [-1., -2.], [0., 0.], [.5, .25],
                     [2., 1.], [1., 2.], [3., 3.], [4., 3.]], dtype="<f4")
     y = x[:, 0] * .25 - x[:, 1] * .5
     predictions = {}
-    for kernel in ("linear", "precomputed"):
+    for kernel in KERNELS:
         data = x @ x.T if kernel == "precomputed" else x
-        model = host.HostSVR(kernel=kernel, gamma=.1, coef0=0, max_iter=4, numeric_mode="identical")
+        model = host.HostSVR(kernel=kernel, gamma=.1, coef0=.25 if kernel in ("poly", "sigmoid") else 0, max_iter=4, numeric_mode="identical")
         assert model.fit(data, y) is model
         assert vars(model)["_mojolearn_fitted"] is True
         assert "_mojolearn_fitting" not in vars(model)

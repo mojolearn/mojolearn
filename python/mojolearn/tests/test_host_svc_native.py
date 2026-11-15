@@ -378,16 +378,16 @@ def test_svc_computed_property_refuses_object_storage_hooks(tmp_path, field):
 
 @pytest.mark.parametrize("multi", [False, True])
 def test_svc_inherited_fit_is_native_and_precomputed_matches_linear(multi):
-    """The inherited fit publishes a fitted model whose every inference method is
+    """For every kernel the inherited fit publishes a fitted model whose every inference method is
     one native call, and a precomputed linear Gram gives the linear kernel's
     outputs bit for bit in the same build."""
     x = np.asarray([[-3, -2], [-2, -1], [-1, -2], [-2, -3], [0, 1], [1, 0],
                     [1, 2], [2, 1], [3, 4], [4, 3], [3, 3], [4, 4]], dtype=np.float32)
     y = np.asarray([0] * 4 + [1] * 4 + [2] * 4 if multi else [0] * 6 + [1] * 6, dtype=np.int64)
     outputs = {}
-    for kernel in ("linear", "precomputed"):
+    for kernel in KERNELS:
         data = x @ x.T if kernel == "precomputed" else x
-        model = host.HostSVC(C=1.5, kernel=kernel, gamma=.5, degree=3, coef0=0.,
+        model = host.HostSVC(C=1.5, kernel=kernel, gamma=.5, degree=3, coef0=.25 if kernel in ("poly", "sigmoid") else 0.,
                              probability=True, random_state=17, max_iter=100, numeric_mode="identical")
         assert model.fit(data, y) is model
         assert vars(model)["_mojolearn_fitted"] is True
