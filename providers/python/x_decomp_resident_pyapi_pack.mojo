@@ -29,9 +29,7 @@ from x_decomp.resident import (
     dev_code_rows_run,
     dev_eigh_run,
     dev_eigh_to_run,
-    GRP_CLS2_NOSCAN,
     GRP_CLS2_DEVSCAN,
-    GRP_CLS2_LAZY,
     GRP_FAST_FUSED,
     GRP_FAST_SRP_STRAT,
     dev_move_run,
@@ -283,12 +281,8 @@ def grp_cls2_py() raises -> PythonObject:
     NOSCAN, bit 2 DEVSCAN, bit 4 LAZY, bit 8 FUSED, bit 16 SRP_STRAT (0 on
     every other build)."""
     var f = 0
-    comptime if GRP_CLS2_NOSCAN:
-        f |= 1
     comptime if GRP_CLS2_DEVSCAN:
         f |= 2
-    comptime if GRP_CLS2_LAZY:
-        f |= 4
     comptime if GRP_FAST_FUSED:
         f |= 8
     comptime if GRP_FAST_SRP_STRAT:
