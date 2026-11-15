@@ -122,6 +122,9 @@ def parse_tree_infer(path):
                     pass
                 if f.get("hash") not in (None, "-", "None"):
                     rec["hashes"].append(f["hash"])
+                calls = _small_rows().parse_suffix(f)   # SMALL ROWS (2026-11-15): calls= min_ms= max_ms=
+                if calls is not None:
+                    rec.setdefault("scored_calls", []).append(dict(calls, round=f.get("round")))
             elif head == "FSPEED-INFER-WARMUP" and arm and batch:
                 try:
                     out["warmup"][(arm, batch)] = (float(f["ms"]), int(f["rows"]))
@@ -146,6 +149,22 @@ def parse_tree_infer(path):
 # ---------------------------------------------------------------------------
 # Cells
 # ---------------------------------------------------------------------------
+
+_SMALL_ROWS = []
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py by path, loaded once per process (small rows: calls and spread)."""
+    if not _SMALL_ROWS:
+        import importlib.util
+        import os
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bench_board_small_rows.py")
+        spec = importlib.util.spec_from_file_location("bench_board_infer_small_rows", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _SMALL_ROWS.append(mod)
+    return _SMALL_ROWS[0]
+
 
 def _timing(cell, ms, rounds, refused, bb):
     cell.update(times_ms=ms, median_ms=float(statistics.median(ms)) if ms else None,
@@ -181,6 +200,7 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
             warm = p["warmup"].get((arm, batch))
             refused = p["refused"].get((arm, batch)) or p["refused"].get((arm, "all"))
             _timing(cell, rec["ms"], ctx["rounds"], refused, bb)
+            cell.update(_small_rows().cell_fields(rec.get("scored_calls")))
             if not rec["ms"] and not refused:
                 cell["status"] = "UNKNOWN(no inference lines)"
             cell["batch_rows"] = rec["rows"] or (warm[1] if warm else None)
@@ -242,6 +262,7 @@ def classical_cells(bb, ctx, race, r):
         refused = None if a.get("status") == "ok" else "%s: %s" % (
             a.get("status"), json.dumps(a.get("error"))[:200])
         _timing(cell, a.get("ms") or [], ctx["rounds"], refused, bb)
+        cell.update(_small_rows().cell_fields(a.get("scored_calls")))   # SMALL ROWS (2026-11-15)
         cell["warmup_ms"] = a.get("warmup_ms")
         cell["call"] = a.get("call_text") or "%s(Xq)" % inf.get("call")
         cell["hash"] = (a.get("digests") or [None])[-1]
