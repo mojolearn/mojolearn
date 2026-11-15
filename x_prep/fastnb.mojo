@@ -38,10 +38,10 @@ from x_prep.common import FP, IP, p, ld, st
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
 comptime IDN_NB_CAT_ATOMIC = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-#: The switch: FAST, Apple, and the define (default OFF); or IDENTICAL (above).
-comptime NB_CAT_ATOMIC = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_NB_CAT_ATOMIC"]()
-) or IDN_NB_CAT_ATOMIC
+# TOMBSTONE: MOJOLEARN_NB_CAT_ATOMIC (FAST+Apple opt-in arm, EXP:289 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 4a5487a7a7.
+# Restore: git apply experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch
+#: The switch: IDENTICAL (above); the FAST + Apple opt-in arm is deleted.
+comptime NB_CAT_ATOMIC = IDN_NB_CAT_ATOMIC
 
 
 def cat_hist_atomic_kernel(f: FP, q: IP, total: Int32):
