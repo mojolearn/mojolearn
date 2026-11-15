@@ -2184,6 +2184,96 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_SSD_OCCUPANCY`](#mojolearn_idn_ssd_occupancy) | Mamba-2 SSD S10/S12/S18 kernels (mamba/impl/modules/ssd_minimal.mojo; host column keeps the cell kernels) | 2026-11-15 (`44ec9b2ec9`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #5), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-cell chains; host column keeps the cell kernels) | [MOJOLEARN_IDN_SSD_OCCUPANCY.patch](../experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch) |
 | [`MOJOLEARN_IDN_ATTN_FOLD_V2`](#mojolearn_idn_attn_fold_v2) | Attention key-axis fold v2 (transformer/impl/llama/attn_fold_v2.mojo, modeling_llama.mojo eager kernels, fused_attention.mojo fused kernels, training/byte_lm_host_kernels.mojo host column) | 2026-11-15 (`c3d1c7865f`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #3), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits on every column (fold order; device, fused, host oracle and byte-LM host kernels restored together) | [MOJOLEARN_IDN_ATTN_FOLD_V2.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch) |
 | [`MOJOLEARN_IDN_NORM_FIXED_LANES`](#mojolearn_idn_norm_fixed_lanes) | RMSNorm / LayerNorm row statistics as one 32-lane cell (transformer/experiments/norm_fixed_lanes.mojo; modeling_llama.mojo, autograd/kernels/transformer.mojo, autograd/transformer_primitives_ops.mojo device; oracles, samba_ops_oracle and byte_lm_host_kernels host column) | 2026-11-15 (`c48e5cad76`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #6), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits on every column (fold order; device kernels, oracles and host kernels restored together) | [MOJOLEARN_IDN_NORM_FIXED_LANES.patch](../experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch) |
+| [`MOJOLEARN_2030_NO_FUSED_EST_MOVE`](#mojolearn_2030_no_fused_est_move) | Trees (GBDT fused estimation move opt-out, DEVIATION 2030) | 2026-11-15 (`0415c68a0f`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch](../experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch) |
+| [`MOJOLEARN_2031_SYM_RIDX_SPLITS`](#mojolearn_2031_sym_ridx_splits) | Trees (GBDT symmetric ridx-only split schedule, opt-in off Apple) | 2026-11-15 (`7a9e6c5691`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_2031_SYM_RIDX_SPLITS.patch](../experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS.patch) |
+| [`MOJOLEARN_2041_FAST_CHUNKS_PIN`](#mojolearn_2041_fast_chunks_pin) | Trees (GBDT FAST partition chunk-count pin) | 2026-11-15 (`824cf67b84`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_2041_FAST_CHUNKS_PIN.patch](../experiments/removed/MOJOLEARN_2041_FAST_CHUNKS_PIN.patch) |
+| [`MOJOLEARN_2551_DEVICE_PARTITION`](#mojolearn_2551_device_partition) | Trees (GBDT device leaf partition force for FAST, DEVIATION 2551) | 2026-11-15 (`269778f8c9`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_2551_DEVICE_PARTITION.patch](../experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch) |
+| [`MOJOLEARN_2581_GROUP_WIDTH`](#mojolearn_2581_group_width) | Trees (GBDT per-group bit width, FAST opt-in) | 2026-11-15 (`413f6bdc16`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_2581_GROUP_WIDTH.patch](../experiments/removed/MOJOLEARN_2581_GROUP_WIDTH.patch) |
+| [`MOJOLEARN_AFCL_T01`](#mojolearn_afcl_t01) | Trees (Apple FAST classical card T01) | 2026-11-15 (`4dcdb311b5`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T01.patch](../experiments/removed/MOJOLEARN_AFCL_T01.patch) |
+| [`MOJOLEARN_AFCL_T02`](#mojolearn_afcl_t02) | Trees (Apple FAST classical card T02) | 2026-11-15 (`951210db46`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T02.patch](../experiments/removed/MOJOLEARN_AFCL_T02.patch) |
+| [`MOJOLEARN_AFCL_T03`](#mojolearn_afcl_t03) | Trees (Apple FAST classical card T03) | 2026-11-15 (`358548637a`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T03.patch](../experiments/removed/MOJOLEARN_AFCL_T03.patch) |
+| [`MOJOLEARN_AFCL_T04`](#mojolearn_afcl_t04) | Trees (Apple FAST classical card T04) | 2026-11-15 (`c8fa4d47fc`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T04.patch](../experiments/removed/MOJOLEARN_AFCL_T04.patch) |
+| [`MOJOLEARN_AFCL_T05`](#mojolearn_afcl_t05) | Trees (Apple FAST classical card T05) | 2026-11-15 (`bc67334f43`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T05.patch](../experiments/removed/MOJOLEARN_AFCL_T05.patch) |
+| [`MOJOLEARN_AFCL_T06`](#mojolearn_afcl_t06) | Trees (Apple FAST classical card T06) | 2026-11-15 (`f22e75ee88`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T06.patch](../experiments/removed/MOJOLEARN_AFCL_T06.patch) |
+| [`MOJOLEARN_AFCL_T07`](#mojolearn_afcl_t07) | Trees (Apple FAST classical card T07) | 2026-11-15 (`d985e1b336`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T07.patch](../experiments/removed/MOJOLEARN_AFCL_T07.patch) |
+| [`MOJOLEARN_AFCL_T08`](#mojolearn_afcl_t08-never-run-card-deleted-2026-11-15) | Forest inference (Apple FAST programme) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T08.patch](../experiments/removed/MOJOLEARN_AFCL_T08.patch) |
+| [`MOJOLEARN_AFCL_T09`](#mojolearn_afcl_t09) | Trees (ExtraTrees Apple FAST eight-feature search tile) | 2026-11-15 (`e1052abc38`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T09.patch](../experiments/removed/MOJOLEARN_AFCL_T09.patch) |
+| [`MOJOLEARN_AFCL_T10`](#mojolearn_afcl_t10) | Trees (IsolationForest Apple FAST 128-lane path block) | 2026-11-15 (`dd8de6f332`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T10.patch](../experiments/removed/MOJOLEARN_AFCL_T10.patch) |
+| [`MOJOLEARN_AFCL_T11`](#mojolearn_afcl_t11) | Trees (TreeSHAP Apple FAST 64-lane query block) | 2026-11-15 (`a57eda3a34`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T11.patch](../experiments/removed/MOJOLEARN_AFCL_T11.patch) |
+| [`MOJOLEARN_AFCL_T12`](#mojolearn_afcl_t12) | Trees (Apple FAST classical card T12) | 2026-11-15 (`33b61e5bf8`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFCL_T12.patch](../experiments/removed/MOJOLEARN_AFCL_T12.patch) |
+| [`MOJOLEARN_AFT_F01`](#mojolearn_aft_f01) | Trees (RF 32-column pass, FAST+Apple) | 2026-11-15 (`f4ce56514d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F01.patch](../experiments/removed/MOJOLEARN_AFT_F01.patch) |
+| [`MOJOLEARN_AFT_F02`](#mojolearn_aft_f02) | Trees (RF eight histogram rows per lane, FAST+Apple) | 2026-11-15 (`f4ce56514d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F02.patch](../experiments/removed/MOJOLEARN_AFT_F02.patch) |
+| [`MOJOLEARN_AFT_F03`](#mojolearn_aft_f03) | Trees (RF two split cells per warp block, FAST+Apple) | 2026-11-15 (`47051d6b6e`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F03.patch](../experiments/removed/MOJOLEARN_AFT_F03.patch) |
+| [`MOJOLEARN_AFT_F04`](#mojolearn_aft_f04) | Trees (RF scan width x2, FAST+Apple) | 2026-11-15 (`47051d6b6e`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F04.patch](../experiments/removed/MOJOLEARN_AFT_F04.patch) |
+| [`MOJOLEARN_AFT_F05`](#mojolearn_aft_f05) | Trees (RF sampled-order gather four rows per lane, FAST+Apple) | 2026-11-15 (`47051d6b6e`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F05.patch](../experiments/removed/MOJOLEARN_AFT_F05.patch) |
+| [`MOJOLEARN_AFT_F06`](#mojolearn_aft_f06) | Trees (ExtraTrees Apple FAST 64-thread block) | 2026-11-15 (`e1052abc38`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F06.patch](../experiments/removed/MOJOLEARN_AFT_F06.patch) |
+| [`MOJOLEARN_AFT_F07`](#mojolearn_aft_f07) | Trees (ExtraTrees Apple FAST partition rows per thread x2) | 2026-11-15 (`e1052abc38`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F07.patch](../experiments/removed/MOJOLEARN_AFT_F07.patch) |
+| [`MOJOLEARN_AFT_F08`](#mojolearn_aft_f08) | Trees (ExtraTrees Apple FAST 1 GiB forest row-slot cap) | 2026-11-15 (`e1052abc38`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F08.patch](../experiments/removed/MOJOLEARN_AFT_F08.patch) |
+| [`MOJOLEARN_AFT_F09`](#mojolearn_aft_f09) | Trees (ExtraTrees row-major range pass two-row tile, Apple FAST card F09) | 2026-11-15 (`c3a84428df`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F09.patch](../experiments/removed/MOJOLEARN_AFT_F09.patch) |
+| [`MOJOLEARN_AFT_F10`](#mojolearn_aft_f10) | Trees (IsolationForest Apple FAST 64-lane build block) | 2026-11-15 (`72e0724726`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F10.patch](../experiments/removed/MOJOLEARN_AFT_F10.patch) |
+| [`MOJOLEARN_AFT_F11`](#mojolearn_aft_f11) | Trees (IsolationForest Apple FAST two rows per lane) | 2026-11-15 (`4a6591cfdc`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F11.patch](../experiments/removed/MOJOLEARN_AFT_F11.patch) |
+| [`MOJOLEARN_AFT_F12`](#mojolearn_aft_f12) | Trees (IsolationForest Apple FAST tiled gather) | 2026-11-15 (`f53beacaab`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_F12.patch](../experiments/removed/MOJOLEARN_AFT_F12.patch) |
+| [`MOJOLEARN_AFT_G01`](#mojolearn_aft_g01) | Trees (Apple FAST tree card G01: one uniform-barrier block per feature scanning 128-bin tiles) | 2026-11-15 (`957d58e74f`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G01.patch](../experiments/removed/MOJOLEARN_AFT_G01.patch) |
+| [`MOJOLEARN_AFT_G02`](#mojolearn_aft_g02) | Trees (Apple FAST tree card G02: occupancy-driven document replication) | 2026-11-15 (`868b669683`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G02.patch](../experiments/removed/MOJOLEARN_AFT_G02.patch) |
+| [`MOJOLEARN_AFT_G03`](#mojolearn_aft_g03) | Trees (Apple FAST tree card G03: one leader folds winners per block) | 2026-11-15 (`6df465532f`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G03.patch](../experiments/removed/MOJOLEARN_AFT_G03.patch) |
+| [`MOJOLEARN_AFT_G04`](#mojolearn_aft_g04) | Trees (Apple FAST tree card G04: 512-thread partition reduction) | 2026-11-15 (`d39d33ceb2`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G04.patch](../experiments/removed/MOJOLEARN_AFT_G04.patch) |
+| [`MOJOLEARN_AFT_G05`](#mojolearn_aft_g05) | Trees (Apple FAST tree card G05: 512-thread quantization block) | 2026-11-15 (`adccdfe434`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G05.patch](../experiments/removed/MOJOLEARN_AFT_G05.patch) |
+| [`MOJOLEARN_AFT_G06`](#mojolearn_aft_g06) | Trees (Apple FAST tree card G06: 128-thread compressed-word packing, sixteen rows per lane) | 2026-11-15 (`5f0ca355ea`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G06.patch](../experiments/removed/MOJOLEARN_AFT_G06.patch) |
+| [`MOJOLEARN_AFT_G07`](#mojolearn_aft_g07) | Trees (Apple FAST tree card G07: 128-thread Apple leaf walker reduction) | 2026-11-15 (`0c740c97bb`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G07.patch](../experiments/removed/MOJOLEARN_AFT_G07.patch) |
+| [`MOJOLEARN_AFT_G08`](#mojolearn_aft_g08) | Trees (Apple FAST tree card G08: four cursor rows per leaf-update iteration) | 2026-11-15 (`70b5f7a860`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G08.patch](../experiments/removed/MOJOLEARN_AFT_G08.patch) |
+| [`MOJOLEARN_AFT_G09`](#mojolearn_aft_g09) | Trees (Apple FAST tree card G09: eight-row ordered CTR numerator tiles) | 2026-11-15 (`d9dedc681d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G09.patch](../experiments/removed/MOJOLEARN_AFT_G09.patch) |
+| [`MOJOLEARN_AFT_G10`](#mojolearn_aft_g10) | Trees (Apple FAST tree card G10: four coalesced rows per CTR lookup worker) | 2026-11-15 (`07284d9b26`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G10.patch](../experiments/removed/MOJOLEARN_AFT_G10.patch) |
+| [`MOJOLEARN_AFT_G11`](#mojolearn_aft_g11) | Trees (Apple FAST tree card G11: 128-thread ordered derivative/weight reduction) | 2026-11-15 (`dd541ff51d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G11.patch](../experiments/removed/MOJOLEARN_AFT_G11.patch) |
+| [`MOJOLEARN_AFT_G12`](#mojolearn_aft_g12) | Trees (Apple FAST tree card G12: four-row ordered apply tiles) | 2026-11-15 (`da9c45fa84`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_G12.patch](../experiments/removed/MOJOLEARN_AFT_G12.patch) |
+| [`MOJOLEARN_AFT_N01`](#mojolearn_aft_n01) | Trees (Apple FAST tree card N01) | 2026-11-15 (`e601839e30`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N01.patch](../experiments/removed/MOJOLEARN_AFT_N01.patch) |
+| [`MOJOLEARN_AFT_N02`](#mojolearn_aft_n02) | Trees (Apple FAST tree card N02) | 2026-11-15 (`5f55007c32`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N02.patch](../experiments/removed/MOJOLEARN_AFT_N02.patch) |
+| [`MOJOLEARN_AFT_N03`](#mojolearn_aft_n03) | Trees (Apple FAST tree card N03) | 2026-11-15 (`13d92e2f1c`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N03.patch](../experiments/removed/MOJOLEARN_AFT_N03.patch) |
+| [`MOJOLEARN_AFT_N04`](#mojolearn_aft_n04) | Trees (Apple FAST tree card N04) | 2026-11-15 (`eaabda5fe8`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N04.patch](../experiments/removed/MOJOLEARN_AFT_N04.patch) |
+| [`MOJOLEARN_AFT_N05`](#mojolearn_aft_n05) | Trees (Apple FAST tree card N05) | 2026-11-15 (`a0eec817dc`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N05.patch](../experiments/removed/MOJOLEARN_AFT_N05.patch) |
+| [`MOJOLEARN_AFT_N06`](#mojolearn_aft_n06) | Trees (Apple FAST tree card N06) | 2026-11-15 (`e3824bb991`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N06.patch](../experiments/removed/MOJOLEARN_AFT_N06.patch) |
+| [`MOJOLEARN_AFT_N07`](#mojolearn_aft_n07) | Trees (Apple FAST tree card N07) | 2026-11-15 (`7127af55a3`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N07.patch](../experiments/removed/MOJOLEARN_AFT_N07.patch) |
+| [`MOJOLEARN_AFT_N08`](#mojolearn_aft_n08) | Trees (Apple FAST tree card N08) | 2026-11-15 (`6a830e56b0`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N08.patch](../experiments/removed/MOJOLEARN_AFT_N08.patch) |
+| [`MOJOLEARN_AFT_N09`](#mojolearn_aft_n09) | Trees (Apple FAST tree card N09) | 2026-11-15 (`3c44979412`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N09.patch](../experiments/removed/MOJOLEARN_AFT_N09.patch) |
+| [`MOJOLEARN_AFT_N10`](#mojolearn_aft_n10) | Trees (Apple FAST tree card N10) | 2026-11-15 (`cb73446e0e`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N10.patch](../experiments/removed/MOJOLEARN_AFT_N10.patch) |
+| [`MOJOLEARN_AFT_N11`](#mojolearn_aft_n11) | Trees (Apple FAST tree card N11) | 2026-11-15 (`89a685b7dc`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N11.patch](../experiments/removed/MOJOLEARN_AFT_N11.patch) |
+| [`MOJOLEARN_AFT_N12`](#mojolearn_aft_n12) | Trees (Apple FAST tree card N12) | 2026-11-15 (`0d082c6dc3`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_N12.patch](../experiments/removed/MOJOLEARN_AFT_N12.patch) |
+| [`MOJOLEARN_AFT_P01`](#mojolearn_aft_p01-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P01.patch](../experiments/removed/MOJOLEARN_AFT_P01.patch) |
+| [`MOJOLEARN_AFT_P02`](#mojolearn_aft_p02-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P02.patch](../experiments/removed/MOJOLEARN_AFT_P02.patch) |
+| [`MOJOLEARN_AFT_P04`](#mojolearn_aft_p04-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P04.patch](../experiments/removed/MOJOLEARN_AFT_P04.patch) |
+| [`MOJOLEARN_AFT_P05`](#mojolearn_aft_p05-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P05.patch](../experiments/removed/MOJOLEARN_AFT_P05.patch) |
+| [`MOJOLEARN_AFT_P06`](#mojolearn_aft_p06-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P06.patch](../experiments/removed/MOJOLEARN_AFT_P06.patch) |
+| [`MOJOLEARN_AFT_P07`](#mojolearn_aft_p07-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P07.patch](../experiments/removed/MOJOLEARN_AFT_P07.patch) |
+| [`MOJOLEARN_AFT_P08`](#mojolearn_aft_p08-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P08.patch](../experiments/removed/MOJOLEARN_AFT_P08.patch) |
+| [`MOJOLEARN_AFT_P09`](#mojolearn_aft_p09-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P09.patch](../experiments/removed/MOJOLEARN_AFT_P09.patch) |
+| [`MOJOLEARN_AFT_P10`](#mojolearn_aft_p10-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P10.patch](../experiments/removed/MOJOLEARN_AFT_P10.patch) |
+| [`MOJOLEARN_AFT_P11`](#mojolearn_aft_p11-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P11.patch](../experiments/removed/MOJOLEARN_AFT_P11.patch) |
+| [`MOJOLEARN_AFT_P12`](#mojolearn_aft_p12-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | 2026-11-15 (`a5502e594d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_AFT_P12.patch](../experiments/removed/MOJOLEARN_AFT_P12.patch) |
+| [`MOJOLEARN_CTR_INDEX_FUSED`](#mojolearn_ctr_index_fused) | Trees (CatBoost-style CTR prep, device CTR output) | 2026-11-15 (`3fb3500522`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_CTR_INDEX_FUSED.patch](../experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch) |
+| [`MOJOLEARN_CTR_ONEHOT_DEVICE`](#mojolearn_ctr_onehot_device) | Trees (CatBoost-style CTR prep, device dense-code pass) | 2026-11-15 (`6293628f02`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_CTR_ONEHOT_DEVICE.patch](../experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch) |
+| [`MOJOLEARN_CTR_PREP_SHARED`](#mojolearn_ctr_prep_shared) | Trees (CatBoost-style CTR prep, shared prep context) | 2026-11-15 (`ea9a6fecad`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_CTR_PREP_SHARED.patch](../experiments/removed/MOJOLEARN_CTR_PREP_SHARED.patch) |
+| [`MOJOLEARN_CTR_SORT_ONCE`](#mojolearn_ctr_sort_once) | Trees (CatBoost-style CTR prep, FeatureFreq sort once) | 2026-11-15 (`f2886a9013`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_CTR_SORT_ONCE.patch](../experiments/removed/MOJOLEARN_CTR_SORT_ONCE.patch) |
+| [`MOJOLEARN_EST_ITERS_DEVICE`](#mojolearn_est_iters_device) | Trees (GBDT Apple FAST device Newton walk force knob) | 2026-11-15 (`7a4e69bdca`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_EST_ITERS_DEVICE.patch](../experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch) |
+| [`MOJOLEARN_ET_DEVICE_BATCH_16384`](#mojolearn_et_device_batch_16384) | Trees (ExtraTrees device batch width) | 2026-11-15 (`e7f3794811`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_ET_DEVICE_BATCH_16384.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch) |
+| [`MOJOLEARN_ET_PART_ROWS`](#mojolearn_et_part_rows) | Trees (ExtraTrees FAST partition rows per thread off Apple) | 2026-11-15 (`e1052abc38`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_ET_PART_ROWS.patch](../experiments/removed/MOJOLEARN_ET_PART_ROWS.patch) |
+| [`MOJOLEARN_ET_RM_NARROW`](#mojolearn_et_rm_narrow) | Trees (ExtraTrees narrow-row row-major copy off Apple) | 2026-11-15 (`e1052abc38`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_ET_RM_NARROW.patch](../experiments/removed/MOJOLEARN_ET_RM_NARROW.patch) |
+| [`MOJOLEARN_GBDT_INDEX_PACK_DEVICE`](#mojolearn_gbdt_index_pack_device) | Trees (GBDT one-launch compressed index pack, Apple FAST) | 2026-11-15 (`2f51f8b97d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_INDEX_PACK_DEVICE.patch](../experiments/removed/MOJOLEARN_GBDT_INDEX_PACK_DEVICE.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH`](#mojolearn_gbdt_lg_batch) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | 2026-11-15 (`c556cd4e1d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_LG_BATCH.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH2`](#mojolearn_gbdt_lg_batch2) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | 2026-11-15 (`c556cd4e1d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_LG_BATCH2.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH2.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH32`](#mojolearn_gbdt_lg_batch32) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | 2026-11-15 (`c556cd4e1d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_LG_BATCH32.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH32.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH4`](#mojolearn_gbdt_lg_batch4) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | 2026-11-15 (`c556cd4e1d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_LG_BATCH4.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH4.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH8`](#mojolearn_gbdt_lg_batch8) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | 2026-11-15 (`c556cd4e1d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_LG_BATCH8.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH8.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_BATCH128`](#mojolearn_gbdt_lg_exact_batch128) | Trees (GBDT lossguide, FAST exact-batch width 128 force knob) | 2026-11-15 (`e50ac0e432`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_BATCH32`](#mojolearn_gbdt_lg_exact_batch32) | Trees (GBDT lossguide, FAST exact-batch width 32) | 2026-11-15 (`ad8530ee49`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch) |
+| [`MOJOLEARN_GBDT_PREDICT_PACKED`](#mojolearn_gbdt_predict_packed) | Trees (GBDT packed resident predict, Apple FAST) | 2026-11-15 (`2f51f8b97d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_PREDICT_PACKED.patch](../experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.patch) |
+| [`MOJOLEARN_GBDT_QUANT_DEVICE`](#mojolearn_gbdt_quant_device) | Trees (GBDT device quantizer over resident float columns, Apple FAST) | 2026-11-15 (`b763f5cf63`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_GBDT_QUANT_DEVICE.patch](../experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch) |
+| [`MOJOLEARN_ORD_DOC_ID_STORAGE`](#mojolearn_ord_doc_id_storage) | Trees (GBDT Ordered document-key dither storage, FAST Apple) | 2026-11-15 (`5b86e54145`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_ORD_DOC_ID_STORAGE.patch](../experiments/removed/MOJOLEARN_ORD_DOC_ID_STORAGE.patch) |
+| [`MOJOLEARN_RF_BINS_COLUMN_MAJOR`](#mojolearn_rf_bins_column_major) | Trees (RF bins row-major on Apple) | 2026-11-15 (`d472e0a838`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch](../experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch) |
+| [`MOJOLEARN_RF_COLS10`](#mojolearn_rf_cols10) | Trees (RF columns per pass on Apple) | 2026-11-15 (`f4ce56514d`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_RF_COLS10.patch](../experiments/removed/MOJOLEARN_RF_COLS10.patch) |
+| [`MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN`](#mojolearn_rf_fast_sample_per_column) | Trees (RF per-node feature sampler, FAST) | 2026-11-15 (`47051d6b6e`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch](../experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch) |
+| [`MOJOLEARN_RF_HIST_COLUMNS8`](#mojolearn_rf_hist_columns8) | Trees (RF eight-column histogram tiles force-on) | 2026-11-15 (`47051d6b6e`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_RF_HIST_COLUMNS8.patch](../experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch) |
+| [`MOJOLEARN_RF_SPLIT_CANDIDATES`](#mojolearn_rf_split_candidates) | Trees (RF split candidate slots, FAST off Apple) | 2026-11-15 (`47051d6b6e`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_RF_SPLIT_CANDIDATES.patch](../experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch) |
+| [`MOJOLEARN_SHAP_FAST_ROW_PAIR`](#mojolearn_shap_fast_row_pair) | Trees (TreeSHAP Apple FAST row pairs) | 2026-11-15 (`70f8ff00b2`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_SHAP_FAST_ROW_PAIR.patch](../experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch) |
+| [`MOJOLEARN_SYM_RESOLVE_BLOCK`](#mojolearn_sym_resolve_block) | Trees (GBDT symmetric, FAST Apple per-threadgroup resolve fold) | 2026-11-15 (`1805cb6b73`) | 2026-11-15 (lane/restore-apple-fast-trees) | Apple fast opt-in arm, default off, default path unchanged; not timed in the NVIDIA campaign | [MOJOLEARN_SYM_RESOLVE_BLOCK.patch](../experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch) |
 
 ## Trees
 
@@ -8980,6 +9070,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_T08.patch`, then delete the `MOJOLEARN_AFCL_T08` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_FOREST_SHARED_ROWS: unmeasured arm deleted (2026-11-15)
 
@@ -9102,6 +9193,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P01.patch`, then delete the `MOJOLEARN_AFT_P01` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P02: never-run card deleted (2026-11-15)
 
@@ -9110,6 +9202,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P02.patch`, then delete the `MOJOLEARN_AFT_P02` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P03: never-run card deleted (2026-11-15)
 
@@ -9118,6 +9211,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P03.patch`, then delete the `MOJOLEARN_AFT_P03` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Not restored 2026-11-15 (lane/restore-apple-fast-trees): its only reader, the shared-row staging FOREST_SHARED_ROWS in core/forest_inference.mojo, was deleted by 77aaad1bcc (not an Apple fast arm); restoring P03 needs that host back first. Refusal kept.
 
 ## MOJOLEARN_AFT_P04: never-run card deleted (2026-11-15)
 
@@ -9126,6 +9220,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P04.patch`, then delete the `MOJOLEARN_AFT_P04` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P05: never-run card deleted (2026-11-15)
 
@@ -9134,6 +9229,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P05.patch`, then delete the `MOJOLEARN_AFT_P05` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P06: never-run card deleted (2026-11-15)
 
@@ -9142,6 +9238,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P06.patch`, then delete the `MOJOLEARN_AFT_P06` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P07: never-run card deleted (2026-11-15)
 
@@ -9150,6 +9247,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P07.patch`, then delete the `MOJOLEARN_AFT_P07` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P08: never-run card deleted (2026-11-15)
 
@@ -9158,6 +9256,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P08.patch`, then delete the `MOJOLEARN_AFT_P08` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P09: never-run card deleted (2026-11-15)
 
@@ -9166,6 +9265,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P09.patch`, then delete the `MOJOLEARN_AFT_P09` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P10: never-run card deleted (2026-11-15)
 
@@ -9174,6 +9274,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P10.patch`, then delete the `MOJOLEARN_AFT_P10` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P11: never-run card deleted (2026-11-15)
 
@@ -9182,6 +9283,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P11.patch`, then delete the `MOJOLEARN_AFT_P11` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ## MOJOLEARN_AFT_P12: never-run card deleted (2026-11-15)
 
@@ -9190,6 +9292,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P12.patch`, then delete the `MOJOLEARN_AFT_P12` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 ## MOJOLEARN_2711_GRAM_STRIDED_DEAD: opt-in arm deleted (2026-11-15)
 
 - **What it was**: the define that brought back arm 0 of `GRAM_STRIDED_ARM` (the strided per-lane accumulator the sm_120a AOT build corrupts) in every build. `GRAM_STRIDED_ARM` is now the constant 1; arm 0 stays reachable only through the explicit `STRIDED_ARM` parameter the jacobi_sm120a probe passes. (core/gram_splitk.mojo)
@@ -18246,6 +18349,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-39-trees (2026-11-15) in `e7f3794811`; code recoverable at `e7f3794811^`.
 - Restore: `git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; grid_controls entry moved to `removed` where one existed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-39-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_ET_DEVICE_BATCH_32768
 
@@ -18573,6 +18677,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
 - Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F01.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F02
 
@@ -18582,6 +18687,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
 - Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F02.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F03
 
@@ -18591,6 +18697,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
 - Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F03.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F04
 
@@ -18600,6 +18707,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
 - Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F04.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F05
 
@@ -18609,6 +18717,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
 - Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F05.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_IDN_RF_COLS40_OFF
 
@@ -18674,6 +18783,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/dataset.mojo.
 - Deleted by: lane/expdel2-38-trees `d472e0a838` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_RF_COLS10
 
@@ -18683,6 +18793,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
 - Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_RF_COLS10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_RF_FAST_HIST_ZERO_OFF
 
@@ -18701,6 +18812,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
 - Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_RF_FBS_WARP_OFF
 
@@ -18746,6 +18858,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
 - Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_RF_HIST_COLUMNS8_OFF
 
@@ -18773,6 +18886,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
 - Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Not restored 2026-11-15 (lane/restore-apple-fast-trees): its host, the small_node_split fused path (with T05), was deleted by the sweep 6ef444429e (not an Apple fast arm); restoring the arm needs that host back first. Refusal kept.
 
 ### MOJOLEARN_RF_SPLIT_CANDIDATES
 
@@ -18782,6 +18896,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
 - Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_RF_SPLIT_CANDIDATES_OFF
 
@@ -19532,6 +19647,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T09.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F06
 
@@ -19542,6 +19658,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F06.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F07
 
@@ -19552,6 +19669,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F07.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F08
 
@@ -19562,6 +19680,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F08.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_ET_BINNED_OFF
 
@@ -19652,6 +19771,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
 - Restore: `git apply experiments/removed/MOJOLEARN_ET_PART_ROWS.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_ET_PART_ROWS_OFF
 
@@ -19692,6 +19812,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
 - Restore: `git apply experiments/removed/MOJOLEARN_ET_RM_NARROW.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_ET_RM_NARROW_OFF
 
@@ -19979,6 +20100,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `c3a84428df`, `2497c8a9cf` (2026-11-15); code recoverable at `fdd11ef4d7`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F09.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_ET_TIE_MAX_COLID
 
@@ -20001,6 +20123,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): gbdt/apple_fast_classical.mojo (AFCL_T01-T07, AFCL_T12), gbdt/apple_fast_tree_experiments.mojo (AFT_N01-N12) and gbdt/gpu_data/apple_fast_trees_experiments.mojo (AFT_G01-G12): 32 unread False constants removed, tombstones kept; no bits change (990019c624).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T02
 
@@ -20011,6 +20134,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `951210db46` (2026-11-15); code recoverable at `4dcdb311b5`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T02.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T03
 
@@ -20021,6 +20145,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `358548637a` (2026-11-15); code recoverable at `951210db46`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T03.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T04
 
@@ -20031,6 +20156,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `c8fa4d47fc` (2026-11-15); code recoverable at `358548637a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T04.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T05
 
@@ -20041,6 +20167,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `bc67334f43` (2026-11-15); code recoverable at `c8fa4d47fc`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T05.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T06
 
@@ -20051,6 +20178,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `f22e75ee88` (2026-11-15); code recoverable at `bc67334f43`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T06.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T07
 
@@ -20061,6 +20189,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `d985e1b336` (2026-11-15); code recoverable at `f22e75ee88`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T07.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T12
 
@@ -20071,6 +20200,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `33b61e5bf8` (2026-11-15); code recoverable at `d985e1b336`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T12.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N01
 
@@ -20083,6 +20213,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): gbdt/apple_fast_tree_experiments.mojo: the twelve unread AFT_N01-N12 False constants removed, tombstones kept; no bits change (990019c624).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N02
 
@@ -20093,6 +20224,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `5f55007c32` (2026-11-15); code recoverable at `e601839e30`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N02.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N03
 
@@ -20103,6 +20235,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `13d92e2f1c` (2026-11-15); code recoverable at `5f55007c32`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N03.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N04
 
@@ -20113,6 +20246,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `eaabda5fe8` (2026-11-15); code recoverable at `13d92e2f1c`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N04.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N05
 
@@ -20123,6 +20257,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `a0eec817dc` (2026-11-15); code recoverable at `eaabda5fe8`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N05.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N06
 
@@ -20133,6 +20268,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `e3824bb991` (2026-11-15); code recoverable at `a0eec817dc`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N06.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N07
 
@@ -20143,6 +20279,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `7127af55a3` (2026-11-15); code recoverable at `e3824bb991`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N07.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N08
 
@@ -20153,6 +20290,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `6a830e56b0` (2026-11-15); code recoverable at `7127af55a3`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N08.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N09
 
@@ -20163,6 +20301,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `3c44979412` (2026-11-15); code recoverable at `6a830e56b0`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N09.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N10
 
@@ -20173,6 +20312,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `cb73446e0e` (2026-11-15); code recoverable at `3c44979412`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N11
 
@@ -20183,6 +20323,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `89a685b7dc` (2026-11-15); code recoverable at `cb73446e0e`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N11.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_N12
 
@@ -20193,6 +20334,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `0d082c6dc3` (2026-11-15); code recoverable at `89a685b7dc`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_N12.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_SYM_CTR_ALL_OFF
 
@@ -20213,6 +20355,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `ea9a6fecad` (2026-11-15); code recoverable at `0a23440f37`.
 - Restore: `git apply experiments/removed/MOJOLEARN_CTR_PREP_SHARED.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_CTR_SORT_ONCE
 
@@ -20223,6 +20366,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `f2886a9013` (2026-11-15); code recoverable at `ea9a6fecad`.
 - Restore: `git apply experiments/removed/MOJOLEARN_CTR_SORT_ONCE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_CTR_INDEX_FUSED
 
@@ -20233,6 +20377,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `3fb3500522` (2026-11-15); code recoverable at `f2886a9013`.
 - Restore: `git apply experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_CTR_ONEHOT_DEVICE
 
@@ -20243,6 +20388,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-41-trees `6293628f02` (2026-11-15); code recoverable at `3fb3500522`.
 - Restore: `git apply experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-41-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### Non-owner folds (lane expdel2-41-trees)
 
@@ -20764,6 +20910,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-46-trees `72e0724726` (2026-11-15); code recoverable at `e0359716d7`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFCL_T10
 
@@ -20774,6 +20921,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-46-trees `dd8de6f332` (2026-11-15); code recoverable at `72e0724726`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F12
 
@@ -20784,6 +20932,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-46-trees `f53beacaab` (2026-11-15); code recoverable at `dd8de6f332`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F12.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_F11
 
@@ -20794,6 +20943,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-46-trees `4a6591cfdc` (2026-11-15); code recoverable at `f53beacaab`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_F11.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_IF_DIAG_ENTRY_RETURN
 
@@ -20864,6 +21014,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-46-trees `a57eda3a34` (2026-11-15); code recoverable at `40d673a2f6`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T11.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_SHAP_FAST_ROW_PAIR
 
@@ -20874,6 +21025,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-46-trees `70f8ff00b2` (2026-11-15); code recoverable at `a57eda3a34`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_TREESHAP_ACC_SHARED
 
@@ -21038,6 +21190,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_BATCH2
 
@@ -21048,6 +21201,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH2.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_BATCH4
 
@@ -21058,6 +21212,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH4.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_BATCH8
 
@@ -21068,6 +21223,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH8.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_BATCH32
 
@@ -21078,6 +21234,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH32.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_BATCH_OFF
 
@@ -21098,6 +21255,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `e50ac0e432` (2026-11-15); code recoverable at `25eeaf016e`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF
 
@@ -21118,6 +21276,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `ad8530ee49` (2026-11-15); code recoverable at `c9cb94022d`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_EXACT_BATCH64
 
@@ -21188,6 +21347,7 @@ Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED
 - Deleted by: lane/expdel2-43-trees `971db746c6` `c91aa521d9` (2026-11-15); code recoverable at `e301d611ef`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### Non-owner folds by lane expdel2-43-trees
 
@@ -21270,6 +21430,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `7a9e6c5691` (2026-11-15); code recoverable at `931e7ca76a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF
 
@@ -21300,6 +21461,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `413f6bdc16` (2026-11-15); code recoverable at `a0d1816b17`.
 - Restore: `git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_2581_GROUP_WIDTH_OFF
 
@@ -21402,6 +21564,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `824cf67b84` (2026-11-15); code recoverable at `d51ccf732f`.
 - Restore: `git apply experiments/removed/MOJOLEARN_2041_FAST_CHUNKS_PIN.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_2635_LINEAR_BOUNDS
 
@@ -21424,6 +21587,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): gbdt/gpu_data/apple_fast_trees_experiments.mojo: the twelve unread AFT_G01-G12 False constants removed, tombstones kept; no bits change (990019c624).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G02
 
@@ -21434,6 +21598,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `868b669683` (2026-11-15); code recoverable at `957d58e74f`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G02.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G03
 
@@ -21444,6 +21609,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `6df465532f` (2026-11-15); code recoverable at `868b669683`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G03.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G04
 
@@ -21454,6 +21620,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `d39d33ceb2` (2026-11-15); code recoverable at `6df465532f`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G04.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G05
 
@@ -21464,6 +21631,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `adccdfe434`, `10b9a4c50c` (2026-11-15); code recoverable at `d39d33ceb2`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G05.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G06
 
@@ -21474,6 +21642,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `5f0ca355ea`, `ca88825ff9` (2026-11-15); code recoverable at `adccdfe434`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G06.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G07
 
@@ -21484,6 +21653,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `0c740c97bb` (2026-11-15); code recoverable at `5f0ca355ea`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G07.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G08
 
@@ -21494,6 +21664,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `70b5f7a860` (2026-11-15); code recoverable at `0c740c97bb`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G08.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G09
 
@@ -21504,6 +21675,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `d9dedc681d`, `d6735a6c9b` (2026-11-15); code recoverable at `70b5f7a860`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G09.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G10
 
@@ -21514,6 +21686,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `07284d9b26`, `55948e963a` (2026-11-15); code recoverable at `d9dedc681d`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G11
 
@@ -21524,6 +21697,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `dd541ff51d` (2026-11-15); code recoverable at `07284d9b26`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G11.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_AFT_G12
 
@@ -21534,6 +21708,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `da9c45fa84` (2026-11-15); code recoverable at `dd541ff51d`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFT_G12.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_PREDICT_PACKED
 
@@ -21544,6 +21719,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `408e1ba726` (2026-11-15); code recoverable at `da9c45fa84`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_QUANT_DEVICE
 
@@ -21556,6 +21732,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): gbdt/train.mojo (_QdPackTable, _qd_pack_word_table, _cindex_from_device_columns, _qd_upload_float_columns, _QD_SLAB/_QD_SUB_BLOCK/_QD_SUB_MAX_BLOCKS, three dead GBDT_QUANT_DEVICE/INDEX_PACK branches), gbdt/grid_creator/gls_borders_device.mojo (resident-column read), bindings/_mojolearn_gbdt.mojo (gbdt_fit_rowmajor_binding, gbdt_fit_rowmajor_native, gbdt_fit_row_major_available_binding and their registration), gbdt/estimator.mojo (gbdt_fit_row_major_available), gbdt/gpu_data/kernel/binarize.mojo (pack_cindex_words_kernel, transpose_rows_to_columns_kernel, PACK_*/TR_* constants) and the three False constants in gbdt/gpu_data/sym_feat_switches.mojo removed; no bits change (a063b7b5b8).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_INDEX_PACK_DEVICE
 
@@ -21566,6 +21743,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-42-trees `a6d190efef` (2026-11-15); code recoverable at `b763f5cf63`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_INDEX_PACK_DEVICE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-42-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### Non-owner folds (lane expdel2-42-trees)
 
@@ -21609,6 +21787,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-44-trees `0415c68a0f` (2026-11-15); code recoverable at `3f984813dd`.
 - Restore: `git apply experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_2551_DEVICE_PARTITION
 
@@ -21619,6 +21798,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-44-trees `269778f8c9` (2026-11-15); code recoverable at `f431553766`.
 - Restore: `git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_2551_DEVICE_PARTITION_OFF
 
@@ -21639,6 +21819,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-44-trees `7a4e69bdca` (2026-11-15); code recoverable at `886f01f544`.
 - Restore: `git apply experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_NS_PREDICT_BITVEC
 
@@ -21805,6 +21986,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-44-trees `5b86e54145` (2026-11-15); code recoverable at `48af6b7d48`.
 - Restore: `git apply experiments/removed/MOJOLEARN_ORD_DOC_ID_STORAGE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+Restored 2026-11-15 (lane/restore-apple-fast-trees): Apple fast arm back as it was (Apple fast is paused, not abandoned; deleted unmeasured), opt-in, default off, default path unchanged; see Restored table.
 
 ### MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF
 
