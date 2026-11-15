@@ -635,6 +635,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF`](#mojolearn_seq_fast_theta_snap_off) | Series on x_sequence (Apple FAST theta Nelder-Mead cycle watch) | superseded (SEQ_FAST_THETA_SNAP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF`](#mojolearn_seq_fast_theta_spec_off) | Series on x_sequence (Apple FAST theta speculative Nelder-Mead) | superseded (SEQ_FAST_THETA_SPEC default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch) |
 | [`MOJOLEARN_IDN_SEQ_REG_OFF`](#mojolearn_idn_seq_reg_off) | Series on x_sequence (IDENTICAL theta register form) | superseded (IDN_SEQ_REG promoted) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_REG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_VAR_COOP_OFF`](#mojolearn_seq_fast_var_coop_off) | Series on x_sequence (Apple FAST VAR coop folds) | superseded (SEQ_FAST_VAR_COOP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5985,3 +5986,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/theta.mojo; grid entry `idn_seq_reg` moved to `removed` in seq-reg.json.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `38664dbf45`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo` and move the entry back to `controls` in `experiments/six_lane_integration/grid_controls/seq-reg.json`.
+
+### MOJOLEARN_SEQ_FAST_VAR_COOP_OFF
+
+- Tried: the rollback of `SEQ_FAST_VAR_COOP` (`sequence/ops.mojo`): under FAST + Apple with TSA2_VAR, VAR's R-long folds (column scale, Z^T Z, Z^T Ys, sigma_u) one thread per cell instead of one simdgroup per cell.
+- Verdict: the coop default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_VAR_COOP` (rollback `SEQ_FAST_VAR_COOP_OFF`), lane/apple-fast-verdicts-6, M3 rab13-varcoop, full board size, one run per arm: var synthetic 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms, forecast_rmse identical). KEEP (FAST + Apple default, `_OFF`). Apple FAST only.
+- Removed: the `_OFF` term (`SEQ_FAST_VAR_COOP = TSA2_VAR`) and, in `sequence/ops_impl.mojo` `_var_fit_queued` (reached only under TSA2_VAR), the plain-`gemm` else arm and the `comptime if`, plus the now unused `SEQ_FAST_VAR_COOP` import there. `sequence/exec_device.mojo`'s coop routing keeps reading `SEQ_FAST_VAR_COOP` (false off FAST + Apple). No bits move.
+- Files: sequence/ops.mojo, sequence/ops_impl.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `72b582962f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.

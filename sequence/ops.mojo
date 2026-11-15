@@ -114,9 +114,13 @@ comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_
 #: for it with Args.i11 = 1 (op_gemm reads i0..i8 only); no other GEMM moves.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
 #: rab13-varcoop): var synthetic 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms,
-#: forecast_rmse identical. KEEP: the FAST + Apple default; rollback
-#: -D MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.
-comptime SEQ_FAST_VAR_COOP = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_COOP_OFF"]()
+#: forecast_rmse identical. KEEP: the FAST + Apple default, so it holds
+#: wherever TSA2_VAR does.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_COOP_OFF (superseded: SEQ_FAST_VAR_COOP KEEP, M3 rab13-varcoop var synthetic
+# 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms, forecast_rmse identical) deleted 2026-11-15 by lane/expdel-04-neural;
+# code recoverable at 72b582962f.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch
+comptime SEQ_FAST_VAR_COOP = TSA2_VAR
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1
