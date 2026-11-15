@@ -1,0 +1,34 @@
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index 23424df4e6..f522a6caba 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -8527,13 +8527,15 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
+     # barrier after warp 0's denominator fold goes: block kb + 1 writes the
+     # other page, and the page block kb + 2 rewrites was last read by warp 0
+     # before it reached block kb + 1's barrier. Synchronization only.
+-    # TOMBSTONE: MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 43593b02ee.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER.patch
+-    comptime assert BK * WST >= TQ * 33, "amma forward: pass 2's second page must hold TQ x 33"
++    # `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restores the single page and the
++    # barrier.
++    comptime P2_ONE_PAGE = is_defined["MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER"]()
++    comptime assert P2_ONE_PAGE or BK * WST >= TQ * 33, "amma forward: pass 2's second page must hold TQ x 33"
+     for kb in range(kb_lo, kb_hi + 1):
+         var pg = tile
+-        if ((kb - kb_lo) & 1) == 1:
+-            pg = wT
++        comptime if not P2_ONE_PAGE:
++            if ((kb - kb_lo) & 1) == 1:
++                pg = wT
+         comptime for u in range(RPT):
+             var r = tr + u * 16
+             var t = t0 + r
+@@ -8554,6 +8556,8 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
+                 var j = kb * BK + jj
+                 if j >= rr[0] and j <= rr[1]:
+                     dacc = ftz(ftz(dacc) + ftz(pg.unsafe_load(tid * 33 + jj)))
++        comptime if P2_ONE_PAGE:
++            barrier()
+     if tid < TQ and t0 + tid < l:
+         stats.unsafe_store(TQ + tid, ftz(dacc))
+         denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))

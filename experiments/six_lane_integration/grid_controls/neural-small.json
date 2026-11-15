@@ -4,33 +4,6 @@
   "branch": "lane/neural-small",
   "head": "a7b55a97b",
   "controls": {
-    "attn_tile_order": {
-      "define": "MOJOLEARN_IDN_ATTN_TILE_ORDER",
-      "kind": "arms",
-      "arms": {
-        "off": [],
-        "asc": [
-          "MOJOLEARN_IDN_ATTN_TILE_ORDER=1"
-        ],
-        "zdot_asc": [
-          "MOJOLEARN_IDN_ATTN_TILE_ORDER=2"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "transformer/impl/llama/fused_attention.mojo:1495",
-        "transformer/impl/llama/fused_attention.mojo:1551",
-        "transformer/impl/llama/fused_attention.mojo:10198"
-      ],
-      "binding": [
-        "_mojolearn_byte_lm",
-        "_mojolearn_transformer",
-        "_mojolearn_training"
-      ],
-      "bits_change": false,
-      "status": "new",
-      "note": "off = main = DEVIATION 2900 _bswz heaviest-causal-tile-first map (already the NVIDIA and AMD default word, so the proposed desc arm IS main). asc: _blk_map ignores SWZ (rollback, every estash kernel). zdot_asc: only the estash zdot kernel takes the ascending decode (the H100 leg measured _bswz costing zdot +6 regs, 4->3 blocks/SM, 14.79->15.61 ms). paired not built (EXPERIMENTS.md). Forward arms reach fwd r2 (lm-forward, transformer-forward); zdot_asc reaches only backward (train lanes). No bits: _blk_map is a bijection."
-    },
     "gemm_tile_min_blocks": {
       "define": "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",
       "kind": "int_sweep",
@@ -100,60 +73,6 @@
       "bits_change": false,
       "status": "new",
       "note": "off = 4 (main). Lifts the split-plan floor P >= 4 to 3 or 2 leaves: short-contraction products with outputs under the split cap get P x the blocks with the same leaves and fold tree (check_device_is_launch_invariant). Under 3/2 the P=3 batch-invariance fixtures see the split plan id (same words)."
-    },
-    "attn_fwd_tq_rule": {
-      "define": "MOJOLEARN_ATTN_FWD_TQ_RULE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_ATTN_FWD_TQ_RULE=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "transformer/impl/llama/fused_attention.mojo:636",
-        "transformer/impl/llama/fused_attention.mojo:11045"
-      ],
-      "binding": [
-        "_mojolearn_byte_lm",
-        "_mojolearn_transformer",
-        "_mojolearn_training"
-      ],
-      "bits_change": false,
-      "status": "kept",
-      "note": "Opt-in per-launch forward TQ rule (attn_fwd_rows_for may pick 16). Non-trial builds only, estash default word, head dim 64. Inert under MOJOLEARN_ATTN_TILE_RULE_OFF. Same bits.",
-      "exclusive_with": [
-        "MOJOLEARN_ATTN_TILE_RULE_OFF"
-      ]
-    },
-    "attn_tile_rule_off": {
-      "define": "MOJOLEARN_ATTN_TILE_RULE_OFF",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_ATTN_TILE_RULE_OFF=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "transformer/impl/llama/fused_attention.mojo:4537",
-        "transformer/impl/llama/fused_attention.mojo:4579",
-        "transformer/impl/llama/fused_attention.mojo:4592"
-      ],
-      "binding": [
-        "_mojolearn_byte_lm",
-        "_mojolearn_transformer",
-        "_mojolearn_training"
-      ],
-      "bits_change": false,
-      "status": "kept",
-      "note": "Rollback arm of the Oct 4 per-launch dq/dkdv tile rule (pins dq rows to ATTN_DQ_TQ and dk/dv keys to the old 32): the owed rule-removal A/B with the old rule as arm B. Backward only (train lanes). Same bits.",
-      "owed_removal": {
-        "ab": "B arm = MOJOLEARN_ATTN_TILE_RULE_OFF (the Oct 4 rule rolled back), A arm = main; single A/B, no crosses",
-        "reason": "rollback arm of the Oct 4 attention tile rule (fused_attention.mojo:4537-4592); an owed rule-removal single, not a grid dimension (prune_neural.md item 8)"
-      }
     },
     "gemm_kpack_rpt4": {
       "define": "MOJOLEARN_GEMM_KPACK_RPT4",
@@ -510,11 +429,11 @@
   "removed": [
     {
       "define": "MOJOLEARN_ATTN_DQ_MFMA",
-      "reason": "Not gridded (AMD): the dq MFMA kernel aborts (rc 134) on the #65 stack (bench/results/pr63-amd-mfma-20261001 SUMMARY.md:17-19); repair before gridding."
+      "reason": "Not gridded (AMD): the dq MFMA kernel aborts (rc 134) on the #65 stack (bench/results/pr63-amd-mfma-20261001 SUMMARY.md:17-19); repair before gridding. DELETED 2026-11-15 (lane/expdel2-34-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): never gridded or measured; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
     },
     {
       "define": "MOJOLEARN_ATTN_DKDV_MFMA",
-      "reason": "Not gridded (AMD): engages only at BJ == 32 (fused_attention.mojo dkdv launch) while the AMD tile rule picks 16, so it silently no-ops on main; needs a BJ 16 body or a pairing first."
+      "reason": "Not gridded (AMD): engages only at BJ == 32 (fused_attention.mojo dkdv launch) while the AMD tile rule picks 16, so it silently no-ops on main; needs a BJ 16 body or a pairing first. DELETED 2026-11-15 (lane/expdel2-34-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): never gridded or measured; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
     },
     {
       "define": "MOJOLEARN_GEMM_KPACK_CPT4",
@@ -557,6 +476,21 @@
       "define": "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32 / _128",
       "control": "m3_angle_block",
       "reason": "DELETED 2026-11-15 (lane/expdel2-26-neural; recoverable at 5fc464dce4; see docs/TOMBSTONES.md section expdel2-26-neural): unmeasured arm deleted under AGENTS.md 'An unmeasured arm is deleted'; default kept, no bits move"
+    },
+    {
+      "define": "MOJOLEARN_IDN_ATTN_TILE_ORDER",
+      "control": "attn_tile_order",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-34-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): unmeasured grid arms; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_ATTN_FWD_TQ_RULE",
+      "control": "attn_fwd_tq_rule",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-34-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): unmeasured opt-in arm; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_ATTN_TILE_RULE_OFF",
+      "control": "attn_tile_rule_off",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-34-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): unmeasured old path; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
     }
   ],
   "notes": {

@@ -1044,6 +1044,43 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF`](#mojolearn_idn_seq_wgrad_blocked_off) | Sequence (blocked BPTT weight gradient, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch) |
 | [`MOJOLEARN_SEQ_CROSTON_REG_OFF`](#mojolearn_seq_croston_reg_off) | Series (Croston register smoothing, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_SEQ_CROSTON_REG_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_CROSTON_REG_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_PIPE_CH`](#mojolearn_seq_fast_pipe_ch) | Sequence (pipelined chunk size, FAST Apple) | removed (unmeasured opt-in knob) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_CH.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch) |
+| [`MOJOLEARN_ATTN_AMMA_ADMIT`](#mojolearn_attn_amma_admit) | Neural (fused attention, Apple) | removed (unmeasured check arm) | 2026-11-15 | [MOJOLEARN_ATTN_AMMA_ADMIT.patch](../experiments/removed/MOJOLEARN_ATTN_AMMA_ADMIT.patch) |
+| [`MOJOLEARN_ATTN_APPLE_ERECOMP`](#mojolearn_attn_apple_erecomp) | Neural (fused attention, Apple) | removed (unmeasured Apple opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_APPLE_ERECOMP.patch](../experiments/removed/MOJOLEARN_ATTN_APPLE_ERECOMP.patch) |
+| [`MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY`](#mojolearn_attn_apple_estash_force_deny) | Neural (fused attention, Apple) | removed (unmeasured Apple opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch](../experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch) |
+| [`MOJOLEARN_ATTN_DKDV_AMMA`](#mojolearn_attn_dkdv_amma) | Neural (fused attention, Apple) | removed (unmeasured Apple opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DKDV_AMMA.patch](../experiments/removed/MOJOLEARN_ATTN_DKDV_AMMA.patch) |
+| [`MOJOLEARN_ATTN_DKDV_BJ16`](#mojolearn_attn_dkdv_bj16) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DKDV_BJ16.patch](../experiments/removed/MOJOLEARN_ATTN_DKDV_BJ16.patch) |
+| [`MOJOLEARN_ATTN_DKDV_BJ32`](#mojolearn_attn_dkdv_bj32) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DKDV_BJ32.patch](../experiments/removed/MOJOLEARN_ATTN_DKDV_BJ32.patch) |
+| [`MOJOLEARN_ATTN_DKDV_MFMA`](#mojolearn_attn_dkdv_mfma) | Neural (fused attention, AMD) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DKDV_MFMA.patch](../experiments/removed/MOJOLEARN_ATTN_DKDV_MFMA.patch) |
+| [`MOJOLEARN_ATTN_DKDV_NO_T4`](#mojolearn_attn_dkdv_no_t4) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DKDV_NO_T4.patch](../experiments/removed/MOJOLEARN_ATTN_DKDV_NO_T4.patch) |
+| [`MOJOLEARN_ATTN_DKDV_T4`](#mojolearn_attn_dkdv_t4) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DKDV_T4.patch](../experiments/removed/MOJOLEARN_ATTN_DKDV_T4.patch) |
+| [`MOJOLEARN_ATTN_DQ_MFMA`](#mojolearn_attn_dq_mfma) | Neural (fused attention, AMD) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DQ_MFMA.patch](../experiments/removed/MOJOLEARN_ATTN_DQ_MFMA.patch) |
+| [`MOJOLEARN_ATTN_DQ_TQ16`](#mojolearn_attn_dq_tq16) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DQ_TQ16.patch](../experiments/removed/MOJOLEARN_ATTN_DQ_TQ16.patch) |
+| [`MOJOLEARN_ATTN_DQ_TQ32`](#mojolearn_attn_dq_tq32) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DQ_TQ32.patch](../experiments/removed/MOJOLEARN_ATTN_DQ_TQ32.patch) |
+| [`MOJOLEARN_ATTN_DQ_TQ64`](#mojolearn_attn_dq_tq64) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_DQ_TQ64.patch](../experiments/removed/MOJOLEARN_ATTN_DQ_TQ64.patch) |
+| [`MOJOLEARN_ATTN_EXACT_TAIL_GUARD`](#mojolearn_attn_exact_tail_guard) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_EXACT_TAIL_GUARD.patch](../experiments/removed/MOJOLEARN_ATTN_EXACT_TAIL_GUARD.patch) |
+| [`MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER`](#mojolearn_attn_fwd_amma_p1_barrier) | Neural (fused attention, Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER.patch](../experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER.patch) |
+| [`MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER`](#mojolearn_attn_fwd_amma_p2_barrier) | Neural (fused attention, Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER.patch](../experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER.patch) |
+| [`MOJOLEARN_ATTN_FWD_TQ16`](#mojolearn_attn_fwd_tq16) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_FWD_TQ16.patch](../experiments/removed/MOJOLEARN_ATTN_FWD_TQ16.patch) |
+| [`MOJOLEARN_ATTN_FWD_TQ_RULE`](#mojolearn_attn_fwd_tq_rule) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_FWD_TQ_RULE.patch](../experiments/removed/MOJOLEARN_ATTN_FWD_TQ_RULE.patch) |
+| [`MOJOLEARN_ATTN_KV_CORNER_GUARD`](#mojolearn_attn_kv_corner_guard) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_KV_CORNER_GUARD.patch](../experiments/removed/MOJOLEARN_ATTN_KV_CORNER_GUARD.patch) |
+| [`MOJOLEARN_ATTN_LEGACY_CORNER`](#mojolearn_attn_legacy_corner) | Neural (fused attention, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_ATTN_LEGACY_CORNER.patch](../experiments/removed/MOJOLEARN_ATTN_LEGACY_CORNER.patch) |
+| [`MOJOLEARN_ATTN_NO_APPLE_MMA`](#mojolearn_attn_no_apple_mma) | Neural (fused attention, Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_NO_APPLE_MMA.patch](../experiments/removed/MOJOLEARN_ATTN_NO_APPLE_MMA.patch) |
+| [`MOJOLEARN_ATTN_NO_BWD_CORNER`](#mojolearn_attn_no_bwd_corner) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_NO_BWD_CORNER.patch](../experiments/removed/MOJOLEARN_ATTN_NO_BWD_CORNER.patch) |
+| [`MOJOLEARN_ATTN_NO_MODE_FLUSH`](#mojolearn_attn_no_mode_flush) | Neural (fused attention, AMD) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_NO_MODE_FLUSH.patch](../experiments/removed/MOJOLEARN_ATTN_NO_MODE_FLUSH.patch) |
+| [`MOJOLEARN_ATTN_NO_SCRATCH_CACHE`](#mojolearn_attn_no_scratch_cache) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_NO_SCRATCH_CACHE.patch](../experiments/removed/MOJOLEARN_ATTN_NO_SCRATCH_CACHE.patch) |
+| [`MOJOLEARN_ATTN_REPAIR_MASKED_TAIL`](#mojolearn_attn_repair_masked_tail) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_REPAIR_MASKED_TAIL.patch](../experiments/removed/MOJOLEARN_ATTN_REPAIR_MASKED_TAIL.patch) |
+| [`MOJOLEARN_ATTN_STASH_ZDOT_AMMA`](#mojolearn_attn_stash_zdot_amma) | Neural (fused attention, Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_STASH_ZDOT_AMMA.patch](../experiments/removed/MOJOLEARN_ATTN_STASH_ZDOT_AMMA.patch) |
+| [`MOJOLEARN_ATTN_STICKY`](#mojolearn_attn_sticky) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_STICKY.patch](../experiments/removed/MOJOLEARN_ATTN_STICKY.patch) |
+| [`MOJOLEARN_ATTN_TILE_RULE_OFF`](#mojolearn_attn_tile_rule_off) | Neural (fused attention, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_ATTN_TILE_RULE_OFF.patch](../experiments/removed/MOJOLEARN_ATTN_TILE_RULE_OFF.patch) |
+| [`MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`](#mojolearn_attn_zdot_amma_fold_barrier) | Neural (fused attention, Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER.patch](../experiments/removed/MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER.patch) |
+| [`MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER`](#mojolearn_attn_zdot_stash_fold_barrier) | Neural (fused attention, Apple) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER.patch](../experiments/removed/MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER.patch) |
+| [`MOJOLEARN_GAPLM_ZDOT_KREG`](#mojolearn_gaplm_zdot_kreg) | Neural (fused attention, NVIDIA) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_GAPLM_ZDOT_KREG.patch](../experiments/removed/MOJOLEARN_GAPLM_ZDOT_KREG.patch) |
+| [`MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF`](#mojolearn_idn_attn_bwd_scan_reuse_off) | Neural (fused attention, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF.patch) |
+| [`MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF`](#mojolearn_idn_attn_one_flag_wait_off) | Neural (fused attention, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF.patch) |
+| [`MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF`](#mojolearn_idn_attn_scan_cache_off) | Neural (fused attention, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF.patch) |
+| [`MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF`](#mojolearn_idn_attn_scratch_cache_off) | Neural (fused attention, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF.patch) |
+| [`MOJOLEARN_IDN_ATTN_TILE_ORDER`](#mojolearn_idn_attn_tile_order) | Neural (fused attention, IDENTICAL) | removed (unmeasured grid arms) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_TILE_ORDER.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_TILE_ORDER.patch) |
+| [`MOJOLEARN_NN18_DENSE_TILE_CONTROL`](#mojolearn_nn18_dense_tile_control) | Neural (fused attention, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch](../experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -15392,3 +15429,350 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - `MOJOLEARN_SEQ_RNN_SCAN_APPLE`: the docstring naming it (sequence/checks/rnn_scan_check.mojo); `9cf14671a2`, recoverable at `9c26def697`; `experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_APPLE.expdel2-28-neural.patch`.
 
 Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; plan correction). No read in this lane's files, nothing to fold: `MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF`, `MOJOLEARN_IDN_ROW_COOP_OFF`, `MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF`, `MOJOLEARN_MOE_FAST_MMA_OFF`, `MOJOLEARN_TSA2_VAR_OFF`. The generated host twins (mamba/host/gen/mamba3_siso.mojo, mamba/host/gen/selective_scan_interface.mojo) still carry the deleted Mamba arms until they are regenerated.
+
+## Experiment deletions: lane expdel2-34-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-34-neural), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept. File: transformer/impl/llama/fused_attention.mojo.
+
+### MOJOLEARN_ATTN_AMMA_ADMIT
+
+- Tried: check arm: the GEMM window admission test (exponent minima, warp butterflies, the `emin` page) inside the Apple matrix-unit forward kernel and the zdot kernel.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: the `comptime if ATTN_AMMA_ADMIT` blocks of `fused_attn_forward_r2_amma_kernel` and the arm term of the zdot amma kernel's `adm`; the kernels admit every window, as by default. The zdot amma kernel still computes the minima it no longer reads (kernel body left as is). Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `0236b48e2f` (2026-11-15); code recoverable at `fdabb0186d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_AMMA_ADMIT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_APPLE_ERECOMP
+
+- Tried: a denied Apple process recomputes one layer's exp stash in the backward (estash forward into scratch, then the estash backward).
+- Evidence: source comment only (M3 Ultra T3 shard, 5 steps: round 3 backward 3.537 s, recompute 3.619 s); no EXPERIMENTS.md row or A/B verdict. Deleted unmeasured (rule a).
+- Removed: ATTN_APPLE_ESTASH_RECOMPUTE (now the constant False for its importer), the gate's recompute fields (slot renamed `MojolearnAttnEstashGateV3`), the recompute grant and the body of `fused_backward_launch_erecomp_report` (now the plain launcher for its importer). Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `9125339d58` (2026-11-15); code recoverable at `cd9d87915b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ERECOMP.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY
+
+- Tried: measurement arm: the estash memory grant always refuses.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: the arm term of `attention_estash_memory_grant`. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `3e8269e098` (2026-11-15); code recoverable at `9125339d58`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DKDV_AMMA
+
+- Tried: dk / dv folds on Apple's matrix unit (`_dkdv_tiled_pf_amma`).
+- Evidence: source comment only (M4, 12 layers x 1 x 2048: dk/dv 261 / 251 ms against 266 ms, no measurable gain); no EXPERIMENTS.md row. Deleted (rule a).
+- Removed: ATTN_BWD_DKDV_AMMA and `_dkdv_tiled_pf_amma`; `_dkdv_tiled_pf` runs the tiled body. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `15a3f2210e` (2026-11-15); code recoverable at `eaa875c1b1`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DKDV_AMMA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DKDV_BJ16
+
+- Tried: force 16 keys per block of the `_r32` dk/dv arm on every column.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a). (PR #64's AMD 16 is the comptime AMD value the per-launch tile rule replaced.)
+- Removed: the term of ATTN_DKDV_BJ_R32 and of the pinned form. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `a5bc5b1913` (2026-11-15); code recoverable at `6955f6e721`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ16.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DKDV_BJ32
+
+- Tried: force 32 keys per block of the `_r32` dk/dv arm on AMD.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: the term of ATTN_DKDV_BJ_R32 and of the pinned form. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `3a02a72be4` (2026-11-15); code recoverable at `a5bc5b1913`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ32.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DKDV_MFMA
+
+- Tried: dk / dv folds on the AMD matrix cores (`fused_bwd_dkdv_mfma_kernel`).
+- Evidence: grid neural-small.json removed: not gridded (engages only at BJ 32 while AMD picks 16; the dq MFMA kernel aborts rc 134); never measured (rule a).
+- Removed: ATTN_DKDV_MFMA and its launch branch in the dk/dv launcher. `fused_bwd_dkdv_mfma_kernel` is kept: tools/amd_codegen/probe_attn_dq.mojo imports it. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `4eb171e657` (2026-11-15); code recoverable at `0447fb7252`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DKDV_MFMA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DKDV_NO_T4
+
+- Tried: turn off the transposed dk/dv staging on every column.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: the term of the kernel's comptime T4 (T4 is "not Apple"). Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `62df7ffb39` (2026-11-15); code recoverable at `6ea086845c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DKDV_NO_T4.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DKDV_T4
+
+- Tried: force the transposed dk/dv staging on Apple.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: the term of the kernel's comptime T4. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `6ea086845c` (2026-11-15); code recoverable at `15a3f2210e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DKDV_T4.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DQ_MFMA
+
+- Tried: dq fold on the AMD matrix cores (`fused_bwd_dq_mfma_kernel`).
+- Evidence: grid neural-small.json removed: not gridded, the kernel aborts (rc 134); never measured (rule a).
+- Removed: ATTN_DQ_MFMA and its launch branch in `_launch_bwd_estash`. `fused_bwd_dq_mfma_kernel` is kept: tools/amd_codegen/probe_attn_dq.mojo imports it. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `0447fb7252` (2026-11-15); code recoverable at `9ed7579367`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DQ_MFMA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DQ_TQ16
+
+- Tried: force 16 query rows per dq block.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of ATTN_DQ_TQ and of the pinned form. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `8b3e85074f` (2026-11-15); code recoverable at `347eba6c25`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DQ_TQ16.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DQ_TQ32
+
+- Tried: force 32 query rows per dq block.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of ATTN_DQ_TQ and of the pinned form. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `1f621f3a80` (2026-11-15); code recoverable at `8b3e85074f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DQ_TQ32.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_DQ_TQ64
+
+- Tried: force 64 query rows per dq block.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of ATTN_DQ_TQ (now ATTN_DQ_TQ_DEFAULT) and of the pinned form. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `6955f6e721` (2026-11-15); code recoverable at `1f621f3a80`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_DQ_TQ64.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_EXACT_TAIL_GUARD
+
+- Tried: force the exact dk/dv tail guard on a column the replay matrix leaves off.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of ATTN_EXACT_TAIL_GUARD (now ATTN_REPAIR_MASKED_TAIL, the measured kernel-matrix column). Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `7a7282ec56` (2026-11-15); code recoverable at `c7f24015f7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_EXACT_TAIL_GUARD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER
+
+- Tried: restore the per-key-block pass-1 barrier of the Apple matrix-unit forward.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: the arm's barrier and its negation; the one barrier after the loop stays. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `43593b02ee` (2026-11-15); code recoverable at `fb85c5f1db`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER
+
+- Tried: restore pass 2's single page and per-block barrier in the Apple matrix-unit forward.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: P2_ONE_PAGE and its two branches; the alternating page is the only form. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `1de034c06f` (2026-11-15); code recoverable at `43593b02ee`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_FWD_TQ16
+
+- Tried: the second-round forward kernels at 16 query rows.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term: ATTN_FWD_TQ is 32. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `dd89e16295` (2026-11-15); code recoverable at `9a253b44b2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_FWD_TQ16.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_FWD_TQ_RULE
+
+- Tried: the per-launch forward tile rule (`attn_fwd_rows_for`) on the estash forward.
+- Evidence: grid neural-small.json control attn_fwd_tq_rule (status kept, never run): no A/B recorded. Deleted unmeasured (rule a).
+- Removed: ATTN_FWD_TQ_RULE, `attn_fwd_rows_for` and the 16-row branch of the estash forward launch. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `1c0a228611` (2026-11-15); code recoverable at `dd89e16295`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_FWD_TQ_RULE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_KV_CORNER_GUARD
+
+- Tried: old name of the exact dk/dv corner guard, forced on.
+- Evidence: source comment only (the guard-only trial removed 248/3697 refusals without a measurable speed or memory win). Deleted (rule a).
+- Removed: its term of ATTN_EXACT_TAIL_GUARD. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `99987befbf` (2026-11-15); code recoverable at `7a7282ec56`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_KV_CORNER_GUARD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_LEGACY_CORNER
+
+- Tried: refuse on the masked-tail corner instead of the measured exact replay.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: its term of ATTN_REPAIR_MASKED_TAIL. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `c7f24015f7` (2026-11-15); code recoverable at `8eda4c8a03`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_LEGACY_CORNER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_NO_APPLE_MMA
+
+- Tried: revert the Apple matrix-unit forward to the SIMT forward.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of ATTN_FWD_APPLE_MMA (now APPLE_MMA). Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `1a7b79977c` (2026-11-15); code recoverable at `0236b48e2f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_NO_APPLE_MMA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_NO_BWD_CORNER
+
+- Tried: DEVIATION 3112: the backward launchers stop refusing on a corner (a measurement arm, never shipped).
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its two branches in the backward launchers; ATTN_NO_BWD_CORNER stays as the constant False for its importers. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `9a253b44b2` (2026-11-15); code recoverable at `a7bd96b41b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_NO_BWD_CORNER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_NO_MODE_FLUSH
+
+- Tried: AMD software flush seams instead of MODE FP_DENORM 2.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of ATTN_AMD_MODE_FLUSH. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `eaa875c1b1` (2026-11-15); code recoverable at `4eb171e657`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_NO_MODE_FLUSH.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_NO_SCRATCH_CACHE
+
+- Tried: per-call attention scratches instead of the process cache.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of ATTN_SCRATCH_CACHE. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `e348b403be` (2026-11-15); code recoverable at `5c0ca62e33`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_NO_SCRATCH_CACHE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_REPAIR_MASKED_TAIL
+
+- Tried: force the exact masked-tail replay on columns the kernel matrix leaves off.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a). The replay itself is the measured NVIDIA / AMD default (checks/kernel_matrix_attn.mojo) and stays.
+- Removed: its term of ATTN_REPAIR_MASKED_TAIL (now `attn_masked_tail_replay_for[TARGET_COLUMN]()`). Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `8eda4c8a03` (2026-11-15); code recoverable at `c3d1c7865f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_REPAIR_MASKED_TAIL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_STASH_ZDOT_AMMA
+
+- Tried: the stash zdot on Apple's matrix unit (`fused_bwd_zdot_stash_amma_kernel`).
+- Evidence: source comment only (M4, 12 layers x 1 x 2048: 2119 ms against 1808-1860 ms of zdot a step, slower); no EXPERIMENTS.md row. Deleted (rule a).
+- Removed: ATTN_BWD_STASH_ZDOT_AMMA, `fused_bwd_zdot_stash_amma_kernel` and its two launch branches. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `ea92c099fe` (2026-11-15); code recoverable at `f5c6ca76e4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_STASH_ZDOT_AMMA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_STICKY
+
+- Tried: DEVIATION 3110 direction-specific sticky fallback.
+- Evidence: source comment only (700-step H100 control: intermittent refusals, the latch regresses throughput 3.6%); no EXPERIMENTS.md row. Deleted (rule a).
+- Removed: its read; ATTN_STICKY stays as the constant False for its importers. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `a7bd96b41b` (2026-11-15); code recoverable at `99987befbf`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_STICKY.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_TILE_RULE_OFF
+
+- Tried: rollback of the Oct 4 per-launch dq / dk-dv tile rule to the comptime tiles.
+- Evidence: grid neural-small.json control attn_tile_rule_off (status kept; its owed rule-removal A/B never ran). Deleted unmeasured (rule b).
+- Removed: its term of ATTN_TILE_RULE_OFF (gone with IDN_ALL_OFF in the same file) and of ATTN_FWD_TQ_RULE. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `3e964079d5` (2026-11-15); code recoverable at `3a02a72be4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_TILE_RULE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER
+
+- Tried: restore a synchronization-only barrier after warp 0's z fold in the Apple zdot amma kernel.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: the arm's barrier. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `f5c6ca76e4` (2026-11-15); code recoverable at `1de034c06f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER
+
+- Tried: restore a synchronization-only barrier on Apple in the estash zdot kernel.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: its term of the barrier condition (the barrier stays off Apple). Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `fb85c5f1db` (2026-11-15); code recoverable at `1a7b79977c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_GAPLM_ZDOT_KREG
+
+- Tried: lane/gap-lm's zdot estash kernel with the key held in registers (`fused_bwd_zdot_kreg_kernel`).
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: ATTN_GAPLM_ZDOT_KREG, `fused_bwd_zdot_kreg_kernel`, ZK_TQ, ZK_RG and its launch branch. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `fdabb0186d` (2026-11-15); code recoverable at `62df7ffb39`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GAPLM_ZDOT_KREG.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF
+
+- Tried: the four-buffer backward regime scan.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: its term of IDN_ATTN_BWD_SCAN_REUSE. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `5f78ca38ed` (2026-11-15); code recoverable at `f0d7af0f4d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF
+
+- Tried: the second wait before the corner-flag read on NVIDIA / AMD.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: its term of IDN_ATTN_ONE_FLAG_WAIT. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `347eba6c25` (2026-11-15); code recoverable at `e348b403be`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF
+
+- Tried: per-call regime-scan and flag allocations under IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: its term of IDN_ATTN_SCAN_CACHE. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `f0d7af0f4d` (2026-11-15); code recoverable at `f8340c9fd3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF
+
+- Tried: per-call attention scratches on NVIDIA / AMD under IDENTICAL (the docstring named it for a process driving two device contexts).
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: its term of IDN_ATTN_SCRATCH_CACHE. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `5c0ca62e33` (2026-11-15); code recoverable at `5f78ca38ed`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_ATTN_TILE_ORDER
+
+- Tried: arms 1 `asc` (every kernel takes the ascending decode) and 2 `zdot_asc` (only the estash zdot).
+- Evidence: grid neural-small.json control attn_tile_order (status new, never run). Deleted unmeasured (rule a).
+- Removed: ATTN_TILE_ORDER, ATTN_TILE_ORDER_ASC / _ZDOT_ASC and their terms in `_blk_map` and the zdot launch. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `cd9d87915b` (2026-11-15); code recoverable at `85e5bc6d2e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_TILE_ORDER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_NN18_DENSE_TILE_CONTROL
+
+- Tried: NN18 B arm: stage every K page (dense key tiles).
+- Evidence: no EXPERIMENTS.md row, no grid control, no source A/B: no A/B recorded for the opt-in arm. Deleted unmeasured (rule a).
+- Removed: NN18_DENSE_TILE_CONTROL; `nn18_key_tile_bounds` returns the visibility bounds. Default unchanged: no bits move.
+- Files: transformer/impl/llama/fused_attention.mojo.
+- Deleted by: lane/expdel2-34-neural `c6141790b8` (2026-11-15); code recoverable at `3e8269e098`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### Non-owner folds in this lane's files
+
+- `MOJOLEARN_ATTN_ES_TQ16` (owner expdel2-32-neural): the forced 16-row zdot tile (ATTN_ES_FORCE_TQ16) (transformer/impl/llama/fused_attention.mojo); `6ff852c2a3`, recoverable at `1c0a228611`; `experiments/removed/MOJOLEARN_ATTN_ES_TQ16.expdel2-34-neural.patch`.
+- `MOJOLEARN_ATTN_ES_TQ8` (owner expdel2-32-neural): the forced 8-row zdot tile (ATTN_ES_FORCE_TQ8) (transformer/impl/llama/fused_attention.mojo); `453bfc437c`, recoverable at `6ff852c2a3`; `experiments/removed/MOJOLEARN_ATTN_ES_TQ8.expdel2-34-neural.patch`.
+- `MOJOLEARN_IDN_ALL_OFF` (owner expdel2-37-series): the umbrella terms of IDN_ATTN_SCAN_CACHE, IDN_ATTN_BWD_SCAN_REUSE, IDN_ATTN_SCRATCH_CACHE, IDN_ATTN_ONE_FLAG_WAIT and ATTN_TILE_RULE_OFF; with it the DQ / DK-DV pinned forms and ATTN_DKDV_BJ_R32 go (its other terms in this file went with ATTN_FWD_TQ_RULE, IDN_ATTN_STASH, NN18_DENSE_TILE_CONTROL and IDN_ATTN_HEAD_SHARE) (transformer/impl/llama/fused_attention.mojo); `9ed7579367`, recoverable at `3e964079d5`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-34-neural.patch`.
+- `MOJOLEARN_IDN_ATTN_HEAD_SHARE` (owner expdel2-07-base): NN17_GQA_FOUR_HEADS and `_try_launch_shared_heads`; the two forward launchers launch their kernel directly (the kernel's HEAD_SHARE parameter stays) (transformer/impl/llama/fused_attention.mojo); `f8340c9fd3`, recoverable at `c6141790b8`; `experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.expdel2-34-neural.patch`.
+- `MOJOLEARN_IDN_ATTN_STASH` (owner expdel2-07-base): arms 1 recompute, 2 packed, 3 forced alias_y: ATTN_STASH_ARM, ATTN_V1_PACKED_ESTASH, `_visible_prefix`, `_visible_ramp_sum`, the PACKED parameter of `_estash_cell`; ATTN_V1_RECOMPUTE_BACKWARD stays False for its importers (transformer/impl/llama/fused_attention.mojo); `85e5bc6d2e`, recoverable at `453bfc437c`; `experiments/removed/MOJOLEARN_IDN_ATTN_STASH.expdel2-34-neural.patch`.
+
+Not deleted: `MOJOLEARN_ATTN_ARM_TRIAL` (KEEP, reported): it is the only build switch that compiles the attention sabotage instantiations (ATTN_ARM_SABOTAGE, _NEW, _KV) that transformer/checks/transformer_attention_arms_check.mojo and bench/attention_step_price_main.mojo exercise. `MOJOLEARN_COLUMN_CPU` (plan correction).

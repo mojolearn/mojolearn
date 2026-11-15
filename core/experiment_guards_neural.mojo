@@ -745,6 +745,81 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_WGRAD_BLOCKED_OFF (unmeasured old path) is gone; the default is kept; code at 105cf60fa6; restore: experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_FAST_PIPE_CH"](), "removed 2026-11-15 (lane/expdel2-28-neural): SEQ_FAST_PIPE_CH (unmeasured opt-in knob) is gone; the default is kept; code at c5730b729c; restore: experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch"
+    # Lane expdel2-34-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_AMMA_ADMIT.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_AMMA_ADMIT"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_AMMA_ADMIT (unmeasured check arm) is gone; the default is kept; code at fdabb0186d; restore: experiments/removed/MOJOLEARN_ATTN_AMMA_ADMIT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ERECOMP.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_APPLE_ERECOMP"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_APPLE_ERECOMP (unmeasured Apple opt-in arm) is gone; the default is kept; code at cd9d87915b; restore: experiments/removed/MOJOLEARN_ATTN_APPLE_ERECOMP.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_APPLE_ESTASH_FORCE_DENY (unmeasured Apple opt-in arm) is gone; the default is kept; code at 9125339d58; restore: experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_AMMA.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DKDV_AMMA"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DKDV_AMMA (unmeasured Apple opt-in arm) is gone; the default is kept; code at eaa875c1b1; restore: experiments/removed/MOJOLEARN_ATTN_DKDV_AMMA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ16.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DKDV_BJ16"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DKDV_BJ16 (unmeasured opt-in arm) is gone; the default is kept; code at 6955f6e721; restore: experiments/removed/MOJOLEARN_ATTN_DKDV_BJ16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ32.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DKDV_BJ32"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DKDV_BJ32 (unmeasured opt-in arm) is gone; the default is kept; code at a5bc5b1913; restore: experiments/removed/MOJOLEARN_ATTN_DKDV_BJ32.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_MFMA.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DKDV_MFMA"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DKDV_MFMA (unmeasured opt-in arm) is gone; the default is kept; code at 0447fb7252; restore: experiments/removed/MOJOLEARN_ATTN_DKDV_MFMA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_NO_T4.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DKDV_NO_T4"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DKDV_NO_T4 (unmeasured opt-in arm) is gone; the default is kept; code at 6ea086845c; restore: experiments/removed/MOJOLEARN_ATTN_DKDV_NO_T4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_T4.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DKDV_T4"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DKDV_T4 (unmeasured opt-in arm) is gone; the default is kept; code at 15a3f2210e; restore: experiments/removed/MOJOLEARN_ATTN_DKDV_T4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DQ_MFMA.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DQ_MFMA"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DQ_MFMA (unmeasured opt-in arm) is gone; the default is kept; code at 9ed7579367; restore: experiments/removed/MOJOLEARN_ATTN_DQ_MFMA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DQ_TQ16.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DQ_TQ16"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DQ_TQ16 (unmeasured opt-in arm) is gone; the default is kept; code at 347eba6c25; restore: experiments/removed/MOJOLEARN_ATTN_DQ_TQ16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DQ_TQ32.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DQ_TQ32"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DQ_TQ32 (unmeasured opt-in arm) is gone; the default is kept; code at 8b3e85074f; restore: experiments/removed/MOJOLEARN_ATTN_DQ_TQ32.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DQ_TQ64.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_DQ_TQ64"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_DQ_TQ64 (unmeasured opt-in arm) is gone; the default is kept; code at 1f621f3a80; restore: experiments/removed/MOJOLEARN_ATTN_DQ_TQ64.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_EXACT_TAIL_GUARD.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_EXACT_TAIL_GUARD (unmeasured opt-in arm) is gone; the default is kept; code at c7f24015f7; restore: experiments/removed/MOJOLEARN_ATTN_EXACT_TAIL_GUARD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_FWD_AMMA_P1_BARRIER (unmeasured opt-in arm) is gone; the default is kept; code at fb85c5f1db; restore: experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_FWD_AMMA_P2_BARRIER (unmeasured opt-in arm) is gone; the default is kept; code at 43593b02ee; restore: experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_TQ16.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_FWD_TQ16"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_FWD_TQ16 (unmeasured opt-in arm) is gone; the default is kept; code at 9a253b44b2; restore: experiments/removed/MOJOLEARN_ATTN_FWD_TQ16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_TQ_RULE.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_FWD_TQ_RULE"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_FWD_TQ_RULE (unmeasured opt-in arm) is gone; the default is kept; code at dd89e16295; restore: experiments/removed/MOJOLEARN_ATTN_FWD_TQ_RULE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_KV_CORNER_GUARD.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_KV_CORNER_GUARD"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_KV_CORNER_GUARD (unmeasured opt-in arm) is gone; the default is kept; code at 7a7282ec56; restore: experiments/removed/MOJOLEARN_ATTN_KV_CORNER_GUARD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_LEGACY_CORNER.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_LEGACY_CORNER"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_LEGACY_CORNER (unmeasured old path) is gone; the default is kept; code at 8eda4c8a03; restore: experiments/removed/MOJOLEARN_ATTN_LEGACY_CORNER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_APPLE_MMA.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_NO_APPLE_MMA"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_NO_APPLE_MMA (unmeasured opt-in arm) is gone; the default is kept; code at 0236b48e2f; restore: experiments/removed/MOJOLEARN_ATTN_NO_APPLE_MMA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_BWD_CORNER.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_NO_BWD_CORNER"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_NO_BWD_CORNER (unmeasured opt-in arm) is gone; the default is kept; code at a7bd96b41b; restore: experiments/removed/MOJOLEARN_ATTN_NO_BWD_CORNER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_MODE_FLUSH.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_NO_MODE_FLUSH"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_NO_MODE_FLUSH (unmeasured opt-in arm) is gone; the default is kept; code at 4eb171e657; restore: experiments/removed/MOJOLEARN_ATTN_NO_MODE_FLUSH.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_SCRATCH_CACHE.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_NO_SCRATCH_CACHE (unmeasured opt-in arm) is gone; the default is kept; code at 5c0ca62e33; restore: experiments/removed/MOJOLEARN_ATTN_NO_SCRATCH_CACHE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_REPAIR_MASKED_TAIL.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_REPAIR_MASKED_TAIL"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_REPAIR_MASKED_TAIL (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_ATTN_REPAIR_MASKED_TAIL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_STASH_ZDOT_AMMA.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_STASH_ZDOT_AMMA"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_STASH_ZDOT_AMMA (unmeasured opt-in arm) is gone; the default is kept; code at f5c6ca76e4; restore: experiments/removed/MOJOLEARN_ATTN_STASH_ZDOT_AMMA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_STICKY.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_STICKY"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_STICKY (unmeasured opt-in arm) is gone; the default is kept; code at 99987befbf; restore: experiments/removed/MOJOLEARN_ATTN_STICKY.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_TILE_RULE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_TILE_RULE_OFF (unmeasured old path) is gone; the default is kept; code at 3a02a72be4; restore: experiments/removed/MOJOLEARN_ATTN_TILE_RULE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_ZDOT_AMMA_FOLD_BARRIER (unmeasured opt-in arm) is gone; the default is kept; code at 1de034c06f; restore: experiments/removed/MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER"](), "removed 2026-11-15 (lane/expdel2-34-neural): ATTN_ZDOT_STASH_FOLD_BARRIER (unmeasured opt-in arm) is gone; the default is kept; code at 1a7b79977c; restore: experiments/removed/MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_GAPLM_ZDOT_KREG.patch
+    comptime assert not is_defined["MOJOLEARN_GAPLM_ZDOT_KREG"](), "removed 2026-11-15 (lane/expdel2-34-neural): GAPLM_ZDOT_KREG (unmeasured opt-in arm) is gone; the default is kept; code at 62df7ffb39; restore: experiments/removed/MOJOLEARN_GAPLM_ZDOT_KREG.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF"](), "removed 2026-11-15 (lane/expdel2-34-neural): IDN_ATTN_BWD_SCAN_REUSE_OFF (unmeasured old path) is gone; the default is kept; code at f0d7af0f4d; restore: experiments/removed/MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF"](), "removed 2026-11-15 (lane/expdel2-34-neural): IDN_ATTN_ONE_FLAG_WAIT_OFF (unmeasured old path) is gone; the default is kept; code at e348b403be; restore: experiments/removed/MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF"](), "removed 2026-11-15 (lane/expdel2-34-neural): IDN_ATTN_SCAN_CACHE_OFF (unmeasured old path) is gone; the default is kept; code at f8340c9fd3; restore: experiments/removed/MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF"](), "removed 2026-11-15 (lane/expdel2-34-neural): IDN_ATTN_SCRATCH_CACHE_OFF (unmeasured old path) is gone; the default is kept; code at 5f78ca38ed; restore: experiments/removed/MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_TILE_ORDER.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_TILE_ORDER"](), "removed 2026-11-15 (lane/expdel2-34-neural): IDN_ATTN_TILE_ORDER (unmeasured grid arms) is gone; the default is kept; code at 85e5bc6d2e; restore: experiments/removed/MOJOLEARN_IDN_ATTN_TILE_ORDER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch
+    comptime assert not is_defined["MOJOLEARN_NN18_DENSE_TILE_CONTROL"](), "removed 2026-11-15 (lane/expdel2-34-neural): NN18_DENSE_TILE_CONTROL (unmeasured opt-in arm) is gone; the default is kept; code at 3e8269e098; restore: experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch"
     return True
 
 

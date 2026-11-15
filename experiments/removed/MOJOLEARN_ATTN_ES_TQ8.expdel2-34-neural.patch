@@ -1,0 +1,38 @@
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index 68dbc4b6f3..1dfe7965d5 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -1323,9 +1323,12 @@ def fused_attention_kv_keys(arm: Int) -> Int:
+ 
+ # TOMBSTONE: MOJOLEARN_ATTN_ES_TQ16 (unmeasured forced-tile arm) deleted 2026-11-15 by lane/expdel2-34-neural (non-owner, owner expdel2-32-neural); code recoverable at 1c0a228611.
+ # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ES_TQ16.expdel2-34-neural.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_ATTN_ES_TQ8 (unmeasured forced-tile arm) deleted 2026-11-15 by lane/expdel2-34-neural (non-owner, owner expdel2-32-neural); code recoverable at 6ff852c2a3.
+-# Restore: git apply experiments/removed/MOJOLEARN_ATTN_ES_TQ8.expdel2-34-neural.patch; record in docs/TOMBSTONES.md.
+-comptime ATTN_ES_TQ = 16 if TARGET_COLUMN == COLUMN_NVIDIA else 8
++comptime ATTN_ES_FORCE_TQ8 = is_defined["MOJOLEARN_ATTN_ES_TQ8"]()
++comptime ATTN_ES_TQ = (
++    16 if (
++        TARGET_COLUMN == COLUMN_NVIDIA and not ATTN_ES_FORCE_TQ8
++    ) else 8
++)
+ """Static tile used by the resource-inspection harness. Production launch
+ routing uses `attention_estash_zdot_tq`; AMD's shape-dependent route cannot
+ be represented by one compile-time resource probe."""
+@@ -1334,13 +1337,15 @@ be represented by one compile-time resource probe."""
+ def attention_estash_zdot_tq(l: Int, window: Int) -> Int:
+     """Measured scheduling route for the exact full-estash zdot kernel.
+ 
+-    NVIDIA uses the qualified 16x16
++    Explicit trial overrides win first.  NVIDIA uses the qualified 16x16
+     tile.  CDNA AMD uses it only at L>=1536, the non-regressing measured
+     range (including L2048/window512).  Apple, RDNA and every unknown column
+     retain 8x32.  ``window`` is deliberately not a dispatch input yet: the
+     qualification has only one windowed point, already covered by L>=1536.
+     """
+-    comptime if TARGET_COLUMN == COLUMN_NVIDIA:
++    comptime if ATTN_ES_FORCE_TQ8:
++        return 8
++    elif TARGET_COLUMN == COLUMN_NVIDIA:
+         return 16
+     elif TARGET_COLUMN == COLUMN_AMD:
+         return 16 if l >= 1536 else 8
