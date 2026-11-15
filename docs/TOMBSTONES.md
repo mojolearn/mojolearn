@@ -2167,6 +2167,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`](#mojolearn_rsvd_fast_devscan_off) | Decomposition (randomized_svd finiteness scan, FAST+Apple) | 2026-11-15 (`82c5c6ef43`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch) |
 | [`MOJOLEARN_IDN_QUERY_X_HELD_OFF`](#mojolearn_idn_query_x_held_off-old-path-deleted-2026-11-15) | Resident kernel query buffers (IDENTICAL) | 2026-11-15 (`a75f345253`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch) |
 | [`MOJOLEARN_IDN_IF_FIT_OWN_X`](#mojolearn_idn_if_fit_own_x) | Trees (IsolationForest) | 2026-11-15 (`cfce0d30ce`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_IF_FIT_OWN_X.patch](../experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch) |
+| [`MOJOLEARN_CNN_GENERIC_OPS`](#mojolearn_cnn_generic_ops) | Neural (CNN program tuned ops) | 2026-11-15 (`f839bce651`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_CNN_GENERIC_OPS.patch](../experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -14426,6 +14427,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Files: autograd/cnn_block_op.mojo.
 - Deleted by: lane/expdel2-23-neural `f839bce651` (2026-11-15); code recoverable at `aefeacb577`.
 - Restore: `git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS
 

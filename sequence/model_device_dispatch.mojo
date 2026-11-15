@@ -10,6 +10,7 @@ from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeMo
 from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, RNN_PREDICT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
 from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
+from autograd.cnn_block_op import CNN_FUSED_OPS
 from x_cnn.device import cnn_ctx
 
 from sequence.perf3_seq_resident import seq_resident_resolve, seq_resident_unpin
@@ -21,14 +22,17 @@ from core.shared_slot import SharedSlot
 
 
 def _cnn_exec() raises -> DeviceExec:
-    """The CNN sessions' executor. With the tuned ops (CNN_FUSED_OPS, now the only
+    """The CNN sessions' executor. With the tuned ops (CNN_FUSED_OPS, the
     default; autograd/cnn_block_op.mojo) it wraps the x_cnn context, so the
     session's launches and the x_cnn entries the ops call share one in-order
-    queue."""
+    queue; `-D MOJOLEARN_CNN_GENERIC_OPS` keeps the shared sequence context."""
     # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (opt-in arm) named here; deleted 2026-11-15 by lane/expdel2-23-neural (owner); this
     # docstring note removed by lane/expdel2-29-neural, code recoverable at cdff18f6c8.
     # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-29-neural.patch
-    return DeviceExec(cnn_ctx())
+    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+    comptime if CNN_FUSED_OPS:
+        return DeviceExec(cnn_ctx())
+    return DeviceExec()
 
 
 def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
