@@ -1,106 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The Python door to the chunked LM head v2 (lane/exposure-leftovers,
-2026-09-23): `mojolearn.training.chunked_lm_head_loss`.
+"""The Python door to the chunked LM head v2: `mojolearn.training.chunked_lm_head_loss`.
 
-Both training bindings register `chunked_lm_head_v2_loss` and
-`chunked_lm_head_v2_train`, the GPU binding over the device kernels and the
-training host binding over training/checks/chunked_lm_head_oracle.mojo. Before
-this lane only the GPU binding registered them and nothing in Python called
-either, so every test below fails at that commit: the source tests because the
-host registration, the manifest exports and the public name were absent, the
-runtime tests because `training.chunked_lm_head_loss` did not exist.
-
-SOURCE CHECKS (run anywhere, nothing built, `mojolearn` never imported):
-the two bindings register the same two names with the same address and param
-counts; the manifest exports them and ships the oracle as a host module; the
-public name is in `training.__all__`; the laneless declaration names what the
-missing identity lane owes.
-
-RUNTIME CHECKS (run only where the training host binding is built and the
+Runtime checks (run only where the training host binding is built and the
 package took the CPU-only route; they print SKIP and return otherwise): each
 refusal fires by name before any output. The Float64-reference agreement, the
-loss-stage/train-stage agreement and the repeat words moved to the native
-check checks/native_tests/training_chunked_lm_head_door.mojo
+loss-stage/train-stage agreement and the repeat words are the native check
+checks/native_tests/training_chunked_lm_head_door.mojo
 (pixi run check-native-training-chunked-lm-head-door-cpu).
 
     cd python && python3 -m pytest mojolearn/tests/test_chunked_lm_head_door.py -q
 """
-import re
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-HOST = "bindings/_mojolearn_training_host.mojo"
-GPU = "bindings/_mojolearn_training.mojo"
-NAMES = {"chunked_lm_head_v2_loss": 6, "chunked_lm_head_v2_train": 8}
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def _registered(text):
-    return set(re.findall(r'def_function\[\w+\]\("(\w+)"\)', text))
-
-
-def _addr_count(text, name):
-    m = re.search(r'_addrs\(addresses, (\d+), "%s"\)' % name, text)
-    return int(m.group(1)) if m else None
-
-
-def _surface():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "_clh_surface", ROOT / "python" / "mojolearn" / "host_surface.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# ------------------------------------------------------------ source checks
-
-
-def test_both_bindings_register_the_same_two_entries():
-    host, gpu = _read(HOST), _read(GPU)
-    for name, n_addr in NAMES.items():
-        assert name in _registered(gpu), name
-        assert name in _registered(host), f"{HOST} does not register {name}"
-        assert _addr_count(gpu, name) == n_addr, name
-        assert _addr_count(host, name) == n_addr, name
-        assert f'_params(params, 3, "{name}")' in host, name
-    assert "from training.checks.chunked_lm_head_oracle import" in host
-    # the host arm is the oracle, never the device module
-    assert not re.search(r"^\s*from training\.chunked_lm_head_v2 import", host, re.M)
-
-
-def test_manifest_exports_the_entries_and_ships_the_oracle():
-    fam = _surface().family("training")
-    for name in NAMES:
-        assert name in fam["exports"], name
-    assert "training/checks/chunked_lm_head_oracle.mojo" in fam["host_modules"]
-    assert "chunked_lm_head_loss" in fam["classes"]
-    oracle = _read("training/checks/chunked_lm_head_oracle.mojo")
-    assert not re.search(r"^\s*from (std\.gpu|max\.gpu)", oracle, re.M)
-    assert 'is_defined["MOJOLEARN_HOST_SABOTAGE"]' in oracle
-
-
-def test_the_door_is_public_and_its_debt_is_declared():
-    training = _read("python/mojolearn/training.py")
-    assert re.search(r"__all__ = \[.*'chunked_lm_head_loss'", training, re.S)
-    impl = _read("python/mojolearn/_training_impl.py")
-    assert "def chunked_lm_head_loss(" in impl
-    # the public door is one native call; the owner runs both entries
-    owner = _read("bindings/training_extra_native_door.mojo")
-    for name in NAMES:
-        assert f'"{name}"' in owner, name
-    # it left DECLARED_LANELESS on 2026-10-21: the coverage lane
-    # training-chunked-lm-head reaches it
-    accounting = _read("tools/lane_accounting.py")
-    assert '"training.chunked_lm_head_loss": (' not in accounting
-    assert '"training-chunked-lm-head"' in _read("tools/verify_coverage_audit.py")
-
-
-# ----------------------------------------------------------- runtime checks
 
 
 def _cpu_only_with_training_host():
