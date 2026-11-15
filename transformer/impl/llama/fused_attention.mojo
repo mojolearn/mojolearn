@@ -8312,8 +8312,7 @@ def _launch_bwd_shipped[HD: Int](
 
 # ===========================================================================
 # THE FORWARD ON APPLE'S MATRIX UNIT (lane/apple-identical-neural, 2026-09-26;
-# Apple IDENTICAL only, `ATTN_FWD_APPLE_MMA`; `-D MOJOLEARN_ATTN_NO_APPLE_MMA`
-# reverts).
+# Apple IDENTICAL only, `ATTN_FWD_APPLE_MMA`).
 #
 # `fused_attn_forward_r2_kernel[64, 32, QRES, True, False]` spends its time in
 # two chains: pass 1's scores, `dot = _step_preflushed(q[p], k[p], dot)` over
@@ -8339,10 +8338,9 @@ def _launch_bwd_shipped[HD: Int](
 #     original's arithmetic).
 # TQ 32, HD 64, PF, clean instantiations only.
 # ===========================================================================
-comptime ATTN_FWD_APPLE_MMA = (
-    APPLE_MMA
-    and not is_defined["MOJOLEARN_ATTN_NO_APPLE_MMA"]()
-)
+# TOMBSTONE: MOJOLEARN_ATTN_NO_APPLE_MMA (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 0236b48e2f.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_APPLE_MMA.patch
+comptime ATTN_FWD_APPLE_MMA = APPLE_MMA
 
 #: Apple's `_step_preflushed` is `ftz(identical_mul_add(a, b, acc))`, and the
 #: M4's FMA never returns a subnormal word: over 9 operand kinds x 4.19M
