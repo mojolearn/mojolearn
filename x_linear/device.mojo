@@ -40,7 +40,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_SGD_CHUNK, C16_GLM_FUSED, RIDGECV_FF_BLOCKED
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C19_SGD_CHUNK, C16_GLM_FUSED, RIDGECV_FF_BLOCKED
 from x_linear.ridge_ff_blocks import (
     RFF_TPB, rff_blocks, rff_stats, rff_mcols, rff_part_words, rff_mean_part_kernel, rff_mean_fold_kernel, rff_untrusted_kernel,
     rff_cell_part_kernel, rff_cell_fold_kernel, rff_kf_solve_kernel, rff_solve_kernel,
@@ -1588,7 +1588,9 @@ struct _SgdOvrEpochs(LoopStep, Movable):
         """The launches of one epoch (chunk launches per class wave, the
         epoch ends, the activity kernel, the criterion, the order)."""
         var nb = (self.n + self.batch - 1) // max(self.batch, 1)
-        var wave = 4 if C17_OVR else self.problems
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_OVR (unmeasured opt-in arm; non-owner site) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e6671383da.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+        var wave = self.problems
         var waves = (self.problems + wave - 1) // wave
         return ((nb + self.chunk - 1) // max(self.chunk, 1)) * waves + self.problems + 3
 
@@ -1630,10 +1632,7 @@ struct _SgdOvrEpochs(LoopStep, Movable):
                     tt += bs1 if self.bsum else 1
                     s1 += bs1
                     nbt += 1
-                # C17: bounded class waves reduce simultaneously live model
-                # state. Four is a scheduling budget, never a dataset route.
-                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                var wave = 4 if C17_OVR else problems
+                var wave = problems
                 for first_problem in range(0, problems, wave):  # driver-loop: over class waves of the chunk launch
                     var active_problems = min(wave, problems - first_problem)
                     # a stopped problem's block returns at once (`act`), so the
