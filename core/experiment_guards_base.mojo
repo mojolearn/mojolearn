@@ -71,8 +71,7 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch
     comptime assert not is_defined["MOJOLEARN_MLP_SESSIONS_PACKED"](), "removed 2026-11-15 (lane/expdel2-02-base): MLP_SESSIONS_PACKED (opt-in arm, never measured) is gone; the default is kept; code at 1c0608ab17; restore: experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch
-    comptime assert not is_defined["MOJOLEARN_MSEL_UNITS_GPU_PARALLEL"](), "removed 2026-11-15 (lane/expdel2-02-base): MSEL_UNITS_GPU_PARALLEL (opt-in arm, never measured) is gone; the default is kept; code at 853bb6d0ee; restore: experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch"
+    # MOJOLEARN_MSEL_UNITS_GPU_PARALLEL: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_NEURAL_TABLE_ROUTE_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): NEURAL_TABLE_ROUTE_OFF (old path, never measured) is gone; the default is kept; code at 0ace134aa9; restore: experiments/removed/MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch
@@ -130,10 +129,8 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_FLOAT_RADIX.patch
     comptime assert not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_RAGGED_FLOAT_RADIX (Prep (I19 ragged float-word sort by stable radix instead of the bounded rank control)) was opt-in arm; AMD-only component screening, never an NVIDIA + AMD full-operation A/B; the opt-in arm is gone and the default path is unchanged; code recoverable at 6e8a669206; see docs/TOMBSTONES.md"
     # Lane expdel2-09-base (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P04.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_P04"](), "removed 2026-11-15 (lane/expdel2-09-base): AFCL_P04 (never-run Apple FAST programme card) is gone; the default is kept; code at 75ea427c34; restore: experiments/removed/MOJOLEARN_AFCL_P04.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P09.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_P09"](), "removed 2026-11-15 (lane/expdel2-09-base): AFCL_P09 (never-run Apple FAST programme card) is gone; the default is kept; code at 74cbc6951a; restore: experiments/removed/MOJOLEARN_AFCL_P09.patch"
+    # MOJOLEARN_AFCL_P04: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_P09: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_NB_TEXT_CSR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_NB_TEXT_CSR_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): NB_TEXT_CSR_OFF (old path (rule d)) is gone; the default is kept; code at a6a4828242; restore: experiments/removed/MOJOLEARN_NB_TEXT_CSR_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_OFF.patch
@@ -164,8 +161,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): PREP_FAST_CLS2_MINMAX_FUSED_OFF (old path) is gone; the default is kept; code at af2a7c589f; restore: experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): PREP_FAST_CLS2_MINMAX_POOL_OFF (old path) is gone; the default is kept; code at 008e8e1375; restore: experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch
-    comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"](), "removed 2026-11-15 (lane/expdel2-20-linear): X_PREP_FAST_FIT_TRANSFORM_FUSED (opt-in arm, no A/B recorded) is gone; the default is kept; code at 23c6c58415; restore: experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch"
+    # MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Lane expdel2-21-linear (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_CALIB_GNB_FOLDS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CALIB_GNB_FOLDS_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): CALIB_GNB_FOLDS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 8bfe803d02; restore: experiments/removed/MOJOLEARN_CALIB_GNB_FOLDS_OFF.patch"
@@ -186,10 +182,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SELECT_FREG_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): SELECT_FREG_OFF (old path, promoted on Apple only; NVIDIA/AMD A/B owed, Feature selection (f_regression fused)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_SELECT_FREG_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SELECT_FCLS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SELECT_FCLS_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): SELECT_FCLS_OFF (old path, promoted on Apple only; NVIDIA/AMD A/B owed, Feature selection (f_classif fused)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_SELECT_FCLS_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P07.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_P07"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): AFCL_P07 (never-run Apple FAST programme card, Feature selection (Apple FAST card P07 rows per thread)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_AFCL_P07.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P08.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_P08"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): AFCL_P08 (never-run Apple FAST programme card, Metrics (Apple FAST card P08 two-chain average)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_AFCL_P08.patch"
+    # MOJOLEARN_AFCL_P07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_P08: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-36-neural-series-linear
     return True
 

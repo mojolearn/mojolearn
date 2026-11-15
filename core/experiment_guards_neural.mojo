@@ -609,18 +609,12 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"](), "removed 2026-11-15 (lane/expdel2-30-neural): AFN_OPT_CLIP_FUSE (unmeasured opt-in arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_AFN_OPT_CLIP_FUSE.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_MULTITENSOR.patch
     comptime assert not is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"](), "removed 2026-11-15 (lane/expdel2-30-neural): AFN_OPT_MULTITENSOR (unmeasured opt-in arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_AFN_OPT_MULTITENSOR.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_BPE_ALL.patch
-    comptime assert not is_defined["MOJOLEARN_BPE_ALL"](), "removed 2026-11-15 (lane/expdel2-30-neural): BPE_ALL (unmeasured opt-in bundle) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_BPE_ALL.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_BPE_ENCODE_DEVICE.patch
-    comptime assert not is_defined["MOJOLEARN_BPE_ENCODE_DEVICE"](), "removed 2026-11-15 (lane/expdel2-30-neural): BPE_ENCODE_DEVICE (unmeasured opt-in arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_BPE_ENCODE_DEVICE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_BPE_GROUP_FILTER.patch
-    comptime assert not is_defined["MOJOLEARN_BPE_GROUP_FILTER"](), "removed 2026-11-15 (lane/expdel2-30-neural): BPE_GROUP_FILTER (unmeasured opt-in arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_BPE_GROUP_FILTER.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_BPE_LIVEBUF.patch
-    comptime assert not is_defined["MOJOLEARN_BPE_LIVEBUF"](), "removed 2026-11-15 (lane/expdel2-30-neural): BPE_LIVEBUF (unmeasured opt-in arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_BPE_LIVEBUF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_BPE_MERGE_BATCH.patch
-    comptime assert not is_defined["MOJOLEARN_BPE_MERGE_BATCH"](), "removed 2026-11-15 (lane/expdel2-30-neural): BPE_MERGE_BATCH (unmeasured opt-in arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_BPE_MERGE_BATCH.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_BPE_TRAIN_DEVICE.patch
-    comptime assert not is_defined["MOJOLEARN_BPE_TRAIN_DEVICE"](), "removed 2026-11-15 (lane/expdel2-30-neural): BPE_TRAIN_DEVICE (unmeasured opt-in arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_BPE_TRAIN_DEVICE.patch"
+    # MOJOLEARN_BPE_ALL: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_BPE_ENCODE_DEVICE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_BPE_GROUP_FILTER: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_BPE_LIVEBUF: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_BPE_MERGE_BATCH: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_BPE_TRAIN_DEVICE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-30-neural): IDN_AF_RESIDENT_OFF (unmeasured old path) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_IDN_AF_RESIDENT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF.patch

@@ -59,14 +59,11 @@ def _check_configuration() -> Bool:
     # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # MOJOLEARN_IDN_CHOL_OPS_FIT: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Lane expdel2-19-kernel (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L11.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L11"](), "removed 2026-11-15 (lane/expdel2-19-kernel): AFCL_L11 (never-run Apple FAST programme card) is gone; the default is kept; code at 7fa6378a2a; restore: experiments/removed/MOJOLEARN_AFCL_L11.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G13.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_G13"](), "removed 2026-11-15 (lane/expdel2-19-kernel): AFCL_G13 (never-run Apple FAST programme card) is gone; the default is kept; code at ab962d7d76; restore: experiments/removed/MOJOLEARN_AFCL_G13.patch"
+    # MOJOLEARN_AFCL_L11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_G13: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch
     comptime assert not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"](), "removed 2026-11-15 (lane/expdel2-19-kernel): FAMILY_CTX_PER_CALL (opt-in arm) is gone; the default path is the only one; code at 26b4b3147a; restore: experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch
-    comptime assert not is_defined["MOJOLEARN_GP_BULK_DOWNLOAD"](), "removed 2026-11-15 (lane/expdel2-19-kernel): GP_BULK_DOWNLOAD (opt-in arm) is gone; the default path is the only one; code at 476e96f77a; restore: experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch"
+    # MOJOLEARN_GP_BULK_DOWNLOAD: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_GP_BULK_DOWNLOAD_OFF (old path) is gone; the default is kept; code at 2fd4a6c6c1; restore: experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF.patch
@@ -100,8 +97,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_KM_RBF_CELL"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_KM_RBF_CELL (opt-in arm) is gone; the default path is the only one; code at 0ade8f67d9; restore: experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_KM_DOT_CELL_OFF (old path) is gone; the default is kept; code at 16e283c44f; restore: experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_RBF_FUSED.patch
-    comptime assert not is_defined["MOJOLEARN_RBF_FUSED"](), "removed 2026-11-15 (lane/expdel2-19-kernel): RBF_FUSED (opt-in arm) is gone; the default path is the only one; code at eb41bfa927; restore: experiments/removed/MOJOLEARN_RBF_FUSED.patch"
+    # MOJOLEARN_RBF_FUSED: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_RBF_FUSED_OFF (old path) is gone; the default is kept; code at f2f200fc1b; restore: experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch
@@ -125,8 +121,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_NYS_DEV_BASIS_OFF (old path) is gone; the default is kept; code at 91606051a7; restore: experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch"
     # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L06.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L06"](), "removed 2026-11-15 (lane/expdel2-20-linear): AFCL_L06 (never-run Apple FAST programme card) is gone; the default is kept; code at 1701048c43; restore: experiments/removed/MOJOLEARN_AFCL_L06.patch"
+    # MOJOLEARN_AFCL_L06: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): IDN_SVC_ONE_BLOCK_OFF (old path of the promoted default) is gone; the default is kept; code at ed4cab202e; restore: experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch

@@ -2184,6 +2184,69 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_SSD_OCCUPANCY`](#mojolearn_idn_ssd_occupancy) | Mamba-2 SSD S10/S12/S18 kernels (mamba/impl/modules/ssd_minimal.mojo; host column keeps the cell kernels) | 2026-11-15 (`44ec9b2ec9`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #5), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-cell chains; host column keeps the cell kernels) | [MOJOLEARN_IDN_SSD_OCCUPANCY.patch](../experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch) |
 | [`MOJOLEARN_IDN_ATTN_FOLD_V2`](#mojolearn_idn_attn_fold_v2) | Attention key-axis fold v2 (transformer/impl/llama/attn_fold_v2.mojo, modeling_llama.mojo eager kernels, fused_attention.mojo fused kernels, training/byte_lm_host_kernels.mojo host column) | 2026-11-15 (`c3d1c7865f`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #3), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits on every column (fold order; device, fused, host oracle and byte-LM host kernels restored together) | [MOJOLEARN_IDN_ATTN_FOLD_V2.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch) |
 | [`MOJOLEARN_IDN_NORM_FIXED_LANES`](#mojolearn_idn_norm_fixed_lanes) | RMSNorm / LayerNorm row statistics as one 32-lane cell (transformer/experiments/norm_fixed_lanes.mojo; modeling_llama.mojo, autograd/kernels/transformer.mojo, autograd/transformer_primitives_ops.mojo device; oracles, samba_ops_oracle and byte_lm_host_kernels host column) | 2026-11-15 (`c48e5cad76`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #6), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits on every column (fold order; device kernels, oracles and host kernels restored together) | [MOJOLEARN_IDN_NORM_FIXED_LANES.patch](../experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch) |
+| [`MOJOLEARN_AFCL_G01`](#mojolearn_afcl_g01-never-run-card-deleted-2026-11-15) | Brute-force kNN MMA block (FAST Apple) | 2026-11-15 (`9e73d27c38`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G01.patch](../experiments/removed/MOJOLEARN_AFCL_G01.patch) |
+| [`MOJOLEARN_AFCL_G02`](#mojolearn_afcl_g02-never-run-card-deleted-2026-11-15) | Fused top-k kNN staged chunk (FAST Apple) | 2026-11-15 (`9c8a5bb983`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G02.patch](../experiments/removed/MOJOLEARN_AFCL_G02.patch) |
+| [`MOJOLEARN_AFCL_G03`](#mojolearn_afcl_g03-never-run-apple-fast-card-deleted-2026-11-15) | Cluster (DBSCAN MMA eps, FAST Apple) | 2026-11-15 (`099ec7d1ef`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G03.patch](../experiments/removed/MOJOLEARN_AFCL_G03.patch) |
+| [`MOJOLEARN_AFCL_G05`](#mojolearn_afcl_g05-never-run-apple-fast-card-deleted-2026-11-15) | Cluster (fused L2-NN SIMT kernel, FAST Apple) | 2026-11-15 (`3a3c2a7c91`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G05.patch](../experiments/removed/MOJOLEARN_AFCL_G05.patch) |
+| [`MOJOLEARN_AFCL_G07`](#mojolearn_afcl_g07-never-run-apple-fast-card-deleted-2026-11-15) | Cluster (MiniBatchKMeans device steps, FAST Apple) | 2026-11-15 (`47c2b3d78f`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G07.patch](../experiments/removed/MOJOLEARN_AFCL_G07.patch) |
+| [`MOJOLEARN_AFCL_G09`](#mojolearn_afcl_g09-never-run-card-deleted-2026-11-15) | IVF-Flat batched scan (FAST Apple) | 2026-11-15 (`1feb1c083e`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G09.patch](../experiments/removed/MOJOLEARN_AFCL_G09.patch) |
+| [`MOJOLEARN_AFCL_G12`](#mojolearn_afcl_g12-never-run-apple-fast-card-deleted-2026-11-15) | Cluster (MeanShift grid, FAST Apple) | 2026-11-15 (`59bcf4d7c7`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G12.patch](../experiments/removed/MOJOLEARN_AFCL_G12.patch) |
+| [`MOJOLEARN_AFCL_G13`](#mojolearn_afcl_g13) | Kernel density (FAST Apple kde2 tile query ownership) | 2026-11-15 (`0ba472a9c7`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G13.patch](../experiments/removed/MOJOLEARN_AFCL_G13.patch) |
+| [`MOJOLEARN_AFCL_G14`](#mojolearn_afcl_g14-never-run-card-deleted-2026-11-15) | hierarchy / hdbscan FAST MMA Boruvka | 2026-11-15 (`3ce335dfc9`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_G14.patch](../experiments/removed/MOJOLEARN_AFCL_G14.patch) |
+| [`MOJOLEARN_AFCL_L06`](#mojolearn_afcl_l06) | Kernel (FAST+Apple SMO fused update_f staged page) | 2026-11-15 (`30ab49dcd7`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_L06.patch](../experiments/removed/MOJOLEARN_AFCL_L06.patch) |
+| [`MOJOLEARN_AFCL_L11`](#mojolearn_afcl_l11) | Kernel / GP (FAST Apple predictive-variance groups) | 2026-11-15 (`d55d80a7d4`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_L11.patch](../experiments/removed/MOJOLEARN_AFCL_L11.patch) |
+| [`MOJOLEARN_AFCL_L13`](#mojolearn_afcl_l13-never-run-card-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | 2026-11-15 (`0d75c7cca2`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_L13.patch](../experiments/removed/MOJOLEARN_AFCL_L13.patch) |
+| [`MOJOLEARN_AFCL_P01`](#mojolearn_afcl_p01) | Prep (FAST+Apple col_stats / PowerTransformer stats) | 2026-11-15 (`16da6ce3e2`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P01.patch](../experiments/removed/MOJOLEARN_AFCL_P01.patch) |
+| [`MOJOLEARN_AFCL_P02`](#mojolearn_afcl_p02) | Prep (FAST+Apple MaxAbsScaler direct fit) | 2026-11-15 (`1d5f37812c`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P02.patch](../experiments/removed/MOJOLEARN_AFCL_P02.patch) |
+| [`MOJOLEARN_AFCL_P03`](#mojolearn_afcl_p03) | Prep (CategoricalNB atomic count table) | 2026-11-15 (`4a5487a7a7`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P03.patch](../experiments/removed/MOJOLEARN_AFCL_P03.patch) |
+| [`MOJOLEARN_AFCL_P04`](#mojolearn_afcl_p04) | Preprocessing (FAST+Apple CSR NB) | 2026-11-15 (`a6a4828242`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P04.patch](../experiments/removed/MOJOLEARN_AFCL_P04.patch) |
+| [`MOJOLEARN_AFCL_P05`](#mojolearn_afcl_p05) | Prep (FAST+Apple TargetEncoder te stages) | 2026-11-15 (`a1ed29218e`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P05.patch](../experiments/removed/MOJOLEARN_AFCL_P05.patch) |
+| [`MOJOLEARN_AFCL_P06`](#mojolearn_afcl_p06) | Prep (FAST+Apple IterativeImputer ii_conv) | 2026-11-15 (`fc8c992aab`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P06.patch](../experiments/removed/MOJOLEARN_AFCL_P06.patch) |
+| [`MOJOLEARN_AFCL_P07`](#mojolearn_afcl_p07) | Feature selection (Apple FAST card P07 rows per thread) | 2026-11-15 (`688cf16fe5`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P07.patch](../experiments/removed/MOJOLEARN_AFCL_P07.patch) |
+| [`MOJOLEARN_AFCL_P08`](#mojolearn_afcl_p08) | Metrics (Apple FAST card P08 two-chain average) | 2026-11-15 (`ab5abfd358`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P08.patch](../experiments/removed/MOJOLEARN_AFCL_P08.patch) |
+| [`MOJOLEARN_AFCL_P09`](#mojolearn_afcl_p09) | Metrics (FAST+Apple curve counts) | 2026-11-15 (`890e449c3d`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P09.patch](../experiments/removed/MOJOLEARN_AFCL_P09.patch) |
+| [`MOJOLEARN_AFCL_P10`](#mojolearn_afcl_p10-expdel2-37-series) | Time series (resample tiled gather width) | 2026-11-15 (`b318452d7a`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P10.patch](../experiments/removed/MOJOLEARN_AFCL_P10.patch) |
+| [`MOJOLEARN_AFCL_P11`](#mojolearn_afcl_p11) | Series (Apple FAST card P11 two-chain series sums) | 2026-11-15 (`80484b2334`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P11.patch](../experiments/removed/MOJOLEARN_AFCL_P11.patch) |
+| [`MOJOLEARN_AFCL_P12`](#mojolearn_afcl_p12-expdel2-37-series) | Time series (ARIMA Kalman block width) | 2026-11-15 (`96d454df19`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P12.patch](../experiments/removed/MOJOLEARN_AFCL_P12.patch) |
+| [`MOJOLEARN_AFCL_P13`](#mojolearn_afcl_p13) | Prep (FAST+Apple class stats) | 2026-11-15 (`1de4f202c5`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P13.patch](../experiments/removed/MOJOLEARN_AFCL_P13.patch) |
+| [`MOJOLEARN_AFCL_P14`](#mojolearn_afcl_p14-expdel2-37-series) | Time series (Holt-Winters optimizer block width) | 2026-11-15 (`db4fd5d0c6`) | 2026-11-15 (lane/restore-apple-fast-classical) | never-run Apple FAST programme card, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_AFCL_P14.patch](../experiments/removed/MOJOLEARN_AFCL_P14.patch) |
+| [`MOJOLEARN_ANN3_CAGRA_TEAM`](#mojolearn_ann3_cagra_team) | Neighbors / ANN (FAST+Apple CAGRA search) | 2026-11-15 (`0c729eaf23`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_CAGRA_TEAM.patch](../experiments/removed/MOJOLEARN_ANN3_CAGRA_TEAM.patch) |
+| [`MOJOLEARN_ANN3_DIRECT_OUT`](#mojolearn_ann3_direct_out) | Neighbors / ANN (IVF-PQ / IVF-SQ build download) | 2026-11-15 (`8d1d604991`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_DIRECT_OUT.patch](../experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.patch) |
+| [`MOJOLEARN_ANN3_PQ_SEED`](#mojolearn_ann3_pq_seed) | Neighbors / ANN (FAST+Apple IVF-PQ codebook seeding) | 2026-11-15 (`d8754520a2`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_PQ_SEED.patch](../experiments/removed/MOJOLEARN_ANN3_PQ_SEED.patch) |
+| [`MOJOLEARN_ANN3_ROW_THREADS`](#mojolearn_ann3_row_threads) | Neighbors / ANN (IVF-PQ / IVF-SQ residual and encode launches) | 2026-11-15 (`5f0cf5941a`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_ROW_THREADS.patch](../experiments/removed/MOJOLEARN_ANN3_ROW_THREADS.patch) |
+| [`MOJOLEARN_ANN3_SCAN_SELECT`](#mojolearn_ann3_scan_select) | Neighbors / ANN (FAST+Apple IVF scan top-k) | 2026-11-15 (`6e4834bbfa`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_SCAN_SELECT.patch](../experiments/removed/MOJOLEARN_ANN3_SCAN_SELECT.patch) |
+| [`MOJOLEARN_ANN3_TRAINSET_COPY`](#mojolearn_ann3_trainset_copy) | Neighbors / ANN (IVF coarse training sample) | 2026-11-15 (`74902fa9a1`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_TRAINSET_COPY.patch](../experiments/removed/MOJOLEARN_ANN3_TRAINSET_COPY.patch) |
+| [`MOJOLEARN_ANN3_TSNE_RB32`](#mojolearn_ann3_tsne_rb32) | Neighbors / t-SNE (FAST+Apple repulsion) | 2026-11-15 (`e114af5d32`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_TSNE_RB32.patch](../experiments/removed/MOJOLEARN_ANN3_TSNE_RB32.patch) |
+| [`MOJOLEARN_ANN3_TSNE_RB64`](#mojolearn_ann3_tsne_rb64) | Neighbors / t-SNE (FAST+Apple repulsion) | 2026-11-15 (`bf400e5cfd`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_TSNE_RB64.patch](../experiments/removed/MOJOLEARN_ANN3_TSNE_RB64.patch) |
+| [`MOJOLEARN_ANN3_TSNE_STEP_ROWS`](#mojolearn_ann3_tsne_step_rows) | Neighbors / t-SNE (FAST+Apple step) | 2026-11-15 (`fc8c24af4e`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_ANN3_TSNE_STEP_ROWS.patch](../experiments/removed/MOJOLEARN_ANN3_TSNE_STEP_ROWS.patch) |
+| [`MOJOLEARN_BPE_ALL`](#mojolearn_bpe_all) | Neural (Apple FAST BPE tokenizer) | 2026-11-15 (`b4e977e8eb`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_BPE_ALL.patch](../experiments/removed/MOJOLEARN_BPE_ALL.patch) |
+| [`MOJOLEARN_BPE_ENCODE_DEVICE`](#mojolearn_bpe_encode_device) | Neural (Apple FAST BPE encode) | 2026-11-15 (`b4e977e8eb`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_BPE_ENCODE_DEVICE.patch](../experiments/removed/MOJOLEARN_BPE_ENCODE_DEVICE.patch) |
+| [`MOJOLEARN_BPE_GROUP_FILTER`](#mojolearn_bpe_group_filter) | Neural (Apple FAST BPE train) | 2026-11-15 (`b4e977e8eb`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_BPE_GROUP_FILTER.patch](../experiments/removed/MOJOLEARN_BPE_GROUP_FILTER.patch) |
+| [`MOJOLEARN_BPE_LIVEBUF`](#mojolearn_bpe_livebuf) | Neural (Apple FAST BPE pools) | 2026-11-15 (`b4e977e8eb`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_BPE_LIVEBUF.patch](../experiments/removed/MOJOLEARN_BPE_LIVEBUF.patch) |
+| [`MOJOLEARN_BPE_MERGE_BATCH`](#mojolearn_bpe_merge_batch) | Neural (Apple FAST BPE train) | 2026-11-15 (`b4e977e8eb`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_BPE_MERGE_BATCH.patch](../experiments/removed/MOJOLEARN_BPE_MERGE_BATCH.patch) |
+| [`MOJOLEARN_BPE_TRAIN_DEVICE`](#mojolearn_bpe_train_device) | Neural (Apple FAST BPE train) | 2026-11-15 (`b4e977e8eb`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_BPE_TRAIN_DEVICE.patch](../experiments/removed/MOJOLEARN_BPE_TRAIN_DEVICE.patch) |
+| [`MOJOLEARN_CD_GRAM_BLOCKS`](#mojolearn_cd_gram_blocks) | Linear (FAST+Apple CD Gram from row blocks) | 2026-11-15 (`d75e2fbb7a`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_CD_GRAM_BLOCKS.patch](../experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch) |
+| [`MOJOLEARN_DECOMP_FAST_OMP_BLOCK`](#mojolearn_decomp_fast_omp_block-unmeasured-arm-deleted-2026-11-15) | SparseCoder / dictionary OMP, FAST Apple (x_decomp/omp_block.mojo) | 2026-11-15 (`9914fb0c3e`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch) |
+| [`MOJOLEARN_DECOMP_FAST_TSQR_GRID`](#mojolearn_decomp_fast_tsqr_grid) | Decomposition (TSQR trailing update, FAST+Apple) | 2026-11-15 (`09d9ea4aba`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch) |
+| [`MOJOLEARN_DECOMP_FAST_TSQR_NORM`](#mojolearn_decomp_fast_tsqr_norm) | Decomposition (TSQR fused norm chains, FAST+Apple) | 2026-11-15 (`11764e57c7`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch) |
+| [`MOJOLEARN_GP_BULK_DOWNLOAD`](#mojolearn_gp_bulk_download) | Kernel / GP (download into a list) | 2026-11-15 (`2fd4a6c6c1`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_GP_BULK_DOWNLOAD.patch](../experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch) |
+| [`MOJOLEARN_MEANSHIFT_BLOCK`](#mojolearn_meanshift_block) | Clustering (FAST+Apple MeanShift) | 2026-11-15 (`ee14292c4b`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_MEANSHIFT_BLOCK.patch](../experiments/removed/MOJOLEARN_MEANSHIFT_BLOCK.patch) |
+| [`MOJOLEARN_MI_CLF_RANKMAJOR`](#mojolearn_mi_clf_rankmajor) | Prep (mutual_info_classif point kernel, FAST+Apple) | 2026-11-15 (`31dc3269c3`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_MI_CLF_RANKMAJOR.patch](../experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch) |
+| [`MOJOLEARN_MI_REG_SORTCOUNT`](#mojolearn_mi_reg_sortcount) | Prep (mutual_info_regression search, FAST+Apple) | 2026-11-15 (`8b76065907`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_MI_REG_SORTCOUNT.patch](../experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch) |
+| [`MOJOLEARN_MOMENTS_ROWS`](#mojolearn_moments_rows) | Clustering (FAST mixtures moments) | 2026-11-15 (`82c9546196`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_MOMENTS_ROWS.patch](../experiments/removed/MOJOLEARN_MOMENTS_ROWS.patch) |
+| [`MOJOLEARN_MSEL_UNITS_GPU_PARALLEL`](#mojolearn_msel_units_gpu_parallel) | Model selection (CV units) | 2026-11-15 (`0ace134aa9`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch](../experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch) |
+| [`MOJOLEARN_NB_CAT_ATOMIC`](#mojolearn_nb_cat_atomic) | Prep (CategoricalNB count table, FAST+Apple) | 2026-11-15 (`5867d7c11d`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_NB_CAT_ATOMIC.patch](../experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch) |
+| [`MOJOLEARN_OLS_FAST_SMALL_NT`](#mojolearn_ols_fast_small_nt) | Linear (FAST+Apple OLS step-5 small product) | 2026-11-15 (`9043ca5365`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_OLS_FAST_SMALL_NT.patch](../experiments/removed/MOJOLEARN_OLS_FAST_SMALL_NT.patch) |
+| [`MOJOLEARN_RBF_FUSED`](#mojolearn_rbf_fused) | Kernel methods (FAST Apple RBFSampler transform) | 2026-11-15 (`f2f200fc1b`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_RBF_FUSED.patch](../experiments/removed/MOJOLEARN_RBF_FUSED.patch) |
+| [`MOJOLEARN_SGD_FAST_EPOCH_RESIDENT`](#mojolearn_sgd_fast_epoch_resident) | Linear (SGD minibatch epoch, FAST Apple) | 2026-11-15 (`51a85b3df6`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch](../experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch) |
+| [`MOJOLEARN_SI_ONEPASS`](#mojolearn_si_onepass) | Prep (FAST+Apple SimpleImputer col_stats) | 2026-11-15 (`8193833d2e`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_SI_ONEPASS.patch](../experiments/removed/MOJOLEARN_SI_ONEPASS.patch) |
+| [`MOJOLEARN_SVM_WS1024`](#mojolearn_svm_ws1024) | SVM (working-set size, FAST Apple) | 2026-11-15 (`ab40e72f25`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_SVM_WS1024.patch](../experiments/removed/MOJOLEARN_SVM_WS1024.patch) |
+| [`MOJOLEARN_UMAP_INIT_TOL`](#mojolearn_umap_init_tol) | UMAP (FAST+Apple spectral initialization tolerance) | 2026-11-15 (`6eba6fdae9`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_UMAP_INIT_TOL.patch](../experiments/removed/MOJOLEARN_UMAP_INIT_TOL.patch) |
+| [`MOJOLEARN_VSEARCH_ALL`](#mojolearn_vsearch_all) | Neighbors / ANN (FAST+Apple bundle) | 2026-11-15 (`0912c8dee2`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_VSEARCH_ALL.patch](../experiments/removed/MOJOLEARN_VSEARCH_ALL.patch) |
+| [`MOJOLEARN_WARD_ROUNDS`](#mojolearn_ward_rounds) | Clustering (FAST AgglomerativeClustering ward) | 2026-11-15 (`864c5c4f46`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_WARD_ROUNDS.patch](../experiments/removed/MOJOLEARN_WARD_ROUNDS.patch) |
+| [`MOJOLEARN_XD_FAST_CLS2_GRP_LAZY`](#mojolearn_xd_fast_cls2_grp_lazy) | Decomposition (random projection components_ download, FAST+Apple) | 2026-11-15 (`772bf55066`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch](../experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch) |
+| [`MOJOLEARN_X_LINEAR_FAST_FMA`](#mojolearn_x_linear_fast_fma) | Linear (xmad, FAST Apple) | 2026-11-15 (`561bfcf338`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_X_LINEAR_FAST_FMA.patch](../experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch) |
+| [`MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED`](#mojolearn_x_prep_fast_fit_transform_fused) | Preprocessing (FAST+Apple StandardScaler fit_transform) | 2026-11-15 (`3fca9aa4b8`) | 2026-11-15 (lane/restore-apple-fast-classical) | Apple FAST opt-in arm, opt-in, default off, Apple fast only; not run (Apple fast paused, not abandoned: Andrew 2026-11-15) | [MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch) |
 
 ## Trees
 
@@ -8865,6 +8928,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Files: bindings/native_unit_threads_unpack.mojo.
 - Deleted by: lane/expdel2-02-base `0ace134aa9` (2026-11-15); code recoverable at `853bb6d0ee`.
 - Restore: `git apply experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_NEURAL_TABLE_ROUTE_OFF
 
@@ -9822,6 +9886,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-09-base `a6a4828242` (2026-11-15); code recoverable at `75ea427c34`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P04.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
 - Records: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-09-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P09
 
@@ -9832,6 +9897,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-09-base `890e449c3d` (2026-11-15); code recoverable at `74cbc6951a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P09.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
 - Records: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-09-base section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_NB_TEXT_CSR_OFF
 
@@ -9995,6 +10061,7 @@ Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP by the pl
 - **Deleted by**: lane/expdel2-10-cluster `099ec7d1ef` (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b9deefa446`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G03.patch`, then delete the `MOJOLEARN_AFCL_G03` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-10-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_G05: never-run Apple FAST card deleted (2026-11-15)
 
@@ -10005,6 +10072,7 @@ Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP by the pl
 - **Deleted by**: lane/expdel2-10-cluster `3a3c2a7c91` (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `52d759e739`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G05.patch`, then delete the `MOJOLEARN_AFCL_G05` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-10-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_DBSCAN_FAST_DENSE_ADJ: opt-in arm deleted (2026-11-15)
 
@@ -10489,6 +10557,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b21ae6d074`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G14.patch`, then delete the `MOJOLEARN_AFCL_G14` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_BORUVKA_FAST_MMA_OFF: old path deleted (2026-11-15)
 
@@ -10792,6 +10861,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-12-cluster (expdel2-12-cluster, commit `9e73d27c38`); code recoverable at `76c3debd2e`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G01.patch`, then delete the `MOJOLEARN_AFCL_G01` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-12-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ## MOJOLEARN_AFCL_G02: never-run card deleted (2026-11-15)
 
@@ -10800,6 +10870,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-12-cluster (expdel2-12-cluster, commit `9c8a5bb983`); code recoverable at `9e73d27c38`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G02.patch`, then delete the `MOJOLEARN_AFCL_G02` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-12-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ## MOJOLEARN_KNN_FAST_QUERY_GROUP4: opt-in arm deleted (2026-11-15)
 
@@ -10840,6 +10911,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-12-cluster (expdel2-12-cluster, commit `1feb1c083e`); code recoverable at `06b0e453ba`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G09.patch`, then delete the `MOJOLEARN_AFCL_G09` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-12-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ## MOJOLEARN_GMM_INIT_FILL: opt-in arm deleted (2026-11-15)
 
@@ -11107,6 +11179,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_ann/switches.mojo comptime ANN3_PQ_SEED, x_ann/ivf_pq_device.mojo PQ_FAST_SEED and its host-seed branch (init_kind var), x_ann/kpp_seed.mojo kpp_seed and KPP_W removed; unused imports dropped; no bits change (70730767d5).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_COARSE_SEED_OFF
 
@@ -11131,6 +11204,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_ann/switches.mojo comptime ANN3_DIRECT_OUT removed; its two readers in x_ann/ivf_pq_device.mojo folded (the never-true direct-copy branches gone; codes download as before); the codes_addr parameters are now unread but kept (callers in bindings); no bits change (0849c86aeb).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_TRAINSET_COPY
 
@@ -11143,6 +11217,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_ann/switches.mojo: comptime ANN3_TRAINSET_COPY (always False, no reader) removed; dead since lane/expdel2-14-cluster; no bits change (f4f8243483).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_ROW_THREADS
 
@@ -11155,6 +11230,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_ann/switches.mojo comptime ANN3_ROW_THREADS removed; its two readers in x_ann/ivf_pq_device.mojo folded and the unlaunched residual_rows_kernel, sq_encode_rows_kernel deleted; no bits change (15ada51280).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_SCAN_SELECT
 
@@ -11167,6 +11243,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_ann/switches.mojo: comptime ANN3_SCAN_SELECT (always False, no reader) removed; dead since lane/expdel2-14-cluster; no bits change (327ffeb60a).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_CAGRA_TEAM
 
@@ -11179,6 +11256,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_ann/switches.mojo: comptime ANN3_CAGRA_TEAM (always False, no reader) removed; dead since lane/expdel2-14-cluster; no bits change (3f072d0422).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_TSNE_RB32
 
@@ -11189,6 +11267,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-14-cluster `e114af5d32` (2026-11-15); code recoverable at `0c729eaf23`.
 - Restore: `git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB32.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_TSNE_RB64
 
@@ -11199,6 +11278,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-14-cluster `bf400e5cfd` (2026-11-15); code recoverable at `e114af5d32`.
 - Restore: `git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB64.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ANN3_TSNE_STEP_ROWS
 
@@ -11209,6 +11289,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-14-cluster `fc8c24af4e` (2026-11-15); code recoverable at `bf400e5cfd`.
 - Restore: `git apply experiments/removed/MOJOLEARN_ANN3_TSNE_STEP_ROWS.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF
 
@@ -11259,6 +11340,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-14-cluster `0912c8dee2` (2026-11-15); code recoverable at `72e3226c20`.
 - Restore: `git apply experiments/removed/MOJOLEARN_VSEARCH_ALL.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_PQ_LUT_TILED_OFF
 
@@ -11341,6 +11423,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_cluster/ops.mojo trait methods ward_nn and kpp_distinct and their DeviceOps / HostOps implementations removed (no caller after MOJOLEARN_WARD_ROUNDS and MOJOLEARN_XCLUSTER_KPP_DISTINCT went), with _ward_nn_kernel, WNN_TPB, _c38_distinct_kernel (x_cluster/device_ops.mojo) and bodies.ward_cell, ward_nn_row (x_cluster/bodies.mojo); no bits change (c2ccd508d7).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AP_SPLIT_OFF
 
@@ -11401,6 +11484,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-14-cluster `ee14292c4b` (2026-11-15); code recoverable at `7807488033`.
 - Restore: `git apply experiments/removed/MOJOLEARN_MEANSHIFT_BLOCK.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_IDN_AP_R_TOP2_OFF
 
@@ -11461,6 +11545,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-14-cluster `82c9546196` (2026-11-15); code recoverable at `0625274b10`.
 - Restore: `git apply experiments/removed/MOJOLEARN_MOMENTS_ROWS.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-14-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF
 
@@ -11707,6 +11792,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-13-cluster `6eba6fdae9` (2026-11-15); code recoverable at `ade07601c8`.
 - Restore: `git apply experiments/removed/MOJOLEARN_UMAP_INIT_TOL.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
 - Records: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-13-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_UMAP_LIVE_BOTH_ARM
 
@@ -12080,6 +12166,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-15-cluster `47c2b3d78f` (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `01c1811429`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G07.patch`, then delete the `MOJOLEARN_AFCL_G07` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-15-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_G12: never-run Apple FAST card deleted (2026-11-15)
 
@@ -12090,6 +12177,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-15-cluster `59bcf4d7c7` (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `ddae80bfe0`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_G12.patch`, then delete the `MOJOLEARN_AFCL_G12` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-15-cluster section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_CLUSTER_FAST_STOP_GROUP8: opt-in arm deleted (2026-11-15)
 
@@ -12401,6 +12489,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-18-decomposition `09d9ea4aba` (2026-11-15); code recoverable at `23f8f5063b`.
 - Restore: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
 - Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_DECOMP_FAST_TSQR_NORM
 
@@ -12411,6 +12500,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-18-decomposition `11764e57c7` (2026-11-15); code recoverable at `735e11f676`.
 - Restore: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
 - Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_IDN_CD_RESIDENT_OFF
 
@@ -12604,6 +12694,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Deleted by: lane/expdel2-18-decomposition `772bf55066` (2026-11-15); code recoverable at `17fa14cc92`.
 - Restore: `git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
 - Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN
 
@@ -12656,6 +12747,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): gaussian_process/afcl_prediction.mojo comptime AFCL_L11 removed; its ternary reader in gaussian_process/checks/kernels.mojo gp variance launch folded to elem_tpb and the imports dropped; no bits change (9fe0110632).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_G13
 
@@ -12666,6 +12758,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-19-kernel `0ba472a9c7` (2026-11-15); code recoverable at `ab962d7d76`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_G13.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
 - Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_FAMILY_CTX_PER_CALL
 
@@ -12686,6 +12779,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-19-kernel `2fd4a6c6c1` (2026-11-15); code recoverable at `476e96f77a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
 - Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF
 
@@ -12869,6 +12963,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Deleted by: lane/expdel2-19-kernel `f2f200fc1b` (2026-11-15); code recoverable at `eb41bfa927`.
 - Restore: `git apply experiments/removed/MOJOLEARN_RBF_FUSED.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
 - Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_IDN_RBF_FUSED_OFF
 
@@ -13001,6 +13096,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e11cb757b8` (deletion commit `0d75c7cca2`).
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_L13.patch`, then delete the `MOJOLEARN_AFCL_L13` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_DECOMP_FAST_OMP_BLOCK: unmeasured arm deleted (2026-11-15)
 
@@ -13011,6 +13107,7 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_decomp/omp_block.mojo (DECOMP_FAST_OMP_BLOCK, omp_block_fits, omp_block_kernel) deleted, no importer left, its marker moved to x_decomp/device.mojo DevExec.omp_rows; the same commit deletes gemm/tn_centered.mojo (tn_centered_applies, tn_centered_partial_kernel, gemm_tn_centered_identical), whose last importer MOJOLEARN_IDN_GEMM_TN_CENTERED (lane/expdel2-16-decomposition) removed: a restore of that patch also needs the file from 7c6df8f9f7 (note at decomposition/impl/linalg/detail/pca.mojo); no bits change (fb20e60f7b).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_FA_GRAM_ONCE: unmeasured arm deleted (2026-11-15)
 
@@ -13214,6 +13311,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-20-linear `30ab49dcd7` (2026-11-15); code recoverable at `1701048c43`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L06.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
 - Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_CD_FAST_GRAM_OFF
 
@@ -13244,6 +13342,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-20-linear `d75e2fbb7a` (2026-11-15); code recoverable at `6e1b6c3514`.
 - Restore: `git apply experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_CD_IDN_GRAM_COLS_128
 
@@ -13396,6 +13495,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-20-linear `9043ca5365` (2026-11-15); code recoverable at `6dee0ea324`.
 - Restore: `git apply experiments/removed/MOJOLEARN_OLS_FAST_SMALL_NT.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF
 
@@ -13570,6 +13670,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-20-linear `3fca9aa4b8` (2026-11-15); code recoverable at `23c6c58415`.
 - Restore: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
 - Records: refusal in `core/experiment_guards_base.mojo`; `grid_controls/apple-fast-round2.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 
 ## Experiment deletions: lane expdel2-20-linear, non-owner sites (2026-11-15)
@@ -13591,6 +13692,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `16da6ce3e2` (2026-11-15); code recoverable at `9995c7281f`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P01.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P02
 
@@ -13601,6 +13703,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `1d5f37812c` (2026-11-15); code recoverable at `d837f02ccf`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P02.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P03
 
@@ -13611,6 +13714,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `4a5487a7a7` (2026-11-15); code recoverable at `5f02f5b9e3`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P03.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P05
 
@@ -13621,6 +13725,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `a1ed29218e` (2026-11-15); code recoverable at `1d5f37812c`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P05.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P06
 
@@ -13631,6 +13736,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `fc8c992aab` (2026-11-15); code recoverable at `a1ed29218e`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P06.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P13
 
@@ -13641,6 +13747,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `1de4f202c5` (2026-11-15); code recoverable at `16da6ce3e2`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P13.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD
 
@@ -13843,6 +13950,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `31dc3269c3` (2026-11-15); code recoverable at `8b76065907`.
 - Restore: `git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_MI_CLF_RANKMAJOR_OFF
 
@@ -13873,6 +13981,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `8b76065907` (2026-11-15); code recoverable at `699627ef7b`.
 - Restore: `git apply experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_MI_REG_TIES
 
@@ -13903,6 +14012,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `5867d7c11d` (2026-11-15); code recoverable at `4a5487a7a7`.
 - Restore: `git apply experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_PT_SCORE
 
@@ -13923,6 +14033,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-22-linear `8193833d2e` (2026-11-15); code recoverable at `11e4797706`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
 - Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_SI_ONEPASS_OFF
 
@@ -14127,6 +14238,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: x_linear/device.mojo.
 - Deleted by: lane/expdel2-21-linear `51a85b3df6` (2026-11-15); code recoverable at `639da56218`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF
 
@@ -14217,6 +14329,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: svm/impl/workingset.mojo.
 - Deleted by: lane/expdel2-21-linear `ab40e72f25` (2026-11-15); code recoverable at `a4bd9fe9ae`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SVM_WS1024.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF
 
@@ -14244,6 +14357,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: x_linear/ops.mojo.
 - Deleted by: lane/expdel2-21-linear `561bfcf338` (2026-11-15); code recoverable at `f19d6bd79f`.
 - Restore: `git apply experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_X_LINEAR_NO_STAGED_FOLD
 
@@ -15569,6 +15683,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-30-neural `b4e977e8eb` (2026-11-15); code recoverable at `e39daf79ad`.
 - Restore: `git apply experiments/removed/MOJOLEARN_BPE_ALL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-30-neural section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_BPE_ENCODE_DEVICE
 
@@ -15579,6 +15694,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-30-neural `b4e977e8eb` (2026-11-15); code recoverable at `e39daf79ad`.
 - Restore: `git apply experiments/removed/MOJOLEARN_BPE_ENCODE_DEVICE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-30-neural section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_BPE_GROUP_FILTER
 
@@ -15589,6 +15705,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-30-neural `b4e977e8eb` (2026-11-15); code recoverable at `e39daf79ad`.
 - Restore: `git apply experiments/removed/MOJOLEARN_BPE_GROUP_FILTER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-30-neural section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_BPE_LIVEBUF
 
@@ -15599,6 +15716,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-30-neural `b4e977e8eb` (2026-11-15); code recoverable at `e39daf79ad`.
 - Restore: `git apply experiments/removed/MOJOLEARN_BPE_LIVEBUF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-30-neural section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_BPE_MERGE_BATCH
 
@@ -15609,6 +15727,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-30-neural `b4e977e8eb` (2026-11-15); code recoverable at `e39daf79ad`.
 - Restore: `git apply experiments/removed/MOJOLEARN_BPE_MERGE_BATCH.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-30-neural section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_BPE_TRAIN_DEVICE
 
@@ -15621,6 +15740,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-30-neural section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): tokenizer/fast/bpe_device.mojo BpeMerges, bpe_train_merges_device, bpe_encode_batch_device removed; tokenizer/fast/bpe_fast_impl.mojo device arms of fast_bpe_train_fill / fast_bpe_encode_batch_into folded to their refusal, fast_doc_offsets, _document, fast_piece_groups, fast_pretoken_bounds, fast_vocab_from_merges removed; BPE_* flags and BpeDeviceTable stay (bpe_fast_flags binding, FastBpeHandle field); no bits change (86815c72e6).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_IDN_AF_RESIDENT_OFF
 
@@ -17831,6 +17951,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-36-neural-series-linear `688cf16fe5` (2026-11-15); code recoverable at `688cf16fe5^` (= `145be10898` for every file of this lane).
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P07.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
 - Records: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-36-neural-series-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P08
 
@@ -17841,6 +17962,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-36-neural-series-linear `ab5abfd358` (2026-11-15); code recoverable at `ab5abfd358^` (= `145be10898` for every file of this lane).
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P08.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
 - Records: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-36-neural-series-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_SELECT_D_OFF
 
@@ -17881,6 +18003,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-36-neural-series-linear `80484b2334` (2026-11-15); code recoverable at `80484b2334^` (= `145be10898` for every file of this lane).
 - Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P11.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
 - Records: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-36-neural-series-linear section).
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_IDN_KPSS_SCAN_OFF
 
@@ -19211,6 +19334,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Evidence read: no record (rule g).
 - Deleted by: `b318452d7a` on lane/expdel2-37-series; recoverable at `72ae22cf1f`.
 - Patch: `experiments/removed/MOJOLEARN_AFCL_P10.patch`. Refusal: `core/experiment_guards_series.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P12 (expdel2-37-series)
 
@@ -19219,6 +19343,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Evidence read: no record (rule g).
 - Deleted by: `96d454df19` on lane/expdel2-37-series; recoverable at `145be10898`.
 - Patch: `experiments/removed/MOJOLEARN_AFCL_P12.patch`. Refusal: `core/experiment_guards_series.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_AFCL_P14 (expdel2-37-series)
 
@@ -19227,6 +19352,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Evidence read: no record (rule g).
 - Deleted by: `db4fd5d0c6`, `d8a165cb14` on lane/expdel2-37-series; recoverable at `82df561cdb`.
 - Patch: `experiments/removed/MOJOLEARN_AFCL_P14.patch`. Refusal: `core/experiment_guards_series.mojo`.
+Restored 2026-11-15 (lane/restore-apple-fast-classical): Apple fast is paused, not abandoned (Andrew); the arm is back opt-in, default off, Apple fast only, not run; see Restored table.
 
 ### MOJOLEARN_ARIMA_ASYNC_ALL (expdel2-37-series)
 
