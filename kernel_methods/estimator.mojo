@@ -277,12 +277,11 @@ comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
 comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (_CTX_MODE == _NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF` restores the appends):
-#: `_download` fills a list of the final length 8 floats a step instead of n
+#: (FAST keeps the appends): `_download` fills a list of the final length 8 floats a step instead of n
 #: appends into a growing one. The same words: no bit moves.
-comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 1a2458c687.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
 
 
 def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, what: String) raises -> DeviceBuffer[
