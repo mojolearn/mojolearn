@@ -289,71 +289,40 @@ def _(n, rng):
 
 
 # ----------------------------------------------------------------- metrics
-@cell("metrics._as_i32_1d(int64 buffer)")
-def _(n, rng):
-    y = rng.integers(0, 7, n)
-    return lambda: M._as_i32_1d(y, "y_true")
-
-
-@cell("metrics._as_i32_1d(int32 buffer)")
-def _(n, rng):
-    y = rng.integers(0, 7, n).astype(np.int32)
-    return lambda: M._as_i32_1d(y, "y_true")
-
-
-@cell("metrics._as_i32_1d(list of int)")
-def _(n, rng):
-    y = rng.integers(0, 7, n).tolist()
-    return lambda: M._as_i32_1d(y, "y_true")
-
-
-@cell("metrics._prepare_cluster_labels(int64 x2)")
+# The private label/weight seams (`_as_i32_1d`, `_prepare_cluster_labels`,
+# `_classification_pair`, `_encode_classification`, `_label_map`,
+# `_sample_weight_f32`, and the already removed `_binary_ranking_inputs`,
+# `_as_f32_1d`) were deleted from `_metrics_impl` (lane py-metrics,
+# 2026-11-15); their native owners run inside the public call, so the cells
+# time the public call.
+@cell("metrics.adjusted_rand_score(int64 x2)")
 def _(n, rng):
     a = rng.integers(0, 7, n)
     b = rng.integers(0, 7, n)
-    return lambda: M._prepare_cluster_labels(a, b)
+    return lambda: M.adjusted_rand_score(a, b)
 
 
-@cell("metrics._classification_pair+_encode (int64 x2)")
+@cell("metrics.confusion_matrix(int64 x2)")
 def _(n, rng):
     a = rng.integers(0, 7, n)
     b = rng.integers(0, 7, n)
-
-    def run():
-        t, pr, _k, obs = M._classification_pair(a, b, None)
-        return M._encode_classification(t, pr, obs)
-    return run
+    return lambda: M.confusion_matrix(a, b)
 
 
-@cell("metrics._classification_pair+_encode (list of str x2)")
+@cell("metrics.confusion_matrix(list of str x2)")
 def _(n, rng):
     names = ["c%d" % i for i in range(7)]
     a = [names[i] for i in rng.integers(0, 7, n).tolist()]
     b = [names[i] for i in rng.integers(0, 7, n).tolist()]
-
-    def run():
-        t, pr, _k, obs = M._classification_pair(a, b, None)
-        return M._encode_classification(t, pr, obs)
-    return run
+    return lambda: M.confusion_matrix(a, b)
 
 
-@cell("metrics._binary_ranking_inputs+encode (int64 y, f32 score)")
+@cell("metrics.r2_score(f32, sample_weight f32)")
 def _(n, rng):
-    y = rng.integers(0, 2, n)
-    s = rng.random(n, dtype=np.float32)
-
-    def run():
-        true, _k, classes, _sc = M._binary_ranking_inputs(y, s, None)
-        if hasattr(M, "_label_map"):
-            return M._label_map(true, lambda v: int(v == classes[1]))
-        return Array.from_list([int(v == classes[1]) for v in true], "<i4")
-    return run
-
-
-@cell("metrics._sample_weight_f32(f32 buffer)")
-def _(n, rng):
+    y = rng.random(n, dtype=np.float32)
+    p = rng.random(n, dtype=np.float32)
     w = rng.random(n, dtype=np.float32)
-    return lambda: M._sample_weight_f32(w, n, "r2_score")
+    return lambda: M.r2_score(y, p, sample_weight=w)
 
 
 @cell("metrics.kl_divergence negativity scan (Array.min x2)")
@@ -361,12 +330,6 @@ def _(n, rng):
     a = arr(rng.random(n, dtype=np.float32))
     b = arr(rng.random(n, dtype=np.float32))
     return lambda: (a.min() < 0, b.min() < 0)
-
-
-@cell("metrics._as_f32_1d(f32 buffer) (control)")
-def _(n, rng):
-    y = rng.random(n, dtype=np.float32)
-    return lambda: M._as_f32_1d(y, "y")
 
 
 # --------------------------------------------------------- model_selection
