@@ -205,11 +205,10 @@ def test_public_linear_refuses_replaced_native_entry(monkeypatch, operation):
     assert not calls
 
 
-def test_existing_linear_primitive_exact_integer_contract():
-    from mojolearn.tests import test_training_primitives_surface as existing
-    report = existing.Report("native_linear_existing_primitive")
-    existing.arm_linear(report)
-    assert report.rows and not report.failures, report.failures
+# Deleted: test_existing_linear_primitive_exact_integer_contract. It ran
+# test_training_primitives_surface.arm_linear (linear forward/backward exact on
+# small integers), which aea4ac877e moved to Mojo; the check is
+# checks/native_tests/training_primitives.mojo `_linear` / `_linear_gpu`.
 
 
 def test_existing_linear_backward_aligned_accumulation_contract():
