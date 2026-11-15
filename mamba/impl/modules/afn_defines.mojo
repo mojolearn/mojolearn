@@ -152,18 +152,9 @@ comptime IDN_M2_SSD_TILES = (
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA1_CHUNKSCAN (neural MERGED-UNMEASURED FAST+Apple opt-in arm: chunked parallel Mamba-1 scan; M3 F10 B/A 0.89-1.07 mixed, stayed OFF) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 0c4cc7e8d7.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_CHUNKSCAN.patch
 comptime AFN_MAMBA1_CHUNKSCAN = False
-# M02: not tested in this campaign; standalone A/B leaves CHUNKSCAN fixed.
-comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
-    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
-# Scored FAST quality: 28/28 metrics within the existing bands; PASS.
-# F10/mamba1-input M3 2026-10-06: 35 retained public-caller timings;
-# B/A range 0.8297..1.4946, mixed/regressing; FAST candidate stays OFF.
-# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
-# Scored quality metrics and per-arm build/hash provenance retained at
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/mamba1-input.
-# No combined-switch or full-board default claim from these component cases.
-    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_FUSE_IN"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA1_FUSE_IN (neural MERGED-UNMEASURED FAST+Apple opt-in arm: fused conv1d+SiLU input; M3 F10 B/A 0.83-1.49 mixed, stayed OFF) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 1560ac92d7.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_FUSE_IN.patch
+comptime AFN_MAMBA1_FUSE_IN = False
 # M03: not tested in this campaign; no full-workload promotion is claimed.
 comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
@@ -261,8 +252,6 @@ comptime AFN26_MAMBA_REFUSAL_GRID4 = AFN_APPLE_FAST and is_defined[
 def afn_mamba_switches() -> String:
     """The switches this build has on, for a probe or a log line."""
     var s = String("")
-    comptime if AFN_MAMBA1_FUSE_IN:
-        s += "MAMBA1_FUSE_IN "
     comptime if AFN_MAMBA2_SSD_MMA:
         s += "MAMBA2_SSD_MMA "
     comptime if AFN_MAMBA3_SISO_FUSED:
