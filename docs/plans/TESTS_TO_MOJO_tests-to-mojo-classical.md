@@ -129,20 +129,51 @@ added (docstrings and one public shape test). Four new checks, registered in `ch
 | `test_pca_exact_native_owner.py` | `test_complete_exact_owner_matches_existing_bits_and_independent_subspace[18]` | RNG-bound fixture (default_rng(9021)); NumPy float64 SVD outside oracle; audit_native_call |
 | `test_pca_exact_native_owner.py` | `test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs[6]` | RNG-bound fixture; Python seed values (2**70+3, -1); audit_native_call |
 
+## What would let the KEEP-NOPORT groups move (coordinator decision 3)
+
+None moved: no group's assertion is a small native relation with a typed RUN entry to call. Per group:
+
+- `test_minmax_scaler_native_lifecycle.py` (4) and `test_standard_scaler_native_fit.py` (1): 43 x 5 input, so a
+  Mojo-side generator would do (the relations hold for any data with the constant and near-constant columns), but
+  partial_fit's statistic merge and the unseen-column NaN mask run in `bindings/minmax_native_door.mojo` on
+  PythonObject fields; they move once a typed `minmax_partial_fit_run` entry exists. The StandardScaler one picks its
+  route by `MOJOLEARN_SCALER_DIRECT` at run time and stays until that switch is decided.
+- `test_cpu_training_*` (11): public-API repeat/refusal smokes of a CPU-only install over whole estimators; they
+  test the install, not a kernel, so they stay Python (the kernels are in the family checks).
+- `test_cpu_training_par_classical.py` (1), `test_x_prep_twice.py` (1): worker processes and child-process hang
+  timeouts: boundary, stay.
+- `test_kde_fused_fast.py` (3): `fast`-only arms (paused programme; the checks build `identical`): move with the
+  programme when it reopens.
+- `test_public_verifier_gap_methods.py` JL bound (1): needs a typed `jl_min_dim` RUN entry.
+- `test_svc_multiclass.py` (3): 240 x 5 and 120 x 4 generated inputs and public multiclass/SVR refits; a Mojo
+  generator could replace the data, but OvO pairing and the precomputed/linear SVR arm have no typed entry in
+  `svm/estimator.mojo` (binary `svc_fit_host` only), so a check would cover only the binary third and the Python
+  test would stay: not moved.
+- `test_native_prep_iterimp_door.py` (2): compared with the former Python route (an oracle helper); move when the
+  oracle's expected outputs are stored as fixture words by a committed generator.
+- `test_native_sgd_weight_lifetime.py`, `test_native_transient_buffer_lifetimes.py` (5),
+  `test_native_decomp_buffer_owners.py` (1): Python-allocated owner lifetimes and pool reuse across public calls:
+  boundary, stay.
+- `test_ne2_g_decomp_entries.py` (6): public caches invalidated by `set_params`/refit: boundary, stay.
+- `test_pca_exact_native_owner.py` (2): NumPy float64 SVD as the outside oracle and Python big-int seeds: stay.
+
 ## Native entries missing
 
+- MinMaxScaler partial_fit merge: no typed RUN entry (`bindings/minmax_native_door.mojo` merges on PythonObjects).
 - `johnson_lindenstrauss_min_dim`: no typed RUN entry; the bound is composed inside `bindings/jl_native_pack.mojo`
   `jl_min_dim`, so its test stays Python.
 
 ## Open points
 
-- `test_host_logistic_native.py`, `test_host_svc_native.py`, `test_host_svr_native.py`: the kept "inherited fit ...
-  results" tests assert frozen sha256 digests of an older commit's outputs. AGENTS.md "Bits may change between
-  versions" forbids holding bits to an older version; they fail on any legitimate bit change. Left for the
-  orchestrator (rewrite as a same-version relation, or delete).
+- The frozen-digest "inherited fit" tests of `test_host_logistic_native.py`, `test_host_svc_native.py` and
+  `test_host_svr_native.py` (digests of 32011bb32 outputs) are replaced by same-build relations: fitted state and one
+  native call per method over every kernel, precomputed linear Gram equals the linear kernel bit for bit (SVC, SVR),
+  nested score equals this build's predict accuracy (logistic).
 - Most NATIVE rows of the inventory are leftovers of earlier migrations: their numerics already moved and what
-  remains is boundary. The archive checks the inventory named (`archive_cholesky`, `archive_standard`,
-  `archive_minmax`, `archive_linear`, `archive_codec`, `archive_path`, `archive_reader`) are not in `registry.mojo`,
-  so no CI run executes them; none was cited as coverage.
+  remains is boundary.
+- The twelve `archive_*` checks (cholesky, codec, linear, minmax, parser, path, reader, repr, standard, text_cells,
+  unicode_names, writer) were outside the runner; they are now registered (host column), their per-check pixi tasks
+  are gone, and `native-checks.yml` / `tools/ops/native_checks_gpu_job.sh` run `tools/generated_sources.py prepare`
+  before the one build, since eight of them import the gitignored generated archive Unicode table.
 - `tools/release_public_runtime_profile.json` lists five deleted `test_native_prep_no_callbacks.py` nodes; it is the
   frozen record of a past Apple run (it checks executed blob hashes), so it was left unchanged.
