@@ -155,10 +155,12 @@ comptime C15_FACTOR_SOLVE = False
 #                this cell took that fallback was not isolated in the run.
 #   Geometric mean over all measured cells 0.80x. Quality identical (r2 and
 #   rmse within 1e-6 in every cell); NV vs AMD output hashes MATCH.
-# `-D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` restores the incumbent
-# routes (the grid's "off" arm). The old opt-in define is refused in
+# The `_OFF` rollback to the incumbent routes (the grid's "off" arm) was
+# deleted 2026-11-15. The old opt-in define is refused in
 # core/six_lane_experiment_guards.mojo.
-comptime LINEAR_GRAM_SOLVE = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path, superseded by the measured IDENTICAL default) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 439c466840.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LINEAR_GRAM_SOLVE = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 2a301a3aa3.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch; record in docs/TOMBSTONES.md.
 comptime C16_GLM_FUSED = False

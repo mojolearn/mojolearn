@@ -724,6 +724,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF`](#mojolearn_classical_enetcv_fold_blocks_off-old-path-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV staged means + Gram, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch) |
 | [`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS`](#mojolearn_classical_enetcv_score_blocks-unmeasured-arm-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV score rows per block arm, IDENTICAL) | removed (opt-in arm; losing arm =4096) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch) |
 | [`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF`](#mojolearn_classical_enetcv_score_blocks_off-old-path-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV 4096-row score blocks, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF`](#mojolearn_classical_linear_gram_solve_off-old-path-deleted-2026-11-15) | Linear (OLS / Ridge incumbent routes beside the resident Gram, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6988,3 +6989,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6ac3a7434d`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv-folds.json` control `enetcv_score_blocks`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the promoted resident centered-Gram fit to the incumbent OLS TSQR / Ridge routes in IDENTICAL (glm/linear_fit_device.mojo, glm/host/linear_fit_native.mojo, bindings/_mojolearn_estimators.mojo, _mojolearn_estimators_host.mojo read `LINEAR_GRAM_SOLVE`). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `LINEAR_GRAM_SOLVE` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:2015 SPLIT (grid g50ebe26a5): OLS takes the centered TSQR (Gram off faster, taxi avg 0.762, istella 0.665), ridge keeps the Gram (5.76x slower off), NV == AMD hashes; the per-estimator split stays in the default, so the global define goes. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `439c466840`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-structural.json` control `linear_gram_solve`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
