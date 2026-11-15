@@ -14,8 +14,7 @@ the freed buffers by capacity and hands them back on the next take; the
 words copied are the same, so no bit moves.
 
 DEFAULT OFF CANDIDATE (never timed on current source): `-D
-MOJOLEARN_IDN_SCRATCH_POOL` turns it on; `-D MOJOLEARN_IDN_ALL_OFF` keeps it
-off. Off, every take allocates and
+MOJOLEARN_IDN_SCRATCH_POOL` turns it on. Off, every take allocates and
 every give frees, exactly the per-call form.
 
 Changes against the old branch: (1) the process environment switch
@@ -40,7 +39,9 @@ from core.shared_slot import SharedSlot
 
 # TOMBSTONE: MOJOLEARN_IDN_SCRATCH_POOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 2ec9cce908.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_SCRATCH_POOL = is_defined["MOJOLEARN_IDN_SCRATCH_POOL"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SCRATCH_POOL = is_defined["MOJOLEARN_IDN_SCRATCH_POOL"]()
 
 #: free entries kept per kind; a give past this frees the buffer instead
 comptime SCRATCH_POOL_KEEP = 64

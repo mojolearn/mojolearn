@@ -91,7 +91,6 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: Threads per block for every kernel here. See PORTABILITY above.
@@ -127,11 +126,12 @@ comptime FLOAT32_KEY_BITS = 32
 #: `offsets` buffer, so the form runs only when R8_BINS * blocks_wide <=
 #: seg_size (seg_size >= R8_BINS); smaller segments keep the one-bit passes.
 #: Shared pages: SORT_BLOCK Int32 = 2 KB (under every column's 16 KB floor).
-#: `-D MOJOLEARN_IDN_ALL_OFF` restores the one-bit passes. The one-bit
-#: kernels stay for ensemble/randomforest.mojo.
+#: The one-bit kernels stay for ensemble/randomforest.mojo.
 # TOMBSTONE: MOJOLEARN_IDN_SEG_RADIX8_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at af0618e292.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEG_RADIX8_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_SEG_RADIX8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SEG_RADIX8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime R8_BITS = 8
 comptime R8_BINS = 256
 comptime R8_PASSES = FLOAT32_KEY_BITS // R8_BITS
