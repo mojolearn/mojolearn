@@ -37,8 +37,6 @@ SM=64 + BPSM=4 equalled SM=128. The one distinct BPSM point, 4 blocks per
 device SM, is arm 1 (HIST_REP_DEVICE_X4; 1 is never a real SM pin). The old
 define is refused in core/six_lane_experiment_guards.mojo.
 """
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

@@ -19,7 +19,6 @@ NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
 | MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL | switch | on/off | greedy_search_helper.mojo `replication_for` |
 """
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
