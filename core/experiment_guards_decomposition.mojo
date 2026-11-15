@@ -223,8 +223,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): IDN_TSQR_NORM_OFF (old path) is gone; the default is kept; code at 09d9ea4aba; restore: experiments/removed/MOJOLEARN_IDN_TSQR_NORM_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_STRIP_UPDATE.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): IDN_TSQR_STRIP_UPDATE (arm) is gone; the default path is the only one; code at 11764e57c7; restore: experiments/removed/MOJOLEARN_IDN_TSQR_STRIP_UPDATE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): IDN_TSQR_TREE_PAR_OFF (old path) is gone; the default is kept; code at bc3f9433a3; restore: experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch"
+    # MOJOLEARN_IDN_TSQR_TREE_PAR_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): IDN_TSQR_WY_PAIR_OFF (old path) is gone; the default is kept; code at 094d2402ca; restore: experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_RESIDENT_OFF.patch

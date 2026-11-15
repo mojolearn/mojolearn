@@ -2150,6 +2150,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD`](#mojolearn_idn_mamba3_forward_door_old-old-path-deleted-2026-11-15) | Mamba-3 prefill forward door (IDENTICAL) | 2026-11-15 (`39aa5d2695`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch) |
 | [`MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC`](#mojolearn_idn_mamba_backward_generic) | Neural (Mamba-1/2 block step backward) | 2026-11-15 (`e9b44b3e5b`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch) |
 | [`MOJOLEARN_IDN_OLS_PREDICT_TILED`](#mojolearn_idn_ols_predict_tiled-opt-in-arm-deleted-2026-11-15) | OLS predict gemv (IDENTICAL) | 2026-11-15 (`1900f1d297`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_OLS_PREDICT_TILED.patch](../experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch) |
+| [`MOJOLEARN_IDN_TSQR_TREE_PAR_OFF`](#mojolearn_idn_tsqr_tree_par_off) | Decomposition (TSQR tree combine, IDENTICAL) | 2026-11-15 (`77c81ac782`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -12607,6 +12608,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-18-decomposition `77c81ac782` (2026-11-15); code recoverable at `bc3f9433a3`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
 - Records: refusal in `core/experiment_guards_decomposition.mojo`; `grid_controls/gap-tsqr.json` control `tsqr_tree_par` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_IDN_TSQR_WY_PAIR_OFF
 
