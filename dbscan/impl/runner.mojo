@@ -99,7 +99,6 @@ one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD

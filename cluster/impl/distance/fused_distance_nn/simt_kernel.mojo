@@ -166,11 +166,8 @@ from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_FAST,
     ftz,
     ftz_simd,
     identical_mul_add,

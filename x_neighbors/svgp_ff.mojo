@@ -41,7 +41,6 @@ from x_linear.ff import (
 )
 from x_linear.ops import fa
 from checks.numerics import ftz, identical_log, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 
 #: elements of one partial of the m-long folds
 comptime SVGP_FF_FOLD = 64

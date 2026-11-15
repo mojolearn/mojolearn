@@ -120,7 +120,6 @@ from core.cosine_rows import cosine_unit_rows
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
-    NUMERIC_FAST,
     ftz,
     identical_div,
     identical_mul,
@@ -128,8 +127,6 @@ from checks.numerics import (
 )
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: metric='cosine'

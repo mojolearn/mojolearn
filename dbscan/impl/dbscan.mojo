@@ -42,7 +42,6 @@ the dataset, takes 80% of what is left, and divides by a per-row estimate.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN

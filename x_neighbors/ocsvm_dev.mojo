@@ -41,7 +41,6 @@ from x_neighbors.items import (
     ocsvm_rho_part_item, ocsvm_rho_level_item, ocsvm_rho_level_items, ocsvm_rho_levels_done,
 )
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, _down_i, BLOCK, kernel_kernel
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_neighbors.ocsvm_init import (

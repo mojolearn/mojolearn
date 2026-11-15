@@ -76,7 +76,6 @@ from cluster.checks.plus_plus import (
     write_inclusive_scan_kernel,
 )
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from std.os import getenv
 from std.time import perf_counter_ns
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
