@@ -95,12 +95,12 @@ comptime UMAP_IDENTICAL_GRAD_CLIP = Float32(4.0)
 # average, so this cannot be a default; it is opt-in through
 # `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`.
 # `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even
-# then, and `-D MOJOLEARN_UMAP_LIVE_BOTH_ARM=1` (trial only) applies both
-# attractive moves live (worse on taxi at 0.8907).
+# then.
 comptime UMAP_LIVE_ROW = umap_device_optimizer_live_row_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
-comptime UMAP_LIVE_BOTH_ARM = is_defined["MOJOLEARN_UMAP_LIVE_BOTH_ARM"]()
+# TOMBSTONE: MOJOLEARN_UMAP_LIVE_BOTH_ARM (unmeasured opt-in trial arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 1ff002b526.
+# Restore: git apply experiments/removed/MOJOLEARN_UMAP_LIVE_BOTH_ARM.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
 
 
 #: The run-time-dimension kernel's per-vertex row width (UMAP_MAX_COMPONENTS).
@@ -177,11 +177,7 @@ def umap_identical_epoch_kernel[C: Int](
                 var g = ftz(
                     identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c]))))
                 )
-                comptime if UMAP_LIVE_BOTH_ARM:
-                    # Trial arm only: both moves applied to the running row.
-                    x[c] = ftz(x[c] + g)
-                    x[c] = ftz(x[c] + g)
-                elif UMAP_LIVE_ROW:
+                comptime if UMAP_LIVE_ROW:
                     # DEVIATION 2668: the head move lands on the running
                     # position now, so the next edge's delta sees it; the
                     # mirror (tail) move stays deferred to the epilogue.
@@ -221,7 +217,7 @@ def umap_identical_epoch_kernel[C: Int](
                     ),
                 )
                 comptime for c in range(C):
-                    comptime if UMAP_LIVE_ROW or UMAP_LIVE_BOTH_ARM:
+                    comptime if UMAP_LIVE_ROW:
                         # DEVIATION 2668: the repulsive move lands on the
                         # running position, as cuML's serial kernel applies it.
                         x[c] = ftz(
@@ -307,11 +303,7 @@ def umap_identical_epoch_kernel_rt(
                 var g = ftz(
                     identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c]))))
                 )
-                comptime if UMAP_LIVE_BOTH_ARM:
-                    # Trial arm only: both moves applied to the running row.
-                    x[c] = ftz(x[c] + g)
-                    x[c] = ftz(x[c] + g)
-                elif UMAP_LIVE_ROW:
+                comptime if UMAP_LIVE_ROW:
                     # DEVIATION 2668: the head move lands on the running
                     # position now, so the next edge's delta sees it; the
                     # mirror (tail) move stays deferred to the epilogue.
@@ -351,7 +343,7 @@ def umap_identical_epoch_kernel_rt(
                     ),
                 )
                 for c in range(C):
-                    comptime if UMAP_LIVE_ROW or UMAP_LIVE_BOTH_ARM:
+                    comptime if UMAP_LIVE_ROW:
                         # DEVIATION 2668: the repulsive move lands on the
                         # running position, as cuML's serial kernel applies it.
                         x[c] = ftz(
