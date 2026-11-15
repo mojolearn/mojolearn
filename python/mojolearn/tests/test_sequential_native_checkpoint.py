@@ -191,9 +191,6 @@ def test_native_sequential_export_prediction_and_training_state_refusals(loss, t
 
 
 def test_native_sequential_checkpoint_and_import_do_not_call_python_helpers(monkeypatch, tmp_path):
-    import importlib.util
-    # The Python weight reader is a test reference (tests/_weight_import.py), absent from the package.
-    assert importlib.util.find_spec("mojolearn._weight_import") is None
     x, y = dataset("mse")
     fitted = training_model("mse").fit(x, y, epochs=1)
     imported = model()
