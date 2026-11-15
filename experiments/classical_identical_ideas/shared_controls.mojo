@@ -32,7 +32,9 @@ comptime C03_FINITE_EXTREMA = False
 # cell, centring in the load) instead of center_rows -> matmul. Same words.
 # Reach: LDA transform only; the board's lda-clf times fit + predict/proba,
 # not transform. Bit 2 (value 4) of `x_prep_classical_shared`.
-comptime C04_LDA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C04_LDA"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C04_LDA (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 1c0b13a0e4.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch
+comptime C04_LDA = False
 comptime C05_PHASE_SCRATCH = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"]()
 # C06 (lane classical-kmeans, 2026-10-07): ONE control with arms, replacing
 # ROWS2/ROWS4 (two defines where ROWS4 silently won). Rows per norm block,

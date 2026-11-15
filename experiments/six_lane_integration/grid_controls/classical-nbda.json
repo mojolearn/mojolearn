@@ -5,26 +5,6 @@
  "head": "0034d93b4b98",
  "head_note": "head is the commit before this file was added; see git log for the final sha",
  "controls": {
-  "c04_lda": {
-   "define": "MOJOLEARN_CLASSICAL_C04_LDA",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C04_LDA"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:23",
-    "x_prep/prims.mojo centered_matmul_unit",
-    "python/mojolearn/_expansion_prep.py:3567"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": false,
-   "status": "split_from:MOJOLEARN_CLASSICAL_C04_LOAD_CENTER",
-   "note": "LDA transform only; not on the board lda-clf route (fit + predict/proba). PCA half stays C04_LOAD_CENTER (lane L2 renames it C04_PCA)."
-  },
   "c56_lda_input": {
    "define": "MOJOLEARN_CLASSICAL_C56_LDA_INPUT",
    "kind": "switch",
@@ -166,6 +146,11 @@
    "define": "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS",
    "control": "c61_nb",
    "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser, both arms. on/off ms ratio NV/AMD: gaussian-nb arm 1 istella 1.58/1.05 (57.3 -> 90.6 NV, 28.8 -> 30.2 AMD), taxi 1.42/1.08 (14.7 -> 20.9 NV, 12.7 -> 13.7 AMD), 1.26x combined; arm 2 istella 1.57/1.02, taxi 1.37/1.03, 1.22x combined SLOWER; quality SAME. The C61 csbm_* ops 190-192 (x_prep/blocked.mojo, units.mojo), the binding bits 16-64 and the Python _c61/_class_stats_m2 routes are gone. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C04_LDA",
+   "control": "c04_lda",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 1c0b13a0e4; patch experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch): opt-in arm; EXP:1532 DROPPED-serial record for its PCA half, no A/B for the LDA arm. EXP:1532 (`CLASSICAL_C04_LOAD_CENTER`, PCA): DROPPED-serial; the LDA half renamed `C04_LDA` never ran an A/B. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
   }
  ]
 }

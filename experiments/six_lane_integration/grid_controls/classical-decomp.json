@@ -3,27 +3,7 @@
  "lane": "classical-decomp",
  "branch": "lane/classical-decomp",
  "head": "f0bbeef91",
- "controls": {
-  "C04_LDA": {
-   "define": "MOJOLEARN_CLASSICAL_C04_LDA",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C04_LDA"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_prep/units.mojo:79",
-    "bindings/_mojolearn_x_prep.mojo:319",
-    "python/mojolearn/_expansion_prep.py:3521"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": true,
-   "status": "split_from:C04_LOAD_CENTER (renamed, behavior unchanged; lane L4 owns LDA logic)"
-  }
- },
+ "controls": {},
  "algorithms": {
   "classical:pca": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
@@ -86,9 +66,7 @@
   "expanded:lda-clf@lda_outputs": {
    "binding": "_mojolearn_x_prep",
    "route": "transform (solver != eigen): x_prep op 178 centered_matmul [C04_LDA]",
-   "controls": [
-    "C04_LDA"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "note": "crossing with C55-DA/C56 belongs to lane L4"
   },
@@ -185,6 +163,11 @@
    "define": "MOJOLEARN_CLASSICAL_C01_MEAN",
    "control": "C01_MEAN",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 569d288205; patch experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch): opt-in arm; EXP:1530 names it as the replacement, no A/B of its own. EXP:1530 names it as the replacement of the dropped C01_LEAF64/128 mean kernel; no A/B of its own was ever recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C04_LDA",
+   "control": "C04_LDA",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 1c0b13a0e4; patch experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch): opt-in arm; EXP:1532 DROPPED-serial record for its PCA half, no A/B for the LDA arm. EXP:1532 (`CLASSICAL_C04_LOAD_CENTER`, PCA): DROPPED-serial; the LDA half renamed `C04_LDA` never ran an A/B. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": [

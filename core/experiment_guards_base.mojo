@@ -57,6 +57,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C01_LEAF"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C01_LEAF (Metrics (regression-metrics PairSum leaf length sweep 32/64/128, IDENTICAL)) was opt-in arm; EXP:1530 DROPPED-slower record, no winning arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 561d08802a; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C03_FINITE_EXTREMA (Preprocessing (MinMaxScaler finite extrema, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at cf8de5ae6c; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C04_LDA"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C04_LDA (Prep (LDA transform centered_matmul, IDENTICAL)) was opt-in arm; EXP:1532 DROPPED-serial record for its PCA half, no A/B for the LDA arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 1c0b13a0e4; see docs/TOMBSTONES.md"
     return True
 
 
