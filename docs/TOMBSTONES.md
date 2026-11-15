@@ -756,6 +756,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C59_TRIAL_STATE`](#mojolearn_c59_trial_state-unmeasured-arm-deleted-2026-11-15) | Time series (ARIMA trial state reuse, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C59_TRIAL_STATE.patch](../experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch) |
 | [`MOJOLEARN_C60_LAG4`](#mojolearn_c60_lag4-unmeasured-arm-deleted-2026-11-15) | Time series (shared detrended observations across lag tasks, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C60_LAG4.patch](../experiments/removed/MOJOLEARN_C60_LAG4.patch) |
 | [`MOJOLEARN_IDN_GPC_OVR_OFF`](#mojolearn_idn_gpc_ovr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path) | removed (old path, no A/B recorded; the batched one-vs-rest default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPC_OVR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch) |
+| [`MOJOLEARN_IDN_GPR_PTR_OFF`](#mojolearn_idn_gpr_ptr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path) | removed (old path, no A/B recorded; the resident pointer default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPR_PTR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7328,4 +7329,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The batched one-vs-rest default is untouched. No bit change on any column.
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `abe1b14d9d`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch`, then delete the `MOJOLEARN_IDN_GPC_OVR_OFF` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_GPR_PTR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the `_OFF` rollback of `GPR_IDN_PTR` (`gaussian_process/gpr_resident.mojo`): bit 1 of `gp_idn_caps` cleared and the Python glue called `gpr_fit` / `gpr_predict` with host lists, host walks and per-scalar waits. `GPR_IDN_PTR` stays as a constant.
+- **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The resident pointer default is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b2a4adf292`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch`, then delete the `MOJOLEARN_IDN_GPR_PTR_OFF` refusal in `core/experiment_guards_kernel.mojo`.
 - **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
