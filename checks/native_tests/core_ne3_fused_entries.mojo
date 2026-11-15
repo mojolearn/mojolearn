@@ -224,6 +224,7 @@ def ocsvm_unit(driver: XnDriver, kernel: Int) raises:
 # ---------------------------------------------------------- NearestCentroid
 
 
+@fieldwise_init
 struct NcFitted(Movable):
     var centroids: List[Float32]
     var stats: List[Float32]
@@ -458,6 +459,7 @@ def hcv_unit[H: HcvCalls]() raises:
 # ---------------------------------------------- LabelPropagation/Spreading
 
 
+@fieldwise_init
 struct LpFitted(Movable):
     var distributions: List[Float32]
     var transduction: List[Int32]
