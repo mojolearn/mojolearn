@@ -69,5 +69,7 @@ comptime HIST_REP_SM_ON = _IDN
 #: given) at 2 or at 4 blocks per SM.
 comptime HIST_REP_DEVICE = 0
 comptime HIST_REP_DEVICE_X4 = 1
-comptime HIST_REP_SM = get_defined_int["MOJOLEARN_TREES_HIST_REP_SM", HIST_REP_DEVICE]() if HIST_REP_SM_ON else 32
+# TOMBSTONE: MOJOLEARN_TREES_HIST_REP_SM (DELETE-ARM, rule e, EXP:1640: the grid force values (=64, =1, =32) beside the promoted device default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at cf752f933b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_REP_SM.patch
+comptime HIST_REP_SM = HIST_REP_DEVICE if HIST_REP_SM_ON else 32
 comptime HIST_REP_BPSM = 4 if HIST_REP_SM == HIST_REP_DEVICE_X4 else 2
