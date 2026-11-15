@@ -51,15 +51,14 @@ from autograd.loss_ops import OP_LS_CE_FWD, OP_LS_CE_VJP, OP_LS_METRIC_TERM, MT_
 from autograd.pass1_ops import OP_P1_SCE_VJP
 from autograd.row_ops import ROW_COOP, OP_ROW_BITONIC_BLOCK
 from autograd.row_sort import row_bitonic_block_kernel
-from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
-from sequence.gemm_tiled import seq_gemm_epi_tiled_kernel
+from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks
 from sequence.gemm_tiled import (
-    GEMM_DISPATCH_V1, GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GT_M, GT_N, GT_K, GT_THIN, GT_THIN_K,
+    GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GT_M, GT_N, GT_K, GT_THIN, GT_THIN_K,
     GK_PLAIN, GK_BIAS, GK_BIAS_RELU, GK_BIAS_ACT, GK_L2GRAD, GK_ACT_BWD,
     seq_gemm_route, seq_gemm_epi_kind, seq_gemm_tile_blocks, seq_gemm_tile_kernel,
 )
 from sequence.gemm_tiled import (
-    GR_MICRO, GK_BIAS_LOGISTIC, GK_BIAS_TANH, seq_gemm_micro_kernel, seq_gemm_micro_on,
+    GR_MICRO, GK_BIAS_LOGISTIC, GK_BIAS_TANH, seq_gemm_micro_kernel,
     seq_gemm_split_blocks, seq_gemm_split_kernel,
 )
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
@@ -1318,7 +1317,7 @@ struct DeviceExec(Exec, Movable):
         # both edges are >= 8, else the thin tile along the long edge when the
         # launch fuses an epilogue or column sums, one thread a cell if not); every
         # route is op_gemm's chain and op_gemm_epi's follower, the same words.
-        comptime if SEQ_GEMM_TILED and not GEMM_DISPATCH_V1 and (
+        comptime if SEQ_GEMM_TILED and (
                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
             # fused work: an epilogue (not the plain kind) or the column sums
             var fused = False
@@ -1328,39 +1327,7 @@ struct DeviceExec(Exec, Movable):
                     fused = fused or a.i11 != 0
             self.gemm_launch_route[OP](a, n, seq_gemm_route(a.i0, a.i1, a.i2, fused))
             return
-        # The pass-3 routes below are -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.
-        # nr-small D1: op_gemm's chain with the A/B slabs staged in
-        # threadgroup memory (sequence/gemm_tiled.mojo), same words
-        comptime if SEQ_GEMM_TILED and GEMM_DISPATCH_V1 and OP == OP_GEMM:
-            if seq_gemm_tiled_on(a.i0, a.i1):
-                self.ctx.enqueue_function[seq_gemm_tiled_kernel](
-                    a.p0, a.p1, a.p2,
-                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
-                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
-                    Int32(a.i7), Int32(a.i8),
-                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
-                    block_dim=(GT_TPB, 1, 1),
-                )
-                self.execution_profile.kernel()
-                return
-        # lane ag-pass2-kernels: the tape's GEMM with epilogue on the same
-        # tile as OP_GEMM (same chain, then op_gemm_epi's follower on the
-        # stored word): the same words as the one-thread op_gemm_epi. The
-        # hand MLP's OP_GEMM_EPI keeps its one-thread launch.
-        # Lane ag-pass3-impl: i11 = 1 also folds B's column sums into p4
-        # (the fused linear node's bias gradient) inside the tile.
-        comptime if SEQ_GEMM_TILED and GEMM_DISPATCH_V1 and OP == OP_AGK_GEMM_EPI:
-            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
-                self.ctx.enqueue_function[seq_gemm_epi_tiled_kernel](
-                    a.p0, a.p1, a.p2, a.p3, a.p4,
-                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
-                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
-                    Int32(a.i9), Int32(a.i10), Int32(a.i11), a.f0, a.f1,
-                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
-                    block_dim=(GT_TPB, 1, 1),
-                )
-                self.execution_profile.kernel()
-                return
+        # (Sweep 2026-11-15: the GEMM_DISPATCH_V1 pass-3 tiled routes (False on every build) removed.)
         comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
             # Tried 2026-10-08: MOJOLEARN_C58_FORECAST4 (four series per thread, tasks = ceil(n/4)), NV/AMD 2.1-3.2x
             # SLOWER on every theta/damped-ets cell of run ge123e6f9, quality SAME; deleted, recoverable at main bc10b8b56.
@@ -1406,7 +1373,7 @@ struct DeviceExec(Exec, Movable):
                         self._gemm_tile[GT_THIN, 1, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
                     elif route == GR_THIN_M:
                         self._gemm_tile[1, GT_THIN, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
-                    elif route == GR_MICRO or (route == GR_TILE and seq_gemm_micro_on(a.i0, a.i1)):
+                    elif route == GR_MICRO:
                         # lane ag-pass6-gemm: GR_TILE on both edges >= 64 (or
                         # forced): the micro-tile, 4 x 4 register cells a thread
                         self._gemm_micro(a, ek, colsum, seq_gemm_tile_blocks(GR_MICRO, a.i0, a.i1))
