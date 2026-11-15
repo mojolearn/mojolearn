@@ -698,6 +698,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_SVGP_FAST_RBFTILE_OFF`](#mojolearn_svgp_fast_rbftile_off-old-path-deleted-2026-11-15) | Neighbors (SVGP scaled rbf, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-svgp-rbftile-q PASS) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_BLKCHOL_OFF`](#mojolearn_svgp_fast_blkchol_off-old-path-deleted-2026-11-15) | Neighbors (SVGP float-float Cholesky, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-svgp-blkchol-q PASS) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_SYMTILE_OFF`](#mojolearn_svgp_fast_symtile_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B = Kuf Kfu upper tiles, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch) |
+| [`MOJOLEARN_SVGP_FAST_COLSPLIT_OFF`](#mojolearn_svgp_fast_colsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP column phase solves, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch) |
 
 ## Trees
 
@@ -6062,4 +6063,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: KEPT (EXPERIMENTS.md `SVGP_FAST_SYMTILE`, kap2-svgp-symtile-taxi): M3, svgp taxi 611 -> 463 ms, r2/rmse identical; IDENTICAL default since lane/idn-gates (two_prod commutes bit for bit). No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `614ccc0790`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_SYMTILE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_SVGP_FAST_COLSPLIT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of SVGP's column phase from 4m solve items plus m^2 finish items (`svgp_ff_col_solve_kernel`, `svgp_ff_col_fin_kernel`) to the m serial column threads (`svgp_ff_column_kernel`) (`x_neighbors/iter_device.mojo` SVGP_FAST_COLSPLIT = _SVGP_GATE_ON and not this define). Only the define read is deleted: the column kernel stays where _SVGP_GATE_ON is off (`MOJOLEARN_IDN_GATES_OFF` / `MOJOLEARN_IDN_ALL_OFF`, other FAST columns).
+- **Verdict**: KEPT (EXPERIMENTS.md `SVGP_FAST_COLSPLIT`, kap2-svgp-colsplit-taxi): M3, svgp taxi 613 -> 438 ms, r2/rmse identical; IDENTICAL default since lane/idn-gates. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `2391fda738`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_COLSPLIT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).

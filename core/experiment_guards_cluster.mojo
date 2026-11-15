@@ -122,6 +122,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_BLKCHOL_OFF (FAST+Apple rollback to the one-column-per-launch SVGP Cholesky) is gone; the panel factor is the FAST+Apple path (taxi 287.0 -> 212.5 ms, w2-svgp-blkchol-q PASS); restore: experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_SYMTILE_OFF (rollback to the full m x m SVGP B accumulation) is gone; the upper-tile B is the path wherever _SVGP_GATE_ON is (taxi 611 -> 463 ms, r2/rmse identical); IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF; restore: experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_COLSPLIT_OFF (rollback to the m serial SVGP column threads) is gone; the split column solves are the path wherever _SVGP_GATE_ON is (taxi 613 -> 438 ms, r2/rmse identical); IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF; restore: experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch"
     return True
 
 
