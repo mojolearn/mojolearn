@@ -119,24 +119,12 @@ def test_mlp_logits_shape_rows_alone_and_checkpoint(binding):
 
 
 def _checkpoint_from_weights(tmp):
-    """A trainer checkpoint written by the trainer's own encoder, without
-    running the trainer (no binding needed to write it)."""
-    from mojolearn import _mlp_impl as M
-    from mojolearn._buffer import zeros
-    w = [M._array(v, s, n) for v, s, n in zip(_mlp_weights(), _SHAPES, M._NAMES)]
-    state = dict(schema=M._STATE_SCHEMA, architecture=[8, 16, 3], numeric_mode="identical",
-                 parameter_order=list(M._NAMES), weights=dict(zip(M._NAMES, w)),
-                 optimizer=dict(kind="AdamW", step=0, m=zeros((M._TOTAL,), "<f4"),
-                                v=zeros((M._TOTAL,), "<f4"), flags=zeros((4,), "<i4")),
-                 config=dict(lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.01),
-                 data_schedule={"dataset": "test"})
-    payload = M._encode_state(state)
-    import hashlib
-    env = dict(schema=M._FILE_SCHEMA, payload=payload,
-               payload_sha256=hashlib.sha256(M._canonical(payload)).hexdigest())
+    """A trainer checkpoint written by the public trainer's own
+    `save_checkpoint`, before any step. (It was assembled from the Python
+    encoder twins `_mlp_impl._array`/`_encode_state`/`_canonical` until
+    0a71e11436 deleted them; the native door writes the checkpoint now.)"""
     path = os.path.join(tmp, "mlp.json")
-    with open(path, "wb") as fh:
-        fh.write(M._canonical(env) + b"\n")
+    ml.SmallMLPTrainer(*_mlp_weights(), data_schedule={"dataset": "test"}).save_checkpoint(path)
     return path
 
 
