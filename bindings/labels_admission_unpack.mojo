@@ -66,6 +66,13 @@ from bindings.py_balanced import py_get
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.native_array_storage_door import native_array_from_values
 from bindings.classical_labels_door import labels_real_type
+from bindings.py_balanced import py_fields, py_contains
+from bindings.py_attr import py_attr
+from bindings.py_cpython_table import cpython_table
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.optimizer_public_words_unpack import stash_python_error
+from providers.python.borrowed_buffer_pyapi_unpack import NATIVE_NDARRAY_EXPORTER
+from core.shared_slot import SharedSlot
 from bindings.label_input_sources_unpack import (
     labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL,
 )
@@ -533,24 +540,30 @@ def _admission_integral(view: PythonObject, typestr: String, context: PythonObje
     return stat.i != 0
 
 
+def _admission_shape_text(shape: PythonObject) raises -> String:
+    """`repr(shape)` for a refusal message (only built when refusing)."""
+    return String(py_call(labels_builtins().repr, shape))
+
+
 def admission_check_x_op(x: PythonObject, est: String, shape: PythonObject, complex: Bool, scan: Bool,
                          context: PythonObject) raises:
     """`_sk_validate._check_X`'s refusals, in scikit-learn's words: a
     complex X, a 0-D or 1-D X, an X with no samples or no features; and,
-    with `scan`, NaN or infinity in a float X. `shape` is the tuple the
-    shell read from the input's export."""
+    with `scan`, NaN or infinity in a float X. `shape` is the exact tuple
+    `admission_describe` read from the input's export."""
+    # Lane py-buffer (hot path): the repr of the shape was built on every
+    # call (a repr and a tuple call per fit and predict); it is built only
+    # when a refusal needs it now.
     if complex:
         admitted_x_shape_refuse(1, 0, "", "", est)
-    var b = labels_builtins()
     var rank = len(shape)
-    var text = String(py_call(b.repr, py_call(b.tuple, shape)))
     if rank < 2:
-        admitted_x_shape_refuse(2, rank, text, "", est)
+        admitted_x_shape_refuse(2, rank, _admission_shape_text(shape), "", est)
     if rank == 2:
         if Int(py=shape[0]) == 0:
-            admitted_x_shape_refuse(3, rank, text, "", est)
+            admitted_x_shape_refuse(3, rank, _admission_shape_text(shape), "", est)
         if Int(py=shape[1]) == 0:
-            admitted_x_shape_refuse(4, rank, text, "", est)
+            admitted_x_shape_refuse(4, rank, _admission_shape_text(shape), "", est)
     if scan:
         var view = admit_c_view(x, "X", context)
         var typestr = admitted_dtype(view, context)
@@ -582,3 +595,400 @@ def admission_check_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, 
     if x_rows >= 0 and y_rows >= 0 and x_rows != y_rows:
         raise Error("Found input variables with inconsistent numbers of samples: ["
                     + String(x_rows) + ", " + String(y_rows) + "]")
+
+
+# ------------------------------------------------- describe, X and y in one call
+# Lane py-buffer (2026-11-15): `_sk_validate.describe` read every X and y
+# through `_buffer.Buf` (a ctypes PyObject_GetBuffer, a Python Py_buffer
+# struct, shape and stride tuples built in Python, a contiguity walk, two
+# device probes) on every public fit, predict, transform and score, and then
+# made the admission call above. The description is read here now, in the
+# same native call as the refusals: `_check_X` and `_check_y` are one call
+# each. The answers are the old ones, in the old order: None, sparse
+# (`tocsr`, `nnz` and `shape`), nested lists and tuples (the nesting through
+# first elements, the kind of the first leaf), str/bytes/dict (not tabular),
+# a host buffer export (its shape and PEP 3118 format), a `shape` tuple of
+# ints (a frame), else not tabular. An exact ndarray, list or tuple skips
+# the probes that cannot match it (an exact ndarray is never sparse and never
+# a device array), so the common call makes no attribute probe at all.
+
+comptime ADMISSION_CONTAINER_SPARSE = 1
+comptime ADMISSION_CONTAINER_BUFFER = 2
+comptime ADMISSION_CONTAINER_LIST = 3
+comptime ADMISSION_CONTAINER_FRAME = 4
+comptime ADMISSION_KIND_FLOAT = 1
+comptime ADMISSION_KIND_INT = 2
+comptime ADMISSION_KIND_COMPLEX = 3
+#: ADMISSION_OP_X words (python/mojolearn/_sk_validate.py `_x_words`).
+comptime ADMISSION_X_SPARSE_OK = 1
+comptime ADMISSION_X_TABULAR = 2
+comptime ADMISSION_X_SCAN = 4
+
+
+@fieldwise_init
+struct AdmissionInfo(Movable):
+    """`describe`'s answer: `container` 0 is "not tabular input" (None);
+    `kind` 0 is "not known" (None); `shape` is an exact tuple of ints."""
+    var container: Int
+    var kind: Int
+    var shape: PythonObject
+
+
+struct AdmissionErrorTypes(Defaultable, Movable):
+    """The exception types the describe probes swallow, read once per process
+    so the success path makes no builtins lookup and the failure path calls
+    no Python while an exception is pending."""
+    var attribute_error: PythonObject
+    var buffer_refusals: PythonObject  # (TypeError, ValueError, BufferError): describe's except clause
+
+    def __init__(out self):
+        self.attribute_error = PythonObject(None)
+        self.buffer_refusals = PythonObject(None)
+
+
+comptime ADMISSION_ERROR_TYPES = SharedSlot[AdmissionErrorTypes, "MojolearnAdmissionDescribeErrorTypesV1"]
+
+
+def _admission_error_types() raises -> UnsafePointer[AdmissionErrorTypes, MutUntrackedOrigin]:
+    var state = ADMISSION_ERROR_TYPES.get_or_create_ptr()
+    if state[].attribute_error is None:
+        var b = native_loaded_module("builtins")
+        state[].buffer_refusals = Python.tuple(b.TypeError, b.ValueError, b.BufferError)
+        state[].attribute_error = b.AttributeError
+    return state
+
+
+def _admission_has(obj: PythonObject, var name: String) raises -> Bool:
+    """`hasattr(obj, name)`: True, False on AttributeError, any other
+    exception propagated with its own type."""
+    var errors = _admission_error_types()
+    ref cpy = Python().cpython()
+    var raw = cpy.PyObject_GetAttrString(obj._obj_ptr, name^)
+    if not raw:
+        if cpython_table()[].PyErr_ExceptionMatches(errors[].attribute_error._obj_ptr) != 0:
+            cpython_table()[].PyErr_Clear()
+            return False
+        var failure = stash_python_error()
+        raise failure^
+    _ = PythonObject(from_owned=raw)
+    return True
+
+
+def _admission_attr_or_none(obj: PythonObject, var name: String) raises -> PythonObject:
+    """`getattr(obj, name, None)`."""
+    var errors = _admission_error_types()
+    ref cpy = Python().cpython()
+    var raw = cpy.PyObject_GetAttrString(obj._obj_ptr, name^)
+    if not raw:
+        if cpython_table()[].PyErr_ExceptionMatches(errors[].attribute_error._obj_ptr) != 0:
+            cpython_table()[].PyErr_Clear()
+            return PythonObject(None)
+        var failure = stash_python_error()
+        raise failure^
+    return PythonObject(from_owned=raw)
+
+
+def _admission_is(cls: PythonObject, base: PythonObject) raises -> Bool:
+    """`issubclass(cls, base)` for a builtin base (isinstance's test)."""
+    return cls is base or cpython_table()[].PyType_IsSubtype(cls._obj_ptr, base._obj_ptr) != 0
+
+
+def _admission_exact_ndarray(cls: PythonObject) raises -> Bool:
+    """`cls` is numpy.ndarray itself (no subclass): one identity compare once
+    the shared exporter slot holds it (providers/python/
+    borrowed_buffer_pyapi_unpack.mojo fills it the same way)."""
+    var state = NATIVE_NDARRAY_EXPORTER.get_or_create_ptr()
+    if state[].cls is not None:
+        return cls is state[].cls
+    var sys = native_loaded_module("sys")
+    var numpy_module = py_get(sys.modules, "numpy")
+    if numpy_module is None or py_type(numpy_module) is not py_type(sys):
+        return False
+    if cls is not py_get(py_fields(numpy_module), "ndarray"):
+        return False
+    if (cpython_table()[].PyType_GetFlags(cls._obj_ptr) & UInt64(512)) != 0:
+        return False
+    state[].cls = cls
+    return True
+
+
+def _admission_int_tuple(dims: List[Int]) raises -> PythonObject:
+    """`tuple(dims)` as Python ints."""
+    ref cpy = Python().cpython()
+    var envelope = cpy.PyTuple_New(len(dims))
+    if not envelope:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=envelope)
+    var t = cpython_table()
+    for i in range(len(dims)):  # small-loop(admission: one entry per array axis)
+        var value = t[].PyLong_FromLongLong(Int64(dims[i]))
+        if not value:
+            raise cpy.unsafe_get_error()
+        _ = cpy.PyTuple_SetItem(envelope, i, value)
+    return result
+
+
+def _admission_format_kind(address: Int) -> Int:
+    """`_sk_validate._format_kind` of a PEP 3118 format C string (address 0:
+    the "B" a format-less export means): float, int, complex or 0 (None)."""
+    if address == 0:
+        return ADMISSION_KIND_INT
+    var p = Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=address)
+    var at = 0
+    # lstrip("@=<>!|")
+    while True:  # small-loop(admission: the byte-order prefix of a format string)
+        var c = Int(p[at])
+        if c == 64 or c == 61 or c == 60 or c == 62 or c == 33 or c == 124:
+            at += 1
+        else:
+            break
+    var first = Int(p[at])
+    if first == 0:
+        return 0
+    if first == 90:  # 'Z'
+        return ADMISSION_KIND_COMPLEX
+    var second = Int(p[at + 1])
+    if second == 0:
+        # one letter: f d e g are float; bBhHiIlLqQnN? are int
+        if first == 102 or first == 100 or first == 101 or first == 103:
+            return ADMISSION_KIND_FLOAT
+        if (first == 98 or first == 66 or first == 104 or first == 72 or first == 105 or first == 73
+                or first == 108 or first == 76 or first == 113 or first == 81 or first == 110 or first == 78
+                or first == 63):
+            return ADMISSION_KIND_INT
+        return 0
+    # "f2", "f4", "f8" are float
+    if first == 102 and Int(p[at + 2]) == 0 and (second == 50 or second == 52 or second == 56):
+        return ADMISSION_KIND_FLOAT
+    # 'i', 'u' or 'b' followed only by digits is int
+    if first == 105 or first == 117 or first == 98:
+        var k = at + 1
+        while True:  # small-loop(admission: the width digits of a format string)
+            var c = Int(p[k])
+            if c == 0:
+                return ADMISSION_KIND_INT
+            if c < 48 or c > 57:
+                return 0
+            k += 1
+    return 0
+
+
+def _admission_scalar_kind(value: PythonObject, b: PythonObject) raises -> Int:
+    """`_sk_validate._scalar_kind`: bool and Integral are int, Real is float,
+    Complex is complex, anything else 0 (None)."""
+    var cls = py_type(value)
+    if cls is b.bool or cls is b.int:
+        return ADMISSION_KIND_INT
+    if cls is b.float:
+        return ADMISSION_KIND_FLOAT
+    if cls is b.complex:
+        return ADMISSION_KIND_COMPLEX
+    # Not a builtin scalar (a NumPy scalar, a Fraction, a Decimal, ...): the
+    # numbers ABCs, as the Python step asked them.
+    var numbers = Python.import_module("numbers")
+    if Bool(py=py_call(b.isinstance, value, numbers.Integral)):
+        return ADMISSION_KIND_INT
+    if Bool(py=py_call(b.isinstance, value, numbers.Real)):
+        return ADMISSION_KIND_FLOAT
+    if Bool(py=py_call(b.isinstance, value, numbers.Complex)):
+        return ADMISSION_KIND_COMPLEX
+    return 0
+
+
+def _admission_list(obj: PythonObject, b: PythonObject) raises -> AdmissionInfo:
+    """The nesting of a list or tuple through first elements and the kind of
+    its first leaf (an empty level is int)."""
+    var dims = List[Int]()
+    var item = obj
+    while True:  # small-loop(admission: the nesting depth of a list, its rank)
+        var cls = py_type(item)
+        if not (_admission_is(cls, b.list) or _admission_is(cls, b.tuple)):
+            break
+        var n = len(item)
+        dims.append(n)
+        if n == 0:
+            return AdmissionInfo(ADMISSION_CONTAINER_LIST, ADMISSION_KIND_INT, _admission_int_tuple(dims))
+        item = item[0]
+    var kind = _admission_scalar_kind(item, b)
+    return AdmissionInfo(ADMISSION_CONTAINER_LIST, kind, _admission_int_tuple(dims))
+
+
+def _admission_buffer(obj: PythonObject, mut info: AdmissionInfo) raises -> Bool:
+    """The host buffer export of `obj`: its shape and kind into `info` and
+    True; False when `obj` refuses the export with TypeError, ValueError or
+    BufferError, or exports indirect (suboffset) storage (`Buf`'s TypeError),
+    as describe's except clause. One PyObject_GetBuffer, one release."""
+    var errors = _admission_error_types()
+    var words = List[Int](length=10, fill=0)
+    var view = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var t = cpython_table()
+    if t[].PyObject_GetBuffer(obj._obj_ptr, view, Int32(0x11C)) != 0:
+        if t[].PyErr_ExceptionMatches(errors[].buffer_refusals._obj_ptr) != 0:
+            t[].PyErr_Clear()
+            return False
+        var failure = stash_python_error()
+        raise failure^
+    var ok = True
+    try:
+        var rank = Int(UInt64(words[4]) >> 32)
+        var dims = List[Int]()
+        if rank > 0:
+            if words[8] != 0:
+                var indirect = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=words[8])
+                for axis in range(rank):  # small-loop(admission: one suboffset per array axis)
+                    if indirect[axis] >= 0:
+                        ok = False
+            if ok:
+                if words[6] != 0:
+                    var extents = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=words[6])
+                    for axis in range(rank):  # small-loop(admission: one extent per array axis)
+                        dims.append(extents[axis])
+                else:
+                    # a simple byte-like export without a shape array
+                    dims.append(words[2] // max(words[3], 1))
+        if ok:
+            info.container = ADMISSION_CONTAINER_BUFFER
+            info.kind = _admission_format_kind(words[5])
+            info.shape = _admission_int_tuple(dims)
+    except problem:
+        t[].PyBuffer_Release(view)
+        _ = words^
+        raise problem^
+    t[].PyBuffer_Release(view)
+    _ = words^
+    return ok
+
+
+def _admission_device(obj: PythonObject, b: PythonObject) raises -> Bool:
+    """`_buffer._device_array_kind(obj) is not None`: a CUDA array interface,
+    or a DLPack device that is not the host (kDLCPU, kDLCUDAHost,
+    kDLCUDAManaged)."""
+    if _admission_has(obj, "__cuda_array_interface__"):
+        return True
+    if not _admission_has(obj, "__dlpack_device__"):
+        return False
+    var device: PythonObject
+    try:
+        var probe = py_attr(obj, "__dlpack_device__")
+        var pair = py_call(b.tuple, py_call(probe))
+        device = pair[0]
+    except:
+        return False
+    var hosts = Python.tuple(1, 3, 10)
+    return not py_contains(hosts, device)
+
+
+def admission_describe(obj: PythonObject, context: PythonObject) raises -> AdmissionInfo:
+    """`_sk_validate.describe`, natively (see the section comment)."""
+    if obj is None:
+        return AdmissionInfo(0, 0, PythonObject(None))
+    var b = labels_builtins()
+    var cls = py_type(obj)
+    if cls is b.list or cls is b.tuple:
+        return _admission_list(obj, b)
+    var info = AdmissionInfo(0, 0, PythonObject(None))
+    if _admission_exact_ndarray(cls):
+        if _admission_buffer(obj, info):
+            return info^
+        return _admission_frame(obj, b)
+    if classical_is_array(obj, context):
+        # A mojolearn Array has no buffer export before Python 3.12; `Buf`
+        # read it from its own fields: its shape and the store letter of its
+        # dtype (float for "<f4" and "<f8", int for every other store).
+        var dtype = String(py=obj.dtype)
+        var kind = ADMISSION_KIND_FLOAT if dtype == "<f4" or dtype == "<f8" else ADMISSION_KIND_INT
+        var shape = obj.shape
+        if py_type(shape) is not b.tuple:
+            shape = py_call(b.tuple, shape)
+        return AdmissionInfo(ADMISSION_CONTAINER_BUFFER, kind, shape)
+    if _admission_has(obj, "tocsr") and _admission_has(obj, "nnz") and _admission_has(obj, "shape"):
+        return AdmissionInfo(ADMISSION_CONTAINER_SPARSE, 0, py_call(b.tuple, py_attr(obj, "shape")))
+    if _admission_is(cls, b.list) or _admission_is(cls, b.tuple):
+        return _admission_list(obj, b)
+    if _admission_is(cls, b.str) or _admission_is(cls, b.bytes) or _admission_is(cls, b.dict):
+        return info^
+    if not _admission_device(obj, b):
+        if _admission_buffer(obj, info):
+            return info^
+    return _admission_frame(obj, b)
+
+
+def _admission_frame(obj: PythonObject, b: PythonObject) raises -> AdmissionInfo:
+    """A `shape` attribute that is a tuple of ints: a frame (no kind)."""
+    var shape = _admission_attr_or_none(obj, "shape")
+    if shape is None or not _admission_is(py_type(shape), b.tuple):
+        return AdmissionInfo(0, 0, PythonObject(None))
+    for i in range(len(shape)):  # small-loop(admission: one entry per array axis)
+        if not _admission_is(py_type(shape[i]), b.int):
+            return AdmissionInfo(0, 0, PythonObject(None))
+    if py_type(shape) is not b.tuple:
+        shape = py_call(b.tuple, shape)
+    return AdmissionInfo(ADMISSION_CONTAINER_FRAME, 0, shape)
+
+
+def _admission_info_tuple(info: AdmissionInfo) raises -> PythonObject:
+    """`(container, shape, kind)` with small-int codes (no string built);
+    `_sk_validate.describe` names them."""
+    return Python.tuple(info.container, info.shape, info.kind)
+
+
+def admission_describe_op(obj: PythonObject, context: PythonObject) raises -> PythonObject:
+    """ADMISSION_OP_DESCRIBE: `(container, shape, kind)` codes, or None."""
+    var info = admission_describe(obj, context)
+    if info.container == 0:
+        return PythonObject(None)
+    return _admission_info_tuple(info)
+
+
+def admission_x_op(x: PythonObject, est: String, word: Int, context: PythonObject) raises -> PythonObject:
+    """ADMISSION_OP_X, the whole of `_sk_validate._check_X` but the class
+    tags (folded into `word` once per class by the shell): describe X,
+    refuse sparse X for a dense-only estimator, pass non-tabular input
+    through (None), and make the refusals and the finiteness scan of
+    `admission_check_x_op`. Returns `(container, shape, kind)` or None."""
+    var info = admission_describe(x, context)
+    if info.container == 0:
+        return PythonObject(None)
+    if info.container == ADMISSION_CONTAINER_SPARSE:
+        if (word & ADMISSION_X_SPARSE_OK) == 0:
+            raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use "
+                        + "'.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
+        return _admission_info_tuple(info)
+    var complex = info.kind == ADMISSION_KIND_COMPLEX
+    if not complex:
+        if info.container != ADMISSION_CONTAINER_FRAME and info.kind == 0:
+            return PythonObject(None)  # strings, objects, records: the estimator's own input step
+        if (word & ADMISSION_X_TABULAR) == 0:
+            return PythonObject(None)
+    var scan = ((info.container == ADMISSION_CONTAINER_BUFFER or info.container == ADMISSION_CONTAINER_LIST)
+                and info.kind == ADMISSION_KIND_FLOAT and (word & ADMISSION_X_SCAN) != 0)
+    admission_check_x_op(x, est, info.shape, complex, scan, context)
+    return _admission_info_tuple(info)
+
+
+def admission_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, context: PythonObject) raises -> PythonObject:
+    """ADMISSION_OP_Y, `_sk_validate._check_y` for a y that is not None:
+    describe y and make `admission_check_y_op`'s refusals with the scan flag
+    the description sets (`flags` carries ADMISSION_Y_CLASSIFIER). Returns
+    None when done; for a column vector (n, 1) that is not a list, returns
+    `(flags, y_rows)` without the value checks, so the shell can warn and
+    ravel it first (scikit-learn's `column_or_1d`, warning before refusing)
+    and then make ADMISSION_OP_CHECK_Y with those words."""
+    var info = admission_describe(y, context)
+    if info.container == 0:
+        return PythonObject(None)
+    var rank = len(info.shape)
+    var y_rows = Int(py=info.shape[0]) if rank > 0 else -1
+    if info.container == ADMISSION_CONTAINER_SPARSE:
+        admission_check_y_op(y, est, 0, x_rows, y_rows, context)
+        return PythonObject(None)
+    if info.kind == ADMISSION_KIND_COMPLEX:
+        admission_check_y_op(y, est, ADMISSION_Y_COMPLEX, x_rows, y_rows, context)
+    var words = flags
+    if ((info.container == ADMISSION_CONTAINER_BUFFER or info.container == ADMISSION_CONTAINER_LIST)
+            and info.kind == ADMISSION_KIND_FLOAT):
+        words |= ADMISSION_Y_SCAN
+    if rank == 2 and Int(py=info.shape[1]) == 1 and info.container != ADMISSION_CONTAINER_LIST:
+        return Python.tuple(words, y_rows)
+    admission_check_y_op(y, est, words, x_rows, y_rows, context)
+    return PythonObject(None)
