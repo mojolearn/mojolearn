@@ -17,7 +17,7 @@ def metric_binding_arguments(operation: String, args: PythonObject,
     if (operation == "family_mcls_accuracy" or operation == "family_mcls_r2"
             or operation == "family_mcls_regression_error" or operation == "family_mcls_roc_auc"
             or operation == "family_mcls_pr_curve" or operation == "family_mcls_confusion"
-            or operation == "family_mcls_prf"):
+            or operation == "family_mcls_prf" or operation == "family_mcls_regressor_score"):
         mode = args[len(args) - 1]
     var binding = estimator_binding_mode(mode, "_mojolearn_metrics", context)
     var values = Python.list(binding)

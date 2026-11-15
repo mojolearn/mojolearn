@@ -599,6 +599,14 @@ def r2_score(
                                            force_finite, numeric_mode), _NATIVE_CONTEXT)
 
 
+def _regressor_score(y_true, y_pred, sample_weight=None, numeric_mode=None):
+    """scikit-learn's RegressorMixin.score: R^2 with the uniform average,
+    y_true and y_pred admitted as float32 (any numeric buffer or list) by
+    the metrics owner in one native call."""
+    return _NATIVE(None, _OP.family_mcls_regressor_score, (None, y_true, y_pred, sample_weight, numeric_mode),
+                   _NATIVE_CONTEXT)
+
+
 
 
 
