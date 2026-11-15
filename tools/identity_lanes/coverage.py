@@ -977,10 +977,16 @@ def _coverage_text_tokenizers(ml):
                            end_of_word_suffix=None, fuse_unk=False, byte_fallback=False,
                            ignore_merges=False, vocab=dict(vocab), merges=[]))
     direct = tk.Tokenizer(tokens, [], pattern="gpt2")
-    from_json = tk.Tokenizer._from_json(data, "coverage-tokenizer.json")
-    from_spelled = tk.Tokenizer._from_spelled(dict(vocab), [], pattern="gpt2", added={},
-                                              normalizer=None, bos_ids=(), eos_ids=(),
-                                              ignore_merges=False, source="coverage-spelled")
+    # The spelled (tokenizer.json) vocabulary through the public loader
+    # `Tokenizer.from_pretrained`, twice: once from the file, once from its
+    # directory. Before 2026-11-15 the two were the private `_from_json` and
+    # `_from_spelled`, which from_pretrained reaches.
+    with tempfile.TemporaryDirectory(prefix="ib-coverage-tokenizer-") as tmp:
+        path = os.path.join(tmp, "tokenizer.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        from_json = tk.Tokenizer.from_pretrained(path)
+        from_spelled = tk.Tokenizer.from_pretrained(tmp)
     return direct, from_json, from_spelled
 
 
@@ -1011,7 +1017,7 @@ def _(ml, X, yc, yr, Xh=None):
     raw = np.frombuffer(np.ascontiguousarray(X).tobytes()[:24], dtype=np.uint8)
     text = bytes(_COVERAGE_TEXT_ALPHABET[int(b) % 64] for b in raw).decode("ascii")  # glue: 24 prompt bytes
     prompt = np.asarray([direct.encode(text)], dtype=np.int32)
-    for name, other in (("_from_json", from_json), ("_from_spelled", from_spelled)):  # glue: two loaders
+    for name, other in (("from_pretrained(file)", from_json), ("from_pretrained(dir)", from_spelled)):  # glue: two loaders
         _same_bytes(f"Tokenizer.{name} encode", np.asarray([other.encode(text)], dtype=np.int32),
                     "Tokenizer(...) encode", prompt)
     cfg, tensors = fx.family_fixture("llama", False)
