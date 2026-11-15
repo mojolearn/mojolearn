@@ -248,7 +248,9 @@ comptime IDN_ORD_CAT_PLANES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # BITS: none. Host column untouched. Reached on the device-scale route (the
 # IDENTICAL default, `submit_compute_dev`), single device, 8-bit fixed one-byte
 # policy only; binary and half-byte features keep the regular grid.
-comptime ORD_HIST_FOLD_SKIP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_ORD_HIST_FOLD_SKIP"]()
+# TOMBSTONE: MOJOLEARN_ORD_HIST_FOLD_SKIP (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 48ef0658c9.
+# Restore: git apply experiments/removed/MOJOLEARN_ORD_HIST_FOLD_SKIP.patch
+comptime ORD_HIST_FOLD_SKIP = False
 # the per-part document budget below which a fold partition takes the small
 # kernel (default 256 = one document per thread of the 8-bit block); an int
 # sweep arm for the grid, not a shape rule
