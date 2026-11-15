@@ -614,31 +614,22 @@ def node_feature_range_kernel[
     if sabotage == RANGE_SAB_EMPTY_NOT_IDENTITY and empty_block:
         kmin = range_key(Float32(0.0))
         kmax = range_key(Float32(0.0))
-    comptime if is_defined["MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH"]():
-        # MEASUREMENT ARM, WRONG ON PURPOSE: plain read-modify-writes where the
-        # shipped publish is four atomics, to price the atomics per block. It
-        # loses updates under contention and must never reach a shipped build.
-        if kmin < out_minkey[unsafe_offset=slot]:
-            out_minkey[unsafe_offset=slot] = kmin
-        if kmax > out_maxkey[unsafe_offset=slot]:
-            out_maxkey[unsafe_offset=slot] = kmax
-        out_n_missing[unsafe_offset=slot] += blk_missing
-        out_n_merges[unsafe_offset=slot] += Int32(1)
-    else:
-        # DEVIATION 3021: one block means one writer for this cell.
-        var single = num_blocks == 1
-        comptime if SINGLE_WRITER_PLAIN_PUBLISH:
-            if single:
-                if kmin < out_minkey[unsafe_offset=slot]:
-                    out_minkey[unsafe_offset=slot] = kmin
-                if kmax > out_maxkey[unsafe_offset=slot]:
-                    out_maxkey[unsafe_offset=slot] = kmax
-            else:
-                _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+    # TOMBSTONE: MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH (DELETE-ARM, wrong-on-purpose measurement arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 03694cfdb9.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH.patch; record in docs/TOMBSTONES.md.
+    # DEVIATION 3021: one block means one writer for this cell.
+    var single = num_blocks == 1
+    comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+        if single:
+            if kmin < out_minkey[unsafe_offset=slot]:
+                out_minkey[unsafe_offset=slot] = kmin
+            if kmax > out_maxkey[unsafe_offset=slot]:
+                out_maxkey[unsafe_offset=slot] = kmax
         else:
             _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
-        _publish_add(out_n_missing, slot, blk_missing, single)
-        _publish_add(out_n_merges, slot, Int32(1), single)
+    else:
+        _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+    _publish_add(out_n_missing, slot, blk_missing, single)
+    _publish_add(out_n_merges, slot, Int32(1), single)
 
 
 @always_inline
