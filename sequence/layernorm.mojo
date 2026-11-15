@@ -8,9 +8,7 @@ column's weight and bias gradients over rows. The backward is the
 reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
 g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt
 from sequence.fold32 import FOLD_L, tree32
 from max.gpu.primitives.warp import shuffle_xor
 
@@ -288,8 +286,9 @@ def op_ln_bwd_w(t: Int, a: Args):
 #: the same; only the repeated global reads go. Bound: 32 words a lane (D =
 #: 1024 on a 32-lane cell) is a register budget (the forward holds 32 floats,
 #: the backward 64), not a shape choice; wider rows keep the passes over memory.
-#: `-D MOJOLEARN_IDN_LN_ONE_PASS_OFF` keeps the multi-pass cell (arm A).
-comptime LN_ONE_PASS = LN_ROW_WARP and not is_defined["MOJOLEARN_IDN_LN_ONE_PASS_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_LN_ONE_PASS_OFF (old path, the multi-pass cell; EXP:2170 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at f12b3def4e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ONE_PASS_OFF.patch
+comptime LN_ONE_PASS = LN_ROW_WARP
 #: words a lane holds (slots of the register row)
 comptime LN_ONE_PASS_SLOTS = 32
 comptime LN_ONE_PASS_MAX_D = LN_RW_LANES * LN_ONE_PASS_SLOTS
