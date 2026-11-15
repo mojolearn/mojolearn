@@ -715,6 +715,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C42_ACTIVE_TRIANGLE`](#mojolearn_c42_active_triangle-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (x_cluster) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C42_ACTIVE_TRIANGLE.patch](../experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch) |
 | [`MOJOLEARN_C43_RESIDENT_NORMALIZATION`](#mojolearn_c43_resident_normalization-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (spectral, x_neighbors graphs) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch](../experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch) |
 | [`MOJOLEARN_C44_SAMPLING_DESCRIPTORS`](#mojolearn_c44_sampling_descriptors-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (umap) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch](../experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch) |
+| [`MOJOLEARN_KDE_DIRECT_DISTANCE`](#mojolearn_kde_direct_distance-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (kde) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_KDE_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6911,3 +6912,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4fdc7dda1a`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch`, then delete the `MOJOLEARN_C44_SAMPLING_DESCRIPTORS` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_KDE_DIRECT_DISTANCE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (C30 split, KDE family): (x-y)^2 direct distances in kde/impl/distance and its host twin instead of the expansion. The alias `KDE_DIRECT_DISTANCE` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (kde/host/kde_oracle.mojo, kde/impl/distance/distance.mojo, kde/impl/neighbors/kernel_density.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1fef4f5d4a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch`, then delete the `MOJOLEARN_KDE_DIRECT_DISTANCE` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `kde_direct` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

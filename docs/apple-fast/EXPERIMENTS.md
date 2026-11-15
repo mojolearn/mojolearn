@@ -2563,3 +2563,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_C42_ACTIVE_TRIANGLE` | x_cluster | lane/expdel2-05-base (recoverable at 9276415968) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C43_RESIDENT_NORMALIZATION` | spectral, x_neighbors graphs | lane/expdel2-05-base (recoverable at a4aa6b55b6) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C44_SAMPLING_DESCRIPTORS` | umap | lane/expdel2-05-base (recoverable at 4fdc7dda1a) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
+| `MOJOLEARN_KDE_DIRECT_DISTANCE` | kde | lane/expdel2-05-base (recoverable at 1fef4f5d4a) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
