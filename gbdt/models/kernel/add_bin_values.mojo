@@ -41,16 +41,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: oblivious ensemble four trees per launch (`compute_bins_and_add_four_kernel`,
 #: the resident path's grouping) instead of one launch per tree. Same ordered
 #: float32 adds per row, so no bit moves and the host column is untouched.
-#: `-D MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
-#: restores one launch per tree.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a8ef992718.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
-comptime IDN_PREDICT_FOUR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF"]()
-    )
-)
+comptime IDN_PREDICT_FOUR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: lane/fam2-gbdt F4 (IDENTICAL; CANDIDATE ARM, default OFF, enable with
 #: `-D MOJOLEARN_IDN_GBDT_APPLY_WIDE`): an ensemble whose trees all share one
