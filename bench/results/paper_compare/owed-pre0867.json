@@ -196,6 +196,14 @@
   "mamba3-forward-door-old": {
    "define": "MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD",
    "status": "define in code (core/neural_entry_table.mojo IDN_MAMBA3_FORWARD_DOOR_OLD; bindings/neural_prefill_native_door.mojo _prefill_mamba3_reports, providers/python/mamba3_prefill_session_pyapi_door.mojo, core/mamba3_prefill_session.mojo, mamba/native_block_dispatch.mojo): B = a caps table call per forward and the session's reserve / run / release as three table calls (three registry leases); A = the caps read once when the block's session opens and the forward as ONE table call that reserves, runs and releases in the image under one busy lock (MAMBA3_CAP_HELD_FORWARD). Same session, same weight compare, same _m3_prefill_run body, same bits"
+  },
+  "ni12-fill-rule-off": {
+   "define": "MOJOLEARN_NI12_FILL_RULE_OFF",
+   "status": "define in code (x_cnn/device.mojo NI12_FILL_RULE): B = the implicit conv on every layer (the 2026-10-10 promoted default); A = implicit only when OC >= 32 and C*KH*KW >= 32"
+  },
+  "ni12-implicit-conv-off": {
+   "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
+   "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)"
   }
  },
  "rows": [
@@ -1235,6 +1243,68 @@
     "mamba3-forward-door-old"
    ],
    "decides": "keep the restored arena / direct door (A) unless mamba12-forward-door-old (mamba1-forward, mamba2-forward) or mamba3-forward-door-old (mamba3-forward) is at least as fast on the NVIDIA L40S; also read arms.ours.mamba3_session_info from the mamba3-forward row (weight_uploads must stay 1 and stages_held 1 across rounds; if not, the session is rebuilt per call and that is the next fix); same kernels, digests must not move in either arm"
+  },
+  {
+   "id": "ni12-fill-rule",
+   "source": "fix-cnn-clf-implicit-conv (2026-11-15; grid g50ebe26a5: NI12_IMPLICIT_CONV_OFF faster on cnn-clf NV 193.6 -> 173.9 ms v1446, AMD 303.5 -> 274.0 ms b0080; the 2026-10-10 promotion won conv2d / resnet-block 0.69x-0.74x)",
+   "kind": "ab",
+   "lane": [
+    "cnn-clf",
+    "conv2d",
+    "resnet-block"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ni12-fill-rule-off",
+    "ni12-implicit-conv-off"
+   ],
+   "decides": "keep the per-layer fill rule (A) when cnn-clf (fit and infer) is at least as fast as ni12-implicit-conv-off and conv2d / resnet-block at least as fast as ni12-fill-rule-off on the NVIDIA+AMD average; a loss on either side moves the rule's threshold (NI12_FILL_MIN), never a per-algorithm key; same contract words in all three arms, digests must not move"
+  },
+  {
+   "id": "ni12-fill-rule-neighbour",
+   "source": "fix-cnn-clf-implicit-conv (2026-11-15): the fill rule's unmeasured band (OC 32..63) and both sides of its threshold",
+   "kind": "driver",
+   "driver": "cnn_widths",
+   "shape": {
+    "rows": 20000,
+    "classes": 10,
+    "input_shape": [
+     1,
+     28,
+     28
+    ],
+    "batch_size": 128,
+    "max_iter": 2,
+    "conv_channels": [
+     [
+      16,
+      24
+     ],
+     [
+      16,
+      32
+     ],
+     [
+      32,
+      48
+     ],
+     [
+      48,
+      64
+     ]
+    ]
+   },
+   "arms": [
+    "candidate",
+    "ni12-fill-rule-off",
+    "ni12-implicit-conv-off"
+   ],
+   "b_arms": [
+    "ni12-fill-rule-off",
+    "ni12-implicit-conv-off"
+   ],
+   "decides": "NI12_FILL_MIN = 32 (half the 64-wide tile) holds on non-board widths: the candidate must be at least as fast as the faster B arm at every width on the NVIDIA L40S; a loss where a layer turned implicit (OC 32 / 48) raises the threshold, a loss where it stayed materialized (OC 16 / 24) lowers it, with the reason beside NI12_FILL_RULE"
   }
  ]
 }

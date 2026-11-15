@@ -19,6 +19,8 @@ next case runs. Drivers (the row's "driver" field):
                 cost rule's neighbouring and wide non-board shapes)
   mamba_backward  Mamba1Block.backward and Mamba2Block.backward (the zero-state block VJP, one public call) on
                 synthetic weights at the row's (batch, length, d_model); an arm may be a B wheel set the row names
+  cnn_widths    CNNClassifier.fit on synthetic images at each conv_channels tuple the row names; an arm may be a
+                B wheel set the row names
 
 Runs nothing at import; standard library + numpy + pandas + mojolearn in the arm's venv only (it never imports the
 repo's tools). Serial by nature: the cases are timed calls on one GPU and must not share it.
@@ -185,8 +187,29 @@ def case_mamba_backward(row, arm_cases):
     return out
 
 
+def case_cnn_widths(row, arm_cases):
+    """CNNClassifier.fit on synthetic (C, H, W) images at each conv_channels tuple the row names (the NI12 fill
+    rule's neighbouring, non-board channel widths: x_cnn/device.mojo `ni12_implicit_layer`)."""
+    import numpy as np
+    ml = _ml()
+    sh = row["shape"]
+    n, k = int(sh["rows"]), int(sh["classes"])
+    c, h, w = (int(v) for v in sh["input_shape"])
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((n, c * h * w)).astype(np.float32)
+    y = (np.arange(n) % k).astype(np.int32)
+    out = []
+    for chans in sh["conv_channels"]:  # serial by nature: timed calls on one GPU
+        chans = tuple(int(v) for v in chans)
+        ms, why = timed(lambda: ml.CNNClassifier(input_shape=(c, h, w), conv_channels=chans, kernel_size=3,
+                                                 pool_size=2, batch_size=int(sh["batch_size"]),
+                                                 max_iter=int(sh["max_iter"]), random_state=0).fit(X, y))
+        out.append(("CNNClassifier.fit conv_channels=%s n=%d" % (list(chans), n), ms, why))
+    return out
+
+
 DRIVERS = {"while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
-           "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward}
+           "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths}
 
 
 def arm_cases(row, arm):
