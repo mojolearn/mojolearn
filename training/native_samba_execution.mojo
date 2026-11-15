@@ -261,6 +261,7 @@ struct NativeSambaModel(Movable):
                 _ = self.primitive.call(11, [Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), Int(denominator.unsafe_ptr()),
                     Int(dnormalized.unsafe_ptr()), Int(self.head_gradient.unsafe_ptr()), Int(self.normalized.unsafe_ptr()),
                     self.head, targets], [self.rows, self.vocab, self.width], [])
+                _ = denominator^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
             elif fused:
                 _ = self.primitive.call(7, [Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), Int(dnormalized.unsafe_ptr()),
                     Int(self.head_gradient.unsafe_ptr()), Int(self.normalized.unsafe_ptr()), self.head, targets],
@@ -274,8 +275,12 @@ struct NativeSambaModel(Movable):
                     Int(logits.unsafe_ptr()), targets], [self.rows, self.vocab, -100, 1, items, 1], [0.0])
                 _ = self.primitive.call(5, [Int(dnormalized.unsafe_ptr()), Int(self.head_gradient.unsafe_ptr()), Int(dlogits.unsafe_ptr()),
                     Int(self.normalized.unsafe_ptr()), self.head], [self.rows, self.vocab, self.width], [])
+                _ = logits^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
+                _ = dlogits^
             _ = self.primitive.call(3, [Int(dh.unsafe_ptr()), Int(self.norm_gradient.unsafe_ptr()), Int(dnormalized.unsafe_ptr()),
                 Int(self.last_hidden.unsafe_ptr()), self.norm], [self.rows, self.width], [self.norm_eps])
+            _ = dnormalized^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
+            _ = row_loss^
             for reverse in range(len(self.layers)):  # driver-loop: complete native reverse layer/tape walk
                 var i = len(self.layers) - reverse - 1
                 var next = self.layers[i].backward(Int(dh.unsafe_ptr()), elements)
@@ -285,16 +290,19 @@ struct NativeSambaModel(Movable):
                 var words = self.dropout_words.copy()
                 words[5] = 3
                 _ = self.primitive.call(6, [Int(dropped.unsafe_ptr()), Int(dh.unsafe_ptr())], words, self.dropout_scalars)
+                _ = len(dh)  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
                 dh = dropped^
             self.embedding_gradient = List[Float32](length=self.vocab * self.width, fill=0)
             _ = self.primitive.call(1, [Int(self.embedding_gradient.unsafe_ptr()), Int(dh.unsafe_ptr()), ids],
                 [self.rows, self.vocab, self.width], [])
+            _ = dh^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
             if tied:
                 var n = self.vocab * self.width
                 var pair = List[Float32](length=2 * n, fill=0)
                 unsafe_memcpy(dest=pair.unsafe_ptr(), src=self.embedding_gradient.unsafe_ptr(), count=n)
                 unsafe_memcpy(dest=pair.unsafe_ptr() + n, src=self.head_gradient.unsafe_ptr(), count=n)
                 _ = self.primitive.call(9, [Int(self.embedding_gradient.unsafe_ptr()), Int(pair.unsafe_ptr())], [n, 2, -1], [])
+                _ = pair^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
             self.close_tapes()
             return Float64(loss[0])
         except problem:
@@ -327,6 +335,8 @@ struct NativeSambaModel(Movable):
             unsafe_memcpy(dest=ypart.unsafe_ptr(), src=i32_ptr(targets) + k * self.rows, count=self.rows)
             losses[k] = Float32(self.gradients(Int(xpart.unsafe_ptr()), Int(ypart.unsafe_ptr()),
                 total_count, False, tied, fused, chunked))
+            _ = xpart^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
+            _ = ypart^
             if registry_failure.byte_length() != 0:
                 raise Error(registry_failure)
             for j in range(len(kinds)):  # driver-loop: native ordered gradient-registry copies
@@ -336,6 +346,8 @@ struct NativeSambaModel(Movable):
             unsafe_memcpy(dest=f32_ptr(output), src=stacked.unsafe_ptr(), count=n)
             return Float64(losses[0])
         _ = self.primitive.call(9, [output, Int(stacked.unsafe_ptr())], [n, accumulation, self.rows * accumulation], [])
+        _ = stacked^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
         var total = List[Float32](length=1, fill=0)
         _ = self.primitive.call(9, [Int(total.unsafe_ptr()), Int(losses.unsafe_ptr())], [1, accumulation, -1], [])
+        _ = losses^
         return Float64(total[0])

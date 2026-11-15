@@ -220,6 +220,7 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
         dims[5] = 1
         var destination = Int(py=py_call(packed.buffer_info)[0])
         strided_copy_bytes(address,destination,MutPointer[Int64,MutUntrackedOrigin](unsafe_from_address=Int(dims.unsafe_ptr())),2,item,nr*d)
+        _ = dims^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
         address = destination
     elif String(order) != "C":
         raise Error("TypeError: native row selection requires C or Fortran Array order")

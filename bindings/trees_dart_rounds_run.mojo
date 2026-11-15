@@ -308,6 +308,13 @@ def dart_rounds_run(plan: DartRoundPlan, var member: ForestFitArgs) raises -> Da
                            j, c, lo, n_nodes, shrink, factor, plan.lam, plan.l1, plan.mds, m)
     finally:
         _ = xd_close(plan.dart, handle, Int(bad.unsafe_ptr()))
+        # `bad` is written by the close itself (dart_close's bad word) and must
+        # be named after it: on the refusal path (a round or member raising)
+        # nothing below reads it, so Mojo freed it at its last use inside the
+        # loop and the close wrote into freed storage (heap corruption; the
+        # next free in dart_close segfaulted: trees-dart-clf/-reg/-shap-tree,
+        # gdb trace of the 91d5 smoke, 2026-11-15).
+        _ = len(bad)
         # the session and the step read these words through their addresses
         _ = len(inits32)
         _ = len(all_cols)
