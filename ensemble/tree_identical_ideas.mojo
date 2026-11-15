@@ -53,8 +53,12 @@ comptime RF_SAMPLE_FUSED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 2
 # the RF grid should start at 16; ET has no such record.
 comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11_LEVELS"]()
 comptime T11_LEVELS = get_defined_int["MOJOLEARN_TREES_T11_LEVELS", 4]()
-comptime T12 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T12"]()
-comptime T12_BYTES = get_defined_int["MOJOLEARN_TREES_T12_BYTES", 256*1024*1024]()
+# TOMBSTONE: MOJOLEARN_TREES_T12 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T12.patch
+# TOMBSTONE: MOJOLEARN_TREES_T12_BYTES (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T12_BYTES.patch (same patch as T12)
+comptime T12 = False
+comptime T12_BYTES = 256*1024*1024
 comptime T13 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T13"]()
 comptime T13_BYTES = get_defined_int["MOJOLEARN_TREES_T13_BYTES", 16*1024*1024]()
 # TOMBSTONE: MOJOLEARN_TREES_T14 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.

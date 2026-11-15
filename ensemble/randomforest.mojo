@@ -7,10 +7,9 @@ from ensemble.rf_notices import (
     rf_notice, RF_NOTICE_OOB_PARTIAL, RF_NOTICE_BINS_CLAMPED,
     RF_NOTICE_MAX_SAMPLES_IGNORED,
 )
-from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED, T12, T12_BYTES
+from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED
 from std.math import fma
 from max.gpu import block_dim, block_idx, global_idx, thread_idx
-from std.sys import size_of
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from std.math import ceildiv as _ceildiv
@@ -3020,12 +3019,8 @@ def fit_forest_prepared[
     if k_streams < 1:
         k_streams = 1
 
-    comptime if T12:
-        # A complete Builder arena plus its row streams per active tree.
-        # Capacity is a byte budget, stable logical tree IDs remain unchanged.
-        var hist_bytes = Int(rf_params.tree_params.max_batch_size) * Int(rf_params.tree_params.max_n_bins) * max(1,n_unique_labels) * 40 * size_of[O.BinT]()
-        var slot_bytes = max(1, hist_bytes + n_sampled * (16 + 2 * size_of[Scalar[O.LabelT]]()))
-        k_streams = max(1, min(Int(rf_params.n_trees), T12_BYTES // slot_bytes))
+    # TOMBSTONE: MOJOLEARN_TREES_T12 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T12.patch (with MOJOLEARN_TREES_T12_BYTES)
 
     var sampler = RowSampler(
         ctx,
