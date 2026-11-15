@@ -2,6 +2,7 @@
 GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
+from std.sys.compile import is_defined
 from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
 from core.em_loop_chunk import em_loop_check_every
@@ -53,6 +54,7 @@ from x_cluster.bodies import (
     sqrt_cell,
     flush_cell,
     tree_descend,
+    ward_cell,
     lance_williams,
     LINK_WARD,
 )
@@ -438,8 +440,87 @@ def _meanshift_team_kernel(
         iters[s] = state[1]
 
 
+# FAST ONLY (lane cluster-apple3), d <= MSB_MAX_D, OPT-IN
+# `-D MOJOLEARN_MEANSHIFT_BLOCK=1`: one BLOCK per seed. `_meanshift_kernel`
+# walks all n rows of every shift on one thread per seed, so a fit with a few
+# hundred seeds keeps a few blocks busy. Here the block's threads each fold
+# their stride of the rows and the partial sums fold in threadgroup memory.
+# The addends, the quotient and the stop test are `bodies.meanshift_seed`'s;
+# the order of the sum is not (bits move; the paired quality check).
+comptime MEANSHIFT_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MEANSHIFT_BLOCK"]()
+comptime MSB_TPB = 256
+comptime MSB_MAX_D = 16
+comptime MSB_W = MSB_MAX_D + 1  # the feature sums, then the count
+
+
+def _meanshift_block_kernel(
+    x: FPtr, n: Int32, d: Int32, bw: Float32, stop: Float32, max_iter: Int32,
+    centers: FPtr, intensity: IPtr, iters: IPtr,
+):
+    var s = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var D = Int(d)
+    var red = stack_allocation[MSB_TPB * MSB_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # the seed's center lives in threadgroup memory between the shifts (a
+    # barrier orders threadgroup memory; on Apple it does not order the device's)
+    var cen = stack_allocation[MSB_MAX_D, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var state = stack_allocation[3, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    if tid < D:
+        cen[tid] = centers[s * D + tid]
+    if tid == 0:
+        state[0] = Int32(0)  # 1: the seed is done
+        state[1] = Int32(0)  # completed shifts
+        state[2] = Int32(0)  # rows within the bandwidth at the last shift
+    barrier()
+    var o = tid * MSB_W
+    while True:
+        for f in range(D + 1):
+            red[o + f] = Float32(0)
+        for p in range(tid, N, MSB_TPB):
+            var acc = Float32(0)
+            for f in range(D):
+                var t = ftz(ftz(cen[f]) - ftz(x[p * D + f]))
+                acc = ftz(acc + ftz(identical_mul(t, t)))
+            if identical_sqrt(acc) <= bw:
+                for f in range(D):
+                    red[o + f] = ftz(red[o + f] + ftz(x[p * D + f]))
+                red[o + D] = red[o + D] + Float32(1)
+        barrier()
+        var off = MSB_TPB // 2
+        while off > 0:
+            if tid < off:
+                for f in range(D + 1):
+                    red[o + f] = ftz(red[o + f] + red[(tid + off) * MSB_W + f])
+            barrier()
+            off //= 2
+        if tid == 0:
+            var cnt = red[D]
+            state[2] = Int32(Int(cnt))
+            if cnt == Float32(0):
+                state[0] = Int32(1)
+            else:
+                var shift2 = Float32(0)
+                for f in range(D):
+                    var m = ftz(identical_div(red[f], cnt))
+                    var t = ftz(m - cen[f])
+                    shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
+                    cen[f] = m
+                if identical_sqrt(shift2) <= stop or state[1] == max_iter:
+                    state[0] = Int32(1)
+                else:
+                    state[1] = state[1] + Int32(1)
+        barrier()
+        if state[0] != Int32(0):
+            break
+    if tid < D:
+        centers[s * D + tid] = cen[tid]
+    if tid == 0:
+        intensity[s] = state[2]
+        iters[s] = state[1]
 # TOMBSTONE: MOJOLEARN_MEANSHIFT_BLOCK (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 7807488033.
 # Restore: git apply experiments/removed/MOJOLEARN_MEANSHIFT_BLOCK.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 comptime AP_TPB = 256
@@ -937,8 +1018,99 @@ def _dot_groups_kernel(a: FPtr, b: FPtr, n: Int32, g: Int32, parts: FPtr):
     parts[q] = acc
 
 
+# FAST ONLY (lane cluster-apple3), d <= MOMS_MAX_D, OPT-IN
+# `-D MOJOLEARN_MOMENTS_ROWS=1`: the moments with every ROW read once per
+# component. Thread (k, g) owns MOMS_ROWS consecutive rows and folds all of
+# its chains over them (the means' d + 1, then the covariance's upper
+# triangle) in its own slice of threadgroup memory; a second kernel adds the
+# threads' partials. `_momf_partial_kernel` read every row once per CHAIN.
+# The same addends and finals as 5110/5121, another order: bits move.
+comptime MOMS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MOMENTS_ROWS"]()
+comptime MOMS_MAX_D = 8
+comptime MOMS_ROWS = 64
+comptime MOMS_TPB = 128
+comptime MOMS_W = MOMS_MAX_D * (MOMS_MAX_D + 1) // 2  # chains a thread holds at most
+
+
+def _moms_part_kernel(
+    resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr, part: FPtr, n_groups: Int32, cov_pass: Int32,
+):
+    var tid = Int(thread_idx.x)
+    var t = Int(block_idx.x) * MOMS_TPB + tid
+    var N = Int(n)
+    var D = Int(d)
+    var K = Int(kc)
+    var G = Int(n_groups)
+    var acc = stack_allocation[MOMS_TPB * MOMS_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    if t >= K * G:
+        return
+    var k = t // G
+    var g = t - k * G
+    var r0 = g * MOMS_ROWS
+    var r1 = r0 + MOMS_ROWS
+    if r1 > N:
+        r1 = N
+    var o = tid * MOMS_W
+    var nch = D + 1 if cov_pass == Int32(0) else (D * (D + 1)) // 2
+    for c in range(nch):
+        acc[o + c] = Float32(0)
+    if cov_pass == Int32(0):
+        for i in range(r0, r1):
+            var r = resp[i * K + k]
+            for a in range(D):
+                acc[o + a] = acc[o + a] + xk_term(r, x[i * D + a])
+            acc[o + D] = acc[o + D] + r
+    else:
+        for i in range(r0, r1):
+            var r = resp[i * K + k]
+            var c = 0
+            for a in range(D):
+                var xa = x[i * D + a]
+                var ma = means[k * D + a]
+                for b in range(a, D):
+                    acc[o + c] = acc[o + c] + cov_term(r, xa, x[i * D + b], ma, means[k * D + b])
+                    c += 1
+    for c in range(nch):
+        part[(k * G + g) * MOMS_W + c] = acc[o + c]
+
+
+def _moms_final_kernel(
+    part: FPtr, n_groups: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr, cov_pass: Int32,
+):
+    var t = _tid()
+    var D = Int(d)
+    var K = Int(kc)
+    var G = Int(n_groups)
+    var nout = D + 1 if cov_pass == Int32(0) else D * D
+    if t >= K * nout:
+        return
+    var k = t // nout
+    var c = t - k * nout
+    if cov_pass == Int32(0):
+        var acc = Float32(0)
+        var nkacc = Float32(0)
+        for g in range(G):
+            acc = acc + part[(k * G + g) * MOMS_W + c]
+            nkacc = nkacc + part[(k * G + g) * MOMS_W + D]
+        var nkv = nk_final(nkacc)
+        if c == D:
+            nk[k] = nkv
+        else:
+            means[k * D + c] = mean_final(acc, nkv)
+    else:
+        var a = c // D
+        var b = c - a * D
+        var lo = a if a < b else b
+        var hi = b if a < b else a
+        # the upper triangle's chain of (lo, hi), rows of the triangle ascending
+        var q = lo * D - (lo * (lo - 1)) // 2 + (hi - lo)
+        var acc = Float32(0)
+        for g in range(G):
+            acc = acc + part[(k * G + g) * MOMS_W + q]
+        cov[k * D * D + c] = cov_final(acc, nk[k], reg, a == b)
 # TOMBSTONE: MOJOLEARN_MOMENTS_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0625274b10.
 # Restore: git apply experiments/removed/MOJOLEARN_MOMENTS_ROWS.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
@@ -1177,6 +1349,40 @@ def _optics_step_kernel(
         off //= 2
     if tid == 0:
         part[((s + 1) & 1) * NB + b] = red[0]
+
+
+comptime WNN_TPB = 256
+
+
+# FAST ONLY (lane cluster-apple3): one round of the ward tree's reciprocal
+# nearest neighbours. Not an IDENTICAL path.
+def _ward_nn_kernel(c: FPtr, sz: FPtr, l: Int32, d: Int32, nn: IPtr, md: FPtr):
+    """Block `p`: the cluster q != p at the lowest `bodies.ward_cell`, the
+    lowest q on a tie, by an integer min of `(float bits, q)` keys (the
+    values are >= +0, so their bits order as they do). Every thread reads
+    its own stride of the centroids; the keys fold in threadgroup memory."""
+    var p = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var L = Int(l)
+    var D = Int(d)
+    var red = stack_allocation[WNN_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+    for q in range(tid, L, WNN_TPB):
+        if q != p:
+            var v = ward_cell(c, sz, D, p, q)
+            mine = min(mine, (UInt64(bitcast[DType.uint32](v)) << 32) | UInt64(UInt32(q)))
+    red[tid] = mine
+    barrier()
+    var off = WNN_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    if tid == 0:
+        var key = red[0]
+        nn[p] = Int32(Int(UInt32(key & UInt64(0xFFFFFFFF))))
+        md[p] = bitcast[DType.float32](UInt32(key >> 32))
 
 
 @always_inline
@@ -1757,6 +1963,15 @@ struct DeviceOps(ClusterOps):
             ):
                 self._ph1("meanshift")
                 return
+        comptime if MEANSHIFT_BLOCK:
+            if d <= MSB_MAX_D and ns > 0:
+                self.ctx.enqueue_function[_meanshift_block_kernel](
+                    self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
+                    self._fp(centers), self._ip(intensity), self._ip(iters),
+                    grid_dim=ns, block_dim=MSB_TPB,
+                )
+                self._ph1("meanshift")
+                return
         comptime if MEANSHIFT_TEAM:
             if d <= MST_MAX_D and ns > 0 and getenv("MOJOLEARN_MEANSHIFT_TEAM") != "0":
                 self.ctx.enqueue_function[_meanshift_team_kernel](
@@ -1957,6 +2172,26 @@ struct DeviceOps(ClusterOps):
         comptime if BGMM_FAST_MOMENTS_GEMM:
             if d > MOM_MAX_D:
                 self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
+                self._ph1("moments")
+                return
+        comptime if MOMS:
+            if d <= MOMS_MAX_D and n > 0:
+                var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
+                var need = kc * G * MOMS_W
+                if need > self.mpart_n:
+                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+                    self.mpart_n = need
+                var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                for cp in range(2):
+                    var nout = d + 1 if cp == 0 else d * d
+                    self.ctx.enqueue_function[_moms_part_kernel](
+                        self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), pp,
+                        Int32(G), Int32(cp), grid_dim=(kc * G + MOMS_TPB - 1) // MOMS_TPB, block_dim=MOMS_TPB,
+                    )
+                    self.ctx.enqueue_function[_moms_final_kernel](
+                        pp, Int32(G), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
+                        Int32(cp), grid_dim=_grid(kc * nout), block_dim=TPB,
+                    )
                 self._ph1("moments")
                 return
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -2164,6 +2399,17 @@ struct DeviceOps(ClusterOps):
 
     def fast_device(self) -> Bool:
         return GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        self._ph0()
+        if l < 2:
+            self._ph1("ward_nn")
+            return
+        self.ctx.enqueue_function[_ward_nn_kernel](
+            self._fp(c), self._fp(sz), Int32(l), Int32(d), self._ip(nn), self._fp(md),
+            grid_dim=l, block_dim=WNN_TPB,
+        )
+        self._ph1("ward_nn")
 
     def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
         self._ph0()

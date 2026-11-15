@@ -54,6 +54,7 @@ from x_cluster.bodies import (
     sqrt_cell,
     flush_cell,
     tree_descend,
+    ward_nn_row,
 )
 from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
@@ -596,6 +597,14 @@ struct HostOps(ClusterOps):
 
     def fast_device(self) -> Bool:
         return False
+
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        var pc = self._fp(c)
+        var ps = self._fp(sz)
+        var pn = self._ip(nn)
+        var pm = self._fp(md)
+        for p in range(l):
+            ward_nn_row(pc, ps, l, d, pn, pm, p)
 
     def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
         var dst = self.zeros(1)

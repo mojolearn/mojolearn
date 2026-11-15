@@ -40,6 +40,7 @@ step's passing candidates, it fell to 0.50 s; prefetching the next shared
 tile into registers while the current one is multiplied took it to 0.22 s.
 """
 
+from std.sys.compile import is_defined
 from std.ffi import external_call
 from max.gpu import block_idx, thread_idx
 from max.gpu.primitives.warp import shuffle_xor
@@ -56,9 +57,18 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.os import getenv
 from std.time import perf_counter_ns
 
+# AFCL-G01: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Four complete Apple SIMD groups halve the query rows owned by a block,
+# exposing more independent blocks while retaining each group's matrix and
+# top-k work. This occupancy tradeoff applies to every eligible shape.
+comptime AFCL_G01 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFCL_G01"]()
+)
+comptime MQ_SG = 4 if AFCL_G01 else 8
 # TOMBSTONE: MOJOLEARN_AFCL_G01 (never-run Apple FAST card) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 76c3debd2e.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G01.patch; record in docs/TOMBSTONES.md.
-comptime MQ_SG = 8
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 """Simdgroups per block."""
 comptime MQ_TPB = MQ_SG * 32
 comptime MQ_T = 128
