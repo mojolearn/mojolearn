@@ -104,10 +104,9 @@ over eight blocks of 256, `smoblocksolve.mojo`), half
 the SMO outer iterations of 1024 on a hard problem. Taken from
 SVM_WS_BIG_MIN training rows: the larger set needs at least SVM_WS_MAX rows
 to fill (kernel limit, not a board window)."""
-#: LEGACY, default OFF: the old floor 8192 rows sat just below the board's
-#: 10k kernel-fit rows. Removed as benchmark-tuned on 2026-10-04; the new
-#: floor (SVM_WS_MAX rows) is UNMEASURED.
-comptime SVM_WS_BIG_MIN = 8192 if is_defined["MOJOLEARN_LEGACY_NARROW_SVM_WS"]() else SVM_WS_MAX
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_SVM_WS (old path, EXP:1344 NEUTRAL, not merged; the SVM_WS_MAX floor is the default) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ab40e72f25.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SVM_WS.patch; record in docs/TOMBSTONES.md.
+comptime SVM_WS_BIG_MIN = SVM_WS_MAX
 
 
 def svm_ws_cap(n_train: Int) -> Int:
