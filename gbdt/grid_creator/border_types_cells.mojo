@@ -4,7 +4,6 @@ per-column functions, moved verbatim so the host oracle imports no `std.gpu`
 module. The device file imports every name back.
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 
 from checks.numerics import ftz, pinned_mul_f32, portable_divf

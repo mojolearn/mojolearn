@@ -9,7 +9,6 @@ search is `gls_column` for GreedyLogSum and `border_types.mojo`'s
 `border_type_column` for the six others (its table built by
 `border_table_kernel`, its scratch sized per type)."""
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.sys.compile import is_defined
 
 from core.device_zero import enqueue_fill
 from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
