@@ -15,6 +15,7 @@ from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_ex
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.affinity_preference_plan import AffinityPreferencePlan
 from core.shared_slot import SharedSlot
+from bindings.optimizer_public_words_unpack import stash_python_error
 
 
 struct PreferenceIteratorTypes(Defaultable, Movable):
@@ -40,7 +41,8 @@ def _known_iterator(cls: PythonObject, b: PythonObject) raises -> Bool:
         for sample in samples:  # fixed metadata: the three connected builtin iterator types
             var raw = table[].PyObject_GetIter(sample._obj_ptr)
             if not raw:
-                raise Python().cpython().unsafe_get_error()
+                var failure = stash_python_error()
+                raise failure^
             var iterator = PythonObject(from_owned=raw)
             captured.append(py_type(iterator))
         captured.append(py_type(py_call(b.reversed, empty)))
@@ -83,21 +85,28 @@ def _native_iterator(value: PythonObject, context: PythonObject) raises -> List[
         raise Error("TypeError: preference requires an admitted native iterable or numeric buffer; Python iterator callbacks are unsupported")
     ref cpy = Python().cpython()
     var table = cpython_table()
+    # A CPython failure here (a NumPy scalar or 0-d array is not iterable:
+    # TypeError) is stashed and restored unchanged at the door; reading it
+    # with unsafe_get_error dropped its class and the door raised ValueError
+    # (smoke 2026-11-15, test_affinity_preference_native_boundary).
     var raw = table[].PyObject_GetIter(value._obj_ptr)
     if not raw:
-        raise cpy.unsafe_get_error()
+        var failure = stash_python_error()
+        raise failure^
     var iterator = PythonObject(from_owned=raw)
     # list(iterable) queried this before consuming items; keep native range
     # overflow and native length-hint errors at their original stage.
     var hint = cpy.lib.get_function[Int]("PyObject_LengthHint")(value._obj_ptr, Int(8))
     if hint < 0:
-        raise cpy.unsafe_get_error()
+        var failure = stash_python_error()
+        raise failure^
     var result = List[PythonObject](capacity=hint)
     while True:  # admission: ordered CPython native iterator reads under the GIL
         var item = table[].PyIter_Next(iterator._obj_ptr)
         if not item:
             if cpy.PyErr_Occurred():
-                raise cpy.unsafe_get_error()
+                var failure = stash_python_error()
+                raise failure^
             break
         result.append(PythonObject(from_owned=item))
     _ = iterator
