@@ -124,7 +124,9 @@ comptime C08_GROUPED_OUTPUT = False
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c95b22c391.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch
 comptime C02_LINEAR_PAIR = False
-comptime C56_LDA_INPUT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C56_LDA_INPUT"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C56_LDA_INPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at e96891c8e7.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch
+comptime C56_LDA_INPUT = False
 
 # C05 independent invocation-owned OLS covariance/inverse phase storage.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
