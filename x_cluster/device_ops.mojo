@@ -1991,8 +1991,7 @@ struct DeviceOps(ClusterOps):
         centers: Int, ns: Int, scratch: Int, intensity: Int, iters: Int,
     ) raises:
         self._ph0()
-        # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default
-        # (`-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it off; see
+        # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default (see
         # x_cluster/meanshift_fast.mojo for the M3 A/B): MEANSHIFT_FAST_GRID runs
         # every shift on a grid of (seed, row chunk) blocks
         # (x_cluster/meanshift_fast.mojo) instead of `_meanshift_team_kernel`

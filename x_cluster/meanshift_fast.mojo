@@ -3,8 +3,8 @@
 """MeanShift, FAST on Apple: every shift of every seed on the whole GPU
 (lane/apple-fast-cluster, 2026-10-02). Switch: `MEANSHIFT_FAST_GRID` below,
 taken by `x_cluster/device_ops.mojo` `DeviceOps.meanshift`: on by default
-in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it
-off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` is harmless). No
+in FAST on Apple (the old `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` is
+harmless). No
 build reads the environment.
 
 Cause: `_meanshift_team_kernel` (x_cluster/device_ops.mojo:169) takes ONE
@@ -42,11 +42,10 @@ from x_cluster.bodies import FPtr, IPtr
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
 # n=1, Istella): meanshift 52.1 -> 34.9 ms, n_clusters 12 and silhouette
-# .4035 unchanged. `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it off.
-comptime MEANSHIFT_FAST_GRID = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF"]()
-)
+# .4035 unchanged.
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 2255b408f8.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MEANSHIFT_FAST_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime MSG_TPB = 256
 # AFCL-G12: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Two row passes per block amortize center staging and halve the partial
