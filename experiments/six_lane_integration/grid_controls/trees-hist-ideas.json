@@ -51,24 +51,6 @@
     ]
    ]
   },
-  "trees:gbdt-depthwise": {
-   "binding": "_mojolearn_gbdt",
-   "route": "fit: greedy_search_helper_depthwise -> launch_histograms_for_blocks -> launch_hist2_8bit or launch_hist2_width_group[8] (2581) -> hist2_8bit_kernel",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "trees:gbdt-lossguide": {
-   "binding": "_mojolearn_gbdt",
-   "route": "as trees/gbdt-depthwise",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "trees:gbdt-multiclass": {
-   "binding": "_mojolearn_gbdt",
-   "route": "fit: symmetric greedy -> launch_histograms_for_blocks -> (stat_count>2) launch_one_byte[8] PASS; switch on: launch_hist2_8bit_wide[MULTISTAT,1]",
-   "controls": [],
-   "interaction_groups": []
-  },
   "trees:gbdt-rank-yetirank": {
    "binding": "_mojolearn_gbdt",
    "route": "SymmetricTree greedy (run_tree_layout_traced); two-stat 8-bit path assumed, stat_count not re-verified",
@@ -92,12 +74,6 @@
      "hist_sym_feature_parallel"
     ]
    ]
-  },
-  "trees:gbdt-categorical": {
-   "binding": "_mojolearn_gbdt",
-   "route": "Plain Lossguide (as trees/gbdt-lossguide): greedy_search_helper_depthwise -> launch_histograms_for_blocks -> launch_hist2_8bit; float features take the fused 2-stat 8-bit kernel",
-   "controls": [],
-   "interaction_groups": []
   }
  },
  "not_reached": {

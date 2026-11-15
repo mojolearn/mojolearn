@@ -17,12 +17,6 @@
   }
  },
  "algorithms": {
-  "neural:moe": {
-   "binding": "_mojolearn_x_sequence",
-   "route": "python/mojolearn/_x_sequence_moe.py -> bindings/_mojolearn_x_sequence.mojo moe_forward -> sequence/pyapi.mojo moe_forward_run -> _moe_devgroup_rest -> sequence/exec_device.mojo DeviceExec.launch[OP_MOE_HIDDEN|OP_MOE_OUT] -> sequence/moe_grouped.mojo when on, else sequence/moe_reg.mojo",
-   "controls": [],
-   "interaction_groups": []
-  },
   "neural:resnet-block": {
    "binding": "_mojolearn_x_cnn",
    "route": "python/mojolearn/_expansion_cnn.py BasicBlock -> x_cnn_conv2d_forward_m/_backward_m (x_cnn/device.mojo _conv_relu_on_device: NI12 implicit_conv_kernel by default since 2026-10-10) + x_cnn_batchnorm_*_m (unfused; cnn_bn_fuse removed 2026-10-10)",

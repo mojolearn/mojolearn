@@ -4,14 +4,7 @@
  "branch": "lane/svgp-b-gated",
  "head": "e19ca6776",
  "controls": {},
- "algorithms": {
-  "algos:svgp": {
-   "binding": "_mojolearn_x_neighbors",
-   "route": "python/mojolearn/_expansion_neighbors.py SVGP.fit -> xn_svgp_fit_ff -> bindings/_mojolearn_x_neighbors.mojo svgp_fit_ff_binding -> x_neighbors/iter_device.mojo op_svgp_fit_ff",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF",

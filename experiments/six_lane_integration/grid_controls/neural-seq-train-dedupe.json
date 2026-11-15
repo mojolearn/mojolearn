@@ -132,45 +132,7 @@
       "note": "bits_change not re-assessed by L11 (unchanged switch)"
     }
   },
-  "algorithms": {
-    "neural:lm-train-step": {
-      "binding": "_mojolearn_byte_lm",
-      "route": "fit step: training/byte_lm.mojo train step -> embedding (embedding/checks/embedding_identical) -> blocks -> identical_ce_forward_into/backward_into (training/checks/loss.mojo) -> optimizer (_byte_neural_group_update | identical_optimizer_step)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "neural:mamba2-forward": {
-      "binding": "_mojolearn_mamba",
-      "route": "forward: mamba/impl/modules/mamba2.mojo -> ssd_minimal (cb_g, Y_diag tiles, C_state tiles, Y_off)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "neural:mamba1-forward": {
-      "binding": "_mojolearn_mamba",
-      "route": "forward: modeling_mamba -> selective_scan_interface (neural_scan_profile)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "neural:mamba3-forward": {
-      "binding": "_mojolearn_mamba",
-      "route": "forward: mamba3_siso (Y_intra tiles)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "neural:samba-train-step": {
-      "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
-      "route": "Python calls mamba3 prefill fwd/bwd (mamba3_backward angle suffix), transformer fwd/bwd (neural_attention_owner tape / forward tape), training samba_ops",
-      "controls": [],
-      "interaction_groups": [],
-      "not_reached": []
-    },
-    "neural:mlp-train-step": {
-      "binding": "_mojolearn_training",
-      "route": "train_linear_backward_dev (training/dev_tensors.mojo)",
-      "controls": [],
-      "interaction_groups": []
-    }
-  },
+  "algorithms": {},
   "removed": [
     {
       "define": "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS",

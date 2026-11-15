@@ -5,14 +5,7 @@
  "head": "524c1ffff",
  "head_note": "head = last code commit before this file; the file is committed on top of it.",
  "controls": {},
- "algorithms": {
-  "algos:svc": {
-   "binding": "_mojolearn_svm",
-   "route": "SVC.fit -> smosolver launch_block_solve (smo_grid_solve_kernel[1024], one block) [idn_svc_one_block]",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_TSNE_REP_RB4",

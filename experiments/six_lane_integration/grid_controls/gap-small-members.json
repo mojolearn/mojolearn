@@ -5,20 +5,7 @@
   "head": "2c9e87bb2",
   "head_note": "head = last code commit before this file; the file is committed on top of it.",
   "controls": {},
-  "algorithms": {
-    "expanded:knn-imputer": {
-      "binding": "_mojolearn_x_neighbors",
-      "route": "KNNImputer.transform -> iter_device knn_impute (one 64x64 distance tile per block of query rows) [xn_impute_rowdist]",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:ivf-pq": {
-      "binding": "_mojolearn_x_ann",
-      "route": "IVFPQ.search -> ivf_scan_device enqueue_coarse (coarse_tiled_kernel 64 queries x 64 lists) [ann_coarse_tiled]",
-      "controls": [],
-      "interaction_groups": []
-    }
-  },
+  "algorithms": {},
   "removed": [
     {
       "define": "MOJOLEARN_ANN_COARSE_TILED_OFF",

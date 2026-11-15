@@ -4,29 +4,7 @@
  "branch": "lane/fg-pca",
  "head": "385b276e8",
  "controls": {},
- "algorithms": {
-  "classical:pca": {
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host [pca_lean_scratch] -> compute_covariance (column_mean_launch; split-K centered Gram | [gemm_tn_centered] | shift + gemm_tn_identical_v1) -> eig_and_truncate (_eig_rr_device [pca_rr_one_block]; host tail |)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "gemm_tn_centered reads x_alias2, which pca_lean_scratch sizes; it only acts past the split-K width (d > 128). (pca_rr_one_block and pca_device_truncate, independent of the Gram switches, were removed 2026-10-09 / 2026-10-10.)"
-  },
-  "more:tsvd": {
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: TruncatedSVD.fit -> tsvd_fit_explained [tsvd_one_upload] (tsvd_fit_device: gemm_tn + eig_and_truncate; _tsvd_explained_tail: gemm_nt + 2x _column_variance [colvar_fused])",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "colvar_fused leaves X read-only, which the merged tail does not need but the OFF arm of tsvd_one_upload does not depend on either; cross them once."
-  },
-  "expanded:randomized-svd": {
-   "binding": "_mojolearn_x_decomp",
-   "route": "randomized_svd -> x_decomp_randomized_svd (one driver: RKit pca_randomized_core + svd_flip)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "Copy-only; R2 (rsvd_tsqr_ortho, classical-structural) is the existing control for the dominant orth stage and is not repeated here. (rsvd_idn_direct_in removed 2026-11-08: the one driver has no other input route.)"
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK",

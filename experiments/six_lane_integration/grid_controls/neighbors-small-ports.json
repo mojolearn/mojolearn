@@ -4,26 +4,7 @@
  "branch": "lane/neighbors-small-ports",
  "head": "5445778af",
  "controls": {},
- "algorithms": {
-  "algos:knn-imputer": {
-   "binding": "_mojolearn_x_neighbors",
-   "route": "KNNImputer.fit -> _nan_cells(colmiss_only=1) -> nan_cells_device (NC_FIT_LEAN)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "algos:minibatch-kmeans": {
-   "binding": "_mojolearn_x_cluster",
-   "route": "MiniBatchKMeans.fit -> x_cluster_call ENTRY_MINIBATCH -> minibatch_entry_ptr_idn -> minibatch_fit(xs_res)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "algos:permutation-shap": {
-   "binding": "_mojolearn_x_trees",
-   "route": "PermutationExplainer.shap_values -> _linear_wb -> x_trees_pshap_values_linear -> pshap_values_linear",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_NC_FIT_LEAN_OFF",

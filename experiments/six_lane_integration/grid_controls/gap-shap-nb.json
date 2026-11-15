@@ -4,14 +4,7 @@
  "branch": "lane/gap-shap-nb",
  "head": "ccde2b940",
  "controls": {},
- "algorithms": {
-  "algos:tree-shap": {
-   "binding": "_mojolearn_x_trees",
-   "route": "TreeExplainer.__init__ -> x_trees_tree_shap_prepare_retain -> shap_prepare_retain (_Forest once, _prepare_on, _ensure_tables); shap_values -> x_trees_tree_shap_cache_values -> _tree_shap_values_on -> tab_row_kernel[TABLE_ACC] (TREESHAP_ACC_SHARED) -> fold_kernel",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_TREESHAP_ACC_SHARED",

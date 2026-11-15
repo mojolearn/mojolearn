@@ -5,61 +5,7 @@
  "head": "0034d93b4b98",
  "head_note": "head is the commit before this file was added; see git log for the final sha",
  "controls": {},
- "algorithms": {
-  "expanded:gaussian-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: _gnb_stats -> (_col_stats + gnb_eps) + _class_stats[csb1_part, csb_fold, csb1_ss, csb_var] | C61_NB: csbm_part, csbm_fold (+ csbm_pool, gnb_eps on arm 2) -> gnb_params; predict: gnb_jll",
-   "controls": [],
-   "interaction_groups": [],
-   "not_reached": [
-    "MOJOLEARN_CLASSICAL_C02_STATS_PAIR (StandardScaler only)",
-    "MOJOLEARN_CLASSICAL_C04_* (PCA / LDA transform)"
-   ]
-  },
-  "expanded:multinomial-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: _nb_counts (csb1_part + csb_fold, already one pass, sums only) -> mnb_params",
-   "controls": [],
-   "interaction_groups": [],
-   "not_reached": []
-  },
-  "expanded:complement-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: _nb_counts (csb1_part + csb_fold) -> cnb_params",
-   "controls": [],
-   "interaction_groups": [],
-   "not_reached": []
-  },
-  "expanded:bernoulli-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: _nb_counts with binarize threshold (csb1_part + csb_fold) -> bnb_params",
-   "controls": [],
-   "interaction_groups": [],
-   "not_reached": []
-  },
-  "expanded:categorical-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: cat_hpart / cat_hfold histogram counts -> cat_params",
-   "controls": [],
-   "interaction_groups": [],
-   "not_reached": []
-  },
-  "expanded:lda-clf": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit(svd): _cls[csb1_part, csb_fold] -> lda_prep -> center_rows(z) -> _cs(z) -> lda_w | C61_DA: csbm_part, csbm_fold, csbm_pool -> lda_w; then center_rows(z2) -> _gram -> eigh -> lda_stage2 -> eigh -> lda_stage3; predict/proba: matmul jll",
-   "controls": [],
-   "interaction_groups": [],
-   "not_reached": [],
-   "note": "NV istella 1.83x (T.combined.minus-C55) is preparation_seconds 5.22 vs 2.15 s; fit 1.412 vs 1.428 s, inference equal: no define cause (~/mojolearn-evidence/classical-nbda-lda-istella-1.83x.txt)"
-  },
-  "expanded:qda": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: _cls[csb1_part, csb_fold] (means only) -> lda_prep -> _qda_cov -> eigh -> qda_prep; predict/proba: qda_dec",
-   "controls": [],
-   "interaction_groups": [],
-   "not_reached": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP",

@@ -4,65 +4,7 @@
   "branch": "lane/classical-kmeans",
   "head": "24dbc6581",
   "controls": {},
-  "algorithms": {
-    "classical:kmeans": {
-      "binding": "_mojolearn (host twin _mojolearn_core_host)",
-      "route": "fit: cluster.estimator kmeans_fit -> k-means|| / k-means++ (min_cluster_and_distance_compute, gemm_nt or direct trial) -> Lloyd loop (min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked + fold) -> finalize; predict: min_cluster_and_distance_compute",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "more:gmm": {
-      "binding": "_mojolearn_mixture",
-      "route": "fit: mixture/estimator.mojo:80 init_params=kmeans -> cluster.estimator.kmeans_fit (same as classical:kmeans)",
-      "controls": [],
-      "interaction_groups": [],
-      "notes": "kmeans_conv_chunk and kmeans_assign are decided on classical:kmeans only (GMM runs kmeans_fit only as init, mixture/estimator.mojo:711); phase 2 adds one confirm config here with the kmeans winner."
-    },
-    "expanded:minibatch-kmeans": {
-      "binding": "_mojolearn_x_cluster",
-      "route": "fit: x_cluster/minibatch.mojo -> ops.mb_assign/nearest (device_ops) -> mb_update (_mb_centers_block_kernel); init x_cluster/common.mojo k-means++",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:bisecting-kmeans": {
-      "binding": "_mojolearn_x_cluster",
-      "route": "fit: x_cluster/bisect.mojo -> ops.nearest -> k-means++ x_cluster/common.mojo",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "more:ivf": {
-      "binding": "_mojolearn_ivf",
-      "route": "build: coarse kmeans (cluster kmeans_fit); search: ivf_flat_search pinned tile + identical_ivf_scan",
-      "controls": [],
-      "interaction_groups": [],
-      "notes": "kmeans_conv_chunk and kmeans_assign are decided on classical:kmeans only (ivf/estimator.mojo:93 runs kmeans_fit); phase 2 adds one confirm config here with the kmeans winner."
-    },
-    "classical:knn": {
-      "binding": "_mojolearn",
-      "route": "knn_brute_force (pinned tile / stream top-k) ; host twin knn_host_predict",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "classical:kde": {
-      "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
-      "route": "density.py:844 -> _mojolearn_estimators kde_score_samples(_resident) -> kernel_density + kde/impl/distance",
-      "controls": [],
-      "interaction_groups": [],
-      "notes": "Only c06_norms=rows2 c06_norms=rows4 reach this lane."
-    },
-    "classical:dbscan": {
-      "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
-      "route": "density.py:371 -> _mojolearn_estimators dbscan_fit_core -> dbscan/impl/runner.mojo -> epsilon_neighborhood (brute) or RBC eps (knn primitive)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "classical:hdbscan": {
-      "binding": "_mojolearn_hdbscan",
-      "route": "kNN core distances (knn primitive) -> sparse_mr_mst / linkage",
-      "controls": [],
-      "interaction_groups": []
-    }
-  },
+  "algorithms": {},
   "removed": [
     {
       "define": "MOJOLEARN_C37_ROW_PANELS",

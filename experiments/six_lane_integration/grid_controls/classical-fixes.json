@@ -4,50 +4,7 @@
  "branch": "lane/classical-fixes",
  "head": "1ea312322",
  "controls": {},
- "algorithms": {
-  "classical:kmeans": {
-   "binding": "_mojolearn (host twin _mojolearn_core_host)",
-   "route": "fit: cluster.estimator kmeans_fit -> Lloyd loop (kmeans.mojo:1692 chunked device convergence)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "classical:ols": {
-   "binding": "_mojolearn_x_decomp (host twin _mojolearn_x_decomp_host)",
-   "route": "fit: LinearRegression.fit (linear_model.py:694) -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> ols_tsqr_factor (x_decomp/device.mojo:4133)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "more:logreg": {
-   "binding": "_mojolearn_estimators",
-   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (ls_backtrack; qn_idn_dconv deleted)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "more:linearsvc": {
-   "binding": "_mojolearn_estimators",
-   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (ls_backtrack; qn_idn_dconv deleted)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "more:linearsvr": {
-   "binding": "_mojolearn_estimators",
-   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (ls_backtrack; qn_idn_dconv deleted)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:ridge-clf": {
-   "binding": "_mojolearn_x_linear",
-   "route": "fit: _ridge_run -> x_linear_fit(ALGO_RIDGE) -> ridge_fit_grid -> ra_factor_kernel (ridge_grid.mojo:159 chol_trusted) -> t_ridge_solve_best",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:ridge-cv": {
-   "binding": "_mojolearn_x_linear",
-   "route": "fit: _ridge_kfold_grid -> kf_solve_kernel -> kf_solve (ridgecv.mojo:89 chol_trusted, float-float fallback); refit -> t_ridge_solve_best",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32",

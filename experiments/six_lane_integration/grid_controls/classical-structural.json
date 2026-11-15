@@ -28,39 +28,6 @@
   }
  },
  "algorithms": {
-  "expanded:sgd-reg": {
-   "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host)",
-   "route": "fit: SGDRegressor.fit -> _sgd_fit -> x_linear_fit -> fit_device -> _sgd_mb_grid (batch 4096: sgd_perm_kernel [+ sgd_gather_x/vec kernels under sgd_epoch_contiguous] -> SGD_IDN_MB_FUSE rows/steprows + parts kernels per batch -> sgd_mb_end_kernel)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:sgd-clf": {
-   "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host)",
-   "route": "fit: SGDClassifier.fit -> _sgd_fit -> x_linear_fit -> fit_device -> _sgd_mb_grid (same minibatch route as sgd-reg; binary hinge)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "classical:ols": {
-   "binding": "_mojolearn_estimators + _mojolearn_x_decomp (host columns _mojolearn_estimators_host, _mojolearn_x_decomp_host)",
-   "route": "fit: LinearRegression.fit -> [linear_gram_solve: linear_gram_fit (status 0 ends the fit)] -> else _ols_tsqr_centered -> x_decomp_ols_tsqr_r (C24_TSQR) -> _tsqr_lstsq_core",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "with linear_gram_solve on and the Gram trusted, C24_TSQR is inert (fallback path only); the crossing records that"
-  },
-  "more:ridge": {
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: Ridge.fit -> [linear_gram_solve: linear_gram_fit (status 0 ends the fit)] -> else _column_means/_classical_xy_means (c02_linear_pair) + _center + ridge_fit (ridge_eig_traced)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "with linear_gram_solve on and the Gram trusted, c02_linear_pair is inert (the centering glue is bypassed)"
-  },
-  "expanded:randomized-svd": {
-   "binding": "_mojolearn_x_decomp (host column _mojolearn_x_decomp_host)",
-   "route": "_randomized_decompose -> _rsvd_core (Kit.mm -> launch_gemm; Kit.orth -> x_decomp_dev_orth -> orth_on_device [rsvd_tsqr_ortho: _orth_tsqr_device (ts_factor_device [C24_TSQR] + ts_apply_device_buf) | two-pass qr_factor + guard + trsm]; Kit.svd)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "C24_TSQR's panel/rows/tree knobs tune the TSQR that rsvd_tsqr_ortho routes orth through, so the pair is crossed; off, C24 reaches rSVD only through qr_sliced's C24_TREE4"
-  },
   "classical:kmeans": {
    "binding": "_mojolearn (host twin _mojolearn_core_host)",
    "route": "fit: cluster.estimator kmeans_fit -> Lloyd loop -> min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked[_gated] -> launch_block_table_fold [idn_kmeans_centroid_fold: centroid_fold_part/final kernels | fold_block_table_kernel] -> finalize_centroids_kernel",

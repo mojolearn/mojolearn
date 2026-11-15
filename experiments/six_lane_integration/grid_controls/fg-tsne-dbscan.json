@@ -5,26 +5,7 @@
   "head": "566f78ab1",
   "head_note": "code only, uncompiled (lanes never compile); T3 (FFT), D3 (denseball) skipped this round; H4 already on main as IDN_DENDRO_UNION",
   "controls": {},
-  "algorithms": {
-    "algos:tsne": {
-      "binding": "_mojolearn_x_ann",
-      "route": "_expansion_ann.py TSNE.fit -> x_ann_tsne_fit -> tsne_device.tsne_fit_device -> knn_enqueue (T1) -> perplexity -> symmetrize -> _ts_iter/_enq_repulse_split (T2)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "algos:cagra": {
-      "binding": "_mojolearn_x_ann",
-      "route": "cagra_device.cagra_knn_enqueue -> knn_enqueue (T1)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "classical:hdbscan": {
-      "binding": "_mojolearn_hdbscan",
-      "route": "build_mr_linkage -> compute_core_dists (H2 width) -> sparse_mr_mst_device (H2 seed, H3 reads) -> dendrogram -> condense/extract -> binding outputs (H5)",
-      "controls": [],
-      "interaction_groups": []
-    }
-  },
+  "algorithms": {},
   "removed": [
     {
       "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",

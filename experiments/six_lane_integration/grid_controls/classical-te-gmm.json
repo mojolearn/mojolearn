@@ -17,13 +17,6 @@
      "c08_target_codes"
     ]
    ]
-  },
-  "more:gmm": {
-   "binding": "_mojolearn_mixture",
-   "route": "fit: python/mojolearn/mixture.py -> bindings/_mojolearn_mixture.mojo gmm_fit_binding -> mixture/estimator.mojo gaussian_mixture_fit -> mixture/checks/mstep.mojo gmm_m_step per-component loop: center_scale_kernel + identical_gemm_into + cov_finish_kernel (gmm_cov_sym deleted)",
-   "controls": [],
-   "interaction_groups": [],
-   "notes": "kmeans_assign / c37 reach only the kmeans init of this fit; the brief asks for the cross and it is declared; the M-step cover itself shares no kernel with them"
   }
  },
  "removed": [

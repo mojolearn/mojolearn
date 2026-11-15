@@ -41,37 +41,6 @@
      "c08_target_codes"
     ]
    ]
-  },
-  "expanded:onehot": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes + onehot op 9[C08_GROUPED_OUTPUT]",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:ordinal": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes lookup",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:quantile-transformer": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: sort_cols[radix] (python/mojolearn/_expansion_prep.py:3706) + quantiles; transform: interpolation",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:kbins": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit (strategy=quantile): sort_cols[radix] (python/mojolearn/_expansion_prep.py:2214) + edges; transform: bin lookup",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:categorical-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "fit: cat_hpart/cat_hfold or cat_counts on the given codes (no sort, no dictionary); predict: cat_jll",
-   "controls": [],
-   "interaction_groups": [],
-   "notes": "no C07/C08 control reaches CategoricalNB's public route; the review's C08 attribution for categorical-nb does not hold in code"
   }
  },
  "removed": [

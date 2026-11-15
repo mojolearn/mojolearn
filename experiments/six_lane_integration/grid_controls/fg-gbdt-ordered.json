@@ -5,14 +5,7 @@
  "head": "1ca47fae7",
  "mode": "IDENTICAL",
  "controls": {},
- "algorithms": {
-  "trees:gbdt-ordered": {
-   "binding": "_mojolearn_gbdt",
-   "route": "fit: fit_ordered tree loop (F skip of the unsearched learn permutation; C concatenated cursors + one derivative launch) -> fit_oblivious_tree_structure_traced fold arm (C one-launch fold bins; E permutation-order index; A small-fold histograms in compute_hist2_non_binary_dev[8]) -> batched estimation tasks",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF",

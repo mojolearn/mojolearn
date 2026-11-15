@@ -4,22 +4,7 @@
  "branch": "lane/fg-knn-nb",
  "head": "3b59db56a",
  "controls": {},
- "algorithms": {
-  "classical:knn": {
-   "binding": "_mojolearn",
-   "route": "neighbors.py kneighbors -> knn_search_resident -> _knn_search_on_device_index (K4 pool) -> brute_force_knn_impl -> tiled_brute_force_knn (resident cache) -> smem/register distance tile + bound-compact | small-k | radix | block top-k + partial merges",
-   "controls": [],
-   "interaction_groups": [],
-   "notes": "Diagnostic first: one AMD build with -D MOJOLEARN_KNN_PHASE_TIMERS (existing, vendor-neutral) splits transpose/distance/select/merge/upload. K1 (legacy-schedule arm), K2, K3 and K5 were removed 2026-10-10 (lane postmerge-act-6): AMD takes the NVIDIA schedule."
-  },
-  "expanded:gaussian-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "GaussianNB.fit: encode_labels (G5 device codes deleted) -> _Prog.put(X) -> DeviceCache.dev_put (G2 spare slot; one pageable copy, G1 pinned stage deleted; G3 host spans deleted) -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
-   "controls": [],
-   "interaction_groups": [],
-   "notes": "Diagnostic first: MOJOLEARN_XPREP_PROFILE=1 (XPPHASE upload/alloc us). G4 (C61 arm 2) is classical-nbda.json c61_nb; G6 not in this lane."
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF",

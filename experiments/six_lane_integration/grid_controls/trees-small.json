@@ -25,24 +25,6 @@
         ]
       ]
     },
-    "trees:gbdt-multiclass": {
-      "binding": "_mojolearn_gbdt",
-      "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "trees:gbdt-categorical": {
-      "binding": "_mojolearn_gbdt",
-      "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "trees:gbdt-ordered": {
-      "binding": "_mojolearn_gbdt",
-      "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
-      "controls": [],
-      "interaction_groups": []
-    },
     "trees:gbdt-rank-yetirank": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
@@ -62,36 +44,6 @@
           "hist_sym_feature_parallel"
         ]
       ]
-    },
-    "trees:gbdt-depthwise": {
-      "binding": "_mojolearn_gbdt",
-      "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM) (depthwise/lossguide level body; gather arm doubles the target); predict unchanged by this lane",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "trees:gbdt-lossguide": {
-      "binding": "_mojolearn_gbdt",
-      "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM) (depthwise/lossguide level body; gather arm doubles the target); predict unchanged by this lane",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "trees:rf": {
-      "binding": "_mojolearn_rf",
-      "route": "fit: unchanged by this lane; predict_proba: rf_predict_proba_binding -> _rf_predict_ordered -> launch_forest_inference[GROVE=False] -> forest_row_outputs_kernel (on) | forest_ordered_kernel (off)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "trees:et": {
-      "binding": "_mojolearn_trees",
-      "route": "fit: unchanged by this lane; predict_proba: et_predict_binding -> launch_forest_inference[GROVE=False] -> forest_row_outputs_kernel (on) | forest_ordered_kernel (off)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "trees:iforest": {
-      "binding": "_mojolearn_svm",
-      "route": "fit: iforest_run_binding -> isolation_forest.fit -> build_isolation_trees_global_kernel block_dim = IF_BUILD_TPB; score unchanged",
-      "controls": [],
-      "interaction_groups": []
     }
   },
   "removed": [

@@ -5,47 +5,7 @@
  "head": "a5101cb29",
  "head_note": "lane fg-linear (flagship gaps, 2026-10-09): code only, nothing compiled, run or queued by the lane. Read file docs/plans/flagship-gaps-20261009/read_linear.md.",
  "controls": {},
- "algorithms": {
-  "classical:ols": {
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: LinearRegression.fit -> linear_gram_fit (linear_pinned_upload on the X/y upload; status 0 ends) -> else _ols_tsqr_centered (x_decomp, untouched); jacobi_round_robin reaches only the lstsqEig route (ols_fit_host), not the TSQR fallback",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "more:ridge": {
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: Ridge.fit -> linear_gram_fit (linear_pinned_upload) -> gate reject -> [gram_ff_fallback: _gs_ff_fit] -> [ridge_resident: _gs_ridge_resident_fallback -> ridge_eig_scratch_traced -> svd_eig_scratch_traced (jacobi_round_robin)] -> else status 1 -> Python glue + ridge_fit_host (linear_pinned_upload, jacobi_round_robin)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "all four act only through classical-structural's linear_gram_solve (on by default); ridge_resident / gram_ff_fallback / jacobi_round_robin matter only where the fp32 gate rejects (istella), linear_pinned_upload on both datasets"
-  },
-  "more:lasso": {
-   "binding": "_mojolearn_solver",
-   "route": "fit: Lasso.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (16 epochs a launch; cd_gram_epochs_64 removed 2026-10-10)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "more:elasticnet": {
-   "binding": "_mojolearn_solver",
-   "route": "fit: ElasticNet.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (16 epochs a launch; cd_gram_epochs_64 removed 2026-10-10)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "more:logreg": {
-   "binding": "_mojolearn_estimators",
-   "route": "fit: LogisticRegression.fit -> qn_fit -> qn_fit_host (linear_pinned_upload on X/y) -> min_lbfgs -> GLMWithData.evaluate_pen -> enqueue_tiled (QN_TILED + QN_IDN_FUSED, already main's IDENTICAL default)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "read file's G1 (row-split X^T dZ) and G2 (fused evaluate) are already main's IDENTICAL defaults (QN_TILED glm/impl/qn/glm_base.mojo:471, QN_IDN_FUSED :1211); no new switch"
-  },
-  "expanded:sgd-clf": {
-   "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host)",
-   "route": "fit: SGDClassifier.fit -> _sgd_fit -> x_linear_fit -> _sgd_mb_grid -> sgd_mb_chunk_kernel (batch <= XG_TPB) | SGD_IDN_MB_FUSE steprows + parts (S1 sgd_epoch_kernel deleted)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "the brief's algos:sgd-clf is the FAST key; the IDENTICAL catalog key is expanded:sgd-clf (classical-structural.json, catalog.json)"
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_SGD_EPOCH_KERNEL",

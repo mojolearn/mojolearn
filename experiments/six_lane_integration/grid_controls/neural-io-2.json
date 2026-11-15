@@ -4,33 +4,7 @@
  "branch": "lane/neural-io-2",
  "head": "bf06ffdb3",
  "controls": {},
- "algorithms": {
-  "expanded:embedding": {
-   "binding": "_mojolearn_embedding",
-   "route": "Embedding.backward(ids, dy on device) -> embedding_backward_dev -> _backward_dev_run (eager refusal scans; idn_emb_scan_deferred_off removed 2026-10-10)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "no control of this lane reaches it since the deferred scan was deleted (lane postmerge-act-6)"
-  },
-  "neural:batchnorm2d": {
-   "binding": "_mojolearn_x_cnn",
-   "route": "BatchNorm2d.forward/backward(DeviceTensor) -> batchnorm_forward_m / batchnorm_backward_m; outputs from res_alloc_nofill; frees via res_free",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "neural:dropout2d": {
-   "binding": "_mojolearn_x_cnn",
-   "route": "Dropout2d.forward/backward(DeviceTensor) -> dropout2d_m / map2_m; outputs from res_alloc_nofill; frees via res_free",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "neural:adafactor": {
-   "binding": "_mojolearn_x_sequence",
-   "route": "Adafactor.step (resident) -> adafactor_resident_step_dev_py -> adafactor_core [idn_af_vec_fused]",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_AF_VEC_FUSED",

@@ -15,12 +15,6 @@
      "gemm_split_min_leaves"
     ]
    ]
-  },
-  "neural:samba-train-step": {
-   "binding": "_mojolearn_training (the mamba3 and llama device functions of _mojolearn_mamba and _mojolearn_transformer linked into it under the define)",
-   "route": "training step: SambaStack.train_step -> _train_step_resident -> _mojolearn_training samba_resident_step (training/samba_resident.mojo samba_resident_train_step: embedding -> blocks -> llama_rms_norm -> identical_gemm_into[ROLE_HEAD] -> identical_ce_loss_resident -> identical_gemm_backward_a_into[ROLE_HEAD] / identical_gemm_backward_b_into -> bwd_rms_norm -> the Mamba-3 tape stage rules (autograd/rules_mamba3.mojo) | llama_decoder_layer_backward_device per layer -> identical_embedding_backward_into -> pair add -> identical_optimizer_step_resident_io); arm B: loss_and_grads per-layer calls + samba_head_loss_host + optimizer_resident_step",
-   "controls": [],
-   "interaction_groups": []
   }
  },
  "removed": [

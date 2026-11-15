@@ -4,20 +4,7 @@
  "branch": "lane/hdb-ivf",
  "head": "407e20adb",
  "controls": {},
- "algorithms": {
-  "algos:ivf-refine": {
-   "binding": "_mojolearn_x_ann",
-   "route": "build -> ivf_pq_build_device -> pq_codebooks_device",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "algos:ivf-pq": {
-   "binding": "_mojolearn_x_ann",
-   "route": "build -> ivf_pq_build_device -> pq_codebooks_device",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_HDB_ROUND_LEAN",
