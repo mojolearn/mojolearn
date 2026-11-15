@@ -2091,20 +2091,12 @@ def m3_siso_forward(
     m3_phase_tick(ctx, phase_tick, String("m3_qk_s_kernel"))
     # Keep tiny and unpriced columns on their existing launch. The group
     # threshold supplies ample tile work; it is not an intermediate-size tune.
-    # NI42 independent default-OFF A/B: use the existing same-chain tile on
-    # every GPU whose hardware page/block limits admit it. One logical tile is
-    # sufficient; partial tiles use the existing masks, no board dimension rule.
-    # Baseline retains historical routing. Host keeps the same scalar chains.
-    # Compilation, cross-vendor identity and whole-model quality/timing NOT RUN.
+    # Host keeps the same scalar chains.
     var use_yintra_tile = False
     comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
-        comptime if (
-            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            and is_defined["MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE"]()
-            and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        ):
-            use_yintra_tile = True
-        elif is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
+        # TOMBSTONE: MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE (unmeasured opt-in arm NI42: the y-intra tile on every GPU that fits, IDENTICAL; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f484785e59.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+        comptime if is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
             use_yintra_tile = True
         # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_YINTRA (unmeasured old path: no y-intra tile on NVIDIA; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 3b67ed3496.
         # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
