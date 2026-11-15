@@ -8,6 +8,9 @@ nothing across vendors, records nothing and never replaces the release's one ver
     wheel_verify_smoke.py lanes   --python PY --out DIR      every CPU lane of verify's harness, one process per lane
     wheel_verify_smoke.py tests   --python PY --out DIR --tests-root python/mojolearn/tests
                                                              the Python tests, one process per test file
+    wheel_verify_smoke.py frames  --python PY --out DIR      the Python frames census (tools/ops/python_frames_census.py):
+                                                             the Python that runs inside every public call, one process
+                                                             per public class and per harness lane; REPORTS, GATES NOTHING
     wheel_verify_smoke.py step    --out DIR --name N -- CMD  one command, logged, its rc in SUMMARY.txt
 
 PARALLEL PLAN (AGENTS.md "parallelize tests and experiments by default"): every pool's units are independent
@@ -37,6 +40,7 @@ gets one line per crash with its top native frame (gdb) and top Python frame (fa
 diagnostics only: the unit's status stays `crash`.
 """
 import argparse
+import json
 import os
 import re
 import shutil
@@ -50,6 +54,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 #: memory reserved for a unit the plan input has not measured (MB)
 MEM_PER_WORKER_MB = 2048
@@ -557,6 +562,55 @@ def split_long_files(par, splittable, args, argv, cwd, env):
     return out
 
 
+def cmd_frames(args):
+    """(e) THE PYTHON FRAMES CENSUS (tools/ops/python_frames_census.py; AGENTS.md "No Python in the runtime"): every
+    public class member and public function of the INSTALLED wheel, called with verify's own endpoint fixtures and
+    harness lanes under sys.setprofile; <out>/python-frames/census.tsv lists per member the Python functions entered
+    inside the call and its binding calls, SUMMARY.txt the totals, the 30 Python functions inside the most public
+    calls (the remaining runtime Python: the work list) and per family totals. One unit per public class and per CPU
+    lane, through run_pool (all cores, memory admission, longest first). It reports and gates nothing: the step's
+    line is rc=0 whatever the census finds, and a unit that crashes is listed, never a failure of the smoke."""
+    try:
+        return _frames(args)
+    except Exception as exc:   # reports, gates nothing: a broken census is one line, never a failed smoke
+        summary(args.out, f"frames rc=0 census not taken: {type(exc).__name__}: {str(exc)[:300]} (reports; gates nothing)")
+        return 0
+    except SystemExit as exc:
+        summary(args.out, f"frames rc=0 census not taken: {str(exc)[:300]} (reports; gates nothing)")
+        return 0
+
+
+def _frames(args):
+    import python_frames_census as census
+    fdir = Path(args.out) / "python-frames"
+    fdir.mkdir(parents=True, exist_ok=True)
+    cwd = empty_dir(args.out, "frames")
+    tool = str(Path(__file__).resolve().parent / "python_frames_census.py")
+    pkg = probe(args.python, "import importlib.util as u; print(u.find_spec('mojolearn').submodule_search_locations[0])",
+                cwd)
+    p = subprocess.run([sys.executable, str(ROOT / "tools" / "public_api_surface.py"), pkg],
+                       capture_output=True, text=True)
+    (fdir / "surface.txt").write_text(p.stdout)
+    if p.returncode != 0 or not p.stdout.strip():
+        summary(args.out, f"frames rc=0 census not taken: public_api_surface.py rc={p.returncode} (reports; gates nothing)")
+        return 0
+    rc, _, seconds, _ = run_unit([args.python, "-I", tool, "inventory", "--surface", str(fdir / "surface.txt"),
+                                  "--out", str(fdir)], fdir / "inventory.log", cwd, child_env(), args.timeout)
+    if rc != 0 or not (fdir / "inventory.json").is_file():
+        summary(args.out, f"frames rc=0 census not taken: inventory rc={rc} log=python-frames/inventory.log "
+                          "(reports; gates nothing)")
+        return 0
+    inv = json.loads((fdir / "inventory.json").read_text())
+    units = [(u["name"], [args.python, "-I", tool, "unit", "--inventory", str(fdir / "inventory.json"),
+                          "--unit", u["name"], "--out", str(fdir / "units")]) for u in inv["units"]]
+    run_pool("python-frames", units, args, cwd, child_env(), args.timeout)
+    lines = census.report(fdir)
+    for line in lines:
+        summary(args.out, line)
+    print("\n".join(lines[:1]), flush=True)
+    return 0
+
+
 def cmd_step(args):
     """One command, its full output in <out>/<name>.log and one SUMMARY.txt line."""
     argv = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
@@ -574,7 +628,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd_name", required=True)
     for name, fn, timeout in (("imports", cmd_imports, 300), ("lanes", cmd_lanes, 900),
-                              ("tests", cmd_tests, 1800), ("step", cmd_step, 1800)):
+                              ("frames", cmd_frames, 900), ("tests", cmd_tests, 1800), ("step", cmd_step, 1800)):
         p = sub.add_parser(name)
         p.set_defaults(func=fn)
         p.add_argument("--out", required=True)

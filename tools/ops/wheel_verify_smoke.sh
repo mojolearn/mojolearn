@@ -24,6 +24,9 @@
 #              the harness runs directly; --no-batch --no-rlpair stamp each JSON partial_column, which
 #              _verify_reference.admit() refuses: nothing here can become a record.
 #   test-deps  pytest (pinned like tools/cpu_wheel_checks.sh), scipy, scikit-learn, added AFTER (a)-(c)
+#   frames     (e) the Python frames census (tools/ops/python_frames_census.py): the Python that runs inside every
+#              public call, with verify's own fixtures, one process per public class and per CPU lane;
+#              OUT/python-frames/census.tsv and the totals in SUMMARY.txt. Reports; gates nothing (always rc=0)
 #   tests      (d) the pytest files of SOURCE_ROOT/python/mojolearn/tests against the installed runtime
 #              (tools/run_python_tests.py INSTALLED_BOOTSTRAP), one process per file (one per test for a file
 #              longer than an even share of the pool); GPU and optional-dependency tests skip with their reason
@@ -44,7 +47,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 SOURCE_ROOT=${SOURCE_ROOT:-$(cd "$HERE/../.." && pwd)}
 PY=${PYTHON:-python3}
 VENV=${VENV:-$(mktemp -d)/venv}
-STEPS=${STEPS:-install,imports,selftest,lanes,test-deps,tests}
+STEPS=${STEPS:-install,imports,selftest,lanes,frames,test-deps,tests}
 HELPER="$PY $HERE/wheel_verify_smoke.py"
 : > "$OUT/SUMMARY.txt"
 
@@ -72,6 +75,7 @@ fi
 want imports && $HELPER imports --python "$VPY" --out "$OUT" $(mem imports)
 want selftest && $HELPER step --out "$OUT" --name selftest --timeout 900 -- "$VPY" -I -m mojolearn verify --self-test
 want lanes && $HELPER lanes --python "$VPY" --out "$OUT" --commit "${SOURCE_COMMIT:-}" $(mem lanes)
+want frames && $HELPER frames --python "$VPY" --out "$OUT" $(mem python-frames)
 want test-deps && $HELPER step --out "$OUT" --name test-deps -- "$VPY" -m pip install --disable-pip-version-check \
   --no-input -q --no-cache-dir pytest==8.3.5 scipy scikit-learn
 want tests && $HELPER tests --python "$VPY" --out "$OUT" --tests-root "$SOURCE_ROOT/python/mojolearn/tests" $(mem tests)
