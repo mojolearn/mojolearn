@@ -78,21 +78,11 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     fit_oblivious_tree_structure_traced,
     split_stat_planes,
 )
-#: lane/apple-fast-sym-iter: the pointwise SymmetricTree arm's per-tree
-#: fixed cost, FAST + Apple only, every alias default OFF
-#: (`gbdt/methods/sym_iter_fast.mojo` has the defines and the mechanism).
-#: Under every other build each alias is comptime False, the pool list stays
-#: empty and the runtime flags below are constant False.
-from gbdt.methods.sym_iter_fast import (
-    SYM_BUF_ARENA,
-    SYM_ITER_ANY,
-    SymIterPool,
-    sym_compute_bins_pooled,
-    sym_objective_is_pointwise,
-    sym_pool_get,
-    sym_scale_from_mags,
-    sym_split_planes,
-)
+# TOMBSTONE: MOJOLEARN_SYM_BUF_ARENA (NEUTRAL: rab7-symbufarena 1000-taxi -0.2%; F12 M3 B/A 0.93..1.01 mixed) (the pointwise symmetric
+# arm's pool of one)
+# deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 0f457a0c03.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
+from gbdt.methods.sym_iter_fast import sym_objective_is_pointwise
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     SYM_RIDX_SPLITS_2031,
     run_sequential_two_level_feature_freq_tree,
@@ -203,7 +193,6 @@ from checks.kernel_matrix import (
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from gbdt.gpu_data.sym_feat_switches import GBDT_EVAL_FUSED
 # lane t2-trees-on-executor: the boosting round as one step of the executor's
 # bounded device loop (`SymDeviceRounds`, `fit_sym_rounds_on_device`)
 from autograd.program_loop import LoopTimers
@@ -367,7 +356,6 @@ from gbdt.targets.kernel.pair_logit import (
 )
 from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_GROUP_FUSED
 from gbdt.targets.kernel.yeti_rank import (
-    YETI_TASK_FUSED,
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
     launch_yeti_rank_zero_value,
@@ -383,13 +371,9 @@ from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
 
 
 
-#: lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`, FAST + Apple only): the
-#: held-out loss slots kept on the device between readbacks, and the extra
-#: words per level the packed per-tree apply record needs in `h_vals` /
-#: `d_vals`. Outside the switch both are main's sizes (one loss word, no
-#: extra words), so `make_test_arm` allocates exactly what it did.
-comptime _EVAL_FV_SLOTS = 1024 if GBDT_EVAL_FUSED else 1
-comptime _EVAL_PACK_WORDS = 5 if GBDT_EVAL_FUSED else 0
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL: rab7-gbdtevalfused istella -0.3%) (the deferred held-out loss slots and the packed per-tree apply) deleted 2026-11-15 by
+# lane/expdel-05-trees; code recoverable at 70801eb24c.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
 
 
 @fieldwise_init
@@ -458,14 +442,9 @@ def make_test_arm(
     var max_leaves = 1 << max_depth
     var w = ctx.enqueue_create_buffer[DType.float32](n)
     enqueue_fill(ctx, w, Float32(1.0))
-    # main's sizes; only `GBDT_EVAL_FUSED` (FAST + Apple) widens them
     var fv_n = 1
     var h_fv_n = blocks
     var vals_n = max_leaves * approx_dim
-    comptime if GBDT_EVAL_FUSED:
-        fv_n = _EVAL_FV_SLOTS
-        h_fv_n = max(blocks, _EVAL_FV_SLOTS)
-        vals_n = max_leaves * approx_dim + _EVAL_PACK_WORDS * max_depth
     return TestArm(
         n_rows,
         cindex^, targets^, w^,
@@ -529,71 +508,9 @@ def _apply_last_tree_to_test(
     if depth == 0:
         return
 
-    comptime if GBDT_EVAL_FUSED:
-        # lane/apple-fast-sym-feat: the tree's records and leaf values in
-        # ONE pinned region of `h_vals` -- offsets, shifts, masks, bins
-        # (`depth` words each), the take-equal bytes (`ceil(depth / 4)`
-        # words), then the values -- and ONE upload of the used prefix
-        # instead of six. Same kernel, same records, same adds.
-        var hv = test.h_vals.unsafe_ptr()
-        var hw = hv.bitcast[UInt32]()
-        var eq_words = (depth + 3) // 4
-        var vals_at = 4 * depth + eq_words
-        for k in range(eq_words):
-            hw.unsafe_store(4 * depth + k, UInt32(0))
-        var hb = (hw + 4 * depth).bitcast[UInt8]()
-        # driver-loop: over the tree depth (split records)
-        for level in range(depth):
-            ref pcf = layout.features[
-                Int(weak.structure.splits[level].feature_id)
-            ]
-            hw.unsafe_store(level, pcf.offset * UInt32(n))
-            hw.unsafe_store(depth + level, pcf.shift)
-            hw.unsafe_store(2 * depth + level, pcf.mask)
-            hw.unsafe_store(
-                3 * depth + level,
-                UInt32(Int(weak.structure.splits[level].bin_idx)),
-            )
-            var p_take_bin = (
-                Int(weak.structure.splits[level].split_type)
-                == BIN_SPLIT_TAKE_BIN
-            )
-            hb.unsafe_store(level, UInt8(1) if p_take_bin else UInt8(0))
-        var p_values = (1 << depth) * approx_dim
-        # driver-loop: over the last tree's leaf values (leaves x approx_dim)
-        for i in range(p_values):
-            var v = Float32(0.0)
-            if i < len(weak.leaf_values):
-                v = weak.leaf_values[i]
-            hv.unsafe_store(vals_at + i, v)
-        var used = vals_at + p_values
-        var d_used = test.d_vals.create_sub_buffer[DType.float32](0, used)
-        ctx.enqueue_copy(dst_buf=d_used, src_ptr=hv)
-        # one buffer carries every launch argument: an untracked origin so
-        # the derived pointers are not seen as aliasing mutable arguments
-        var dv = test.d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var dw = dv.bitcast[UInt32]()
-        var p_wide = (n + 255) // 256
-        if p_wide > 1024:
-            p_wide = 1024
-        ctx.enqueue_function[compute_bins_and_add_kernel](
-            test.cindex.unsafe_ptr(),
-            dw,
-            dw + depth,
-            dw + 2 * depth,
-            dw + 3 * depth,
-            (dw + 4 * depth).bitcast[UInt8](),
-            Int32(depth),
-            dv + vals_at,
-            Int32(n),
-            test.cursor.unsafe_ptr(),
-            Int32(approx_dim),
-            Int32(n),
-            grid_dim=(p_wide, approx_dim, 1),
-            block_dim=(256, 1, 1),
-        )
-        return
-
+    # TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL) packed one-upload apply deleted 2026-11-15 by lane/expdel-05-trees;
+    # code recoverable at 70801eb24c.
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
     for level in range(depth):  # small-loop(depth: tree levels, at most 16): per-level apply launch arguments
         ref cf = layout.features[
             Int(weak.structure.splits[level].feature_id)
@@ -689,10 +606,9 @@ def _test_loss_enqueue(
     approx_dim: Int,
     slot: Int,
 ) raises:
-    """lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`, FAST + Apple only):
-    `_test_loss`'s launches with the folded sum left on the device in
-    `test.fv[slot]`; no readback, no drain. `_test_loss_flush` reads the
-    slots back. Same kernels, same fold, so the same loss values."""
+    """`_test_loss`'s launches with the folded sum left on the device in
+    `test.fv[slot]`; no readback, no drain. Same kernels, same fold, so the
+    same loss values."""
     var n = test.n_rows
     var blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     if objective == OBJECTIVE_MULTICLASS:
@@ -744,44 +660,9 @@ def _test_loss_div_kernel(
         )
 
 
-def _test_loss_flush(
-    ctx: DeviceContext,
-    mut test: TestArm,
-    mut test_losses: List[Float64],
-    mut detector: OverfittingDetector,
-    pending: Int,
-) raises:
-    """lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`): ONE readback and ONE
-    drain for the last `pending` deferred held-out losses (their
-    placeholders are the tail of `test_losses`), then the detector sees
-    them in iteration order, exactly as it would have one per tree. Only
-    used when the detector cannot stop the fit (`is_active()` False), so
-    no stop is ever decided late."""
-    if pending <= 0:
-        return
-    # the losses divided on the device (`_test_loss_div_kernel`), one bulk
-    # copy into their placeholders; the host only feeds the detector
-    var n = test.n_rows
-    var base = len(test_losses) - pending
-    var d_losses = ctx.enqueue_create_buffer[DType.uint64](pending)
-    var h_losses = ctx.enqueue_create_host_buffer[DType.uint64](pending)
-    ctx.enqueue_function[_test_loss_div_kernel](
-        test.fv.unsafe_ptr(), Int32(pending), Int32(n),
-        d_losses.unsafe_ptr(),
-        grid_dim=(pending + 63) // 64, block_dim=64,
-    )
-    ctx.enqueue_copy(dst_ptr=h_losses.unsafe_ptr(), src_buf=d_losses)
-    ctx.synchronize()
-    unsafe_memcpy(
-        dest=(test_losses.unsafe_ptr() + base).bitcast[UInt64](),
-        src=h_losses.unsafe_ptr(),
-        count=pending,
-    )
-    _ = d_losses^  # past the drain
-    _ = h_losses^
-    # driver-loop: over the pending iterations (one held-out loss each)
-    for j in range(pending):
-        detector.add_error(test_losses[base + j])
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL) `_test_loss_flush` deleted 2026-11-15 by lane/expdel-05-trees; code
+# recoverable at 70801eb24c.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
 
 
 def _heldout_loss_bits_gated_kernel(
@@ -1852,43 +1733,9 @@ def _estimate_and_apply(
         launch_inverse_permutation(ctx, row_index, yeti.value().query.inverse, n_rows)
     stage_times.end(ctx, "est.stage_in")
     stage_times.begin(ctx)
-    # lane/apple-fast-sym-iter, SYM_BUF_ARENA: the oracle's five host
-    # staging buffers from the workspace's `arena_host` (pool of one, keyed
-    # as `OracleHostScratch.matches`) instead of five allocations per task.
-    # Single-dimensional pointwise oracles only; the key mismatch on any
-    # other shape makes `make_bin_optimized_oracle` allocate as main does.
-    var sym_host_ws = Optional[OracleHostScratch]()
-    comptime if SYM_BUF_ARENA:
-        if (
-            approx_dim == 1
-            and not query.__bool__()
-            and not pairs.__bool__()
-            and not yeti.__bool__()
-            and sym_objective_is_pointwise(objective)
-        ):
-            var sym_fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-            if len(est_ws[0].arena_host) == 0 or not est_ws[0].arena_host[
-                0
-            ].matches(n_leaves, 1, 1, sym_fv_blocks):
-                est_ws[0].arena_host.clear()
-                est_ws[0].arena_host.append(
-                    OracleHostScratch(
-                        n_leaves, 1, 1, sym_fv_blocks,
-                        ctx.enqueue_create_host_buffer[DType.uint32](n_leaves),
-                        ctx.enqueue_create_host_buffer[DType.float32](n_leaves),
-                        ctx.enqueue_create_host_buffer[DType.float32](
-                            sym_fv_blocks
-                        ),
-                        ctx.enqueue_create_host_buffer[DType.float32](
-                            2 * n_leaves
-                        ),
-                        ctx.enqueue_create_host_buffer[DType.float32](n_leaves),
-                        ctx.enqueue_create_host_buffer[DType.float32](
-                            2 * n_leaves
-                        ),
-                    )
-                )
-            sym_host_ws = Optional(est_ws[0].arena_host[0].handles())
+    # TOMBSTONE: MOJOLEARN_SYM_BUF_ARENA (NEUTRAL: rab7-symbufarena 1000-taxi -0.2%; F12 M3 B/A 0.93..1.01 mixed) pooled oracle host staging
+    # deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 0f457a0c03.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         g_target.copy(), g_weights.copy(), g_cursor.copy(),
@@ -1907,7 +1754,6 @@ def _estimate_and_apply(
         yeti^,
         yeti_seed,
         oracle_ws^,
-        host_scratch=sym_host_ws^,
     )
     stage_times.end(ctx, "est.make_oracle")
     # `TDocParallelLeavesEstimator::Estimate`
@@ -2895,14 +2741,14 @@ def _launch_querywise_pointwise_target(
 # != 0` (the score std dev is a host reduction), an identity trace (per-round
 # host records), a multi-device plan (the shards take the scale as a launch
 # value), Depthwise / Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
-# estimator `apple_fast_est`, the SYM_ITER pool and the fused eval stay).
+# estimator `apple_fast_est` stays).
 #
 # A/B: `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` restores the host loop for these
 # fits until the NVIDIA + AMD board rows are measured (RUN OWED); then the
 # switch goes (the host loop's pointwise arm stays for the refused fits).
 # ===========================================================================
 comptime GBDT_DEVICE_ROUNDS_BUILD = (
-    not (EST_APPLE_ANY or SYM_ITER_ANY or SYM_BUF_ARENA or GBDT_EVAL_FUSED)
+    not EST_APPLE_ANY
     and not is_defined["MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF"]()
 )
 
@@ -4481,7 +4327,6 @@ def fit_with_test(
         _flush_fixed or HIST2_SMEM_IS_I32 or _one_byte_fixed
     )
     var mags = ctx.enqueue_create_buffer[DType.float32](2)
-    var h_mags = ctx.enqueue_create_host_buffer[DType.float32](2)
 
     # their `TGpuAwareRandom::GetGpuSeeds`: the per-thread RNG state of
     # the whole fit, created once and advanced in place by every draw
@@ -4610,11 +4455,8 @@ def fit_with_test(
     # one set of gather/staging buffers, keyed by (n_rows, approx_dim) with
     # a leaf-count capacity
     var est_ws = List[TEstimationWorkspace]()
-    # lane/apple-fast-sym-iter: the pointwise symmetric arm's pool of one
-    # (`SymIterPool`); inert (empty) under every build without the defines.
     # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
     # prefetch carry); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch.
-    var sym_pool = List[SymIterPool]()
     # DEVIATION 2551: the non-symmetric estimator's device partition, the
     # FIT's pool of one (empty and never touched on the default side)
     var leaf_parts = List[DeviceLeafPartitioner]()
@@ -4923,12 +4765,9 @@ def fit_with_test(
                 # the group layout's magnitudes are per group too
                 if pair_buffers.value().n_pairs < 0:
                     mag_blocks = fv_blocks
-        comptime if YETI_TASK_FUSED:
-            # lane af-sym-multi: the fused task kernel writes one magnitude
-            # pair per TASK (its launcher's guard, `n_tasks <= row_blocks`);
-            # the value partials stay one per row block (all 0.0)
-            if is_yeti_rank and yeti_buffers.value().n_tasks <= mse_blocks:
-                mag_blocks = yeti_buffers.value().n_tasks
+        # TOMBSTONE: MOJOLEARN_YR_TASK_FUSED (NEUTRAL: rab7-yrtaskfused yetirank 3386.79 -> 3394.43 ms, +0.2%) per-task magnitude partials
+        # deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 41f0634a67.
+        # Restore: git apply experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch
         ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
             fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
             grid_dim=1, block_dim=256,
@@ -5557,47 +5396,27 @@ def fit_with_test(
             # `compute_hist2` takes `fixed_scale` as a HOST scalar
             # (`pointwise_kernels.mojo:1318`); making it a device pointer is
             # the fix and is not attempted here.
-            # lane/apple-fast-sym-iter: the pool of one for this arm's
-            # per-tree buffers.
-            comptime if SYM_ITER_ANY:
-                sym_pool_get(
-                    ctx, sym_pool, n_rows, max_depth,
-                    noise_sm if noise_sm > 0 else 1,
-                )
+            # TOMBSTONE: MOJOLEARN_SYM_BUF_ARENA (NEUTRAL: rab7-symbufarena 1000-taxi -0.2%; F12 M3 B/A 0.93..1.01 mixed) (pooled planes, h_mags scale)
+            # deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 0f457a0c03.
+            # Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
             var scale = Float32(1.0)
             comptime if _needs_magnitudes:
-                var sym_scale_ready = False
-                comptime if SYM_BUF_ARENA:
-                    # the fit's `h_mags` instead of a host buffer per tree
-                    if not sym_scale_ready:
-                        ctx.enqueue_copy(dst_buf=h_mags, src_buf=mags)
-                        ctx.synchronize()
-                        scale = sym_scale_from_mags(h_mags, n_rows)
-                        sym_scale_ready = True
-                if not sym_scale_ready:
-                    var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
-                    ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
-                    ctx.synchronize()
-                    _ = boot_mag_part^  # past the drain (step-33 race class, device side)
-                    _ = mags^  # past the drain (step-33 race class, device side)
-                    var m0 = Float64(hm[0])
-                    if m0 < 0.0:
-                        m0 = -m0
-                    var m1 = Float64(hm[1])
-                    if m1 < 0.0:
-                        m1 = -m1
-                    scale = Float32(
-                        choose_scale(m1 if m1 > m0 else m0, n_rows)
-                    )
+                var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
+                ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
+                ctx.synchronize()
+                _ = boot_mag_part^  # past the drain (step-33 race class, device side)
+                _ = mags^  # past the drain (step-33 race class, device side)
+                var m0 = Float64(hm[0])
+                if m0 < 0.0:
+                    m0 = -m0
+                var m1 = Float64(hm[1])
+                if m1 < 0.0:
+                    m1 = -m1
+                scale = Float32(
+                    choose_scale(m1 if m1 > m0 else m0, n_rows)
+                )
 
-            var planes: Tuple[
-                DeviceBuffer[DType.float32], DeviceBuffer[DType.float32]
-            ]
-            comptime if SYM_BUF_ARENA:
-                # the pool's two planes instead of two n_rows buffers per tree
-                planes = sym_split_planes(ctx, stats, n_rows, sym_pool[0])
-            else:
-                planes = split_stat_planes(ctx, stats, n_rows)
+            var planes = split_stat_planes(ctx, stats, n_rows)
             # lane/sym-quality: the gradient plane onto the tree's grid, as
             # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
             # only where the scale above is a real one
@@ -5623,34 +5442,20 @@ def fit_with_test(
             # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (a
             # full-depth tree's final subsets as the partition); code recoverable at b639a2bd2.
             # Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
-            var sym_pooled_partition = False
-            comptime if SYM_BUF_ARENA:
-                # the pool's partitioner: the bins land in its `bins`,
-                # one drain (the bounds readback), no allocation and no
-                # keep-alive drain
-                sym_pooled_partition = True
-                sym_compute_bins_pooled(
-                    ctx, layout_for_test, splits, len(splits), lc,
-                    n_rows, sym_pool[0],
-                )
-                var sym_part = sym_pool[0].parts.partition(
-                    ctx, n_rows, 1 << len(splits)
-                )
-                sizes = sym_part.sizes.copy()
-                leaf_offsets = sym_part.offsets.copy()
-                row_index = sym_part.row_index.copy()
-            if not sym_pooled_partition:
-                var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-                compute_bins_for_model(
-                    ctx, layout_for_test, splits, len(splits), lc, n_rows,
-                    d_bins,
-                )
-                var part = partition_from_bins(
-                    ctx, d_bins, n_rows, 1 << len(splits)
-                )
-                sizes = part.sizes.copy()
-                leaf_offsets = part.offsets.copy()
-                row_index = part.row_index.copy()
+            # TOMBSTONE: MOJOLEARN_SYM_BUF_ARENA (NEUTRAL: rab7-symbufarena 1000-taxi -0.2%; F12 M3 B/A 0.93..1.01 mixed) pooled partitioner
+            # deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 0f457a0c03.
+            # Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
+            var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+            compute_bins_for_model(
+                ctx, layout_for_test, splits, len(splits), lc, n_rows,
+                d_bins,
+            )
+            var part = partition_from_bins(
+                ctx, d_bins, n_rows, 1 << len(splits)
+            )
+            sizes = part.sizes.copy()
+            leaf_offsets = part.offsets.copy()
+            row_index = part.row_index.copy()
             sym_rows = row_index.copy()
             # TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (one
             # Newton step from the searcher's statistics); code recoverable at b639a2bd2.
@@ -5863,63 +5668,25 @@ def fit_with_test(
         # to the held-out cursor. One tree at a time, through the
         # ROW-WISE apply, because the partition-wise one only knows rows
         # the tree was grown on.
-        comptime if GBDT_EVAL_FUSED:
-            # lane/apple-fast-sym-feat: with a detector that cannot stop
-            # the fit, the held-out loss stays on the device and is read
-            # back once per `_EVAL_FV_SLOTS` trees (and after the loop).
-            # The packed apply rewrites `h_vals` each tree without a drain
-            # of its own: the previous tree's upload has completed because
-            # this iteration's leaf values were read back to the host
-            # (a drain) before this tree could be appended to the model.
-            if has_test and not detector.is_active():
-                _apply_last_tree_to_test(
-                    ctx, model, layout_for_test, test.value(), approx_dim,
-                    learning_rate,
-                )
-                var slot = len(test_losses) % _EVAL_FV_SLOTS
-                _test_loss_enqueue(
-                    ctx, test.value(), objective, num_classes, alpha,
-                    logloss_border, approx_dim, slot,
-                )
-                test_losses.append(Float64(0.0))
-                if slot == _EVAL_FV_SLOTS - 1:
-                    _test_loss_flush(
-                        ctx, test.value(), test_losses, detector,
-                        _EVAL_FV_SLOTS,
-                    )
-            elif has_test:
-                _apply_last_tree_to_test(
-                    ctx, model, layout_for_test, test.value(), approx_dim,
-                    learning_rate,
-                )
-                var t_loss = _test_loss(
-                    ctx, test.value(), objective, num_classes, alpha,
-                    logloss_border, approx_dim,
-                )
-                test_losses.append(t_loss)
-                # `DetectOverfitting(testError, detector, ...)`
-                # (`overfitting_detector.h:25-34`)
-                detector.add_error(t_loss)
-                if detector.is_need_stop():
-                    stopped_early = True
-                    break
-        else:
-            if has_test:
-                _apply_last_tree_to_test(
-                    ctx, model, layout_for_test, test.value(), approx_dim,
-                    learning_rate,
-                )
-                var t_loss = _test_loss(
-                    ctx, test.value(), objective, num_classes, alpha,
-                    logloss_border, approx_dim,
-                )
-                test_losses.append(t_loss)
-                # `DetectOverfitting(testError, detector, ...)`
-                # (`overfitting_detector.h:25-34`)
-                detector.add_error(t_loss)
-                if detector.is_need_stop():
-                    stopped_early = True
-                    break
+        # TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL) deferred held-out loss deleted 2026-11-15 by
+        # lane/expdel-05-trees; code recoverable at 70801eb24c.
+        # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
+        if has_test:
+            _apply_last_tree_to_test(
+                ctx, model, layout_for_test, test.value(), approx_dim,
+                learning_rate,
+            )
+            var t_loss = _test_loss(
+                ctx, test.value(), objective, num_classes, alpha,
+                logloss_border, approx_dim,
+            )
+            test_losses.append(t_loss)
+            # `DetectOverfitting(testError, detector, ...)`
+            # (`overfitting_detector.h:25-34`)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
 
         # the device `functionValue` read alongside this iteration's
         # gradients: the loss AFTER THE PREVIOUS TREE (their accumulation
@@ -5945,12 +5712,6 @@ def fit_with_test(
             ctx, est_ws, model, deferred_splits, has_deferred_tree,
             approx_dim, learning_rate, not_pd_total, trace, stage_times,
         )
-    comptime if GBDT_EVAL_FUSED:
-        if has_test and not detector.is_active():
-            _test_loss_flush(
-                ctx, test.value(), test_losses, detector,
-                len(test_losses) % _EVAL_FV_SLOTS,
-            )
     loop_times.stop_host("fit_total", t_loop)
     loop_times.report()
 

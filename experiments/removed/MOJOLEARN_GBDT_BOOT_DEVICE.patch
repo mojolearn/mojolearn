@@ -1,0 +1,47 @@
+diff --git b/gbdt/gpu_data/sym_feat_switches.mojo a/gbdt/gpu_data/sym_feat_switches.mojo
+index 276bf57c02..8b7ffc3e76 100644
+--- b/gbdt/gpu_data/sym_feat_switches.mojo
++++ a/gbdt/gpu_data/sym_feat_switches.mojo
+@@ -1,10 +1,10 @@
+ """lane/apple-fast-sym-feat (2026-10-03): the A/B switches of the symmetric
+ feature set outside histograms and leaf estimation (quantization, index
+-build, held-out arm, predict). Every switch is compiled
++build, held-out arm, predict, bootstrap seeds). Every switch is compiled
+ ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
+ and is OFF by default, so IDENTICAL (and FAST on any other vendor) compiles
+ main's code unchanged. One module so `train.mojo`, `gls_borders_device.mojo`,
+-`doc_parallel_boosting.mojo` and `resident_model.mojo`
++`doc_parallel_boosting.mojo`, `resident_model.mojo` and `bootstrap.mojo`
+ read the same flags without importing each other."""
+ from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+@@ -78,7 +78,13 @@ comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
+ comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
+     is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]()
+ )
+-# TOMBSTONE: MOJOLEARN_GBDT_BOOT_DEVICE (NEUTRAL: rab7-gbdtbootdevice istella -0.2%; its device seed fill is every
+-# tier's default since cpu2-l6-bindings, so the switch read nothing) deleted 2026-11-15 by lane/expdel-05-trees; code
+-# recoverable at 2f51f8b97d.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch
++#: `-D MOJOLEARN_GBDT_BOOT_DEVICE`: the 65,536 bootstrap seeds are filled
++#: by one launch (`bootstrap_seed_fill_kernel`, splitmix64 of
++#: `base + (i + 1) * golden`, the host loop's exact values) instead of a
++#: host loop, a pinned upload and a drain.
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
++#: source), never timed.
++comptime GBDT_BOOT_DEVICE = SYM_FEAT_FAST_APPLE and (
++    is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"]()
++)
+diff --git b/gbdt/gpu_util/kernel/bootstrap.mojo a/gbdt/gpu_util/kernel/bootstrap.mojo
+index daf413d318..02861342bb 100644
+--- b/gbdt/gpu_util/kernel/bootstrap.mojo
++++ a/gbdt/gpu_util/kernel/bootstrap.mojo
+@@ -95,6 +95,7 @@ from std.memory import stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
++from gbdt.gpu_data.sym_feat_switches import GBDT_BOOT_DEVICE
+ 
+ from gbdt.gpu_util.kernel.random_gen import (
+     next_poisson_f,

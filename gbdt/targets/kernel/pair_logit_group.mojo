@@ -134,7 +134,7 @@ comptime PAIRLOGIT_EST_REUSE = pairlogit_est_reuse_for[TARGET_COLUMN]()
 def pl_group_narrow_for[column: Int]() -> Bool:
     """Lane af-sym-multi, FAST + Apple default since 2026-10-04 (rollback
     `-D MOJOLEARN_PL_GROUP_NARROW_OFF`; the old `-D MOJOLEARN_PL_GROUP_NARROW`
-    and `-D MOJOLEARN_SYM_MULTI_ALL` change nothing): the group kernel runs on
+    changes nothing): the group kernel runs on
     128-thread blocks instead of 256. Istella's queries hold ~103 documents,
     so a 256-thread block leaves four of its eight SIMD groups idle through
     every tile loop and barrier; at 128 the idle half is gone and twice the

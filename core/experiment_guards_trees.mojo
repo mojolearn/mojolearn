@@ -68,6 +68,30 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_IDN_ADA_SESSION_OFF, the IDENTICAL escape from the AdaBoost members' data session (the session moves no bit); every build opens the session and a GPU binary runs every tree member's round on the device; code at 5b5490960d; see docs/TOMBSTONES.md"
     # integ-w6 (2026-11-09): a retired model-selection define; CalibratedClassifierCV (bindings/trees_public_meta_door.mojo) is in this family.
     comptime assert not is_defined["MOJOLEARN_MSEL_UNITS_SERIAL"](), "removed 2026-11-09 (integ-w6, integ/pre-0867-w3; code at lane/p3-msel-parallel-and-process-pool@9d7f5a2af9): MSEL_UNITS_SERIAL (every CV unit on the calling thread) is redundant: units whose member fits run on a GPU run one at a time by default (bindings/native_unit_threads.mojo native_unit_device_workers); -D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL is the parallel-GPU arm (docs/TOMBSTONES.md)"
+    # Lane expdel-05-trees (2026-11-15): Apple FAST GBDT/SYM losers and a superseded old path (docs/plans/
+    # EXPERIMENT_DELETIONS_2026-11-15.md, docs/TOMBSTONES.md "Lane expdel-05-trees"); code recoverable at each line's sha.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_FEAT_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_FEAT_ALL, the FAST Apple umbrella of the six symmetric feature-set switches, was NEUTRAL: rab4-symfeat istella -1.3%, taxi -0.1%, quality noise; the switches it kept keep their own defines; code at 54b6a264fc; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch
+    comptime assert not is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_GBDT_BOOT_DEVICE, the FAST Apple device bootstrap seed fill, was NEUTRAL: rab7-gbdtbootdevice istella -0.2%; the device seed fill is every build's default, the switch read nothing; code at 2f51f8b97d; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
+    comptime assert not is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_GBDT_EVAL_SKIP_EMPTY, the FAST Apple one-word held-out index for an empty eval set, was NEUTRAL: rab7-gbdtevalskipem istella +0.0%, taxi +0.4%; code at 8815b00d75; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_GBDT_EVAL_FUSED"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_GBDT_EVAL_FUSED, the FAST Apple packed held-out apply and deferred held-out loss readback, was NEUTRAL: rab7-gbdtevalfused istella 14752.15 -> 14703.82 ms (-0.3%); code at 70801eb24c; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_HIST_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_HIST_ALL, the FAST Apple umbrella of SYM_SORT_SWAP + SYM_RESOLVE_BLOCK, was NEUTRAL: rab4-symhist istella -0.1%, taxi -0.2%, quality noise; code at 24c9108159; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_SORT_SWAP"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_SORT_SWAP, the FAST Apple one-pass level sort with a handle swap, was NEUTRAL: rab7-symsortswap istella +0.3%, taxi +0.1%; code at 1805cb6b73; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_ITER_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_ITER_ALL, the FAST Apple umbrella of SYM_BUF_ARENA, was NEUTRAL: rab4-symiter 1000-taxi +0.2%, quality identical; code at a768195223; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_BUF_ARENA"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_BUF_ARENA, the FAST Apple per-fit buffer pool of the pointwise symmetric arm, was NEUTRAL: rab7-symbufarena 1000-taxi 18897.66 -> 18865.75 ms (-0.2%); F12 M3 B/A 0.93..1.01 mixed; code at 0f457a0c03; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_MULTI_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_MULTI_ALL, the FAST Apple umbrella of YR_TASK_FUSED (its PL_GROUP_NARROW part is the default on its own), was NEUTRAL: rab4-symmulti yetirank 3390.8 -> 3395.46 ms (+0.1%); code at 16f9e02852; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_YR_TASK_FUSED"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_YR_TASK_FUSED, the FAST Apple one-launch YetiRank call, was NEUTRAL: rab7-yrtaskfused yetirank 3386.79 -> 3394.43 ms (+0.2%), ndcg10 .680466 -> .680553; code at 41f0634a67; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_KSHAP_FAST_BATCH_OFF, the FAST Apple rollback of the batched kernel / permutation SHAP buffers, is removed: KSHAP_FAST_BATCH was KEPT (kap2-kshap-batch-istella 27,011 -> 15,325 ms, kap2-pshap-batch-istella 34,198 -> 28,236 ms, M3); every FAST Apple build batches; code at 073a9cc375; see docs/TOMBSTONES.md"
     return True
 
 

@@ -637,6 +637,17 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_SEQ_REG_OFF`](#mojolearn_idn_seq_reg_off) | Series on x_sequence (IDENTICAL theta register form) | superseded (IDN_SEQ_REG promoted) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_REG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_VAR_COOP_OFF`](#mojolearn_seq_fast_var_coop_off) | Series on x_sequence (Apple FAST VAR coop folds) | superseded (SEQ_FAST_VAR_COOP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch) |
 | [`MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF`](#mojolearn_idn_samba_resident_step_off) | Neural (IDENTICAL Samba resident forward and train step) | superseded (IDN_SAMBA_RESIDENT_STEP promoted) | 2026-11-15 | [MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch) |
+| [`MOJOLEARN_SYM_FEAT_ALL`](#mojolearn_sym_feat_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_FEAT_ALL.patch](../experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch) |
+| [`MOJOLEARN_GBDT_BOOT_DEVICE`](#mojolearn_gbdt_boot_device) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_BOOT_DEVICE.patch](../experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch) |
+| [`MOJOLEARN_GBDT_EVAL_SKIP_EMPTY`](#mojolearn_gbdt_eval_skip_empty) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch) |
+| [`MOJOLEARN_GBDT_EVAL_FUSED`](#mojolearn_gbdt_eval_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_FUSED.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch) |
+| [`MOJOLEARN_SYM_HIST_ALL`](#mojolearn_sym_hist_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_HIST_ALL.patch](../experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch) |
+| [`MOJOLEARN_SYM_SORT_SWAP`](#mojolearn_sym_sort_swap) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_SORT_SWAP.patch](../experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch) |
+| [`MOJOLEARN_SYM_ITER_ALL`](#mojolearn_sym_iter_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_ITER_ALL.patch](../experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch) |
+| [`MOJOLEARN_SYM_BUF_ARENA`](#mojolearn_sym_buf_arena) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_BUF_ARENA.patch](../experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch) |
+| [`MOJOLEARN_SYM_MULTI_ALL`](#mojolearn_sym_multi_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_MULTI_ALL.patch](../experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch) |
+| [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
+| [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6005,3 +6016,110 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: training/neural_identical_experiments.mojo, bindings/_mojolearn_training.mojo (comments); grid entry `samba_resident_step` moved to `removed` in samba-resident.json.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `5bfce25001`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo` and move the entry back to `controls` in `experiments/six_lane_integration/grid_controls/samba-resident.json`.
+## Lane expdel-05-trees: GBDT and SYM Apple FAST losers (2026-11-15)
+
+Deleted from the plan docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-05-trees), one commit per
+define, each evidence row read first. Every arm here was default off (or, for `_OFF`, the non-default old path): no
+bits change on any vendor or the host column, no board row needs re-timing.
+
+### MOJOLEARN_SYM_FEAT_ALL
+
+- Tried: one umbrella define turning on the six FAST + Apple symmetric feature-set switches (GBDT_INDEX_PACK_DEVICE, GBDT_QUANT_DEVICE, GBDT_EVAL_SKIP_EMPTY, GBDT_EVAL_FUSED, GBDT_PREDICT_PACKED, GBDT_BOOT_DEVICE) together.
+- Verdict: NEUTRAL. rab4-symfeat (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella -1.3%, taxi -0.1%, quality noise; stays off. Apple FAST only (no NVIDIA / AMD arm). Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `54b6a264fc`. Patch: `experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 192, 216, 1300; appended row in the "Lane expdel-05-trees" section.
+- Note: Only the umbrella went: GBDT_INDEX_PACK_DEVICE, GBDT_QUANT_DEVICE and GBDT_PREDICT_PACKED keep their own defines (prerequisites of the unmeasured AFT_G06 / AFT_P05 cards; KEEP-OPEN in the plan).
+
+### MOJOLEARN_GBDT_BOOT_DEVICE
+
+- Tried: the 65,536 bootstrap seeds filled by one device launch (`bootstrap_seed_fill_kernel`) instead of a host loop, a pinned upload and a drain, FAST + Apple only.
+- Verdict: NEUTRAL. rab7-gbdtbootdevice (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella 14724.09 -> 14693.21 ms (-0.2%); stays off. The device seed fill itself became every tier's default on 2026-10-04 (cpu2-l6-bindings, `create_bootstrap_seeds`), so the switch had no branch left: only the comptime and its import were deleted. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `2f51f8b97d`. Patch: `experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/gpu_util/kernel/bootstrap.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 167, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_GBDT_EVAL_SKIP_EMPTY
+
+- Tried: with no eval set, a one-word held-out compressed index instead of the one-row dummy `_build_cindex_from_floats` build (`_sym_feat_test_cindex`), FAST + Apple only.
+- Verdict: NEUTRAL. rab7-gbdtevalskipem (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella +0.0%, taxi +0.4%; stays off. The caller now calls `_build_cindex_from_floats` directly, as the default arm did. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `8815b00d75`. Patch: `experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/train.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 169, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_GBDT_EVAL_FUSED
+
+- Tried: the held-out arm's per-tree apply as ONE packed upload (split records and leaf values in one pinned region of `h_vals`) instead of six, and, with an overfitting detector that cannot stop the fit, the per-tree held-out loss left on the device in 1024 slots and read back once per 1024 trees (`_test_loss_flush`), FAST + Apple only.
+- Verdict: NEUTRAL. rab7-gbdtevalfused (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella 14752.15 -> 14703.82 ms (-0.3%); stays off. Deleted with it: `_EVAL_FV_SLOTS`, `_EVAL_PACK_WORDS`, the packed branch of `_apply_last_tree_to_test`, `_test_loss_flush` and the loop's deferred arm; `GBDT_DEVICE_ROUNDS_BUILD` no longer names it. `_test_loss_enqueue` and `_test_loss_div_kernel` stay (the default `_test_loss` and the executor's `tree_op_heldout_loss` use them). Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `70801eb24c`. Patch: `experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 168, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_HIST_ALL
+
+- Tried: one umbrella define turning on the FAST + Apple symmetric split-search switches SYM_SORT_SWAP + SYM_RESOLVE_BLOCK (narrowed from the old six-switch umbrella, a noise DROP on 2026-10-03).
+- Verdict: NEUTRAL. rab4-symhist (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella -0.1%, taxi -0.2%, quality noise; stays off. Apple FAST only. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `24c9108159`. Patch: `experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/kernel/sym_fast.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 194, 218, 1299; appended row in the "Lane expdel-05-trees" section.
+- Note: Only the umbrella went here; SYM_SORT_SWAP is deleted in its own commit; SYM_RESOLVE_BLOCK keeps its define (the prerequisite of the unmeasured AFCL_T05 card in gbdt/apple_fast_classical.mojo; KEEP-OPEN).
+
+### MOJOLEARN_SYM_SORT_SWAP
+
+- Tried: the level split's one-bit radix pass written into `tmp_bins` / `tmp_indices` and the handles swapped instead of copied back (two `copy_u32_kernel` launches per level fewer, `split_subsets_from_desc`), FAST + Apple only.
+- Verdict: NEUTRAL. rab7-symsortswap (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella +0.3%, taxi +0.1%; stays off. The `_radix_pass` import went with it. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `1805cb6b73`. Patch: `experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/kernel/sym_fast.mojo`, `gbdt/methods/pointwise_optimization_subsets.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 203, 227, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_ITER_ALL
+
+- Tried: one umbrella define for the FAST + Apple per-iteration fixed-cost switches of the pointwise SymmetricTree arm, narrowed to SYM_BUF_ARENA (the old four-switch umbrella was a DROP on 2026-10-03, auc .980163 -> .980122).
+- Verdict: NEUTRAL. rab4-symiter (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric-1000 taxi +0.2%, quality identical; stays off. Apple FAST only. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `a768195223`. Patch: `experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/sym_iter_fast.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 196, 220, 1301; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_BUF_ARENA
+
+- Tried: a per-fit pool of one (`SymIterPool`) for every buffer the pointwise SymmetricTree arm made per tree (the two split planes, the bins staging, the leaf partitioner, the oracle's host staging, the searcher's three fold-arm dummies) and the magnitudes readback into the fit's `h_mags`, FAST + Apple only.
+- Verdict: NEUTRAL. rab7-symbufarena (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric-1000 taxi 18897.66 -> 18865.75 ms (-0.2%); F12/arena M3 2026-10-06: 6 scored caller times, B/A 0.9336..1.0082 (mixed/regressing); stays off. Deleted with it: `SymIterPool`, `sym_pool_get`, `sym_split_planes`, `sym_scale_from_mags`, `sym_compute_bins_pooled`, the `SYM_ITER_ANY` alias, the fit's `h_mags` host buffer (read only by this arm), the pooled oracle host staging and the searcher's pooled-dummy arm. `sym_objective_is_pointwise` stays in `gbdt/methods/sym_iter_fast.mojo` (the default leaf estimator and the device rounds read it). Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `0f457a0c03`. Patch: `experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/sym_iter_fast.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`, `gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 187, 211, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_MULTI_ALL
+
+- Tried: one umbrella define for the FAST + Apple multiclass / pairlogit / yetirank switches, narrowed to PL_GROUP_NARROW + YR_TASK_FUSED; PL_GROUP_NARROW then became the default on its own and the umbrella no longer selected it, so it selected YR_TASK_FUSED only.
+- Verdict: NEUTRAL. rab4-symmulti (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-rank-yetirank istella 3390.8 -> 3395.46 ms (+0.1%); stays off. Apple FAST only. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `16f9e02852`. Patch: `experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/targets/kernel/yeti_rank.mojo`, `gbdt/targets/kernel/pair_logit_group.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 198, 222, 1302; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_YR_TASK_FUSED
+
+- Tried: one launch per YetiRank call (`yeti_rank_task_fused_kernel` via `launch_yeti_rank_fused`): the point load, the per-query unit-weight means, the centering, the block kernel's draws / sort / pairs and the row scatter in one task block, the group ids computed once per fit, FAST + Apple only.
+- Verdict: NEUTRAL. rab7-yrtaskfused (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-rank-yetirank istella 3386.79 -> 3394.43 ms (+0.2%), ndcg10 .680466 -> .680553; stays off. Deleted with it: `yeti_task_fused_for`, `YETI_TASK_FUSED`, the kernel, its launcher, the per-fit group-id launch in `make_yeti_rank_target_buffers` and the per-task magnitude count in `doc_parallel_boosting.mojo`. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `41f0634a67`. Patch: `experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/targets/kernel/yeti_rank.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 204, 228, 1303; appended row in the "Lane expdel-05-trees" section.
+- Note: The unmeasured AFT_N10 card (experiments/apple_fast_trees/N.json) named the task-fused kernel as one of its two sites; its block-kernel site stays, so N10 still has an arm.
+
+### MOJOLEARN_KSHAP_FAST_BATCH_OFF
+
+- Tried: the FAST + Apple rollback of KSHAP_FAST_BATCH (the explainers' synthetic matrix in one pooled device buffer, a reused host buffer, KernelExplainer's solve once over many rows): it sent a FAST + Apple build back to the per-chunk path.
+- Verdict: removed (old path; KSHAP_FAST_BATCH KEPT). KSHAP_FAST_BATCH KEPT on the M3 Ultra: kap2-kshap-batch-istella kernel-shap istella 27,011 -> 15,325 ms (-43.3%), rel_error_vs_exact 4.378e-09 both arms; kap2-pshap-batch-istella permutation-shap istella 34,198 -> 28,236 ms, rel error identical. Apple FAST only, so the M3 A/B is the whole record (no NVIDIA / AMD arm). Only the define read went: the per-chunk path is the path of every IDENTICAL and non-Apple build and stays. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `073a9cc375`. Patch: `experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `xtrees/agnostic_device.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 691, 692; appended row in the "Lane expdel-05-trees" section.
