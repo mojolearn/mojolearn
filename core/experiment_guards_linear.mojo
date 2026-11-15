@@ -126,6 +126,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_RIDGE_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_RIDGE_RESIDENT_OFF (rollback of the Ridge resident eig fallback to status 1 and the Python glue) is gone; the resident fallback is the IDENTICAL path"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_GRAM_FF_FALLBACK_OFF (rollback of the Ridge float-float Gram second chance to the direct eig route) is gone; the float-float fallback is the IDENTICAL path"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_GFF_GRAM_TILED_OFF (rollback of the float-float leaf Gram to the per-cell gff_leaf_kernel) is gone; the register-tiled leaf Gram is the IDENTICAL path"
     return True
 
 

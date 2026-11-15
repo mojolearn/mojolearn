@@ -722,6 +722,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_RIDGE_RESIDENT_OFF`](#mojolearn_idn_ridge_resident_off-old-path-deleted-2026-11-15) | Linear (Ridge resident eig fallback at the Gram gate, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED fg2, _OFF ridge istella NV 2.22x / AMD 1.28x slower) | 2026-11-15 | [MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch) |
 | [`MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF`](#mojolearn_idn_jacobi_round_robin_off-old-path-deleted-2026-11-15) | Linear / Decomposition (round-robin Jacobi of the linear models' eig routes, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, ridge istella NV 0.25x / AMD 0.14x) | 2026-11-15 | [MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch) |
 | [`MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF`](#mojolearn_idn_gram_ff_fallback_off-old-path-deleted-2026-11-15) | Linear (float-float Gram second chance for a gate-rejected Ridge fit, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, ridge istella NV 0.96x / AMD 0.51x) | 2026-11-15 | [MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch) |
+| [`MOJOLEARN_IDN_GFF_GRAM_TILED_OFF`](#mojolearn_idn_gff_gram_tiled_off-old-path-deleted-2026-11-15) | Linear (register-tiled float-float leaf Gram, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED w2-decide-linalg, ridge istella 0.917) | 2026-11-15 | [MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6974,3 +6975,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `438e34e369`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch`, then delete the `MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `gram_ff_fallback` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_GFF_GRAM_TILED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_GFF_GRAM_TILED` (C1, lane ridge-ff-tiled) to the per-cell `gff_leaf_kernel` in the float-float leaf Gram of IDN_GRAM_FF_FALLBACK. `IDN_GFF_GRAM_TILED` is now `IDN_GRAM_FF_FALLBACK` (read by glm/impl/gram_solve.mojo). With this commit fg_linear_controls.mojo reads no define (the `is_defined` import goes).
+- **Verdict**: PROMOTED 2026-10-11 (lane w2-decide-linalg, main c8ef6c66d, one run per arm, NV == AMD digests): ridge istella 0.917 (NV 0.857 / AMD 0.977; v0135/a1717 vs v0134/a1716), ridge taxi 0.973 (v0080/a1662 vs v0079/a1661); ols / ard / bayesian-ridge / ridge-cv 1.00; same bits. No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `bdbba2b676`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch`, then delete the `MOJOLEARN_IDN_GFF_GRAM_TILED_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `gff_gram_tiled` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

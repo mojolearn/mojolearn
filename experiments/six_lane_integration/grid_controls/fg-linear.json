@@ -4,28 +4,7 @@
  "branch": "lane/fg-linear",
  "head": "a5101cb29",
  "head_note": "lane fg-linear (flagship gaps, 2026-10-09): code only, nothing compiled, run or queued by the lane. Read file docs/plans/flagship-gaps-20261009/read_linear.md.",
- "controls": {
-  "gff_gram_tiled": {
-   "define": "MOJOLEARN_IDN_GFF_GRAM_TILED_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_GFF_GRAM_TILED",
-    "glm/impl/gram_solve.mojo:gff_leaf_tiled_kernel",
-    "glm/impl/gram_solve.mojo:_gs_ff_fit"
-   ],
-   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host, unchanged)",
-   "bits_change": false,
-   "status": "promoted 2026-10-11 (lane w2-decide-linalg, d9441e439; A/B on main c8ef6c66d, same box, one run per arm): IDENTICAL default; ridge istella 0.917 (NV 0.857 / AMD 0.977; nv2 v0135 vs v0134, amd a1717 vs a1716), ridge taxi 0.973 (v0080/a1662 vs v0079/a1661), ols/ard/bayesian-ridge/ridge-cv 1.00, same bits. -D MOJOLEARN_IDN_GFF_GRAM_TILED_OFF restores gff_leaf_kernel.",
-   "notes": "C1 (lane ridge-ff-tiled 2026-10-11). The float-float leaf Gram (the ff fallback ridge istella takes) as 64 x 64 register tiles of the extended [X|y] upper triangle, 4 x 4 cells a thread, 16 rows of centered words staged in shared memory per chunk; each cell's chain unchanged (no bit moves). Expected ridge istella NV 534 -> ~250 ms, AMD 455 -> ~200. ID check owed (digests must equal default)."
-  }
- },
+ "controls": {},
  "algorithms": {
   "classical:ols": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
@@ -36,9 +15,7 @@
   "more:ridge": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: Ridge.fit -> linear_gram_fit (linear_pinned_upload) -> gate reject -> [gram_ff_fallback: _gs_ff_fit] -> [ridge_resident: _gs_ridge_resident_fallback -> ridge_eig_scratch_traced -> svd_eig_scratch_traced (jacobi_round_robin)] -> else status 1 -> Python glue + ridge_fit_host (linear_pinned_upload, jacobi_round_robin)",
-   "controls": [
-    "gff_gram_tiled"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "note": "all four act only through classical-structural's linear_gram_solve (on by default); ridge_resident / gram_ff_fallback / jacobi_round_robin matter only where the fp32 gate rejects (istella), linear_pinned_upload on both datasets"
   },
@@ -104,6 +81,11 @@
    "define": "MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF",
    "control": "gram_ff_fallback",
    "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the PROMOTED default (fg2: ridge istella NV 0.96x / AMD 0.51x). Code recoverable at 438e34e369."
+  },
+  {
+   "define": "MOJOLEARN_IDN_GFF_GRAM_TILED_OFF",
+   "control": "gff_gram_tiled",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the PROMOTED default (ridge istella NV 0.857 / AMD 0.977). Code recoverable at bdbba2b676."
   }
  ]
 }
