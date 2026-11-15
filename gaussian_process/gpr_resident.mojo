@@ -32,7 +32,6 @@ IDENTICAL only, always on: bit 1 of `gp_idn_caps` is set on every IDENTICAL buil
 
 from std.atomic import Atomic
 from max.gpu import block_idx, thread_idx
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -95,9 +94,9 @@ from gemm.contract import OP_TN
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, always on.
 # TOMBSTONE: MOJOLEARN_IDN_GPR_PTR_OFF (no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at b2a4adf292.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
-comptime GPR_IDN_PTR = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; the resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 508bbde394.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-07-base.patch
+comptime GPR_IDN_PTR = _CTX_MODE == _CTX_IDENTICAL
 
 comptime _GP = MutPointer[Float32, MutAnyOrigin]
 comptime _GI = MutPointer[Int32, MutAnyOrigin]

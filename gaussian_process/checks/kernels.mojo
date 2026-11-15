@@ -756,8 +756,10 @@ def gp_kernel_diag(spec: GPKernelSpec) raises -> Float32:
 #: Each quotient is rounded to float32 before the subtraction either way
 #: (DEVIATION 1753 says so and `check_kernels_vs_oracle`'s oracle
 #: materializes the scaled copy), so no bit moves on any column.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; the resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 508bbde394.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-07-base.patch
 comptime GP_IDN_PRESCALE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_PRESCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GP_PRESCALE_OFF"]()
 )
 
 

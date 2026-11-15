@@ -1,0 +1,66 @@
+diff --git b/gaussian_process/checks/kernels.mojo a/gaussian_process/checks/kernels.mojo
+index 5f419b9850..ef5efa9d98 100644
+--- b/gaussian_process/checks/kernels.mojo
++++ a/gaussian_process/checks/kernels.mojo
+@@ -756,10 +756,8 @@ def gp_kernel_diag(spec: GPKernelSpec) raises -> Float32:
+ #: Each quotient is rounded to float32 before the subtraction either way
+ #: (DEVIATION 1753 says so and `check_kernels_vs_oracle`'s oracle
+ #: materializes the scaled copy), so no bit moves on any column.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; the resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 508bbde394.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-07-base.patch
+ comptime GP_IDN_PRESCALE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_GP_PRESCALE_OFF"]()
++    is_defined["MOJOLEARN_IDN_GP_PRESCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ 
+diff --git b/gaussian_process/gpc_ovr.mojo a/gaussian_process/gpc_ovr.mojo
+index cd69462d59..ed6334408a 100644
+--- b/gaussian_process/gpc_ovr.mojo
++++ a/gaussian_process/gpc_ovr.mojo
+@@ -36,6 +36,7 @@ IDENTICAL only, always on: the per-class binding calls are not a route.
+ """
+ 
+ from std.atomic import Atomic
++from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+@@ -81,9 +82,9 @@ from max.gpu import block_idx, thread_idx
+ #: fam2-kernel-gp (2026-10-04), IDENTICAL, always on.
+ # TOMBSTONE: MOJOLEARN_IDN_GPC_OVR_OFF (no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at abe1b14d9d.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; the resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 508bbde394.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-07-base.patch
+-comptime GPC_IDN_OVR = _CTX_MODE == _CTX_IDENTICAL
++comptime GPC_IDN_OVR = _CTX_MODE == _CTX_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF (superseded by the device Newton loop) deleted 2026-11-09 by lane/n8-gp-krr-smo; code recoverable at f59d913b0b.
+ # Restore: git apply experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch
+diff --git b/gaussian_process/gpr_resident.mojo a/gaussian_process/gpr_resident.mojo
+index 8fdd822ee2..1de3171899 100644
+--- b/gaussian_process/gpr_resident.mojo
++++ a/gaussian_process/gpr_resident.mojo
+@@ -32,6 +32,7 @@ IDENTICAL only, always on: bit 1 of `gp_idn_caps` is set on every IDENTICAL buil
+ 
+ from std.atomic import Atomic
+ from max.gpu import block_idx, thread_idx
++from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+@@ -94,9 +95,9 @@ from gemm.contract import OP_TN
+ #: fam2-kernel-gp (2026-10-04), IDENTICAL, always on.
+ # TOMBSTONE: MOJOLEARN_IDN_GPR_PTR_OFF (no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at b2a4adf292.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; the resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 508bbde394.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-07-base.patch
+-comptime GPR_IDN_PTR = _CTX_MODE == _CTX_IDENTICAL
++comptime GPR_IDN_PTR = _CTX_MODE == _CTX_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ comptime _GP = MutPointer[Float32, MutAnyOrigin]
+ comptime _GI = MutPointer[Int32, MutAnyOrigin]
