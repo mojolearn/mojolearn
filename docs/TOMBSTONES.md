@@ -762,6 +762,7 @@ in the tables after the sections.
 | [`MOJOLEARN_MEASURE_I06_GQA`](#mojolearn_measure_i06_gqa-unmeasured-arm-deleted-2026-11-15) | Neural (I06 forward GQA reuse timing arm of the attention driver) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_MEASURE_I06_GQA.patch](../experiments/removed/MOJOLEARN_MEASURE_I06_GQA.patch) |
 | [`MOJOLEARN_MEASURE_I07_LIFETIME`](#mojolearn_measure_i07_lifetime-unmeasured-arm-deleted-2026-11-15) | Neural (I07 retained-estash lifetime timing arm of the attention driver) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_MEASURE_I07_LIFETIME.patch](../experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch) |
 | [`MOJOLEARN_TRAIN_LIVE_STATUS`](#mojolearn_train_live_status-unmeasured-arm-deleted-2026-11-15) | Neural (byte LM train step live-status candidate, I10) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_TRAIN_LIVE_STATUS.patch](../experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch) |
+| [`MOJOLEARN_IDN_TSQR_REUSE`](#mojolearn_idn_tsqr_reuse-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR immutable-factor reuse across RHS calls, I22) | removed (opt-in arm; component screening only (I22 source5b), never a full-operation A/B) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_REUSE.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7383,3 +7384,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c38a3b0613`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch`, then delete the `MOJOLEARN_TRAIN_LIVE_STATUS` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-seq-train-dedupe.json` control `train_live_status`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_TSQR_REUSE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the I22 immutable TSQR factor reuse across repeated RHS calls, as read by `experiments/performance_ideas/I22/reuse_check.mojo` and `I22/time.mojo`; both now factor once per RHS call (the default).
+- **Verdict**: I22 source5b recorded a component win only; no full-operation NVIDIA + AMD A/B was ever recorded (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c336036020`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch`, then delete the `MOJOLEARN_IDN_TSQR_REUSE` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
