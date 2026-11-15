@@ -75,8 +75,6 @@ from mamba.host.gen.modeling_mamba import (
 )
 from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
 
-from mamba.host.gen.mamba3_backward import (
-)
 # the result types and the scratch helpers stay with the device tree
 from mamba.host.gen.mamba3_prefill_backward import (
     IDN_M3_BWD_SKIP_DEAD,

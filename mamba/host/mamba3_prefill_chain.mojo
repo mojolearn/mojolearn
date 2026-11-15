@@ -79,8 +79,6 @@ from mamba.impl.modeling.modeling_mamba import (
 )
 from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
 
-from autograd.kernels.mamba3 import (
-)
 # the result types and the scratch helpers stay with the device tree
 from autograd.kernels.mamba3_prefill import (
     IDN_M3_BWD_SKIP_DEAD,
