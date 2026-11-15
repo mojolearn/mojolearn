@@ -42,10 +42,12 @@ comptime VSEARCH_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS
 #: table does not fit whole, so main evaluates every entry per candidate from
 #: device memory. The same fold on the same words: no bit moves.
 #: DEFAULT (FAST + Apple) since 2026-10-04, VSEARCH_ALL A/B above (ad265a028,
-#: 9/9 faster, recall identical); rollback `-D MOJOLEARN_PQ_LUT_TILED_OFF`.
+#: 9/9 faster, recall identical).
 #: Limits are the kernel's: pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <=
 #: LUT_MAX (threadgroup memory), checked at the launch; no dimension window.
-comptime PQ_LUT_TILED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_LUT_TILED_OFF"]()
+# TOMBSTONE: MOJOLEARN_PQ_LUT_TILED_OFF (old path; EXP:352 KEPT the tiled table as the FAST + Apple default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0912c8dee2.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_LUT_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PQ_LUT_TILED = VSEARCH_FAST_APPLE
 
 #: the IVF-PQ score and top-k in ONE launch per chunk of queries: one
 #: threadgroup per query walks its probed lists with the tiled table, keeps
