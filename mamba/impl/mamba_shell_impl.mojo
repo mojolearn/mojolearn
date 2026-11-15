@@ -12,7 +12,6 @@ from std.memory import bitcast, unsafe_memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined, get_defined_int
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
-from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
 from std.os import abort, getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -116,7 +115,9 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
 
 
-comptime M3_DIRECT_TRANSFER = not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"]()
+# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER (unmeasured old path: Mamba-3 transfers through host lists) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 9c516e8231.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER.patch
+comptime M3_DIRECT_TRANSFER = True
 
 
 def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
@@ -134,51 +135,45 @@ def _m3_upload_addr[wait: Bool = True](ctx: DeviceContext, addr: Int, n: Int) ra
     returns: the caller's array outlives the call, every reader is enqueued
     after it on the same in-order `ctx`, and the forward entry waits once
     at its end."""
-    comptime if not M3_DIRECT_TRANSFER:
-        return m3_upload(ctx, _m3_read_f32(addr, n))
-    else:
-        var src = _f32_ptr(addr)
-        var count = max(n, 1)
-        var dev = mamba_device_alloc(ctx, count)
-        # DeviceContext accepts ordinary host pointers; the Python frame
-        # retains each NumPy array until the synchronized copy completes.
-        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
-        if n > 0:
-            mamba_copy_in(ctx, dev, src, count)
-            comptime if wait:
-                ctx.synchronize()
-            return dev^
-        # n == 0: one +0.0 word staged through a host buffer.
-        var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-        ctx.synchronize()
-        if n > 0:
-            unsafe_memcpy(dest=host.unsafe_ptr(), src=src, count=n)
-        else:
-            host.unsafe_ptr().unsafe_store(0, Float32(0.0))
-        mamba_copy_in(ctx, dev, host.unsafe_ptr(), count)
-        ctx.synchronize()
-        _ = host^
+    var src = _f32_ptr(addr)
+    var count = max(n, 1)
+    var dev = mamba_device_alloc(ctx, count)
+    # DeviceContext accepts ordinary host pointers; the Python frame
+    # retains each NumPy array until the synchronized copy completes.
+    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
+    if n > 0:
+        mamba_copy_in(ctx, dev, src, count)
+        comptime if wait:
+            ctx.synchronize()
         return dev^
+    # n == 0: one +0.0 word staged through a host buffer.
+    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
+    ctx.synchronize()
+    if n > 0:
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+    else:
+        host.unsafe_ptr().unsafe_store(0, Float32(0.0))
+    mamba_copy_in(ctx, dev, host.unsafe_ptr(), count)
+    ctx.synchronize()
+    _ = host^
+    return dev^
 
 
 def _m3_download_addr[wait: Bool = True](ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int) raises:
     """`wait=False` (lane/neural-apple, 2026-09-28) enqueues the copy into
     the caller's array and returns; the caller waits once after its last
     download, before any buffer is released or the host reads."""
-    comptime if not M3_DIRECT_TRANSFER:
-        _m3_write_f32(addr, m3_download(ctx, buf, n))
+    var dst = _f32_ptr(addr)
+    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
+    if n == len(buf):
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
     else:
-        var dst = _f32_ptr(addr)
-        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
-        else:
-            var direct_view = buf.create_sub_buffer[DType.float32](0, n)
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=direct_view)
-        comptime if wait:
-            ctx.synchronize()
+        var direct_view = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=direct_view)
+    comptime if wait:
+        ctx.synchronize()
 
 
 
@@ -419,29 +414,16 @@ def _m3_load_weights[wait: Bool = True](ctx: DeviceContext, a: List[Int], dims: 
     var di = dims.d_inner
     var dip = dims.d_in_proj()
     var nh = dims.nheads
-    comptime if M3_DIRECT_TRANSFER:
-        var norm_w = _m3_upload_addr[wait](ctx, a[1], dm)
-        var w_in = _m3_upload_addr[wait](ctx, a[2], dip * dm)
-        var dt_bias = _m3_upload_addr[wait](ctx, a[3], nh)
-        var bnorm_w = _m3_upload_addr[wait](ctx, a[4], M3_D_STATE)
-        var cnorm_w = _m3_upload_addr[wait](ctx, a[5], M3_D_STATE)
-        var b_bias = _m3_upload_addr[wait](ctx, a[6], nh * M3_D_STATE)
-        var c_bias = _m3_upload_addr[wait](ctx, a[7], nh * M3_D_STATE)
-        var d_skip = _m3_upload_addr[wait](ctx, a[8], nh)
-        var w_out = _m3_upload_addr[wait](ctx, a[9], dm * di)
-        return Mamba3DeviceWeights(dims, norm_w^, w_in^, dt_bias^, bnorm_w^, cnorm_w^, b_bias^, c_bias^, d_skip^, w_out^)
-    else:
-        var w = Mamba3Weights(dims)
-        w.norm_w = _m3_read_f32(a[1], dm)
-        w.w_in = _m3_read_f32(a[2], dip * dm)
-        w.dt_bias = _m3_read_f32(a[3], nh)
-        w.bnorm_w = _m3_read_f32(a[4], M3_D_STATE)
-        w.cnorm_w = _m3_read_f32(a[5], M3_D_STATE)
-        w.b_bias = _m3_read_f32(a[6], nh * M3_D_STATE)
-        w.c_bias = _m3_read_f32(a[7], nh * M3_D_STATE)
-        w.d_skip = _m3_read_f32(a[8], nh)
-        w.w_out = _m3_read_f32(a[9], dm * di)
-        return Mamba3DeviceWeights(ctx, w)
+    var norm_w = _m3_upload_addr[wait](ctx, a[1], dm)
+    var w_in = _m3_upload_addr[wait](ctx, a[2], dip * dm)
+    var dt_bias = _m3_upload_addr[wait](ctx, a[3], nh)
+    var bnorm_w = _m3_upload_addr[wait](ctx, a[4], M3_D_STATE)
+    var cnorm_w = _m3_upload_addr[wait](ctx, a[5], M3_D_STATE)
+    var b_bias = _m3_upload_addr[wait](ctx, a[6], nh * M3_D_STATE)
+    var c_bias = _m3_upload_addr[wait](ctx, a[7], nh * M3_D_STATE)
+    var d_skip = _m3_upload_addr[wait](ctx, a[8], nh)
+    var w_out = _m3_upload_addr[wait](ctx, a[9], dm * di)
+    return Mamba3DeviceWeights(dims, norm_w^, w_in^, dt_bias^, bnorm_w^, cnorm_w^, b_bias^, c_bias^, d_skip^, w_out^)
 
 
 # TOMBSTONE: _mamba3_run, _mamba3_check_state_words, _mamba3_run_on, _mamba3_run_arena (the per-call Mamba-3 body: nine weight and ten state uploads, fifteen downloads per call) and the Mamba-3 decode session body (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 844ea17a80; code recoverable at 25e5650c14.
