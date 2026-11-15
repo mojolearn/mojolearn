@@ -332,6 +332,11 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 - Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
   Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
+- While this campaign runs it overrides every "NVIDIA and AMD" in the measurement and release rules (restated
+  2026-11-15: "forget about AMD for now"): a switch is decided, a measured winner is replaced, a fix wave is measured
+  and an owed A/B arm is timed on the NVIDIA L40S alone. No AMD box is rented and no AMD build is waited on. The
+  two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
+  Bits across vendors are unaffected: the release's one verification still covers every vendor.
 - Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
   GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
   read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
@@ -371,7 +376,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   known without the measurement. A fix that lands within the hour after a measurement starts is evidence the
   list was not read.
 - Work moves in waves: fix wave (every lane the findings call for, at once) -> one integration branch -> one
-  GitHub build -> one measurement on NVIDIA and AMD together -> read every flag -> the next fix wave. Never a
+  GitHub build -> one measurement (NVIDIA and AMD together; NVIDIA only during the pre-0.8.67 campaign, see
+  "3. Measurement") -> read every flag -> the next fix wave. Never a
   box run for one lane, one row or one family; never a second measurement of the same sha for rows that a later
   sha changes. Between waves the boxes come down.
 - The only measurement that may run with known fixes outstanding is a discovery screen whose purpose is to find
@@ -433,7 +439,7 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   `~/mojolearn-evidence/`.
 - **Use bash, not zsh,** for loops and variable expansion: zsh does not word-split `$FLAGS`.
 - **Final reply, short:** branch and head; one line per change with the cause as `file:line`; deletions; bit
-  changes; the A/B define; what it queued (box and id) and any RUN OWED; open doubts. No narrative, no diffs.
+  changes (and anything kept serial or duplicated to avoid one: there should be none); the A/B define; what it queued (box and id) and any RUN OWED; open doubts. No narrative, no diffs.
 - **Peer communication only for execution (Andrew, 2026-10-29).** Contact peers only to resolve ownership,
   coordinate a dependency, hand off required work or prevent conflicting changes; never for advice, reassurance or
   status. Put routine findings in handoff files.
@@ -441,6 +447,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit
   status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or
   infer full success from filtered output."
+- Every lane brief and spawn prompt also carries the bits reminder (Andrew, 2026-11-15): "Bits can change. They must
+  match across vendors and the host column within one version, never against older code. Take the faster or parallel
+  form, change every column together, and report 'bits change'." A lane that reports "bits unchanged" names what it
+  kept serial, slower or duplicated to get that; the orchestrator opens a lane for each such item the same session.
 
 ### Compiles
 
