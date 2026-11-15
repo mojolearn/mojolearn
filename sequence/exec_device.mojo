@@ -10,7 +10,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 from sequence.moe_group import (
     MOE_GROUP_TPB, moe_group_count_all_kernel, moe_group_offsets_all_kernel, moe_group_scatter_all_kernel,
-    moe_group_zero_all_kernel, MOE_STABLE_PACK, moe_group_stable_all_kernel,
+    moe_group_zero_all_kernel,
 )
 from sequence.moe_reg import (
     MOE_DEVGROUP,
@@ -1040,18 +1040,11 @@ struct DeviceExec(Exec, Movable):
                     grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
                 self.execution_profile.kernel()
-                comptime if MOE_STABLE_PACK:
-                    self.ctx.enqueue_function[moe_group_stable_all_kernel](
-                        a.p2, a.p5, a.p4, Int32(gp), Int32(a.i3),
-                        grid_dim=((a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
-                    )
-                    self.execution_profile.kernel()
-                else:
-                    self.ctx.enqueue_function[moe_group_scatter_all_kernel](
-                        a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
-                        grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
-                    )
-                    self.execution_profile.kernel()
+                self.ctx.enqueue_function[moe_group_scatter_all_kernel](
+                    a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
+                    grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.execution_profile.kernel()
         comptime if MOE_REGTILE and OP == OP_MOE_ROUTE:
             if a.i1 <= MOE_RT:
                 var bt = MOE_RT // a.i1
@@ -1087,18 +1080,11 @@ struct DeviceExec(Exec, Movable):
                             a.p7, a.p5, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
                         )
                         self.execution_profile.kernel()
-                        comptime if MOE_STABLE_PACK:
-                            self.ctx.enqueue_function[moe_group_stable_all_kernel](
-                                a.p2, a.p5, a.p4, Int32(npairs), Int32(a.i3),
-                                grid_dim=((a.i3 + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-                            )
-                            self.execution_profile.kernel()
-                        else:
-                            self.ctx.enqueue_function[moe_group_scatter_kernel](
-                                a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
-                                grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-                            )
-                            self.execution_profile.kernel()
+                        self.ctx.enqueue_function[moe_group_scatter_kernel](
+                            a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
+                            grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                        )
+                        self.execution_profile.kernel()
                 comptime if MOE_GROUPED_GEMM:
                     # lane gap-gemm-layers: each expert's gate|up product on
                     # identical_gemm_into (sequence/moe_grouped.mojo); h in
