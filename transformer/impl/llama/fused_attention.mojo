@@ -4596,10 +4596,10 @@ comptime TILED_TK = 16
 comptime ATTN_DQ_TQ_DEFAULT = (
     16 if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD else 64
 )
-comptime ATTN_DQ_TQ = 16 if is_defined["MOJOLEARN_ATTN_DQ_TQ16"]() else (
-    32 if is_defined["MOJOLEARN_ATTN_DQ_TQ32"]() else (
-        64 if is_defined["MOJOLEARN_ATTN_DQ_TQ64"]() else ATTN_DQ_TQ_DEFAULT
-    )
+# TOMBSTONE: MOJOLEARN_ATTN_DQ_TQ16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 347eba6c25.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_DQ_TQ16.patch
+comptime ATTN_DQ_TQ = 32 if is_defined["MOJOLEARN_ATTN_DQ_TQ32"]() else (
+    64 if is_defined["MOJOLEARN_ATTN_DQ_TQ64"]() else ATTN_DQ_TQ_DEFAULT
 )
 """Keys per staged tile of `fused_bwd_dq_tiled_kernel`."""
 comptime TILED_TT = 16
@@ -4629,7 +4629,6 @@ comptime TILED_TT = 16
 comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime ATTN_DQ_TQ_PINNED = (
     ATTN_TILE_RULE_OFF
-    or is_defined["MOJOLEARN_ATTN_DQ_TQ16"]()
     or is_defined["MOJOLEARN_ATTN_DQ_TQ32"]()
     or is_defined["MOJOLEARN_ATTN_DQ_TQ64"]()
 )
