@@ -1,0 +1,25 @@
+diff --git a/x_decomp/rr_block.mojo b/x_decomp/rr_block.mojo
+index 23ad8d7054..985e4766c9 100644
+--- a/x_decomp/rr_block.mojo
++++ b/x_decomp/rr_block.mojo
+@@ -58,7 +58,9 @@ switch was deleted 2026-11-15 (docs/TOMBSTONES.md): IDN_EIGH_BLOCK is False and
+ the rotation solver runs at every size.
+ 
+ CANDIDATE ARMS (default off, each moves the words on all four columns):
++  -D MOJOLEARN_IDN_EIGH_BLOCK_MIN128  the block form from n = 128 (default 512)
+ """
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add
+ from std.memory import bitcast
+ from x_decomp.cells import F32Ptr
+@@ -81,9 +83,7 @@ comptime RB_B = 16
+ #: order of a pivot problem
+ comptime RB_W = 2 * RB_B
+ #: the block form's least n
+-# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_MIN128 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 452f97fd66.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_MIN128.patch; record in docs/TOMBSTONES.md.
+-comptime RB_MIN_N = 512
++comptime RB_MIN_N = 128 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_MIN128"]() else 512
+ 
+ 
+ @always_inline

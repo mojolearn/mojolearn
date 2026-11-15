@@ -1,0 +1,37 @@
+diff --git a/x_decomp/tsqr_device.mojo b/x_decomp/tsqr_device.mojo
+index 16289de5dc..d45d1296db 100644
+--- a/x_decomp/tsqr_device.mojo
++++ b/x_decomp/tsqr_device.mojo
+@@ -1248,9 +1248,29 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
+         ts_free_device()
+         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+     if keep:
+-        # TOMBSTONE: MOJOLEARN_IDN_TSQR_REUSE (opt-in arm, no A/B recorded for a default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-07-base); code recoverable at 5f02e22a5c.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+-        raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
++        # I22 2026-10-06 scoped REUSE WIN, source5b467815b51b, same helper
++        # cases/protocol above: reuse/incumbent AMD 0.535/0.535/0.541,
++        # NVIDIA L40S 0.543/0.548/0.556. Source audit: each timed phase
++        # factors once vs control three times, but BOTH perform all three
++        # Q*C applies with different k=1/2/3 and coefficient matrices.
++        # Each apply allocates/copies its RHS and output, launches tree/leaf
++        # kernels and synchronizes. Final keep=False frees the state; the
++        # next scored phase factors fresh, never reusing warmup factors.
++        # This explicitly reuses an unchanged factor, not cached outputs.
++        # Four retained factor buffers are limited to16MiB below. The driver
++        # also holds one packed matrix vs control three until phase end;
++        # timings therefore include allocation/lifetime amortization too.
++        # Counts are source-audited: no runtime factor/apply count or result
++        # download is emitted. No new identity/quality validation performed.
++        # Keep opt-in: helper-only synthetic gains need actual estimator/
++        # full-dataset qualification before default promotion.
++        comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
++            raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
++        var retained_bytes = 0
++        for i in range(5):  # admitted factor, panel, R tiles, tau and pair T2 buffers
++            retained_bytes += len(st[].bufs[i])*4
++        if retained_bytes>16*1024*1024:
++            raise Error("x_decomp tsqr: retained factor state exceeds16 MiB experiment budget")
+     var nb = ts_blocks(m)
+     var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
+     ctx.enqueue_copy(dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_ptr=c)

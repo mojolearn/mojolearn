@@ -38,14 +38,12 @@ hand DEVICE words between threads are `dev_barrier` (Apple's
 from std.atomic import Atomic
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from core.device_zero import enqueue_fill
 from glm.impl.center_items import center_cell
 from x_decomp.cells import F32Ptr
@@ -95,14 +93,14 @@ comptime TS_SMEM_TREE_BYTES = 4 * (TS_MAX_N + TS_TPB)
 # same words on every column (the host replay x_decomp/tsqr_host.mojo is
 # unchanged):
 #
-# TS_GRID_UPDATE (-D MOJOLEARN_IDN_TSQR_GRID_OFF restores the old form): a
+# TS_GRID_UPDATE (IDENTICAL; FAST keeps the serial chunk walk): a
 # panel's trailing update (and Q C's panel apply) is its own launch of one
 # threadgroup per (block, chunk of TS_NB columns), not a serial walk over the
 # chunks inside the block's one threadgroup. The chunks of one panel are
 # independent (each reads the panel's reflectors and T, and reads and writes
 # only its own columns), so no bit moves.
 #
-# TS_NORM_FUSED (-D MOJOLEARN_IDN_TSQR_NORM_OFF restores the old form): the
+# TS_NORM_FUSED (IDENTICAL; FAST keeps the separate norm pass): the
 # norm chain of panel column j + 1 is accumulated by the threads that update
 # that column in step j (chain g walks the same rows in the same order and
 # squares the very words it stores), so the separate norm pass (TS_P live
@@ -110,7 +108,6 @@ comptime TS_SMEM_TREE_BYTES = 4 * (TS_MAX_N + TS_TPB)
 # reflector. The same fmas in the same order: no bit moves.
 # IDENTICAL builds only: a FAST build keeps its launches as they were.
 comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
 # F11/grid M3 2026-10-06: 6 retained public-caller timings;
@@ -128,7 +125,13 @@ comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APP
 # ON; single-sample component evidence does not qualify a full caller change.
 # All arms: one excluded same-context warmup/one score, rc=0, prior identity
 # reused without revalidation; measurements/20261006/index.json has receipts.
-comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"]())
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_GRID_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at d60cec8a15.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_GRID_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_TSQR_GRID (Apple FAST opt-in arm, never promoted) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 23f8f5063b.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch; record in docs/TOMBSTONES.md.
+comptime TS_GRID_UPDATE = _TS_IDN
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
 # F11/default M3 2026-10-06: 6 retained public-caller timings;
 # B/A range 0.9704..1.0015, mixed/regressing; FAST candidate stays OFF.
@@ -140,7 +143,11 @@ comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_
 # 1.108/1.102/1.096, NVIDIA L40S 1.035/1.032/1.032 (all rollback LOSS).
 # Fused norm chains and grid remain ON. Full-estimator qualification remains
 # separate; these are factor/apply helper timings, not a dataset board run.
-comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_NORM_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 09d9ea4aba.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_NORM_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_TSQR_NORM (Apple FAST opt-in arm, never promoted) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 735e11f676.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch; record in docs/TOMBSTONES.md.
+comptime TS_NORM_FUSED = _TS_IDN
 # I22 STRIP-only LOSS/neutral, same freeze/cases/protocol: candidate/incumbent
 # AMD 1.100/1.097/1.001, NVIDIA L40S 1.082/1.075/1.000. The explicit
 # ts_leaf_update_kernel[2] groups two trailing chunks; width18 has only one
@@ -148,7 +155,8 @@ comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_O
 # REUSE+STRIP bundle wins vs refactoring: AMD 0.564/0.564/0.541, NVIDIA
 # 0.571/0.573/0.555. REUSE alone below is faster on both wider cases; the
 # bundle does not demonstrate a strip improvement. STRIP stays OFF.
-comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_STRIP_UPDATE (opt-in arm, no A/B recorded for a default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 11764e57c7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_STRIP_UPDATE.patch; record in docs/TOMBSTONES.md.
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 comptime TS_SMEM2_OK = (
     lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM2_BYTES]()
@@ -445,7 +453,7 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
             c0 += TS_NB
 
 
-def ts_leaf_update_kernel[STRIP: Int = 1](
+def ts_leaf_update_kernel(
     a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32, nch_in: Int32
 ):
     """`ts_leaf_panel_kernel`'s (U) for panel `pan`, one threadgroup per
@@ -475,19 +483,13 @@ def ts_leaf_update_kernel[STRIP: Int = 1](
     var j0 = pan * TS_NB
     var pw = min(TS_NB, n - j0)
     var npan = ts_panels(n)
-    var first = j0 + pw + ch * STRIP * TS_NB
+    var first = j0 + pw + ch * TS_NB
     if first >= n:
         return
-    # One T load for a bounded strip of independent trailing-column chunks.
-    # The unchanged helper ends in a barrier before scratch is reused. Each
-    # column sees exactly its old row chains, reflector fold and update order.
     if tid < _TT:
         tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
     barrier()
-    comptime for piece in range(STRIP):
-        var c0=first+piece*TS_NB
-        if c0<n:
-            _wy_chunk_kern[True](blk,n,blk,n,c0,n,mb,j0,pw,tsh,part,zsh,wsh,g,l)
+    _wy_chunk_kern[True](blk,n,blk,n,first,n,mb,j0,pw,tsh,part,zsh,wsh,g,l)
 
 
 def ts_pair_mid_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32):
@@ -1151,17 +1153,10 @@ def ts_leaf_phase(
                     var j1 = pan * TS_NB + min(TS_NB, n - pan * TS_NB)
                     var nch = (n - j1 + TS_NB - 1) // TS_NB
                     if nch > 0:
-                        comptime if TS_STRIP_UPDATE:
-                            var strips=(nch+1)//2
-                            ctx.enqueue_function[ts_leaf_update_kernel[2]](
-                                da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
-                                Int32(strips),grid_dim=cnt*strips,block_dim=TS_TPB,
-                            )
-                        else:
-                            ctx.enqueue_function[ts_leaf_update_kernel[1]](
-                                da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
-                                Int32(nch),grid_dim=cnt*nch,block_dim=TS_TPB,
-                            )
+                        ctx.enqueue_function[ts_leaf_update_kernel](
+                            da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
+                            Int32(nch),grid_dim=cnt*nch,block_dim=TS_TPB,
+                        )
                         _wait_apple(ctx)
                 b0 += cnt
     _ = npair
@@ -1252,29 +1247,9 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     if keep:
-        # I22 2026-10-06 scoped REUSE WIN, source5b467815b51b, same helper
-        # cases/protocol above: reuse/incumbent AMD 0.535/0.535/0.541,
-        # NVIDIA L40S 0.543/0.548/0.556. Source audit: each timed phase
-        # factors once vs control three times, but BOTH perform all three
-        # Q*C applies with different k=1/2/3 and coefficient matrices.
-        # Each apply allocates/copies its RHS and output, launches tree/leaf
-        # kernels and synchronizes. Final keep=False frees the state; the
-        # next scored phase factors fresh, never reusing warmup factors.
-        # This explicitly reuses an unchanged factor, not cached outputs.
-        # Four retained factor buffers are limited to16MiB below. The driver
-        # also holds one packed matrix vs control three until phase end;
-        # timings therefore include allocation/lifetime amortization too.
-        # Counts are source-audited: no runtime factor/apply count or result
-        # download is emitted. No new identity/quality validation performed.
-        # Keep opt-in: helper-only synthetic gains need actual estimator/
-        # full-dataset qualification before default promotion.
-        comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
-            raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
-        var retained_bytes = 0
-        for i in range(5):  # admitted factor, panel, R tiles, tau and pair T2 buffers
-            retained_bytes += len(st[].bufs[i])*4
-        if retained_bytes>16*1024*1024:
-            raise Error("x_decomp tsqr: retained factor state exceeds16 MiB experiment budget")
+        # TOMBSTONE: MOJOLEARN_IDN_TSQR_REUSE (opt-in arm, no A/B recorded for a default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-07-base); code recoverable at 5f02e22a5c.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+        raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
     var nb = ts_blocks(m)
     var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
     ctx.enqueue_copy(dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_ptr=c)

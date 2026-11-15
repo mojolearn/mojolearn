@@ -18,7 +18,6 @@ POOL_KEEP_BYTES is released after a sync."""
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from core.admitted_finite_status import enqueue_finite_status
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
@@ -539,12 +538,13 @@ def dev_lda_bound_run(
 #: crossed four times and X H^T twice per half sweep through the host-address
 #: entry); only the permutation (k ints) goes up and the folded violation
 #: (one float, the kit's `total`) comes down. The same kernel on the same
-#: values: the same words. -D MOJOLEARN_IDN_CD_RESIDENT_OFF (or
-#: -D MOJOLEARN_IDN_ALL_OFF) leaves the entry out and Python keeps the
+#: values: the same words. A FAST build leaves the entry out and Python keeps the
 #: host-address call.
-comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_CD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_CD_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at ee37c009aa.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CD_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
@@ -559,11 +559,12 @@ comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 #: of F^ X every step; randomized_svd and linalg.svd likewise) is not
 #: downloaded and uploaded again around the solve; only s (n) and V (n x n)
 #: come down. The same launches on the same values: the same words.
-#: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
-#: the entry out and Python keeps the host-address call.
-comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entry out and Python keeps the host-address call.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_SVD_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at d4f807923d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
@@ -598,11 +599,12 @@ def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
 #: clamps it where it lives; only the pivots (n ints), info, the row orders
 #: (2 n), the diagonal (n) and the four stats come down. The same launches
 #: on the same values: the same words.
-#: -D MOJOLEARN_IDN_LU_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
-#: entries out and Python keeps the host-address calls.
-comptime IDN_LU_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_LU_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entries out and Python keeps the host-address calls.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_LU_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 5621d30bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LU_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_lu_run(ia: Int, il: Int, pp: I32Ptr, pi: F32Ptr, n: Int) raises -> Int:
@@ -662,25 +664,27 @@ def dev_lu_aux_run(
 #: elementwise result of the whole n x d input) is not downloaded and
 #: uploaded again for its QR; only R (d x d) comes down. The same launch on
 #: the same values: the same words. Needs IDN_QR_R_DIRECT (its helper).
-#: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
-#: entry out and Python keeps the host-address call.
-comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT and not is_defined["MOJOLEARN_IDN_QR_R_RESIDENT_OFF"]()
+#: A FAST build leaves the entry out and Python keeps the host-address call.
+# TOMBSTONE: MOJOLEARN_IDN_QR_R_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at e25d523eff.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT
 # lane fix-d1-decomp (2026-10-04, audit F8): the resident QR held X twice
 # (the operand and the device copy the factorization destroys). When the
 # caller gives the operand up (p[2] != 0: FactorAnalysis's centered X, never
 # read after its R), the QR runs in place on the operand's own pooled buffer
 # and no second m x n buffer is made. The same launch on the same values:
-# the same words. -D MOJOLEARN_IDN_QR_R_INPLACE_OFF (or -D
-# MOJOLEARN_IDN_ALL_OFF) keeps the copy whatever the caller says.
-comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT and not (
-    is_defined["MOJOLEARN_IDN_QR_R_INPLACE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# the same words.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_QR_R_INPLACE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at c735434b00.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_INPLACE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT
 
 
 def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> Int:
     """`x_decomp_qr_r` of the device matrix a (m x n); r (n x n) is a host
-    address. p = [m, n] or [m, n, consume]. Without consume (or under
-    IDN_QR_R_INPLACE_OFF) a is left as it is: the QR destroys a device copy.
+    address. p = [m, n] or [m, n, consume]. Without consume (or outside
+    IDN_QR_R_INPLACE) a is left as it is: the QR destroys a device copy.
     With consume != 0 and IDN_QR_R_INPLACE the QR destroys a itself (the
     caller must not read a again). Returns 1 when a was consumed, else 0.
     Waits."""
@@ -718,11 +722,12 @@ def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> I
 #: iteration). Here the same kernel (`lasso_rows_kernel`, `lars_rows_kernel`,
 #: `omp_rows_kernel`: DevExec's launches) reads them where they are and
 #: writes the codes into a device matrix. The same words.
-#: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
-#: the entry out and Python keeps the host-address calls.
-comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_CODE_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entry out and Python keeps the host-address calls.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_CODE_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at bf0328cef9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CODE_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_code_rows_run(
@@ -788,11 +793,12 @@ def dev_code_rows_run(
 #: distances, a covariance product) is not downloaded and uploaded again
 #: for its solve; w (n) and V (n x n) come down as before. The same launches
 #: on the same values: the same words.
-#: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
-#: the entry out and Python keeps the host-address call.
-comptime IDN_EIGH_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_EIGH_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entry out and Python keeps the host-address call.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 2eb3f33e29.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_EIGH_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> Int:
@@ -925,8 +931,7 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
 #       first read, not in fit (the fit then ends with no synchronize).
 # The matrix (and so every output word) is main's under every switch.
 # DEVSCAN is the FAST + Apple default since the M3 A/B (n=1, quality
-# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms;
-# -D MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF turns it off. NOSCAN and LAZY
+# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms. NOSCAN and LAZY
 # stay opt-in (they move the NaN/inf refusal from fit to transform; pending
 # Andrew's decision); NOSCAN, when defined, replaces the device scan.
 #: M3 A/B 2026-10-04 (afc_ab_def, full board size, 1 run per arm, main a16fada80), gaussian-rp taxi,
@@ -935,18 +940,25 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
 #: NaN/inf refusal, LAZY defers components_ out of the timed fit). Default needs Andrew's API decision.
 
 comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"]()
+# TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN (unmeasured Apple FAST opt-in arm, EXP:466 PARKED) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 081ec2e9c2.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch; record in docs/TOMBSTONES.md.
+comptime GRP_CLS2_NOSCAN = False
 #: lane/idn-gates (2026-10-04): DEVSCAN alone is also the IDENTICAL default
 #: on every vendor (the refusal is a predicate: no output word depends on
-#: where it runs); -D MOJOLEARN_IDN_GATES_OFF (or the _OFF) restores the host
-#: walk in IDENTICAL. NOSCAN, LAZY and FUSED stay FAST + Apple.
-comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: where it runs). NOSCAN, LAZY and FUSED stay FAST + Apple.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at 17dc13843a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF (old path beside the FAST + Apple default, EXP:467 KEEP) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 772bf55066.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime GRP_CLS2_DEVSCAN = (
-    (_CLS2_FAST_APPLE or _CLS2_IDN)
-    and not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"]()
-    and not GRP_CLS2_NOSCAN
+    _CLS2_FAST_APPLE or _CLS2_IDN
 )
-comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"]()
+# TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_LAZY (unmeasured Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 17fa14cc92.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch; record in docs/TOMBSTONES.md.
+comptime GRP_CLS2_LAZY = False
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
 #: the M3 A/Bs kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella}
 #: (gaussian-rp taxi 3.4 -> 2.1 ms, istella -4.6%; sparse-rp taxi -10.7%,
@@ -965,8 +977,7 @@ comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime GRP_FAST_FUSED = _CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN
 #: lane apple-fast-w2-kfeat (2026-10-04), DEFAULT in FAST + Apple (needs
-#: GRP_FAST_FUSED; rollback `-D MOJOLEARN_XD_FAST_SRP_STRAT_OFF`, main's
-#: Bernoulli pattern). Quality fix: w2-kfeat-srp-q PASS, istella 40-seed mean
+#: GRP_FAST_FUSED). Quality fix: w2-kfeat-srp-q PASS, istella 40-seed mean
 #: distortion 0.946 -> 0.571, board seed 7 1.883 -> 0.475 (sklearn 0.474);
 #: taxi mean 0.346 -> 0.233, seed 7 0.147 -> 0.264 (sklearn 0.381); M3
 #: speed istella 15.7 -> 15.9 ms (neutral). SparseRandomProjection's nonzero PATTERN is drawn column
@@ -987,8 +998,10 @@ comptime GRP_FAST_FUSED = _CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN
 #: variance term for every input and leaves the off-diagonal terms' law
 #: alone. The 'auto' n_components and compute_inverse_components routes
 #: (not fused) keep main's draw.
-comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED and not is_defined["MOJOLEARN_XD_FAST_SRP_STRAT_OFF"]()
-comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
+# TOMBSTONE: MOJOLEARN_XD_FAST_SRP_STRAT_OFF (old path beside the FAST + Apple default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at f45bdace85.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED
+comptime GRP_CLS2_ANY = GRP_CLS2_DEVSCAN
 
 
 # grp_cls2_py (the compiled-in switch bits) lives in the shell next to this file.

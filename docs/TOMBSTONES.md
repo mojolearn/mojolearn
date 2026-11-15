@@ -717,6 +717,30 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_EIGH_BLOCK_OFF`](#mojolearn_idn_eigh_block_off) | Decomposition (block eigh override) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch) |
 | [`MOJOLEARN_IDN_EIGH_BLOCK_ON`](#mojolearn_idn_eigh_block_on) | Decomposition (block eigh candidate) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_ON.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch) |
 | [`MOJOLEARN_PCA_RR_EIGH_OFF`](#mojolearn_pca_rr_eigh_off) | Decomposition (PCA / TruncatedSVD eigensolver, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_PCA_RR_EIGH_OFF.patch](../experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF`](#mojolearn_classical_rsvd_tsqr_ortho_off) | Decomposition (randomized_svd orth, IDENTICAL) | removed (old path; EXP:1993 PROMOTED) | 2026-11-15 | [MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch) |
+| [`MOJOLEARN_DECOMP_FAST_TSQR_GRID`](#mojolearn_decomp_fast_tsqr_grid) | Decomposition (TSQR trailing update, FAST+Apple) | removed (opt-in arm, no A/B recorded for a default) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch) |
+| [`MOJOLEARN_DECOMP_FAST_TSQR_NORM`](#mojolearn_decomp_fast_tsqr_norm) | Decomposition (TSQR fused norm chains, FAST+Apple) | removed (opt-in arm, no A/B recorded for a default) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch) |
+| [`MOJOLEARN_IDN_CD_RESIDENT_OFF`](#mojolearn_idn_cd_resident_off) | Decomposition (sparse coding CD on device matrices, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_CD_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_CD_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_CODE_RESIDENT_OFF`](#mojolearn_idn_code_resident_off) | Decomposition (sparse_encode row solvers on device matrices, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_CODE_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_CODE_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_EIGH_BLOCK_B32`](#mojolearn_idn_eigh_block_b32) | Decomposition (block Jacobi eigh width, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_B32.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_B32.patch) |
+| [`MOJOLEARN_IDN_EIGH_BLOCK_B8`](#mojolearn_idn_eigh_block_b8) | Decomposition (block Jacobi eigh width, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_B8.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_B8.patch) |
+| [`MOJOLEARN_IDN_EIGH_BLOCK_MIN128`](#mojolearn_idn_eigh_block_min128) | Decomposition (block Jacobi eigh threshold, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_MIN128.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_MIN128.patch) |
+| [`MOJOLEARN_IDN_EIGH_RESIDENT_OFF`](#mojolearn_idn_eigh_resident_off) | Decomposition (eigh on a device matrix, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_LU_RESIDENT_OFF`](#mojolearn_idn_lu_resident_off) | Decomposition (LU and companions on device matrices, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_LU_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_QR_R_INPLACE_OFF`](#mojolearn_idn_qr_r_inplace_off) | Decomposition (resident qr_r in place, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_QR_R_INPLACE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_QR_R_INPLACE_OFF.patch) |
+| [`MOJOLEARN_IDN_QR_R_RESIDENT_OFF`](#mojolearn_idn_qr_r_resident_off) | Decomposition (qr_r on a device matrix, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_QR_R_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_QR_R_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_SVD_RESIDENT_OFF`](#mojolearn_idn_svd_resident_off) | Decomposition (tall SVD on a device matrix, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SVD_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SVD_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_TSQR_GRID_OFF`](#mojolearn_idn_tsqr_grid_off) | Decomposition (TSQR trailing update, IDENTICAL) | removed (old path, no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_GRID_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_GRID_OFF.patch) |
+| [`MOJOLEARN_IDN_TSQR_NORM_OFF`](#mojolearn_idn_tsqr_norm_off) | Decomposition (TSQR fused norm chains, IDENTICAL) | removed (old path, no A/B recorded beside the default) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_NORM_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_NORM_OFF.patch) |
+| [`MOJOLEARN_IDN_TSQR_STRIP_UPDATE`](#mojolearn_idn_tsqr_strip_update) | Decomposition (TSQR two-chunk strip update, IDENTICAL) | removed (opt-in arm, no A/B recorded for a default) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_STRIP_UPDATE.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_STRIP_UPDATE.patch) |
+| [`MOJOLEARN_IDN_TSQR_TREE_PAR_OFF`](#mojolearn_idn_tsqr_tree_par_off) | Decomposition (TSQR tree combine, IDENTICAL) | removed (old path; EXP:479 run owed, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch) |
+| [`MOJOLEARN_IDN_TSQR_WY_PAIR_OFF`](#mojolearn_idn_tsqr_wy_pair_off) | Decomposition (TSQR panel-pair WY update, IDENTICAL) | removed (old path; EXP:479 run owed, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch) |
+| [`MOJOLEARN_LU_FAST_RESIDENT_OFF`](#mojolearn_lu_fast_resident_off) | Decomposition (lu_factor / lu_solve resident, FAST+Apple) | removed (old path beside the FAST+Apple default, A/B owed) | 2026-11-15 | [MOJOLEARN_LU_FAST_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_LU_FAST_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`](#mojolearn_rsvd_fast_devscan_off) | Decomposition (randomized_svd finiteness scan, FAST+Apple) | removed (old path; EXP:2377 KEPT default) | 2026-11-15 | [MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch) |
+| [`MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF`](#mojolearn_xd_fast_cls2_grp_devscan_off) | Decomposition (random projection fit refusal, FAST+Apple / IDENTICAL) | removed (old path; EXP:467 KEEP) | 2026-11-15 | [MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch) |
+| [`MOJOLEARN_XD_FAST_CLS2_GRP_LAZY`](#mojolearn_xd_fast_cls2_grp_lazy) | Decomposition (random projection components_ download, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch](../experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch) |
+| [`MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN`](#mojolearn_xd_fast_cls2_grp_noscan) | Decomposition (random projection fit refusal, FAST+Apple) | removed (opt-in arm; EXP:466 PARKED) | 2026-11-15 | [MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch](../experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch) |
+| [`MOJOLEARN_XD_FAST_SRP_STRAT_OFF`](#mojolearn_xd_fast_srp_strat_off) | Decomposition (SparseRandomProjection pattern, FAST+Apple) | removed (old path, no A/B recorded beside the FAST+Apple default) | 2026-11-15 | [MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch](../experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -11232,3 +11256,261 @@ The owner lanes write these defines' sections; here the inline markers and `expe
 - `MOJOLEARN_PROBA64_QOLD` (owner expdel2-10-cluster): the docstrings of the NearestCentroid float64 probability registration (docstring only); x_neighbors/native_descriptor_device.mojo, x_neighbors/native_descriptor_host.mojo; `d91ea2daf9`, recoverable at `508e9c6288`; `experiments/removed/MOJOLEARN_PROBA64_QOLD.expdel2-15-cluster.patch`.
 
 `MOJOLEARN_IDN_OCSVM_RES_OFF` (owner expdel2-10-cluster) needs no edit in this lane's files: `OCSVM_IDN_RES` stays the IDENTICAL-mode alias in x_neighbors/ocsvm_dev.mojo. Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP by the plan's correction); `MOJOLEARN_XN_FUSED_SABOTAGE` and `MOJOLEARN_HOST_SABOTAGE` (sabotage arms, KEEP).
+## Experiment deletions: lane expdel2-18-decomposition (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-18-decomposition), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte. Where the folded alias is still a mode expression (IDENTICAL-only, FAST + Apple), the other mode's branch is live code and stays. A later commit of the lane removed now-unused `is_defined` imports; a restore re-adds `from std.sys.compile import is_defined` where the file lacks it.
+
+### MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF
+
+- Tried: old path: randomized_svd's orth by two sliced Householder passes instead of the blocked TSQR.
+- Evidence: EXP:1993 PROMOTED the TSQR orth to the IDENTICAL default 2026-10-10 (grid g50ebe26a5: istella 0.710x, taxi 0.638x NV+AMD). Verdict: the old path goes (rule e).
+- Removed: the define read; RSVD_IDN_TSQR_ORTHO stays as the IDENTICAL-mode constant for x_decomp/device.mojo and x_decomp/host.mojo; the two-pass route stays for FAST and for shapes the TSQR does not take. Default unchanged: no bits move.
+- Files: x_decomp/tsqr_core.mojo.
+- Deleted by: lane/expdel2-18-decomposition `d60cec8a15` (2026-11-15); code recoverable at `77c81ac782`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; `grid_controls/classical-structural.json` control `rsvd_tsqr_ortho` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_DECOMP_FAST_TSQR_GRID
+
+- Tried: the IDENTICAL grid trailing update (one threadgroup per block x chunk) in FAST + Apple builds.
+- Evidence: F11/grid M3 2026-10-06 component timings only (B/A 0.964..0.988), stayed OFF; no full-operation A/B. Verdict: deleted unmeasured (rule a).
+- Removed: the FAST + Apple term; TS_GRID_UPDATE is the IDENTICAL-mode constant; _TS_FAST_APPLE goes with the NORM arm. Default unchanged: no bits move.
+- Files: x_decomp/tsqr_device.mojo.
+- Deleted by: lane/expdel2-18-decomposition `09d9ea4aba` (2026-11-15); code recoverable at `23f8f5063b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_DECOMP_FAST_TSQR_NORM
+
+- Tried: the IDENTICAL fused norm chains in FAST + Apple builds.
+- Evidence: F11/default M3 2026-10-06 component timings only (B/A 0.970..1.002, mixed), stayed OFF. Verdict: deleted unmeasured (rule a).
+- Removed: the FAST + Apple term; TS_NORM_FUSED is the IDENTICAL-mode constant; _TS_FAST_APPLE and the TARGET_HAS_APPLE_GPU / NUMERIC_FAST imports go. Default unchanged: no bits move.
+- Files: x_decomp/tsqr_device.mojo.
+- Deleted by: lane/expdel2-18-decomposition `11764e57c7` (2026-11-15); code recoverable at `735e11f676`.
+- Restore: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_CD_RESIDENT_OFF
+
+- Tried: old path: the host-address CD entry around every half sweep.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_CD_RESIDENT stays as the IDENTICAL-mode constant. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `d4f807923d` (2026-11-15); code recoverable at `ee37c009aa`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CD_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_CODE_RESIDENT_OFF
+
+- Tried: old path: sparse_encode's host-address entries (Gram and Q down and up again).
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_CODE_RESIDENT stays as the IDENTICAL-mode constant. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `2eb3f33e29` (2026-11-15); code recoverable at `bf0328cef9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CODE_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_EIGH_BLOCK_B32
+
+- Tried: RB_B = 32 (64 x 64 pivots) for the opt-in block Jacobi eigh.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B. Verdict: deleted unmeasured (rule a).
+- Removed: the define read and _RB_B_WIDE; RB_B is 16. Default unchanged: no bits move.
+- Files: x_decomp/rr_block.mojo.
+- Deleted by: lane/expdel2-18-decomposition `42411265d7` (2026-11-15); code recoverable at `27a4e29363`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_B32.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_EIGH_BLOCK_B8
+
+- Tried: RB_B = 8 (16 x 16 pivots) for the opt-in block Jacobi eigh.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B. Verdict: deleted unmeasured (rule a).
+- Removed: the define read; RB_B is the constant 16 for x_decomp/rr_solve.mojo. Default unchanged: no bits move.
+- Files: x_decomp/rr_block.mojo.
+- Deleted by: lane/expdel2-18-decomposition `452f97fd66` (2026-11-15); code recoverable at `42411265d7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_B8.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_EIGH_BLOCK_MIN128
+
+- Tried: the block Jacobi eigh from n = 128 instead of 512.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B. Verdict: deleted unmeasured (rule a).
+- Removed: the define read; RB_MIN_N is the constant 512; the is_defined import of x_decomp/rr_block.mojo goes. Default unchanged: no bits move.
+- Files: x_decomp/rr_block.mojo.
+- Deleted by: lane/expdel2-18-decomposition `3739c872e5` (2026-11-15); code recoverable at `452f97fd66`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_MIN128.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_EIGH_RESIDENT_OFF
+
+- Tried: old path: the host-address eigh entry for a resident operand.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_EIGH_RESIDENT stays as the IDENTICAL-mode constant. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `e25d523eff` (2026-11-15); code recoverable at `2eb3f33e29`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_EIGH_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_LU_RESIDENT_OFF
+
+- Tried: old path: the host-address LU / lu_aux / trisolve entries.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_LU_RESIDENT stays as the IDENTICAL-mode constant. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `bf0328cef9` (2026-11-15); code recoverable at `5621d30bd9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_QR_R_INPLACE_OFF
+
+- Tried: old path: the resident QR always copies the operand, whatever the caller gives up.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `17dc13843a` (2026-11-15); code recoverable at `c735434b00`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_QR_R_INPLACE_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_QR_R_RESIDENT_OFF
+
+- Tried: old path: the host-address qr_r entry.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `c735434b00` (2026-11-15); code recoverable at `e25d523eff`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_QR_R_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_SVD_RESIDENT_OFF
+
+- Tried: old path: the host-address SVD entry for a resident operand.
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_SVD_RESIDENT stays as the IDENTICAL-mode constant. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `5621d30bd9` (2026-11-15); code recoverable at `d4f807923d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SVD_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_TSQR_GRID_OFF
+
+- Tried: old path: the serial walk over a panel's trailing chunks inside the block's one threadgroup.
+- Evidence: I22 2026-10-06 helper timings only (GRID_OFF/incumbent mixed, two losses a vendor); no full-operation A/B. Verdict: deleted (rule b).
+- Removed: the define read; TS_GRID_UPDATE is the IDENTICAL-mode constant; the serial walk stays for FAST. Default unchanged: no bits move.
+- Files: x_decomp/tsqr_device.mojo.
+- Deleted by: lane/expdel2-18-decomposition `23f8f5063b` (2026-11-15); code recoverable at `d60cec8a15`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_GRID_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_TSQR_NORM_OFF
+
+- Tried: old path: the separate norm pass for every panel column.
+- Evidence: I22 2026-10-06 helper timings: NORM_OFF loses on both vendors (AMD 1.10, NV 1.03); no full-operation A/B. Verdict: deleted (rule b).
+- Removed: the define read; TS_NORM_FUSED is the IDENTICAL-mode constant; the separate pass stays for FAST. Default unchanged: no bits move.
+- Files: x_decomp/tsqr_device.mojo.
+- Deleted by: lane/expdel2-18-decomposition `735e11f676` (2026-11-15); code recoverable at `09d9ea4aba`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_NORM_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_TSQR_STRIP_UPDATE
+
+- Tried: ts_leaf_update_kernel[2]: one T load per two trailing chunks.
+- Evidence: I22 2026-10-06 STRIP-only LOSS/neutral (AMD 1.10, NV 1.08); stayed OFF. Verdict: deleted (rule a).
+- Removed: TS_STRIP_UPDATE, the strip launch and ts_leaf_update_kernel's STRIP parameter (the one-chunk body stays). Default unchanged: no bits move.
+- Files: x_decomp/tsqr_device.mojo.
+- Deleted by: lane/expdel2-18-decomposition `5f02e22a5c` (2026-11-15); code recoverable at `11764e57c7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_STRIP_UPDATE.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_TSQR_TREE_PAR_OFF
+
+- Tried: old path: the serial tree-combine norm chain and the untiled Q C tree apply.
+- Evidence: EXP:479 RUN OWED (owed row tsqr-wy-pair-tree-par never ran). Verdict: deleted unmeasured (rule b).
+- Removed: the define read; TS_TREE_PAR is the IDENTICAL-mode constant; the serial forms stay for FAST. Default unchanged: no bits move.
+- Files: x_decomp/tsqr_core.mojo.
+- Deleted by: lane/expdel2-18-decomposition `77c81ac782` (2026-11-15); code recoverable at `bc3f9433a3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; `grid_controls/gap-tsqr.json` control `tsqr_tree_par` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_IDN_TSQR_WY_PAIR_OFF
+
+- Tried: old path: the per-panel blocked update.
+- Evidence: EXP:479 RUN OWED (owed row tsqr-wy-pair-tree-par never ran). Verdict: deleted unmeasured (rule b).
+- Removed: the define read; TS_WY_PAIR is the IDENTICAL-mode constant; the per-panel form stays for FAST. Default unchanged: no bits move.
+- Files: x_decomp/tsqr_core.mojo.
+- Deleted by: lane/expdel2-18-decomposition `bc3f9433a3` (2026-11-15); code recoverable at `094d2402ca`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; `grid_controls/gap-tsqr.json` control `tsqr_wy_pair` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_LU_FAST_RESIDENT_OFF
+
+- Tried: old path: lu_factor / lu_solve staged through the host.
+- Evidence: EXP:2031 OPEN (A/B owed, none recorded). Verdict: deleted unmeasured (rule b).
+- Removed: the define read; LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX. Default unchanged: no bits move.
+- Files: x_decomp/s_linalg_fast.mojo.
+- Deleted by: lane/expdel2-18-decomposition `671756a458` (2026-11-15); code recoverable at `82c5c6ef43`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LU_FAST_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_RSVD_FAST_DEVSCAN_OFF
+
+- Tried: old path: the host scan of the one admission path.
+- Evidence: EXP:2377 KEPT default (restored 2026-11-09; rab15 istella 490.1 -> 435.1 ms). Verdict: the old path goes (rule e).
+- Removed: the define read; RSVD_FAST_DEVSCAN = XD_FAST_APPLE. Default unchanged: no bits move.
+- Files: x_decomp/s_linalg_fast.mojo.
+- Deleted by: lane/expdel2-18-decomposition `82c5c6ef43` (2026-11-15); code recoverable at `c18df7df06`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF
+
+- Tried: old path: the single-thread host finiteness walk in fit.
+- Evidence: EXP:467 KEEP, the FAST + Apple default (gaussian-rp istella 54.3 -> 15.9 ms). Verdict: the old path goes (rule e).
+- Removed: the define read; GRP_CLS2_DEVSCAN = FAST+Apple or IDENTICAL. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `f45bdace85` (2026-11-15); code recoverable at `772bf55066`.
+- Restore: `git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_XD_FAST_CLS2_GRP_LAZY
+
+- Tried: components_ downloaded on first read, not in fit.
+- Evidence: no A/B recorded for a default (M3 2026-10-04 single taxi run, API decision pending). Verdict: deleted unmeasured (rule a).
+- Removed: the define read; GRP_CLS2_LAZY stays as the constant False for x_decomp/decomp_owner_dev.mojo; GRP_CLS2_ANY = GRP_CLS2_DEVSCAN. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `772bf55066` (2026-11-15); code recoverable at `17fa14cc92`.
+- Restore: `git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN
+
+- Tried: fit reads the shape only; transform flags a non-finite X.
+- Evidence: EXP:466 PARKED; no A/B for a default. Verdict: deleted unmeasured (rule a).
+- Removed: the define read; GRP_CLS2_NOSCAN stays as the constant False for x_decomp/decomp_owner_dev.mojo; GRP_CLS2_DEVSCAN loses its NOSCAN term. Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `17fa14cc92` (2026-11-15); code recoverable at `081ec2e9c2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### MOJOLEARN_XD_FAST_SRP_STRAT_OFF
+
+- Tried: old path: main's Bernoulli nonzero pattern in the fused fit.
+- Evidence: EXP:861 quality HOLD rows; no A/B recorded for the rollback. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; GRP_FAST_SRP_STRAT = GRP_FAST_FUSED (the Bernoulli draw stays for the non-fused routes). Default unchanged: no bits move.
+- Files: x_decomp/resident.mojo.
+- Deleted by: lane/expdel2-18-decomposition `c18df7df06` (2026-11-15); code recoverable at `f45bdace85`.
+- Restore: `git apply experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+- Records: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+
+### Non-owner sites of lane expdel2-18-decomposition
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_IDN_ALL_OFF` (owner expdel2-37-series): the umbrella term removed from IDN_{CD,SVD,LU,CODE,EIGH}_RESIDENT, IDN_QR_R_INPLACE, _CLS2_IDN (x_decomp/resident.mojo), IDN_EIGH_BLOCK (x_decomp/rr_block.mojo), IDN_LU_RESIDENT_PAIR (x_decomp/s_linalg_fast.mojo), TS_WY_PAIR / TS_TREE_PAR (x_decomp/tsqr_core.mojo), TS_GRID_UPDATE / TS_NORM_FUSED / TS_STRIP_UPDATE (x_decomp/tsqr_device.mojo); `ee37c009aa`, recoverable at `7fa6378a2a`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch`.
+- `MOJOLEARN_IDN_GATES_OFF` (owner expdel2-16-decomposition): the term in _CLS2_IDN (x_decomp/resident.mojo); `081ec2e9c2`, recoverable at `17dc13843a`; `experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-18-decomposition.patch`.
+- `MOJOLEARN_CLASSICAL_C24_TREE4` (owner expdel2-06-base): TS_TREE_ARITY = 2 (x_decomp/tsqr_core.mojo); the linear_controls import goes; `6f8587ae6b`, recoverable at `671756a458`; `experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.expdel2-18-decomposition.patch`.
+- `MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` (owner expdel2-06-base): TS_ROWS = 2048 (x_decomp/tsqr_core.mojo); `14b094a93f`, recoverable at `6f8587ae6b`; `experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.expdel2-18-decomposition.patch`.
+- `MOJOLEARN_CLASSICAL_C24_PANEL8` (owner expdel2-06-base): TS_NB = 16 (x_decomp/tsqr_core.mojo); `094d2402ca`, recoverable at `14b094a93f`; `experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.expdel2-18-decomposition.patch`.
+- `MOJOLEARN_IDN_TSQR_REUSE` (owner expdel2-07-base): keep=True in ts_apply_device keeps its refusal; the 16 MiB budget check only the arm reached goes (x_decomp/tsqr_device.mojo); `aa77115e1b`, recoverable at `5f02e22a5c`; `experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.expdel2-18-decomposition.patch`.
+- `MOJOLEARN_IDN_EIGH_BLOCK_OFF` (owner expdel2-16-decomposition): the term in IDN_EIGH_BLOCK (x_decomp/rr_block.mojo); `9ee63b6d65`, recoverable at `aa77115e1b`; `experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.expdel2-18-decomposition.patch`.
+- `MOJOLEARN_IDN_EIGH_BLOCK_ON` (owner expdel2-16-decomposition): IDN_EIGH_BLOCK stays as the constant False for its importers (x_decomp/device.mojo, eigh_ops_host.mojo, kit_device.mojo); the block solver bodies they guard are the owner's; `27a4e29363`, recoverable at `9ee63b6d65`; `experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.expdel2-18-decomposition.patch`.
+
+Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP; coordinator correction 2026-11-15). `MOJOLEARN_LU_QOLD` and `MOJOLEARN_TSVD_QOLD` (owner expdel2-17-decomposition) have no read in this lane's files (they reach x_decomp/s_linalg_fast.mojo and x_decomp/tsvd_descriptor_boundary_run.mojo only through the LU_QFIX / TSVD_QFIX aliases, which the owner keeps as constants); x_decomp/tsqr_multi_gpu.mojo reads only `MOJOLEARN_QR_PARALLEL_SABOTAGE` (a sabotage control, KEEP). Nothing changed in those two files.

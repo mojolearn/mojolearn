@@ -1,0 +1,38 @@
+diff --git a/x_decomp/tsqr_device.mojo b/x_decomp/tsqr_device.mojo
+index 34ce416f3b..ff0b233b3d 100644
+--- a/x_decomp/tsqr_device.mojo
++++ b/x_decomp/tsqr_device.mojo
+@@ -39,12 +39,13 @@ from std.atomic import Atomic
+ from max.gpu import block_idx, thread_idx
+ from std.memory import stack_allocation
+ from std.sys.compile import is_defined
++from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ 
+ from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_sqrt
+ from core.device_zero import enqueue_fill
+ from glm.impl.center_items import center_cell
+ from x_decomp.cells import F32Ptr
+@@ -109,6 +110,7 @@ comptime TS_SMEM_TREE_BYTES = 4 * (TS_MAX_N + TS_TPB)
+ # reflector. The same fmas in the same order: no bit moves.
+ # IDENTICAL builds only: a FAST build keeps its launches as they were.
+ comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+ # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
+ # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
+ # F11/grid M3 2026-10-06: 6 retained public-caller timings;
+@@ -146,9 +148,7 @@ comptime TS_GRID_UPDATE = _TS_IDN
+ # separate; these are factor/apply helper timings, not a dataset board run.
+ # TOMBSTONE: MOJOLEARN_IDN_TSQR_NORM_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 09d9ea4aba.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_NORM_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_TSQR_NORM (Apple FAST opt-in arm, never promoted) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 735e11f676.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch; record in docs/TOMBSTONES.md.
+-comptime TS_NORM_FUSED = _TS_IDN
++comptime TS_NORM_FUSED = _TS_IDN or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
+ # I22 STRIP-only LOSS/neutral, same freeze/cases/protocol: candidate/incumbent
+ # AMD 1.100/1.097/1.001, NVIDIA L40S 1.082/1.075/1.000. The explicit
+ # ts_leaf_update_kernel[2] groups two trailing chunks; width18 has only one
