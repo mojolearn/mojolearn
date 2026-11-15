@@ -103,7 +103,7 @@ is not this lane's.
 
 from std.math import log, pi, sqrt
 from std.memory import bitcast
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from core.accelerator_target import TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 # TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-07-base); code recoverable at c48de5dbfd.
 # Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
@@ -3634,7 +3634,8 @@ comptime KDE_QT_TILE_FLOATS = KDE_QT_CELL * KDE_QT_FEAT
 # body's query traffic, which is the istella loss; under it the coalesced
 # staging and the 4x train reuse are the taxi gain (B/A NV 0.300, AMD
 # 0.387). At the default q_tpb = 128 the rule takes the query tile for
-# d <= 16 and the default body above, covering every neighbouring width.
+# d <= 16 and the default body above on AMD, d <= 56 on NVIDIA (the budget
+# note at KDE_QT_QUERY_CACHE_BYTES), covering every neighbouring width.
 # The A/B is owed (bench/results/paper_compare/owed-pre0867.json):
 # `-D MOJOLEARN_IDN_KDE_QTILE_FORCE` (the promoted every-d form, B arm),
 # this rule (A), on istella, taxi and one wide non-board dataset, NV and
@@ -3644,7 +3645,24 @@ comptime KDE_QT_TILE_FLOATS = KDE_QT_CELL * KDE_QT_FEAT
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 comptime KDE_IDN_QTILE_FORCE = KDE_IDN_QTILE and is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"]()
-comptime KDE_QT_QUERY_CACHE_BYTES = 32 * 1024
+# THE BUDGET IS THE VENDOR'S L1, NOT ONE NUMBER (lane flag-knn-kde-fit,
+# 2026-11-15; owed driver rk-kde-qtile-widths, whose row says "a loss at 24
+# or 48 moves the 32 KiB budget"). Same-box L40S, host 590b12deb83b,
+# measurement of fcc934a37c, KernelDensity fit+score_samples n=200000
+# q=20000, rule (32 KiB everywhere) vs 0.8.66 (query tile at every width):
+# d=12 117 vs 119 ms, d=16 128 vs 121, d=24 395 vs 143 (2.76x slower),
+# d=48 462 vs 258 (1.79x slower), d=512 1417 vs 2084 (faster); board kde
+# istella (d=220) 29.27 vs 34.94 ms (faster). So on NVIDIA the query tile
+# still wins at 48 and loses by 220: the 32 KiB budget is MI300X/MI325X's
+# vector L1 per CU and is far below NVIDIA's. NVIDIA (Ampere/Ada/Hopper) has
+# 128 KiB of unified L1/shared memory per SM; the query-tile body stages
+# KDE_QT_TILE_FLOATS words (16 KiB) of it as shared memory, leaving
+# 112 KiB of L1 for the block's re-read query rows: at q_tpb = 128 that is
+# d <= 56, covering every measured NVIDIA win (12..48) and none of its losses
+# (220, 512). AMD keeps 32 KiB (its measured istella loss; its widths driver
+# is owed). Same bits on every vendor and width (both bodies write the same
+# partial planes word for word, see the BITS note above).
+comptime KDE_QT_QUERY_CACHE_BYTES = (128 * 1024 - KDE_QT_TILE_FLOATS * 4) if TARGET_HAS_NVIDIA_GPU else 32 * 1024
 
 
 @always_inline
