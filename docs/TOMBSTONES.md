@@ -748,6 +748,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C05_OLS_PHASE`](#mojolearn_classical_c05_ols_phase-unmeasured-arm-deleted-2026-11-15) | Linear (invocation-owned OLS covariance / inverse phase storage, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch) |
 | [`MOJOLEARN_C52_PAIR_ROWS`](#mojolearn_c52_pair_rows-unmeasured-arm-deleted-2026-11-15) | Kernel density (KDE pair-combine route with fixed 128/512 leaf, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C52_PAIR_ROWS.patch](../experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch) |
 | [`MOJOLEARN_C53_CENTER4`](#mojolearn_c53_center4-unmeasured-arm-deleted-2026-11-15) | Mixture (GMM / BGMM centered-component staging, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C53_CENTER4.patch](../experiments/removed/MOJOLEARN_C53_CENTER4.patch) |
+| [`MOJOLEARN_C54_PREDICT_TILES`](#mojolearn_c54_predict_tiles-unmeasured-arm-deleted-2026-11-15) | Kernel / GP (four kernel columns share one scaled query load, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C54_PREDICT_TILES.patch](../experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7257,3 +7258,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `f76fba175b`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C53_CENTER4.patch`, then delete the `MOJOLEARN_C53_CENTER4` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C54_PREDICT_TILES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C54_PREDICT_TILES` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `843366c4fd`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch`, then delete the `MOJOLEARN_C54_PREDICT_TILES` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

@@ -48,6 +48,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C25_PROJECTION_REUSE_OFF (Kernel (RBFSampler projection old path, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the measured IDENTICAL default is the only path; code recoverable at 935328056e; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch
     comptime assert not is_defined["MOJOLEARN_C52_PAIR_ROWS"](), "removed 2026-11-15 (lane/expdel2-07-base): C52_PAIR_ROWS (Kernel density (KDE pair-combine route with fixed 128/512 leaf, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at dd94b7ad88; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch
+    comptime assert not is_defined["MOJOLEARN_C54_PREDICT_TILES"](), "removed 2026-11-15 (lane/expdel2-07-base): C54_PREDICT_TILES (Kernel / GP (four kernel columns share one scaled query load, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 843366c4fd; see docs/TOMBSTONES.md"
     return True
 
 
