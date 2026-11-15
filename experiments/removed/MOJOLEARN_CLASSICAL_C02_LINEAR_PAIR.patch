@@ -1,0 +1,15 @@
+diff --git b/experiments/classical_identical_ideas/shared_controls.mojo a/experiments/classical_identical_ideas/shared_controls.mojo
+index 1d12b6e3b0..40991a8630 100644
+--- b/experiments/classical_identical_ideas/shared_controls.mojo
++++ a/experiments/classical_identical_ideas/shared_controls.mojo
+@@ -121,9 +121,7 @@ comptime C08_GROUPED_OUTPUT = False
+ 
+ # Independent C02 linear sums and C56 LDA input reuse, default OFF.
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c95b22c391.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch
+-comptime C02_LINEAR_PAIR = False
++comptime C02_LINEAR_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"]()
+ comptime C56_LDA_INPUT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C56_LDA_INPUT"]()
+ 
+ # C05 independent invocation-owned OLS covariance/inverse phase storage.

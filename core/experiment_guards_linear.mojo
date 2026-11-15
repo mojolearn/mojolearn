@@ -154,6 +154,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_RIDGECV_FF_BLOCKED (Linear (RidgeCV float-float fallback in block partials, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 49c61a4093; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C08_UNIQUE_SCAN_OFF (Prep (unique_cols one-thread-per-column walk, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the default is the only path; code recoverable at 9b76c98115; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C02_LINEAR_PAIR (Linear (OLS / Ridge independent C02 linear sums, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at c95b22c391; see docs/TOMBSTONES.md"
     return True
 
 

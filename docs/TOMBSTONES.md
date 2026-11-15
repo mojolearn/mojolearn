@@ -743,6 +743,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C11_DRAW_GATHER`](#mojolearn_classical_c11_draw_gather-unmeasured-arm-deleted-2026-11-15) | Resample (bootstrap draw gather, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch) |
 | [`MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS`](#mojolearn_classical_c12_sparse_counts-unmeasured-arm-deleted-2026-11-15) | Metrics (sparse confusion counts, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch) |
 | [`MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT`](#mojolearn_classical_c08_grouped_output-unmeasured-arm-deleted-2026-11-15) | Prep (grouped one-hot emission, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch) |
+| [`MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR`](#mojolearn_classical_c02_linear_pair-unmeasured-arm-deleted-2026-11-15) | Linear (OLS / Ridge independent C02 linear sums, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7212,3 +7213,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9a0b339815`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch`, then delete the `MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c08_grouped_output`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C02_LINEAR_PAIR` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c95b22c391`. Non-owner read sites: lane expdel2-01-base (`experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch`, then delete the `MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c02_linear_pair`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

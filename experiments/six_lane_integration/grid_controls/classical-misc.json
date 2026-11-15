@@ -23,24 +23,6 @@
    "status": "kept",
    "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
   },
-  "c02_linear_pair": {
-   "define": "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "glm/impl/center_device.mojo:302"
-   ],
-   "binding": "_mojolearn_estimators,_mojolearn_x_decomp",
-   "bits_change": true,
-   "status": "kept",
-   "note": "row-block x column exact integer accumulation + incumbent cs_fold_kernel; bits_change assumed until the ID check."
-  },
   "c05_ols_phase": {
    "define": "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
    "kind": "switch",
@@ -217,17 +199,13 @@
   "classical:ols": {
    "binding": "_mojolearn_x_decomp",
    "route": "fit: LinearRegression.fit (linear_model.py:694) -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> ols_tsqr_factor (x_decomp/device.mojo:4133: X and y up once, col_sums_pair_buf, col_means_buf, ts_pack_center_device, ts_factor_device) -> _tsqr_lstsq_core(Ra=...) small-R SVD",
-   "controls": [
-    "c02_linear_pair"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "more:ridge": {
    "binding": "_mojolearn_estimators",
    "route": "fit: Ridge.fit -> _classical_xy_means -> lm_col_sums_pair -> col_sums_pair_device",
-   "controls": [
-    "c02_linear_pair"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "expanded:lu-solve": {
@@ -532,6 +510,11 @@
    "define": "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
    "control": "c05_phase_scratch",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 1ebc49831d; patch experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
+   "control": "c02_linear_pair",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c95b22c391; patch experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
   }
  ],
  "owed_removal_ab": [
