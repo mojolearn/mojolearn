@@ -696,6 +696,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`](#mojolearn_xn_fast_schi2_lazyw_off-old-path-deleted-2026-11-15) | Neighbors (SkewedChi2Sampler lazy weights, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-xn-q PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch) |
 | [`MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF`](#mojolearn_xn_fast_cls2_ocsvm_res_off-old-path-deleted-2026-11-15) | Neighbors (OneClassSVM resident Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT 417ba1ded) | 2026-11-15 | [MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_RBFTILE_OFF`](#mojolearn_svgp_fast_rbftile_off-old-path-deleted-2026-11-15) | Neighbors (SVGP scaled rbf, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-svgp-rbftile-q PASS) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch) |
+| [`MOJOLEARN_SVGP_FAST_BLKCHOL_OFF`](#mojolearn_svgp_fast_blkchol_off-old-path-deleted-2026-11-15) | Neighbors (SVGP float-float Cholesky, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-svgp-blkchol-q PASS) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch) |
 
 ## Trees
 
@@ -6044,4 +6045,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `SVGP_FAST_RBFTILE`: M3 one run per arm, svgp istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q SVGP-FAST-PAIR PASS (r2/rmse/elbo). No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `9152d5f19c`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_RBFTILE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_SVGP_FAST_BLKCHOL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SVGP's three m x m float-float Cholesky factors from one launch per 16-column panel to one launch per column (`x_neighbors/iter_device.mojo` SVGP_FAST_BLKCHOL, folded into SVGP_BLKCHOL with the IDENTICAL X5 switch). Only the define read is deleted: the per-column factor stays where neither panel switch is on (`MOJOLEARN_IDN_SVGP_BLKCHOL_OFF`). `tools/svgp_fast_pair.py` drops it from its B arms.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `SVGP_FAST_BLKCHOL`: M3 one run per arm, svgp taxi 287.0 -> 212.5 ms, istella 336.6 -> 265.7 ms (measured without RBFTILE; the combined retime the row names is a timing note, not a verdict), w2-svgp-blkchol-q PASS. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `4b8e9ee649`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_BLKCHOL_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).

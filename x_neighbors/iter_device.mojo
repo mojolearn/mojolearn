@@ -2301,8 +2301,8 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 #: SVGP_FAST_BLKCHOL, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp).
 #: M3, one run per arm (measured without RBFTILE; combined retime owed):
 #: taxi 287.0 -> 212.5 ms, istella 336.6 -> 265.7 ms; w2-svgp-blkchol-q
-#: SVGP-FAST-PAIR PASS. MOJOLEARN_SVGP_FAST_BLKCHOL_OFF restores the
-#: one-column-per-launch factor.
+#: SVGP-FAST-PAIR PASS. The one-column-per-launch factor stays where
+#: neither panel switch is on.
 #: The three m x m float-float Cholesky factors
 #: (L_u, L_s, then Q) one panel of SVGP_CHOL_PB columns per launch instead of
 #: one column per launch (m = 512: 1,024 dependent launches -> 64). Each block
@@ -2312,10 +2312,9 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 #: entry is the same chain as `_chol_col`: the pivot A[c,c] - L[c,k]^2 and
 #: the row A[i,c] - L[i,k] L[c,k], k ascending from 0, then sqrt / divide.
 #: The words only move with FAST's free contraction.
-comptime SVGP_FAST_BLKCHOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_BLKCHOL_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 4b8e9ee649.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: X5 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
 #: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
 #: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
