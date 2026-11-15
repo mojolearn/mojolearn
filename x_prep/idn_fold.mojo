@@ -94,7 +94,9 @@ comptime IDN_TE_ENC_TREE = _IDN
 comptime IDN_II_GRAM_TILE = _IDN
 #: K14's non-eigh part: ii_conv's max over the row sums by a threadgroup tree
 #: (device only: a max is exact, the unit's word, so the host is unchanged)
-comptime IDN_II_CONV_TREE = _IDN and not is_defined["MOJOLEARN_IDN_II_CONV_TREE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_II_CONV_TREE_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at ef6c79d70a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_II_CONV_TREE_OFF.patch
+comptime IDN_II_CONV_TREE = _IDN
 
 #: lanes of the tree (the device threadgroup width); a power of two
 comptime TREE_W = 256
