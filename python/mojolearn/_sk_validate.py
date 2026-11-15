@@ -399,7 +399,7 @@ def _check_width(est, X, info):
 # ------------------------------------------------------------------ y
 
 
-def _check_y(est, y, x_rows=-1):
+def _check_y(est, y, x_rows=-1, X=None):
     """Refuse or reshape y as scikit-learn's `validate_data(..., y)` does,
     and refuse an X and y of different lengths (`check_consistent_length`,
     `x_rows` the rows of X or -1); return the y to fit on."""
@@ -417,7 +417,9 @@ def _check_y(est, y, x_rows=-1):
     # infinity, a continuous y for a classifier) and the lengths, in
     # scikit-learn's words. Lane py-buffer removed the `_buffer.Buf`
     # description that ran before it.
-    column = entry(_OP_Y, (y, name, ADMISSION_Y_CLASSIFIER if kind == "classifier" else 0, x_rows),
+    # X rides along so a non-finite y refusal can name a non-finite X first
+    # (scikit-learn's order); it is read only on that refusal path.
+    column = entry(_OP_Y, (y, name, ADMISSION_Y_CLASSIFIER if kind == "classifier" else 0, x_rows, X),
                    context)
     if column is None:
         return y
@@ -430,7 +432,7 @@ def _check_y(est, y, x_rows=-1):
             "the shape of y to (n_samples, ), for example using ravel().",
             _conversion_warning(), stacklevel=4)
         y = y.reshape(-1)
-    entry(_OP_CHECK_Y, (y, name, flags, x_rows, y_rows), context)
+    entry(_OP_CHECK_Y, (y, name, flags, x_rows, y_rows, X), context)
     return y
 
 
@@ -494,7 +496,7 @@ def before_fit(est, method, slots, args, kwargs):
     y = _get(args, kwargs, iy, yname)
     if y is not _MISSING:
         x_rows = info[1][0] if info is not None and info[1] else -1
-        y2 = _check_y(est, _array_like(y), x_rows)
+        y2 = _check_y(est, _array_like(y), x_rows, X)
         if y2 is not y:
             args, kwargs = _put(args, kwargs, iy, yname, y2)
     prior = None if method == "partial_fit" else vars(est).get("n_features_in_", _MISSING)

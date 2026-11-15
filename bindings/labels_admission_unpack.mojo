@@ -34,12 +34,12 @@
 #   admission_x_op(X, est, word)
 #                     `_sk_validate._check_X` whole: the description, the
 #                     sparse refusal, and admission_check_x_op below
-#   admission_y_op(y, est, flags, x_rows)
+#   admission_y_op(y, est, flags, x_rows[, X])
 #                     `_sk_validate._check_y` for a y that is not None
 #   admission_check_x_op(X, est, shape, complex, scan)
 #                     `_sk_validate._check_X`'s refusals (complex, rank,
 #                     empty) and its finiteness scan, scikit-learn's wording
-#   admission_check_y_op(y, est, flags, x_rows, y_rows)
+#   admission_check_y_op(y, est, flags, x_rows, y_rows[, X])
 #                     `_sk_validate._check_y` / `_check_lengths`' refusals
 #                     (y missing, complex, non-finite, continuous labels for
 #                     a classifier, inconsistent lengths)
@@ -627,7 +627,7 @@ def admission_check_x_op(x: PythonObject, est: String, shape: PythonObject, comp
 
 
 def admission_check_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, y_rows: Int,
-                         context: PythonObject) raises:
+                         x: PythonObject, context: PythonObject) raises:
     """`_sk_validate._check_y` / `_check_lengths`' refusals, in
     scikit-learn's words: a required y that is None, a complex y, NaN or
     infinity in a float y (`ADMISSION_Y_SCAN`), a continuous float y for a
@@ -640,6 +640,21 @@ def admission_check_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, 
         var view = admit_c_view(y, "y", context)
         var typestr = admitted_dtype(view, context)
         if not _admission_all_finite(view, typestr):
+            # scikit-learn refuses a non-finite X before y. A class whose X
+            # scan runs in its native fit (no _X_SCAN) has not scanned X yet:
+            # scan it here, on this refusal path only (smoke 2026-11-15,
+            # test_linear_regression_fit_refuses_non_finite_x_before_y).
+            var x_bad = False
+            if x is not None:
+                try:
+                    var x_view = admit_c_view(x, "X", context)
+                    var x_type = admitted_dtype(x_view, context)
+                    x_bad = String(x_type[byte=1]) == "f" and not _admission_all_finite(x_view, x_type)
+                    _ = x_view
+                except:
+                    x_bad = False  # X's own admission refuses it at its usual stage
+            if x_bad:
+                raise Error(admitted_finite_wording(est))
             raise Error("Input y contains NaN or infinity (" + est + ").")
         if (flags & ADMISSION_Y_CLASSIFIER) != 0 and not _admission_integral(view, typestr, context):
             raise Error(
@@ -1020,7 +1035,8 @@ def admission_x_op(x: PythonObject, est: String, word: Int, context: PythonObjec
     return _admission_info_tuple(info)
 
 
-def admission_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, context: PythonObject) raises -> PythonObject:
+def admission_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, x: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
     """ADMISSION_OP_Y, `_sk_validate._check_y` for a y that is not None:
     describe y and make `admission_check_y_op`'s refusals with the scan flag
     the description sets (`flags` carries ADMISSION_Y_CLASSIFIER). Returns
@@ -1034,15 +1050,15 @@ def admission_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, contex
     var rank = len(info.shape)
     var y_rows = Int(py=info.shape[0]) if rank > 0 else -1
     if info.container == ADMISSION_CONTAINER_SPARSE:
-        admission_check_y_op(y, est, 0, x_rows, y_rows, context)
+        admission_check_y_op(y, est, 0, x_rows, y_rows, x, context)
         return PythonObject(None)
     if info.kind == ADMISSION_KIND_COMPLEX:
-        admission_check_y_op(y, est, ADMISSION_Y_COMPLEX, x_rows, y_rows, context)
+        admission_check_y_op(y, est, ADMISSION_Y_COMPLEX, x_rows, y_rows, x, context)
     var words = flags
     if ((info.container == ADMISSION_CONTAINER_BUFFER or info.container == ADMISSION_CONTAINER_LIST)
             and info.kind == ADMISSION_KIND_FLOAT):
         words |= ADMISSION_Y_SCAN
     if rank == 2 and Int(py=info.shape[1]) == 1 and info.container != ADMISSION_CONTAINER_LIST:
         return Python.tuple(words, y_rows)
-    admission_check_y_op(y, est, words, x_rows, y_rows, context)
+    admission_check_y_op(y, est, words, x_rows, y_rows, x, context)
     return PythonObject(None)
