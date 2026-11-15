@@ -2047,22 +2047,11 @@ def _pmul(a: Float32, b: Float32) -> Float32:
     return _step(a, b, Float32(-0.0))
 
 
-# NN18 counterfactual control isolates the already implemented structural
-# K-tile bounds. OFF by default. A uses the existing visibility bounds; B
-# stages every K page while unchanged per-row predicates exclude every
-# masked term. Only page traffic/barriers/unused score work differ. This
-# does not bypass the existing finite-regime admission or corner replay.
-comptime NN18_DENSE_TILE_CONTROL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN18_DENSE_TILE_CONTROL"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-
+# TOMBSTONE: MOJOLEARN_NN18_DENSE_TILE_CONTROL (unmeasured NN18 dense K-tile B arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 3e8269e098.
+# Restore: git apply experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch
 @always_inline
 def nn18_key_tile_bounds(lo: Int,hi: Int,keys: Int,tile: Int) -> Tuple[Int,Int]:
-    comptime if NN18_DENSE_TILE_CONTROL:
-        return (0,(keys-1)//tile)
+    """The key tiles the visibility bounds `[lo, hi]` touch."""
     return (lo//tile,hi//tile)
 
 
