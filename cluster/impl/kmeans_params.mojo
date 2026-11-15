@@ -40,12 +40,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _KP_MODE, NUMERIC_IDENTICAL a
 #: iteration i now stops at the next multiple of KMEANS_LAZY_EVERY (at most 3
 #: more Lloyd steps, which never raise the objective), so IDENTICAL bits move
 #: only for fits that converge early, on every column at once.
-#: -D MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF (or MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF)
+#: -D MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF
 #: restores the per-iteration read in IDENTICAL.
-comptime KMEANS_LAZY_SHIFT_IDN = _KP_MODE == _KP_IDENTICAL and not (
-    is_defined["MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF"]()
-    or is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF (old path, EXP:352 KEPT FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at f1d1f0f0b6.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMEANS_LAZY_SHIFT_IDN = _KP_MODE == _KP_IDENTICAL and not is_defined["MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF"]()
 #: The lazy read's period, shared by the device loop and the host restatement.
 comptime KMEANS_LAZY_EVERY = 4
 

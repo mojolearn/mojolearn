@@ -1484,19 +1484,19 @@ comptime KMEANS_LAZY_SHIFT = (
         )
         or KMEANS_LAZY_SHIFT_IDN
     )
-    and not is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF (old path, EXP:352 KEPT FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at f1d1f0f0b6.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF.patch; record in docs/TOMBSTONES.md.
 )
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
 #: IVF-family rows faster, recall_at_10 identical. ACCEPT;
-#: rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF` (shift read every iteration).
 #: SCOPE (2026-10-04): a fit takes the lazy read only when its caller sets
 #: `KMeansParams.lazy_shift` (IVF's coarse quantizer in ivf_flat_build.mojo,
 #: its k-means|| recluster through the propagated params, and IVF-PQ's
 #: subspace codebooks in x_ann/ivf_pq_device.mojo); every other caller keeps
 #: the per-iteration read.
 """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
-rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF`): the Lloyd loop reads the centroid shift
+rollback switch deleted 2026-11-15): the Lloyd loop reads the centroid shift
 back and tests convergence every KMEANS_LAZY_SHIFT_EVERY iterations and at
 max_iter, instead of every iteration (one synchronize and one host round
 trip per iteration: 20 waits per IVF coarse fit, per k-means|| recluster and
