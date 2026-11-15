@@ -42,8 +42,7 @@ buffers live in a `QueryXBuffers`. A resident model's predict asks
 it reuses the lease's held buffers (no device or pinned allocation, no fill
 launch; a prefix view when the call has fewer rows than the largest seen)
 and `resident_query_x_done` gives them back after the call's
-synchronisation. A fold, lease 0, or `-D MOJOLEARN_IDN_QUERY_X_HELD_OFF`
-take the per-call buffers above. Read the words through `finite_word()`
+synchronisation. A fold or lease 0 take the per-call buffers above. Read the words through `finite_word()`
 and `range_word()` (a held word is compared with the call's mark).
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
