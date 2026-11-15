@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-linalg2 (2026-10-03): LU_FAST_STEP1 (default; _OFF reverts), the
+"""lane/apple-fast-gap-linalg2 (2026-10-03): LU_FAST_STEP1 (default), the
 blocked LU's panel steps as ONE launch per column (FAST on Apple only).
 
 `launch_lu`'s blocked route runs five launches per column of a panel (the
