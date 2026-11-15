@@ -93,7 +93,7 @@ A lane owns a set of code files (no code file is in two lanes) and makes the mec
 | `MOJOLEARN_ANN3_DIRECT_OUT` | DELETE-ARM | a | 1+2 | 5 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR` | DELETE-ARM | a | 1+6 | 7 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` | DELETE-OLD-PATH | e | 1+11 | 18 | EXP:2015 OLS taxi avg 0.762, istella 0.665 (Gram off faster); ridge taxi 5.76x slower off -- record read: the default is the recorded winner or the kept path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DT_BINS_QOLD` | DELETE-OLD-PATH | e | 1+4 | 5 | EXP:1285 QUALITY-FIX KEPT: FAST default -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_ET_SCALAR_STAGE_COMPARE` | DELETE-ARM | a | 3+0 | 12 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_FOREST_DEVICE_FINITE_OFF` | DELETE-OLD-PATH | d | 1+12 | 23 | EXP:106 KEPT 69f7a41fd -- promoted on one vendor in the record; tombstone notes the owed other vendor |
@@ -130,7 +130,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C08_ONEHOT_FT` | DELETE-ARM | a | 1+4 | 5 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C08_ORDINAL_FT` | DELETE-ARM | a | 1+4 | 5 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C56_LDA_INPUT` | DELETE-ARM | a | 1+5 | 6 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DART_ROUND_REF_OFF` | DELETE-OLD-PATH | b | 1+1 | 4 | EXP:2393 PENDING -- no A/B recorded for the old path |
 | `MOJOLEARN_FOREST_SEPARATE_NODES` | DELETE-ARM | e | 1+3 | 4 | EXP:1504 DROP, defines deleted -- record read: loser, superseded, default-equal force knob, or never measured |
 | `MOJOLEARN_IDN_AF_RESIDENT_OFF` | DELETE-OLD-PATH | b | 1+9 | 13 | no record -- no A/B recorded for the old path |
@@ -192,7 +192,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFT_P10` | DELETE-EXPERIMENT | g | 1+2 | 3 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_P11` | DELETE-EXPERIMENT | g | 1+2 | 3 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_P12` | DELETE-EXPERIMENT | g | 1+2 | 3 | no record -- never-run Apple FAST programme card |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT` | DELETE-ARM | a | 4+0 | 41 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_FOREST_FAST_SHARED_ROWS` | DELETE-ARM | a | 1+4 | 52 | no record -- no A/B recorded (Apple fast opt-in) |
@@ -236,7 +236,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_APPLE_STEP_UNROLL_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | no record -- no A/B recorded; old path beside the Apple fast default |
 | `MOJOLEARN_CLASSICAL_C06_NORM_ROWS` | DELETE-ARM | a | 1+3 | 4 | EXP:1519 4`; new `CLASSICAL_C06_SMALL_D_THREAD` (thread per row at d <= 32, incumbent bit -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD` | DELETE-ARM | a | 1+2 | 10 | EXP:1519 4`; new `CLASSICAL_C06_SMALL_D_THREAD` (thread per row at d <= 32, incumbent bit -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT` | DELETE-ARM | a | 4+0 | 41 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH` | DELETE-ARM | a | 2+0 | 2 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_FAST_LCG_MODULO` | DELETE-ARM | a | 1+4 | 7 | no record -- no A/B recorded (Apple fast opt-in) |
@@ -300,7 +300,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_C62_SAME_COMPONENT_SKIP` | DELETE-ARM | a | 1+3 | 31 | EXP:1560 unmeasured -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C01_MEAN` | DELETE-ARM | e | 1+4 | 14 | EXP:1530 DROPPED-slower -- record read: loser, superseded, default-equal force knob, or never measured |
 | `MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` | DELETE-OLD-PATH | e | 1+11 | 18 | EXP:2015 OLS taxi avg 0.762, istella 0.665 (Gram off faster); ridge taxi 5.76x slower off -- record read: the default is the recorded winner or the kept path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_FOREST_DEVICE_FINITE_OFF` | DELETE-OLD-PATH | d | 1+12 | 23 | EXP:106 KEPT 69f7a41fd -- promoted on one vendor in the record; tombstone notes the owed other vendor |
 | `MOJOLEARN_IDN_COLVAR_FUSED_OFF` | DELETE-OLD-PATH | e | 1+2 | 3 | EXP:1946 PROMOTED (IDENTICAL default) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_GFF_GRAM_TILED_OFF` | DELETE-OLD-PATH | e | 1+1 | 2 | EXP:2096 KEEP (promoted) -- record read: the default is the recorded winner or the kept path |
@@ -393,7 +393,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS` | DELETE-ARM | a | 1+2 | 13 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C56_LDA_INPUT` | DELETE-ARM | a | 1+5 | 6 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C56_QDA_PROJECT` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH` | DELETE-ARM | a | 2+0 | 2 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_ATTN_HEAD_SHARE` | DELETE-ARM | e | 2+2 | 5 | EXP:1483 DROP -- record read: loser, superseded, default-equal force knob, or never measured |
@@ -430,7 +430,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C21_EXTREMA` | DELETE-ARM | a | 1+2 | 23 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C56_QDA_PROJECT` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` | DELETE-OLD-PATH | e | 1+11 | 18 | EXP:2015 OLS taxi avg 0.762, istella 0.665 (Gram off faster); ridge taxi 5.76x slower off -- record read: the default is the recorded winner or the kept path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF` | DELETE-OLD-PATH | e | 1+1 | 2 | EXP:1971 PROMOTED (IDENTICAL default, together) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF` | DELETE-OLD-PATH | e | 1+4 | 5 | EXP:1971 PROMOTED (IDENTICAL default, together) -- record read: the default is the recorded winner or the kept path |
@@ -481,7 +481,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS` | DELETE-ARM | a | 1+2 | 13 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT` | DELETE-ARM | a | 1+5 | 12 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS` | DELETE-ARM | e | 1+3 | 4 | EXP:1992 PROMOTED (IDENTICAL default, arm 64) -- record read: loser, superseded, default-equal force knob, or never measured |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_CLASS_ONEPASS_OFF` | DELETE-OLD-PATH | b | 1+8 | 9 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_IDN_GEMM_LEAF` | DELETE-ARM | e | 1+23 | 24 | EXP:1766 PROMOTED for the MLP step only (IDENTICAL default on mlp-train-step); every othe -- record read: loser, superseded, default-equal force knob, or never measured |
@@ -512,7 +512,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFCL_G05` | DELETE-EXPERIMENT | g | 1+3 | 4 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_ANN3_PREPARE_OFF` | DELETE-OLD-PATH | b | 1+4 | 22 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_C43_RESIDENT_NORMALIZATION` | DELETE-ARM | a | 1+12 | 54 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DBSCAN_FAST_DENSE_ADJ` | DELETE-ARM | a | 1+0 | 1 | no record -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_DBSCAN_FAST_DIRECT_OUT` | DELETE-ARM | a | 1+0 | 1 | no record -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_DBSCAN_FAST_MMA_OFF` | DELETE-OLD-PATH | b | 1+3 | 5 | no record -- no A/B recorded; old path beside the Apple fast default |
@@ -567,7 +567,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_C33_FROZEN_CHUNKS` | DELETE-ARM | e | 1+4 | 5 | EXP:2323 DELETED (superseded) -- record read: loser, superseded, default-equal force knob, or never measured |
 | `MOJOLEARN_C34_PARALLEL_EDGES` | DELETE-ARM | a | 1+3 | 6 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_C62_SAME_COMPONENT_SKIP` | DELETE-ARM | a | 1+3 | 31 | EXP:1560 unmeasured -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DBSCAN_FAST_CC_BATCH` | DELETE-ARM | a | 1+0 | 1 | EXP:503 OPEN -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_HDB_LINKAGE_DEVICE_OFF` | DELETE-OLD-PATH | e | 1+2 | 3 | EXP:509 DROPPED-noise -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_HDB_ONE_SYNC` | DELETE-ARM | e | 1+3 | 4 | EXP:1914 KEPT (owed row withdrawn) -- record read: loser, superseded, default-equal force knob, or never measured |
@@ -623,7 +623,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_ANN3_TRAINSET_COPY` | DELETE-ARM | a | 1+1 | 7 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_C35_PACKED_LISTS` | DELETE-ARM | a | 1+8 | 30 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_C35_ROWS_128` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_GMM_INIT_FILL` | DELETE-ARM | a | 1+1 | 10 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF` | DELETE-OLD-PATH | b | 1+4 | 6 | no record -- no A/B recorded for the old path |
@@ -679,7 +679,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_C43_RESIDENT_NORMALIZATION` | DELETE-ARM | a | 1+12 | 54 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CAGRA_FAST_ITERS_OFF` | DELETE-OLD-PATH | b | 1+3 | 4 | EXP:2126 owed (boxes down) -- no A/B recorded; old path beside the Apple fast default |
 | `MOJOLEARN_CAGRA_FAST_SEEDS_OFF` | DELETE-OLD-PATH | b | 1+4 | 5 | EXP:2126 owed (boxes down) -- no A/B recorded; old path beside the Apple fast default |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_IDN_LANCZOS_POOL_OFF` | DELETE-OLD-PATH | b | 1+4 | 23 | no record -- no A/B recorded for the old path |
@@ -736,7 +736,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | EXP:500 HOLD-quality -- no A/B recorded; old path beside the Apple fast default |
 | `MOJOLEARN_C39_RETAIN_STATE` | DELETE-ARM | a | 1+10 | 12 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_C42_ACTIVE_TRIANGLE` | DELETE-ARM | a | 1+10 | 24 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_AP_CONV_CHUNK16` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_AP_CONV_CHUNK32` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded for the opt-in arm |
@@ -783,7 +783,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_C43_RESIDENT_NORMALIZATION` | DELETE-ARM | a | 1+12 | 54 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_C54_PREDICT_TILES` | DELETE-ARM | a | 1+8 | 45 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLUSTER_FAST_STOP_GROUP8` | DELETE-ARM | a | 1+5 | 6 | no record -- no A/B recorded (Apple fast opt-in) |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_GATES_OFF` | DELETE-OLD-PATH | e | 7+25 | 77 | EXP:2479 DELETED (old path) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_MBK_RESIDENT_OFF` | DELETE-OLD-PATH | e | 1+3 | 4 | EXP:2050 KEEP (promoted 2026-10-11; _OFF restores) -- record read: the default is the recorded winner or the kept path |
@@ -835,7 +835,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C14_GROUP_RHS` | DELETE-ARM | a | 1+5 | 35 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES` | DELETE-ARM | a | 1+8 | 31 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF` | DELETE-OLD-PATH | e | 1+7 | 8 | EXP:1993 PROMOTED (IDENTICAL default) -- record read: the default is the recorded winner or the kept path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF` | DELETE-OLD-PATH | e | 1+3 | 4 | EXP:435 DROPPED-slower -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_DECOMP_FAST_OMP_BLOCK` | DELETE-ARM | a | 1+4 | 11 | EXP:449 OPEN (measured, verdict owed) -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | EXP:931 M3 43765.6 -> 700.3 ms; original no-regression criterion PASS all 8 fixtures, ze -- no A/B recorded; old path beside the Apple fast default |
@@ -892,7 +892,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C27_NORM_VECTOR` | DELETE-ARM | a | 1+5 | 14 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES` | DELETE-ARM | a | 1+8 | 31 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF` | DELETE-OLD-PATH | e | 1+7 | 8 | EXP:1993 PROMOTED (IDENTICAL default) -- record read: the default is the recorded winner or the kept path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF` | DELETE-OLD-PATH | e | 1+3 | 4 | EXP:435 DROPPED-slower -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_DECOMP_FAST_OMP_BLOCK` | DELETE-ARM | a | 1+4 | 11 | EXP:449 OPEN (measured, verdict owed) -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_FA_GRAM_ONCE` | DELETE-ARM | a | 1+1 | 2 | EXP:1260 HOLD-quality -- no A/B recorded for the opt-in arm |
@@ -935,7 +935,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` | DELETE-OLD-PATH | e | 1+2 | 3 | EXP:1638 PROMOTED -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_CLASSICAL_C24_TREE4` | DELETE-ARM | e | 1+6 | 7 | grid classical-decomp.json promoted:ge123e6f9 -- grid C24_TSQR promoted the rows2048 arm; tree4 was a measured arm that was not promoted |
 | `MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF` | DELETE-OLD-PATH | e | 1+7 | 8 | EXP:1993 PROMOTED (IDENTICAL default) -- record read: the default is the recorded winner or the kept path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DECOMP_FAST_TSQR_GRID` | DELETE-ARM | a | 1+5 | 23 | no record -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_DECOMP_FAST_TSQR_NORM` | DELETE-ARM | a | 1+3 | 18 | no record -- no A/B recorded (Apple fast opt-in) |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
@@ -979,7 +979,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFCL_L11` | DELETE-EXPERIMENT | g | 1+0 | 1 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_C52_PAIR_ROWS` | DELETE-ARM | a | 2+15 | 34 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF` | DELETE-OLD-PATH | e | 1+6 | 7 | EXP:1984 PROMOTED (restored; IDENTICAL default) -- record read: the default is the recorded winner or the kept path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_FAMILY_CTX_PER_CALL` | DELETE-ARM | a | 5+4 | 13 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_GP_BULK_DOWNLOAD` | DELETE-ARM | a | 1+0 | 11 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
@@ -1039,7 +1039,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C05_OLS_PHASE` | DELETE-ARM | a | 1+4 | 11 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C17_LS_TRIALS` | DELETE-ARM | a | 2+3 | 5 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C22_TRIANGLE` | DELETE-ARM | a | 1+3 | 13 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF` | DELETE-OLD-PATH | e | 1+5 | 41 | EXP:1831 PROMOTED -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_QN_EXACT_TRIALS` | DELETE-ARM | a | 3+0 | 4 | no record -- no A/B recorded for the opt-in arm |
@@ -1092,7 +1092,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_CLASSICAL_C17_OVR` | DELETE-ARM | a | 1+3 | 4 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_C19_SGD_CHUNK` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED` | DELETE-ARM | a | 1+14 | 97 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_GLM_CELLS_MIXED` | DELETE-ARM | a | 2+0 | 3 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_HUBER_DEVICE_LBFGS_OFF` | DELETE-OLD-PATH | d | 1+3 | 4 | EXP:1256 ACCEPT/DEFAULT: FAST+Apple default -- promoted on one vendor in the record; tombstone notes the owed other vendor |
 | `MOJOLEARN_HUBER_FAST_BLOCK512` | DELETE-ARM | e | 1+3 | 7 | EXP:1423 KEEP (FAST+Apple default, `_OFF`) -- force-on knob: the arm is already the FAST Apple default through its _OFF switch (or umbrella); deleting the read leaves the default byte-identical |
@@ -1192,7 +1192,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AUTOGRAD_MODEL_UNFUSED` | DELETE-ARM | a | 1+4 | 15 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_BYTE_LM_GENERIC_OPS` | DELETE-ARM | a | 2+5 | 7 | EXP:2375 PENDING (A = restored ops are the default) -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CNN_GENERIC_OPS` | DELETE-ARM | a | 1+5 | 6 | EXP:2374 PENDING (A = restored fused block is the default) -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS` | DELETE-ARM | a | 2+9 | 11 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EMB_SERIAL_RUN_BEGIN` | DELETE-ARM | a | 1+0 | 10 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL` | DELETE-ARM | a | 2+5 | 10 | no record -- no A/B recorded for the opt-in arm |
@@ -1262,7 +1262,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF` | DELETE-OLD-PATH | b | 2+3 | 10 | EXP:2171 PENDING -- no A/B recorded for the old path |
 | `MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF` | DELETE-OLD-PATH | b | 1+0 | 1 | EXP:2177 PENDING -- no A/B recorded for the old path |
 | `MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE` | DELETE-OLD-PATH | b | 1+2 | 8 | no record -- no A/B recorded for the old path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS` | DELETE-ARM | a | 2+9 | 11 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF` | DELETE-OLD-PATH | b | 1+2 | 19 | EXP:2168 PENDING -- no A/B recorded for the old path |
@@ -1303,7 +1303,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFN_GEMM_SPLITK` | DELETE-ARM | f | 1+7 | 25 | EXP:618 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
 | `MOJOLEARN_AFN_GEMM_TILESHAPE` | DELETE-ARM | f | 1+6 | 16 | EXP:619 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
 | `MOJOLEARN_AUTOGRAD_EMBEDDING_OFF` | DELETE-OLD-PATH | b | 1+4 | 5 | no record -- no A/B recorded for the old path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS` | DELETE-ARM | a | 2+9 | 11 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EMB_DEVICE_SCRATCH_OFF` | DELETE-OLD-PATH | b | 1+3 | 60 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_EMB_RESIDENT_OFF` | DELETE-OLD-PATH | b | 1+4 | 55 | no record -- no A/B recorded for the old path |
@@ -1335,7 +1335,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFN_MAMBA3_BWD_ARENA` | DELETE-ARM | f | 2+10 | 50 | EXP:634 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
 | `MOJOLEARN_AFN_MAMBA3_BWD_CHUNK` | DELETE-ARM | f | 2+2 | 4 | EXP:635 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
 | `MOJOLEARN_AFN_SAMBA_ALL` | DELETE-ARM | f | 5+17 | 60 | EXP:652 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_M1_SCAN` | DELETE-ARM | e | 2+5 | 7 | EXP:2071 LOSER (deleted) -- record read: loser, superseded, default-equal force knob, or never measured |
 | `MOJOLEARN_IDN_M2_BWD_CELL_OFF` | DELETE-OLD-PATH | b | 2+14 | 82 | no record -- no A/B recorded for the old path |
@@ -1396,7 +1396,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL` | DELETE-ARM | f | 1+2 | 4 | EXP:639 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
 | `MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE` | DELETE-ARM | f | 1+3 | 5 | EXP:641 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
 | `MOJOLEARN_AFN_MAMBA_PROJ_SPLITK` | DELETE-ARM | f | 1+4 | 20 | EXP:641 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ACT_RETAIN` | DELETE-ARM | e | 2+4 | 6 | EXP:2365 DELETED (superseded) -- record read: loser, superseded, default-equal force knob, or never measured |
 | `MOJOLEARN_IDN_ACT_RETAIN_OFF` | DELETE-OLD-PATH | e | 2+4 | 6 | EXP:2365 DELETED (superseded) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
@@ -1429,7 +1429,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 |---|---|---|---|---|---|
 | `MOJOLEARN_CNN_GENERIC_OPS` | DELETE-ARM | a | 1+5 | 6 | EXP:2374 PENDING (A = restored fused block is the default) -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_CNN_PREDICT_PROGRAM_COPY` | DELETE-ARM | a | 1+6 | 12 | EXP:2411 PENDING (A = unfilled X/output buffers, cached replay, one-chunk output in place -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_ETS_TEAM_OFF` | DELETE-OLD-PATH | d | 1+4 | 5 | EXP:535 KEPT aec9f8c33 -- promoted on one vendor in the record; tombstone notes the owed other vendor |
 | `MOJOLEARN_IDN_AF_COL_CHUNK_FOLD` | DELETE-ARM | a | 1+3 | 6 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
@@ -1549,7 +1549,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_BPE_LIVEBUF` | DELETE-ARM | a | 1+6 | 34 | EXP:664 OPEN -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_BPE_MERGE_BATCH` | DELETE-ARM | a | 1+4 | 30 | EXP:665 OPEN -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_BPE_TRAIN_DEVICE` | DELETE-ARM | a | 1+1 | 2 | EXP:666 OPEN -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_ETS_TEAM_OFF` | DELETE-OLD-PATH | d | 1+4 | 5 | EXP:535 KEPT aec9f8c33 -- promoted on one vendor in the record; tombstone notes the owed other vendor |
 | `MOJOLEARN_IDN_AF_RESIDENT_OFF` | DELETE-OLD-PATH | b | 1+9 | 13 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
@@ -1603,7 +1603,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_BYTE_LM_RETAIN_EAGER` | DELETE-ARM | a | 1+4 | 5 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_BYTE_LM_STICKY_EAGER` | DELETE-ARM | a | 1+2 | 5 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | no record -- no A/B recorded for the old path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_CE_DENOM_ROWFOLD` | DELETE-ARM | a | 1+5 | 14 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_CE_PIPE_UP_OFF` | DELETE-OLD-PATH | b | 1+2 | 4 | no record -- no A/B recorded for the old path |
@@ -1641,7 +1641,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFN_SAMBA_HEAD_GEMM` | DELETE-ARM | f | 1+4 | 50 | EXP:657 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
 | `MOJOLEARN_ATTN_ES_TQ16` | DELETE-ARM | a | 2+3 | 8 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_ATTN_ES_TQ8` | DELETE-ARM | a | 2+3 | 8 | no record -- no A/B recorded for the opt-in arm |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_HOST_RMS_FORCE_SERIAL` | DELETE-ARM | a | 1+1 | 3 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ACT_RETAIN` | DELETE-ARM | e | 2+4 | 6 | EXP:2365 DELETED (superseded) -- record read: loser, superseded, default-equal force knob, or never measured |
 | `MOJOLEARN_IDN_ACT_RETAIN_OFF` | DELETE-OLD-PATH | e | 2+4 | 6 | EXP:2365 DELETED (superseded) -- record read: the default is the recorded winner or the kept path |
@@ -1708,7 +1708,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF` | DELETE-OLD-PATH | b | 1+2 | 5 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_ATTN_CACHE_WAIT` | DELETE-ARM | a | 1+2 | 3 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_BN_FOLD_BLOCK_OFF` | DELETE-OLD-PATH | b | 2+4 | 9 | no record -- no A/B recorded for the old path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM` | DELETE-ARM | a | 1+0 | 1 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_FUSE_RESIDUAL1_NORM2` | DELETE-ARM | a | 2+2 | 4 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
@@ -1781,7 +1781,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | define | decision | rule | sites | lines | evidence / why |
 |---|---|---|---|---|---|
 | `MOJOLEARN_AFN_CNN_DIRECT` | DELETE-ARM | f | 1+8 | 45 | EXP:603 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) -- neural MERGED-UNMEASURED opt-in (Oct 3), never measured |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_IDN_ADAPT_M_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_CNN_CONV_RELU` | DELETE-ARM | a | 1+3 | 4 | no record -- no A/B recorded for the opt-in arm |
@@ -1939,7 +1939,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFT_F03` | DELETE-EXPERIMENT | g | 1+8 | 9 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_F04` | DELETE-EXPERIMENT | g | 1+4 | 5 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_F05` | DELETE-EXPERIMENT | g | 1+4 | 5 | no record -- never-run Apple FAST programme card |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_GBDT_QUANT_DEVICE` | DELETE-EXPERIMENT | g | 1+8 | 18 | EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE -- expdel-05 note: NEUTRAL; held only as both-arm prerequisite of an unmeasured Apple FAST card: goes with the |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_RF_COLS40_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | no record -- no A/B recorded for the old path |
@@ -2192,7 +2192,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFT_N04` | DELETE-EXPERIMENT | g | 1+2 | 3 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_N05` | DELETE-EXPERIMENT | g | 1+2 | 3 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_N06` | DELETE-EXPERIMENT | g | 1+2 | 3 | no record -- never-run Apple FAST programme card |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF` | DELETE-OLD-PATH | d | 1+2 | 19 | EXP:110 KEPT c55b8c377 -- promoted on one vendor in the record; tombstone notes the owed other vendor |
 | `MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` | DELETE-OLD-PATH | e | 1+0 | 1 | EXP:137 DROPPED-noise -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_GBDT_DW_MODE_SKIP_OFF` | DELETE-OLD-PATH | d | 1+5 | 6 | EXP:112 KEPT 7736fa5b8 -- promoted on one vendor in the record; tombstone notes the owed other vendor |
@@ -2248,7 +2248,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFT_N08` | DELETE-EXPERIMENT | g | 1+4 | 5 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_N12` | DELETE-EXPERIMENT | g | 1+2 | 12 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_P05` | DELETE-EXPERIMENT | g | 1+3 | 45 | no record -- never-run Apple FAST programme card |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_EST_ITERS_DEVICE` | DELETE-EXPERIMENT | g | 1+4 | 5 | EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE -- expdel-05 note: NEUTRAL; held only as both-arm prerequisite of an unmeasured Apple FAST card: goes with the |
 | `MOJOLEARN_GBDT_FUSED_LEVEL_OFF` | DELETE-OLD-PATH | b | 2+8 | 13 | no record -- no A/B recorded for the old path |
 | `MOJOLEARN_GBDT_NS_PREDICT_BITVEC` | DELETE-ARM | a | 1+1 | 2 | no record -- no A/B recorded for the opt-in arm |
@@ -2346,7 +2346,7 @@ Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md recor
 | `MOJOLEARN_AFT_F11` | DELETE-EXPERIMENT | g | 1+10 | 11 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AFT_F12` | DELETE-EXPERIMENT | g | 1+2 | 24 | no record -- never-run Apple FAST programme card |
 | `MOJOLEARN_AGN_IDN_SYN_POOL_OFF` | DELETE-OLD-PATH | b | 1+3 | 7 | no record -- no A/B recorded for the old path |
-| `MOJOLEARN_COLUMN_CPU` | DELETE-ARM | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
+| `MOJOLEARN_COLUMN_CPU` | KEEP (build switch: the CPU column; corrected 2026-11-15 by the orchestrator, not an experiment) | a | 28+743 | 1074 | no record -- no A/B recorded for the opt-in arm |
 | `MOJOLEARN_DART_DEVICE_OFF` | DELETE-OLD-PATH | d | 1+10 | 19 | EXP:104 KEPT 741a5495d -- promoted on one vendor in the record; tombstone notes the owed other vendor |
 | `MOJOLEARN_IDN_ALL_OFF` | DELETE-OLD-PATH | e | 403+1335 | 3911 | EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) -- record read: the default is the recorded winner or the kept path |
 | `MOJOLEARN_IDN_DART_DEVICE_OFF` | DELETE-OLD-PATH | b | 1+2 | 3 | no record -- no A/B recorded for the old path |
@@ -2767,6 +2767,12 @@ Live tooling that still names a define this plan deletes: one tooling lane moves
 | `tools/w2_clres_quality.py` | 1 |
 | `tools/xprep_pool_pair.py` | 1 |
 | `x_neighbors/gen.py` | 1 |
+
+## Corrections
+
+- `MOJOLEARN_COLUMN_CPU` was listed DELETE-ARM in every lane that reads it (743 sites): it is the CPU-column build switch
+  (`checks/kernel_matrix.mojo` TARGET_COLUMN, `checks/native_tests/runner.mojo`, every host binding, verify's CPU column). It is
+  KEEP in every lane; no lane folds it. Corrected before any lane merged.
 
 ## Doubts
 
