@@ -172,12 +172,9 @@ from gbdt.methods.kernel.two_level_leaves import (
 # TOMBSTONE: MOJOLEARN_SYM_CTR_PERM_BATCH (DROPPED-noise) deleted 2026-10-04 by f4ac2ee28; code recoverable at f4ac2ee28^.
 # Restore: git apply experiments/removed/MOJOLEARN_SYM_CTR_PERM_BATCH.patch; record in docs/TOMBSTONES.md.
 from gbdt.models.kernel.add_bin_values import (
-    IDN_APPLY_WIDE,
     IDN_PREDICT_FOUR,
     compute_bins_and_add_kernel,
     launch_oblivious_apply_four,
-    launch_oblivious_apply_wide,
-    uniform_positive_depth,
 )
 from checks.kernel_matrix import (
     TARGET_COLUMN,
@@ -5929,25 +5926,15 @@ def predict(
     # lane/fam2-gbdt F3 / F4: the same per-row ordered adds in fewer
     # launches (`gbdt/models/kernel/add_bin_values.mojo`)
     var grouped = False
-    comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:
+    comptime if IDN_PREDICT_FOUR:
         var tree_depths = List[Int](capacity=model.size())
         for t in range(model.size()):  # small-loop(model: one entry per tree): collects tree depths for the apply dispatch
             tree_depths.append(model.weak_models[t].structure.get_depth())
-        comptime if IDN_APPLY_WIDE:
-            var uniform = uniform_positive_depth(tree_depths)
-            if uniform > 0:
-                launch_oblivious_apply_wide(
-                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
-                    uniform, model.size(), n_rows, cursor, approx_dim,
-                )
-                grouped = True
-        comptime if IDN_PREDICT_FOUR:
-            if not grouped:
-                launch_oblivious_apply_four(
-                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
-                    tree_depths, n_rows, cursor, approx_dim,
-                )
-                grouped = True
+        launch_oblivious_apply_four(
+            ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
+            tree_depths, n_rows, cursor, approx_dim,
+        )
+        grouped = True
     if not grouped:
         lvl = 0
         leaf = 0
