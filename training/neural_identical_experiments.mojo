@@ -19,7 +19,7 @@ comptime _ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Arm 2 of the ONE RoPE switch MOJOLEARN_IDN_ROPE (arm 1 is NN27).
 # TOMBSTONE: MOJOLEARN_IDN_ROPE (arms 1 and 2, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ROPE.patch
-comptime IDN_ROPE_CACHE = False
+# (Sweep 2026-11-15: IDN_ROPE_CACHE = False removed with its reader and rotary_k_prefill_cache_kernel.)
 # NI24 (+ NN28, merged 2026-10-07; NN28 was the same capability on fewer
 # callers): only owned training-prefill callers may omit the persistent cache
 # copy. One switch for byte_lm, its layer pool and modeling_llama.

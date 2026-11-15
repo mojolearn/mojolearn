@@ -290,7 +290,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from gemm.experiments.neural_tiled_v2 import NI07_GROUPED_PROJECTIONS, neural_projection_triplet
 from training.neural_identical_experiments import (
-    IDN_TRAIN_SWIGLU, IDN_ROPE_CACHE,
+    IDN_TRAIN_SWIGLU,
     IDN_TRAIN_NO_DECODE_CACHE,
 )
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -2863,51 +2863,6 @@ def apply_rotary_pos_emb(
 # ===========================================================================
 
 
-def rotary_k_prefill_cache_kernel(
-    k_rope: MutPointer[Float32, MutAnyOrigin],
-    k_cache: MutPointer[Float32, MutAnyOrigin],
-    v_cache: MutPointer[Float32, MutAnyOrigin],
-    k_proj: MutPointer[Float32, MutAnyOrigin],
-    v_proj: MutPointer[Float32, MutAnyOrigin],
-    cos_tab: MutPointer[Float32, MutAnyOrigin],
-    sin_tab: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, nkv_in: Int32, hd_in: Int32, rd_in: Int32,
-):
-    """NI23: full-prefill K RoPE plus the K/V attention-layout stores.
-
-    Only cache-empty, absolute-position-zero calls enter. One cell computes
-    apply_rotary_pos_emb_kernel's clean S9/S10 spelling, saves its original
-    token-major tape value, and writes the same value to the packed K layout.
-    V is a raw copy, matching kv_append2_kernel (no newly introduced FTZ).
-    """
-    var l = Int(l_in)
-    var nkv = Int(nkv_in)
-    var hd = Int(hd_in)
-    var rd = Int(rd_in)
-    var half = rd // 2
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(b_in) * l * nkv * hd:
-        return
-    var d = i % hd
-    var kvh = (i // hd) % nkv
-    var tok = i // (nkv * hd)
-    var t = tok % l
-    var bb = tok // l
-    var rotated = ftz(k_proj.unsafe_load(i))
-    if d < rd:
-        var f = d if d < half else d - half
-        var c = ftz(cos_tab.unsafe_load(t * half + f))
-        var s = ftz(sin_tab.unsafe_load(t * half + f))
-        var rh = -ftz(k_proj.unsafe_load(i + half)) if d < half else ftz(k_proj.unsafe_load(i - half))
-        var a = ftz(identical_mul(rotated, c))
-        var bterm = ftz(identical_mul(rh, s))
-        rotated = ftz(ftz(a) + ftz(bterm))
-    k_rope.unsafe_store(i, rotated)
-    var dst = ((bb * nkv + kvh) * l + t) * hd + d
-    k_cache.unsafe_store(dst, rotated)
-    v_cache.unsafe_store(dst, v_proj.unsafe_load(i))
-
-
 def kv_append_kernel(
     new_cache: MutPointer[Float32, MutAnyOrigin],
     old_cache: MutPointer[Float32, MutAnyOrigin],
@@ -5005,7 +4960,6 @@ def llama_attention_forward(
 
     # ---- apply_rotary_pos_emb (:257). S9 and S10, q then k. V IS NOT
     #      ROTATED (:257 takes q and k only).
-    var rope_cache_fused = False
     comptime if NN27_QK_ROPE_PAIR and not SAB_S07_ROPE_RELATIVE_POSITION and not SAB_S09_ROPE_HALVES_SWAPPED and not SAB_S10_ROPE_FUSED:
         step_count_launch()
         ctx.enqueue_function[qk_rope_pair_kernel](
@@ -5031,23 +4985,10 @@ def llama_attention_forward(
             pos0,
             rope.rope_dim,
         )
-        comptime if IDN_ROPE_CACHE and not BLOCK_ANY_SABOTAGE:
-            # Cache semantics, not a benchmark size: no previous keys and no ring.
-            rope_cache_fused = s_old == 0 and pos0 == 0 and window == 0
-        if rope_cache_fused:
-            step_count_launch()
-            ctx.enqueue_function[rotary_k_prefill_cache_kernel](
-                stages.k_rope.unsafe_ptr(), stages.k_cache.unsafe_ptr(),
-                stages.v_cache.unsafe_ptr(), stages.k_proj.unsafe_ptr(),
-                stages.v_proj.unsafe_ptr(), rope.cos.unsafe_ptr(), rope.sin.unsafe_ptr(),
-                Int32(b), Int32(l), Int32(nkv), Int32(hd), Int32(rope.rope_dim),
-                grid_dim=(_grid(m * kw), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-            )
-        else:
-            apply_rotary_pos_emb(
-                ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
-                m, l, nkv, hd, pos0, rope.rope_dim,
-            )
+        apply_rotary_pos_emb(
+            ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
+            m, l, nkv, hd, pos0, rope.rope_dim,
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5067,9 +5008,7 @@ def llama_attention_forward(
     #      SPAN this call reads (absolute `[key_lo, pos0 + l)`), gathered
     #      from the ring plus this call's tokens; the ring itself is then
     #      updated in place. The recorded `kv.k_cache` stage is that span.
-    if rope_cache_fused:
-        pass  # NI23 wrote both packed attention stages with K RoPE above.
-    elif window == 0:
+    if window == 0:
         step_count_launch()
         ctx.enqueue_function[kv_append2_kernel](
             stages.k_cache.unsafe_ptr(),
