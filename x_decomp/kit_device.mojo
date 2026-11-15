@@ -26,7 +26,6 @@ enqueued launch, with no sync:
 
 Host floats a launch reads are held (`hold_f`, `hold_i`) until the next
 sync, so an enqueued upload never reads freed memory."""
-from experiments.classical_identical_ideas.linear_controls import C28_BUCKET_SOLVES
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -47,7 +46,6 @@ from x_decomp.device import (
     gamma_kernel,
     gemm_scratch,
     launch_colsum,
-    launch_classical_code_rows,
     launch_ew,
     launch_gemm,
     launch_gemm_ordered,
@@ -899,13 +897,9 @@ struct DKit(Movable):
             per = n * (k * k + 3 * k)
         var dn = self.ctx.enqueue_create_buffer[DType.float32](n)
         var ds = self.ctx.enqueue_create_buffer[DType.float32](per)
-        if C28_BUCKET_SOLVES:
-            if kind != 0:
-                var wsub = self._sub(W)
-                enqueue_fill(self.ctx, wsub, Float32(0.0))
-            launch_classical_code_rows(self.ctx, G.p(), Q.p(), W.p(), rebind[F32Ptr](ds.unsafe_ptr()), rebind[F32Ptr](dn.unsafe_ptr()),
-                                       n, k, kind, a, b, Float32(alpha), Float32(tol))
-        elif kind == 0:
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (its use here: the bucketed code-row solves) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 0794ada190.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-17-decomposition.patch.
+        if kind == 0:
             self.ctx.enqueue_function[lasso_rows_kernel](
                 G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Float32(alpha), Int32(a),
                 Float32(tol), Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
