@@ -188,7 +188,7 @@ def timing_bytes(on: Bool, name: String, n_bytes: Int):
     """DEVIATION 2499: the byte count of a transfer phase, on the same
     `timing` line shape the phase timers use (`timing <name> <n> bytes`),
     so a reader can put bandwidth beside conversion. Prints only under
-    `MOJOLEARN_TRANSFORMER_TIMING=1`; costs nothing otherwise."""
+    `-D MOJOLEARN_TRANSFORMER_TIMING`; costs nothing otherwise."""
     if not on:
         return
     print("timing " + name + " " + String(n_bytes) + " bytes")
@@ -1231,7 +1231,7 @@ def byte_train_step(ctx: DeviceContext, mut trainer: ByteTrainer,
     # Device-state validation requires readback. It precedes all numerical work
     # and all writes; downloads themselves are the only device operations here.
     # DEVIATION 2499: step-phase timers, IDENTICAL-only instrumentation
-    # behind MOJOLEARN_TRANSFORMER_TIMING=1 (the switch the block timers
+    # behind -D MOJOLEARN_TRANSFORMER_TIMING (the define the block timers
     # use). Every `timing_tick` synchronizes the context before it reads
     # the clock; on a phase that already ends with its own wait or a host
     # scan the extra wait is a no-op, and where a phase was asynchronous
@@ -1791,7 +1791,7 @@ def _byte_layer_sync() -> Bool:
     """lane/neural-net-experiment (2026-09-30): whether the step waits on
     the host after EVERY layer's forward and backward (sixteen waits a step
     at the board's depth, before the fused attention's own regime reads).
-    `MOJOLEARN_BYTE_LM_LAYER_SYNC=0` skips them: every launch sits on the
+    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF` skips them: every launch sits on the
     one in-order context, the next layer's kernels are enqueued behind this
     layer's, and the eager-scratch release only drops buffer handles whose
     frees are themselves enqueued (DEVIATION 2520), so no bit moves; what
@@ -1799,7 +1799,7 @@ def _byte_layer_sync() -> Bool:
     measured behaviour; the L40S toggle sweep read 1.00 either way) and OFF
     on the Apple column (lane/neural-pass43, 2026-10-01: a Metal wait with
     a readback costs about 0.2 ms on the M4 and more on the M3 Ultra;
-    `MOJOLEARN_BYTE_LM_LAYER_SYNC=1` restores them); the step's `step.*`
+    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` restores them); the step's `step.*`
     timing ticks read the same either way.
 
     A build constant since lane envgate-neural-lm (2026-11-15): it was a

@@ -22,7 +22,7 @@ chunks free for the next session of any shape and never frees them under
 live views (the views die with their owner's fields, after `__deinit__`
 runs). The bytes a kernel reads and writes are the same; only where a
 buffer's storage sits moves. Default on for the Apple column, off
-elsewhere; `MOJOLEARN_DEVICE_ARENA=0/1` forces either.
+elsewhere; `-D MOJOLEARN_DEVICE_ARENA` / `-D MOJOLEARN_DEVICE_ARENA_OFF` force either.
 """
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

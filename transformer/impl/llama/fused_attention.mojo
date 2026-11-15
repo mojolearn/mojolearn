@@ -384,7 +384,7 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 #
 # `-D MOJOLEARN_ATTN_PHASE_TIMERS=1` compiles per-kernel timers into both
 # launchers; they print under the SAME run-time switch as the block timers
-# (`MOJOLEARN_TRANSFORMER_TIMING=1`), one `timing attn.<kernel> <ms> ms`
+# (`-D MOJOLEARN_TRANSFORMER_TIMING`), one `timing attn.<kernel> <ms> ms`
 # line per launch on fd 1, so the LM step's `--component-timing` step folds
 # them into result.json with no harness change (the probe already excludes
 # the `attn.` prefix from its total: these are sub-phases of `attn.core`
@@ -1871,7 +1871,7 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
 
 @always_inline
 def _attn_speculative() -> Bool:
-    """lane/neural-net-experiment (2026-09-30), `MOJOLEARN_ATTN_SPECULATIVE=1`:
+    """lane/neural-net-experiment (2026-09-30), `-D MOJOLEARN_ATTN_SPECULATIVE`:
     the fused forward's regime scan runs BEHIND the fused kernels instead of
     in front of them, so the one wait that reads the scan also covers the
     kernels and the corner flag: one host round trip per layer instead of
@@ -1883,7 +1883,7 @@ def _attn_speculative() -> Bool:
     on inf or NaN faults nowhere and every loop is shape-bound. Default
     off on NVIDIA and AMD (the L40S toggle sweep read 0.99-1.00) and ON on
     the Apple column (lane/neural-pass43, 2026-10-01: one Metal round trip
-    a layer instead of two; `MOJOLEARN_ATTN_SPECULATIVE=0` restores the
+    a layer instead of two; `-D MOJOLEARN_ATTN_SPECULATIVE_OFF` restores the
     scan in front); the identity gate is the check.
 
     A build constant since lane envgate-neural-lm (2026-11-15): it was a
