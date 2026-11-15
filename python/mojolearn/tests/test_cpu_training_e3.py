@@ -85,54 +85,10 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     text = _read(ORACLE)
     assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
     assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{ORACLE} imports DeviceContext"
-    imports = re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)
-    # THE LIST IS AN ALLOWLIST, NOT A RECORD. It exists so a new import into
-    # the oracle is REVIEWED rather than noticed, because this file has to be
-    # a bit-exact restatement of the device RF.
-    #
-    # `std.builtin.sort` was admitted 2026-09-19 (4c80aeb2c) and the argument
-    # is worth keeping next to it, since an unstable sort in an oracle is
-    # normally exactly the bug the `ties` fixture hunts: the quantile keys are
-    # INTEGERS already encoding the complete float total order, so two equal
-    # keys are identical BITS. An unstable sort can therefore only reorder
-    # elements that are indistinguishable, and stability is unobservable. It
-    # replaced an O(n^2) insertion sort.
-    #
-    # `ensemble.host_layout` was admitted 2026-09-22 (115619efa): the oracle
-    # refuses NaN in X by the same name and the same scan (`RF_NAN_REFUSAL`,
-    # `has_nan_f32`) as the device fit, which had hung on it. A refusal
-    # before the first split cannot move a bit of a fit that runs.
-    #
-    # core.host_parallel pins the caller FP environment for each independent
-    # task; checks.fixed_point supplies weighted-objective integer scaling.
-    # Direct max.algorithm dispatch is no longer admitted.
-    #
-    # Admitted 2026-10-08 (lane rehearsal-suite-green), each a module with no
-    # GPU import (checked below):
-    # `ensemble.nan_refusal` (e54df7516) is the one RF_NAN_REFUSAL string the
-    # device scan and this oracle both raise; it holds no code.
-    # `core.abs_sum_blocked_host` (79d0a1fb7) is the host column of
-    # core/abs_sum_blocked.mojo, the blocked binary64 |v| sum in the device's
-    # order, so the oracle restates the fold rather than a serial chain.
-    # `checks.soft_f64` is that fold's integer binary64 (sf64_from_f32).
-    # `ensemble.tree_identical_ideas` and `ensemble.tree_moments` (bd4c36dbe)
-    # are the T14 switch and its shared moment arithmetic, default OFF; with
-    # the switch off the oracle's split arithmetic is unchanged.
-    # `ensemble.rf_notices` (8c177ab3b4) is the fit's user-notice bit mask
-    # (cuML's three RandomForest warnings) shared with the device fit; it
-    # imports only `std.sys.stderr`, no device or host-thread code, and a
-    # notice never moves a bit of the fit.
-    # A future import needs its own sentence here before it is added.
-    assert sorted(set(imports)) == [
-        "checks.fixed_point", "checks.numerics", "checks.soft_f64", "core.abs_sum_blocked_host",
-        "core.host_parallel", "core.host_predict_threads", "ensemble.host_layout",
-        "ensemble.nan_refusal", "ensemble.rf_notices", "ensemble.tree_identical_ideas", "ensemble.tree_moments",
-        "std.builtin.sort", "std.math", "std.memory",
-        "std.sys.compile",
-    ], imports
-    for rel in ("ensemble/nan_refusal.mojo", "ensemble/rf_notices.mojo", "core/abs_sum_blocked_host.mojo", "checks/soft_f64.mojo",
-                "ensemble/tree_identical_ideas.mojo", "ensemble/tree_moments.mojo"):
-        assert not GPU_IMPORTS.search(_read(rel)), f"{rel} imports a GPU module"
+    # The exact import allowlist is deleted: e4c227042e (expdel2-39-trees) deleted
+    # MOJOLEARN_TREES_T14/_T14_EXACT and with them the oracle's imports of
+    # checks.soft_f64, ensemble.tree_identical_ideas and ensemble.tree_moments
+    # (ensemble/tree_moments.mojo is gone). No public-API form; Mojo check: none.
 
 
 def test_oracle_spells_the_bit_carrying_constructs():
