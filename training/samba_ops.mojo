@@ -12,7 +12,6 @@ the contract's own `ftz(ftz(x) + ftz(y))` node over pairs in ascending
 microbatch index. Every buffer lives for one call; no pointer is retained.
 """
 
-from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -506,12 +505,6 @@ def samba_tree_level_kernel(
     dst.unsafe_store(i, ftz(identical_mul_add(Float32(1.0), left, right)))
 
 
-def samba_leaf_ids_kernel(ids: MutPointer[Int32, MutAnyOrigin], a: Int32):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(a):
-        ids[i] = Int32(i)
-
-
 def samba_validate_accumulation(n: Int, a: Int, t_tokens: Int) raises:
     """Shared shape/alignment admission before any accumulation allocation."""
     if n < 1:
@@ -622,26 +615,9 @@ def _samba_accumulate_core(
 ) raises -> Int:
     """`samba_accumulate_buffer`'s tree; the result goes out through
     `_accumulate_out` (host pointer or device buffer)."""
-    comptime if NN63_CANONICAL_SHARD_MERGE:
-        if a > 1:
-            # Supported multi-GPU callers own disjoint columns and deliver ALL
-            # microbatch leaves in canonical order after each upload completes.
-            # Identity permutation is complete by construction, without trusting
-            # arrival order or a pointer-based logical-leaf cache.
-            var ids = ctx.enqueue_create_buffer[DType.int32](a)
-            ctx.enqueue_function[samba_leaf_ids_kernel](ids.unsafe_ptr(), Int32(a), grid_dim=(_grid(a), 1, 1), block_dim=(SAMBA_TPB, 1, 1))
-            var first = ctx.enqueue_create_buffer[DType.float32](a * n)
-            var second = ctx.enqueue_create_buffer[DType.float32](((a + 1) // 2) * n)
-            var result = ctx.enqueue_create_buffer[DType.float32](n)
-            nn_shard_merge_into(ctx, result, src, ids, first, second, a, n)
-            _accumulate_out(ctx, out_ptr, out_dev, result, n)
-            ctx.synchronize()
-            _ = ids^
-            _ = first^
-            _ = second^
-            _ = result^
-            _ = src^
-            return n
+    # TOMBSTONE: MOJOLEARN_NN63_CANONICAL_SHARD_MERGE (opt-in canonical shard merge, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5f27699bee.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch
+
     # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in tree status kernel and its readback, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at e4e5ad1f37.
     # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
     var dst = ctx.enqueue_create_buffer[DType.float32](n * max(1, a // 2))

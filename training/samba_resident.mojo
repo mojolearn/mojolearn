@@ -102,7 +102,6 @@ from training.estimator import (
     identical_ce_loss_resident,
     identical_optimizer_step_resident_io,
 )
-from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_SAMBA_ATTN_RECOMPUTE
 from training.samba_ops import (
     SAMBA_TPB,
@@ -110,7 +109,6 @@ from training.samba_ops import (
     _samba_accumulate_core,
     samba_accumulate_host,
     samba_validate_accumulation,
-    samba_leaf_ids_kernel,
     samba_tree_level_kernel,
 )
 from transformer.block_options import BlockOptions
@@ -324,21 +322,11 @@ def _pair_add_device(
     TWO pieces, which is what `SambaStack.loss_and_grads` asks of
     `accumulate_grads([d_emb, dw_head], tokens=None)` for the tied embedding
     gradient. Launch for launch `training/samba_ops.mojo::samba_accumulate_buffer`
-    at `a == 2` (one level, `pairs == 1`), including its NN63 arm,
+    at `a == 2` (one level, `pairs == 1`),
     with the result left on the device instead of copied to a host pointer."""
-    comptime if NN63_CANONICAL_SHARD_MERGE:
-        var ids = ctx.enqueue_create_buffer[DType.int32](2)
-        ctx.enqueue_function[samba_leaf_ids_kernel](
-            ids.unsafe_ptr(), Int32(2),
-            grid_dim=(_grid(2), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
-        var first = ctx.enqueue_create_buffer[DType.float32](2 * n)
-        var second = ctx.enqueue_create_buffer[DType.float32](n)
-        nn_shard_merge_into(ctx, dst, src, ids, first, second, 2, n)
-        _ = ids^
-        _ = first^
-        _ = second^
-        return
+    # TOMBSTONE: MOJOLEARN_NN63_CANONICAL_SHARD_MERGE (opt-in canonical shard merge, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5f27699bee.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch
+
     # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in tree status kernel, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at e4e5ad1f37.
     # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
     ctx.enqueue_function[samba_tree_level_kernel](
