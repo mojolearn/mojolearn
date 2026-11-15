@@ -435,8 +435,7 @@ struct KnnIndexCache(Movable):
         self.pool_busy = 0
 
 
-# K4 (lane fg-knn-nb, 2026-10-09): `-D MOJOLEARN_KNN_SCRATCH_POOL_OFF=1`
-# restores the per-call allocations. DEFAULT ON (a waste removal): a search
+# K4 (lane fg-knn-nb, 2026-10-09), the only route (a waste removal): a search
 # over a resident index used to create and free, on every call, the query
 # copy, both norm vectors, the `query_tile x index_tile` distance tile
 # (1 GiB at a 4096 x 65,536 tile), the `query_tile x 2 x buf_len` radix
@@ -449,7 +448,8 @@ struct KnnIndexCache(Movable):
 # owned by the resident entry, dropped with it before its context, and only
 # used on a single-device search; a call that keeps its device indices takes
 # a fresh `out_idx` (it is moved out to the caller).
-comptime KNN_SCRATCH_POOL = not is_defined["MOJOLEARN_KNN_SCRATCH_POOL_OFF"]()
+# TOMBSTONE: MOJOLEARN_KNN_SCRATCH_POOL_OFF (per-call allocation rollback of the CONFIRMED pool) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 465cb20ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def knn_pool_view[dtype: DType](

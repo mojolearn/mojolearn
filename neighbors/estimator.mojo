@@ -145,7 +145,6 @@ from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
     KNN_RESIDENT_CACHE,
-    KNN_SCRATCH_POOL,
     KnnIndexCachePointer,
     knn_pool_view,
     knn_pool_host_dist,
@@ -1263,14 +1262,14 @@ def _knn_search_on_device_index(
     `devices` and `buf_len` are the plan's (`_knn_search_plan`). Split out
     2026-09-17 (DEVIATION 2921) so a resident index enters here; every
     statement below is where it was."""
-    # K4 (KNN_SCRATCH_POOL, `-D MOJOLEARN_KNN_SCRATCH_POOL_OFF=1` restores
-    # the per-call allocations; see knn_brute_force.mojo): a single-device
+    # K4 (the scratch pool; see knn_brute_force.mojo): a single-device
     # search over a resident index takes exact-length views of the handle's
     # pooled scratch instead of allocating it per call.
+    # TOMBSTONE: MOJOLEARN_KNN_SCRATCH_POOL_OFF (per-call allocation rollback of the CONFIRMED pool) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 465cb20ca0.
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch; record in docs/TOMBSTONES.md.
     var pooled = False
-    comptime if KNN_SCRATCH_POOL:
-        if cache and devices <= 1:
-            pooled = knn_pool_acquire(cache.value())
+    if cache and devices <= 1:
+        pooled = knn_pool_acquire(cache.value())
     var n_dist_cells = tiled_distance_tile_cells(query_tile, n_index, n_features, k, mtr)
     var queries: DeviceBuffer[DType.float32]
     var index_norm: DeviceBuffer[DType.float32]
