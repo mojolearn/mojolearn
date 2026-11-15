@@ -99,16 +99,11 @@ from checks.soft_f64 import (
 #: an unweighted fit (already on the device); on a weighted fit the host
 #: uploads its keep/zero decision per leaf (one float per leaf, from the
 #: weight sums the oracle's constructor already read).
-#: `-D MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 0ed18e01e0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
-comptime IDN_EST_ONE_STEP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF"]()
-    )
-)
+comptime IDN_EST_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 #: lane fix-g1-gbdt (audit G1 / F7 "GBDT multiclass leaf solve"; IDENTICAL,
