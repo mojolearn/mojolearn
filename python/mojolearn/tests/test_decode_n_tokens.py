@@ -5,7 +5,9 @@ sessions. One `decode` call over N tokens must return the bytes N `step`
 calls return, token by token, and leave the state (synced back) and the
 reports where the steps leave them; a second `decode` after it continues the
 same state. Holds on whichever arm the box has (the device session where the
-binding exports one, the host arm where it does not). Not a lane.
+binding exports one, the host arm where it does not). Not a lane. The Mamba
+relation is the native check checks/native_tests/mamba_decode_n_tokens.mojo;
+here the Mamba doors keep their shape, sync and refusal tests.
 """
 import os
 
@@ -96,30 +98,26 @@ def _m1_state_bytes(state):
     return [np.asarray(state.conv_window).tobytes(), np.asarray(state.h).tobytes()]
 
 
+# The Mamba-1/2/3 relation (one decode over N tokens, in two calls, equals N
+# session steps: y, the reports, the state and the carried integers) is the
+# native check checks/native_tests/mamba_decode_n_tokens.mojo (host session
+# `MambaDecodeSessionRun.decode`, device program `MambaBlockProgram.decode`).
+# The public door's returned shape, dtype and sync stay here.
 @pytest.mark.parametrize("which", ["mamba1", "mamba2", "mamba3"])
-def test_mamba_decode_equals_the_steps(which):
+def test_mamba_decode_returns_every_token(which):
     blk, dm = _mamba_block(which)
     x = _tokens(2, 10, dm)
-    stepped = blk.allocate_state(2)
-    with blk.decode_session(stepped) as sess:
-        want = np.concatenate([np.asarray(sess.step(np.ascontiguousarray(x[:, t:t + 1])))
-                               for t in range(10)], axis=1)
-        want_h = None if which == "mamba1" else np.asarray(blk.h_last_).tobytes()
-        sess.sync_state()
     decoded = blk.allocate_state(2)
+    zero = _m1_state_bytes(decoded) if which == "mamba1" else _state_bytes(which, decoded)
     with blk.decode_session(decoded) as sess:
-        # Two calls (6 then 4 tokens): the second continues the first's state.
-        got = np.concatenate([np.asarray(sess.decode(np.ascontiguousarray(x[:, :6]))),
-                              np.asarray(sess.decode(np.ascontiguousarray(x[:, 6:])))], axis=1)
-        assert got.shape == (2, 10, dm)
-        if which != "mamba1":
-            assert np.asarray(blk.h_last_).tobytes() == want_h
+        first = sess.decode(np.ascontiguousarray(x[:, :6]))
+        second = sess.decode(np.ascontiguousarray(x[:, 6:]))
+        assert np.asarray(first).shape == (2, 6, dm) and np.asarray(second).shape == (2, 4, dm)
+        assert np.asarray(first).dtype == np.float32
+        assert np.isfinite(np.asarray(first)).all() and np.isfinite(np.asarray(second)).all()
         sess.sync_state()
-    assert got.tobytes() == want.tobytes()
-    if which == "mamba1":
-        assert _m1_state_bytes(decoded) == _m1_state_bytes(stepped)
-    else:
-        assert _state_bytes(which, decoded) == _state_bytes(which, stepped)
+    synced = _m1_state_bytes(decoded) if which == "mamba1" else _state_bytes(which, decoded)
+    assert synced != zero
 
 
 @pytest.mark.parametrize("which", ["mamba1", "mamba2", "mamba3"])
