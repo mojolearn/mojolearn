@@ -15,7 +15,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 def main() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     comptime requested = is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]()
-    comptime disabled = is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d5f1bc4291.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime disabled = is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     comptime assert IDN_EIGH_BLOCK == (requested and not disabled)
     if rb_use(4096) != (requested and not disabled):
         raise Error("block route override precedence changed")
