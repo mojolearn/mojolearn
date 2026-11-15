@@ -41,10 +41,9 @@ comptime IDN_HDB_SELECT_ONE_READ = _IDN_HDB_ON
 between and ONE readback (`extract.mojo::_extract_one_read`); a nonzero
 `cluster_selection_epsilon` keeps the multi-read route."""
 
-comptime IDN_HDB_MR_FUSED_GUARD = (
-    # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF (old path: two more m * m guard passes; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at b02cf6086f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HDB_MR_FUSED_GUARD = _IDN_HDB_ON
 """Dense arm: the NaN count of the distance matrix (DEVIATION 623) and the
 non-finite count of the mutual reachabilities (DEVIATION 1607) taken INSIDE
 the mutual-reachability transform's one pass over the m * m cells and read
