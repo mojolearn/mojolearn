@@ -9,7 +9,7 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T18, T26
+from gbdt.trees_identical_switches import T26
 # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 from gbdt.methods.leaves_estimation.tree_t26_device import t26_estimate_apply
@@ -5069,19 +5069,12 @@ def fit_with_test(
                     # bins for the model and the partition of every
                     # permutation, enqueued back to back
                     var t_bins_b = loop_times.start()
-                    # T18: only the learning permutation shares search row IDs.
-                    # A folded-back Lossguide leaf remains refused by final_ready.
-                    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                    var inherit_learn = T18 and len(dws) == 1
-                    if inherit_learn:
-                        inherit_learn = dws[0].final_ready and len(dws[0].final_sizes) == n_bins
+                    # (Sweep 2026-11-15: the folded T18 learn-permutation inheritance was removed here.)
                     # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
                     # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
                     # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.
                     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
                     for p in range(perm_count):
-                        if inherit_learn and p == learn_p:
-                            continue
                         ref lp = perm_leaf_parts[p]
                         if p == learn_p:
                             compute_non_symmetric_bins_for_model(
@@ -5100,12 +5093,6 @@ def fit_with_test(
                     ctx.synchronize()
                     var parts = List[LeafPartition]()
                     for p in range(perm_count):
-                        if inherit_learn and p == learn_p:
-                            parts.append(LeafPartition(
-                                row_index.copy(), dws[0].final_offsets.copy(),
-                                dws[0].final_sizes.copy(),
-                            ))
-                            continue
                         parts.append(
                             perm_leaf_parts[p].partition_collect(
                                 ctx, n_rows, n_bins
@@ -5169,7 +5156,7 @@ def fit_with_test(
                 var inherit = False
                 comptime if NS_INHERIT_PARTITION:
                     inherit = (
-                        (perm_count == 1 or T18)
+                        perm_count == 1
                         and p == learn_p
                         and len(dws) == 1
                         and dws[0].final_ready

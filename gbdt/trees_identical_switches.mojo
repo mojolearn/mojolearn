@@ -32,7 +32,7 @@ comptime T17_BATCH = 128 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T18 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 967d4d7eef.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T18.patch
-comptime T18 = False
+# (Sweep 2026-11-15: T18 removed; readers folded.)
 
 # T19 (fused partition chain under IDENTICAL) deleted 2026-10-08 by lane/grid-losers-1: grid ge123e6f9 quality loss
 # (gbdt-depthwise istella AUC -0.43%, logloss +20.7%); see docs/apple-fast/EXPERIMENTS.md. T19_DEFER below is independent.
@@ -42,7 +42,7 @@ comptime T18 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T21 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 80865e2e25.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T21.patch
-comptime T21 = False
+# (Sweep 2026-11-15: T21 removed; readers folded.)
 
 # T21 stream count is a scheduling arm, never an accumulator-width change:
 # one replica stream (the sweep define is deleted).
