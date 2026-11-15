@@ -24,6 +24,16 @@ THE DEFINES (each default OFF):
       cell when the product is not split), so the `out_proj` stage is never
       written or read and the separate residual kernel never launches. A
       traced run keeps main's two steps (the trace records `out_proj.out`).
+  MOJOLEARN_AFN_MAMBA_PROJ_SPLITK    the same route; the out_proj product
+      splits `k = d_inner` over `grid.y` when its tiles cover fewer than
+      `2 x AFN_GEMM_CORES` blocks (whole `AFN_GEMM_KB` windows, at least
+      `AFN_GEMM_SPLIT_MIN_STEPS` steps a split, at most `AFN_GEMM_SPLIT_MAX`
+      splits): every split adds into the `x` seed, so the split costs no zero
+      launch and no fold launch. At the mamba board shape (m = 2048) out_proj
+      has 192 tiles and never splits; at the Samba shape (m = 1024) it has 96
+      and splits in two.
+  MOJOLEARN_AFN_EPI_ALL              both of the above, plus
+      MOJOLEARN_AFN_SAMBA_HEAD_GEMM (training/samba_afn.mojo).
 
 The z-gate SiLU is NOT fused: the kernel stores `c[i * n + j]` with the row
 stride equal to `n`, so it cannot write the z column slice of the wider
@@ -44,6 +54,18 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from gemm.afn_apple_fast import (
+    AFN_EPI_NONE,
+    AFN_GEMM_CORES,
+    AFN_GEMM_KB,
+    AFN_GEMM_SPLIT_MAX,
+    AFN_GEMM_SPLIT_MIN_STEPS,
+    _afn_launch_tile,
+    _afn_strides,
+    afn_gemm_tile,
+    afn_gemm_tile_count,
+)
+from gemm.contract import OP_NN, OP_NT, OP_TN
 
 
 # ===========================================================================
@@ -62,16 +84,60 @@ comptime AFN_W2EPI_APPLE = (
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_EPI_ALL.patch
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (neural MERGED-UNMEASURED FAST+Apple opt-in arm: Mamba-1/2/3 in_proj/out_proj on the FAST matrix-unit gemm with the residual folded in) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at f98dbab5bb.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
-comptime AFN_MAMBA_PROJ_EPILOGUE = False
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_SPLITK (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the out_proj split-k policy) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 590e7e3230.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_SPLITK.patch
-#: in_proj and out_proj take the matrix-unit route under EPILOGUE.
-comptime AFN_MAMBA_PROJ_ROUTE = AFN_MAMBA_PROJ_EPILOGUE
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_W2EPI_ALL = AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_EPI_ALL"]()
+comptime AFN_MAMBA_PROJ_EPILOGUE = AFN_W2EPI_ALL or (
+    AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"]()
+)
+comptime AFN_MAMBA_PROJ_SPLITK = AFN_W2EPI_ALL or (
+    AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_MAMBA_PROJ_SPLITK"]()
+)
+#: in_proj and out_proj take the matrix-unit route whenever either is on
+#: (SPLITK is a policy of the same route, as in the gemm lane).
+comptime AFN_MAMBA_PROJ_ROUTE = AFN_MAMBA_PROJ_EPILOGUE or AFN_MAMBA_PROJ_SPLITK
 
 
 def afn_w2epi_switches() -> String:
     """The w2-epi switches this build has on, for a probe or a log line."""
-    return String("none")
+    var s = String("")
+    comptime if AFN_MAMBA_PROJ_EPILOGUE:
+        s += "MAMBA_PROJ_EPILOGUE "
+    comptime if AFN_MAMBA_PROJ_SPLITK:
+        s += "MAMBA_PROJ_SPLITK "
+    if s == "":
+        return String("none")
+    return s
+
+
+# ===========================================================================
+# The split policy (MOJOLEARN_AFN_MAMBA_PROJ_SPLITK)
+# ===========================================================================
+
+
+def afn_proj_k_split(tiles: Int, k: Int) -> Int:
+    """Steps per split, or 0 when the product does not split: the grid already
+    covers the cores twice, `k` is too short, or the define is off. The gemm
+    lane's `afn_gemm_k_split` rule, owned here so it follows this lane's
+    define rather than MOJOLEARN_AFN_GEMM_SPLITK. Whole windows per split."""
+    comptime if not AFN_MAMBA_PROJ_SPLITK:
+        return 0
+    else:
+        var target = 2 * AFN_GEMM_CORES
+        if tiles >= target or k < 2 * AFN_GEMM_SPLIT_MIN_STEPS:
+            return 0
+        var s = (target + tiles - 1) // tiles
+        s = min(s, k // AFN_GEMM_SPLIT_MIN_STEPS)
+        s = min(s, AFN_GEMM_SPLIT_MAX)
+        if s <= 1:
+            return 0
+        var per = (k + s - 1) // s
+        per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+        if (k + per - 1) // per <= 1:
+            return 0
+        return per
 
 
 # ===========================================================================
@@ -94,7 +160,22 @@ def afn_proj_gemm_into(
     (the in_proj call). True when served; False (nothing enqueued) when the
     route is off or the shape/op is not one it serves, and the caller runs
     main's GEMM."""
-    return False
+    comptime if not AFN_MAMBA_PROJ_ROUTE:
+        return False
+    else:
+        if m <= 0 or n <= 0 or k <= 0:
+            return False
+        if op != OP_NN and op != OP_NT and op != OP_TN:
+            return False
+        var st = _afn_strides(op, m, n, k)
+        var tile = afn_gemm_tile(m, n)
+        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+            ctx, tile, cp, ap, bp, cp, cp, m, n, k, st, 1, k
+        )
+        return True
 
 
 def afn_proj_gemm_resid_into(
@@ -110,8 +191,32 @@ def afn_proj_gemm_resid_into(
 ) raises -> Bool:
     """`out[m x n] = x + op(A) . op(B)` (out_proj fused with the block's
     residual add): one device copy seeds `out` with `x`, then ONE kernel
-    launch adds every tile into it
+    launch adds every tile (every split, under the SPLITK policy) into it
     with f32 atomic adds. `out` and `x` must each hold exactly `m n` floats
     (a guard-banded buffer declines). True when served; False (nothing
     enqueued) otherwise, and the caller runs main's GEMM and residual."""
-    return False
+    comptime if not AFN_MAMBA_PROJ_ROUTE:
+        return False
+    else:
+        if m <= 0 or n <= 0 or k <= 0:
+            return False
+        if op != OP_NN and op != OP_NT and op != OP_TN:
+            return False
+        if len(out_buf) != m * n or len(x) != m * n:
+            return False
+        var st = _afn_strides(op, m, n, k)
+        var tile = afn_gemm_tile(m, n)
+        var k_split = afn_proj_k_split(afn_gemm_tile_count(tile, m, n), k)
+        var splits = 1
+        if k_split > 0:
+            splits = (k + k_split - 1) // k_split
+        else:
+            k_split = k
+        ctx.enqueue_copy(dst_buf=out_buf, src_buf=x)
+        var cp = out_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        _afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+            ctx, tile, cp, ap, bp, cp, cp, m, n, k, st, splits, k_split
+        )
+        return True

@@ -5,7 +5,8 @@ afn-mamba, 2026-10-03).
 
 Every switch here is `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and
 has_apple_gpu_accelerator()` AND its own `-D MOJOLEARN_AFN_<NAME>` build
-define. Default OFF. An IDENTICAL build, or a FAST build on NVIDIA/AMD,
+define (or `-D MOJOLEARN_AFN_MAMBA_ALL`, which turns on every one that
+composes). Default OFF. An IDENTICAL build, or a FAST build on NVIDIA/AMD,
 or a FAST Apple build without the define, sees every switch as `False`
 and compiles main's code unchanged: each use site is a `comptime if` whose
 `else` arm is main's spelling verbatim.
@@ -40,6 +41,7 @@ defaults) for their importers:
                                    input runs as device reductions with ONE
                                    readback per call instead of a host
                                    download per name.
+  MOJOLEARN_AFN_MAMBA_ALL          All of the above.
 """
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -53,7 +55,8 @@ comptime AFN_APPLE_FAST = (
 
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA_ALL (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the bundle of the afn-mamba arms, all deleted) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 28dd22a784.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_ALL.patch
-comptime AFN_MAMBA_ALL = False
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_MAMBA_ALL = AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ALL"]()
 
 #: lane fam-lm (2026-10-04), IDENTICAL on a device column (NVIDIA, AMD and
 #: Apple alike; never the host column). Both switches are plumbing: the
@@ -153,34 +156,97 @@ comptime IDN_M2_SSD_TILES = (
     and lib_smem_page_fits_for[TARGET_COLUMN, 20480]()
 )
 
+# M01: not tested in this campaign; keep the historical evidence below.
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA1_CHUNKSCAN (neural MERGED-UNMEASURED FAST+Apple opt-in arm: chunked parallel Mamba-1 scan; M3 F10 B/A 0.89-1.07 mixed, stayed OFF) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 0c4cc7e8d7.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_CHUNKSCAN.patch
-comptime AFN_MAMBA1_CHUNKSCAN = False
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
+# Scored FAST quality: 28/28 metrics within the existing bands; PASS.
+# F10/chunk-scan M3 2026-10-06: 35 retained public-caller timings;
+# B/A range 0.8921..1.0660, mixed/regressing; FAST candidate stays OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/chunk-scan.
+# No combined-switch or full-board default claim from these component cases.
+    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()
+)
+# M02: not tested in this campaign; standalone A/B leaves CHUNKSCAN fixed.
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA1_FUSE_IN (neural MERGED-UNMEASURED FAST+Apple opt-in arm: fused conv1d+SiLU input; M3 F10 B/A 0.83-1.49 mixed, stayed OFF) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 1560ac92d7.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_FUSE_IN.patch
-comptime AFN_MAMBA1_FUSE_IN = False
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
+# Scored FAST quality: 28/28 metrics within the existing bands; PASS.
+# F10/mamba1-input M3 2026-10-06: 35 retained public-caller timings;
+# B/A range 0.8297..1.4946, mixed/regressing; FAST candidate stays OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/mamba1-input.
+# No combined-switch or full-board default claim from these component cases.
+    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_FUSE_IN"]()
+)
+# M03: not tested in this campaign; no full-workload promotion is claimed.
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA2_SSD_MMA (neural MERGED-UNMEASURED FAST+Apple opt-in arm: simdgroup 8x8 SSD tiles; M3 F10 B/A 0.83-2.29 mixed, stayed OFF) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d72c181c19.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA2_SSD_MMA.patch
-comptime AFN_MAMBA2_SSD_MMA = False
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
+# Scored FAST quality: 29/29 metrics within the existing bands; PASS.
+# F10/default M3 2026-10-06: 37 retained public-caller timings;
+# B/A range 0.8310..2.2935, mixed/regressing; FAST candidate stays OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default.
+# No combined-switch or full-board default claim from these component cases.
+    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA2_SSD_MMA"]()
+)
+# M04: not tested in this campaign; current OFF default is preserved.
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA3_SISO_FUSED (neural MERGED-UNMEASURED FAST+Apple opt-in arm: four fused Mamba-3 launches; M3 F10 B/A 0.68-1.01, stayed OFF) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at e4d76c4d0d.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_SISO_FUSED.patch
-comptime AFN_MAMBA3_SISO_FUSED = False
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
+# Scored FAST quality: 17/17 metrics within the existing bands; PASS.
+# F10/mamba3-elementwise M3 2026-10-06: 19 retained public-caller timings;
+# B/A range 0.6775..1.0143, mixed/regressing; FAST candidate stays OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/mamba3-elementwise.
+# No combined-switch or full-board default claim from these component cases.
+    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"]()
+)
+# M05: not tested in this campaign; FAST default and IDENTICAL are preserved.
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA_ARENA (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the FAST+Apple opt-in to the arena; the IDENTICAL arena default stays) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 96e566ce8d.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_ARENA.patch
-comptime AFN_MAMBA_ARENA = IDN_MAMBA_ARENA
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
+# Scored FAST quality: 29/29 metrics within the existing bands; PASS.
+# F10/arena M3 2026-10-06: 37 retained public-caller timings;
+# B/A range 0.4768..0.8485, mixed/regressing; FAST candidate stays OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena.
+# No combined-switch or full-board default claim from these component cases.
+    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ARENA"]()
+) or IDN_MAMBA_ARENA
 #: cpu3-seq (2026-10-04): the device refusal is THE refusal on every device
 #: column, IDENTICAL and FAST, NVIDIA, AMD and Apple (owner's rule: no CPU
 #: data work in a GPU route, and the old host walk is removed from the GPU
 #: route rather than kept behind an _OFF define). The download-and-walk
 #: form (`_refuse_nonfinite_named_host`) is reached only by a host-column
 #: build (`MOJOLEARN_COLUMN_CPU`). The names, their order and the messages
-#: are unchanged; `MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` no longer changes
-#: this switch.
+#: are unchanged; `MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` and
+#: `MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL` no longer change this switch.
 # M06: not tested in this campaign. Device refusal is already mandatory;
 # AFN26_MAMBA_REFUSAL_VEC4 below compares two device implementations.
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the device refusal is already mandatory on every device column) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 6e1e884501.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL.patch
-comptime AFN_MAMBA_DEVICE_REFUSAL = not is_defined["MOJOLEARN_COLUMN_CPU"]() or IDN_MAMBA_DEVICE_REFUSAL
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime AFN_MAMBA_DEVICE_REFUSAL = not is_defined["MOJOLEARN_COLUMN_CPU"]() or AFN_MAMBA_ALL or (
+    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"]()
+) or IDN_MAMBA_DEVICE_REFUSAL
 
 
 # 2026-10-06 source-only campaign: every AFN26 switch is OFF by default and
@@ -229,6 +295,14 @@ comptime AFN26_MAMBA_REFUSAL_GRID4 = AFN_APPLE_FAST and is_defined[
 def afn_mamba_switches() -> String:
     """The switches this build has on, for a probe or a log line."""
     var s = String("")
+    comptime if AFN_MAMBA1_CHUNKSCAN:
+        s += "MAMBA1_CHUNKSCAN "
+    comptime if AFN_MAMBA1_FUSE_IN:
+        s += "MAMBA1_FUSE_IN "
+    comptime if AFN_MAMBA2_SSD_MMA:
+        s += "MAMBA2_SSD_MMA "
+    comptime if AFN_MAMBA3_SISO_FUSED:
+        s += "MAMBA3_SISO_FUSED "
     comptime if AFN_MAMBA_ARENA:
         s += "MAMBA_ARENA "
     comptime if AFN_MAMBA_DEVICE_REFUSAL:
