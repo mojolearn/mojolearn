@@ -123,7 +123,7 @@ comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c95b22c391.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch
-comptime C02_LINEAR_PAIR = False
+# (Sweep 2026-11-15: comptime C02_LINEAR_PAIR removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C56_LDA_INPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at e96891c8e7.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch
 comptime C56_LDA_INPUT = False
