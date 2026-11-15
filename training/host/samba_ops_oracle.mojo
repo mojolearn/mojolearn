@@ -63,7 +63,8 @@ pairwise addition has no fold-order fault (addition commutes), and the public
 ordered-shard reduction reaches no GEMM. Its independent oracle must catch
 the changed native result, including the cancellation fixture ending at three.
 """
-from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 1 and 4, the NN24 eight-lane fold; owner another lane) oracle arms deleted here 2026-11-15 by lane/expdel2-32-neural; code recoverable at f192693134.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
 from core.host_lanes import all_finite
@@ -184,8 +185,6 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
             for j in range(dm):
                 var xj = ftz(xp.unsafe_load(t * dm + j))
                 acc = ftz(identical_mul_add(xj, xj, acc))
-            comptime if NN24_NORM_LANES8:
-                acc = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
 
     if tasks == 1:
@@ -290,8 +289,6 @@ def host_samba_rms_norm_backward(
                 )
                 dhp.unsafe_store(cell, dhj)
                 c = ftz(identical_mul_add(dhj, ftz(xp.unsafe_load(cell)), c))
-            comptime if NN24_NORM_LANES8:
-                c = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             c = ftz(c)
             var mean = ftz(identical_div(ftz(sp.unsafe_load(t)), Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))

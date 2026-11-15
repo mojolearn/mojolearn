@@ -47,8 +47,6 @@ def rms_sumsq_kernel(
         for j in range(dm):
             var v = ftz(x.unsafe_load(row * dm + j))
             acc = ftz(identical_mul_add(v, v, acc))
-    comptime if NN24_NORM_LANES8:
-        acc = norm_profile_dot[NN24_LANES](x, x, row * dm, row * dm, dm)
     sumsq.unsafe_store(row, acc)
 
 
