@@ -173,6 +173,63 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_NATIVE_SPLITS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 6037d8cab6; restore: experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_ADA_SESSION_SHARE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 1eebdbdc8f; restore: experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch"
+    # Lane expdel2-39-trees (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_2010_ROWS_SORTED.patch
+    comptime assert not is_defined["MOJOLEARN_2010_ROWS_SORTED"](), "removed 2026-11-15 (lane/expdel2-39-trees): 2010_ROWS_SORTED (opt-in arm) is gone; the default is kept; code at c2f33a3d2c^; restore: experiments/removed/MOJOLEARN_2010_ROWS_SORTED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch
+    comptime assert not is_defined["MOJOLEARN_ET_DEVICE_BATCH_16384"](), "removed 2026-11-15 (lane/expdel2-39-trees): ET_DEVICE_BATCH_16384 (opt-in arm) is gone; the default is kept; code at e7f3794811^; restore: experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_32768.patch
+    comptime assert not is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"](), "removed 2026-11-15 (lane/expdel2-39-trees): ET_DEVICE_BATCH_32768 (opt-in arm) is gone; the default is kept; code at 7264145906^; restore: experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_32768.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_4096.patch
+    comptime assert not is_defined["MOJOLEARN_ET_DEVICE_BATCH_4096"](), "removed 2026-11-15 (lane/expdel2-39-trees): ET_DEVICE_BATCH_4096 (opt-in arm) is gone; the default is kept; code at d643565405^; restore: experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_4096.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX.patch
+    comptime assert not is_defined["MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX"](), "removed 2026-11-15 (lane/expdel2-39-trees): RF_EXP_NO_SPLIT_MUTEX (opt-in arm) is gone; the default is kept; code at ef82188860^; restore: experiments/removed/MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER.patch
+    comptime assert not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER"](), "removed 2026-11-15 (lane/expdel2-39-trees): RF_FUSED_BOOTSTRAP_GATHER (opt-in arm) is gone; the default is kept; code at f1b48eea9f^; restore: experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"](), "removed 2026-11-15 (lane/expdel2-39-trees): RF_FUSED_BOOTSTRAP_GATHER_OFF (old path) is gone; the default is kept; code at 926c443542^; restore: experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_ROWS_SORTED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"](), "removed 2026-11-15 (lane/expdel2-39-trees): RF_ROWS_SORTED_OFF (old path) is gone; the default is kept; code at f11f6b1142^; restore: experiments/removed/MOJOLEARN_RF_ROWS_SORTED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_C48"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_C48 (opt-in arm) is gone; the default is kept; code at faf4eceab2^; restore: experiments/removed/MOJOLEARN_TREES_C48.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_RF_SAMPLE.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_RF_SAMPLE"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_RF_SAMPLE (opt-in arm) is gone; the default is kept; code at e76f952880^; restore: experiments/removed/MOJOLEARN_TREES_RF_SAMPLE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T02.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T02"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T02 (opt-in arm) is gone; the default is kept; code at 2a4a84c366^; restore: experiments/removed/MOJOLEARN_TREES_T02.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T03.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T03"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T03 (opt-in arm) is gone; the default is kept; code at d8533691e0^; restore: experiments/removed/MOJOLEARN_TREES_T03.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T04.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T04"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T04 (opt-in arm) is gone; the default is kept; code at cd242e8278^; restore: experiments/removed/MOJOLEARN_TREES_T04.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T05.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T05"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T05 (opt-in arm) is gone; the default is kept; code at 53f8571104^; restore: experiments/removed/MOJOLEARN_TREES_T05.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T05_ROW_VISITS"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T05_ROW_VISITS (opt-in knob) is gone; the default is kept; code at 559154b9d2^; restore: experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T06.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T06"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T06 (opt-in arm) is gone; the default is kept; code at 1573ad87b6^; restore: experiments/removed/MOJOLEARN_TREES_T06.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T07.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T07"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T07 (opt-in arm) is gone; the default is kept; code at 793698a946^; restore: experiments/removed/MOJOLEARN_TREES_T07.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T13.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T13"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T13 (opt-in arm) is gone; the default is kept; code at 14fd08ad88^; restore: experiments/removed/MOJOLEARN_TREES_T13.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T13_BYTES.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T13_BYTES"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T13_BYTES (opt-in knob) is gone; the default is kept; code at e4afdba38b^; restore: experiments/removed/MOJOLEARN_TREES_T13_BYTES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T11_LEVELS"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T11_LEVELS (opt-in arm) is gone; the default is kept; code at fbc7483ab3^; restore: experiments/removed/MOJOLEARN_TREES_T11_LEVELS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T08"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T08 (opt-in arm) is gone; the default is kept; code at 5a385aa685^; restore: experiments/removed/MOJOLEARN_TREES_T08.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T08_LAYOUT"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T08_LAYOUT (opt-in arm) is gone; the default is kept; code at 5a385aa685^; restore: experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T08_BITS"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T08_BITS (opt-in arm) is gone; the default is kept; code at 5a385aa685^; restore: experiments/removed/MOJOLEARN_TREES_T08_BITS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T12.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T12"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T12 (opt-in arm) is gone; the default is kept; code at b9e0a62714^; restore: experiments/removed/MOJOLEARN_TREES_T12.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T12_BYTES.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T12_BYTES"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T12_BYTES (opt-in arm) is gone; the default is kept; code at b9e0a62714^; restore: experiments/removed/MOJOLEARN_TREES_T12_BYTES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T14"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T14 (opt-in arm) is gone; the default is kept; code at e4c227042e^; restore: experiments/removed/MOJOLEARN_TREES_T14.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T14_EXACT"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T14_EXACT (opt-in arm) is gone; the default is kept; code at e4c227042e^; restore: experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T15"](), "removed 2026-11-15 (lane/expdel2-39-trees): TREES_T15 (opt-in arm) is gone; the default is kept; code at bcdf8b62a8^; restore: experiments/removed/MOJOLEARN_TREES_T15.patch"
     return True
 
 

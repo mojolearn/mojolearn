@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""2026-10-06 tree source experiments. A opts in; absence preserves B.
+"""Folded constants of the deleted 2026-10-06 tree source experiments.
 
-NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-No symbol in this module is evidence of runtime reach or qualification.
-The source integration ledger is experiments/trees_identical_20261006/forest/.
+Every switch here was deleted on 2026-11-15 (expdel2-39-trees); each name
+stays as its default constant so importers fold their dead arms.
 """
-from std.sys.compile import is_defined, get_defined_int
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # TOMBSTONE: MOJOLEARN_TREES_T01_ROWS (removed) deleted 2026-10-07 by e5ad4d891; code recoverable at e5ad4d891^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T01_REPLICAS.patch; record in docs/TOMBSTONES.md.
@@ -18,59 +15,81 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # applies individually to every switch and its parameter/sub-arm.
 # T01 (streamed exact histogram replicas, = N07) DELETED 2026-10-07: lost on
 # NVIDIA and AMD. Its T01_ROWS task-size knob is covered by T02's cost rule.
-comptime T02 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T02"]()
-comptime T03 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T03"]()
-comptime T04 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T04"]()
-comptime T05 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T05"]()
+# TOMBSTONE: MOJOLEARN_TREES_T02 (DROP, EXP:1581) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T02.patch
+comptime T02 = False
+# TOMBSTONE: MOJOLEARN_TREES_T03 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T03.patch
+comptime T03 = False
+# TOMBSTONE: MOJOLEARN_TREES_T04 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T04.patch
+comptime T04 = False
+# TOMBSTONE: MOJOLEARN_TREES_T05 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T05.patch
+comptime T05 = False
 # RF T05 per-node bound in row visits per thread (see builder.mojo T05_NODE_ROWS).
-comptime T05_ROW_VISITS = get_defined_int["MOJOLEARN_TREES_T05_ROW_VISITS", 32]()
-comptime T06 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T06"]()
-comptime T07 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T07"]()
-comptime T08 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T08"]()
-comptime T08_LAYOUT = get_defined_int["MOJOLEARN_TREES_T08_LAYOUT", 1]()
-comptime T08_BITS = get_defined_int["MOJOLEARN_TREES_T08_BITS", 8]()
+# TOMBSTONE: MOJOLEARN_TREES_T05_ROW_VISITS (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.patch
+comptime T05_ROW_VISITS = 32
+# TOMBSTONE: MOJOLEARN_TREES_T06 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T06.patch
+comptime T06 = False
+# TOMBSTONE: MOJOLEARN_TREES_T07 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T07.patch
+comptime T07 = False
+# TOMBSTONE: MOJOLEARN_TREES_T08 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T08.patch
+# TOMBSTONE: MOJOLEARN_TREES_T08_LAYOUT (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.patch (same patch as T08)
+# TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.patch (same patch as T08)
+comptime T08 = False
+comptime T08_LAYOUT = 1
+comptime T08_BITS = 8
 # TOMBSTONE: MOJOLEARN_TREES_T09 (dead code) deleted 2026-10-07 by eb8efb83a; code recoverable at eb8efb83a^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T09.patch; record in docs/TOMBSTONES.md.
 # T09 (the ExtraTrees bootstrap-locality sort) was deleted by lane/grid-prune
 # (2026-10-07): unreachable on the board, host sync inside the fit.
-# RF bootstrap sample route: ONE switch with three arms (trees-cleanup
-# 2026-10-07; replaces RF T09 and T10, which silently disabled each other).
-#   -D MOJOLEARN_TREES_RF_SAMPLE=0  drawn order, two launches (sample, gather)
-#   -D MOJOLEARN_TREES_RF_SAMPLE=1  sorted bootstrap rows at every width (old RF T09)
-#   -D MOJOLEARN_TREES_RF_SAMPLE=2  fused sample + label gather (old T10)
-# Absent: the per-vendor incumbent, stated explicitly: NVIDIA = 2 (fused,
-# shipped from the H100 Taxi/Istella trials), AMD = 0 (a small MI325X Taxi
-# regression kept the two-launch route), Apple = its ROWS_SORTED_MIN_COLS
-# rule. Every arm draws the same multiset; only row order and launch count move.
-comptime RF_SAMPLE_SET = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_RF_SAMPLE"]()
-comptime RF_SAMPLE_ARM = get_defined_int["MOJOLEARN_TREES_RF_SAMPLE", -1]()
-comptime RF_SAMPLE_SORTED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 1
-comptime RF_SAMPLE_FUSED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 2
+# TOMBSTONE: MOJOLEARN_TREES_RF_SAMPLE (ALWAYS_OFF_DELETE, EXP:1610) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_RF_SAMPLE.patch
+# The per-vendor incumbent stays in ensemble/randomforest.mojo: NVIDIA fused
+# sample + label gather, AMD two launches, Apple sorted rows from 64 columns.
 # T11 device frontier levels per header drain: one int sweep
 # `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` (absent = incumbent K=4; the
 # older IDN K1/K2/K8 defines are deleted). Scheduling only, no bit moves. RF K1/K2/K8 already
 # measured "no combined improvement" (forest-final-decisions 2026-10-05), so
 # the RF grid should start at 16; ET has no such record.
-comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11_LEVELS"]()
-comptime T11_LEVELS = get_defined_int["MOJOLEARN_TREES_T11_LEVELS", 4]()
-comptime T12 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T12"]()
-comptime T12_BYTES = get_defined_int["MOJOLEARN_TREES_T12_BYTES", 256*1024*1024]()
-comptime T13 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T13"]()
-comptime T13_BYTES = get_defined_int["MOJOLEARN_TREES_T13_BYTES", 16*1024*1024]()
-comptime T14 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T14"]()
-comptime T14_EXACT = T14 and is_defined["MOJOLEARN_TREES_T14_EXACT"]()
-comptime T15 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T15"]()
-comptime C48 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48"]()
+# TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS (DROP, EXP:1582) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.patch
+comptime T11 = False
+comptime T11_LEVELS = 4
+# TOMBSTONE: MOJOLEARN_TREES_T12 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T12.patch
+# TOMBSTONE: MOJOLEARN_TREES_T12_BYTES (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T12_BYTES.patch (same patch as T12)
+comptime T12 = False
+comptime T12_BYTES = 256*1024*1024
+# TOMBSTONE: MOJOLEARN_TREES_T13 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T13.patch
+comptime T13 = False
+# TOMBSTONE: MOJOLEARN_TREES_T13_BYTES (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T13_BYTES.patch
+comptime T13_BYTES = 16*1024*1024
+# TOMBSTONE: MOJOLEARN_TREES_T14 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
+# TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch (same patch as T14)
+# Folded constants kept for importers in other lanes' files.
+comptime T14 = False
+comptime T14_EXACT = False
+# TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
+comptime T15 = False
+# TOMBSTONE: MOJOLEARN_TREES_C48 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C48.patch
+comptime C48 = False
 
 @always_inline
 def histogram_task_rows(histogram_bytes: Int, row_bytes: Int, reference: Int) -> Int:
-    """T02/C47: amortize one histogram clear/flush over comparable input bytes.
-
-    Keep at least one 128-thread block, at most eight row visits per lane.
-    The bound follows descriptor overhead/row work and is unrelated to datasets.
-    Partition descriptors remain on their unchanged 128-row geometry.
-    """
-    comptime if T02:
-        var rows = max(128, min(1024, (2 * histogram_bytes) // max(1, row_bytes)))
-        return ((rows + 127) // 128) * 128
+    """Rows per histogram task: the reference geometry (the T02 arm is deleted)."""
     return reference
