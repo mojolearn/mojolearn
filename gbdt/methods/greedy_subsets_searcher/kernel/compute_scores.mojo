@@ -551,58 +551,7 @@ def _leafwise_argmax_write[
             out_bin.unsafe_store(out_slot, UInt32(0xFFFFFFFF))
 
 
-def fused_root_scan_score_kernel[
-    score_function: Int = SCORE_FUNCTION_COSINE,
-    normalize: Bool = False,
-](
-    bf_skip: MutPointer[UInt8, MutAnyOrigin],
-    bin_feature_count_in: Int32,
-    bf_feature_id: MutPointer[UInt32, MutAnyOrigin],
-    feature_weights: MutPointer[Float32, MutAnyOrigin],
-    histograms: MutPointer[Float32, MutAnyOrigin],
-    part_stats: MutPointer[Float32, MutAnyOrigin],
-    stat_count_in: Int32,
-    part_id_in: Int32,
-    maybe_second_part_id_in: Int32,
-    multiclass_optimization: Int32,
-    lambda_l2: Float32,
-    score_std_dev: Float32,
-    global_seed: UInt64,
-    out_score: MutPointer[Float32, MutAnyOrigin],
-    out_bin: MutPointer[UInt32, MutAnyOrigin],
-    min_child_hessian: Float32,
-    feature_first: MutPointer[UInt32, MutAnyOrigin],
-    feature_folds: MutPointer[UInt32, MutAnyOrigin],
-    feature_one_hot: MutPointer[UInt8, MutAnyOrigin],
-    feature_count: Int32,
-):
-    """C45: root prefix and canonical split scoring share one block.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    Capacity is one score block's histogram. Root prefixes remain stored for
-    sibling-cache lifetime, but no separate scan launch/score array exists.
-    The original score statements, comparator and per-feature prefix order
-    are reused; no changed split candidates or floating atomics.
-    """
-    var feature = Int(thread_idx.x)
-    while feature < Int(feature_count):
-        var folds = Int(feature_folds.unsafe_load(feature))
-        if feature_one_hot.unsafe_load(feature) == UInt8(0) and folds > 1:
-            for stat in range(Int(stat_count_in)):
-                var base = (Int(part_id_in) * Int(stat_count_in) + stat) * Int(bin_feature_count_in)
-                base += Int(feature_first.unsafe_load(feature))
-                var running = Float32(0.0)
-                for bin in range(folds):
-                    running = ftz(running + histograms.unsafe_load(base + bin))
-                    histograms.unsafe_store(base + bin, running)
-        feature += Int(block_dim.x)
-    barrier()
-    compute_optimal_split_kernel[score_function, normalize](
-        bf_skip, bin_feature_count_in, bf_feature_id, feature_weights,
-        histograms, part_stats, stat_count_in, part_id_in,
-        maybe_second_part_id_in, multiclass_optimization, lambda_l2,
-        score_std_dev, global_seed, out_score, out_bin, min_child_hessian,
-    )
+# (Sweep 2026-11-15: fused_root_scan_score_kernel, never launched (its C45 caller was deleted), removed.)
 
 
 def compute_optimal_split_kernel[
