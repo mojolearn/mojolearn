@@ -52,12 +52,14 @@ from sequence.ops import FP, add, fma3, ld, mul, st, sub
 # IDENTICAL default on every vendor: every cell's chain is the item's (the
 # same flushed operands, ascending, through the same fma3 from +0.0) and the
 # route tail is the item's statements on the stored logits.
-# -D MOJOLEARN_IDN_GATES_OFF (or MOJOLEARN_MOE_REGTILE_OFF) restores
-# sequence/moe_tiled.mojo in IDENTICAL.
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-29-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
 comptime MOE_REGTILE = (
     (
         (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
-        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     )
     and not is_defined["MOJOLEARN_MOE_REGTILE_OFF"]()
 )
