@@ -168,6 +168,21 @@ struct DeviceQueryX(Movable):
         """1 when a fold index was out of range (after a synchronisation)."""
         return self.bufs.range_word()
 
+    def flag_value(self) -> Int32:
+        """What a status kernel stores on a hit in this call (the held
+        buffers' mark, else 1): an entry's own device test into word
+        QUERY_X_DECISION_SLOT (core/query_x_held.mojo) passes it."""
+        return self.bufs.flag_value()
+
+    def decision_word(self) -> Int32:
+        """1 when the entry flagged its decisions NaN (after a
+        synchronisation)."""
+        return self.bufs.decision_word()
+
+    def status_buffer(self) -> DeviceBuffer[DType.int32]:
+        """A handle copy of the device status words (the same memory)."""
+        return self.bufs.status.copy()
+
     def words_addr(self) -> Int:
         """The pinned status pair's host address (per-call buffers: a
         nonzero word is flagged)."""

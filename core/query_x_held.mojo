@@ -59,6 +59,14 @@ comptime IDN_QUERY_X_HELD = not is_defined["MOJOLEARN_IDN_QUERY_X_HELD_OFF"]()
 # restart at 1 (one fill every 2^31 - 1 calls).
 comptime QUERY_X_MARK_LAST = Int32(2147483647)
 
+# The status words of a query: 0 finite, 1 fold index range, 2 a resident
+# predict's NaN decision (lane flag-svc-infer, 2026-11-15: the decision's
+# NaN test runs on the device into this word and comes back with the other
+# two behind the call's one synchronisation, instead of a pinned per-call
+# download of the decisions and a host scan of every row).
+comptime QUERY_X_STATUS_WORDS = 3
+comptime QUERY_X_DECISION_SLOT = 2
+
 
 struct QueryXBuffers(Movable):
     """A query's device x (`capacity` floats), its device status pair (word
@@ -82,9 +90,9 @@ struct QueryXBuffers(Movable):
         # Built in locals, then moved into the fields (no field is read
         # before every field is set).
         var x = ctx.enqueue_create_buffer[DType.float32](capacity)
-        var status = ctx.enqueue_create_buffer[DType.int32](2)
+        var status = ctx.enqueue_create_buffer[DType.int32](QUERY_X_STATUS_WORDS)
         enqueue_fill[DType.int32](ctx, status, Int32(0))
-        var words = ctx.enqueue_create_host_buffer[DType.int32](2)
+        var words = ctx.enqueue_create_host_buffer[DType.int32](QUERY_X_STATUS_WORDS)
         self.x = x^
         self.status = status^
         self.words = words^
@@ -107,6 +115,17 @@ struct QueryXBuffers(Movable):
             enqueue_fill[DType.int32](self.ctx, self.status, Int32(0))
             self.mark = Int32(0)
         self.mark += 1
+
+    def flag_value(self) -> Int32:
+        """The value a status kernel stores on a hit in this call: the
+        call's mark on held buffers, 1 on per-call buffers (filled 0)."""
+        return self.mark if self.mark > 0 else Int32(1)
+
+    def decision_word(self) -> Int32:
+        """1 when this call's resident decisions held a NaN (after a
+        synchronisation; word QUERY_X_DECISION_SLOT)."""
+        var w = self.words.unsafe_ptr()[QUERY_X_DECISION_SLOT]
+        return Int32(1) if w == self.flag_value() else Int32(0)
 
     def finite_word(self) -> Int32:
         """1 when this call's X held a NaN or an infinity (after a
