@@ -45,7 +45,7 @@ comptime C56_QDA_PROJECT = 0
 # Restore: git apply experiments/removed/MOJOLEARN_C58_SHARED_PREP.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_C58_SERIES4 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 236e97faa2.
 # Restore: git apply experiments/removed/MOJOLEARN_C58_SERIES4.patch
-comptime C58_SERIES4 = False
+# (Sweep 2026-11-15: comptime C58_SERIES4 removed; nothing read it.)
 # C58_FORECAST4 (four theta/ets/garch series per thread) tried 2026-10-08, run ge123e6f9: NV/AMD 2.93x/2.58x
 # synthetic, 2.81x/2.13x taxi-hourly (auto-theta), 2.2-3.1x on every theta/damped-ets cell, quality SAME. Deleted and
 # refused (core/six_lane_experiment_guards.mojo); recoverable at main bc10b8b56.
