@@ -65,10 +65,8 @@ the changed native result, including the cancellation fixture ending at three.
 """
 from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_lanes import all_finite
 from std.math import isfinite
-from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
 from core.host_parallel import host_parallelize
@@ -424,7 +422,8 @@ def host_samba_accumulate(
         for i in range(n):
             single.append(ftz(cur[i]))
         return single^
-    var first_nonfinite = n
+    # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in accumulated non-finite status, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5b6269eefe.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
     var pieces = a
     while pieces > 1:
         var pairs = pieces // 2
@@ -435,13 +434,8 @@ def host_samba_accumulate(
                 var right = ftz(cur[(2 * j + 1) * n + e])
                 var value = ftz(identical_mul_add(Float32(1.0), left, right))
                 nxt.append(value)
-                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN58_ACCUMULATE_STATUS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
-                    if not isfinite(value):
-                        first_nonfinite = min(first_nonfinite, e)
         cur = nxt^
         pieces = pairs
-    if first_nonfinite < n:
-        raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(first_nonfinite))
     comptime if GEMM_ORACLE_HOST_SABOTAGE:
         # Pairwise addition has no fold-order fault. Corrupt the actual native
         # result so the ordered-shard reduction's independent oracle can prove
