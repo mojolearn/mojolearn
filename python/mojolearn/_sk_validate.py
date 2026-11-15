@@ -169,7 +169,7 @@ def input_tag_overrides(cls):
     return {}
 
 
-#: class -> (its __mro__ tuple, the fit word, the call word, has a NaN hook):
+#: class -> (its __mro__ tuple, the fit word, the call word, its NaN rule):
 #: the ADMISSION_OP_X words of `cls`, from tags that are class constants, read
 #: once per class (lane py-buffer). Before, each validated call read up to
 #: three input tags, the NaN hook and the scan sets.
@@ -193,8 +193,7 @@ def _x_words(cls):
     nan_ok = _input_tag(cls, "allow_nan", False)
     fit_scan = not nan_ok and bool(names & _SCANS_X_HERE or names & _SCANS_X_AT_FIT)
     call_scan = fit_scan or (not nan_ok and bool(names & _SCANS_X_AFTER_FIT))
-    hook = getattr(cls, "_mojolearn_allows_nan", None) is not None
-    words = (mro, base | (_X_SCAN if fit_scan else 0), base | (_X_SCAN if call_scan else 0), hook)
+    words = (mro, base | (_X_SCAN if fit_scan else 0), base | (_X_SCAN if call_scan else 0), _nan_rule(cls))
     try:
         _X_WORDS_CACHE[cls] = words
     except TypeError:
@@ -209,12 +208,25 @@ def _input_tag(cls, name, default):
     return input_tag_overrides(cls).get(name, default)
 
 
-def _allows_nan_now(est):
-    """An estimator whose NaN handling is a parameter (SplineTransformer's
-    handle_missing='zeros') says so through `_mojolearn_allows_nan()`; the
-    class tag alone cannot."""
-    hook = getattr(est, "_mojolearn_allows_nan", None)
-    return bool(hook()) if hook is not None else False
+def _nan_rule(cls):
+    """How an estimator whose NaN handling is a parameter says so, resolved
+    once per class (`_x_words`): None, a (parameter, value) pair from the
+    class constant `_mojolearn_nan_parameter` (SplineTransformer's
+    handle_missing='zeros': answered from the parameter, no hook call), or
+    True for an application class's own `_mojolearn_allows_nan()` (called)."""
+    if getattr(cls, "_mojolearn_allows_nan", None) is not None:
+        return True
+    rule = getattr(cls, "_mojolearn_nan_parameter", None)
+    return tuple(rule) if rule is not None else None
+
+
+def _allows_nan_now(est, rule):
+    """`rule` from `_nan_rule`: the class tag alone cannot say whether this
+    instance takes NaN."""
+    if rule is True:
+        hook = getattr(est, "_mojolearn_allows_nan", None)
+        return bool(hook()) if hook is not None else False
+    return getattr(est, rule[0], None) == rule[1]
 
 
 def _target_tag(cls, name, default, est=None):
@@ -352,7 +364,7 @@ def _check_X(est, X, fitting=True):
     cls = type(est)
     words = _x_words(cls)
     word = words[1] if fitting else words[2]
-    if words[3] and word & _X_SCAN and _allows_nan_now(est):
+    if words[3] is not None and word & _X_SCAN and _allows_nan_now(est, words[3]):
         word &= ~_X_SCAN
     entry, context = _admission()
     return entry(_OP_X, (X, cls.__name__, word), context)

@@ -1827,9 +1827,11 @@ class SplineTransformer(_PrepBase):
         self.sparse_output = sparse_output
 
 
-    def _mojolearn_allows_nan(self):
-        """handle_missing='zeros' takes NaN (its rows' spline features are 0)."""
-        return self.handle_missing == "zeros"
+    #: handle_missing='zeros' takes NaN (its rows' spline features are 0): a
+    #: class constant `_sk_validate._nan_rule` reads once per class (was a
+    #: `_mojolearn_allows_nan()` method called on every validated call).
+    _mojolearn_nan_parameter = ("handle_missing", "zeros")
+
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
 
