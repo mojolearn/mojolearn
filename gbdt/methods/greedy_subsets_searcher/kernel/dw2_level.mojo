@@ -41,7 +41,6 @@ from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz
-from gbdt.apple_fast_tree_experiments import AFT_N06
 
 # ---- MOJOLEARN_GBDT_DW2_PART_VEC4 ------------------------------------------
 # TOMBSTONE: MOJOLEARN_AFT_N03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e6d002c73c.
@@ -355,23 +354,21 @@ def dw2_copy_back_kernel[GUARD: Bool = False](
     var n_groups = (end - a0 + DW2_PART_VEC - 1) // DW2_PART_VEC
     var gi = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    # N06: two independent vector groups per worker iteration reuse the
-    # leaf descriptor and grid stride. This is row-index cursor movement,
-    # not prediction-value application. No timing/quality evidence.
+    # TOMBSTONE: MOJOLEARN_AFT_N06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 42ccfefe05.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N06.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
     while gi < n_groups:
-        comptime for tile in range(2 if AFT_N06 else 1):
-            if gi < n_groups:
-                var g = a0 + gi * DW2_PART_VEC
-                if g >= offset and g + DW2_PART_VEC <= end:
-                    row_index.unsafe_store[width=4, alignment=16](
-                        g, temp_index.unsafe_load[width=4, alignment=16](g)
-                    )
-                else:
-                    comptime for e in range(4):
-                        var j = g + e
-                        if j >= offset and j < end:
-                            row_index.unsafe_store(j, temp_index.unsafe_load(j))
-                gi += stride
+        if gi < n_groups:
+            var g = a0 + gi * DW2_PART_VEC
+            if g >= offset and g + DW2_PART_VEC <= end:
+                row_index.unsafe_store[width=4, alignment=16](
+                    g, temp_index.unsafe_load[width=4, alignment=16](g)
+                )
+            else:
+                comptime for e in range(4):
+                    var j = g + e
+                    if j >= offset and j < end:
+                        row_index.unsafe_store(j, temp_index.unsafe_load(j))
+            gi += stride
 
 
 
