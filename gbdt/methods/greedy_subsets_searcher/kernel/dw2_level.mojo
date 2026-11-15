@@ -41,14 +41,12 @@ from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz
-from gbdt.apple_fast_tree_experiments import AFT_N03, AFT_N04, AFT_N06
+from gbdt.apple_fast_tree_experiments import AFT_N04, AFT_N06
 
 # ---- MOJOLEARN_GBDT_DW2_PART_VEC4 ------------------------------------------
-# N03: eight simdgroups instead of sixteen per partition block, keeping
-# four consecutive rows per lane. Chunk allocation/scan/scatter use this
-# same geometry, so stable order and the complete partition are retained.
-# No performance/quality evidence; source only, default OFF.
-comptime DW2_PART_BLOCK = 256 if AFT_N03 else 512
+# TOMBSTONE: MOJOLEARN_AFT_N03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e6d002c73c.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N03.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+comptime DW2_PART_BLOCK = 512
 comptime DW2_PART_VEC = 4
 comptime DW2_PART_CHUNK = DW2_PART_BLOCK * DW2_PART_VEC
 comptime DW2_COPY_BLOCK = 256
