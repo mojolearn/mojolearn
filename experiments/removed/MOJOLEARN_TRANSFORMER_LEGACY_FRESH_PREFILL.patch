@@ -1,0 +1,34 @@
+diff --git b/bindings/_mojolearn_transformer.mojo a/bindings/_mojolearn_transformer.mojo
+index dbb35cdab4..8d139348f3 100644
+--- b/bindings/_mojolearn_transformer.mojo
++++ a/bindings/_mojolearn_transformer.mojo
+@@ -145,6 +145,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.memory import bitcast, unsafe_memcpy
+ from std.os import getenv
+ from std.time import perf_counter_ns
++from std.sys.compile import is_defined
+ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
+ 
+ from core.identity_trace import IdentityTrace
+@@ -537,8 +538,8 @@ def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+ # TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the device per-call transformer_forward_fresh entry, SUPERSEDED by the session's transformer_session_forward_fresh, reached only under MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 or MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+ # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
+ # restored 2026-11-09 by lane r1-restore-measured-winners: the per-call entry and its two defines are live again
+-# with their pre-x4 export rule (NVIDIA IDENTICAL; both defines, the NVIDIA opt-out
+-# -D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL and the opt-in elsewhere -D MOJOLEARN_TRANSFORMER_FRESH_PREFILL, were deleted 2026-11-15); the block session prefill stays the default route elsewhere.
++# with their pre-x4 export rule (NVIDIA IDENTICAL by default, -D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL opts out;
++# the opt-in elsewhere, -D MOJOLEARN_TRANSFORMER_FRESH_PREFILL, was deleted 2026-11-15); the block session prefill stays the default route.
+ def transformer_forward_fresh_binding(
+     addrs: PythonObject, params: PythonObject,
+ ) raises -> PythonObject:
+@@ -1227,9 +1228,7 @@ def build__mojolearn_transformer() -> PythonObject:
+         # Apple retains its prior default until separately priced.
+         # TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL (unmeasured opt-in arm: the per-call fresh prefill off NVIDIA) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 191ceb5942.
+         # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch
+-        # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (old path: no per-call fresh prefill on NVIDIA; superseded) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 3f08712c53.
+-        # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch
+-        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_NVIDIA:
++        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]()):
+             m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
+         m.def_function[transformer_decode_step_binding](
+             "transformer_decode_step"
