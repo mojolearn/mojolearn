@@ -44,6 +44,7 @@ factor's A/B). The log-determinant is `enqueue_logdet`'s fold
 (cholesky/logdet_fold.mojo) with a guarded store; host twin:
 `CholHostFactor.logdet`.
 """
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_idx, thread_idx
 
@@ -76,7 +77,7 @@ from core.step_gate import StepI32, step_fail_joins_loop
 comptime CHOL_OP_GATED = Int32(-1)
 
 #: The one-factor fits' route (lane fable-perf-classical-0855, 2026-11-13).
-#: The deleted opt-in arm (`MOJOLEARN_IDN_CHOL_OPS_FIT`) ran KernelRidge's,
+#: `-D MOJOLEARN_IDN_CHOL_OPS_FIT` runs KernelRidge's,
 #: GaussianProcessRegressor's and GaussianProcessClassifier's factor + solve
 #: on these ops (lane n8-gp-krr-smo,
 #: 2026-11-09: read-free, one drain per fit); absent, the fits keep the
@@ -110,9 +111,8 @@ comptime CHOL_OP_GATED = Int32(-1)
 #: chol-ops-fit in bench/results/paper_compare/owed-pre0867.json.
 # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
-#: Every fit keeps the measured 0.8.66 route; the name stays False for the
-#: importers in other lanes' files until they fold it.
-comptime CHOL_OPS_FIT = False
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime CHOL_OPS_FIT = is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"]()
 
 comptime _F32 = MutPointer[Float32, MutAnyOrigin]
 

@@ -160,6 +160,9 @@ from cholesky.checks.potrf import (
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
+from cholesky.chol_ops import (
+    CHOL_OPS_FIT, chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower,
+)
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -2686,36 +2689,80 @@ struct DevExec(Exec):
         `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
         against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
         runs the same calls on its pooled matrices."""
-        # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
-        # (potrf_lower with its info read per panel, the chol_logdet wait,
-        # trsm_lower against I), restored from 49e8c5b633^.
+        # Lane fix-chol-ops-remaining-callers (2026-11-13): by default the
+        # 0.8.66 route above (potrf_lower with its info read per panel, the
+        # chol_logdet wait, trsm_lower against I), restored from
+        # 49e8c5b633^. Lane m3-linalg-and-housekeeping (49e8c5b633,
+        # 2026-11-09) moved it onto the executor's Cholesky ops (read-free,
+        # ONE read of info + log det) without an NVIDIA + AMD measurement;
+        # the ops route is the B arm under -D MOJOLEARN_IDN_CHOL_OPS_FIT
+        # (cholesky/chol_ops.mojo CHOL_OPS_FIT; the ops measured AMD
+        # KRR/GPR/GPC 1.14-1.25x slower than this route on 2026-11-13). Owed
+        # row chol-ops-fit (bench/results/paper_compare/owed-pre0867.json).
+        # Bits: each route keeps its own words; the ops claim potrf_lower's
+        # arithmetic at the pinned width, so the A/B also checks the words.
         # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
-        var nb = chol_nb_for(n, CHOL_NB_PINNED)
-        var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
-        var trace = IdentityTrace()
-        add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-        var run = potrf_lower(ctx, da, ws, n, trace)
-        st.unsafe_store(0, Float32(run.info))
-        st.unsafe_store(1, Float32(0.0))
-        if run.info == 0:
-            var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-            st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
+        comptime if CHOL_OPS_FIT:
+            var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+            var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
+            var dld = ctx.enqueue_create_buffer[DType.float32](1)
             var db = ctx.enqueue_create_buffer[DType.float32](n * n)
+            var hst = ctx.enqueue_create_host_buffer[DType.int32](1)
+            var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
+            enqueue_fill(ctx, dinfo, Int32(0))
+            enqueue_fill(ctx, dld, Float32(0.0))
+            add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
+            chol_op_factor(ctx, da, dinfo, n)
+            chol_op_logdet(ctx, da, dinfo, dscr, dld, n)
             ctx.enqueue_function[pj_identity_kernel](
                 db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
             )
-            trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
-            _down(ctx, db, li, n * n)
+            chol_op_solve_lower(ctx, da, db, dinfo, n, n)
+            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dinfo)
+            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
             ctx.synchronize()
+            var info = Int(hst.unsafe_ptr().unsafe_load(0))
+            st.unsafe_store(0, Float32(info))
+            st.unsafe_store(1, hld.unsafe_ptr().unsafe_load(0) if info == 0 else Float32(0.0))
+            if info == 0:
+                _down(ctx, db, li, n * n)
+                ctx.synchronize()
             _ = db^
-            _ = dwork^
-        ctx.synchronize()
-        _ = ws^
-        _ = da^
-        _ = ctx^
+            _ = dscr^
+            _ = dld^
+            _ = dinfo^
+            _ = hst^
+            _ = hld^
+            _ = da^
+            _ = ctx^
+        else:
+            var nb = chol_nb_for(n, CHOL_NB_PINNED)
+            var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
+            var trace = IdentityTrace()
+            add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
+            var run = potrf_lower(ctx, da, ws, n, trace)
+            st.unsafe_store(0, Float32(run.info))
+            st.unsafe_store(1, Float32(0.0))
+            if run.info == 0:
+                var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+                st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
+                var db = ctx.enqueue_create_buffer[DType.float32](n * n)
+                ctx.enqueue_function[pj_identity_kernel](
+                    db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+                )
+                trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+                _down(ctx, db, li, n * n)
+                ctx.synchronize()
+                _ = db^
+                _ = dwork^
+            ctx.synchronize()
+            _ = ws^
+            _ = da^
+            _ = ctx^
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
