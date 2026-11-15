@@ -103,6 +103,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     SYM_GROUP_WIDTH_2581,
 )
+from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.train import (
     BORROW_X_COLUMNS,
     TrainedModel,
@@ -657,10 +658,21 @@ def gbdt_fit(
     )
 
 
-# (Sweep 2026-11-15: gbdt_fit_row_major_available, always False and read only by the removed
-# row-major binding, was removed.)
 # TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a6d190efef.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+def gbdt_fit_row_major_available() -> Bool:
+    """lane/apple-fast-sym-feat: whether this binary serves
+    `gbdt_fit_rowmajor` (the FAST Apple device quantizer,
+    `GBDT_QUANT_DEVICE`). The Python layer asks before handing a C-order
+    array over as it is instead of transposing it on the host."""
+    # TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a6d190efef.
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+    comptime if GBDT_QUANT_DEVICE:
+        return True
+    else:
+        return False
 
 
 def gbdt_per_round_paths() -> String:

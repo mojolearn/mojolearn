@@ -62,12 +62,14 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 
 from gbdt.estimator import (
+    gbdt_fit_row_major_available,
     gbdt_model_dim,
     gbdt_per_round_paths,
     gbdt_predict,
@@ -212,10 +214,43 @@ def gbdt_fit_binding(
     return gbdt_fit_outcome_py(gbdt_fit_native(False, args))
 
 
+def gbdt_fit_rowmajor_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    weights_addr: PythonObject,
+    cat_flags_addr: PythonObject,
+    eval_x_addr: PythonObject,
+    eval_y_addr: PythonObject,
+    params: PythonObject,
+    strs: PythonObject,
+) raises -> PythonObject:
+    """lane/apple-fast-sym-feat: `gbdt_fit` with X ROW-MAJOR (a C-order
+    float32 array handed over as it is; the device transposes it under
+    `GBDT_QUANT_DEVICE`). Every other argument is `gbdt_fit`'s; the eval
+    set stays column-major. Served only when
+    `gbdt_fit_row_major_available()` says so (raw float columns only, so
+    `params[3]` must be 0); the Python layer asks first."""
+    var args = gbdt_fit_args_py(x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr, eval_y_addr, params, strs)
+    return gbdt_fit_outcome_py(gbdt_fit_rowmajor_native(args))
+
+
+def gbdt_fit_rowmajor_native(args: GbdtFitArgs) raises -> GbdtFitOutcome:
+    """The row-major fit's own refusal, then `gbdt_fit_native`."""
+    if args.i(3) != 0:
+        raise Error(
+            "gbdt_fit_rowmajor takes raw float columns only; pass categorical"
+            " or one-hot features through gbdt_fit"
+        )
+    return gbdt_fit_native(True, args)
+
+
 # TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-# (Sweep 2026-11-15: gbdt_fit_rowmajor_binding, gbdt_fit_rowmajor_native and
-# gbdt_fit_row_major_available_binding, registered only under the folded GBDT_QUANT_DEVICE, removed.)
+def gbdt_fit_row_major_available_binding() raises -> PythonObject:
+    """lane/apple-fast-sym-feat: 1 when this binary serves
+    `gbdt_fit_rowmajor` (FAST + Apple with a switch that implies
+    `GBDT_QUANT_DEVICE`), else 0."""
+    return PythonObject(1 if gbdt_fit_row_major_available() else 0)
 
 
 def gbdt_predict_binding(
@@ -521,11 +556,15 @@ struct _GbdtGpuImage(GbdtImage):
     @staticmethod
     def fit(row_major: Bool, args: GbdtFitArgs) raises -> GbdtFitOutcome:
         if row_major:
+            comptime if GBDT_QUANT_DEVICE:
+                return gbdt_fit_rowmajor_native(args)
             raise Error("AttributeError: mojolearn: this gbdt binding has no gbdt_fit_rowmajor")
         return gbdt_fit_native(False, args)
 
     @staticmethod
     def row_major() -> Bool:
+        comptime if GBDT_QUANT_DEVICE:
+            return gbdt_fit_row_major_available()
         return False
 
     @staticmethod
@@ -560,6 +599,11 @@ def build__mojolearn_gbdt() -> PythonObject:
         # in a FAST Apple build with the device quantizer; every other
         # binary registers main's functions (Python treats a missing probe
         # as unavailable)
+        comptime if GBDT_QUANT_DEVICE:
+            m.def_function[gbdt_fit_rowmajor_binding]("gbdt_fit_rowmajor")
+            m.def_function[gbdt_fit_row_major_available_binding](
+                "gbdt_fit_row_major_available"
+            )
         m.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         m.def_function[gbdt_fit_two_level_feature_freq_binding](
             "gbdt_fit_two_level_feature_freq"
