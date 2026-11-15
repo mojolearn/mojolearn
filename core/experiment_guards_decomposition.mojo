@@ -133,6 +133,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C27_NORM_VECTOR (Decomposition (PLS / CCA fused component normalization, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 5bdab7e3c8; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C28_BUCKET_SOLVES (Decomposition (ALS / sparse-code bucketed row solves, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 272ae35230; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C01_MEAN"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C01_MEAN (Decomposition (PCA / TSVD column mean as leaf column sums + binary-counter fold, IDENTICAL)) was opt-in arm; EXP:1530 names it as the replacement, no A/B of its own; the opt-in arm is gone and the default path is unchanged; code recoverable at 569d288205; see docs/TOMBSTONES.md"
     return True
 
 

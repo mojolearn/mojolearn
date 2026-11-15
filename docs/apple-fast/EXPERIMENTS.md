@@ -2594,3 +2594,4 @@ Plan `docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md`; sections in docs/TOMBST
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_CLASSICAL_C01_LEAF` | regression metrics (sgd-reg regression_report) | lane/expdel2-07-base (recoverable at 561d08802a) | - | - | DELETED 2026-11-15 (arm) | loser / unmeasured sweep; `C01_LEAF` = 32 and `C01_LEAF_LEGAL` = True kept as constants; patch experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch; no bit change |
+| `MOJOLEARN_CLASSICAL_C01_MEAN` | pca, tsvd | lane/expdel2-07-base (recoverable at 569d288205) | - | - | DELETED 2026-11-15 (unmeasured arm) | opt-in arm; EXP:1530 names it as the replacement, no A/B of its own; `C01_MEAN` folded to its default constant; patch experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch; no bit change |
