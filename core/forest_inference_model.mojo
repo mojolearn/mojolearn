@@ -21,7 +21,9 @@ from core.forest_inference import (
 from core.forest_inference_pool import PooledForest, forest_device_count
 from core.neural_context import process_ctx
 from core.admitted_finite_status import enqueue_finite_status
-from core.forest_experiments import T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T37_WORKSPACE, T38_FUSED_LABELS
+from core.forest_experiments import T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS
+# TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 9d8b51b0a6.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
 from core.shared_slot import SharedSlot
 
 
@@ -125,11 +127,7 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.staged_len = 0
 
     def _input_fits(self, n_in: Int) -> Bool:
-        if self.input_len == n_in:
-            return True
-        comptime if T37_WORKSPACE:
-            return n_in <= self.input_len <= 2*n_in
-        return False
+        return self.input_len == n_in
 
     def is_staged(self, addr: Int, n: Int) -> Bool:
         """True when the input buffer holds the staged rows `addr`, `n`."""
@@ -174,11 +172,6 @@ struct ForestIOWorkspace(Defaultable, Movable):
     def prepare(mut self, ctx: DeviceContext, n_in: Int, n_out: Int) raises:
         if self.input_len == n_in and self.output_len == n_out:
             return
-        comptime if T37_WORKSPACE:
-            # Reuse at most 2x the live request; capacity is bounded by caller
-            # demand and stale larger buffers are released on substantial shrink.
-            if n_in <= self.input_len <= 2*n_in and n_out <= self.output_len <= 2*n_out:
-                return
         if self.staged_len > 0 and self.staged_len == n_in and self._input_fits(n_in):
             # Keep the staged rows: only the output buffer is resized.
             self.output = None
@@ -455,7 +448,7 @@ struct ResidentForest(Movable):
         if self.pool:
             self.pool.value().predict_into[RF_INPUT](x, output, rows)
             return
-        if (reuse_io or T37_WORKSPACE) and self.shared:
+        if reuse_io and self.shared:
             var io = RF_IO.get_or_create_ptr()
             comptime if not RF_INPUT:
                 io = ET_IO.get_or_create_ptr()
@@ -469,7 +462,7 @@ struct ResidentForest(Movable):
                 self.leaves.value(), x, output, rows, features, outputs, self.trees,
                 io[].input.value(), io[].output.value(), x, False,
                 self.ordered, uploaded)
-        elif reuse_io or T37_WORKSPACE:
+        elif reuse_io:
             self.prepare_workspace(rows)
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
@@ -498,9 +491,6 @@ struct ResidentForest(Movable):
         # Calls are synchronous and the binding holds the GIL throughout.
         if self.workspace_rows == rows:
             return
-        comptime if T37_WORKSPACE:
-            if rows <= self.workspace_rows <= 2*rows:
-                return
         self.input_workspace = None
         self.output_workspace = None
         self.label_workspace = None
