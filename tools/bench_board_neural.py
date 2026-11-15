@@ -2195,6 +2195,61 @@ def _neural_ab_receipt(runner, config, executed=False):
     return receipt
 
 
+#: lane flag-native-dispatch-gate (2026-11-15): the fields a neural model or
+#: block holds that name the route its scored call took. Native descriptor
+#: dispatch is a build constant (providers/python/neural_descriptor_pyapi_door.mojo
+#: NEURAL_NATIVE_DISPATCH; B arm -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF): a
+#: connected provider field proves the native arm, None proves the by-name arm.
+_NEURAL_ROUTE_FIELDS = ("_samba_forward_route", "_samba_resident_uploads")
+_NEURAL_ROUTE_PRESENT = ("_native_primitives", "_resident_handle", "_native_block_provider_cache",
+                         "_native_mamba_block_provider_cache", "_native_mamba_state", "_native_session",
+                         "_prefill_session")
+
+
+def _route_suffix(route):
+    """` route=<word>` for the NEURAL-ROUND line: the Samba forward route, else
+    native/by-name dispatch from the connected provider fields, else empty."""
+    if not isinstance(route, dict):
+        return ""
+    if "error" in route:
+        return " route=unread"
+    if route.get("samba_forward_route"):
+        return " route=" + str(route["samba_forward_route"])
+    connected = [v for k, v in route.items() if k.endswith("_connected") and "provider" in k or k == "native_primitives_connected"]
+    if connected:
+        return " route=" + ("native" if any(connected) else "by-name")
+    return ""
+
+
+def neural_route(runner):
+    """The route each neural row's scored call took, read from the model's own
+    fields AFTER the round's clock (never inside it). None for a runner with no
+    neural model. A read failure is recorded by name and never breaks a timing."""
+    model = getattr(runner, "block", None)
+    if model is None:
+        model = getattr(runner, "model", None)
+    if model is None:
+        return None
+    try:
+        fields = vars(model)
+    except TypeError:
+        return {"error": "no field dictionary on %s" % type(model).__name__}
+    route = {"class": type(model).__name__}
+    for name in _NEURAL_ROUTE_FIELDS:
+        if name in fields:
+            value = fields[name]
+            route[name.lstrip("_")] = value if isinstance(value, (int, str, float, bool)) or value is None else repr(value)
+    for name in _NEURAL_ROUTE_PRESENT:
+        if name in fields:
+            route[name.lstrip("_") + "_connected"] = fields[name] is not None
+    blocks = fields.get("_blocks")
+    if blocks:
+        route["layers"] = [neural_route(type("_Layer", (), {"block": block})()) for block in blocks]
+    if getattr(runner, "decode_session", None) is not None:
+        route["decode_session"] = type(runner.decode_session).__name__
+    return route
+
+
 class Ours:
     """Common shape of an `ours` runner: call / sync / outputs / digest."""
     out = None
@@ -5550,8 +5605,16 @@ def worker(args):
                         session_counters = runner.block.session_info()
                     except Exception as exc:  # noqa: BLE001  (a counter read never breaks a timing; recorded)
                         session_counters = {"error": "session_info failed: %r" % (exc,)}
+                # lane flag-native-dispatch-gate: the route the scored call took,
+                # read outside the clock, beside the time.
+                route = None
+                if args.arm.startswith("ours"):
+                    try:
+                        route = neural_route(runner)
+                    except Exception as exc:  # noqa: BLE001  (a route read never breaks a timing; recorded)
+                        route = {"error": "neural_route failed: %r" % (exc,)}
                 round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
-                    "scored_calls": calls_rec,
+                    "scored_calls": calls_rec, "neural_route": route,
                     "extra": extra, "device_memory": device_memory,
                     "mamba3_session_info": session_counters,
                     "state_receipt": state_receipt, "compiles": compiles_now,
@@ -6434,9 +6497,14 @@ def race(args):
                 # lane fix-mamba-forward-doors: the session counters after each round
                 result["arms"][arm].setdefault("mamba3_session_info", []).append(
                     dict(msg["mamba3_session_info"], round=r, warmup=r == 0))
-            print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s%s"
+            route = msg.get("neural_route")
+            if isinstance(route, dict):
+                # lane flag-native-dispatch-gate: the route beside the time, every round
+                result["arms"][arm].setdefault("neural_route", []).append(dict(route, round=r, warmup=r == 0))
+            print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
                   % (lane, arm, r, msg["ms"], msg["digest"],
-                     _small_rows_suffix(msg.get("scored_calls"))), flush=True)
+                     _small_rows_suffix(msg.get("scored_calls")),
+                     _route_suffix(route)), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]

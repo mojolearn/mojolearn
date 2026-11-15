@@ -30,7 +30,7 @@ from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_A
 from providers.python.operation_lock_pyapi_door import OperationLockLease, operation_lock_create
 from bindings.py_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi_door import (
-    neural_descriptor_reuse,
+    neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH,
 )
 from providers.python.transformer_block_session_pyapi_door import (
     transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
@@ -238,9 +238,12 @@ def _neural_owner_runtime_names() -> List[String]:
             String("_native_mamba_provider_cache")]
 
 
-def _neural_owner_env() -> String:
-    # Environment switches read by causal_lm_admit_binding.
-    return String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH"))
+# `_neural_owner_env` (one getenv of MOJOLEARN_NEURAL_NATIVE_DISPATCH per
+# standalone block call, twice on a miss) and the owner record's env word are
+# gone: the dispatch is the build constant NEURAL_NATIVE_DISPATCH
+# (providers/python/neural_descriptor_pyapi_door.mojo; lane
+# flag-native-dispatch-gate). Record: [key, plan, derived, has_profile,
+# next_profile, changed, binding_key, uses_default].
 
 
 def _neural_owner_key(mut mods: NativeModules, block: PythonObject, live: PythonObject, context: PythonObject, mut binding_key: PythonObject, mut uses_default: Bool) raises -> PythonObject:
@@ -339,31 +342,30 @@ def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: Py
 def neural_block_execution(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> NativeBlockExecution:
     var bi = mods.module("builtins")
     var live = neural_block_fields(mods, block, context)
-    var env = _neural_owner_env()
     var record = prepared_get(mods, _NEURAL_OWNER_SLOT, block)
     var hit = False
-    if record is not None and String(record[1]) == env:
+    if record is not None:
         try:
-            hit = _neural_owner_matches(mods, record[0], block, live, context, record[7], Bool(py=record[8]))
+            hit = _neural_owner_matches(mods, record[0], block, live, context, record[6], Bool(py=record[7]))
         except:
             hit = False
     if hit:
         # The remaining field dictionary is operation-local mutable state.
         # No identity list or SimpleNamespace owner is built on this path.
         var fields = py_call(bi.dict, live)
-        _ = py_call(fields.update, record[3])
+        _ = py_call(fields.update, record[2])
         py_setitem(fields, "_neural_live_fields", live)
-        if Bool(py=record[4]):
+        if Bool(py=record[3]):
             var mode = py_get(fields, "numeric_mode")
-            var next_profile = record[5]
+            var next_profile = record[4]
             var want_mode = _neural_default_mode(mods, context) if mode is None else mode
             var saved = py_get(fields, "_arithmetic_profile")
             if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == want_mode) and not Bool(py=saved == next_profile):
                 raise Error("neural block: saved arithmetic profile differs from binding")
             py_setitem(fields, "_arithmetic_profile", next_profile)
             py_setitem(fields, "_arithmetic_profile_mode", want_mode)
-            py_setitem(fields, "_arithmetic_profile_changed", record[6])
-        return NativeBlockExecution(record[2], fields)
+            py_setitem(fields, "_arithmetic_profile_changed", record[5])
+        return NativeBlockExecution(record[1], fields)
     var key = PythonObject(None)
     var binding_key = PythonObject(None)
     var uses_default = False
@@ -380,7 +382,7 @@ def neural_block_execution(mut mods: NativeModules, block: PythonObject, context
     var reusable = key is not None and _neural_owner_reusable(mods, snapshot, live, context)
     if reusable:
         try:
-            reusable = _neural_owner_matches(mods, key, block, live, context, binding_key, uses_default) and _neural_owner_env() == env
+            reusable = _neural_owner_matches(mods, key, block, live, context, binding_key, uses_default)
         except:
             reusable = False
     if not reusable:
@@ -394,7 +396,7 @@ def neural_block_execution(mut mods: NativeModules, block: PythonObject, context
     var has_profile = kind == "transformer" and _native_has_entry(mods, context["bindings"][binding_key][kind], "transformer_arithmetic_profile")
     var next_profile = snapshot["_arithmetic_profile"] if has_profile else PythonObject(None)
     var changed = snapshot["_arithmetic_profile_changed"] if has_profile else PythonObject(False)
-    prepared_put(mods, _NEURAL_OWNER_SLOT, block, Python.list(key, PythonObject(env), plan, derived, PythonObject(has_profile), next_profile, changed, binding_key, PythonObject(uses_default)))
+    prepared_put(mods, _NEURAL_OWNER_SLOT, block, Python.list(key, plan, derived, PythonObject(has_profile), next_profile, changed, binding_key, PythonObject(uses_default)))
     return NativeBlockExecution(plan, snapshot)
 
 
@@ -1085,14 +1087,14 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
     # and bindings/mamba_public_native.mojo.
     if family == "transformer":
         var native = PythonObject(None)
-        if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if code == 1 and NEURAL_NATIVE_DISPATCH:
             native = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
                 _native_function(mods, entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
             mods.released()
         py_setitem(fields, "_native_block_provider_cache", native)
     else:
         var native = PythonObject(None)
-        if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if code == 1 and NEURAL_NATIVE_DISPATCH:
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
             mods.released()
@@ -1520,14 +1522,14 @@ def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, 
     neural_plain_value(mods, mode, 0, context)
     if mode is None:
         mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
-    if String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+    if String(mode) == "identical" and NEURAL_NATIVE_DISPATCH:
         py_setitem(fields, "_runtime_lock", operation_lock_create())
         mods.released()
     else:
         py_setitem(fields, "_runtime_lock", context["rlock"]())
         mods.released()
     var session = PythonObject(None)
-    if String(fields["_native_route"]) == "gpu" and String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+    if String(fields["_native_route"]) == "gpu" and String(mode) == "identical" and NEURAL_NATIVE_DISPATCH:
         # A native registry handle of the block's GPU image (lane
         # transformer-session-native; the former `transformer_session_create`).
         var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)

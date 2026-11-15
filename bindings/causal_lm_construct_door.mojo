@@ -25,7 +25,7 @@ from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.neural_block_admission_door import admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached, NEURAL_NATIVE_DISPATCH
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 from std.python._cpython import GILReleased
@@ -594,14 +594,14 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             extended = extended or tail[i] != default_tail[i]
         py_setitem(fields, "_extended", PythonObject(extended))
         py_setitem(fields, "_gated", PythonObject(gated))
-        if String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") == "1":
+        if String(fields["numeric_mode"]) == "identical" and NEURAL_NATIVE_DISPATCH:
             py_setitem(fields, "_runtime_lock", operation_lock_create())
             mods.released()
         else:
             py_setitem(fields, "_runtime_lock", context["rlock"]())
             mods.released()
         var session = PythonObject(None)
-        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") == "1":
+        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and NEURAL_NATIVE_DISPATCH:
             # The block's session: a native registry handle of its GPU
             # Transformer image, created through the block entry of the neural
             # table (core/transformer_block_session.mojo; lane
@@ -681,7 +681,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(mods, base[i], quantize_key))
         py_setitem(fields, "_int15", planes)
     if kind == "mamba3":
-        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and NEURAL_NATIVE_DISPATCH:
             # The block's prefill session: a native registry handle of its
             # GPU Mamba image (core/mamba3_prefill_session.mojo, lane
             # mamba3-prefill-handle; the former Python entry

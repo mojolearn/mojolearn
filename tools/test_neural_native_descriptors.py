@@ -105,8 +105,10 @@ def test_public_probes_strictly_audit_candidate_calls_and_retain_reports():
         assert "status='failed', traceback=traceback.format_exc(), runtime_audits=RUNTIME_AUDITS" in body
     assert 'if arm == 1 and t in (0, ids.shape[1] - 1):' in samba
     # Independent callback controls stay present and outside strict audit.
-    assert 'baseline.forward(ids, baseline.allocate_state(1, 12))' in causal
-    assert 'assert len(calls) == n' in causal
+    # The default build never calls the by-name legacy entry (lane
+    # flag-native-dispatch-gate: dispatch is a build constant, no env arm).
+    assert "assert not calls, 'default build called the by-name legacy primitive entry'" in causal
+    assert "MOJOLEARN_NEURAL_NATIVE_DISPATCH'] =" not in causal and "MOJOLEARN_NEURAL_NATIVE_DISPATCH'] =" not in samba
     assert 'assert not called' in samba
     runner = read('tools/verify_neural_provider.py')
     assert "result['runtime_audits'] = getattr(module, 'RUNTIME_AUDITS', [])" in runner
