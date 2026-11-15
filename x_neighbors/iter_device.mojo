@@ -1521,7 +1521,6 @@ def knn_impute_split_kernel(
 # best_i scratch, as in knn_sq_tiled2_kernel). Tile sizes come from the
 # threadgroup page (IMR_SMEM_BYTES under every column's limit; the fits gate
 # keeps the cell kernels where it does not fit).
-# -D MOJOLEARN_XN_IMPUTE_ROWDIST_OFF restores the per-cell kernels.
 # ============================================================================
 comptime IMR_G = 64
 comptime IMR_JT = 64
@@ -1531,8 +1530,9 @@ comptime IMR_TPB = 256
 comptime IMR_R = 4
 comptime IMR_XS = IMR_FC + 1  # padded rows (bank spread)
 comptime IMR_SMEM_BYTES = 4 * (IMR_G * IMR_XS + IMR_JT * IMR_XS + IMR_G * (IMR_JT + 1) + 4 * IMR_G)
-comptime IMR_ROWDIST = (not is_defined["MOJOLEARN_XN_IMPUTE_ROWDIST_OFF"]()
-                        and lib_smem_page_fits_for[TARGET_COLUMN, IMR_SMEM_BYTES]())
+# TOMBSTONE: MOJOLEARN_XN_IMPUTE_ROWDIST_OFF (old path: the per-cell KNNImputer kernels where the row tile fits; EXP:1650 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5384f50cc6.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_ROWDIST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IMR_ROWDIST = lib_smem_page_fits_for[TARGET_COLUMN, IMR_SMEM_BYTES]()
 
 
 def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int64, nc_: Int64):
