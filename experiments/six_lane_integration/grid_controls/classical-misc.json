@@ -81,25 +81,6 @@
       "grid": "exclude",
       "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
     },
-    "c20_pair_load": {
-      "define": "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "svm/impl/kernelcache.mojo:347",
-        "svm/impl/kernelcache.mojo:410"
-      ],
-      "binding": "_mojolearn_svm",
-      "bits_change": false,
-      "status": "kept",
-      "note": "fused row+norm gather, parallel over n_ws*n_cols, no reduction. 2026-10-07: C20_ROW_CACHE deleted; its early return hid the square-tile site (kernelcache.mojo get_square_tile_without_caching), now reachable again on every SVC/SVR fit. The square-tile half was never measured: OWES its own A/B (off vs on) before any keep."
-    },
     "c21_extrema": {
       "define": "MOJOLEARN_CLASSICAL_C21_EXTREMA",
       "kind": "switch",
@@ -356,7 +337,6 @@
       "binding": "_mojolearn_svm",
       "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
       "controls": [
-        "c20_pair_load",
         "c21_extrema",
         "c22_triangle"
       ],
@@ -373,7 +353,6 @@
       "binding": "_mojolearn_svm",
       "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
       "controls": [
-        "c20_pair_load",
         "c21_extrema",
         "c22_triangle"
       ],
@@ -594,6 +573,11 @@
       "define": "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",
       "control": "c19_sgd_chunk",
       "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 6690c70fa8; patch experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); 2048 (the incumbent) is the only chunk now. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
+      "control": "c20_pair_load",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 911bf993d5; patch experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note says the square-tile half owed its own A/B. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
     }
   ],
   "owed_removal_ab": [

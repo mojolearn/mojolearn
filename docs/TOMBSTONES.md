@@ -706,6 +706,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C17_OVR`](#mojolearn_classical_c17_ovr-unmeasured-arm-deleted-2026-11-15) | Linear (SGD one-vs-rest in waves of four, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C17_OVR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch) |
 | [`MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT`](#mojolearn_classical_c18_residual_next-unmeasured-arm-deleted-2026-11-15) | Linear (CD next-coordinate residual forwarding, IDENTICAL) | removed (opt-in arm; unqualified opt-in arm, neutral) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch) |
 | [`MOJOLEARN_CLASSICAL_C19_SGD_CHUNK`](#mojolearn_classical_c19_sgd_chunk-unmeasured-arm-deleted-2026-11-15) | Linear (SGD ordered samples per launch sweep, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch) |
+| [`MOJOLEARN_CLASSICAL_C20_PAIR_LOAD`](#mojolearn_classical_c20_pair_load-unmeasured-arm-deleted-2026-11-15) | Kernel (SVM working-set row + norm gather, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6826,3 +6827,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6690c70fa8`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch`, then delete the `MOJOLEARN_CLASSICAL_C19_SGD_CHUNK` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c19_sgd_chunk`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C20_PAIR_LOAD: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the SVM kernel cache gathered each working-set row and its norm together, parallel over n_ws * n_cols (svm/impl/kernelcache.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C20_PAIR_LOAD` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); the grid note says the square-tile half owed its own A/B. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `911bf993d5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch`, then delete the `MOJOLEARN_CLASSICAL_C20_PAIR_LOAD` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-misc.json` control `c20_pair_load`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
