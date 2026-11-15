@@ -717,6 +717,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C44_SAMPLING_DESCRIPTORS`](#mojolearn_c44_sampling_descriptors-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (umap) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch](../experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch) |
 | [`MOJOLEARN_KDE_DIRECT_DISTANCE`](#mojolearn_kde_direct_distance-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (kde) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_KDE_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch) |
 | [`MOJOLEARN_KMEANS_ROW_ASSIGN`](#mojolearn_kmeans_row_assign-unmeasured-arm-deleted-2026-11-15) | Cluster (KMeans row-register assignment, IDENTICAL) | removed (unmeasured opt-in arm; KEPT row withdrawn, no own verdict) | 2026-11-15 | [MOJOLEARN_KMEANS_ROW_ASSIGN.patch](../experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch) |
+| [`MOJOLEARN_IVF_DIRECT_DISTANCE_OFF`](#mojolearn_ivf_direct_distance_off-old-path-deleted-2026-11-15) | Neighbors (IVF-Flat direct distances, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED ge123e6f9, _OFF loses recall g50ebe26a5) | 2026-11-15 | [MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch](../experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6929,3 +6930,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b97e8ccd99`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch`, then delete the `MOJOLEARN_KMEANS_ROW_ASSIGN` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `kmeans_assign` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IVF_DIRECT_DISTANCE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IVF_DIRECT_DISTANCE` (IVF-Flat scan distances as direct sums of squared differences, device scan + balanced tasks + ivf_host twin) to the -2 q.x + |q|^2 + |x|^2 expansion. `IVF_DIRECT_DISTANCE` is now `GRAPH_IDENTICAL`; its readers keep their branches for FAST until their lanes fold them.
+- **Verdict**: PROMOTED 2026-10-08 (lane/grid-flips-1, grid ge123e6f9, one run per arm): ivf istella NV 2259 -> 2117 ms (0.937x), AMD 1562 -> 1505 (0.964x); taxi NV 225.5 -> 201.6 (0.894x), AMD 243.3 -> 242.1 (0.995x); recall better on istella. CONFIRMED on g50ebe26a5 (_OFF arm loses recall). No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3cf1b7b6af`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch`, then delete the `MOJOLEARN_IVF_DIRECT_DISTANCE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `ivf_direct` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

@@ -171,6 +171,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"](), "removed 2026-11-15 (lane/expdel2-05-base): C44_SAMPLING_DESCRIPTORS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch
     comptime assert not is_defined["MOJOLEARN_KMEANS_ROW_ASSIGN"](), "removed 2026-11-15 (lane/expdel2-05-base): KMEANS_ROW_ASSIGN (opt-in row-register KMeans assignment, never measured on its own) is gone; the tiled fused L2-NN is the only arm"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IVF_DIRECT_DISTANCE_OFF (rollback of the IVF scan to the distance expansion) is gone; the direct distances are the IDENTICAL path"
     return True
 
 

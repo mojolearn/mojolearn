@@ -4,24 +4,6 @@
  "branch": "lane/classical-kmeans",
  "head": "24dbc6581",
  "controls": {
-  "ivf_direct": {
-   "define": "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:44"
-   ],
-   "binding": "_mojolearn_ivf",
-   "bits_change": true,
-   "status": "promoted:ge123e6f9",
-   "note": "ivf identical_ivf_scan, ivf_balanced_tasks, ivf_flat_search tile, ivf_host twin Default ON in IDENTICAL; `_OFF` is the norm-expansion distance. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
-  },
   "c06_norms": {
    "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS / MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
    "kind": "arms",
@@ -85,9 +67,7 @@
   "more:ivf": {
    "binding": "_mojolearn_ivf",
    "route": "build: coarse kmeans (cluster kmeans_fit); search: ivf_flat_search pinned tile + identical_ivf_scan",
-   "controls": [
-    "ivf_direct"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "notes": "kmeans_conv_chunk and kmeans_assign are decided on classical:kmeans only (ivf/estimator.mojo:93 runs kmeans_fit); phase 2 adds one confirm config here with the kmeans winner."
   },
@@ -217,6 +197,11 @@
    "define": "MOJOLEARN_KMEANS_ROW_ASSIGN",
    "control": "kmeans_assign",
    "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): rows2 / rows4 arms never measured on their own (V2 rule e); the tiled incumbent is the only arm. Code recoverable at b97e8ccd99."
+  },
+  {
+   "define": "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF",
+   "control": "ivf_direct",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the PROMOTED default (ge123e6f9; CONFIRMED g50ebe26a5). Code recoverable at 3cf1b7b6af."
   }
  ]
 }
