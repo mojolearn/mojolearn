@@ -35,9 +35,9 @@ Re-timing: every DELETE in this plan removes a non-default arm, so no row of `be
 | define | decision | branch lines | live sites | evidence |
 |---|---|---|---|---|
 | `MOJOLEARN_GBDT_EVAL_FUSED` | DELETE-LOSER | 122 | 1 | EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE |
-| `MOJOLEARN_GBDT_PREDICT_PACKED` | DELETE-LOSER | 50 | 1 | EXP:171 NEUTRAL |
+| `MOJOLEARN_GBDT_PREDICT_PACKED` | KEEP-OPEN | 50 | 1 | expdel-05: KEEP-OPEN (2026-11-15): NEUTRAL (EXP:171) but the prerequisite of the unmeasured AFT_P05 card (core/apple_fast_tree_experiments.mojo, P.json: PREDICT_PACKED in both arms; AFT_P05 code sits in the packed `_apply_all` path); orchestrator decides (delete P05 with it, or keep) |
 | `MOJOLEARN_SVGP_FAST_BSPLIT_OFF` | DELETE-OLD-PATH | 26 | 1 | EXP:1424 KEEP (FAST+Apple default, `_OFF`) |
-| `MOJOLEARN_GBDT_QUANT_DEVICE` | DELETE-LOSER | 18 | 1 | EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE |
+| `MOJOLEARN_GBDT_QUANT_DEVICE` | KEEP-OPEN | 18 | 1 | expdel-05: KEEP-OPEN (2026-11-15): NEUTRAL (EXP:172) but implied by GBDT_INDEX_PACK_DEVICE (G06 prerequisite) and held equal in G05; goes with INDEX_PACK_DEVICE |
 | `MOJOLEARN_IDN_SEQ_REG_OFF` | DELETE-OLD-PATH | 16 | 1 | grid seq-reg.json promoted:lane/i17-decide-linalg-seq |
 | `MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF` | DELETE-OLD-PATH | 15 | 1 | grid samba-resident.json promoted:ge123e6f9 |
 | `MOJOLEARN_TSVD_FAST_POOL_OFF` | DELETE-OLD-PATH | 14 | 1 | EXP:1417 KEEP (FAST+Apple default, `_OFF`) |
@@ -78,6 +78,14 @@ Files: `autograd/program_output_copy.mojo`, `bindings/_mojolearn_training.mojo`,
 Defines: `MOJOLEARN_CTR_ONEHOT_DEVICE` (loser), `MOJOLEARN_CTR_PREP_SHARED` (loser), `MOJOLEARN_EST_ITERS_DEVICE` (loser), `MOJOLEARN_GBDT_BOOT_DEVICE` (loser), `MOJOLEARN_GBDT_EVAL_FUSED` (loser), `MOJOLEARN_GBDT_EVAL_SKIP_EMPTY` (loser), `MOJOLEARN_GBDT_INDEX_PACK_DEVICE` (loser), `MOJOLEARN_GBDT_PREDICT_PACKED` (loser), `MOJOLEARN_GBDT_QUANT_DEVICE` (loser), `MOJOLEARN_KSHAP_FAST_BATCH_OFF` (old-path), `MOJOLEARN_SYM_BUF_ARENA` (loser), `MOJOLEARN_SYM_FEAT_ALL` (loser), `MOJOLEARN_SYM_HIST_ALL` (loser), `MOJOLEARN_SYM_ITER_ALL` (loser), `MOJOLEARN_SYM_MULTI_ALL` (loser), `MOJOLEARN_SYM_RESOLVE_BLOCK` (loser), `MOJOLEARN_SYM_SORT_SWAP` (loser), `MOJOLEARN_YR_TASK_FUSED` (loser)
 
 Files: `bindings/_mojolearn_gbdt.mojo`, `gbdt/ctrs/fast_prep.mojo`, `gbdt/estimator.mojo`, `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/grid_creator/gls_borders_device.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`, `gbdt/methods/kernel/pointwise_split_resolve.mojo`, `gbdt/methods/kernel/sym_fast.mojo`, `gbdt/methods/leaves_estimation/apple_fast_est.mojo`, `gbdt/methods/sym_iter_fast.mojo`, `gbdt/resident_model.mojo`, `gbdt/targets/kernel/yeti_rank.mojo`, `xtrees/agnostic_device.mojo`
+
+Lane result (expdel-05-trees, 2026-11-15): 11 deleted (`SYM_FEAT_ALL`, `GBDT_BOOT_DEVICE`, `GBDT_EVAL_SKIP_EMPTY`,
+`GBDT_EVAL_FUSED`, `SYM_HIST_ALL`, `SYM_SORT_SWAP`, `SYM_ITER_ALL`, `SYM_BUF_ARENA`, `SYM_MULTI_ALL`, `YR_TASK_FUSED`,
+`KSHAP_FAST_BATCH_OFF`). 7 moved to KEEP-OPEN after reading the evidence rows: `CTR_ONEHOT_DEVICE`, `CTR_PREP_SHARED`,
+`EST_ITERS_DEVICE` are default ON through their umbrellas `SYM_CTR_ALL` / `SYM_EST_ALL` (EXP:160/161/163 "KEPT/DEFAULT via",
+EXP:1303 "ride their umbrellas, now on"), so they are winners, not losers; `GBDT_INDEX_PACK_DEVICE` + `GBDT_QUANT_DEVICE`,
+`GBDT_PREDICT_PACKED` and `SYM_RESOLVE_BLOCK` lost (NEUTRAL) but are the prerequisites of the unmeasured Apple FAST cards
+AFT_G06, AFT_P05 and AFCL_T05 (both arms); deleting them removes those cards' arms, which is the orchestrator's call.
 
 ### expdel-06-base-cluster-kernel (18 defines, 87 branch lines, 19 files)
 
@@ -2132,21 +2140,21 @@ Columns: verdict = evidence class (WIN / LOSE / OPEN / none) and the newest evid
 
 | define | decision | verdict + evidence | sites | lines | tomb | first site | reason / lane |
 |---|---|---|---|---|---|---|---|
-| `MOJOLEARN_CTR_ONEHOT_DEVICE` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+4/0 | 5 | - | gbdt/ctrs/fast_prep.mojo:161 | expdel-05 |
-| `MOJOLEARN_CTR_PREP_SHARED` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+3/0 | 4 | - | gbdt/ctrs/fast_prep.mojo:136 | expdel-05 |
-| `MOJOLEARN_EST_ITERS_DEVICE` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+4/0 | 5 | - | gbdt/methods/leaves_estimation/apple_fast_est.mojo:129 | expdel-05 |
+| `MOJOLEARN_CTR_ONEHOT_DEVICE` | KEEP-OPEN | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+4/0 | 5 | - | gbdt/ctrs/fast_prep.mojo:161 | expdel-05: KEEP-OPEN (2026-11-15): default ON through SYM_CTR_ALL (EXP:160 KEPT/DEFAULT via SYM_CTR_ALL, EXP:1274 ACCEPT -8.0%); not a loser: its old path is the SYM_CTR_ALL_OFF rollback (owed: A/B of SYM_CTR_ALL on current main, fast_prep.mojo note) |
+| `MOJOLEARN_CTR_PREP_SHARED` | KEEP-OPEN | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+3/0 | 4 | - | gbdt/ctrs/fast_prep.mojo:136 | expdel-05: KEEP-OPEN (2026-11-15): default ON through SYM_CTR_ALL (EXP:161 KEPT/DEFAULT via SYM_CTR_ALL, EXP:1274); not a loser: its old path is the SYM_CTR_ALL_OFF rollback |
+| `MOJOLEARN_EST_ITERS_DEVICE` | KEEP-OPEN | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+4/0 | 5 | - | gbdt/methods/leaves_estimation/apple_fast_est.mojo:129 | expdel-05: KEEP-OPEN (2026-11-15): default ON through SYM_EST_ALL (EXP:163 KEPT/DEFAULT via SYM_EST_ALL, EXP:1275 ACCEPT -2.9%); not a loser: its old path is the SYM_EST_ALL_OFF rollback |
 | `MOJOLEARN_GBDT_BOOT_DEVICE` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+1/0 | 2 | - | gbdt/gpu_data/sym_feat_switches.mojo:93 | expdel-05 |
 | `MOJOLEARN_GBDT_EVAL_FUSED` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+10/0 | 122 | - | gbdt/gpu_data/sym_feat_switches.mojo:73 | expdel-05 |
 | `MOJOLEARN_GBDT_EVAL_SKIP_EMPTY` | DELETE-LOSER | LOSE EXP:169 NEUTRAL | 1+1/0 | 2 | - | gbdt/gpu_data/sym_feat_switches.mojo:62 | expdel-05 |
-| `MOJOLEARN_GBDT_INDEX_PACK_DEVICE` | DELETE-LOSER | LOSE EXP:170 NEUTRAL | 1+2/0 | 3 | - | gbdt/gpu_data/sym_feat_switches.mojo:35 | expdel-05 |
-| `MOJOLEARN_GBDT_PREDICT_PACKED` | DELETE-LOSER | LOSE EXP:171 NEUTRAL | 1+5/0 | 50 | - | gbdt/gpu_data/sym_feat_switches.mojo:83 | expdel-05 |
-| `MOJOLEARN_GBDT_QUANT_DEVICE` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+8/0 | 18 | - | gbdt/gpu_data/sym_feat_switches.mojo:52 | expdel-05 |
+| `MOJOLEARN_GBDT_INDEX_PACK_DEVICE` | KEEP-OPEN | LOSE EXP:170 NEUTRAL | 1+2/0 | 3 | - | gbdt/gpu_data/sym_feat_switches.mojo:35 | expdel-05: KEEP-OPEN (2026-11-15): NEUTRAL (EXP:170) but the prerequisite of the unmeasured AFT_G06 card (experiments/apple_fast_trees/G.json: INDEX_PACK_DEVICE in both arms); deleting it removes G06's arm: orchestrator decides (delete G06 with it, or keep) |
+| `MOJOLEARN_GBDT_PREDICT_PACKED` | KEEP-OPEN | LOSE EXP:171 NEUTRAL | 1+5/0 | 50 | - | gbdt/gpu_data/sym_feat_switches.mojo:83 | expdel-05: KEEP-OPEN (2026-11-15): NEUTRAL (EXP:171) but the prerequisite of the unmeasured AFT_P05 card (core/apple_fast_tree_experiments.mojo, P.json: PREDICT_PACKED in both arms; AFT_P05 code sits in the packed `_apply_all` path); orchestrator decides (delete P05 with it, or keep) |
+| `MOJOLEARN_GBDT_QUANT_DEVICE` | KEEP-OPEN | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+8/0 | 18 | - | gbdt/gpu_data/sym_feat_switches.mojo:52 | expdel-05: KEEP-OPEN (2026-11-15): NEUTRAL (EXP:172) but implied by GBDT_INDEX_PACK_DEVICE (G06 prerequisite) and held equal in G05; goes with INDEX_PACK_DEVICE |
 | `MOJOLEARN_SYM_BUF_ARENA` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+0/0 | 1 | - | gbdt/methods/sym_iter_fast.mojo:112 | expdel-05 |
 | `MOJOLEARN_SYM_FEAT_ALL` | DELETE-LOSER | LOSE EXP:1300 RECORD NEUTRAL: stays off | 1+6/0 | 7 | - | gbdt/gpu_data/sym_feat_switches.mojo:21 | expdel-05 |
 | `MOJOLEARN_SYM_HIST_ALL` | DELETE-LOSER | LOSE EXP:1299 RECORD NEUTRAL: stays off | 1+3/0 | 4 | - | gbdt/methods/kernel/sym_fast.mojo:32 | expdel-05 |
 | `MOJOLEARN_SYM_ITER_ALL` | DELETE-LOSER | LOSE EXP:1301 RECORD NEUTRAL: stays off | 1+2/0 | 3 | - | gbdt/methods/sym_iter_fast.mojo:97 | expdel-05 |
 | `MOJOLEARN_SYM_MULTI_ALL` | DELETE-LOSER | LOSE EXP:1302 RECORD NEUTRAL | 1+0/0 | 1 | - | gbdt/targets/kernel/yeti_rank.mojo:250 | expdel-05 |
-| `MOJOLEARN_SYM_RESOLVE_BLOCK` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+2/0 | 10 | - | gbdt/methods/kernel/sym_fast.mojo:53 | expdel-05 |
+| `MOJOLEARN_SYM_RESOLVE_BLOCK` | KEEP-OPEN | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+2/0 | 10 | - | gbdt/methods/kernel/sym_fast.mojo:53 | expdel-05: KEEP-OPEN (2026-11-15): NEUTRAL (EXP:200/224) but both arms of the unmeasured AFCL_T05 card (gbdt/apple_fast_classical.mojo) require it; orchestrator decides (delete T05 with it, or keep) |
 | `MOJOLEARN_SYM_SORT_SWAP` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+1/0 | 2 | - | gbdt/methods/kernel/sym_fast.mojo:42 | expdel-05 |
 | `MOJOLEARN_YR_TASK_FUSED` | DELETE-LOSER | LOSE EXP:1303 RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DE | 1+0/0 | 1 | - | gbdt/targets/kernel/yeti_rank.mojo:249 | expdel-05 |
 | `MOJOLEARN_KSHAP_FAST_BATCH_OFF` | DELETE-OLD-PATH | WIN EXP:692 KEPT | 1+2/0 | 3 | - | xtrees/agnostic_device.mojo:42 | expdel-05 |
