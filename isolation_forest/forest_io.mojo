@@ -28,11 +28,9 @@ from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.host_parallel import host_parallelize
 from isolation_forest.impl.isolation_forest import (
-    IF_C50_PACKED,
     IF_params,
     IsolationForestModel,
     compute_c_normalization,
-    if_pack_nodes_kernel,
 )
 from core.neural_context import process_ctx
 from isolation_forest.estimator import IsolationForestEstimator, IFResidentEntry, IFResidentKey, _DEVCTX_SLOT
@@ -297,12 +295,6 @@ def if_forest_import(
     model.global_tree_n_nodes = _upload_i32_words(ctx, Int(counts.unsafe_ptr()), n_trees)
     var depths = List[Int32](length=n_trees, fill=0)
     model.global_tree_max_depth = _upload_i32_words(ctx, Int(depths.unsafe_ptr()), n_trees)
-    comptime if IF_C50_PACKED:
-        model.packed_nodes = ctx.enqueue_create_buffer[DType.int32](4 * total)
-        ctx.enqueue_function[if_pack_nodes_kernel](model.node_feature.unsafe_ptr(), model.node_threshold.unsafe_ptr(),
-            model.node_left.unsafe_ptr(), model.node_right.unsafe_ptr(), model.packed_nodes.value().unsafe_ptr(),
-            Int32(total), grid_dim=(total + 255) // 256, block_dim=256)
-        ctx.synchronize()
     model.tree_n_nodes_host = counts^
     model.tree_max_depth_host = depths^
     model.fitted = True

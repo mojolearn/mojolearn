@@ -9,10 +9,8 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T18, T26
 # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
-from gbdt.methods.leaves_estimation.tree_t26_device import t26_estimate_apply
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from gbdt.methods.kernel_add_model_value import (
     add_model_value_gated_kernel,
@@ -137,7 +135,6 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     weight_keep_mask_kernel,
 )
 from gbdt.methods.leaves_estimation.device_walker import (
-    GBDT_WALK_DEV_STEP,
     WALK_FOLD_BLOCK,
     WalkBuffers,
     count_nonzero_u32_kernel,
@@ -173,12 +170,9 @@ from gbdt.methods.kernel.two_level_leaves import (
 # TOMBSTONE: MOJOLEARN_SYM_CTR_PERM_BATCH (DROPPED-noise) deleted 2026-10-04 by f4ac2ee28; code recoverable at f4ac2ee28^.
 # Restore: git apply experiments/removed/MOJOLEARN_SYM_CTR_PERM_BATCH.patch; record in docs/TOMBSTONES.md.
 from gbdt.models.kernel.add_bin_values import (
-    IDN_APPLY_WIDE,
     IDN_PREDICT_FOUR,
     compute_bins_and_add_kernel,
     launch_oblivious_apply_four,
-    launch_oblivious_apply_wide,
-    uniform_positive_depth,
 )
 from checks.kernel_matrix import (
     TARGET_COLUMN,
@@ -2537,16 +2531,13 @@ def _estimate_prepare(
     if finished:
         _walk_finish(pending)
         return pending^
-    comptime if GBDT_WALK_DEV_STEP:
-        # the walk's first `iterations` evaluations, enqueued at the device's
-        # step (device_walker.mojo GBDT_WALK_DEV_STEP); the caller's next
-        # drain settles all of them (`estimate_advance`, phase 3)
-        device_walk_enqueue_speculative(
-            ctx, pending.oracle, pending.walk, iterations
-        )
-        pending.phase = 3
-        return pending^
-    _ = _walk_line_search_or_finish(pending)
+    # the walk's first `iterations` evaluations, enqueued at the device's
+    # step (the device step is the only form since GBDT_WALK_DEV_STEP_OFF was
+    # deleted); the caller's next drain settles all of them (`estimate_advance`, phase 3)
+    device_walk_enqueue_speculative(
+        ctx, pending.oracle, pending.walk, iterations
+    )
+    pending.phase = 3
     return pending^
 
 
@@ -5008,24 +4999,8 @@ def fit_with_test(
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()
-            # T26 V1: only a same-version host/device supported contract.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            var t26_done = False
-            comptime if T26:
-                if (objective == OBJECTIVE_RMSE and not has_weights and perm_count == 1
-                    and approx_dim == 1 and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
-                    and leaf_estimation_iterations == 1):
-                    var direct_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-                    compute_non_symmetric_bins_for_model(
-                        ctx, layout_for_test, tree.model_structure, lc, n_rows, direct_bins,
-                    )
-                    leaf_values = t26_estimate_apply(
-                        ctx, direct_bins, targets, cursors[0], n_rows, n_bins,
-                        l2_leaf_reg, learning_rate,
-                    )
-                    t26_done = True
-                    _ = direct_bins^
-            if device_leaf_partition and not t26_done:
+            # (Sweep 2026-11-15: the folded T26 bounded-leaf branch was removed here.)
+            if device_leaf_partition:
                 # DEVIATION 2551: the pool of one, keyed on the row count,
                 # with a leaf capacity of the policy's own bound
                 if (
@@ -5044,7 +5019,7 @@ def fit_with_test(
             var perm_batched = False
             comptime if CTR_PERM_BATCH:
                 if (
-                    not t26_done and perm_count > 1
+                    perm_count > 1
                     and device_leaf_partition
                     and approx_dim == 1
                     and estimate_can_batch(
@@ -5069,19 +5044,12 @@ def fit_with_test(
                     # bins for the model and the partition of every
                     # permutation, enqueued back to back
                     var t_bins_b = loop_times.start()
-                    # T18: only the learning permutation shares search row IDs.
-                    # A folded-back Lossguide leaf remains refused by final_ready.
-                    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                    var inherit_learn = T18 and len(dws) == 1
-                    if inherit_learn:
-                        inherit_learn = dws[0].final_ready and len(dws[0].final_sizes) == n_bins
+                    # (Sweep 2026-11-15: the folded T18 learn-permutation inheritance was removed here.)
                     # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
                     # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
                     # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.
                     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
                     for p in range(perm_count):
-                        if inherit_learn and p == learn_p:
-                            continue
                         ref lp = perm_leaf_parts[p]
                         if p == learn_p:
                             compute_non_symmetric_bins_for_model(
@@ -5100,12 +5068,6 @@ def fit_with_test(
                     ctx.synchronize()
                     var parts = List[LeafPartition]()
                     for p in range(perm_count):
-                        if inherit_learn and p == learn_p:
-                            parts.append(LeafPartition(
-                                row_index.copy(), dws[0].final_offsets.copy(),
-                                dws[0].final_sizes.copy(),
-                            ))
-                            continue
                         parts.append(
                             perm_leaf_parts[p].partition_collect(
                                 ctx, n_rows, n_bins
@@ -5160,7 +5122,7 @@ def fit_with_test(
                     _ = parts^  # past the drain (step-33 race class)
                     _ = pend^  # past the drain (step-33 race class)
                     loop_times.stop_host("iter_estimate_apply", t_est_b)
-            for p in range(0 if (perm_batched or t26_done) else perm_count):
+            for p in range(0 if perm_batched else perm_count):
                 var pv = List[Float32]()
                 var t_bins = loop_times.start()
                 var part: LeafPartition
@@ -5169,7 +5131,7 @@ def fit_with_test(
                 var inherit = False
                 comptime if NS_INHERIT_PARTITION:
                     inherit = (
-                        (perm_count == 1 or T18)
+                        perm_count == 1
                         and p == learn_p
                         and len(dws) == 1
                         and dws[0].final_ready
@@ -5946,25 +5908,15 @@ def predict(
     # lane/fam2-gbdt F3 / F4: the same per-row ordered adds in fewer
     # launches (`gbdt/models/kernel/add_bin_values.mojo`)
     var grouped = False
-    comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:
+    comptime if IDN_PREDICT_FOUR:
         var tree_depths = List[Int](capacity=model.size())
         for t in range(model.size()):  # small-loop(model: one entry per tree): collects tree depths for the apply dispatch
             tree_depths.append(model.weak_models[t].structure.get_depth())
-        comptime if IDN_APPLY_WIDE:
-            var uniform = uniform_positive_depth(tree_depths)
-            if uniform > 0:
-                launch_oblivious_apply_wide(
-                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
-                    uniform, model.size(), n_rows, cursor, approx_dim,
-                )
-                grouped = True
-        comptime if IDN_PREDICT_FOUR:
-            if not grouped:
-                launch_oblivious_apply_four(
-                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
-                    tree_depths, n_rows, cursor, approx_dim,
-                )
-                grouped = True
+        launch_oblivious_apply_four(
+            ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
+            tree_depths, n_rows, cursor, approx_dim,
+        )
+        grouped = True
     if not grouped:
         lvl = 0
         leaf = 0

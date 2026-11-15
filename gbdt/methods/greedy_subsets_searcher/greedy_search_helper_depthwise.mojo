@@ -62,7 +62,6 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T18, T21
 
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.builtin.sort import sort
@@ -230,7 +229,7 @@ comptime REPORT_PART_STATS_WORK = is_defined["MOJOLEARN_GBDT_PART_STATS_WORK"]()
 # Istella-S is where it can pay (220 features, one one-byte block of 32
 # groups); taxi's two groups are both 8-bit, so there it only changes
 # launcher.
-comptime NONSYM_GROUP_WIDTH_2661 = T21 or is_defined[
+comptime NONSYM_GROUP_WIDTH_2661 = is_defined[
     "MOJOLEARN_2661_NONSYM_GROUP_WIDTH"
 ]()
 

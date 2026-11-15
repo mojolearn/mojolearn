@@ -206,14 +206,6 @@ from gbdt.methods.kernel.pointwise_hist2_half_byte_template import PW_HB_BLOCK, 
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import (
     compute_split_properties_nb_kernel,
     PW_WRITE_EPS,
-    ORD_SMALL_FOLD_BLOCK,
-    ORD_SMALL_FOLD_PART_GROUPS,
-    ord_small_fold_convert_kernel,
-    ord_small_fold_hist8_kernel,
-)
-from gbdt.trees_identical_switches import (
-    ORD_HIST_FOLD_SKIP,
-    ORD_HIST_FOLD_SKIP_DOCS,
 )
 from gbdt.methods.kernel.pointwise_hist2_binary import (
     compute_split_properties_b_kernel,
@@ -1016,57 +1008,7 @@ def compute_hist2_non_binary_dev[
     # (geometric folds, learn then quality per fold), so they are a prefix.
     # Same cells (Int32 sums are order-free); fixed 8-bit route only.
     var z_skip = 0
-    comptime if (
-        ORD_HIST_FOLD_SKIP
-        and bits == 8
-        and pointwise_one_byte_fixed_for[
-            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
-        ]()
-    ):
-        if fold_count > 1 and len(fold_part_sizes) == fold_count:
-            var budget = part_count * ORD_HIST_FOLD_SKIP_DOCS
-            while z_skip < fold_count and fold_part_sizes[z_skip] < budget:  # small-loop(fold_count: fold partitions, 2F): the small-fold prefix
-                z_skip += 1
-        if z_skip > 0:
-            var fb = (
-                nb_count + PW_NB_FEATURES_PER_BLOCK - 1
-            ) // PW_NB_FEATURES_PER_BLOCK
-            var groups = ny if ny < ORD_SMALL_FOLD_PART_GROUPS else ORD_SMALL_FOLD_PART_GROUPS
-            var line_blocks = (2 * hist_line_size + 255) // 256
-            if full_pass:
-                ctx.enqueue_function[ord_small_fold_hist8_kernel[True]](
-                    feature_offset, feature_first_fold_index, feature_folds,
-                    Int32(nb_count), cindex, target, weight, indices,
-                    partition, bin_sums, Int32(hist_line_size),
-                    Int32(fold_count), Int32(ny), fixed_scale, dither_ids,
-                    grid_dim=(fb, z_skip, groups),
-                    block_dim=(ORD_SMALL_FOLD_BLOCK, 1, 1),
-                )
-                ctx.enqueue_function[ord_small_fold_convert_kernel[True]](
-                    bin_sums, Int32(hist_line_size), Int32(fold_count),
-                    Int32(ny), fixed_scale,
-                    grid_dim=(line_blocks, z_skip, ny),
-                    block_dim=(256, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[ord_small_fold_hist8_kernel[False]](
-                    feature_offset, feature_first_fold_index, feature_folds,
-                    Int32(nb_count), cindex, target, weight, indices,
-                    partition, bin_sums, Int32(hist_line_size),
-                    Int32(fold_count), Int32(ny), fixed_scale, dither_ids,
-                    grid_dim=(fb, z_skip, groups),
-                    block_dim=(ORD_SMALL_FOLD_BLOCK, 1, 1),
-                )
-                ctx.enqueue_function[ord_small_fold_convert_kernel[False]](
-                    bin_sums, Int32(hist_line_size), Int32(fold_count),
-                    Int32(ny), fixed_scale,
-                    grid_dim=(line_blocks, z_skip, ny),
-                    block_dim=(256, 1, 1),
-                )
-            if z_skip >= nz:
-                # every fold partition was small: the regular grid has
-                # nothing left to file
-                return
+    # (Sweep 2026-11-15: the folded ORD_HIST_FOLD_SKIP small-fold prefix launch was removed; z_skip stays 0.)
 
     if int_slots:
         var stride_i = ny * nz * 2 * hist_line_size

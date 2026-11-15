@@ -31,7 +31,6 @@ from checks.numerics import (
 )
 from checks.soft_f64 import sf64_add, sf64_mul, sf64_from_f32
 from xtrees.ops import draw
-from gbdt.trees_identical_switches import T30
 
 comptime DART_PIN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
@@ -154,10 +153,7 @@ def dart_row_unit(
             if flags[it] != Int32(0):
                 var j = it * kk + c
                 var value: Float32
-                comptime if T30:
-                    value = cached[j * nn + i]
-                else:
-                    value = values[j * node_cap + Int(nodes[j * nn + i])]
+                value = values[j * node_cap + Int(nodes[j * nn + i])]
                 s = _mul_add(coef[j], value, s)
         dsum[c * nn + i] = s
         score[c * nn + i] = _sub(score[c * nn + i], s)
@@ -309,9 +305,6 @@ def dart_add_unit(
     and the new tree at its shrinkage, in that order."""
     var ci = class_off + e
     var value = values[voff + Int(nodes[row_off + e])]
-    comptime if T30:
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        cached[row_off + e] = value
     score[ci] = _mul_add(shrink, value, _mul_add(factor, dsum[ci], score[ci]))
 
 
