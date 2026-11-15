@@ -1212,9 +1212,10 @@ def mamba3_theta_reverse_kernel(
 #: each angle's whole column of d_theta once (L words), and each thread
 #: folds its token's suffixes from threadgroup memory. SAME BITS.
 #: Columns up to M3_ANGLE_DT_MAXL words take it; longer sequences keep the
-#: old kernel. MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE=1 (a build define) keeps
-#: the old kernel for the A/B.
-comptime M3_ANGLE_DT_SHARED = not is_defined["MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE"]()
+#: old kernel.
+# TOMBSTONE: MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at c48e90d779.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE.patch; record in docs/TOMBSTONES.md.
+comptime M3_ANGLE_DT_SHARED = True
 comptime M3_ANGLE_DT_MAXL = 4096
 comptime M3_ANGLE_DT_TPB = 256
 
