@@ -6,6 +6,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.apple_fast_classical import AFCL_T04
 
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
@@ -22,7 +23,8 @@ from gbdt.gpu_util.partitions_reduce import (
 
 # TOMBSTONE: MOJOLEARN_AFCL_T04 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 23de5304ed.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T04.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
-comptime SPLIT_BLOCK_SIZE = 256
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime SPLIT_BLOCK_SIZE = 128 if AFCL_T04 else 256
 """`constexpr int blockSize = 256` (`gpu_data/kernel/split.cu:211`)."""
 
 comptime SPLIT_MAX_BLOCKS = 65535

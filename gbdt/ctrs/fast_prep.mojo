@@ -56,6 +56,7 @@ quality remain unverified.
 from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import unsafe_memcpy
+from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -136,7 +137,10 @@ comptime SYM_CTR_ALL = True
 # Restore: git apply experiments/removed/MOJOLEARN_CTR_PREP_SHARED.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_T28_PREFIX (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 865bea9957.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_PREFIX.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
-comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE and (
+    is_defined["MOJOLEARN_CTR_PREP_SHARED"]() or SYM_CTR_ALL
+)
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
@@ -145,7 +149,10 @@ comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE
 # Restore: git apply experiments/removed/MOJOLEARN_CTR_SORT_ONCE.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_T28_SORT (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 6293628f02.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_SORT.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
-comptime CTR_SORT_ONCE = _SYM_CTR_FAST_APPLE
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime CTR_SORT_ONCE = _SYM_CTR_FAST_APPLE and (
+    is_defined["MOJOLEARN_CTR_SORT_ONCE"]() or SYM_CTR_ALL
+)
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
@@ -156,14 +163,20 @@ comptime CTR_SORT_ONCE = _SYM_CTR_FAST_APPLE
 #: HOLD (old base). Owed: current-main A/B.
 # TOMBSTONE: MOJOLEARN_CTR_INDEX_FUSED (DELETE-ARM, EXP:1274 force knob under the SYM_CTR_ALL default, rule e) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at f2886a9013.
 # Restore: git apply experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch; record in docs/TOMBSTONES.md.
-comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE and (
+    is_defined["MOJOLEARN_CTR_INDEX_FUSED"]() or SYM_CTR_ALL
+)
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
 #: never timed.
 # TOMBSTONE: MOJOLEARN_CTR_ONEHOT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL force knob, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 3fb3500522.
 # Restore: git apply experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch; record in docs/TOMBSTONES.md.
-comptime CTR_ONEHOT_DEVICE = _SYM_CTR_FAST_APPLE
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime CTR_ONEHOT_DEVICE = _SYM_CTR_FAST_APPLE and (
+    is_defined["MOJOLEARN_CTR_ONEHOT_DEVICE"]() or SYM_CTR_ALL
+)
 
 #: the permutation-DEPENDENT half runs through `CtrPrepFast` under any of
 #: these three; `CTR_PREP_SHARED` alone decides whether the context lives

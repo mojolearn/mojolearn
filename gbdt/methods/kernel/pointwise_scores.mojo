@@ -296,7 +296,13 @@ comptime POINTWISE_WIDE_BLOCK = 1024
 
 # TOMBSTONE: MOJOLEARN_AFT_G04 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 61398a4eb6.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_G04.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
-comptime AFT_PARTITION_BLOCK = POINTWISE_WIDE_BLOCK
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G04
+
+# G04: halve the partition reduction's thread and shared-slab footprint;
+# each lane still walks its complete stripe in all three planes. Preserve
+# the gather geometry above. Uncompiled/unverified/unmeasured, FAST only.
+comptime AFT_PARTITION_BLOCK = 512 if AFT_G04 else POINTWISE_WIDE_BLOCK
 
 #: `FLT_MAX`. Their "this candidate is unusable" sentinel (`:44-45`,
 #: `score_calcers.cuh:161`). NOT negated here -- see the sign section.

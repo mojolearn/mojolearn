@@ -58,7 +58,11 @@ comptime STAGE_NO_BAD = Int32(0x7FFFFFFF)
 comptime STAGE_BLOCK = 256
 # TOMBSTONE: MOJOLEARN_AFT_P06 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 2f1be66a56.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_P06.expdel2-07-base.patch
-comptime LINK_BLOCK = 256
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# P06: source-only alternate link block. Lower per-block register demand for
+# soft binary64 math; quality and performance remain entirely unmeasured.
+from core.apple_fast_tree_experiments import AFT_P06
+comptime LINK_BLOCK = 128 if AFT_P06 else 256
 
 
 def resident_stage_kernel(

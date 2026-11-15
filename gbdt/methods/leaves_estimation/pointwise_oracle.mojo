@@ -186,7 +186,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 #
 # Off by default except under Apple FAST. The force define
 # MOJOLEARN_2030_FUSED_EST_MOVE was deleted 2026-11-15 (docs/TOMBSTONES.md).
-# Its opt-out MOJOLEARN_2030_NO_FUSED_EST_MOVE was deleted the same day.
+# `-D MOJOLEARN_2030_NO_FUSED_EST_MOVE=1` takes precedence for baseline A/B.
 # Kernel equivalence is checked by checks/gbdt_fused_move_check.mojo.
 # Native fit A/B: checks/gbdt_fused_fit_check.mojo (baseline versus define).
 # NVIDIA small-fixture fingerprints passed on L40S and H100. Per-device
@@ -205,6 +205,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_2030_FUSED_EST_MOVE.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_2030_NO_FUSED_EST_MOVE (DELETE-ARM, opt-out arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 3f984813dd.
 # Restore: git apply experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime FUSED_EST_MOVE_2030 = (
     # APPLE FAST default: M4 taxi 1M symmetric 0.962 alone (hash
     # unchanged); the owed gates (check-fit-pointwise,
@@ -212,7 +213,7 @@ comptime FUSED_EST_MOVE_2030 = (
     # gbdt_fused_fit_check) run on the M4 with the define.
     TARGET_COLUMN == COLUMN_APPLE
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-)
+) and not is_defined["MOJOLEARN_2030_NO_FUSED_EST_MOVE"]()
 
 
 def merge_stage_times(mut dst: StageTimes, src: StageTimes):

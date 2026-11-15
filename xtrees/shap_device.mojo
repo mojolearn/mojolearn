@@ -35,7 +35,16 @@ from core.shared_slot import SharedSlot
 comptime TPB = 64 if AFT_P08 else 128
 # TOMBSTONE: MOJOLEARN_AFCL_T11 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 40d673a2f6.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T11.patch; record in docs/TOMBSTONES.md.
-comptime QUERY_TPB = TPB
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# AFCL-T11: two SIMD groups per query/fold block reduce private TreeSHAP
+# state per workgroup. This does not enable the rejected row-pair candidate.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T11 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFCL_T11"]()
+)
+comptime QUERY_TPB = 64 if AFCL_T11 else TPB
 comptime BUF_BYTES = (64 if AFT_P09 else 128) * 1024 * 1024
 comptime UNITS_MAX = 1 << 20
 
@@ -94,8 +103,10 @@ comptime SHAP_TREE_TAB = SHAP_TABLE
 # Original wrong-binding failure retained; affected artifacts built fe1864e2c.
 # TOMBSTONE: MOJOLEARN_SHAP_FAST_ROW_PAIR (measured loser: F13 SHAP M3 2026-10-06 B/A 1.07-1.74, kept OFF) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at a57eda3a34.
 # Restore: git apply experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
 # P07 is a distinct quartet tile; the existing pair arm and audit stay separate.
-comptime SHAP_ROW_TILE = 4 if AFT_P07 else 1
+comptime SHAP_ROW_TILE = 4 if AFT_P07 else (2 if SHAP_FAST_ROW_PAIR else 1)
 struct ShapPairAudit(Defaultable, Movable):
     var calls: Int
     def __init__(out self):
@@ -518,6 +529,8 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
         var rc = min(rows, n - r0)
         var tu = n_trees * rc
         var row_units = n_trees * ((rc + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE)
+        comptime if SHAP_FAST_ROW_PAIR:
+            SHAP_PAIR_STATE.get_or_create_ptr()[].calls += 1
         var ran = False
         comptime if SHAP_TABLE:
             if tt:

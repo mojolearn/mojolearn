@@ -185,10 +185,20 @@ as hex by `if_check.mojo` so the constant cannot drift by a decimal."""
 
 # TOMBSTONE: MOJOLEARN_AFT_F10 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at e0359716d7.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F10.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# AFT F10: two 32-lane groups share each tree instead of four; less idle
+# work on short ranges trades against less parallel sampling/minmax work.
+# The shared scratch remains sized by IF_BUILD_TPB_MAX, and all scans use
+# the actual n_threads. experiments/apple_fast_trees/IDEAS.md; opt-in,
+# no quality/speed evidence; uncompiled/unverified/unmeasured.
 # TOMBSTONE: MOJOLEARN_TREES_IF_BUILD_TPB (opt-in int sweep, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 2e3951cb68.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_IF_BUILD_TPB.patch; record in docs/TOMBSTONES.md.
 
-comptime IF_BUILD_TPB = 128
+comptime IF_BUILD_TPB = 64 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F10"]()
+) else 128
 """`build_isolation_trees_global_kernel<T><<<n_trees, 128, 0, stream>>>`
 (`:397`). A scheduling width: the sampling, the gather and every node's
 min/max and partition are split over the block's threads; no bit depends
@@ -217,7 +227,16 @@ stands at 25. A new output here REUSES A SLICE."""
 
 # TOMBSTONE: MOJOLEARN_AFCL_T10 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 72e0724726.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T10.patch; record in docs/TOMBSTONES.md.
-comptime IF_PATH_TPB = 256
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# AFCL-T10: four SIMD groups per path/score block reduce live traversal
+# state per workgroup. All trees and correction terms remain unchanged.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T10 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFCL_T10"]()
+)
+comptime IF_PATH_TPB = 128 if AFCL_T10 else 256
 """`compute_path_lengths`' `threads = 256` (`isolation_forest.cuh:146`)."""
 
 
@@ -959,6 +978,18 @@ def build_tree_iterative_global(
 
 # TOMBSTONE: MOJOLEARN_AFT_F12 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dd8de6f332.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F12.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# AFT F12: each lane copies a 16-byte tile of the flattened sampled matrix.
+# Unlike the old per-row gather, narrow feature rows use the whole block;
+# the first sampled-row lookup is reused within the tile when it stays in
+# that row. Tail/cross-row cells retain their own exact index and feature.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_IF_GATHER_TILE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and IF_FAST_ROWMAJOR
+    and is_defined["MOJOLEARN_AFT_F12"]()
+)
 
 
 def build_isolation_trees_global_kernel(
@@ -1104,24 +1135,46 @@ def build_isolation_trees_global_kernel(
         )
     barrier()
 
-    for s in range(max_samples):
-        var src_row = Int(tree_sample_indices.unsafe_load(s))
-        var f = tid
-        while f < max_features:
-            var src_col = f
-            if has_feature_indices:
-                src_col = Int(tree_feature_indices.unsafe_load(f))
-            comptime if IF_FAST_ROWMAJOR:
-                local_data.unsafe_store(
-                    s * max_features + f,
-                    data.unsafe_load(src_row * n_cols + src_col),
-                )
-            else:
-                local_data.unsafe_store(
-                    s * max_features + f,
-                    data.unsafe_load(src_row + src_col * n_rows),
-                )
-            f += n_threads
+    comptime if AFT_IF_GATHER_TILE:
+        var cells = max_samples * max_features
+        var first = tid * 4
+        while first < cells:
+            var first_sample = first // max_features
+            var first_row = Int(tree_sample_indices.unsafe_load(first_sample))
+            comptime for c in range(4):
+                var cell = first + c
+                if cell < cells:
+                    var s = cell // max_features
+                    var f = cell - s * max_features
+                    var src_row = first_row
+                    if s != first_sample:
+                        src_row = Int(tree_sample_indices.unsafe_load(s))
+                    var src_col = f
+                    if has_feature_indices:
+                        src_col = Int(tree_feature_indices.unsafe_load(f))
+                    local_data.unsafe_store(
+                        cell, data.unsafe_load(src_row * n_cols + src_col)
+                    )
+            first += n_threads * 4
+    else:
+        for s in range(max_samples):
+            var src_row = Int(tree_sample_indices.unsafe_load(s))
+            var f = tid
+            while f < max_features:
+                var src_col = f
+                if has_feature_indices:
+                    src_col = Int(tree_feature_indices.unsafe_load(f))
+                comptime if IF_FAST_ROWMAJOR:
+                    local_data.unsafe_store(
+                        s * max_features + f,
+                        data.unsafe_load(src_row * n_cols + src_col),
+                    )
+                else:
+                    local_data.unsafe_store(
+                        s * max_features + f,
+                        data.unsafe_load(src_row + src_col * n_rows),
+                    )
+                f += n_threads
     barrier()
 
     build_tree_iterative_global(
@@ -1198,7 +1251,18 @@ def traverse_global_tree(
 
 # TOMBSTONE: MOJOLEARN_AFT_F11 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at f53beacaab.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F11.patch; record in docs/TOMBSTONES.md.
-comptime AFT_IF_PATH_ROWS = 1
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# AFT F11: two independent rows/lane reuse each tree offset and the tree
+# loop; adjacent lanes retain adjacent rows within each stripe. Two FP32
+# accumulators bound register growth, and each still folds trees in order.
+# Used by both single-owner and tree-sharded traversal; score epilogues are
+# unchanged. experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed
+# evidence; uncompiled/unverified/unmeasured.
+comptime AFT_IF_PATH_ROWS = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F11"]()
+) else 1
 
 
 def compute_path_lengths_global_kernel(

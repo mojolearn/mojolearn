@@ -11,6 +11,7 @@ search is `gls_column` for GreedyLogSum and `border_types.mojo`'s
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_zero import enqueue_fill
+from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
     NAN_MODE_MAX,
@@ -76,7 +77,9 @@ def device_float_borders(
     var modes = List[Int]()
     if n_float == 0 or n_rows <= 0:
         return (borders^, modes^)
-    # (Sweep 2026-11-15: the folded GBDT_QUANT_DEVICE resident-column read was removed; `dev_cols` is unread.)
+    var use_dev = False
+    comptime if GBDT_QUANT_DEVICE:
+        use_dev = dev_cols.__bool__()
     var sn = min(sample_n, n_rows)
     var sampled = sn < n_rows
     var span = max(n_rows, sn)
@@ -120,7 +123,9 @@ def device_float_borders(
             d_idx.unsafe_ptr(), Int32(sn), Int32(n_rows), sample_key,
             grid_dim=_blocks(sn), block_dim=GLS_BLOCK,
         )
-    var d_cols = ctx.enqueue_create_buffer[DType.float32](chunk * n_rows)
+    var d_cols = ctx.enqueue_create_buffer[DType.float32](
+        1 if use_dev else chunk * n_rows
+    )
     var d_keys = ctx.enqueue_create_buffer[DType.uint32](chunk * sn)
     var d_vals = ctx.enqueue_create_buffer[DType.uint32](chunk * sn)
     var d_tkeys = ctx.enqueue_create_buffer[DType.uint32](chunk * sn)
@@ -171,21 +176,24 @@ def device_float_borders(
         var bt_grid = width
         var bt_block = 1
         var cols_ptr = d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        for c in range(width):
-            var view = d_cols.create_sub_buffer[DType.float32](
-                c * n_rows, n_rows
-            )
-            if resident:
-                ctx.enqueue_copy(
-                    dst_buf=view, src_buf=dev_col_bufs[base + c]
+        if use_dev:
+            cols_ptr = dev_cols.value() + base * n_rows
+        else:
+            for c in range(width):
+                var view = d_cols.create_sub_buffer[DType.float32](
+                    c * n_rows, n_rows
                 )
-                continue
-            ctx.enqueue_copy(
-                dst_buf=view,
-                src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                    cols[base + c]
-                ),
-            )
+                if resident:
+                    ctx.enqueue_copy(
+                        dst_buf=view, src_buf=dev_col_bufs[base + c]
+                    )
+                    continue
+                ctx.enqueue_copy(
+                    dst_buf=view,
+                    src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                        cols[base + c]
+                    ),
+                )
         enqueue_fill(ctx, d_nan_s, Int32(0))
         enqueue_fill(ctx, d_nan_c, Int32(0))
         var key_span = n_rows if sampled else sn

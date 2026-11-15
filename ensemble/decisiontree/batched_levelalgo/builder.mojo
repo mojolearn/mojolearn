@@ -127,7 +127,7 @@ comptime TPB_DEFAULT = 128
 # samples every feature (regression, max_features=1.0) otherwise spends one
 # histogram launch and one split launch per 10 columns, each re-reading
 # every row of the batch; the workspace grows 4x (168 MB at 4096 nodes x
-# 128 bins, 8-byte bins).
+# 128 bins, 8-byte bins). `-D MOJOLEARN_RF_COLS10` keeps 10.
 # NOT IDENTICAL (measured 2026-09-28, trees-apple): the same 40 under
 # IDENTICAL kept the forest bytes (hash 3a5e8c09dd0d5fc7) but made
 # RandomForestRegressor Istella-S SLOWER on the M4 Pro, 60.8 s -> 91.0 s.
@@ -161,16 +161,26 @@ comptime IDN_RF_COLS40 = (
 # Restore: git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS20.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_RF_TRIAL_COLS40 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS40.patch; record in docs/TOMBSTONES.md.
-comptime N_BLKS_FOR_COLS = 40 if (
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F01 and MOJOLEARN_RF_COLS10 (`-D MOJOLEARN_RF_COLS10` keeps 10 on Apple; RF_TRIAL_COLS20/40 stay deleted): opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# AFT F01: a power-of-two 32-column pass bounds workspace and reduces the
+# per-pass live histogram bytes versus 40 while retaining every column.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F01 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F01"]()
+)
+comptime N_BLKS_FOR_COLS = 32 if AFT_F01 else (40 if (
     (
         (
             GLOBAL_NUMERIC_MODE == NUMERIC_FAST
             or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         )
         and TARGET_HAS_APPLE_GPU
+        and not is_defined["MOJOLEARN_RF_COLS10"]()
     )
     or IDN_RF_COLS40
-) else 10
+) else 10)
 
 @always_inline
 def blk_cols_for(n_sampled_cols: Int) -> Int:
@@ -216,7 +226,16 @@ comptime ALIGN_VALUE = 512
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_F02.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_2011_HIST_ITEMS1 (old one-item mapping; four items measured faster 2026-09-10) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch; record in docs/TOMBSTONES.md.
-comptime HIST_ITEMS_PER_THREAD = 4
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F02 opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# AFT F02: eight rows/lane amortizes each histogram work descriptor over
+# 1024 rows at the fixed 128-lane block, without changing bins or samples.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F02 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFT_F02"]()
+)
+comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else 4
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
 

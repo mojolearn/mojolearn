@@ -100,8 +100,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_IDN_IF_RESIDENT_OFF (rollback of IsolationForest to a refit of the whole forest inside every scoring call) is gone, no A/B was ever recorded for it; the resident forest that fit built is the path on every tier; restore: experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_FOREST_DEVICE_FINITE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): FOREST_DEVICE_FINITE_OFF (FAST+Apple rollback of the forest fits to the host finite scans) is gone; the device scan is the FAST+Apple path"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T08.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T08"](), "removed 2026-11-15 (lane/expdel2-03-base): AFCL_T08 (Forest inference (Apple FAST programme)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFCL_T08.patch"
+    # MOJOLEARN_AFCL_T08: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch
     comptime assert not is_defined["MOJOLEARN_FOREST_SHARED_ROWS"](), "removed 2026-11-15 (lane/expdel2-03-base): FOREST_SHARED_ROWS (Forest inference) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at a5502e594d; restore: experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FOREST_FAST_SHARED_ROWS.patch
@@ -130,30 +129,19 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TREES_T38_FUSED_LABELS"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T38_FUSED_LABELS (Forest inference (IDENTICAL, labels)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 81c34fb4fb; restore: experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch
     comptime assert not is_defined["MOJOLEARN_TREES_C50_GB_PACKED"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_C50_GB_PACKED (GBDT predict (IDENTICAL, packed nodes)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 03a43eb1ec; restore: experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P01.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P01"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P01 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P01.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P02.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P02"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P02 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P02.patch"
+    # MOJOLEARN_AFT_P01: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P02: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_AFT_P03.patch
     comptime assert not is_defined["MOJOLEARN_AFT_P03"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P03 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P03.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P04.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P04"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P04 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P04.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P05.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P05"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P05 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P05.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P06.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P06"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P06 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P06.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P07.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P07"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P07 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P07.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P08.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P08"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P08 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P08.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P09.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P09"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P09 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P09.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P10.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P10"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P10 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P10.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P11.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P11"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P11 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P11.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P12.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_P12"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P12 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P12.patch"
+    # MOJOLEARN_AFT_P04: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P05: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P06: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P08: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P09: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_P12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT.patch
     comptime assert not is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"](), "removed 2026-11-15 (lane/expdel2-04-base): FOREST_ORDERED_RESIDENT (opt-in arm, Forest inference (ordered resident policy); no A/B recorded for the opt-in arm (rule a)) is gone; the default stays; code recoverable at 39d9cbb242; restore: experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT.patch"
@@ -176,8 +164,7 @@ def _check_configuration() -> Bool:
     # Lane expdel2-39-trees (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_2010_ROWS_SORTED.patch
     comptime assert not is_defined["MOJOLEARN_2010_ROWS_SORTED"](), "removed 2026-11-15 (lane/expdel2-39-trees): 2010_ROWS_SORTED (opt-in arm) is gone; the default is kept; code at c2f33a3d2c^; restore: experiments/removed/MOJOLEARN_2010_ROWS_SORTED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch
-    comptime assert not is_defined["MOJOLEARN_ET_DEVICE_BATCH_16384"](), "removed 2026-11-15 (lane/expdel2-39-trees): ET_DEVICE_BATCH_16384 (opt-in arm) is gone; the default is kept; code at e7f3794811^; restore: experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch"
+    # MOJOLEARN_ET_DEVICE_BATCH_16384: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_32768.patch
     comptime assert not is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"](), "removed 2026-11-15 (lane/expdel2-39-trees): ET_DEVICE_BATCH_32768 (opt-in arm) is gone; the default is kept; code at 7264145906^; restore: experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_32768.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_4096.patch
@@ -237,16 +224,11 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_2012_SMEM_COPIES4"](), "removed 2026-11-15 (lane/expdel2-38-trees): 2012_SMEM_COPIES4 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_2012_SMEM_COPIES4.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_2502_RETRY_PURE.patch
     comptime assert not is_defined["MOJOLEARN_2502_RETRY_PURE"](), "removed 2026-11-15 (lane/expdel2-38-trees): 2502_RETRY_PURE (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_2502_RETRY_PURE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F01.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F01"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F01 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F01.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F02.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F02"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F02 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F02.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F03.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F03"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F03 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F03.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F04.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F04"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F04 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F04.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F05.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F05"](), "removed 2026-11-15 (lane/expdel2-38-trees): AFT_F05 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_AFT_F05.patch"
+    # MOJOLEARN_AFT_F01: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F02: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F03: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F04: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F05: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_COLS40_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_RF_COLS40_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_COLS40_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_COLS40_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF.patch
@@ -259,14 +241,11 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_QBIN_DEVICE_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): IDN_RF_SAMPLE_PER_NODE_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch
-    comptime assert not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_BINS_COLUMN_MAJOR (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_RF_COLS10.patch
-    comptime assert not is_defined["MOJOLEARN_RF_COLS10"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_COLS10 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_COLS10.patch"
+    # MOJOLEARN_RF_BINS_COLUMN_MAJOR: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_RF_COLS10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_FAST_HIST_ZERO_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch
-    comptime assert not is_defined["MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_FAST_SAMPLE_PER_COLUMN (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch"
+    # MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FBS_WARP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RF_FBS_WARP_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_FBS_WARP_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_FBS_WARP_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch
@@ -275,16 +254,14 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS4"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS4 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS4_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS4_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch
-    comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS8"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS8 (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch"
+    # MOJOLEARN_RF_HIST_COLUMNS8: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RF_HIST_COLUMNS8_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_COLUMNS8_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_HIST_SIMD_AGG_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch
     comptime assert not is_defined["MOJOLEARN_RF_SMALL_NODE_FUSED"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_SMALL_NODE_FUSED (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch
-    comptime assert not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_SPLIT_CANDIDATES (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch"
+    # MOJOLEARN_RF_SPLIT_CANDIDATES: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES_OFF"](), "removed 2026-11-15 (lane/expdel2-38-trees): RF_SPLIT_CANDIDATES_OFF (old path) is gone; the default is kept; code at 52922acecb; restore: experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS20.patch
@@ -298,14 +275,10 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch
     comptime assert not is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES"](), "removed 2026-11-15 (lane/expdel2-38-trees): TREE_EXACT_SIBLING_HIST_BYTES (arm) is gone; the default path is the only one; code at 52922acecb; restore: experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch"
     # Lane expdel2-40-trees (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T09.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T09"](), "removed 2026-11-15 (lane/expdel2-40-trees): AFCL_T09 (never-run Apple FAST programme card, Trees (ExtraTrees Apple FAST eight-feature search tile); no record (rule g)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_AFCL_T09.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F06.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F06"](), "removed 2026-11-15 (lane/expdel2-40-trees): AFT_F06 (never-run Apple FAST programme card, Trees (ExtraTrees Apple FAST 64-thread block); no record (rule g)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_AFT_F06.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F07.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F07"](), "removed 2026-11-15 (lane/expdel2-40-trees): AFT_F07 (never-run Apple FAST programme card, Trees (ExtraTrees Apple FAST partition rows per thread x2); no record (rule g)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_AFT_F07.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F08.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F08"](), "removed 2026-11-15 (lane/expdel2-40-trees): AFT_F08 (never-run Apple FAST programme card, Trees (ExtraTrees Apple FAST 1 GiB forest row-slot cap); no record (rule g)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_AFT_F08.patch"
+    # MOJOLEARN_AFCL_T09: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F06: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F08: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ET_BINNED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ET_BINNED_OFF"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_BINNED_OFF (old path, Trees (ExtraTrees FAST Apple float X instead of binned codes); no record (rule b)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_BINNED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K1.patch
@@ -322,16 +295,14 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_ET_MAX_ACC_8"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_MAX_ACC_8 (opt-in arm, Trees (ExtraTrees fixed 8-wide score accumulator); no record (rule a)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_MAX_ACC_8.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_PART_FLAGS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ET_PART_FLAGS_OFF"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_PART_FLAGS_OFF (old path, Trees (ExtraTrees partition second gather); no record (rule b)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_PART_FLAGS_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_ET_PART_ROWS.patch
-    comptime assert not is_defined["MOJOLEARN_ET_PART_ROWS"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_PART_ROWS (opt-in arm, Trees (ExtraTrees FAST partition rows per thread off Apple); EXP:105 KEPT 269ffa57a (rule e, force-on knob)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_PART_ROWS.patch"
+    # MOJOLEARN_ET_PART_ROWS: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ET_PART_ROWS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ET_PART_ROWS_OFF"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_PART_ROWS_OFF (old path, Trees (ExtraTrees FAST Apple one row per thread partition); EXP:105 KEPT 269ffa57a (rule d): promoted on Apple M3 Ultra only; NVIDIA/AMD A/B owed but FAST is Apple only) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_PART_ROWS_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_RANGE_TILED.patch
     comptime assert not is_defined["MOJOLEARN_ET_RANGE_TILED"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_RANGE_TILED (opt-in arm, Trees (ExtraTrees FAST tiled range pass off Apple); no record (rule a)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_RANGE_TILED.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_RM_LINE_HW_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ET_RM_LINE_HW_OFF"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_RM_LINE_HW_OFF (old path, Trees (ExtraTrees row-major 64-byte line); no record (rule b)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_RM_LINE_HW_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_ET_RM_NARROW.patch
-    comptime assert not is_defined["MOJOLEARN_ET_RM_NARROW"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_RM_NARROW (opt-in arm, Trees (ExtraTrees narrow-row row-major copy off Apple); no record (rule a)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_RM_NARROW.patch"
+    # MOJOLEARN_ET_RM_NARROW: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ET_RM_NARROW_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ET_RM_NARROW_OFF"](), "removed 2026-11-15 (lane/expdel2-40-trees): ET_RM_NARROW_OFF (old path, Trees (ExtraTrees Apple narrow-row row-major copy off); no record (rule b)) is gone; the default path is the only one; code recoverable at 6641db4b18; restore: experiments/removed/MOJOLEARN_ET_RM_NARROW_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch
@@ -387,60 +358,35 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_ET_RELAXED_PUBLISH"](), "removed 2026-11-15 (lane/expdel2-41-trees): ET_RELAXED_PUBLISH (opt-in arm, Trees (ExtraTrees relaxed publish opt-in for other columns); no A/B recorded (rule a)) is gone; the default path is the only one; code recoverable at 05759052d0; restore: experiments/removed/MOJOLEARN_ET_RELAXED_PUBLISH.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_SEQCST_PUBLISH.patch
     comptime assert not is_defined["MOJOLEARN_ET_SEQCST_PUBLISH"](), "removed 2026-11-15 (lane/expdel2-41-trees): ET_SEQCST_PUBLISH (opt-in arm, Trees (ExtraTrees seq_cst publish opt-out); no A/B recorded for the opt-out (rule a)) is gone; the default path is the only one; code recoverable at 7da85bac98; restore: experiments/removed/MOJOLEARN_ET_SEQCST_PUBLISH.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F09.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F09"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_F09 (never-run card, Trees (ExtraTrees row-major range pass two-row tile, Apple FAST card F09); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at fdd11ef4d7; restore: experiments/removed/MOJOLEARN_AFT_F09.patch"
+    # MOJOLEARN_AFT_F09: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ET_TIE_MAX_COLID.patch
     comptime assert not is_defined["MOJOLEARN_ET_TIE_MAX_COLID"](), "removed 2026-11-15 (lane/expdel2-41-trees): ET_TIE_MAX_COLID (opt-in arm, Trees (ExtraTrees max-colid tie rule); no A/B recorded (rule a)) is gone; the default path is the only one; code recoverable at 47831cc734; restore: experiments/removed/MOJOLEARN_ET_TIE_MAX_COLID.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T01.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T01"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T01 (never-run card, Trees (Apple FAST classical card T01); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 382112ba07; restore: experiments/removed/MOJOLEARN_AFCL_T01.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T02.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T02"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T02 (never-run card, Trees (Apple FAST classical card T02); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 4dcdb311b5; restore: experiments/removed/MOJOLEARN_AFCL_T02.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T03.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T03"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T03 (never-run card, Trees (Apple FAST classical card T03); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 951210db46; restore: experiments/removed/MOJOLEARN_AFCL_T03.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T04.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T04"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T04 (never-run card, Trees (Apple FAST classical card T04); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 358548637a; restore: experiments/removed/MOJOLEARN_AFCL_T04.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T05.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T05"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T05 (never-run card, Trees (Apple FAST classical card T05); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at c8fa4d47fc; restore: experiments/removed/MOJOLEARN_AFCL_T05.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T06.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T06"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T06 (never-run card, Trees (Apple FAST classical card T06); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at bc67334f43; restore: experiments/removed/MOJOLEARN_AFCL_T06.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T07.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T07"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T07 (never-run card, Trees (Apple FAST classical card T07); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at f22e75ee88; restore: experiments/removed/MOJOLEARN_AFCL_T07.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T12.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T12"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFCL_T12 (never-run card, Trees (Apple FAST classical card T12); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at d985e1b336; restore: experiments/removed/MOJOLEARN_AFCL_T12.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N01.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N01"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N01 (never-run card, Trees (Apple FAST tree card N01); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 33b61e5bf8; restore: experiments/removed/MOJOLEARN_AFT_N01.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N02"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N02 (never-run card, Trees (Apple FAST tree card N02); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at e601839e30; restore: experiments/removed/MOJOLEARN_AFT_N02.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N03.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N03"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N03 (never-run card, Trees (Apple FAST tree card N03); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 5f55007c32; restore: experiments/removed/MOJOLEARN_AFT_N03.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N04.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N04"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N04 (never-run card, Trees (Apple FAST tree card N04); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 13d92e2f1c; restore: experiments/removed/MOJOLEARN_AFT_N04.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N05.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N05"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N05 (never-run card, Trees (Apple FAST tree card N05); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at eaabda5fe8; restore: experiments/removed/MOJOLEARN_AFT_N05.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N06.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N06"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N06 (never-run card, Trees (Apple FAST tree card N06); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at a0eec817dc; restore: experiments/removed/MOJOLEARN_AFT_N06.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N07.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N07"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N07 (never-run card, Trees (Apple FAST tree card N07); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at e3824bb991; restore: experiments/removed/MOJOLEARN_AFT_N07.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N08.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N08"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N08 (never-run card, Trees (Apple FAST tree card N08); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 7127af55a3; restore: experiments/removed/MOJOLEARN_AFT_N08.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N09.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N09"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N09 (never-run card, Trees (Apple FAST tree card N09); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 6a830e56b0; restore: experiments/removed/MOJOLEARN_AFT_N09.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N10.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N10"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N10 (never-run card, Trees (Apple FAST tree card N10); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 3c44979412; restore: experiments/removed/MOJOLEARN_AFT_N10.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N11.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N11"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N11 (never-run card, Trees (Apple FAST tree card N11); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at cb73446e0e; restore: experiments/removed/MOJOLEARN_AFT_N11.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N12.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_N12"](), "removed 2026-11-15 (lane/expdel2-41-trees): AFT_N12 (never-run card, Trees (Apple FAST tree card N12); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 89a685b7dc; restore: experiments/removed/MOJOLEARN_AFT_N12.patch"
+    # MOJOLEARN_AFCL_T01: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T02: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T03: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T04: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T05: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T06: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N01: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N02: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N03: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N04: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N05: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N06: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N08: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N09: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_N12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_SYM_CTR_ALL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SYM_CTR_ALL_OFF"](), "removed 2026-11-15 (lane/expdel2-41-trees): SYM_CTR_ALL_OFF (old path, Trees (CatBoost-style CTR prep umbrella rollback); EXP:1274 ACCEPT/DEFAULT FAST+Apple (rule d)) is gone; the default path is the only one; code recoverable at 2497c8a9cf; restore: experiments/removed/MOJOLEARN_SYM_CTR_ALL_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_CTR_PREP_SHARED.patch
-    comptime assert not is_defined["MOJOLEARN_CTR_PREP_SHARED"](), "removed 2026-11-15 (lane/expdel2-41-trees): CTR_PREP_SHARED (never-run card, Trees (CatBoost-style CTR prep, shared prep context); EXP:1303 NEUTRAL) is gone; the default path is the only one; code recoverable at 0a23440f37; restore: experiments/removed/MOJOLEARN_CTR_PREP_SHARED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_CTR_SORT_ONCE.patch
-    comptime assert not is_defined["MOJOLEARN_CTR_SORT_ONCE"](), "removed 2026-11-15 (lane/expdel2-41-trees): CTR_SORT_ONCE (opt-in arm, Trees (CatBoost-style CTR prep, FeatureFreq sort once); EXP:1274 record read: force knob already on under the SYM_CTR_ALL FAST+Apple default (rule e)) is gone; the default path is the only one; code recoverable at ea9a6fecad; restore: experiments/removed/MOJOLEARN_CTR_SORT_ONCE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch
-    comptime assert not is_defined["MOJOLEARN_CTR_INDEX_FUSED"](), "removed 2026-11-15 (lane/expdel2-41-trees): CTR_INDEX_FUSED (opt-in arm, Trees (CatBoost-style CTR prep, device CTR output); EXP:1274 record read: force knob already on under the SYM_CTR_ALL FAST+Apple default (rule e)) is gone; the default path is the only one; code recoverable at f2886a9013; restore: experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch
-    comptime assert not is_defined["MOJOLEARN_CTR_ONEHOT_DEVICE"](), "removed 2026-11-15 (lane/expdel2-41-trees): CTR_ONEHOT_DEVICE (never-run card, Trees (CatBoost-style CTR prep, device dense-code pass); EXP:1303 NEUTRAL) is gone; the default path is the only one; code recoverable at 3fb3500522; restore: experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch"
+    # MOJOLEARN_CTR_PREP_SHARED: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_CTR_SORT_ONCE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_CTR_INDEX_FUSED: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_CTR_ONEHOT_DEVICE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-41-trees
     # Lane expdel2-45-trees (2026-11-15): unmeasured arms, never-run cards and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_IF_PACKED.patch
@@ -533,14 +479,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IF_ROWMAJOR_OFF"](), "removed 2026-11-15 (lane/expdel2-46-trees): IF_ROWMAJOR_OFF (old path, Trees (IsolationForest FAST+Apple row-major upload rollback); EXP:115 KEPT 269ffa57a, the FAST+Apple default (rule d: FAST is Apple only, so no NVIDIA/AMD arm is owed)) is gone; the default path is the only one; code recoverable at b35af0836a; restore: experiments/removed/MOJOLEARN_IF_ROWMAJOR_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_IF_BUILD_TPB.patch
     comptime assert not is_defined["MOJOLEARN_TREES_IF_BUILD_TPB"](), "removed 2026-11-15 (lane/expdel2-46-trees): TREES_IF_BUILD_TPB (opt-in arm, Trees (IsolationForest build block width sweep); no A/B recorded for the opt-in int sweep (rule a)) is gone; the default path is the only one; code recoverable at 2e3951cb68; restore: experiments/removed/MOJOLEARN_TREES_IF_BUILD_TPB.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F10.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F10"](), "removed 2026-11-15 (lane/expdel2-46-trees): AFT_F10 (never-run card, Trees (IsolationForest Apple FAST 64-lane build block); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at e0359716d7; restore: experiments/removed/MOJOLEARN_AFT_F10.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T10.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T10"](), "removed 2026-11-15 (lane/expdel2-46-trees): AFCL_T10 (never-run card, Trees (IsolationForest Apple FAST 128-lane path block); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 72e0724726; restore: experiments/removed/MOJOLEARN_AFCL_T10.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F12.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F12"](), "removed 2026-11-15 (lane/expdel2-46-trees): AFT_F12 (never-run card, Trees (IsolationForest Apple FAST tiled gather); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at dd8de6f332; restore: experiments/removed/MOJOLEARN_AFT_F12.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F11.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_F11"](), "removed 2026-11-15 (lane/expdel2-46-trees): AFT_F11 (never-run card, Trees (IsolationForest Apple FAST two rows per lane); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at f53beacaab; restore: experiments/removed/MOJOLEARN_AFT_F11.patch"
+    # MOJOLEARN_AFT_F10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_T10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_F11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IF_DIAG_ENTRY_RETURN.patch
     comptime assert not is_defined["MOJOLEARN_IF_DIAG_ENTRY_RETURN"](), "removed 2026-11-15 (lane/expdel2-46-trees): IF_DIAG_ENTRY_RETURN (diagnostic arm, Trees (IsolationForest hang-bisect truncation, entry return); no A/B recorded (rule a); a 2026-08 RTX 4090 hang bisect guard that no script builds today) is gone; the default path is the only one; code recoverable at 4a6591cfdc; restore: experiments/removed/MOJOLEARN_IF_DIAG_ENTRY_RETURN.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IF_DIAG_GATHER_ONLY.patch
@@ -553,10 +495,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TREESHAP_FAST_TABLE_OFF"](), "removed 2026-11-15 (lane/expdel2-46-trees): TREESHAP_FAST_TABLE_OFF (old path, Trees (TreeSHAP leaf table rollback); EXP:186 KEPT/DEFAULT (rule e)) is gone; the default path is the only one; code recoverable at 7d6b2a07e7; restore: experiments/removed/MOJOLEARN_TREESHAP_FAST_TABLE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SHAP_TREE_TAB_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SHAP_TREE_TAB_OFF"](), "removed 2026-11-15 (lane/expdel2-46-trees): SHAP_TREE_TAB_OFF (old path, Trees (TreeSHAP decision-word row unit rollback); EXP:1271 ACCEPT/DEFAULT on M3 (FAST+Apple, istella 24.75 -> 19.57 ms); promoted on one vendor, the NVIDIA/AMD IDENTICAL A/B is owed (rule d)) is gone; the default path is the only one; code recoverable at 24292c45c2; restore: experiments/removed/MOJOLEARN_SHAP_TREE_TAB_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T11.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_T11"](), "removed 2026-11-15 (lane/expdel2-46-trees): AFCL_T11 (never-run card, Trees (TreeSHAP Apple FAST 64-lane query block); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 40d673a2f6; restore: experiments/removed/MOJOLEARN_AFCL_T11.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch
-    comptime assert not is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"](), "removed 2026-11-15 (lane/expdel2-46-trees): SHAP_FAST_ROW_PAIR (opt-in arm, Trees (TreeSHAP Apple FAST row pairs); F13 SHAP M3 2026-10-06 measured slower (B/A 1.07-1.74), kept OFF; no default A/B (rule a)) is gone; the default path is the only one; code recoverable at a57eda3a34; restore: experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch"
+    # MOJOLEARN_AFCL_T11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_SHAP_FAST_ROW_PAIR: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_TREESHAP_ACC_SHARED.patch
     comptime assert not is_defined["MOJOLEARN_TREESHAP_ACC_SHARED"](), "removed 2026-11-15 (lane/expdel2-46-trees): TREESHAP_ACC_SHARED (opt-in arm, Trees (TreeSHAP shared-tile accumulator); no A/B recorded for the opt-in arm (rule a)) is gone; the default path is the only one; code recoverable at 70f8ff00b2; restore: experiments/removed/MOJOLEARN_TREESHAP_ACC_SHARED.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_T45_LINEAR_UNWIND.patch
@@ -588,24 +528,17 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_IDENTICAL_SPLIT_COPY (opt-in arm, Trees (GBDT depthwise/lossguide, Apple IDENTICAL split-time histogram copy); no A/B recorded for the opt-in arm) is gone; the default path is the only one; code recoverable at 7be6f0b80e; restore: experiments/removed/MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY.patch"
     # MOJOLEARN_GBDT_ID_DEFER_COPY: refusal removed 2026-11-15 (restored by lane/restore-run-arms-trees; RUN arm, see docs/TOMBSTONES.md Restored table)
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_LG_BATCH"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_BATCH (opt-in arm, Trees (GBDT lossguide, FAST Apple B-best-leaves batch); no A/B recorded for the opt-in arm) is gone; the default path is the only one; code recoverable at ba59d96b6a; restore: experiments/removed/MOJOLEARN_GBDT_LG_BATCH.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH2.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_LG_BATCH2"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_BATCH2 (opt-in arm, Trees (GBDT lossguide, FAST Apple B-best-leaves batch); no A/B recorded for the opt-in arm) is gone; the default path is the only one; code recoverable at ba59d96b6a; restore: experiments/removed/MOJOLEARN_GBDT_LG_BATCH2.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH4.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_LG_BATCH4"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_BATCH4 (opt-in arm, Trees (GBDT lossguide, FAST Apple B-best-leaves batch); no A/B recorded for the opt-in arm) is gone; the default path is the only one; code recoverable at ba59d96b6a; restore: experiments/removed/MOJOLEARN_GBDT_LG_BATCH4.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH8.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_LG_BATCH8"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_BATCH8 (opt-in arm, Trees (GBDT lossguide, FAST Apple B-best-leaves batch); no A/B recorded for the opt-in arm) is gone; the default path is the only one; code recoverable at ba59d96b6a; restore: experiments/removed/MOJOLEARN_GBDT_LG_BATCH8.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH32.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_LG_BATCH32"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_BATCH32 (opt-in arm, Trees (GBDT lossguide, FAST Apple B-best-leaves batch); no A/B recorded for the opt-in arm) is gone; the default path is the only one; code recoverable at ba59d96b6a; restore: experiments/removed/MOJOLEARN_GBDT_LG_BATCH32.patch"
+    # MOJOLEARN_GBDT_LG_BATCH: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_GBDT_LG_BATCH2: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_GBDT_LG_BATCH4: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_GBDT_LG_BATCH8: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_GBDT_LG_BATCH32: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_LG_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_BATCH_OFF (old path, Trees (GBDT lossguide, FAST Apple B-best-leaves batch); no A/B recorded for the old path) is gone; the default path is the only one; code recoverable at ba59d96b6a; restore: experiments/removed/MOJOLEARN_GBDT_LG_BATCH_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_EXACT_BATCH128 (opt-in arm, Trees (GBDT lossguide, FAST exact-batch width 128 force knob); EXP:113 KEPT 9722e5a2b: 128 is already the FAST Apple default) is gone; the default path is the only one; code recoverable at 25eeaf016e; restore: experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch"
+    # MOJOLEARN_GBDT_LG_EXACT_BATCH128: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_EXACT_BATCH128_OFF (old path, Trees (GBDT lossguide, FAST Apple exact-batch width 128); EXP:113 KEPT 9722e5a2b) is gone; the default path is the only one; code recoverable at e50ac0e432; restore: experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_EXACT_BATCH32 (opt-in arm, Trees (GBDT lossguide, FAST exact-batch width 32); no A/B recorded for the opt-in arm) is gone; the default path is the only one; code recoverable at c9cb94022d; restore: experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch"
+    # MOJOLEARN_GBDT_LG_EXACT_BATCH32: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH64.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_LG_EXACT_BATCH64 (opt-in arm, Trees (GBDT lossguide, IDENTICAL exact-batch width 64); EXP:114 KEPT is the FAST width) is gone; the default path is the only one; code recoverable at d61b232e98; restore: experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH64.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF.patch
@@ -618,18 +551,15 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF"](), "removed 2026-11-15 (lane/expdel2-43-trees): GBDT_NS_INHERIT_PARTITION_OFF (old path, Trees (GBDT non-symmetric, FAST Apple inherited partition); no A/B recorded for the old path) is gone; the default path is the only one; code recoverable at 3b8ce77de5; restore: experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-43-trees): IDN_GBDT_NS_SCALE_DEVICE_OFF (old path, Trees (GBDT non-symmetric, IDENTICAL device fixed-point scale); no A/B recorded for the old path) is gone; the default path is the only one; code recoverable at 608bbc1936; restore: experiments/removed/MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch
-    comptime assert not is_defined["MOJOLEARN_SYM_RESOLVE_BLOCK"](), "removed 2026-11-15 (lane/expdel2-43-trees): SYM_RESOLVE_BLOCK (never-run card, Trees (GBDT symmetric, FAST Apple per-threadgroup resolve fold); EXP:1303 RECORD NEUTRAL) is gone; the default path is the only one; code recoverable at e301d611ef; restore: experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch"
+    # MOJOLEARN_SYM_RESOLVE_BLOCK: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-43-trees
     # Lane expdel2-42-trees (2026-11-15): unmeasured arms, never-run cards and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS.patch
-    comptime assert not is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"](), "removed 2026-11-15 (lane/expdel2-42-trees): 2031_SYM_RIDX_SPLITS (opt-in arm, Trees (GBDT symmetric ridx-only split schedule, opt-in off Apple); no A/B recorded for the opt-in arm off Apple (rule a)) is gone; the default path is the only one; code recoverable at 931e7ca76a; restore: experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS.patch"
+    # MOJOLEARN_2031_SYM_RIDX_SPLITS: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF"](), "removed 2026-11-15 (lane/expdel2-42-trees): 2031_SYM_RIDX_SPLITS_OFF (old path, Trees (GBDT symmetric permuting reorder on Apple); no A/B recorded for the old path (rule b)) is gone; the default path is the only one; code recoverable at 931e7ca76a; restore: experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_2580_LEVEL_QUANT.patch
     comptime assert not is_defined["MOJOLEARN_2580_LEVEL_QUANT"](), "removed 2026-11-15 (lane/expdel2-42-trees): 2580_LEVEL_QUANT (opt-in arm, Trees (GBDT one-byte stats quantized once per level); no A/B recorded for the opt-in arm (rule a)) is gone; the default path is the only one; code recoverable at 7a9e6c5691; restore: experiments/removed/MOJOLEARN_2580_LEVEL_QUANT.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH.patch
-    comptime assert not is_defined["MOJOLEARN_2581_GROUP_WIDTH"](), "removed 2026-11-15 (lane/expdel2-42-trees): 2581_GROUP_WIDTH (opt-in arm, Trees (GBDT per-group bit width, FAST opt-in); FAST arm NO FLIP geomean=1.007 (MI300X, 2026-09-11) and no other A/B (rule a)) is gone; the default path is the only one; code recoverable at a0d1816b17; restore: experiments/removed/MOJOLEARN_2581_GROUP_WIDTH.patch"
+    # MOJOLEARN_2581_GROUP_WIDTH: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_2581_GROUP_WIDTH_OFF"](), "removed 2026-11-15 (lane/expdel2-42-trees): 2581_GROUP_WIDTH_OFF (old path, Trees (GBDT block-widest one-byte ladder under IDENTICAL); no A/B recorded for the old path (rule b)) is gone; the default path is the only one; code recoverable at a0d1816b17; restore: experiments/removed/MOJOLEARN_2581_GROUP_WIDTH_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.patch
@@ -648,52 +578,33 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_GBDT_BT_HW_F64_OFF"](), "removed 2026-11-15 (lane/expdel2-42-trees): GBDT_BT_HW_F64_OFF (old path, Trees (GBDT border-type DP on soft binary64 everywhere); EXP:2272 CANDIDATE) is gone; the default path is the only one; code recoverable at 533f4a23f1; restore: experiments/removed/MOJOLEARN_GBDT_BT_HW_F64_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF"](), "removed 2026-11-15 (lane/expdel2-42-trees): GBDT_BT_COLUMN_BLOCKS_OFF (old path, Trees (GBDT packed 64-column border-type launch); EXP:2273 CANDIDATE) is gone; the default path is the only one; code recoverable at 4d1a3fc5f3; restore: experiments/removed/MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_2041_FAST_CHUNKS_PIN.patch
-    comptime assert not is_defined["MOJOLEARN_2041_FAST_CHUNKS_PIN"](), "removed 2026-11-15 (lane/expdel2-42-trees): 2041_FAST_CHUNKS_PIN (opt-in arm, Trees (GBDT FAST partition chunk-count pin); no A/B recorded (Apple fast opt-in, rule a)) is gone; the default path is the only one; code recoverable at d51ccf732f; restore: experiments/removed/MOJOLEARN_2041_FAST_CHUNKS_PIN.patch"
+    # MOJOLEARN_2041_FAST_CHUNKS_PIN: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_2635_LINEAR_BOUNDS.patch
     comptime assert not is_defined["MOJOLEARN_2635_LINEAR_BOUNDS"](), "removed 2026-11-15 (lane/expdel2-42-trees): 2635_LINEAR_BOUNDS (opt-in arm, Trees (GBDT linear LowerBound/UpperBound walks in the border search); no A/B recorded for the opt-in arm (rule a)) is gone; the default path is the only one; code recoverable at 824cf67b84; restore: experiments/removed/MOJOLEARN_2635_LINEAR_BOUNDS.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G01.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G01"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G01 (never-run card, Trees (Apple FAST tree card G01: one uniform-barrier block per feature scanning 128-bin tiles); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 55d610dfe9; restore: experiments/removed/MOJOLEARN_AFT_G01.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G02.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G02"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G02 (never-run card, Trees (Apple FAST tree card G02: occupancy-driven document replication); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 957d58e74f; restore: experiments/removed/MOJOLEARN_AFT_G02.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G03.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G03"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G03 (never-run card, Trees (Apple FAST tree card G03: one leader folds winners per block); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 868b669683; restore: experiments/removed/MOJOLEARN_AFT_G03.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G04.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G04"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G04 (never-run card, Trees (Apple FAST tree card G04: 512-thread partition reduction); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 6df465532f; restore: experiments/removed/MOJOLEARN_AFT_G04.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G05.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G05"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G05 (never-run card, Trees (Apple FAST tree card G05: 512-thread quantization block); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at d39d33ceb2; restore: experiments/removed/MOJOLEARN_AFT_G05.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G06.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G06"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G06 (never-run card, Trees (Apple FAST tree card G06: 128-thread compressed-word packing, sixteen rows per lane); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at adccdfe434; restore: experiments/removed/MOJOLEARN_AFT_G06.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G07.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G07"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G07 (never-run card, Trees (Apple FAST tree card G07: 128-thread Apple leaf walker reduction); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 5f0ca355ea; restore: experiments/removed/MOJOLEARN_AFT_G07.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G08.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G08"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G08 (never-run card, Trees (Apple FAST tree card G08: four cursor rows per leaf-update iteration); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 0c740c97bb; restore: experiments/removed/MOJOLEARN_AFT_G08.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G09.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G09"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G09 (never-run card, Trees (Apple FAST tree card G09: eight-row ordered CTR numerator tiles); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 70b5f7a860; restore: experiments/removed/MOJOLEARN_AFT_G09.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G10.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G10"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G10 (never-run card, Trees (Apple FAST tree card G10: four coalesced rows per CTR lookup worker); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at d9dedc681d; restore: experiments/removed/MOJOLEARN_AFT_G10.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G11.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G11"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G11 (never-run card, Trees (Apple FAST tree card G11: 128-thread ordered derivative/weight reduction); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at 07284d9b26; restore: experiments/removed/MOJOLEARN_AFT_G11.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G12.patch
-    comptime assert not is_defined["MOJOLEARN_AFT_G12"](), "removed 2026-11-15 (lane/expdel2-42-trees): AFT_G12 (never-run card, Trees (Apple FAST tree card G12: four-row ordered apply tiles); never-run Apple FAST programme card (rule g)) is gone; the default path is the only one; code recoverable at dd541ff51d; restore: experiments/removed/MOJOLEARN_AFT_G12.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"](), "removed 2026-11-15 (lane/expdel2-42-trees): GBDT_PREDICT_PACKED (never-run card, Trees (GBDT packed resident predict, Apple FAST); EXP:171 NEUTRAL) is gone; the default path is the only one; code recoverable at da9c45fa84; restore: experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_QUANT_DEVICE"](), "removed 2026-11-15 (lane/expdel2-42-trees): GBDT_QUANT_DEVICE (never-run card, Trees (GBDT device quantizer over resident float columns, Apple FAST); EXP:1303 NEUTRAL) is gone; the default path is the only one; code recoverable at 408e1ba726; restore: experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_INDEX_PACK_DEVICE.patch
-    comptime assert not is_defined["MOJOLEARN_GBDT_INDEX_PACK_DEVICE"](), "removed 2026-11-15 (lane/expdel2-42-trees): GBDT_INDEX_PACK_DEVICE (never-run card, Trees (GBDT one-launch compressed index pack, Apple FAST); EXP:170 NEUTRAL) is gone; the default path is the only one; code recoverable at b763f5cf63; restore: experiments/removed/MOJOLEARN_GBDT_INDEX_PACK_DEVICE.patch"
+    # MOJOLEARN_AFT_G01: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G02: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G03: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G04: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G05: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G06: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G08: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G09: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFT_G12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_GBDT_PREDICT_PACKED: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_GBDT_QUANT_DEVICE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_GBDT_INDEX_PACK_DEVICE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-42-trees
     # Lane expdel2-44-trees (2026-11-15): unmeasured arms, force knobs and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_2030_FUSED_EST_MOVE.patch
     comptime assert not is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"](), "removed 2026-11-15 (lane/expdel2-44-trees): 2030_FUSED_EST_MOVE (opt-in arm, Trees (GBDT fused estimation move force knob, DEVIATION 2030)) is gone; the default path is the only one; code recoverable at 5b86e54145; restore: experiments/removed/MOJOLEARN_2030_FUSED_EST_MOVE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch
-    comptime assert not is_defined["MOJOLEARN_2030_NO_FUSED_EST_MOVE"](), "removed 2026-11-15 (lane/expdel2-44-trees): 2030_NO_FUSED_EST_MOVE (opt-in arm, Trees (GBDT fused estimation move opt-out, DEVIATION 2030)) is gone; the default path is the only one; code recoverable at 3f984813dd; restore: experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch
-    comptime assert not is_defined["MOJOLEARN_2551_DEVICE_PARTITION"](), "removed 2026-11-15 (lane/expdel2-44-trees): 2551_DEVICE_PARTITION (opt-in arm, Trees (GBDT device leaf partition force for FAST, DEVIATION 2551)) is gone; the default path is the only one; code recoverable at f431553766; restore: experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch"
+    # MOJOLEARN_2030_NO_FUSED_EST_MOVE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_2551_DEVICE_PARTITION: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION_OFF.patch
     comptime assert not is_defined["MOJOLEARN_2551_DEVICE_PARTITION_OFF"](), "removed 2026-11-15 (lane/expdel2-44-trees): 2551_DEVICE_PARTITION_OFF (old path, Trees (GBDT host leaf partition rollback, DEVIATION 2551)) is gone; the default path is the only one; code recoverable at 269778f8c9; restore: experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch
-    comptime assert not is_defined["MOJOLEARN_EST_ITERS_DEVICE"](), "removed 2026-11-15 (lane/expdel2-44-trees): EST_ITERS_DEVICE (never-run card / force knob, Trees (GBDT Apple FAST device Newton walk force knob)) is gone; the default path is the only one; code recoverable at 886f01f544; restore: experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch"
+    # MOJOLEARN_EST_ITERS_DEVICE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_NS_PREDICT_BITVEC"](), "removed 2026-11-15 (lane/expdel2-44-trees): GBDT_NS_PREDICT_BITVEC (opt-in arm, Trees (GBDT Depthwise/Lossguide bitvector apply)) is gone; the default path is the only one; code recoverable at 4cdd684efa; restore: experiments/removed/MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF.patch
@@ -724,8 +635,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"](), "removed 2026-11-15 (lane/expdel2-44-trees): ORDERED_BATCH_EST_OFF (old path, Trees (GBDT Ordered batched estimation rollback, FAST Apple)) is gone; the default path is the only one; code recoverable at accebf0183; restore: experiments/removed/MOJOLEARN_ORDERED_BATCH_EST_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ORD_ALL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ORD_ALL_OFF"](), "removed 2026-11-15 (lane/expdel2-44-trees): ORD_ALL_OFF (old path, Trees (GBDT Ordered FAST bundle rollback)) is gone; the default path is the only one; code recoverable at 611ff32f4b; restore: experiments/removed/MOJOLEARN_ORD_ALL_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_ORD_DOC_ID_STORAGE.patch
-    comptime assert not is_defined["MOJOLEARN_ORD_DOC_ID_STORAGE"](), "removed 2026-11-15 (lane/expdel2-44-trees): ORD_DOC_ID_STORAGE (opt-in arm, Trees (GBDT Ordered document-key dither storage, FAST Apple)) is gone; the default path is the only one; code recoverable at 48af6b7d48; restore: experiments/removed/MOJOLEARN_ORD_DOC_ID_STORAGE.patch"
+    # MOJOLEARN_ORD_DOC_ID_STORAGE: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-trees; Apple fast opt-in arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"](), "removed 2026-11-15 (lane/expdel2-44-trees): PAIRLOGIT_EST_REUSE_OFF (old path, Trees (GBDT PairLogit estimation reuse rollback, FAST Apple)) is gone; the default path is the only one; code recoverable at 6d03f59f60; restore: experiments/removed/MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF.patch
