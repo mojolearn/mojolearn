@@ -18,16 +18,47 @@ import array
 import ctypes
 import os
 
-from mojolearn import _arena_io
-from mojolearn import _expansion_prep as _ep
-from mojolearn._array import Array
+import mojolearn
+from mojolearn import Array
+from mojolearn import _expansion_prep as _ep  # oracle subject: the x_prep program runner this builder feeds (names not defined here resolve to it, `__getattr__`)
 # `full` left `_expansion_prep`'s imports in ec78e70324; the select oracle reads it from here.
-from mojolearn._buffer import full  # noqa: F401
+from mojolearn.tests._oracle_support import Buf, addr_ro, full, typestr_of  # noqa: F401
 from mojolearn.tests._typed_input import as_f32_c
-from mojolearn._expansion_prep import (
-    _OPS, _PROG_CALL, _PROG_CONTEXT, _Scratch, _XB, _blocked,
-    _mode, _optional_prep_entry, _prep_binding)
-from mojolearn._expansion_prep import _Prog as _ProgRecord
+from mojolearn._expansion_prep import (  # oracle subject: the native x_prep runner (`_PROG_CALL`/`_PROG_CONTEXT`), the stage numbers it decodes (`_OPS`), the scratch offset type and record class it admits (`_Scratch`, `_Prog`) and the x_prep binding (`_prep_binding`); no public route runs a program
+    _OPS, _PROG_CALL, _PROG_CONTEXT, _Scratch, _prep_binding)
+from mojolearn._expansion_prep import _Prog as _ProgRecord  # oracle subject: the record class the runner admits
+
+#: x_prep/blocked.mojo's row block (the product's `_expansion_prep._XB`).
+_XB = 2048
+
+
+def _switch(name):
+    return os.environ.get(name, "1").strip() != "0"
+
+
+def _blocked():
+    """The MOJOLEARN_XPREP_BLOCKED switch (unset or anything but "0": on), the product's `_expansion_prep._blocked`."""
+    return _switch("MOJOLEARN_XPREP_BLOCKED")
+
+
+def _mode():
+    """The process default numeric mode (public `mojolearn.numeric_mode`; the product's `_expansion_prep._mode`)."""
+    return mojolearn.numeric_mode()
+
+
+def _optional_prep_entry(binding, name):
+    """Probe optional exports without hiding a missing mandatory host implementation."""
+    binding.x_prep_run  # Load/validate the family before interpreting a refusal as absence.
+    try:
+        return getattr(binding, name)
+    except (AttributeError, ImportError):
+        return None
+
+
+def _is_device_rows(x):
+    """A fold's rows on the device (the product's `_arena_io.DeviceRows`, recognized by its class name and its
+    `materialize`, so the oracle imports no product module for the test)."""
+    return type(x).__name__ == "DeviceRows" and callable(getattr(x, "materialize", None))
 
 #: The IDENTICAL binding's family switch bits (bindings/_mojolearn_x_prep*.mojo
 #: `idn_fam_binding`); moved here with `_idn_fam` when the product copy was
@@ -57,12 +88,6 @@ _PARAMS = 14
 
 
 _NONE = -1
-
-
-def _native_helper(key):
-    """The base binding's host helper `key` (`_buffer._native`)."""
-    from .._buffer import _native
-    return _native(key)
 
 
 def _p2m_chunks(n, per=1):
@@ -218,11 +243,12 @@ class _Prog:
         never does, and a read of one is refused). A `_arena_io.DeviceRows`
         (a fold's rows, lane cpu4-misc) is kept as it is: `run` gathers it
         on the device, or copies its host rows when the binding cannot."""
-        if isinstance(arr, _arena_io.DeviceRows):
+        if _is_device_rows(arr):
             if inout or arr.dtype != "<f4":
                 arr = arr.materialize()
-        if not (isinstance(arr, (Array, _arena_io.DeviceRows)) and arr.dtype == "<f4"
-                and (isinstance(arr, _arena_io.DeviceRows) or arr._has_order("C"))):
+        rows = _is_device_rows(arr)
+        if not ((isinstance(arr, Array) or rows) and arr.dtype == "<f4"
+                and (rows or arr.flags["C_CONTIGUOUS"])):
             arr = as_f32_c(arr, ndim=None, name="input")[0]
         off = self.alloc(arr.size)
         self._inputs.append((off, arr, "f"))
@@ -361,7 +387,7 @@ def _fast_on(name, mode):
 
 
 def _x2d(X, name="X"):
-    if isinstance(X, _arena_io.DeviceRows):
+    if _is_device_rows(X):
         # a fold's rows on the device (lane cpu4-misc): float32 2-D rows of
         # a C-contiguous base stay a handle for `_Prog.put`; anything else
         # takes its host rows and the usual conversion
@@ -681,7 +707,6 @@ def _label_buffer(y):
     MOJOLEARN_XPREP_LABELS switch)."""
     if isinstance(y, (list, tuple, str, bytes)):
         return None
-    from mojolearn._buffer import Buf, typestr_of
     from mojolearn.tests._typed_input import has_buffer as _has_buffer, materialize as _materialize, raw_store_type as _raw_store_type
     if not isinstance(y, Array):
         if not _has_buffer(y):
@@ -700,7 +725,7 @@ def _label_buffer(y):
     nw = arr.size * wpe
     if nw > 2 ** 30:
         return None
-    store = _raw_store_type("i", nw).from_address(arr._addr)
+    store = _raw_store_type("i", nw).from_address(addr_ro(arr, name="y"))
     store._keep = arr
     words = Array._owned(store, (nw,), "<i4", "C")
     return _LabelBuf(kind, words, arr.size, arr.dtype in ("<f4", "<f8"), arr)
@@ -724,5 +749,5 @@ def _class_words(pr, out, n, ints):
     float64 Array (one byte copy, no Python object per label)."""
     words = pr.get_i32(out, 2 * n)
     store = array.array("q" if ints else "d")
-    store.frombytes(ctypes.string_at(words._addr, 8 * n))
+    store.frombytes(ctypes.string_at(addr_ro(words, name="words"), 8 * n))
     return Array._owned(store, (n,), "<i8" if ints else "<f8", "C")

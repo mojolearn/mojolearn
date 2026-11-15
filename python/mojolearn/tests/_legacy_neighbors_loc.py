@@ -7,15 +7,26 @@ Test-only oracle; never imported by the package."""
 import os
 
 import math as _stdmath  # test oracle: isclose (deleted from _portable_math by 3db84bb031)
-from mojolearn import _portable_math as math
-from mojolearn._array import Array
-from mojolearn._buffer import addr, addr_ro, empty
-from mojolearn._lazy_out import _empty_out
+from mojolearn import Array, NearestCentroid, KNNImputer  # oracle subject: the public classes these frozen bodies subclass (their `_op` / `_bind` drive the x_neighbors kernels)
+from mojolearn.tests._oracle_support import addr, addr_ro, empty, empty_out as _empty_out, portable_math as math
 from mojolearn.tests._typed_input import f32_dense as _f32, f32_1d as _f32_1d, i32_1d as _i32
-from mojolearn._expansion_neighbors import (
-    NearestCentroid, KNNImputer, _f32_scalar,
-    _accuracy, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
-)
+
+# Local copies of the product's python/mojolearn/_expansion_neighbors.py A/B flags (import-time values).
+_UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
+_OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
+
+
+def _f32_scalar(v):
+    """A Python double rounded once to float32, as a Python float (copy of `_expansion_neighbors._f32_scalar`)."""
+    return Array.from_list([float(v)], "<f4").tolist()[0]
+
+
+def _accuracy(y_true, y_pred, sample_weight=None):
+    """sklearn's accuracy_score: the (weighted) fraction of exact label
+    matches (`_expansion_metrics.accuracy_fraction`: grouped sums in the
+    x_metrics binding, no per-row Python)."""
+    from mojolearn._expansion_metrics import accuracy_fraction  # oracle subject: the native x_metrics accuracy op over labels of any kind; the public accuracy_score refuses str labels under normalize=True
+    return accuracy_fraction(y_true, y_pred, sample_weight)
 
 
 # Frozen copies of the former package helpers (python/mojolearn/_expansion_neighbors.py
@@ -36,7 +47,7 @@ def _class_array(classes, codes):
     """classes[codes] for int32 codes (an Array): int or bool classes an
     int64 Array, real classes a float64 Array (the native gather of
     `decode_labels`), other labels a list (`decode_labels`)."""
-    from mojolearn._labels import decode_labels
+    from mojolearn.tests._legacy_host_inference import decode_labels
     if all(isinstance(v, (bool, int)) for v in classes):  # glue: type check over the k class labels
         return decode_labels([int(v) for v in classes], codes)   # glue: the k class values
     if all(isinstance(v, (int, float)) for v in classes):  # glue: type check over the k class labels
@@ -73,7 +84,7 @@ class LegacyNearestCentroid(NearestCentroid):
         # the native encoder's int32 codes, the class counts from the device
         # (`p2m_class_counts`, an atomic add per row; lane pyglue-numeric:
         # a Python counting loop on every column but FAST + Apple)
-        from mojolearn._labels import encode_labels
+        from mojolearn._labels import encode_labels  # oracle subject: the native ORDER RULE encoder (classical_encode_labels: buffers, Series, lists, '<U' and object labels, its refusals); no exact copy, no public route
         classes, lab = encode_labels(y)
         if lab.size != n:
             raise ValueError("X and y have different numbers of rows")
@@ -87,11 +98,9 @@ class LegacyNearestCentroid(NearestCentroid):
         if self.priors == "empirical":
             # count / n per class in the base binding (lane py-runtime-b;
             # the same binary64 words as the Python quotient)
-            from mojolearn._buffer import _native
-            pa = empty((C,), "<f8")
-            ca = Array.from_list(counts, "<i8")
-            _native("class_ratio_f64")(addr_ro(ca, name="counts"), C, n, 1, addr(pa, name="class_prior_"))
-            prior = pa.tolist()  # glue: k class priors for the checks below
+            # the base binding's `class_ratio_f64` (mode 1: count / n) is the correctly rounded binary64
+            # quotient of two exact integers, which Python's true division also is
+            prior = [c / n for c in counts]  # glue: k class priors for the checks below
         elif self.priors == "uniform":
             prior = [1.0 / C] * C
         else:

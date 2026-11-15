@@ -4,7 +4,7 @@
 used only as an independent test oracle: `fit(model, X, y, sample_weight)`,
 `scores(model, X, want_total)` (score_samples: False; score: True)."""
 from mojolearn.tests._legacy_sample_weight import check_sample_weight
-from mojolearn._buffer import addr, addr_ro, all_finite, empty
+from mojolearn.tests._oracle_support import addr, addr_ro, all_finite, empty
 from mojolearn.tests._typed_input import as_f32_dense_c
 
 

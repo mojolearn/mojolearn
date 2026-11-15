@@ -19,8 +19,12 @@ import os
 import struct
 
 from mojolearn.tests import _onnx_proto_oracle as _pb
-from mojolearn.importers._graph import (FLOAT_DTYPES, ITEMSIZE, ONNX_DTYPE, GraphIR, Node, TensorInfo, UnsupportedModel,
-                     onnx_dtype_name)
+from mojolearn.importers import UnsupportedModel
+# oracle subject: GraphIR, Node and TensorInfo are the product IR classes the test compares field for field with the
+# Mojo reader's graph; they have no public constructor
+from mojolearn.importers._graph import GraphIR, Node, TensorInfo  # oracle subject: the product IR the test compares
+# the dtype tables and names: local copies of importers/_graph.py's in the resolve oracle
+from mojolearn.tests._resolve_oracle import FLOAT_DTYPES, ITEMSIZE, ONNX_DTYPE, onnx_dtype_name  # noqa: F401
 
 OPSET_MIN = 13
 _DEFAULT_DOMAINS = ("", "ai.onnx")

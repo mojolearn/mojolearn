@@ -7,9 +7,11 @@ deleted on 2026-11-15 (lane py-tail-2): every public call admits its inputs
 natively (`bindings/admitted_family_door.mojo`). Fixtures and the legacy
 oracle copies under tests/ still need a typed, laid-out Array of a test
 value; these build it from the native Array operations (`from_list`,
-`from_buffer`, `astype`, `_as_order`), with NumPy (the test extra) for the
-inputs no Array constructor borrows (strided views, odd widths, object or
-`__array__`-only exporters, sparse matrices).
+`from_buffer`, `astype`, `reshape`, `order` / `flags`), with NumPy (the test
+extra) for the inputs no Array constructor borrows (strided views, odd widths,
+object or `__array__`-only exporters, sparse matrices) and for a column-major
+copy. Only the public Array API and `_oracle_support` are used, so an internal
+rename does not break the oracles that import this module.
 
 Each converter returns `(Array, copied)`, the shape the deleted helpers had,
 so the oracle copies read unchanged.
@@ -19,7 +21,8 @@ import ctypes
 import sys
 from functools import lru_cache
 
-from mojolearn._array import Array, _CODE
+from mojolearn import Array
+from mojolearn.tests._oracle_support import CODE as _CODE, require_numpy
 
 
 def _numpy():
@@ -91,9 +94,24 @@ def as_typed(obj, dtype, order="C", ndim=None, name="X"):
     if a.dtype != dtype:
         a = a.astype(dtype)
         copied = True
-    if not a._has_order(order):
-        copied = True
-    return a._as_order(order), copied
+    laid, flipped = _in_order(a, order)
+    return laid, copied or flipped
+
+
+def _in_order(a, order):
+    """`a` laid out as `order` ("C" or "F") and whether that copied: `a` itself when its label is `order` or both
+    layouts coincide (at most one dimension above 1, `flags` reports both), else a copy with the same values in
+    `order`: the layout and values of the former private `Array._as_order`, which relabeled a coinciding layout
+    (same bytes) where this returns it unchanged."""
+    if a.order == order:
+        return a, False
+    flags = a.flags
+    if flags["C_CONTIGUOUS"] and flags["F_CONTIGUOUS"]:
+        return a, False
+    if order == "C":
+        return a.reshape(a.shape), True  # public reshape copies an F-order Array to C order
+    np = require_numpy("the oracle column-major layout")
+    return Array.from_buffer(np.asfortranarray(np.asarray(a))), True
 
 
 def as_f32_c(obj, *, ndim=2, name="X"):
@@ -204,16 +222,10 @@ def output_store(code, n):
 def same_dtype_store(raw, dtype):
     """An `array.array` of the elements `raw` (bytes of `dtype`) holds, equal
     to `array.array(code, memoryview(raw).cast(code))` (the float32 object
-    round trip quiets a signaling NaN; the core helper `cast_elements` does
-    the same in place), or None without that helper."""
-    from mojolearn._buffer import _native_optional
+    round trip quiets a signaling NaN, as the core helper `cast_elements`
+    float32 -> float32 did in place; here the round trip itself, stdlib only)."""
     store = array.array(_CODE[dtype])
     store.frombytes(raw)
     if dtype != "<f4" or not len(store):
         return store
-    fn = _native_optional("cast_elements")
-    if fn is None:
-        return None
-    at = store.buffer_info()[0]
-    fn(at, 0, at, 0, len(store))
-    return store
+    return array.array("f", store.tolist())

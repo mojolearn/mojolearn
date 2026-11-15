@@ -2,11 +2,28 @@
 """Frozen pre-migration Python paths of the approximate indexes' `fit` and `refine`
 (lane native-neighbors-20261024, base b32103c00), used only as an independent test
 oracle for the one-call native doors (bindings/neighbors_ann_native_door.mojo)."""
-from mojolearn import _backend
-from mojolearn._buffer import addr, addr_ro, empty
+import mojolearn
+from mojolearn.tests._oracle_support import addr, addr_ro, empty, require_numpy
 from mojolearn.tests._typed_input import as_f32_c
-from mojolearn._ivf_impl import _METRICS, _MODE_CODE, METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED
-from mojolearn._expansion_ann import _ann_int
+
+# Local copies of the product's IVF constants (python/mojolearn/_ivf_impl.py).
+_MODE_CODE = {"fast": 0, "identical": 1}
+METRIC_L2_EXPANDED = 0
+METRIC_L2_SQRT_EXPANDED = 1
+_METRICS = {
+    "sqeuclidean": METRIC_L2_EXPANDED,
+    "l2_expanded": METRIC_L2_EXPANDED,
+    "euclidean": METRIC_L2_SQRT_EXPANDED,
+    "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
+    "l2": METRIC_L2_SQRT_EXPANDED,
+}
+
+
+def _ann_int(owner, name, v):
+    """Local copy of the product's `_expansion_ann._ann_int`."""
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise TypeError(f"mojolearn {owner}: {name} must be an int, got {type(v).__name__}")
+    return int(v)
 
 
 # The removed IVFIndex helpers (lane py-tail, 2026-11-15; native twins in
@@ -24,7 +41,7 @@ def _int_param(name, v):
 
 def _ivf_extension(self):
     mod = self._bind()
-    want = getattr(self, "numeric_mode", None) or _backend.default_mode()
+    want = getattr(self, "numeric_mode", None) or mojolearn.numeric_mode()
     fn = getattr(mod, "ivf_numeric_mode", None)
     if fn is not None and int(fn()) != _MODE_CODE.get(want):
         raise RuntimeError(
@@ -316,12 +333,11 @@ def cagra_fit(self, X, y=None):
 
 
 def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclidean"):
-    from mojolearn._optional_numpy import require_numpy
     np = require_numpy('_expansion_ann')
     if metric not in ("sqeuclidean", "euclidean"):
         raise ValueError(f"mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
                          f"(inner product is not implemented), got {metric!r}")
-    from mojolearn import _backend
+    from mojolearn import _backend  # oracle subject: _backend.binding resolves the native x_ann binding refine drives; module-level refine has no estimator to reach it through
     x, _ = as_f32_c(dataset, ndim=2, name="dataset")
     q, _ = as_f32_c(queries, ndim=2, name="queries")
     n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input

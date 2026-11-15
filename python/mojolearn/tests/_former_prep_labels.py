@@ -9,15 +9,63 @@ import ctypes
 import itertools
 import numbers
 
-from mojolearn._array import Array
-from mojolearn.tests._array_reference import _native_reduce
-from mojolearn._buffer import full
+from mojolearn import Array
+from mojolearn.tests._array_reference import _native_reduce, _REDUCE_INTEGRAL
 from mojolearn.tests._typed_input import as_f32_c
-from mojolearn import _labels
-from mojolearn._labels import flatten_labels, sorted_classes, is_bool
+# The native label walk (bindings/classical_labels_door.mojo `_flatten_labels`, `_sorted_classes`): the ORDER RULE
+# and the refusals the native walk words (tests/test_hotpath_native.py `_agree` notes the Python reference words some
+# refusals differently), so a local copy would not be exact.
+from mojolearn._labels import flatten_labels, sorted_classes  # oracle subject: the native label walk and ORDER RULE, no public route
 from mojolearn.tests._prep_prog_oracle import (
     _PrepBase, _Prog, _NONE, _CAT_R, _CAT_CH, _mode, _x2d, _codes, _fit_categories, _label_chunk,
-    _LABEL_KIND, _LabelBuf, _label_buffer, _class_words, _prep_binding, _optional_prep_entry, _native_helper)
+    _LABEL_KIND, _LabelBuf, _label_buffer, _class_words, _prep_binding, _optional_prep_entry)
+
+
+def is_bool(value):
+    """Python's `bool` or NumPy's `bool_`, without importing NumPy (the product's `_labels.is_bool`)."""
+    return isinstance(value, bool) or type(value).__name__ == "bool_"
+
+
+_TOKENIZER_ENTRIES = {}
+
+
+def _tokenizer_entry(name):
+    """An entry of the tokenizer host binding (`str_labels_native_call`, `user_objects_native_call`), resolved once."""
+    fn = _TOKENIZER_ENTRIES.get(name)
+    if fn is None:
+        from mojolearn.tokenizer import _binding  # oracle subject: the tokenizer host binding's native str-label encoder and user-object reader, no public route
+        fn = _TOKENIZER_ENTRIES[name] = getattr(_binding()._module, name)
+    return fn
+
+
+# A local copy of `mojolearn._user_objects` (its KIND_* counters, `call` and the array.array branch of `take`):
+# the same native read and refusals, reached through the binding entry above.
+_REFUSALS = {"TypeError": TypeError, "ValueError": ValueError, "IndexError": IndexError,
+             "OverflowError": OverflowError}
+KIND_STR, KIND_BOOL, KIND_EXACT_INT, KIND_INTEGRAL, KIND_REAL = 0, 1, 2, 3, 4
+KIND_INTVAL, KIND_SEQ, KIND_INT_OR_BOOL, KIND_PLAIN_INT, KIND_REAL_NONBOOL = 5, 6, 7, 8, 9
+
+
+def _uo_call(operation, *args):
+    """One user-object read (`_user_objects.call`); raises the refusal the read returns."""
+    got = _tokenizer_entry("user_objects_native_call")(operation, *args)
+    if type(got) is tuple and len(got) == 3 and got[0] == "__refuse__":
+        raise _REFUSALS[got[1]](got[2])
+    return got
+
+
+def _uo_kinds(values):
+    """The kind counts of a list of objects (KIND_* above)."""
+    return _uo_call("kinds", values)
+
+
+def _uo_take(values, indices):
+    """``[values[i] for i in indices]`` for a Python list or tuple and an int32 or int64 `array.array` of indices
+    (every caller here passes one)."""
+    if not (isinstance(indices, array.array) and indices.typecode in ("q", "i") and indices.itemsize in (4, 8)):
+        raise TypeError("mojolearn tests: _uo_take takes an int32 or int64 array.array of indices")
+    return _uo_call("take", values, indices.buffer_info()[0] if len(indices) else 0, len(indices),
+                    indices.itemsize)
 
 
 _STR_LABELS = []
@@ -27,8 +75,7 @@ def str_labels(operation, *args):
     """Frozen copy of the former `_labels.str_labels` (deleted from the package
     2026-11-14 by lane py-admission): the native str-label encoder, ONE call."""
     if not _STR_LABELS:
-        from mojolearn.tokenizer import _binding
-        _STR_LABELS.append(_binding()._module.str_labels_native_call)
+        _STR_LABELS.append(_tokenizer_entry("str_labels_native_call"))
     got = _STR_LABELS[0](operation, *args)
     if got is None:
         return None
@@ -72,8 +119,7 @@ def _numeric_labels(values):
     holds exactly (so the device's categories are the labels themselves),
     else None (str labels, ints beyond 2**24: the Python route)."""
     # every label read once natively (bindings/user_objects_native_door.mojo f32_exact)
-    from mojolearn import _user_objects
-    return _user_objects.call("f32_exact", values)
+    return _uo_call("f32_exact", values)
 
 
 def _label_classes(mode, values):
@@ -84,8 +130,7 @@ def _label_classes(mode, values):
         classes, _ = sorted_classes(values)
         return classes, None
     cats = _fit_categories(mode, Array._from_flat(nums, (len(nums), 1), "<f4"))[0]
-    from mojolearn import _user_objects
-    ints = _user_objects.kinds(values)[_user_objects.KIND_INTEGRAL] == len(values)
+    ints = _uo_kinds(values)[KIND_INTEGRAL] == len(values)
     classes = [int(c) if ints else float(c) for c in cats.tolist()]  # glue: class list from the device categories (cats-sized: distinct class values)
     return classes, cats
 
@@ -93,8 +138,7 @@ def _label_classes(mode, values):
 def _label_codes(pr, values, cats):
     """Stages: each label's index among `cats` (or -1). Returns the codes
     offset and the unknown-count offset."""
-    from mojolearn import _user_objects
-    words = _user_objects.call("floats", values)
+    words = _uo_call("floats", values)
     arr = Array._owned(words, (len(words), 1), "<f8", "C").astype("<f4")
     return _codes(pr, arr, [cats])
 
@@ -119,13 +163,12 @@ def _multilabel_indicator(y):
         if len(shape) != 2:
             return None
         return _multilabel_buffer(y, shape)
-    from mojolearn import _user_objects
-    if not (isinstance(y, (list, tuple)) and y and _user_objects.kinds(y)[_user_objects.KIND_SEQ] == len(y)):
+    if not (isinstance(y, (list, tuple)) and y and _uo_kinds(y)[KIND_SEQ] == len(y)):
         return None
     if len(y[0]) < 2:
         return None
     # the rows read once natively (bindings/user_objects_native_door.mojo indicator)
-    status, words, width = _user_objects.call("indicator", y)
+    status, words, width = _uo_call("indicator", y)
     if status == 1:
         raise ValueError("mojolearn: y rows have different lengths")
     if status == 2:
@@ -142,7 +185,6 @@ def _multilabel_buffer(y, shape):
         return None
     if "bool" in str(getattr(y, "dtype", "")):
         raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
-    from mojolearn._array import _NATIVE_CODE, _REDUCE_INTEGRAL
     from mojolearn.tests._typed_input import as_f64_c
     Y, _ = as_f64_c(y, ndim=2, name="y")
     refuse = ValueError("mojolearn: Multioutput target data is not supported with label binarization")
@@ -411,13 +453,13 @@ class LabelEncoder(_PrepBase):
         if got is not None:
             return got
         # str classes or a Python code list: the explicit input-prep route (G5)
-        from mojolearn import _user_objects
-        # the codes read once natively, range-checked by the base helper
-        codes = _user_objects.call("ints", flatten_labels(y))
-        if len(codes) and int(_native_helper("check_indices_i64")(
-                codes.buffer_info()[0], len(codes), len(self._classes))) == 1:
+        # the codes read once natively, range-checked as the base helper `check_indices_i64` did (its status 1:
+        # an index outside [0, K); it tests the range before duplicates)
+        codes = _uo_call("ints", flatten_labels(y))
+        K = len(self._classes)
+        if len(codes) and any(c < 0 or c >= K for c in codes):
             raise ValueError("mojolearn: y contains previously unseen labels")
-        return _classes_array(_user_objects.take(self._classes, codes))
+        return _classes_array(_uo_take(self._classes, codes))
 
 
 def _stage_class_gather(pr, codes, n, cats, ints):
@@ -598,10 +640,9 @@ class LabelBinarizer(_PrepBase):
         if self._cats is None:
             # str classes: the codes come back for the explicit object-label decode (G5)
             pr.run(self.numeric_mode_)
-            from mojolearn import _user_objects
             # one class object per code, placed natively (user_objects take)
-            idx = _user_objects.call("ints", pr.values(codes, n)) if K != 1 else array.array("q", bytes(8 * n))
-            return _classes_array(_user_objects.take(self._classes, idx))
+            idx = _uo_call("ints", pr.values(codes, n)) if K != 1 else array.array("q", bytes(8 * n))
+            return _classes_array(_uo_take(self._classes, idx))
         # numeric classes (lane cpu2-l3-prep): each code's class gathered on the device
         # (f2_code_gather); one class: both codes name it
         ints = label_kind(self._classes) == "int"
