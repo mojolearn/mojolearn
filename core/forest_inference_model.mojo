@@ -13,7 +13,7 @@ from std.memory import bitcast
 from std.time import perf_counter_ns
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
-from max.gpu.host import DeviceContext, DeviceBuffer
+from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import (
     _forest_shape_checks, forest_pack_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
     device_all_finite,
@@ -227,6 +227,13 @@ struct ResidentForest(Movable):
     var input_workspace: Optional[DeviceBuffer[DType.float32]]
     var output_workspace: Optional[DeviceBuffer[DType.float32]]
     var label_workspace: Optional[DeviceBuffer[DType.int32]]
+    #: Lane flag-trees-infer-iforest (2026-11-15): the two-word finite status
+    #: (word 0 the input, word 1 the output) and its pinned host word pair,
+    #: held from the first predict. `_predict_into_buffers` created both on
+    #: every call (25bb542958, 199f170c73): one device and one PINNED host
+    #: allocation per predict, and the pinned free at the end of each call.
+    var status_dev: Optional[DeviceBuffer[DType.int32]]
+    var status_host: Optional[HostBuffer[DType.int32]]
     var workspace_rows: Int
     var features: Int
     var outputs: Int
@@ -254,6 +261,8 @@ struct ResidentForest(Movable):
         self.input_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.output_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.label_workspace = Optional[DeviceBuffer[DType.int32]]()
+        self.status_dev = Optional[DeviceBuffer[DType.int32]]()
+        self.status_host = Optional[HostBuffer[DType.int32]]()
         self.workspace_rows = 0
         self.features = features
         self.outputs = outputs
@@ -314,6 +323,8 @@ struct ResidentForest(Movable):
         # Predict/prepare are synchronous; destroy GPU operands before context
         # even when an upload/allocation exception bypasses explicit release.
         _ = self.pool^
+        _ = self.status_host^
+        _ = self.status_dev^
         _ = self.output_workspace^
         _ = self.label_workspace^
         _ = self.input_workspace^
@@ -335,6 +346,8 @@ struct ResidentForest(Movable):
         self.pool = None
         if self.ctx:
             self.ctx.value().synchronize()
+        self.status_host = None
+        self.status_dev = None
         self.output_workspace = None
         self.label_workspace = None
         self.input_workspace = None
@@ -431,6 +444,7 @@ struct ResidentForest(Movable):
         if self.pool:
             self.pool.value().predict_into[RF_INPUT](x, output, rows)
             return
+        self._ensure_status()
         if reuse_io and self.shared:
             var io = RF_IO.get_or_create_ptr()
             comptime if not RF_INPUT:
@@ -444,23 +458,33 @@ struct ResidentForest(Movable):
                 self.columns.value(), self.thresholds.value(), self.left.value(),
                 self.leaves.value(), x, output, rows, features, outputs, self.trees,
                 io[].input.value(), io[].output.value(), x, False,
-                self.ordered, uploaded)
+                self.ordered, uploaded, self.status_dev.value(), self.status_host.value())
         elif reuse_io:
             self.prepare_workspace(rows)
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
                 self.leaves.value(), x, output, rows, features, outputs, self.trees,
                 self.input_workspace.value(), self.output_workspace.value(), x, False,
-                self.ordered, False)
+                self.ordered, False, self.status_dev.value(), self.status_host.value())
         else:
             var dx = self.ctx.value().enqueue_create_buffer[DType.float32](rows * features)
             var dout = self.ctx.value().enqueue_create_buffer[DType.float32](rows * outputs)
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
                 self.leaves.value(), x, output, rows, features, outputs, self.trees, dx, dout, x, False,
-                self.ordered, False)
+                self.ordered, False, self.status_dev.value(), self.status_host.value())
             _ = dx^
             _ = dout^
+
+    def _ensure_status(mut self) raises:
+        """The held two-word finite status pair (`status_dev`,
+        `status_host`), created at the first predict of this snapshot; every
+        later call reuses it (`_predict_into_buffers` fills word 0 and 1
+        before it reads them back)."""
+        if self.status_dev and self.status_host:
+            return
+        self.status_dev = self.ctx.value().enqueue_create_buffer[DType.int32](2)
+        self.status_host = self.ctx.value().enqueue_create_host_buffer[DType.int32](2)
 
     def prepare_workspace(mut self, rows: Int) raises:
         # DEVIATION BLOCK FOREST-IO-REUSE-1:
@@ -577,7 +601,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     rows: Int, features: Int, outputs: Int, trees: Int,
     mut dx: DeviceBuffer[DType.float32], mut dout: DeviceBuffer[DType.float32],
     stage: MutPointer[Float32, MutAnyOrigin], staged: Bool, ordered: Bool,
-    uploaded: Bool) raises:
+    uploaded: Bool, mut dstat: DeviceBuffer[DType.int32], mut hstat: HostBuffer[DType.int32]) raises:
     """`stage` is the pinned host stage the upload reads when `staged`
     (DEVIATION 2962), else `x` itself; the input scan is the same predicate
     either way. `uploaded`: `dx` already holds these rows, scanned finite
@@ -609,8 +633,11 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     # predicate (`|bits| >= 0x7F800000`, the exponent of all ones that
     # `forest_nonfinite_kernel` tested) enqueued after the traversal and
     # copied back with the output under the one synchronize. Numerics: none.
-    var dstat = ctx.enqueue_create_buffer[DType.int32](2)
-    var hstat = ctx.enqueue_create_host_buffer[DType.int32](2)
+    # Lane flag-trees-infer-iforest: `dstat` / `hstat` are the snapshot's
+    # held pair (`ResidentForest.status_dev` / `status_host`); this function
+    # created both on every call (a device and a pinned host allocation, and
+    # the pinned free, per predict). The fill below resets both words each
+    # call, as the fresh pair's fill did. Numerics: none.
     try:
         dstat.enqueue_fill(Int32(0))
         if not uploaded:
@@ -642,8 +669,6 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     except e:
         ctx.synchronize()
         raise e
-    _ = dstat^
-    _ = hstat^
     comptime if FOREST_PROFILE:
         t4 = Int(perf_counter_ns())
     comptime if FOREST_PROFILE:
