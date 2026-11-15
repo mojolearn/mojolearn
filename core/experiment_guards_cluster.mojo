@@ -124,6 +124,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_SYMTILE_OFF (rollback to the full m x m SVGP B accumulation) is gone; the upper-tile B is the path wherever _SVGP_GATE_ON is (taxi 611 -> 463 ms, r2/rmse identical); IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF; restore: experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_COLSPLIT_OFF (rollback to the m serial SVGP column threads) is gone; the split column solves are the path wherever _SVGP_GATE_ON is (taxi 613 -> 438 ms, r2/rmse identical); IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF; restore: experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVGP_FAST_BSPLIT_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_BSPLIT_OFF (FAST+Apple rollback to SYMTILE's single-partial SVGP B and b) is gone; the row-slice partials are the FAST+Apple path (istella 224.6 -> 167.1 ms, r2 equal, rab19-svgpbsplit); restore: experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch"
     return True
 
 

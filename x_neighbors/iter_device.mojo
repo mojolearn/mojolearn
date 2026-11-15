@@ -2299,7 +2299,7 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 
 
 # ---- lane apple-fast-w2-svgp (2026-10-04): FAST + Apple candidates for
-# SVGP's fit (and predict). BLKCHOL is default; BSPLIT stays opt-in.
+# SVGP's fit (and predict). BLKCHOL and BSPLIT are default.
 
 #: SVGP_FAST_BLKCHOL, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp).
 #: M3, one run per arm (measured without RBFTILE; combined retime owed):
@@ -2470,12 +2470,11 @@ def _svgp_chol_panels(ctx: DeviceContext, wp: FP, m: Int, n: Int, nfac: Int) rai
 #: Source lane/apple-fast-w2-svgp@146898d2c.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
 #: rab19-svgpbsplit): svgp istella 224.6 -> 167.1 ms, taxi 211.3 -> 149.1 ms,
-#: r2 equal. KEEP: the FAST + Apple default (with SYMTILE); rollback
-#: -D MOJOLEARN_SVGP_FAST_BSPLIT_OFF. See docs/apple-fast/EXPERIMENTS.md.
-comptime SVGP_FAST_BSPLIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and SVGP_FAST_SYMTILE
-    and not is_defined["MOJOLEARN_SVGP_FAST_BSPLIT_OFF"]()
-)
+#: r2 equal. KEEP: the FAST + Apple default (with SYMTILE). See
+#: docs/apple-fast/EXPERIMENTS.md.
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_BSPLIT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 6d5bdfc57a.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_BSPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and SVGP_FAST_SYMTILE
 comptime SVGP_BSPLIT_R = 4
 comptime SVGP_BSPLIT_RV = 32
 
