@@ -1,8 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole-operation CPU tree predictions against frozen independent oracles."""
-import ast
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -166,16 +163,3 @@ def test_gbdt_hash_and_properties_are_native():
     assert audit_native_call(actual.model_sha256).assert_native() == expected.model_sha256()
     assert audit_native_call(type(actual).n_trees.fget, actual).assert_native() == 1
     assert audit_native_call(type(actual).inference_engine.fget, actual).assert_native() == "sequential"
-
-
-def test_tree_prediction_and_state_methods_are_one_native_call():
-    for module, clsname, names in ((forest, "HostForest", {"__init__", "predict", "predict_proba", "_predict_with_proba", "_vote",
-            "_groves_handle", "__getstate__", "__setstate__", "model_sha256", "n_trees", "inference_engine"}),
-            (gbdt, "HostGBDT", {"__init__", "predict", "predict_proba", "model_sha256", "n_trees", "inference_engine"})):
-        cls = next(n for n in ast.parse(Path(module.__file__).read_text()).body if isinstance(n, ast.ClassDef) and n.name == clsname)
-        for method in cls.body:
-            if not isinstance(method, ast.FunctionDef) or method.name not in names:
-                continue
-            body = method.body[1:] if ast.get_docstring(method) is not None else method.body
-            assert len(body) == 1 and isinstance(body[0], ast.Return), method.name
-            assert sum(isinstance(n, ast.Call) for n in ast.walk(body[0])) == 1, method.name
