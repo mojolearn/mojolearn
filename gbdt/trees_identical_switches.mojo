@@ -51,7 +51,9 @@ comptime T21 = False
 # one int sweep `-D MOJOLEARN_TREES_T21_STREAMS=1|2|4` (absent = 1, the
 # incumbent single replica stream). Replaces T21_STREAM / T21_STREAM4.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime T21_STREAMS = get_defined_int["MOJOLEARN_TREES_T21_STREAMS", 1]() if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 1
+# TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 293d3da2dd.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T21_STREAMS.patch
+comptime T21_STREAMS = 1
 
 # T22 document-keyed ordered storage: fold-position compressed storage, the
 # original document ids passed to the dither (no bits change).
