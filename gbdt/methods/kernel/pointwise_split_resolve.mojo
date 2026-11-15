@@ -305,10 +305,11 @@ def launch_pw_pack_winner(
 # keep the incumbent), block (0, 0) thread 0 makes the chain's stores
 # (`best_*`, `winners_*`, `score_before`, `split_desc`), and every thread
 # takes the descriptor from its registers. Integer and compare work only;
-# the bins written are the unfused kernel's. `-D
-# MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the chain.
+# the bins written are the unfused kernel's.
 # ====================================================================
-comptime PW_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold, PW_FUSED_LEVEL kept as the constant True for its importers) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c91aa521d9.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+comptime PW_FUSED_LEVEL = True
 # the searcher's fused launch alone, for bisecting
 comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
     "MOJOLEARN_GBDT_FUSED_PW_OFF"
