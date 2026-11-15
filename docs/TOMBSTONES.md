@@ -684,6 +684,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`](#mojolearn_ivfpq_fast_device_codebooks_off-old-path-deleted-2026-11-15) | ANN (IVF-PQ build codebooks, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch](../experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch) |
 | [`MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF`](#mojolearn_cagra_fast_ivfg_exactd_off-old-path-deleted-2026-11-15) | ANN (CAGRA IVFG graph tile, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch) |
 | [`MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF`](#mojolearn_cagra_fast_ivfg_lowd_seeds4_off-old-path-deleted-2026-11-15) | ANN (CAGRA low-d graph + 4x seeds, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-cagra-lowds4-q PASS) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch) |
+| [`MOJOLEARN_CAGRA_FAST_IVFG_OFF`](#mojolearn_cagra_fast_ivfg_off-old-path-deleted-2026-11-15) | ANN (CAGRA build graph, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch) |
 
 ## Trees
 
@@ -5936,4 +5937,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: DEFAULT (FAST+Apple) since EXPERIMENTS.md `CAGRA_FAST_IVFG_LOWD_SEEDS4`: M3 one run per arm, cagra taxi build 2,879.2 -> 714.9 ms (faiss-cpu 1,015.6), w2-cagra-lowds4-q PASS (recall@10 B >= A on taxi and istella). No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `b26ab50a56`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch`, then delete the `MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_CAGRA_FAST_IVFG_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the CAGRA build's intermediate graph from IVFG (approximate, device k-means lists) to the exact k-NN graph (`x_ann/fast_env.mojo` CAGRA_FAST_IVFG, read in `x_ann/cagra_device.mojo` `cagra_knn_enqueue`). Only the define read is deleted: the exact graph stays the IDENTICAL path and IVFG's fallback (small n or a short probe pool).
+- **Verdict**: KEPT 3852df59b (EXPERIMENTS.md `CAGRA_FAST_IVFG + IVFG_EXACTD + SEEDS + ITERS`): M3 one run per arm, cagra istella 21,239 -> 1,254.3 ms, recall .9838 -> .9972. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `2f74cb72ed`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch`, then delete the `MOJOLEARN_CAGRA_FAST_IVFG_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).

@@ -96,6 +96,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): CAGRA_FAST_IVFG_EXACTD_OFF (FAST+Apple rollback to the expanded-form IVFG graph tile) is gone with its row-norm pass; the difference-form tile is the only IVFG tile (bundle KEPT 3852df59b, CAGRA istella 21,239 -> 1,254 ms, recall .9972); restore: experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF (FAST+Apple rollback to the exact low-d graph and 1x seeds) is gone; IVFG at every width with 4x seeds is the FAST+Apple path (cagra taxi build 2,879.2 -> 714.9 ms, recall@10 B >= A); restore: experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): CAGRA_FAST_IVFG_OFF (FAST+Apple rollback to the exact CAGRA build graph) is gone; IVFG is the FAST+Apple build graph (cagra istella 21,239 -> 1,254.3 ms, recall .9972, KEPT 3852df59b); restore: experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch"
     return True
 
 
