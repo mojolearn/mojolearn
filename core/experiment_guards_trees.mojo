@@ -78,6 +78,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_GBDT_EVAL_SKIP_EMPTY, the FAST Apple one-word held-out index for an empty eval set, was NEUTRAL: rab7-gbdtevalskipem istella +0.0%, taxi +0.4%; code at 8815b00d75; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_EVAL_FUSED"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_GBDT_EVAL_FUSED, the FAST Apple packed held-out apply and deferred held-out loss readback, was NEUTRAL: rab7-gbdtevalfused istella 14752.15 -> 14703.82 ms (-0.3%); code at 70801eb24c; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_SYM_HIST_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_HIST_ALL, the FAST Apple umbrella of SYM_SORT_SWAP + SYM_RESOLVE_BLOCK, was NEUTRAL: rab4-symhist istella -0.1%, taxi -0.2%, quality noise; code at 24c9108159; see docs/TOMBSTONES.md"
     return True
 
 

@@ -631,6 +631,7 @@ in the tables after the sections.
 | [`MOJOLEARN_GBDT_BOOT_DEVICE`](#mojolearn_gbdt_boot_device) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_BOOT_DEVICE.patch](../experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch) |
 | [`MOJOLEARN_GBDT_EVAL_SKIP_EMPTY`](#mojolearn_gbdt_eval_skip_empty) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch) |
 | [`MOJOLEARN_GBDT_EVAL_FUSED`](#mojolearn_gbdt_eval_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_FUSED.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch) |
+| [`MOJOLEARN_SYM_HIST_ALL`](#mojolearn_sym_hist_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_HIST_ALL.patch](../experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5948,3 +5949,13 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 168, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_HIST_ALL
+
+- Tried: one umbrella define turning on the FAST + Apple symmetric split-search switches SYM_SORT_SWAP + SYM_RESOLVE_BLOCK (narrowed from the old six-switch umbrella, a noise DROP on 2026-10-03).
+- Verdict: NEUTRAL. rab4-symhist (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella -0.1%, taxi -0.2%, quality noise; stays off. Apple FAST only. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `24c9108159`. Patch: `experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/kernel/sym_fast.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 194, 218, 1299; appended row in the "Lane expdel-05-trees" section.
+- Note: Only the umbrella went here; SYM_SORT_SWAP is deleted in its own commit; SYM_RESOLVE_BLOCK keeps its define (the prerequisite of the unmeasured AFCL_T05 card in gbdt/apple_fast_classical.mojo; KEEP-OPEN).
