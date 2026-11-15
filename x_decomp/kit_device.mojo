@@ -72,7 +72,6 @@ from x_decomp.kit import (
     Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
-from x_decomp.classical_device import contrast_kernel
 from std.atomic import Atomic
 from std.builtin.sort import sort
 from core.device_zero import enqueue_fill
@@ -631,14 +630,6 @@ struct DKit(Movable):
         return out^
 
     # ---- the kit's calls (Kit's operands, modes and float32 scalars)
-    def classical_contrast(self, Y: DMat, fun: Int, alpha: Float64, mut gp: DMat) raises -> DMat:
-        var gx = DMat(Y.r, Y.c)
-        gp = DMat(Y.r, Y.c)
-        if Y.n() > 0:
-            self.ctx.enqueue_function[contrast_kernel](Y.p(), gx.p(), gp.p(), Int32(Y.n()), Int32(fun), Float32(alpha),
-                                                       grid_dim=_blocks(Y.n()), block_dim=TPB)
-        return gx^
-
     def ew1(self, op: Int, A: DMat, s: Float64) raises -> DMat:
         var out = DMat(A.r, A.c)
         if A.n() == 0:

@@ -6,7 +6,6 @@ the same cells on the same values (eigh: `DKit.eigh`, DevExec's solve), so
 the same words as the host column. Each Python scalar read (the largest
 eigenvalue, a norm, a convergence limit) is one word home where Python read
 it. GPU binding only."""
-from experiments.classical_identical_ideas.linear_controls import C27_COMPONENTS
 from x_decomp.cells import F32Ptr
 from x_decomp.ica import ICA_F32_EPS, ICA_FLT_MIN, _recip_or0
 from x_decomp.kit import (
@@ -31,11 +30,8 @@ def sym_decorrelation_dev(mut k: DKit, W: DMat) raises -> DMat:
 
 
 def ica_g_dev(k: DKit, Y: DMat, fun: Int, alpha: Float64, mut gp: DMat) raises -> DMat:
-    comptime if C27_COMPONENTS:
-        var g1 = DMat(0, 0)
-        var gx = k.classical_contrast(Y, fun, alpha, g1)
-        gp = k.ew1(OP_SCALE, k.rowsum(g1), 1.0 / Float64(Y.c))
-        return gx^
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_COMPONENTS (its use here: the fused contrast kernel) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 19e04d45d5.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.expdel2-17-decomposition.patch.
     var gx: DMat
     var g1: DMat
     if fun == 0:
