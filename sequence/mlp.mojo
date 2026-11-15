@@ -66,10 +66,12 @@ comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS
 #:   each storing its row's loss term) and the row-block sums by many threads
 #:   in the fold launch, in place of ceil(B / R) part threads that each chained
 #:   R rows of software logs. Same bits by construction (the loss-section
-#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is;
-#:   -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF restores the pass-3 row-block threads
-#:   for the A/B.
-comptime MLP_LB_ROWS = MLP_LOSSBLOCK and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF"]()
+#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is.
+# TOMBSTONE: MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6ed945170f.
+# Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch
+# The pass-3 row-block body stays as mlp_loss_block[False] (sequence/mlp_fit.mojo), which
+# autograd/checks/lossblock_cases.mojo runs beside the default as its same-words reference.
+comptime MLP_LB_ROWS = MLP_LOSSBLOCK
 # NI52 scheduling-only subarm: leave the exact epoch Feistel mapping intact,
 # but construct even the no-shuffle identity order on the selected executor.
 # Avoid the otherwise unused host N-row permutation initialization. Default
@@ -183,7 +185,7 @@ def op_act_bwd(t: Int, a: Args):
 #:   once-an-epoch norm would report a different number. The curve feeds
 #:   tol / n_iter_no_change every epoch, so the term is always consumed; it
 #:   is made cheap instead (2 launches, short chains, many threads).
-#: MLP_LB_ROWS (the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF keeps the
+#: MLP_LB_ROWS (the default; mlp_loss_block[False] keeps the
 #: layout above), per batch, L <= 4 layers: 3 launches (L > 4: 2 ceil(L / 4)
 #: + 1). The pass-3 part launch's critical path was one row-block thread's
 #: chain of R(B) rows of O loss terms, two software logs a term under

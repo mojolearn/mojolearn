@@ -382,7 +382,7 @@ def mlp_loss_block[E: Exec, //, ROWS: Bool = MLP_LB_ROWS](
     partials written to `rowparts`; the handed-in data sum of the deleted
     -D MOJOLEARN_AUTOGRAD_LOSS arm went with it, lane X3). Launches: one op_mlp_lb_part and one op_mlp_lb_fold per
     group of four layers (2 for L <= 4).
-    ROWS (MLP_LB_ROWS, the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF):
+    ROWS (MLP_LB_ROWS, the default; False is the check's reference):
     the row losses one thread per row into `rowloss` (B floats), the row
     blocks and the per-layer norms folded by many threads, then a one-thread
     batch loss: one more launch (3 for L <= 4), the same bits."""
