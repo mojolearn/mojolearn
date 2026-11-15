@@ -218,7 +218,9 @@ comptime KMH_RBF_CELL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_KM_RBF_CELL"]()
 )
-comptime KMH_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
+# TOMBSTONE: MOJOLEARN_IDN_KM_RBF_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0e42489093.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL_D16.patch; record in docs/TOMBSTONES.md.
+comptime KMH_RBF_CELL_MAX_D = 64
 
 #: fix-kg1-kernel (audit B11): the host column of
 #: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_DOT_CELL` (ON by
