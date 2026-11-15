@@ -168,7 +168,11 @@ def device_finalize(owner: PythonObject, context: PythonObject) raises -> Python
 def device_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
-        _ = device_finalize(args[0], args[1])
+        # PyInstanceMethod(MethodType(entry, context)): the bound context comes
+        # first, the owner second (as host_archive_finalize_c reads them). The
+        # swapped read subscripted the owner ("'TrainDeviceArray' object is not
+        # subscriptable") on every collection (smoke 2026-11-15).
+        _ = device_finalize(args[1], args[0])
     except error:
         return optimizer_python_error(error)
     return PythonObject(None).steal_data()
