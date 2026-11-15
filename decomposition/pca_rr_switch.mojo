@@ -17,9 +17,9 @@ from x_decomp.rr import RR_EIGH_SWEEPS
 #: FAST builds are unchanged.
 # TOMBSTONE: MOJOLEARN_PCA_RR_EIGH_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 5972d75b59.
 # Restore: git apply experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch; record in docs/TOMBSTONES.md.
-comptime PCA_RR_EIGH = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime PCA_RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: The round-robin solve's sweep budget in PCA / TruncatedSVD, the device and
 #: the host column alike. RECORDED REASON (lane idn-all, 2026-10-04): it is
@@ -41,9 +41,9 @@ comptime PCA_RR_SWEEPS = RR_EIGH_SWEEPS
 #: (about 2 (n - 1) launches each: 438 at 220 columns) as no-ops. Device
 #: only (the host column's loop already stops there); moves no bit.
 #: -D MOJOLEARN_PCA_RR_FLAG_TEST_OFF restores the enqueue-everything form.
-comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
-    is_defined["MOJOLEARN_PCA_RR_FLAG_TEST_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not is_defined["MOJOLEARN_PCA_RR_FLAG_TEST_OFF"]()
 
 #: TOMBSTONE (lane/postmerge-act-5, 2026-10-09): P1 + P1b, -D MOJOLEARN_IDN_PCA_RR_ONE_BLOCK
 #: (one-launch one-block round-robin solve) was BROKEN on NVIDIA (nv2 v1030: pca and tsvd

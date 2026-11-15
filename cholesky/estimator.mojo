@@ -233,9 +233,11 @@ def cholesky_factor_host(
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CHOL_FAST_DEVIO_OFF (unmeasured old path beside the FAST Apple default, EXP:1395 READY-AB) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 70d6bad292.
 # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 comptime CHOL_FAST_DEVIO = (
     (_CTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
-    or (_CTX_MODE == _CTX_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    or _CTX_MODE == _CTX_IDENTICAL
 )
 
 

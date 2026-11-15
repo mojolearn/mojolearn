@@ -26,10 +26,9 @@ from x_decomp.cells import F32Ptr
 #: `HostExec.eigh` (x_decomp/eigh_tridiag_host.mojo) read it.
 # TOMBSTONE: MOJOLEARN_IDN_EIGH_TRIDIAG_OFF (old path, EXP:476 KEEP default: AMD 8620.1 -> 353.7, NV 21119.9 -> 367.2 ms) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8e83b98cee.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_TRIDIAG_OFF.patch; record in docs/TOMBSTONES.md.
-comptime EIGH_TD_IDN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime EIGH_TD_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Panel width (reflectors per WY block). TD_TPB == 8 TD_NB is assumed by
 #: the tile loads below.

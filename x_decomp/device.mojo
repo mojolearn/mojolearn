@@ -3,7 +3,6 @@
 """DevExec: the decomp lane's cells on the GPU. One thread per output, the
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
-from std.sys.compile import is_defined
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
@@ -203,7 +202,9 @@ comptime PJ_SYNC_ROUNDS = 512
 # IDENTICAL builds only: a FAST build keeps its waits and readbacks.
 # TOMBSTONE: MOJOLEARN_IDN_XD_SWEEP_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0ddee7ae4b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_SWEEP_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
 comptime XD_NO_FLAG = Int32(2147483647)
 # lane gap-tsqr (2026-10-08, docs/plans/gaps-2026-10-08.md section 7, item 4),
@@ -254,7 +255,9 @@ comptime XD_EIGH_ONE_BLOCK_N = 32
 # the same launches on the same values, the same words.
 # TOMBSTONE: MOJOLEARN_IDN_QR_R_DIRECT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0c86559205.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline

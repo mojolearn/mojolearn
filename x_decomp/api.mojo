@@ -8,7 +8,6 @@ executors: the Python doors in the sibling shell module (`*_py[DevExec]` in
 address contract by construction. Every address is a host buffer the caller
 owns. The IDENTICAL route flags (`IDN_*`) live here too."""
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.cells import F32Ptr, I32Ptr
@@ -265,14 +264,18 @@ comptime IDN_OLS_ONE_ENTRY = _API_IDN
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 # TOMBSTONE: MOJOLEARN_IDN_LU_GESV_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at c9e3c20372.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_GESV_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_LU_GESV = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LU_GESV = _API_IDN
 # lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
 # takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and
 # host binding alike, so the four agree), instead of downloading F, slicing
 # its columns in Python and uploading F^ again.
 # TOMBSTONE: MOJOLEARN_IDN_LLE_DEV_F0_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 79f4ad1e97.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LLE_DEV_F0_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_LLE_DEV_F0 = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LLE_DEV_F0 = _API_IDN
 # lane fam-decomp (2026-10-04): the kit's `rand` draws into a device matrix
 # on the GPU binding (`dev_rand_py`, the kernel `DevExec.rand` launches: the
 # same Philox words) and downloads it only if Python reads it, instead of
@@ -281,7 +284,9 @@ comptime IDN_LLE_DEV_F0 = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 # starts).
 # TOMBSTONE: MOJOLEARN_IDN_RAND_RESIDENT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at c47a9137eb.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAND_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_RAND_RESIDENT = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_RAND_RESIDENT = _API_IDN
 # lane fam2-decomp (2026-10-04): a device-resident matrix's transpose, column
 # selection and row range stay on the device (`x_decomp_dev_move`: TRANSPOSE,
 # the new TAKE_COLS, TAKE_ROWS; one thread a moved value) when the result
@@ -291,7 +296,9 @@ comptime IDN_RAND_RESIDENT = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"
 # Copies only: the same words.
 # TOMBSTONE: MOJOLEARN_IDN_RES_MOVES_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d82ec62247.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RES_MOVES_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_RES_MOVES = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_RES_MOVES = _API_IDN
 # lane fix-d1-decomp (2026-10-04, audit F7/B7): the decomp Python leftovers.
 # IDN_NMF_L2_CELL (bit 5): NMF's coordinate descent adds l2 to H H^T's
 # diagonal with one `axpy` cell against the identity mask on EVERY column of
@@ -301,27 +308,35 @@ comptime IDN_RES_MOVES = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 # becomes +0.0.
 # TOMBSTONE: MOJOLEARN_IDN_NMF_L2_CELL_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 87157c4174.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NMF_L2_CELL_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_NMF_L2_CELL = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_NMF_L2_CELL = _API_IDN
 # IDN_ICA_LIM_DEV (bit 6): FastICA's parallel convergence scalar
 # max |abs(diag(W1 W^T)) - 1| is reduced on the device (`x_decomp_dev_maxabs`)
 # and one word comes down, instead of k words and a Python max. A max is
 # exact: the same value.
 # TOMBSTONE: MOJOLEARN_IDN_ICA_LIM_DEV_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at b6300f1d85.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ICA_LIM_DEV_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_ICA_LIM_DEV = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ICA_LIM_DEV = _API_IDN
 # IDN_POLAR_MAX_DEV (bit 7): varimax/quartimax `_polar`'s max |A| (it picks
 # an exact power-of-two scale) is reduced on the device, one word down,
 # instead of the k x k matrix and a Python max. The same value.
 # TOMBSTONE: MOJOLEARN_IDN_POLAR_MAX_DEV_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 6278f49a67.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_POLAR_MAX_DEV = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_POLAR_MAX_DEV = _API_IDN
 # IDN_LLE_PAD_DEV (bit 8): LLE's shift-invert loop pads its resident X
 # ((n - 1) x p) with a zero row on the device (PLACE_COLS + FILL0 moves),
 # instead of downloading X and uploading [X; 0] twice per iteration. Copies
 # only: the same words.
 # TOMBSTONE: MOJOLEARN_IDN_LLE_PAD_DEV_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 4265e949c0.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LLE_PAD_DEV_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_LLE_PAD_DEV = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LLE_PAD_DEV = _API_IDN
 #: the binding exports `x_decomp_dev_maxabs` (GPU binding) when a user is on
 comptime IDN_DEV_MAXABS = IDN_ICA_LIM_DEV or IDN_POLAR_MAX_DEV
 
