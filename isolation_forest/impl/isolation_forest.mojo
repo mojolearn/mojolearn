@@ -562,13 +562,9 @@ def _upload_rowmajor_fast(
 #: cpu2-l6-bindings (2026-10-04): the device route is the default on EVERY
 #: tier and vendor (FAST included); the FAST List route was a host copy of
 #: the query on a GPU route. Same words (`ftz` per cell) either way.
-comptime IDN_IF_QUERY_DEVICE = not (
-    is_defined["MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF"]()
-    or (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_IF_QUERY_DEVICE = not is_defined["MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF"]()
 
 #: Lane fam2-forests (IDENTICAL speed wave 3): the fitted forest stays
 #: RESIDENT between binding calls (`isolation_forest/estimator.mojo`,
@@ -579,10 +575,9 @@ comptime IDN_IF_QUERY_DEVICE = not (
 #: (the forest is a pure function of the seed and the X bits) and the host
 #: column is untouched. `-D MOJOLEARN_IDN_IF_RESIDENT_OFF` restores the
 #: refit-per-call form.
-comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"]()
 
 #: Lane fam2-forests: the scoring epilogue of the resident entry runs on the
 #: device and the result is downloaded straight into the caller's buffer.
@@ -594,10 +589,9 @@ comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 #: subtraction, the operation the host loop did), so no bit moves.
 #: Applies inside the resident entry only. `-D
 #: MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF` restores the host epilogue.
-comptime IDN_IF_EPILOGUE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_IF_EPILOGUE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF"]()
 
 
 def _upload_colmajor_as_rowmajor_device(

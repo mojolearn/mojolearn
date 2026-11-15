@@ -184,8 +184,9 @@ comptime ORD_SKIP_UNSEARCHED_PERM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and
 comptime IDN_ORD_CAT_PLANES = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IDN_ORD_CAT_PLANES_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
 
 # A ORD_HIST_FOLD_SKIP (default OFF, a schedule change; A/B owed).
 # The fold arm's 8-bit one-byte histogram launches one block per (feature
