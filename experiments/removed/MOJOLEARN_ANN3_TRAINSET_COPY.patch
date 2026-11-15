@@ -1,0 +1,15 @@
+diff --git a/x_ann/switches.mojo b/x_ann/switches.mojo
+index 5e38194537..4a0b045b4b 100644
+--- a/x_ann/switches.mojo
++++ b/x_ann/switches.mojo
+@@ -71,9 +71,7 @@ comptime ANN3_DIRECT_OUT = False
+ #: The coarse quantizer's FAST training sample is gathered row by row with
+ #: memcpy into a list made by length (one append per float otherwise).
+ #: Plain copies: no bit moves.
+-# TOMBSTONE: MOJOLEARN_ANN3_TRAINSET_COPY (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 8d1d604991.
+-# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TRAINSET_COPY.patch; record in docs/TOMBSTONES.md.
+-comptime ANN3_TRAINSET_COPY = False
++comptime ANN3_TRAINSET_COPY = is_defined["MOJOLEARN_ANN3_TRAINSET_COPY"]()
+ 
+ #: The IVF-PQ / IVF-SQ residual launch and the IVF-SQ encode launch run one
+ #: thread per ROW, each walking its row's cells in order, instead of one

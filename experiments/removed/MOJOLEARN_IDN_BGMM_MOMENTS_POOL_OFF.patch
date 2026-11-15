@@ -1,0 +1,23 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index be18b8c4be..50fb8ced41 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -1490,11 +1490,14 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
+ # n x d) and DRAINED the stream before returning so they could die. The
+ # buffers now live in the ops object and the call returns with its work
+ # enqueued: one allocation per fit, one drain less per EM iteration.
+-# Scheduling only, no bit moves. FAST keeps the per-call buffers and the drain.
+-# TOMBSTONE: MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0fd51e8785.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF.patch; record in docs/TOMBSTONES.md.
++# Scheduling only, no bit moves. `-D MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF=1`
++# restores the per-call buffers and the drain.
+ comptime IDN_BGMM_MOMENTS_POOL = (
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not (
++        is_defined["MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+ 
+ 

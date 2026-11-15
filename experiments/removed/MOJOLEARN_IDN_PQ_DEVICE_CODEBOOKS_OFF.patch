@@ -1,0 +1,17 @@
+diff --git a/x_ann/switches.mojo b/x_ann/switches.mojo
+index b47e7e75d0..a25d1eaf73 100644
+--- a/x_ann/switches.mojo
++++ b/x_ann/switches.mojo
+@@ -143,9 +143,9 @@ comptime ANN3_CAGRA_TEAM = False
+ #: docs/apple-fast/EXPERIMENTS.md, IVFPQ_FAST_DEVICE_CODEBOOKS).
+ #: `pq_len <= PQK_LEN_MAX` and `n_codes <= PQK_CODES_MAX` take it; wider
+ #: subspaces keep the per-subspace fits on every column.
+-# TOMBSTONE: MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF (old path; EXP:1775 PROMOTED the batched codebooks, NV+AMD) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at fc8c24af4e.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_PQ_DEVICE_CODEBOOKS = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
++comptime IDN_PQ_DEVICE_CODEBOOKS = (
++    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF"]()
++)
+ 
+ #: lane hdb-ivf D8(a) (IDENTICAL, DEFAULT OFF, 2026-10-11),
+ #: -D MOJOLEARN_IDN_PQ_TRAINSET_STRIDED: the batched PQ codebook loop
