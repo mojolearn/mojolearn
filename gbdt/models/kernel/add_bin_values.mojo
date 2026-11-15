@@ -47,18 +47,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
 comptime IDN_PREDICT_FOUR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-#: lane/fam2-gbdt F4 (IDENTICAL; CANDIDATE ARM, default OFF, enable with
-#: `-D MOJOLEARN_IDN_GBDT_APPLY_WIDE`): an ensemble whose trees all share one
-#: positive depth is applied `APPLY_WIDE_TREES` trees per launch
-#: (`compute_bins_and_add_uniform_kernel`), each row carrying its sum in a
-#: register through the trees in tree order: the same ordered float32 adds,
-#: one cursor store per launch instead of one per tree. No bit moves. Time it
-#: against the four-tree grouping (resident predict and `predict`). An
-#: ensemble with mixed depths keeps the four-tree grouping.
-comptime IDN_APPLY_WIDE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()
-)
+#: lane/fam2-gbdt F4, the wide uniform-depth apply (candidate arm, never
+#: timed). The name stays False for its importers; the integrator deletes it,
+#: `launch_oblivious_apply_wide` and `compute_bins_and_add_uniform_kernel`
+#: once `gbdt/methods/doc_parallel_boosting.mojo` no longer imports them.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_APPLY_WIDE (DELETE-ARM, opt-in candidate arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 805d22d33d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch; record in docs/TOMBSTONES.md.
+comptime IDN_APPLY_WIDE = False
 
 #: trees per launch of the wide arm: bounded so one launch stays short (macOS
 #: cuts a Metal launch that runs for seconds)
