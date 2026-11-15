@@ -54,10 +54,13 @@ comptime MLP_EPOCH_DEV = _MLP_IDN
 #:   comment block below): the per-batch seed, row-loss and L2 sums in two
 #:   launches with the tape's fold rule, and the epoch loss as a blocked fold.
 #:   Default on wherever MLP_BLOCKED_FOLDS is; bit version mlp-lossblock-1
-#:   (new reported-loss bits). -D MOJOLEARN_MLP_LOSSBLOCK_OFF restores the
-#:   MLP_BLOCKED_FOLDS kernels (op_mlp_rowloss, op_mlp_l2part, op_mlp_l2fold,
-#:   op_mlp_rowpart, op_mlp_bloss, op_mlp_epoch_loss) for the A/B.
-comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_OFF"]()
+#:   (new reported-loss bits).
+# TOMBSTONE: MOJOLEARN_MLP_LOSSBLOCK_OFF (old path; EXP:2159 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at e06ff6f0f3.
+# Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch
+# The trainer no longer launches the MLP_BLOCKED_FOLDS-only loss kernels (op_mlp_l2part / l2fold via _l2_blocked,
+# op_mlp_rowpart, OP_MLP_EPOCH_LOSS); they stay registered (sequence/dispatch.mojo, another lane's file) and
+# autograd/checks/lossblock_cases.mojo still runs _l2_blocked and op_mlp_rowpart as its reference.
+comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS
 #: MLP_LB_ROWS (lane ag-pass5-loss, 2026-10-19; PASS5_IDEAS idea 2): the
 #:   loss block's row losses one thread per row (B threads in op_mlp_lb_part,
 #:   each storing its row's loss term) and the row-block sums by many threads
