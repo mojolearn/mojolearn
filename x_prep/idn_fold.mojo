@@ -83,7 +83,9 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJ
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 74754fe939.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch
 comptime IDN_TE_BLOCKED = False
-comptime IDN_TE_GLOBAL_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 44b08dfc1e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF.patch
+comptime IDN_TE_GLOBAL_TREE = _IDN
 comptime IDN_TE_ENC_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_ENC_TREE_OFF"]()
 comptime IDN_II_GRAM_TILE = _IDN and not is_defined["MOJOLEARN_IDN_II_GRAM_TILE_OFF"]()
 #: K14's non-eigh part: ii_conv's max over the row sums by a threadgroup tree
