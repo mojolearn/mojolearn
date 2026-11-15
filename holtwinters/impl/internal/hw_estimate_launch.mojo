@@ -5,7 +5,8 @@
 that module holds only the kernels and the per-thread arithmetic they share
 with the host column; the launch sequence and its arguments are unchanged."""
 
-from experiments.classical_identical_ideas.stats_controls import C58_SERIES4
+# TOMBSTONE: MOJOLEARN_C58_SERIES4 (opt-in arm, no A/B recorded; non-owner site, owner expdel2-07-base) folded to False 2026-11-15 by lane/expdel2-37-series; code recoverable at 82df561cdb.
+# Restore: git apply experiments/removed/MOJOLEARN_C58_SERIES4.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from holtwinters.impl.internal.hw_estimate import (
@@ -119,7 +120,7 @@ def holtwinters_estimate_gpu(
         level.unsafe_ptr(), trend.unsafe_ptr(), season.unsafe_ptr(),
         alpha.unsafe_ptr(), beta.unsafe_ptr(), gamma.unsafe_ptr(), error.unsafe_ptr(),
         criterion.unsafe_ptr(), niter.unsafe_ptr(), theta_out.unsafe_ptr(),
-        grid_dim=(((batch_size + (4 if C58_SERIES4 else 1)*tpb - 1) // ((4 if C58_SERIES4 else 1)*tpb)), 1, 1),
+        grid_dim=((batch_size + tpb - 1) // tpb, 1, 1),
         block_dim=(tpb, 1, 1),
     )
     ctx.synchronize()

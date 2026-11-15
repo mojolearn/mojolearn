@@ -79,7 +79,6 @@ IEEE `/` (correctly rounded on every column measured, IDENTITY_PATHS row
     `hw_estimate_check.mojo` compares their bits.
 """
 
-from experiments.classical_identical_ideas.stats_controls import C58_SERIES4
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -693,9 +692,9 @@ def holtwinters_estimate_gpu_kernel(
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var batch_size = Int(batch_size_in)
     var frequency = Int(frequency_in)
-    # C58 bounded independent series tasks; IDs and recurrence order fixed.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    comptime GROUP = 4 if C58_SERIES4 else 1
+    # TOMBSTONE: MOJOLEARN_C58_SERIES4 (opt-in arm, no A/B recorded; non-owner site, owner expdel2-07-base) folded to False 2026-11-15 by lane/expdel2-37-series; code recoverable at 82df561cdb.
+    # Restore: git apply experiments/removed/MOJOLEARN_C58_SERIES4.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
+    comptime GROUP = 1
     var first = tid*GROUP
     for member in range(GROUP):
         tid = first+member
