@@ -43,12 +43,9 @@ from x_decomp.resident import _ptr, pool_alloc, pool_free
 
 #: The switch: FAST + Apple default ON since the M3 A/B (nb-lda-fused-zones:
 #: LDA taxi-zones 2,721 -> 1,509 ms, -44.5%, perplexity 45.22 same).
-#: -D MOJOLEARN_LDA_FUSED_SS_OFF turns it off; the old -D MOJOLEARN_LDA_FUSED_SS
-#: is harmless (no longer read).
-comptime LDA_FUSED_SS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_LDA_FUSED_SS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_LDA_FUSED_SS_OFF (old path: main's chain; EXP:416 KEPT a7b8b9513 on FAST + Apple, the one vendor FAST runs on, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at d203a04705.
+# Restore: git apply experiments/removed/MOJOLEARN_LDA_FUSED_SS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LDA_FUSED_SS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: Lanes per document (one SIMD group).
 comptime LFS_TPD = 32
 #: Documents per block.
