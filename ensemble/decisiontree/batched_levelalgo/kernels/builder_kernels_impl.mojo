@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
 
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
+from ensemble.tree_identical_ideas import T04, T05, T07, T08, T14, C48
 from max.gpu import (
     WARP_SIZE,
     block_dim,
@@ -461,35 +461,32 @@ comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 
-comptime IDN_RF_SAMPLE_PER_NODE = BUILD_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch; EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_RF_SAMPLE_PER_NODE = BUILD_MODE == NUMERIC_IDENTICAL
 """fam-forests (2026-10-04), IDENTICAL on every vendor: the per-node feature
 sampler below (`SAMPLE_PER_NODE_DEFAULT`). `sampled_columns_for_node` writes
 the same integers as `k` calls of `sampled_column_at` (one Feistel bijection
 per node instead of one per (node, column)), so no bit of a forest moves and
-the host column needs no change. `-D MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF`
-restores the per-column arm."""
+the host column needs no change."""
 
+# TOMBSTONE: MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN (old per-column arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch; record in docs/TOMBSTONES.md.
 comptime SAMPLE_PER_NODE_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
-    and not is_defined["MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN"]()
 ) or IDN_RF_SAMPLE_PER_NODE
 """FAST only: the fused setup's feature sampler runs one thread per node
 (`sampled_columns_for_node`) instead of one per (node, column), drawing
-each node's 24-key bijection once instead of `k` times. Same columns.
-`-D MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN` restores the per-column arm."""
+each node's 24-key bijection once instead of `k` times. Same columns."""
 
+# TOMBSTONE: MOJOLEARN_RF_SPLIT_CANDIDATES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RF_SPLIT_CANDIDATES_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch; record in docs/TOMBSTONES.md.
 comptime HIST_SPLIT_CANDIDATES_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL or (
-    BUILD_MODE == NUMERIC_FAST
-    and (
-        is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
-        or (
-            TARGET_HAS_APPLE_GPU
-            and not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES_OFF"]()
-        )
-    )
+    BUILD_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 """IDENTICAL, EVERY VENDOR (DEVIATION 5611, 2026-09-27): the node's split
 is merged from per-block candidate slots by `merge_split_candidates_kernel`
@@ -508,22 +505,21 @@ every other column.
 FAST: each `find_best_splits` block stores its winner in its own
 candidate slot and `merge_split_candidates_kernel` folds a node's slots
 with `Split.update` (a total order), instead of every block spinning on
-the node's device mutex. Same winner. OPT-IN (`-D
-MOJOLEARN_RF_SPLIT_CANDIDATES=1`), NOT FLIPPED: Apple M4 1M rows, hashes
+the node's device mutex. Same winner. Off-Apple FAST NOT FLIPPED
+(the opt-in was deleted 2026-11-15): Apple M4 1M rows, hashes
 unchanged, taxireg 0.993, taxi 1.018 -- the mutex is not the cost here.
 ON BY DEFAULT on Apple since the SIMD-group split kernel
 (`FBS_WARP_DEFAULT`): with 40 columns per pass every node's mutex took
 up to 40 publishes; 5 trees 1M x 220 regression split time 5.1 -> 3.6 s,
-same forest (`-D MOJOLEARN_RF_SPLIT_CANDIDATES_OFF`).
+same forest.
 `MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX` is the racy pricing arm (never a
 build default; its forests move run to run and its build gate refuses).
 """
 
-comptime SMALL_NODE_FUSED_DEFAULT = T05 or (
-    BUILD_MODE == NUMERIC_FAST
-    and is_defined["MOJOLEARN_RF_SMALL_NODE_FUSED"]()
-)
-"""FAST experiment: a batch whose every node fits one block's walk runs
+# TOMBSTONE: MOJOLEARN_RF_SMALL_NODE_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch; record in docs/TOMBSTONES.md.
+comptime SMALL_NODE_FUSED_DEFAULT = T05
+"""T05: a batch whose every node fits one block's walk runs
 `small_node_split_kernel` (histogram in shared memory + split search in
 one launch) instead of zero + histogram + find_best_splits."""
 
@@ -537,24 +533,22 @@ comptime SMALL_NODE_ROWS = 256 if is_defined[
 comptime IDN_RF_HIST_ZERO = (
     BUILD_MODE == NUMERIC_IDENTICAL
     and not TARGET_HAS_APPLE_GPU
-    and not (
-        is_defined["MOJOLEARN_IDN_RF_HIST_ZERO_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 """fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: zero-after-read
 (`HIST_ZERO_AFTER_READ_DEFAULT`, below), which Apple IDENTICAL already takes.
 One `hist_zero` launch fewer per column pass of every sampling round; zeros
-are zeros, so no bit moves. `-D MOJOLEARN_IDN_RF_HIST_ZERO_OFF` restores the
-per-round zero launch on NVIDIA and AMD."""
+are zeros, so no bit moves."""
+# TOMBSTONE: MOJOLEARN_IDN_RF_HIST_ZERO_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_HIST_ZERO_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch; EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RF_FAST_HIST_ZERO_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch; record in docs/TOMBSTONES.md.
 
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
-    (
-        BUILD_MODE == NUMERIC_FAST
-        or (BUILD_MODE == NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU)
-        or IDN_RF_HIST_ZERO
-    )
-    and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
+    BUILD_MODE == NUMERIC_FAST
+    or (BUILD_MODE == NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU)
+    or IDN_RF_HIST_ZERO
 )
 """FAST, and Apple IDENTICAL since trees-apple2 (2026-09-28; zeros are
 zeros, so no bit of a forest can move; see the ordering note at the zero
@@ -565,7 +559,7 @@ command buffer (about 0.2 ms of GPU timeline at 1M rows on the M4), and the
 per-round zero was one launch in five. The histogram kernel writes exactly the
 `n_bins * n_classes` cells each (node, column) block of this kernel reads, so
 the workspace is all-zero again when the kernel retires. Same zeros, same
-model. `-D MOJOLEARN_RF_FAST_HIST_ZERO_OFF` restores the per-round launch."""
+model."""
 
 # `builder.cuh:163`. Their comment: "Tunable performance heuristic for the
 # shared-memory histogram path. Large per-block histograms, usually from
@@ -634,12 +628,14 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # UNVERIFIED, RUN OWED (archive/plans/ensemble/PLAN.md "2026-09-01
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
-# `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
+# P = 1 is shipped; checks pin P > 1 explicitly.
 # N07 / TREES_T01 streamed exact histogram replicas: DELETED 2026-10-07
 # (lane trees-cleanup). Lost on both vendors at source cbcc8dcd3303:
 # 100000x32 AMD 1.034, NVIDIA L40S 1.293; NVIDIA 131071x17 1.227.
 # Row in docs/apple-fast/EXPERIMENTS.md; recoverable at 8be4d20d4.
-comptime HIST_SMEM_COPIES_DEFAULT = 4 if is_defined["MOJOLEARN_2012_SMEM_COPIES4"]() else 1
+# TOMBSTONE: MOJOLEARN_2012_SMEM_COPIES4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_2012_SMEM_COPIES4.patch; record in docs/TOMBSTONES.md.
+comptime HIST_SMEM_COPIES_DEFAULT = 1
 
 
 def default_smem_bin_slots[B: Bin]() -> Int:
@@ -1554,15 +1550,8 @@ def node_split_copy_back_sampled_kernel[
             ]
 
 
-# AFT F04: double only the scan's cooperative width. The ops retain the
-# original TPB-grained work map, so segment boundaries and row multiplicity
-# do not change; fewer scan aggregates trade for more shared memory/block.
-# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
-comptime AFT_RF_SCAN_WIDTH_SCALE = 2 if (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and is_defined["MOJOLEARN_AFT_F04"]()
-) else 1
+# TOMBSTONE: MOJOLEARN_AFT_F04 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F04.patch; record in docs/TOMBSTONES.md.
 
 
 struct NodeSplitScratch[
@@ -1632,7 +1621,7 @@ struct NodeSplitScratch[
         max_work_items: Int,
         max_rows: Int = 1,
     ) raises:
-        comptime SCAN_TPB = Self.TPB * AFT_RF_SCAN_WIDTH_SCALE
+        comptime SCAN_TPB = Self.TPB
         var n_blocks = ceildiv(max_slots, SCAN_TPB)
         # DEVIATION 2001: the staging trio holds whichever functor the
         # flag selects. `OPS_BYTES == size_of[Ops]()` when the flag is
@@ -1881,7 +1870,7 @@ def launch_node_split_kernel[
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[OpsST]()
         )
-        launch_inclusive_scan_by_key[OpsST, TPB * AFT_RF_SCAN_WIDTH_SCALE, scan_sab](
+        launch_inclusive_scan_by_key[OpsST, TPB, scan_sab](
             ctx,
             ops_ptr,
             n_slots,
@@ -1927,7 +1916,7 @@ def launch_node_split_kernel[
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[OpsT]()
         )
-        launch_inclusive_scan_by_key[OpsT, TPB * AFT_RF_SCAN_WIDTH_SCALE, scan_sab](
+        launch_inclusive_scan_by_key[OpsT, TPB, scan_sab](
             ctx,
             ops_ptr,
             n_slots,
@@ -2010,16 +1999,8 @@ def launch_node_split_kernel[
 # ===========================================================================
 
 
-# AFT F05: four coalesced row stripes/lane in the existing label+weight
-# gather, preserving each sampled position and the sampler's entire stream.
-# The tile amortizes lane scheduling and keeps adjacent lanes on adjacent
-# positions; no sorting or sample-selection change is part of the candidate.
-# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
-comptime AFT_RF_GATHER_ROWS = 4 if (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and is_defined["MOJOLEARN_AFT_F05"]()
-) else 1
+# TOMBSTONE: MOJOLEARN_AFT_F05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F05.patch; record in docs/TOMBSTONES.md.
 
 
 def gather_sampled_order_kernel[
@@ -2036,21 +2017,19 @@ def gather_sampled_order_kernel[
     """DEVIATION 2001's once-per-tree gather (see the block above). One
     thread per sampled position; `gather_weights` is the runtime
     `has_sample_weight` (Int32 per the kernel-scalar rule)."""
-    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_RF_GATHER_ROWS + Int(thread_idx.x)
-    comptime for r in range(AFT_RF_GATHER_ROWS):
-        var i = first + r * Int(block_dim.x)
-        if i < Int(n_sampled_rows):
-            var src = Int(row_ids[unsafe_offset=i])
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_sampled_rows):
+        var src = Int(row_ids[unsafe_offset=i])
+        comptime if sabotage == 1:
+            # SABOTAGE: broadcast position 0's row -- every label collapses.
+            src = Int(row_ids[unsafe_offset=0])
+        labels_s[unsafe_offset=i] = labels[unsafe_offset=src]
+        if gather_weights != Int32(0):
+            var w = sample_weight[unsafe_offset=src]
             comptime if sabotage == 1:
-                # SABOTAGE: broadcast position 0's row -- every label collapses.
-                src = Int(row_ids[unsafe_offset=0])
-            labels_s[unsafe_offset=i] = labels[unsafe_offset=src]
-            if gather_weights != Int32(0):
-                var w = sample_weight[unsafe_offset=src]
-                comptime if sabotage == 1:
-                    # SABOTAGE: multiplicative, exact in fp32.
-                    w = w * Float32(2.0)
-                sample_weight_s[unsafe_offset=i] = w
+                # SABOTAGE: multiplicative, exact in fp32.
+                w = w * Float32(2.0)
+            sample_weight_s[unsafe_offset=i] = w
 
 
 def launch_gather_sampled_order_kernel[
@@ -2080,7 +2059,7 @@ def launch_gather_sampled_order_kernel[
         sample_weight_s.unsafe_origin_cast[MutAnyOrigin](),
         Int32(n_sampled_rows),
         Int32(1) if gather_weights else Int32(0),
-        grid_dim=ceildiv(n_sampled_rows, TPB * AFT_RF_GATHER_ROWS),
+        grid_dim=ceildiv(n_sampled_rows, TPB),
         block_dim=TPB,
     )
 
@@ -2195,27 +2174,24 @@ def leaf_kernel[
             objective.IncrementHistogram(partials.unsafe_offset(logical),Int32(1),Int32(0),label,dataset,stat)
             pos += Int(block_dim.x)
         barrier()
-        comptime if not T14_EXACT:
-            lane = Int(thread_idx.x)
-            while lane < 128:
-                moments[unsafe_offset=lane] = sf64_from_f32(objective.LabelMoment(partials[unsafe_offset=lane]).cast[DType.float32]())
-                lane += Int(block_dim.x)
-            barrier()
+        # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        lane = Int(thread_idx.x)
+        while lane < 128:
+            moments[unsafe_offset=lane] = sf64_from_f32(objective.LabelMoment(partials[unsafe_offset=lane]).cast[DType.float32]())
+            lane += Int(block_dim.x)
+        barrier()
         var distance = 64
         while distance > 0:
             lane = Int(thread_idx.x)
             while lane < distance:
                 partials[unsafe_offset=lane] = partials[unsafe_offset=lane] + partials[unsafe_offset=lane+distance]
-                comptime if not T14_EXACT:
-                    moments[unsafe_offset=lane] = moment_pair(moments[unsafe_offset=lane],moments[unsafe_offset=lane+distance])
+                moments[unsafe_offset=lane] = moment_pair(moments[unsafe_offset=lane],moments[unsafe_offset=lane+distance])
                 lane += Int(block_dim.x)
             barrier()
             distance //= 2
         if Int(thread_idx.x) == 0:
-            comptime if T14_EXACT:
-                O.SetLeafVector(partials,dataset.num_outputs,leaves.unsafe_offset(Int(dataset.num_outputs)*node_id),objective.Scales())
-            else:
-                leaves[unsafe_offset=Int(dataset.num_outputs)*node_id] = moment_finish(moments[unsafe_offset=0],partials[unsafe_offset=0].Weight(objective.Scales()).cast[DType.float32]()).cast[O.DataT]()
+            leaves[unsafe_offset=Int(dataset.num_outputs)*node_id] = moment_finish(moments[unsafe_offset=0],partials[unsafe_offset=0].Weight(objective.Scales()).cast[DType.float32]()).cast[O.DataT]()
         return
 
     # `:228-232`
@@ -2715,10 +2691,6 @@ def build_histograms_kernel[
 comptime IDN_RF_HIST_SIMD_AGG = (
     BUILD_MODE == NUMERIC_IDENTICAL
     and not TARGET_HAS_APPLE_GPU
-    and not (
-        is_defined["MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 """fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: the warp
 aggregation below (`HIST_SIMD_AGG_DEFAULT`) in the column-tile histogram.
@@ -2726,14 +2698,15 @@ A skewed column (Istella: the median column holds 74% of its rows in one
 value) otherwise sends most of a warp to one shared-memory address, where
 the atomics retry against each other. Unweighted bins only, whose fields
 are integers: the same per-bin totals in another order, so no bit moves.
-`-D MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF` restores one atomic per lane."""
+"""
+# TOMBSTONE: MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RF_HIST_SIMD_AGG_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch; EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
 
-comptime HIST_SIMD_AGG_DEFAULT = (
-    TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
-    # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
-    and not (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-) or IDN_RF_HIST_SIMD_AGG
+comptime HIST_SIMD_AGG_DEFAULT = TARGET_HAS_APPLE_GPU or IDN_RF_HIST_SIMD_AGG
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28: in the column-tile histogram, the lanes of a SIMD group
 whose bin equals lane 0's bin add their contributions with one SIMD sum and
 lane 0 issues ONE threadgroup atomic for them; the other lanes add as
@@ -2994,53 +2967,47 @@ def launch_build_histograms_kernel[
         if dataset.has_bins:
             # NVIDIA and Apple use four-column tiles after exact Taxi/Istella
             # repeated-fit trials improved both datasets. HIP stays on the
-            # original route pending its own trial. OFF restores that route;
-            # the explicit defines remain available for other-vendor trials.
-            comptime DEFAULT4 = (
-                not is_defined["MOJOLEARN_RF_HIST_COLUMNS4_OFF"]()
-                and (
-                    TARGET_HAS_NVIDIA_GPU
-                    or TARGET_HAS_APPLE_GPU
-                    # fam-forests (2026-10-04), IDENTICAL on AMD: the
-                    # four-column tile there too (integer / fixed-point
-                    # bins added by atomics, so the same histogram cells
-                    # as the one-column route: no bit moves). `-D
-                    # MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF` restores the
-                    # one-column route on AMD.
-                    or (
-                        TARGET_HAS_AMD_GPU
-                        and BUILD_MODE == NUMERIC_IDENTICAL
-                        and not (
-                            is_defined[
-                                "MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF"
-                            ]()
-                            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-                        )
-                    )
-                )
-            )
+            # original route pending its own trial.
+            # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS4_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch; record in docs/TOMBSTONES.md.
+            # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch; record in docs/TOMBSTONES.md.
+            # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS2 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch; record in docs/TOMBSTONES.md.
+            # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS8 (force-on knob; the arm is the FAST Apple default) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch; record in docs/TOMBSTONES.md.
+            # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS8_OFF (old path; EXP:120 KEPT on Apple M3 only, the NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch; record in docs/TOMBSTONES.md.
+            # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch; EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
             comptime USE4 = (
-                DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
+                TARGET_HAS_NVIDIA_GPU
+                or TARGET_HAS_APPLE_GPU
+                # fam-forests (2026-10-04), IDENTICAL on AMD: the
+                # four-column tile there too (integer / fixed-point
+                # bins added by atomics, so the same histogram cells
+                # as the one-column route: no bit moves). `-D
+                # MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF` restores the
+                # one-column route on AMD.
+                or (
+                    TARGET_HAS_AMD_GPU
+                    and BUILD_MODE == NUMERIC_IDENTICAL
+                    and not is_defined[
+                        "MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF"
+                    ]()
+                )
             )
             comptime TILE = (10 if is_defined[
                 "MOJOLEARN_RF_HIST_COLUMNS10"
             ]() else (
+                # FAST Apple default (M3 aft-ab-rfc8: taxi 11.51 -> 11.36 s,
+                # Istella 14.38 -> 14.24 s, same hashes as 4-column tiles)
                 8 if (
-                    is_defined["MOJOLEARN_RF_HIST_COLUMNS8"]()
-                    # FAST Apple default (M3 aft-ab-rfc8: taxi 11.51 -> 11.36 s,
-                    # Istella 14.38 -> 14.24 s, same hashes as 4-column tiles)
-                    or (
-                        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-                        and TARGET_HAS_APPLE_GPU
-                        and not is_defined["MOJOLEARN_RF_HIST_COLUMNS8_OFF"]()
-                    )
-                ) else (
-                    4 if USE4 else 2
-                )
+                    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+                    and TARGET_HAS_APPLE_GPU
+                ) else 4
             ))
-            comptime ENABLED = (
-                USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
-            )
+            comptime ENABLED = USE4
             comptime COPIES = 1
             comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
                 # Actual bin bytes bound the four-column replicated footprint.
@@ -3609,10 +3576,11 @@ def small_node_split_kernel[
         ] = sp.pure
 
 
+# TOMBSTONE: MOJOLEARN_RF_FBS_WARP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FBS_WARP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime FBS_WARP_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_RF_FBS_WARP_OFF"]()
 )
 """FAST on Apple: `find_best_splits` gives each (node, column) ONE SIMD
 group instead of a 128-thread block (`find_best_splits_warp_kernel`). The
@@ -3623,16 +3591,9 @@ lane's bins, and lane 0 publishes through the same `_publish_to_global`.
 At depth a level holds hundreds of thousands of (node, column) cells, each
 of which paid a 128-thread block and a barrier-bound scan."""
 
-# AFT F03: two small-histogram split cells per block instead of four.
-# This is the device-loop-reachable small-work split scheduler: the older
-# small_node_split path only runs host-staged batches. Halving cells halves
-# this kernel's shared carve and changes occupancy, not candidate coverage.
-# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
-comptime FBS_WARP_CELLS = 2 if (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and is_defined["MOJOLEARN_AFT_F03"]()
-) else 4
+# TOMBSTONE: MOJOLEARN_AFT_F03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F03.patch; record in docs/TOMBSTONES.md.
+comptime FBS_WARP_CELLS = 4
 
 
 def find_best_splits_warp_kernel[
@@ -4014,15 +3975,12 @@ def bin_dataset_kernel[dtype: DType](
         )
         var b = lower_bound_aspace(q, n_bins, data[unsafe_offset=off])
         comptime if T08:
-            var bin_offset = Int(col)*Int(n_rows)+i
-            comptime if T08_LAYOUT == 1:
-                bin_offset = i*Int(n_cols)+Int(col)
-            elif T08_LAYOUT == 3:
-                bin_offset = ((i//32)*Int(n_cols)+Int(col))*32+i%32
-            comptime if T08_BITS == 16:
-                bins.unsafe_bitcast[UInt16]()[unsafe_offset=bin_offset] = UInt16(Int(b))
-            else:
-                bins[unsafe_offset=bin_offset] = UInt8(Int(b))
+            # TOMBSTONE: MOJOLEARN_TREES_T08_LAYOUT (unmeasured knob; layout 1 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+            # TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured knob; 8 bits kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+            # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+            var bin_offset = i*Int(n_cols)+Int(col)
+            bins[unsafe_offset=bin_offset] = UInt8(Int(b))
         else:
             if bins_row_major != 0:
                 bins[unsafe_offset = i * Int(n_cols) + Int(col)] = UInt8(Int(b))
