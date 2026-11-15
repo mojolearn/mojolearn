@@ -13,7 +13,6 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
     ANN3_HOST_PASSES,
-    ANN3_ROW_THREADS,
     IDN_PQ_DEVICE_CODEBOOKS,
     IDN_PQ_TRAINSET_STRIDED,
     IDN_PQ_TRAIN_ROWS_PER_CODE,
@@ -66,32 +65,15 @@ def residual_kernel(count: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int
         pq_residual_cell(e, x, centers, labels, Int(dim), Int(rot_dim), dst)
 
 
-def residual_rows_kernel(n: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int32, rot_dim: Int32, dst: F32P):
-    """`residual_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
-    `ANN3_ROW_THREADS`): thread i runs `pq_residual_cell` for its row's
-    rot_dim cells in order. A cell reads its own inputs and writes its own
-    word, so the words are the ones one thread per cell writes."""
-    var i = _tid()
-    if i < Int(n):
-        var rd = Int(rot_dim)
-        for c in range(rd):
-            pq_residual_cell(i * rd + c, x, centers, labels, Int(dim), rd, dst)
-
-
 def _enqueue_residual(
     ctx: DeviceContext, n: Int, dim: Int, rot_dim: Int, x: F32P, centers: F32P, labels: I32P, dst: F32P,
 ) raises:
     """The residual launch: one thread per row under `ANN3_ROW_THREADS`, one
     per cell otherwise."""
-    comptime if ANN3_ROW_THREADS:
-        ctx.enqueue_function[residual_rows_kernel](
-            Int32(n), x, centers, labels, Int32(dim), Int32(rot_dim), dst, grid_dim=_grid(n), block_dim=TPB,
-        )
-    else:
-        ctx.enqueue_function[residual_kernel](
-            Int32(n * rot_dim), x, centers, labels, Int32(dim), Int32(rot_dim), dst,
-            grid_dim=_grid(n * rot_dim), block_dim=TPB,
-        )
+    ctx.enqueue_function[residual_kernel](
+        Int32(n * rot_dim), x, centers, labels, Int32(dim), Int32(rot_dim), dst,
+        grid_dim=_grid(n * rot_dim), block_dim=TPB,
+    )
 
 
 def assign_kernel(count: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32, pq_len: Int32, n_codes: Int32, codes: I32P):
@@ -658,16 +640,6 @@ def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P,
         sq_encode_cell(e, r, Int(dim), vmin, delta, codes)
 
 
-def sq_encode_rows_kernel(n: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P, codes: I32P):
-    """`sq_encode_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
-    `ANN3_ROW_THREADS`): the row's dim cells in order, each `sq_encode_cell`."""
-    var i = _tid()
-    if i < Int(n):
-        var d = Int(dim)
-        for c in range(d):
-            sq_encode_cell(i * d + c, r, d, vmin, delta, codes)
-
-
 def ivf_sq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
@@ -706,14 +678,9 @@ def ivf_sq_build_device(
     else:
         _sq_range_enqueue(ctx, dr, n, dim, dvmin, ddelta)
     st.mark(ctx, "range")
-    comptime if ANN3_ROW_THREADS:
-        ctx.enqueue_function[sq_encode_rows_kernel](Int32(n), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
-                                                    ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n),
-                                                    block_dim=TPB)
-    else:
-        ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
-                                               ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
-                                               block_dim=TPB)
+    ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                           ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
+                                           block_dim=TPB)
     ctx.synchronize()
     vmin = download_f32(ctx, dvmin, dim)
     delta = download_f32(ctx, ddelta, dim)

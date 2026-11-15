@@ -82,7 +82,7 @@ comptime ANN3_HOST_PASSES = True
 #: on the same words: no bit moves.
 # TOMBSTONE: MOJOLEARN_ANN3_ROW_THREADS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 74902fa9a1.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_ROW_THREADS.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_ROW_THREADS = False
+# (Sweep 2026-11-15: comptime ANN3_ROW_THREADS removed; its two readers in x_ann/ivf_pq_device.mojo folded, residual_rows_kernel and sq_encode_rows_kernel deleted.)
 
 #: FAST on Apple: the IVF scan's top-k (k <= 16) is one launch per chunk of
 #: queries: each thread keeps its partial top-k in registers, the threadgroup
