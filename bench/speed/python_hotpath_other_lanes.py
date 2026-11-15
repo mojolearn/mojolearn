@@ -11,7 +11,7 @@ import json, math, os, sys, time
 import numpy as np
 import mojolearn  # noqa: F401
 from mojolearn._array import Array
-from mojolearn import _labels, linear_model as LM, ensemble as EN, randomforest as RF
+from mojolearn import _bufcheck, _labels, linear_model as LM, ensemble as EN, randomforest as RF
 from mojolearn import _metrics_impl as M, _gbdt_adapters as GA, _svm_impl as SV
 
 arr = Array.from_buffer
@@ -97,7 +97,7 @@ def _(n, r):
     w = arr(r.random(n, dtype=np.float32))
 
     def run():
-        wv = _labels.flat_view(w, "f")
+        wv = _bufcheck.flat_view(w, "f")
         return min(wv) < 0, max(wv) > 0
     return run
 
@@ -107,7 +107,7 @@ def _(n, r):
     order = arr(r.permutation(n).astype(np.int64))
 
     def run():
-        ov = _labels.flat_view(order, "q")
+        ov = _bufcheck.flat_view(order, "q")
         bad = min(ov) < 0 or max(ov) >= n or len(set(ov)) != n
         return bad, order.astype("<u4")
     return run
@@ -118,7 +118,7 @@ def _(n, r):
     x = arr(np.asfortranarray(r.integers(0, 50, (n, 10)).astype(np.float32)))
 
     def run():
-        xv = _labels.flat_view(x, "f")
+        xv = _bufcheck.flat_view(x, "f")
         return [len(set(xv[f * n:(f + 1) * n])) for f in range(10)]
     return run
 
