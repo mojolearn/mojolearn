@@ -116,6 +116,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): XN_FAST_SCHI2_MOJO_MT_OFF (FAST+Apple rollback to Python MT19937 draws in SkewedChi2Sampler.fit) is gone; the Mojo draws are the FAST+Apple path (istella 9.0 -> 2.2 ms, byte-identical); restore: experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): XN_FAST_CLS2_OCSVM_RES_OFF (FAST+Apple rollback to the downloaded OneClassSVM Gram) is gone; the resident Gram is the FAST+Apple path (ocsvm taxi -77%, quality identical, KEPT 417ba1ded); restore: experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_RBFTILE_OFF (FAST+Apple rollback to the per-cell SVGP scaled rbf) is gone; the tiled launch is the FAST+Apple path (istella 336.3 -> 299.1 ms, w2-svgp-rbftile-q PASS); restore: experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch"
     return True
 
 

@@ -1990,11 +1990,10 @@ def op_ocsvm_labels(
 #: features ascending) and `unary_item`'s identity step. M3, one run per
 #: arm: istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q
 #: SVGP-FAST-PAIR PASS (r2/rmse/elbo gates; A r2 taxi -0.19498, istella
-#: -0.10602). MOJOLEARN_SVGP_FAST_RBFTILE_OFF restores the per-cell kernel.
-comptime SVGP_FAST_RBFTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"]()
-)
+#: -0.10602). The per-cell kernel stays where neither tiled switch is on.
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_RBFTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 9152d5f19c.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: X6 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
 #: tiled launch. Each cell is `kernel_item`'s K_RBF chain (`_sub`, the pinned
 #: `identical_mul_add`, features ascending from +0 over exactly d) and
