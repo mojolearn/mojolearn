@@ -58,12 +58,12 @@ from x_neighbors.nan_cells_device import (
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
 from x_neighbors.items import XN_IMPUTE_TIE_MEAN, knn_impute_tie_mean_item
-from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
+from x_neighbors.items import XN_TREE, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, xn_finite_behind,
-    absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
+    absdiff_sum_k0, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
@@ -91,12 +91,11 @@ def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: In
     ctx.enqueue_function[absdiff_sum_k0](
         a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
     )
-    comptime if XN_TREE_ON:
-        # lane apple-fast-purity: the partials folded by one block of XN_TREE
-        # threads (`xn_tree_fold`'s steps), not by one thread
-        ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
-    else:
-        ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+    # lane apple-fast-purity: the partials folded by one block of XN_TREE
+    # threads (`xn_tree_fold`'s steps), not by one thread
+    # TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
+    ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
 
 
 comptime _XN_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, XN_TREE * 4]()

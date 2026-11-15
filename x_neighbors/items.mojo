@@ -636,12 +636,12 @@ def _fold_parts(part: FP, nb: Int) -> Float32:
 
 #: lane apple-fast-purity (2026-10-03): the absolute-difference sum's
 #: partials fold in a fixed tree, so the device folds them with one block of
-#: XN_TREE threads instead of one thread (`-D MOJOLEARN_PURITY_4_OFF`: the
-#: ascending chain). Slot s folds partials s, s + XN_TREE, ... from zero,
+#: XN_TREE threads instead of one thread. Slot s folds partials s, s + XN_TREE, ... from zero,
 #: ascending; then halving: slot s += slot s + h for h = XN_TREE / 2 .. 1.
 #: The host column runs the same steps, so every column has the same word.
 comptime XN_TREE = 256
-comptime XN_TREE_ON = not is_defined["MOJOLEARN_PURITY_4_OFF"]()
+# TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+# Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -1174,31 +1174,25 @@ def absdiff_part_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
 
 
 def absdiff_fin_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
-    """Stage 2 of 2, ONE item: the partials folded (the XN_TREE order;
-    ascending under -D MOJOLEARN_PURITY_4_OFF)."""
-    comptime if XN_TREE_ON:
-        res.unsafe_store(0, xn_tree_fold(part, xn_fold_blocks(count)))
-    else:
-        res.unsafe_store(0, _fold_parts(part, xn_fold_blocks(count)))
+    """Stage 2 of 2, ONE item: the partials folded (the XN_TREE order)."""
+    # TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
+    res.unsafe_store(0, xn_tree_fold(part, xn_fold_blocks(count)))
 
 
 def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
     """sum |a - b| over every element, ONE host item in the blocked order of
     `absdiff_part_item` + `absdiff_fin_item` (the resident label-propagation
     loops' convergence test, the same bits as the `absdiff_sum` op)."""
-    comptime if XN_TREE_ON:
-        var nb = xn_fold_blocks(count)
-        var parts = List[Float32](length=max(nb, 1), fill=Float32(0))
-        var pp = FP(unsafe_from_address=Int(parts.unsafe_ptr()))
-        for blk in range(nb):
-            pp.unsafe_store(blk, _absdiff_block(a, b, blk, count))
-        res.unsafe_store(0, xn_tree_fold(pp, nb))
-        _ = parts^
-    else:
-        var acc = Float32(0)
-        for blk in range(xn_fold_blocks(count)):
-            acc = _add(acc, _absdiff_block(a, b, blk, count))
-        res.unsafe_store(0, acc)
+    # TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
+    var nb = xn_fold_blocks(count)
+    var parts = List[Float32](length=max(nb, 1), fill=Float32(0))
+    var pp = FP(unsafe_from_address=Int(parts.unsafe_ptr()))
+    for blk in range(nb):
+        pp.unsafe_store(blk, _absdiff_block(a, b, blk, count))
+    res.unsafe_store(0, xn_tree_fold(pp, nb))
+    _ = parts^
 
 
 # DEVIATION 5209 (row 123)
