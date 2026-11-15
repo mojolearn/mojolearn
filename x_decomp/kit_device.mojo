@@ -26,8 +26,6 @@ enqueued launch, with no sync:
 
 Host floats a launch reads are held (`hold_f`, `hold_i`) until the next
 sync, so an enqueued upload never reads freed memory."""
-from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
-from experiments.classical_identical_ideas.linear_controls import C23_MCD, C28_BUCKET_SOLVES
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -48,7 +46,6 @@ from x_decomp.device import (
     gamma_kernel,
     gemm_scratch,
     launch_colsum,
-    launch_classical_code_rows,
     launch_ew,
     launch_gemm,
     launch_gemm_ordered,
@@ -70,30 +67,16 @@ from x_decomp.device import (
     XD_FAST_SVD_ONE_BLOCK,
     XD_EIGH_ONE_BLOCK_N,
 )
-from x_decomp.rr_block import IDN_EIGH_BLOCK
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.kit import (
     Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
-from x_decomp.classical_device import contrast_kernel
-from core.blocked_moments import bm_centered_gram_panels
-from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
 from std.atomic import Atomic
 from std.builtin.sort import sort
 from core.device_zero import enqueue_fill
 from core.device_fold import device_exclusive_scan_total_from
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
-from cholesky.checks.potrf import (
-    CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
-)
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
-from core.identity_trace import IdentityTrace
-from cholesky.chol_ops import (
-    CHOL_OPS_FIT, chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower,
-)
-from x_decomp.jacobi_par import pj_identity_kernel
-from x_decomp.mcd import IDN_MCD_CHOL
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import pool_buffer, _pool_buf_view, _ptr, pool_alloc, pool_free
@@ -647,22 +630,6 @@ struct DKit(Movable):
         return out^
 
     # ---- the kit's calls (Kit's operands, modes and float32 scalars)
-    def classical_centered_gram(self, X: DMat, means: DMat) raises -> DMat:
-        var out = DMat(X.c, X.c)
-        if X.c > 0:
-            # C23_MCD (lane classical-decomp): the panel-256 reference cell's
-            # value, row-parallel (core/blocked_moments.mojo)
-            bm_centered_gram_panels(self.ctx, out.p(), X.p(), means.p(), X.r, X.c, C23_MCD_LEAF_ROWS)
-        return out^
-
-    def classical_contrast(self, Y: DMat, fun: Int, alpha: Float64, mut gp: DMat) raises -> DMat:
-        var gx = DMat(Y.r, Y.c)
-        gp = DMat(Y.r, Y.c)
-        if Y.n() > 0:
-            self.ctx.enqueue_function[contrast_kernel](Y.p(), gx.p(), gp.p(), Int32(Y.n()), Int32(fun), Float32(alpha),
-                                                       grid_dim=_blocks(Y.n()), block_dim=TPB)
-        return gx^
-
     def ew1(self, op: Int, A: DMat, s: Float64) raises -> DMat:
         var out = DMat(A.r, A.c)
         if A.n() == 0:
@@ -920,13 +887,9 @@ struct DKit(Movable):
             per = n * (k * k + 3 * k)
         var dn = self.ctx.enqueue_create_buffer[DType.float32](n)
         var ds = self.ctx.enqueue_create_buffer[DType.float32](per)
-        if C28_BUCKET_SOLVES:
-            if kind != 0:
-                var wsub = self._sub(W)
-                enqueue_fill(self.ctx, wsub, Float32(0.0))
-            launch_classical_code_rows(self.ctx, G.p(), Q.p(), W.p(), rebind[F32Ptr](ds.unsafe_ptr()), rebind[F32Ptr](dn.unsafe_ptr()),
-                                       n, k, kind, a, b, Float32(alpha), Float32(tol))
-        elif kind == 0:
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (its use here: the bucketed code-row solves) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 0794ada190.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-17-decomposition.patch.
+        if kind == 0:
             self.ctx.enqueue_function[lasso_rows_kernel](
                 G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Float32(alpha), Int32(a),
                 Float32(tol), Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
@@ -1229,25 +1192,27 @@ struct DKit(Movable):
         route (`DevExec._eigh_batch_on`: the one-block batched Jacobi with a
         batch of one) minus its wait, the same launches and words; an
         unconverged solve raises at that sync, before any host decision
-        reads a value computed from it. Above it (and under the quarantined
-        IDN_EIGH_BLOCK build) it is `eigh`. Only for callers whose every
+        reads a value computed from it. Above it it is `eigh`. Only for callers whose every
         result is followed by a kit `sync` (MinCovDet's C-step: its log
         determinant, and `_write_dev` at the end of the fit)."""
         var n = A.r
-        comptime if not IDN_EIGH_BLOCK:
-            if n >= 1 and n <= XD_EIGH_ONE_BLOCK_N:
-                var wd = DMat(1, n)
-                var vd = DMat(n, n)
-                var da = self.ctx.enqueue_create_buffer[DType.float32](n * n)
-                self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
-                var dw = self._sub(wd)
-                var dv = self._sub(vd)
-                var status = DevExec._eigh_batch_enq(self.ctx, da, 1, n, dw, dv)
-                self.eig_status.append(status^)
-                _ = da^
-                _ = dw^
-                _ = dv^
-                return _Eig(wd^, vd^)
+        # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (its use here: the quarantined block-eigh build took `eigh` at every n) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner another lane); code recoverable at 46b2b32aff.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.expdel2-17-decomposition.patch.
+        # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (its use here: the same IDN_EIGH_BLOCK test; the alias is False without _ON) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner another lane); code recoverable at 46b2b32aff.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.expdel2-17-decomposition.patch.
+        if n >= 1 and n <= XD_EIGH_ONE_BLOCK_N:
+            var wd = DMat(1, n)
+            var vd = DMat(n, n)
+            var da = self.ctx.enqueue_create_buffer[DType.float32](n * n)
+            self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+            var dw = self._sub(wd)
+            var dv = self._sub(vd)
+            var status = DevExec._eigh_batch_enq(self.ctx, da, 1, n, dw, dv)
+            self.eig_status.append(status^)
+            _ = da^
+            _ = dw^
+            _ = dv^
+            return _Eig(wd^, vd^)
         return self.eigh(A)
 
     def rev_vec(self, A: DMat) raises -> DMat:
@@ -1348,14 +1313,10 @@ struct DMcd:
         return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
 
     def emp_cov_at(self, Xs: DMat, loc: DMat) raises -> DMat:
-        # C57 retains this candidate's just-computed immutable subset mean.
-        # No reuse across support changes; the centered products are unchanged.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C23_MCD:
-            return self.k.ew1(OP_SCALE, self.k.classical_centered_gram(Xs, loc), 1.0 / Float64(Xs.r))
-        comptime if C57_CANDIDATE_STATE:
-            var Xc = self.k.ew2(OP_SUB, Xs, loc)
-            return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C23_MCD (its use here: the centered-Gram covariance arm) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 7b5151da9b.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.expdel2-17-decomposition.patch.
+        # TOMBSTONE: MOJOLEARN_C57_CANDIDATE_STATE (its use here: the covariance centred at the candidate's mean) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-07-base); code recoverable at 3b6b933bcc.
+        # Restore: git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.expdel2-17-decomposition.patch.
         return self.emp_cov(Xs)
 
     def mahal(self, X: DMat, loc: DMat, P: DMat) raises -> DMat:
@@ -1379,100 +1340,6 @@ struct DMcd:
             )
         return self.k.mm(self.k.ew2(OP_MUL, e.vd, inv), e.vd, False, True)
 
-    # ---- IDN_MCD_CHOL (x_decomp/mcd.mojo): the Cholesky C-step's pieces
-    def chol(mut self, A: DMat) raises -> DChol:
-        """`potrf_lower` on a copy of A (+0.0 ridge through `add_jitter`, the
-        profile's diagonal flush), `chol_logdet` (one wait), then L^{-1} =
-        `trsm_lower(L, I)`, enqueued. Every launch is a grid over the panel,
-        the trailing block or the right-hand sides; ~10 launches a 32-column
-        panel against the Jacobi's 2 (p - 1) a sweep. A factorization that
-        stops (not positive definite) gives log det -inf and no L^{-1}."""
-        # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
-        # by default (restored from 49e8c5b633^); the executor's Cholesky
-        # ops (one read of info + log det) are the B arm under
-        # -D MOJOLEARN_IDN_CHOL_OPS_FIT, as in DevExec.chol_inv
-        # (x_decomp/device.mojo; owed row chol-ops-fit).
-        var n = A.r
-        var L = self.k.copy(A)
-        var da = self.k._sub(L)
-        comptime if CHOL_OPS_FIT:
-            var ctx = self.k.ctx.copy()
-            var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
-            var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
-            var dld = ctx.enqueue_create_buffer[DType.float32](1)
-            var hst = ctx.enqueue_create_host_buffer[DType.int32](1)
-            var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
-            enqueue_fill(ctx, dinfo, Int32(0))
-            add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-            chol_op_factor(ctx, da, dinfo, n)
-            chol_op_logdet(ctx, da, dinfo, dscr, dld, n)
-            var li = DMat(n, n)
-            ctx.enqueue_function[pj_identity_kernel](
-                li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            var db = self.k._sub(li)
-            chol_op_solve_lower(ctx, da, db, dinfo, n, n)
-            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dinfo)
-            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
-            ctx.synchronize()
-            var info = Int(hst.unsafe_ptr().unsafe_load(0))
-            var ld = hld.unsafe_ptr().unsafe_load(0)
-            _ = dscr^
-            _ = dld^
-            _ = dinfo^
-            _ = hst^
-            _ = hld^
-            _ = db^
-            _ = da^
-            _ = L^
-            if info != 0:
-                return DChol(_neg_inf(), DMat(0, 0))
-            return DChol(Float64(ld), li^)
-        else:
-            var nb = chol_nb_for(n, CHOL_NB_PINNED)
-            var ws = self.k.ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
-            var trace = IdentityTrace()
-            add_jitter(self.k.ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-            var run = potrf_lower(self.k.ctx, da, ws, n, trace)
-            if run.info != 0:
-                self.k.ctx.synchronize()
-                _ = ws^
-                _ = da^
-                _ = L^
-                return DChol(_neg_inf(), DMat(0, 0))
-            var dwork = self.k.ctx.enqueue_create_buffer[DType.float32](n + 1)
-            var ld = chol_logdet(self.k.ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
-            var li = DMat(n, n)
-            self.k.ctx.enqueue_function[pj_identity_kernel](
-                li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            var db = self.k._sub(li)
-            trsm_lower(self.k.ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
-            # ws and dwork are idle after chol_logdet's wait; L returns to the
-            # pool, whose later users are ordered after trsm on this stream
-            _ = ws^
-            _ = dwork^
-            _ = db^
-            _ = da^
-            _ = L^
-            return DChol(Float64(ld), li^)
-
-    def mahal_chol(self, X: DMat, loc: DMat, Li: DMat) raises -> DMat:
-        """rowsum((Xc L^{-T})^2): the distances under P = L^{-T} L^{-1}."""
-        var Xc = self.k.ew2(OP_SUB, X, loc)
-        var Y = self.k.mm(Xc, Li, False, True)
-        return self.k.rowsum(self.k.ew2(OP_MUL, Y, Y))
-
-    def dist_from(mut self, X: DMat, loc: DMat, cov: DMat) raises -> DMat:
-        """The distances under cov: its Cholesky when it factors, pinvh
-        otherwise."""
-        var f = self.chol(cov)
-        self.csteps += 1
-        if f.det != _neg_inf():
-            return self.mahal_chol(X, loc, f.li)
-        var P = self.pinvh(cov)
-        return self.mahal(X, loc, P)
-
     def finish(mut self, X: DMat, mut e: DEst) raises:
         """A C-step's final distances, owed since `c_step` (lane
         mcd-per-step-cost, 2026-11-14): `dist = mahal(X - location,
@@ -1489,75 +1356,10 @@ struct DMcd:
         if e.P.r == 0:
             var P = self.pinvh(e.cov)
             e.dist = self.mahal(X, e.loc, P)
-        elif e.p_chol:
-            e.dist = self.mahal_chol(X, e.loc, e.P)
         else:
             e.dist = self.mahal(X, e.loc, e.P)
         e.P = DMat(0, 0)
         e.owed = False
-
-    def c_step_chol(
-        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat
-    ) raises -> DEst:
-        """`c_step` with the Cholesky's log determinant and distances
-        (IDN_MCD_CHOL; x_decomp/mcd.mojo `Mcd.c_step_chol` is the host
-        column): the same control flow, statement for statement; the final
-        distances owed (`finish`)."""
-        var iters = n_iter
-        var dist = DMat(0, 1)
-        var sel: DMat
-        if not has_init:
-            self.draws += 1
-            var r = self.k.rand(1, X.r, self.seed, 1000 + self.draws, 0)
-            sel = self.k.smallest_dev(r, h)
-        else:
-            var d0 = self.dist_from(X, loc0, cov0)
-            sel = self.k.smallest_dev(d0, h)
-            dist = d0^
-        var Xs = self.k.gather_dev(X, sel)
-        var loc = self.k.colmean(Xs)
-        var cov = self.emp_cov_at(Xs, loc)
-        var f = self.chol(cov)
-        self.csteps += 1
-        var det = f.det
-        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
-        var P = DMat(0, 0)
-        var p_chol = False
-        var has_p = False
-        if det == _neg_inf():
-            has_p = True
-        var prev_det = _pos_inf()
-        var have_prev = False
-        var prev_loc = DMat(0, 0)
-        var prev_cov = DMat(0, 0)
-        var prev_sel = DMat(0, 1)
-        while det < prev_det and iters > 0 and det != _neg_inf():
-            P = self.k.copy(f.li)             # det is finite: cov factored
-            p_chol = True
-            has_p = True
-            var dd = self.mahal_chol(X, loc, P)
-            prev_loc = loc^
-            prev_cov = cov^
-            prev_sel = sel^
-            have_prev = True
-            prev_det = det
-            sel = self.k.smallest_dev(dd, h)
-            dist = dd^
-            Xs = self.k.gather_dev(X, sel)
-            loc = self.k.colmean(Xs)
-            cov = self.emp_cov_at(Xs, loc)
-            f = self.chol(cov)
-            self.csteps += 1
-            det = f.det
-            iters -= 1
-        if not has_p:
-            raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
-        var use_prev = have_prev and det > prev_det
-        if iters == 0:
-            use_prev = False
-        if use_prev:
-            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, DMat(0, 0), False, False)
-        return DEst(loc^, cov^, det, sel^, DMat(0, 1), P^, p_chol, True)
 
     def c_step(
         mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat
@@ -1566,8 +1368,6 @@ struct DMcd:
         distance resident (lane cpu3-core): the host reads only the log
         determinants the loop branches on (and the NaN refusal words). The
         final distances are owed to `finish` (lane mcd-per-step-cost)."""
-        comptime if IDN_MCD_CHOL:
-            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0)
         var iters = n_iter
         var dist = DMat(0, 1)
         var sel: DMat
@@ -1624,8 +1424,8 @@ struct DMcd:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, DMat(0, 0), False, False)
-        return DEst(loc^, cov^, det, sel^, DMat(0, 1), P^, False, True)
+            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, DMat(0, 0), False)
+        return DEst(loc^, cov^, det, sel^, DMat(0, 1), P^, True)
 
     def select_random(
         mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut output: DCands
@@ -1727,35 +1527,23 @@ struct DCands(Movable):
         self.det.append(det)
 
 
-struct DChol(Movable):
-    """IDN_MCD_CHOL: a covariance's Cholesky log determinant (-inf when the
-    factorization stopped) and L^{-1} (empty then)."""
-    var det: Float64
-    var li: DMat
-
-    def __init__(out self, det: Float64, var li: DMat):
-        self.det = det
-        self.li = li^
-
-
 struct DEst(Movable):
     """`Est` with every matrix resident: location, covariance, the log
     determinant, the support rows (an index vector) and the distances.
     `owed`: the final distances are not computed yet (`DMcd.finish` runs
-    them from P, the precision the loop last used (L^{-1} when `p_chol`),
-    or from pinvh(cov) when P is empty)."""
+    them from P, the precision the loop last used, or from pinvh(cov)
+    when P is empty)."""
     var loc: DMat
     var cov: DMat
     var det: Float64
     var sel: DMat
     var dist: DMat
     var P: DMat
-    var p_chol: Bool
     var owed: Bool
 
     def __init__(
         out self, var loc: DMat, var cov: DMat, det: Float64, var sel: DMat, var dist: DMat, var P: DMat,
-        p_chol: Bool, owed: Bool,
+        owed: Bool,
     ):
         self.loc = loc^
         self.cov = cov^
@@ -1763,7 +1551,6 @@ struct DEst(Movable):
         self.sel = sel^
         self.dist = dist^
         self.P = P^
-        self.p_chol = p_chol
         self.owed = owed
 
 

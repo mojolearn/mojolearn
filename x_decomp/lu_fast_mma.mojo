@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (FAST+Apple default, rollback `-D MOJOLEARN_LU_FAST_MMA_OFF`),
+"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (FAST+Apple default),
 the blocked LU with delayed trailing updates on the Apple matrix unit (FAST
-on Apple only; needs LU_FAST_STEP1, so `-D MOJOLEARN_LU_FAST_STEP1_OFF`
-turns it off too).
+on Apple only; needs LU_FAST_STEP1).
 
 Main's blocked route (`launch_lu`, panel width LU_PANEL_NB = 32) updates the
 WHOLE trailing square after every 32-column panel with `lu_trail_rb_kernel`
@@ -53,8 +52,6 @@ near-tie. IDENTICAL and every other vendor compile main's route unchanged.
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -67,11 +64,14 @@ from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 #: DEFAULT in FAST + Apple (lane/apple-fast-w2-linalg). M3, one run per arm:
 #: lu-factor synthetic 971.7 -> 849.3 ms, lu-solve synthetic 971.9 -> 852.1 ms;
 #: w2-lumma-quality PASS (factor/solve residual gates, info equal, finite).
-#: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE. `-D MOJOLEARN_LU_FAST_MMA_OFF`
-#: restores main's per-32-column scalar trailing updates.
-comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJOLEARN_LU_FAST_MMA_OFF"]()
+#: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE.
+# TOMBSTONE: MOJOLEARN_LU_FAST_MMA_OFF (old path: main's per-32-column scalar trailing updates beside the FAST Apple default; EXP:1401 READY-AB, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 53eb025cc0.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE
 #: The outer block (the big GEMM's k). A multiple of the 32-column panel.
-comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
+# TOMBSTONE: MOJOLEARN_LU_FAST_MMA_NB (width knob: other outer-block widths, no A/B recorded; 256 kept) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at d5d5200eb1.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_NB.patch; record in docs/TOMBSTONES.md.
+comptime LFM_NB = 256
 comptime LFM_PANEL = 32
 # TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
 # at f59d913b0b (F02: the trailing subtract through scoped_kernel's SUBTRACT epilogue, with its shared_sub_record counter).

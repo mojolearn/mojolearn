@@ -29,20 +29,10 @@
    "bits_change": false,
    "status": "new",
    "note": "Ordered boosting's per-tree scratch (two search planes, bins, noise partials and terms, bootstrap draws, |planes|, magnitudes) allocated once per fit off the FAST wide path, as fast_planes/fast_bins are; every cell written before it is read each tree. Bit-neutral. NOT COMPILED, NOT MEASURED."
-  },
-  "fa_svd_group": {
-   "define": "MOJOLEARN_FA_SVD_GROUP_OFF",
-   "kind": "switch",
-   "arms": {"on": [], "off": ["MOJOLEARN_FA_SVD_GROUP_OFF"]},
-   "default": "on",
-   "source": ["x_decomp/fa_fast.mojo:193", "x_decomp/fa_fast.mojo:970"],
-   "binding": "_mojolearn_x_decomp (FAST Apple build only)",
-   "bits_change": false,
-   "status": "new",
-   "note": "FactorAnalysis FAST Apple grid SVD: 4 Jacobi sweeps behind one wait with xd_flag_first_kernel (main's IDENTICAL svd driver) instead of one wait and readback per sweep. Bit-neutral. NOT COMPILED, NOT MEASURED."
   }
  },
  "removed": [
-  {"define": "MOJOLEARN_FA_FAST_GRAM_SPREAD", "control": "fa_gram_spread", "reason": "DELETED 2026-11-09 (lane k1-delete-unverdicted-fast; recoverable at f59d913b0b; patch experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch): never measured (OPEN, M3 FAST A/B owed, Apple FAST investment stopped)"}
+  {"define": "MOJOLEARN_FA_FAST_GRAM_SPREAD", "control": "fa_gram_spread", "reason": "DELETED 2026-11-09 (lane k1-delete-unverdicted-fast; recoverable at f59d913b0b; patch experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch): never measured (OPEN, M3 FAST A/B owed, Apple FAST investment stopped)"},
+  {"define": "MOJOLEARN_FA_SVD_GROUP_OFF", "control": "fa_svd_group", "reason": "DELETED 2026-11-15 (lane/expdel2-17-decomposition; recoverable at ab9f4a5c5d; patch experiments/removed/MOJOLEARN_FA_SVD_GROUP_OFF.patch): old path (one readback per sweep) beside the bit-neutral default, EXP:2145 DEFAULT; V2 rule e"}
  ]
 }

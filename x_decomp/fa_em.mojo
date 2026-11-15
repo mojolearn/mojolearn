@@ -12,8 +12,7 @@ stopping test in the same order. So the IDENTICAL words are the Python
 driver's on every column; x_decomp/fa_em_dev.mojo runs the same statements
 on resident device matrices."""
 from std.math import inf, sqrt
-from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
-from x_decomp.cells import F32Ptr, OP_CLASSICAL_FA_LOAD
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT,
@@ -116,11 +115,10 @@ def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], 
         var Vt = mat_rows(Vfull, 0, nc)
         var sk = cols_of(s2, 0, nc)
         var unexp = dsum(s2, nc, d) if nc < d else 0.0
-        comptime if C27_FA_COMPONENTS:
-            W = k.ew3(OP_CLASSICAL_FA_LOAD, Vt, mat_vec_t(sk.copy()), sqrt_psi, 0.0)
-        else:
-            W = k.ew2(OP_MUL, Vt, mat_vec_t(k.ew1(OP_SQRT, k.ew1(OP_MAXS, k.ew1(OP_ADDS, sk, -1.0), 0.0), 0.0)))
-            W = k.ew2(OP_MUL, W, sqrt_psi)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS (its use here: the fused loadings cell) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 60183a47dc.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.expdel2-17-decomposition.patch.
+        W = k.ew2(OP_MUL, Vt, mat_vec_t(k.ew1(OP_SQRT, k.ew1(OP_MAXS, k.ew1(OP_ADDS, sk, -1.0), 0.0), 0.0)))
+        W = k.ew2(OP_MUL, W, sqrt_psi)
         var lsk = k.ew1(OP_LOGS, sk, FA_LOG_FLOOR)
         var slog = dsum(lsk, 0, lsk.n())
         var lps = k.ew1(OP_LOGS, psi, FA_LOG_FLOOR)

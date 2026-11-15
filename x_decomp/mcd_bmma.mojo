@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MCD_BMMA (lane/apple-fast-w2-mcd2, 2026-10-04, DEFAULT in FAST +
-Apple, rollback MOJOLEARN_MCD_BMMA_OFF): ONE launch of the matrix-unit GEMM over every candidate of an
+Apple; the _OFF rollback was deleted 2026-11-15): ONE launch of the matrix-unit GEMM over every candidate of an
 MCD phase instead of one `_launch_gemm_mma` per candidate.
 
 Why: x_decomp/mcd_fast.mojo's MCD_BATCH_MMA default enqueues three GEMMs per

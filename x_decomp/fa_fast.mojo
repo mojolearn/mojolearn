@@ -4,8 +4,7 @@
 main 2026-10-04 by lane/apple-fast-rec-fa-robust, every define default OFF and
 READY-AB): FactorAnalysis's fit and transform on device-resident operands.
 The recovery keeps main's two-pass mean and its cancellation-free psi update
-(lane/apple-fast-quality-glmfa) on these routes; LIVEBUF turns
-ITER_DEVICE on. NOT an IDENTICAL path: the binding
+(lane/apple-fast-quality-glmfa) on these routes. NOT an IDENTICAL path: the binding
 registers these entries only under `FA_FAST_APPLE` (a FAST build for the
 Apple GPU), each route only when its `-D MOJOLEARN_FA_<NAME>` define is set
 (read with `is_defined`, never an env read), and python/mojolearn/
@@ -25,7 +24,7 @@ defines (docs/apple-fast/ab/fa.md):
   becomes the eigh of D G D / n (same spectrum: R^T R = G), the route main
   already takes when n < d. The Python loop stays Python.
 - MOJOLEARN_FA_ITER_DEVICE (the FAST + Apple default since 2026-10-04,
-  rab7-faiterfix; rollback MOJOLEARN_FA_ITER_DEVICE_OFF): `fa_em_py`, the
+  rab7-faiterfix; the rollback was deleted 2026-11-15): `fa_em_py`, the
   whole EM loop as one call on the
   resident G: per iteration `fa_scale_kernel` (D G D / n and sqrt(psi) +
   1e-12), the round-robin eigh (main's kernels and sweeps, no sign-flip and
@@ -33,8 +32,8 @@ defines (docs/apple-fast/ab/fa.md):
   uses), `fa_finish_kernel` (W, the psi update, the 2 d log terms) and ONE
   readback of 2 d + 4 floats; the log-likelihood is summed in float64 on the
   host in main's order and the tol test is main's. Implies GRAM_ONCE's pass.
-- MOJOLEARN_FA_LIVEBUF: ITER_DEVICE's scratch as one arena buffer (one live
-  Metal buffer instead of ~12) and W + psi read back in one copy.
+- MOJOLEARN_FA_LIVEBUF (the scratch as one arena buffer) was an unmeasured
+  opt-in arm and was deleted 2026-11-15 (docs/TOMBSTONES.md).
 - MOJOLEARN_FA_TRANSFORM_FUSED (`fa_transform_kernel`, transform as one
   launch over rows) was NEUTRAL (rab7-fatransform istella +2.0%) and was
   deleted 2026-11-15 (docs/TOMBSTONES.md).
@@ -44,14 +43,12 @@ defines (docs/apple-fast/ab/fa.md):
   R D / sqrt(n) per iteration (`fa_rs_svd_block_kernel` / `rs_round_kernel`)
   instead of the float32 eigh of D G D / n, which squared the condition
   number (Istella held-out mean_log_likelihood 92.898 against main's
-  99.487). MOJOLEARN_FA_GRAM_QOLD keeps the float32 route; GRAM_ONCE alone
-  (the Python loop) keeps it too. See FA_GRAM_DF below.
+  99.487). See FA_GRAM_DF below.
 """
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys import llvm_intrinsic
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
@@ -95,19 +92,10 @@ comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPL
 # TOMBSTONE: MOJOLEARN_FA_ALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: every FA define at once; factor-analysis istella 10300.9 -> 20530.8 ms (+99.3%, rab6-faqfix), quality noise.
 # Restore: git apply experiments/removed/MOJOLEARN_FA_ALL.patch; record in docs/TOMBSTONES.md.
-#: (FAST + Apple, default OFF) FactorAnalysis.fit forms the centred Gram G
-#: (d x d) in ONE tiled pass over the resident X (`fa_gram_tile_kernel` +
-#: `fa_gram_fold_kernel`), and the Python EM loop takes the eigh of D G D / n
-#: in place of main's QR of the n x d data and SVD of R D / sqrt(n) per
-#: iteration (the same spectrum: R^T R = G). Source lane/apple-fast-fa@3efbce2af.
-#: Prior M3 B arms (source tree): taxi 277 ms, istella 1262 ms against board
-#: 308 / 10351. Never recorded in EXPERIMENTS. Recovery fixes: main's two-pass
-#: mean and its cancellation-free psi update (lane/apple-fast-quality-glmfa,
-#: 2026-10-03) are kept on this route too; the old route had psi =
-#: var - colsum(W^2), whose float32 floor near var * 1e-7 cost Istella's
-#: held-out log-likelihood. Quality risk: G squares the condition number the
-#: QR route sees; the A/B's quality check decides.
-comptime FA_GRAM_ONCE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_GRAM_ONCE"]()
+# TOMBSTONE: MOJOLEARN_FA_GRAM_ONCE (opt-in arm, EXP:1260 HOLD-quality, no A/B of its own) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 816fd77809.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_ONCE.patch; record in docs/TOMBSTONES.md.
+# The name stays (x_decomp/decomp_owner_dev.mojo fa_flags bit 1 reads it) as the folded constant.
+comptime FA_GRAM_ONCE = False
 #: (FAST + Apple, default ON since 2026-10-04; implies GRAM_ONCE's pass) the whole EM loop as
 #: ONE binding call on the resident G (`fa_em_py`): per iteration
 #: `fa_scale_kernel`, main's round-robin eigh, `fa_finish_kernel` (order, sign,
@@ -117,36 +105,28 @@ comptime FA_GRAM_ONCE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_GRAM_ONCE"]()
 #: LIVEBUF), istella about 1253 ms against board 308 / 10351: the largest
 #: classical lead found, never recorded. Recovery fix: psi update in
 #: `fa_finish_kernel` is main's cancellation-free form (see GRAM_ONCE).
-#: LIVEBUF acts only inside this loop, so it
-#: turns it on (a lone define never builds a no-op arm).
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab7-faiterfix, with the double-float Gram FA_GRAM_DF of lane/apple-fast-
 #: fa-quality): factor-analysis istella 10299.65 -> 5636.55 ms (-45.3%),
 #: mean_log_likelihood 99.487208 -> 99.487138 (noise; the float32 Gram's
 #: 92.898 loss is gone); taxi 317.85 -> 157.98 ms (-50.3%), -14.823653 ->
 #: -14.823710 (noise). KEEP: the FAST + Apple default since then (FA_GRAM_DF
-#: with it, since FA_GRAM_DF follows FA_ITER_DEVICE); rollback
-#: -D MOJOLEARN_FA_ITER_DEVICE_OFF (the old -D name is harmless; the
-#: LIVEBUF arm still turns it on).
-comptime FA_ITER_DEVICE = FA_FAST_APPLE and (
-    not is_defined["MOJOLEARN_FA_ITER_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_FA_LIVEBUF"]()
-)
+#: with it, since FA_GRAM_DF follows FA_ITER_DEVICE).
+# TOMBSTONE: MOJOLEARN_FA_ITER_DEVICE_OFF (old path: the Python EM loop; EXP:1280 ACCEPT/DEFAULT on FAST + Apple, the one vendor FAST runs on, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at a0f1f9fb9c.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_ITER_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FA_ITER_DEVICE = FA_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_FA_EIG_SMALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: the FA EM loop's d x d eigh / SVD as ONE launch of one threadgroup (fa_rr_eigh_block_kernel, fa_rs_svd_block_kernel); in FA_ALL istella 10300.9 -> 20530.8 ms (+99.3%).
 # Restore: git apply experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch; record in docs/TOMBSTONES.md.
-#: (FAST + Apple, default OFF; implies ITER_DEVICE) the loop's scratch as one
-#: arena buffer (one live Metal buffer instead of ~14) and W + psi read back
-#: in one copy. Source lane/apple-fast-fa@3efbce2af. Prior M3 B arms
-#: (ITER_DEVICE + LIVEBUF): istella 1258 ms, taxi 168.7 ms. No failure.
-comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
+# TOMBSTONE: MOJOLEARN_FA_LIVEBUF (opt-in arm: the loop's scratch as one arena buffer, W + psi in one copy; EXP:457 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 19144bed20.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_LIVEBUF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: the FA EM convergence test on the device (double-float ll sum in fa_finish_kernel, a flag read every 4 iterations); only timed with EIG_SMALL (FA_ALL istella +99.3%), alone never timed.
 # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
 # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
 #: (FAST + Apple, QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) the
-#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
+#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it.
 #: Cause: the float32 Gram + float32 eigh of D G D / n resolve B = D G D / n
 #: only to eps ||B||, but the psi of a column the factors explain sits at
 #: relative psi_j / var_j (1e-8 on Istella) of B_jj; FA_ALL's Istella held-out
@@ -166,8 +146,9 @@ comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
 #:      the residual it must resolve is sqrt(psi / var) ~ 1e-4 >> eps.
 #: float32 numpy model (~/mojolearn-evidence/fa-quality/fa_model.py, results
 #: beside it): see docs/apple-fast/EXPERIMENTS.md `FA_GRAM_DF`.
-comptime FA_GRAM_QOLD = is_defined["MOJOLEARN_FA_GRAM_QOLD"]()
-comptime FA_GRAM_DF = FA_ITER_DEVICE and not FA_GRAM_QOLD
+# TOMBSTONE: MOJOLEARN_FA_GRAM_QOLD (old path: the float32 Gram + eigh route; EXP:1263 KEPT the QUALITY-FIX default) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 319c915ad2.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_QOLD.patch; record in docs/TOMBSTONES.md.
+comptime FA_GRAM_DF = FA_ITER_DEVICE
 #: (FAST + Apple, lane apple-slow-paths 2026-10-17) the FA_GRAM_DF loop's
 #: grid SVD enqueues FA_SVD_GROUP sweeps between two convergence readbacks,
 #: each sweep on its own flag slice with its own lowest-flag word
@@ -179,8 +160,9 @@ comptime FA_GRAM_DF = FA_ITER_DEVICE and not FA_GRAM_QOLD
 #: (the same X_DECOMP_SVD_SWEEPS bound) is found from the same flags. 4 a
 #: group: a well-conditioned R converges in ~8-12 sweeps, so the waits fall
 #: 3-4x for at most 3 identity sweeps; a size rule, not a shape rule.
-#: `-D MOJOLEARN_FA_SVD_GROUP_OFF` restores one readback per sweep.
-comptime FA_SVD_GROUP = 1 if is_defined["MOJOLEARN_FA_SVD_GROUP_OFF"]() else 4
+# TOMBSTONE: MOJOLEARN_FA_SVD_GROUP_OFF (old path: one readback per sweep; EXP:2145 DEFAULT, bit-neutral) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at ab9f4a5c5d.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_SVD_GROUP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FA_SVD_GROUP = 4
 #: a Cholesky pivot under this fraction of G_jj (2^-44, 16x the double-float
 #: word's 2^-48) drops its row: the residual left is 2^-22 of the column's
 #: norm, the float32 Householder QR's own backward error
@@ -766,40 +748,28 @@ def sub_s(a: Float32, b: Float32) -> Float32:
 
 
 struct _FaMem(Movable):
-    """The loop's device scratch: one arena buffer (FA_LIVEBUF) or one buffer
-    per slot. Slots are named by index; offsets are 64-float aligned."""
+    """The loop's device scratch: one buffer per slot (the FA_LIVEBUF arena
+    arm was deleted 2026-11-15). Slots are named by index; each buffer is
+    padded to a multiple of 64 floats."""
     var bufs: List[DeviceBuffer[DType.float32]]
     var which: List[Int]
     var offs: List[Int]
     var lens: List[Int]
-    var arena: Bool
-    var total: Int
 
-    def __init__(out self, arena: Bool):
+    def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.which = List[Int]()
         self.offs = List[Int]()
         self.lens = List[Int]()
-        self.arena = arena
-        self.total = 0
 
     def add(mut self, ctx: DeviceContext, count: Int) raises -> Int:
         var cnt = max(count, 1)
         var padded = (cnt + 63) // 64 * 64
-        if self.arena:
-            self.which.append(0)
-            self.offs.append(self.total)
-            self.total += padded
-        else:
-            self.bufs.append(ctx.enqueue_create_buffer[DType.float32](padded))
-            self.which.append(len(self.bufs) - 1)
-            self.offs.append(0)
+        self.bufs.append(ctx.enqueue_create_buffer[DType.float32](padded))
+        self.which.append(len(self.bufs) - 1)
+        self.offs.append(0)
         self.lens.append(cnt)
         return len(self.lens) - 1
-
-    def seal(mut self, ctx: DeviceContext) raises:
-        if self.arena:
-            self.bufs.append(ctx.enqueue_create_buffer[DType.float32](max(self.total, 1)))
 
     def ptr(self, s: Int) -> F32Ptr:
         return F32Ptr(unsafe_from_address=Int(self.bufs[self.which[s]].unsafe_ptr())) + self.offs[s]
@@ -1003,7 +973,7 @@ def fa_em_run(
     var h = dm // 2
     var nb = _pj_off_blocks(d)
     var ctx = xd_ctx()
-    var mem = _FaMem(FA_LIVEBUF)
+    var mem = _FaMem()
     var s_b = mem.add(ctx, d * d)
     var s_v = mem.add(ctx, d * d)
     var s_sp = mem.add(ctx, d)
@@ -1020,11 +990,9 @@ def fa_em_run(
     var s_llst = mem.add(ctx, 4)
     var s_llrec = mem.add(ctx, 2 * max_iter)
     # FA_GRAM_DF: R^T (d x d), the singular values, the grid SVD's pair flags
-    # (after W, psi A and psi B: LIVEBUF reads those three as one span)
     var s_r0 = mem.add(ctx, d * d if FA_GRAM_DF else 1)
     var s_s = mem.add(ctx, d if FA_GRAM_DF else 1)
     var s_flags = mem.add(ctx, h * FA_SVD_GROUP if FA_GRAM_DF else 1)
-    mem.seal(ctx)
     # the log-likelihood's three float64 sums (`fa_ll_terms_kernel`)
     var d_llsum = ctx.enqueue_create_buffer[DType.uint64](3)
     var h_llsum = ctx.enqueue_create_host_buffer[DType.uint64](3)
@@ -1104,24 +1072,9 @@ def fa_em_run(
     # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
     # Tried: the stop iteration and ll pairs read back from the device here.
     # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
-    comptime if FA_LIVEBUF:
-        # W, psi A and psi B are adjacent in the arena: one copy
-        var span = (mem.offs[s_pb] + mem.lens[s_pb]) - mem.offs[s_w]
-        var hout = ctx.enqueue_create_host_buffer[DType.float32](span)
-        var sall = mem.bufs[0].create_sub_buffer[DType.float32](mem.offs[s_w], span)
-        ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=sall)
-        ctx.synchronize()
-        var op = F32Ptr(unsafe_from_address=Int(hout.unsafe_ptr()))
-        for k in range(nc * d):
-            w_dst.unsafe_store(k, op.unsafe_load(k))
-        var poff = mem.offs[cur] - mem.offs[s_w]
-        for k in range(d):
-            psi_dst.unsafe_store(k, op.unsafe_load(poff + k))
-        _ = hout^
-    else:
-        ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
-        ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(cur))
-        ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
+    ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(cur))
+    ctx.synchronize()
     _ = h_llsum^
     _ = d_llsum^
     _ = hfold^

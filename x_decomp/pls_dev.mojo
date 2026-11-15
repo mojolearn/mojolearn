@@ -6,8 +6,7 @@ reads). The SVD is the executor op (`DKit.svd`, S and V^T resident) and the
 pinv's cut is taken on the device (`DKit.pinv_inv`; lane
 n9b-device-svd-qr: were the solve's words home, the order on the host, and
 s_max home for the cut). GPU binding only."""
-from experiments.classical_identical_ideas.linear_controls import C27_NORM_VECTOR
-from x_decomp.cells import F32Ptr, OP_CLASSICAL_NORM
+from x_decomp.cells import F32Ptr
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADDS, OP_DIV, OP_GTS, OP_LE, OP_MUL, OP_RECIP, OP_SCALE, OP_SELECT, OP_SQRT, OP_SUB,
     mat_from,
@@ -82,20 +81,16 @@ def power_dev(mut k: DKit, X: DMat, Y: DMat, a: PlsArgs, mut xw: DMat, mut yw: D
             xw = k.mm(Xp, y_score, False, False)
         else:
             xw = k.ew2(OP_DIV, k.mm(X, y_score, True, False), _dot_dev(k, y_score, y_score))
-        comptime if C27_NORM_VECTOR:
-            xw = k.ew3(OP_CLASSICAL_NORM, xw, _dot_dev(k, xw, xw), k.zeros(1, 1), eps)
-        else:
-            xw = k.ew2(OP_DIV, xw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, xw, xw), 0.0), eps))
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_NORM_VECTOR (its use here: the fused normalize cell) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 2b6647c32d.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.expdel2-17-decomposition.patch.
+        xw = k.ew2(OP_DIV, xw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, xw, xw), 0.0), eps))
         var x_score = k.mm(X, xw, False, False)
         if a.mode_b:
             yw = k.mm(Yp, x_score, False, False)
         else:
             yw = k.ew2(OP_DIV, k.mm(Y, x_score, True, False), _dot_dev(k, x_score, x_score))
         if a.norm_y:
-            comptime if C27_NORM_VECTOR:
-                yw = k.ew3(OP_CLASSICAL_NORM, yw, _dot_dev(k, yw, yw), k.zeros(1, 1), eps)
-            else:
-                yw = k.ew2(OP_DIV, yw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, yw, yw), 0.0), eps))
+            yw = k.ew2(OP_DIV, yw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, yw, yw), 0.0), eps))
         y_score = k.ew2(OP_DIV, k.mm(Y, yw, False, False), k.ew1(OP_ADDS, _dot_dev(k, yw, yw), eps))
         if Y.c == 1:
             break

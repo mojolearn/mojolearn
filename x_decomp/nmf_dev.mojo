@@ -17,13 +17,12 @@ NMF_CD_LOOP_CHUNK. Before, MU read 1-3 error words home per 10 iterations and
 CD 1-2 violation words per iteration."""
 # TOMBSTONE: nmf-mu-cd-host-word-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
 # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
-from experiments.classical_identical_ideas.linear_controls import C26_PRODUCTS, C26_UPDATE_FUSED
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from autograd.program_loop import LoopTimers
 from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
-from x_decomp.cells import F32Ptr, I32Ptr, OP_CLASSICAL_MU_IS, add
+from x_decomp.cells import F32Ptr, I32Ptr, add
 from x_decomp.device import xd_ctx
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,
@@ -147,20 +146,14 @@ struct _MuStep(LoopStep, Movable):
     var kind: Int
     var eps: DMat
     var one: DMat
-    var frozen_num: DMat
-    var frozen_gram: DMat
     var state: DMat
 
     def __init__(out self, M: DMat, W: DMat, H: DMat, a: NmfArgs) raises:
         var k = DKit()
         var eps = k.upload(mat_const(NMF_F32_EPS, 1, 1))
         var one = k.upload(mat_const(1.0, 1, 1))
-        var frozen_num = DMat(0, 0)
-        var frozen_gram = DMat(0, 0)
-        comptime if C26_PRODUCTS:
-            if not a.update_h and a.beta == 2.0:
-                frozen_num = k.mm(M, H, False, True)
-                frozen_gram = k.mm(H, H, False, True)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_PRODUCTS (its use here: the fixed-H products computed once) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at e46341292a.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.expdel2-17-decomposition.patch.
         self.k = k^
         self.M = _view(M)
         self.W = _view(W)
@@ -169,8 +162,6 @@ struct _MuStep(LoopStep, Movable):
         self.kind = nmf_err_kind(a.beta)
         self.eps = eps^
         self.one = one^
-        self.frozen_num = frozen_num^
-        self.frozen_gram = frozen_gram^
         self.state = DMat(1, 2)
 
     def criterion(self, mut registers: LoopRegisters, it: Int) raises:
@@ -198,12 +189,8 @@ struct _MuStep(LoopStep, Movable):
         if beta == 2.0:
             var num: DMat
             var den: DMat
-            if C26_PRODUCTS and not self.a.update_h:
-                num = _view(self.frozen_num)
-                den = self.k.mm(self.W, self.frozen_gram, False, False)
-            else:
-                num = self.k.mm(self.M, self.H, False, True)
-                den = self.k.mm(self.W, self.k.mm(self.H, self.H, False, True), False, False)
+            num = self.k.mm(self.M, self.H, False, True)
+            den = self.k.mm(self.W, self.k.mm(self.H, self.H, False, True), False, False)
             if self.a.l1w > 0:
                 den = self.k.ew1(OP_ADDS, den, self.a.l1w)
             if self.a.l2w > 0:
@@ -230,16 +217,13 @@ struct _MuStep(LoopStep, Movable):
                 den = self.k.ew1(OP_ADDS, den, self.a.l1w)
             if self.a.l2w > 0:
                 den = self.k.ew2s(OP_AXPY, den, self.W, self.a.l2w)
-            comptime if C26_UPDATE_FUSED:
-                self.k.put_gated(
-                    gate, self.W, self.k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, self.W, num, den, NMF_F32_EPS)
-                )
-            else:
-                den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
-                var delta = self.k.ew2(OP_DIV, num, den)
-                if beta == 0.0:
-                    delta = self.k.ew1(OP_SQRT, delta, 0.0)
-                self.k.put_gated(gate, self.W, self.k.ew2(OP_MUL, self.W, delta))
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED (its use here: the fused multiplicative update cell) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 9eacb23639.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.expdel2-17-decomposition.patch.
+            den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
+            var delta = self.k.ew2(OP_DIV, num, den)
+            if beta == 0.0:
+                delta = self.k.ew1(OP_SQRT, delta, 0.0)
+            self.k.put_gated(gate, self.W, self.k.ew2(OP_MUL, self.W, delta))
             if self.a.update_h:
                 R = _mu_ratio_dev(self.k, self.M, self.W, self.H, beta, P)
                 num = self.k.mm(self.W, R, True, False)
@@ -253,17 +237,11 @@ struct _MuStep(LoopStep, Movable):
                     den = self.k.ew1(OP_ADDS, den, self.a.l1h)
                 if self.a.l2h > 0:
                     den = self.k.ew2s(OP_AXPY, den, self.H, self.a.l2h)
-                comptime if C26_UPDATE_FUSED:
-                    self.k.put_gated(
-                        gate, self.H,
-                        self.k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, self.H, num, den, NMF_F32_EPS),
-                    )
-                else:
-                    den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
-                    var delta = self.k.ew2(OP_DIV, num, den)
-                    if beta == 0.0:
-                        delta = self.k.ew1(OP_SQRT, delta, 0.0)
-                    self.k.put_gated(gate, self.H, self.k.ew2(OP_MUL, self.H, delta))
+                den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
+                var delta = self.k.ew2(OP_DIV, num, den)
+                if beta == 0.0:
+                    delta = self.k.ew1(OP_SQRT, delta, 0.0)
+                self.k.put_gated(gate, self.H, self.k.ew2(OP_MUL, self.H, delta))
         loop_lap(ctx, timers, "mu_update")
         if self.a.tol > 0 and it % NMF_MU_CHECK_PERIOD == 0:
             self.criterion(registers, it)
@@ -329,8 +307,6 @@ struct _CdStep(LoopStep, Movable):
     var draws: Int
     var ident: DMat
     var eye: DMat
-    var fixed_gram: DMat
-    var fixed_cross: DMat
     var state: DMat
 
     def __init__(out self, M: DMat, W: DMat, Ht: DMat, a: NmfArgs) raises:
@@ -339,16 +315,6 @@ struct _CdStep(LoopStep, Movable):
         # the per-fit constants, up once
         var ident = k.iota_i32(kc) if not a.shuffle else DMat(0, 0)
         var eye = k.upload(mat_eye(kc)) if (a.l2w != 0.0 or a.l2h != 0.0) else DMat(0, 0)
-        var fixed_gram = DMat(0, 0)
-        var fixed_cross = DMat(0, 0)
-        comptime if C26_PRODUCTS:
-            if not a.update_h:
-                fixed_gram = k.mm(Ht, Ht, True, False)
-                fixed_cross = k.mm(M, Ht, False, False)
-                if a.l2w != 0.0:
-                    fixed_gram = k.ew2s(OP_AXPY, fixed_gram, eye, a.l2w)
-                if a.l1w != 0.0:
-                    fixed_cross = k.ew1(OP_ADDS, fixed_cross, -a.l1w)
         self.k = k^
         self.M = _view(M)
         self.W = _view(W)
@@ -358,8 +324,6 @@ struct _CdStep(LoopStep, Movable):
         self.draws = 0
         self.ident = ident^
         self.eye = eye^
-        self.fixed_gram = fixed_gram^
-        self.fixed_cross = fixed_cross^
         self.state = DMat(1, 1)
 
     def _perm(mut self) raises -> DMat:
@@ -377,10 +341,7 @@ struct _CdStep(LoopStep, Movable):
         var gate = _gate(registers)
         var p1 = self._perm()
         var v1: DMat
-        if C26_PRODUCTS and not self.a.update_h:
-            v1 = _cd_sweep_dev(self.k, gate, self.W, self.fixed_gram, self.fixed_cross, p1)
-        else:
-            v1 = _cd_side_dev(self.k, gate, self.M, self.W, self.Ht, self.a.l1w, self.a.l2w, p1, self.eye, False)
+        v1 = _cd_side_dev(self.k, gate, self.M, self.W, self.Ht, self.a.l1w, self.a.l2w, p1, self.eye, False)
         loop_lap(ctx, timers, "cd_w")
         var two = self.a.update_h
         var v2 = DMat(0, 0)
