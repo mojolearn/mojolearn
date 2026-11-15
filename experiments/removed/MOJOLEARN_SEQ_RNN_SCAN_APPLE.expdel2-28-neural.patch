@@ -1,0 +1,22 @@
+diff --git a/sequence/checks/rnn_scan_check.mojo b/sequence/checks/rnn_scan_check.mojo
+index 37519969c4..551d040c81 100644
+--- a/sequence/checks/rnn_scan_check.mojo
++++ b/sequence/checks/rnn_scan_check.mojo
+@@ -16,12 +16,11 @@ RNN_SCAN_CASE line a case (with an FNV-1a digest of the step arm's words, the
+ value to compare across vendors) and RNN_SCAN_CHECK status=PASS|FAIL; it
+ raises on any difference.
+ 
+-On a build whose target does not run the scan (an Apple build: its
+-recurrent layers take the per-step chain, recurrent_scan.mojo
+-SEQ_RNN_SCAN_ON_THIS_TARGET) the device scan cases are SKIPPED and only the
+-chain is checked on the device (device == host). (MOJOLEARN_SEQ_RNN_SCAN_APPLE,
+-the Metal probe arm, was deleted 2026-11-15 by lane/expdel2-28-neural;
+-Restore: git apply experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_APPLE.expdel2-28-neural.patch.)
++On a build whose target does not run the scan (an Apple build without
++-D MOJOLEARN_SEQ_RNN_SCAN_APPLE: its recurrent layers take the per-step
++chain, recurrent_scan.mojo SEQ_RNN_SCAN_ON_THIS_TARGET) the device scan
++cases are SKIPPED and only the chain is checked on the device (device ==
++host); with the define the scan cases run, the Metal probe arm.
+ 
+     tools/with_identical_mode.sh pixi run mojo run -I . sequence/checks/rnn_scan_check.mojo
+     tools/with_identical_mode.sh pixi run mojo run -I . sequence/checks/rnn_scan_check.mojo host

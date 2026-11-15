@@ -1,0 +1,244 @@
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index 6376a8b167..7422208ff5 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -935,8 +935,7 @@ def m3_resume_kernel(
+ # not on either state axis. qk_s is scratch until m3_qk_s_kernel overwrites
+ # it below. Every increment still owns its full ascending Q-term fold;
+ # the state recurrence still walks chunks serially. No arithmetic reassociation.
+-# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_STATEPASS (unmeasured old path: the fused serial state pass in place of decay + increment + scan; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 8c5ab3e7af.
+-# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++comptime M3_LEGACY_STATEPASS = is_defined["MOJOLEARN_MAMBA3_LEGACY_STATEPASS"]()
+ 
+ 
+ def m3_state_decay_kernel(
+@@ -1145,8 +1144,84 @@ def m3_state_scan_kernel(
+     h_state.unsafe_store(cell, sealed)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_STATEPASS (unmeasured old path: the fused serial state pass in place of decay + increment + scan; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 8c5ab3e7af.
+-# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++def m3_statepass_kernel(
++    pass_states: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
++    h_last: MutPointer[Float32, MutAnyOrigin],  # [B, H, P, N]
++    h_state: MutPointer[Float32, MutAnyOrigin],  # [B, H, P, N] in/out
++    kscale_work: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, N]
++    v_work: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
++    dacs: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
++    b_in: Int32,
++    t_in: Int32,
++    nh_in: Int32,
++    nc_in: Int32,
++    q_in: Int32,
++):
++    comptime n_state = M3_D_STATE
++    comptime p_dim = M3_HEADDIM
++    var b = Int(b_in)
++    var t_work = Int(t_in)
++    var nh = Int(nh_in)
++    var nc = Int(nc_in)
++    var qv = Int(q_in)
++    var pn = p_dim * n_state
++    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if cell >= b * nh * pn:
++        return
++    var bb = cell // (nh * pn)
++    var rem = cell - bb * nh * pn
++    var hh = rem // pn
++    var i = rem - hh * pn
++    var p = i // n_state
++    var n = i - p * n_state
++
++    var h = ftz(h_state.unsafe_load(cell))
++    var sealed = h
++    for c in range(nc):
++        pass_states.unsafe_store((((bb * nc + c) * nh + hh) * pn) + i, h)
++        if c == nc - 1:
++            sealed = h
++        var c0 = c * qv
++        var real = t_work - c0
++        if real > qv:
++            real = qv
++        var dl = ftz(
++            dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + (qv - 1))
++        )
++        var acc = Float32(0.0)
++        for j in range(qv):
++            var vsv = Float32(0.0)
++            var ksv = Float32(0.0)
++            if j < real:
++                var drev = ftz(
++                    dl
++                    - ftz(
++                        dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + j)
++                    )
++                )
++                var e = ftz(identical_exp(drev))
++                vsv = ftz(
++                    identical_mul(
++                        ftz(
++                            v_work.unsafe_load(
++                                ((bb * t_work + c0 + j) * nh + hh) * p_dim
++                                + p
++                            )
++                        ),
++                        e,
++                    )
++                )
++                ksv = ftz(
++                    kscale_work.unsafe_load(
++                        ((bb * t_work + c0 + j) * nh + hh) * n_state + n
++                    )
++                )
++            # padded rows: exact zeros enter the fold (contract s3).
++            acc = ftz(identical_mul_add(vsv, ksv, acc))
++        var scale_c = ftz(identical_exp(dl))
++        h = ftz(identical_mul_add(scale_c, ftz(h), ftz(acc)))
++    h_last.unsafe_store(cell, h)
++    h_state.unsafe_store(cell, sealed)
+ 
+ 
+ # ===========================================================================
+@@ -1905,70 +1980,86 @@ def m3_siso_forward(
+             block_dim=(MAMBA3_TPB, 1, 1),
+         )
+         m3_phase_tick(ctx, phase_tick, String("m3_resume_kernel"))
+-    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_STATEPASS (unmeasured old path: the fused serial state pass in place of decay + increment + scan; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 8c5ab3e7af.
+-    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-    # qk_s has B*C*H*Q*Q cells; Q>=32, so Q+1 decay entries fit.
+-    # Its lifetime as decay scratch ends before the QK kernel below.
+-    comptime if not AFN_MAMBA3_SISO_FUSED:
+-        ctx.enqueue_function[m3_state_decay_kernel](
+-            qk_s.unsafe_ptr(), dacs.unsafe_ptr(), Int32(b * nh * nc), Int32(qv),
+-            grid_dim=(_grid(b * nh * nc * (qv + 1)), 1, 1),
++    comptime if M3_LEGACY_STATEPASS:
++        ctx.enqueue_function[m3_statepass_kernel](
++            pass_states.unsafe_ptr(),
++            h_last.unsafe_ptr(),
++            h_state.unsafe_ptr(),
++            kscale_work.unsafe_ptr(),
++            v_work.unsafe_ptr(),
++            dacs.unsafe_ptr(),
++            Int32(b),
++            Int32(t_work),
++            Int32(nh),
++            Int32(nc),
++            Int32(qv),
++            grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
+             block_dim=(MAMBA3_TPB, 1, 1),
+         )
+-        m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
+-    # One million increment cells provides ample independent tile work.
+-    # Only tiny and original large grid cases have been priced; the cutoff
+-    # is an occupancy guard, not a measured optimum across intermediate sizes.
+-    # Apple retains its prior default until separately performance-validated.
+-    var use_increment_tile = False
+-    comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+-        # TOMBSTONE: MOJOLEARN_MAMBA3_TILED_INCREMENT (unmeasured opt-in arm: the state-increment tile on every column that fits, Apple included; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 17dfff96d5.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE (unmeasured old path: no increment tile on NVIDIA and AMD; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2c7e9967c3.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-        comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
+-            use_increment_tile = b * nc * nh >= 128
+-    if use_increment_tile:
+-        # AMD MI300X: six-way interleaved medians were 0.349/0.374 of
+-        # its prior shared-V path. NVIDIA RTX 4090: 0.957/0.951 of the
+-        # prior 8x32 tile. Both used the two large public shapes, and
+-        # every direct scalar/shared-V/8x32/16x16 cell was equal.
+-        # TOMBSTONE: MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE (unmeasured opt-in arm: the 16 x 16 increment tile off NVIDIA and AMD; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 0e3f2a5d45.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-        comptime if TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_NVIDIA:
+-            ctx.enqueue_function[m3_state_increment_tiled_kernel[16, 16]](
++        m3_phase_tick(ctx, phase_tick, String("m3_statepass_kernel"))
++    else:
++        # qk_s has B*C*H*Q*Q cells; Q>=32, so Q+1 decay entries fit.
++        # Its lifetime as decay scratch ends before the QK kernel below.
++        comptime if not AFN_MAMBA3_SISO_FUSED:
++            ctx.enqueue_function[m3_state_decay_kernel](
++                qk_s.unsafe_ptr(), dacs.unsafe_ptr(), Int32(b * nh * nc), Int32(qv),
++                grid_dim=(_grid(b * nh * nc * (qv + 1)), 1, 1),
++                block_dim=(MAMBA3_TPB, 1, 1),
++            )
++            m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
++        # One million increment cells provides ample independent tile work.
++        # Only tiny and original large grid cases have been priced; the cutoff
++        # is an occupancy guard, not a measured optimum across intermediate sizes.
++        # Apple retains its prior default until separately performance-validated.
++        var use_increment_tile = False
++        comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
++            # TOMBSTONE: MOJOLEARN_MAMBA3_TILED_INCREMENT (unmeasured opt-in arm: the state-increment tile on every column that fits, Apple included; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 17dfff96d5.
++            # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++            # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE (unmeasured old path: no increment tile on NVIDIA and AMD; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2c7e9967c3.
++            # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++            comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
++                use_increment_tile = b * nc * nh >= 128
++        if use_increment_tile:
++            # AMD MI300X: six-way interleaved medians were 0.349/0.374 of
++            # its prior shared-V path. NVIDIA RTX 4090: 0.957/0.951 of the
++            # prior 8x32 tile. Both used the two large public shapes, and
++            # every direct scalar/shared-V/8x32/16x16 cell was equal.
++            # TOMBSTONE: MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE (unmeasured opt-in arm: the 16 x 16 increment tile off NVIDIA and AMD; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 0e3f2a5d45.
++            # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++            comptime if TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_NVIDIA:
++                ctx.enqueue_function[m3_state_increment_tiled_kernel[16, 16]](
++                    pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
++                    v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
++                    Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
++                    grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1),
++                )
++            # (the 8 x 32 tile was reached only through MOJOLEARN_MAMBA3_TILED_INCREMENT off NVIDIA / AMD)
++        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V (unmeasured old path: the scalar state increment where shared V fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 641484de4f.
++        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++        elif lib_smem_page_fits_for[TARGET_COLUMN, 512]():
++            ctx.enqueue_function[m3_state_increment_shared_v_kernel](
+                 pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+                 v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+                 Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+-                grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1),
++                grid_dim=((b * nc * nh * p_dim * n_state + 255) // 256, 1, 1),
++                block_dim=(256, 1, 1),
+             )
+-        # (the 8 x 32 tile was reached only through MOJOLEARN_MAMBA3_TILED_INCREMENT off NVIDIA / AMD)
+-    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V (unmeasured old path: the scalar state increment where shared V fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 641484de4f.
+-    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-    elif lib_smem_page_fits_for[TARGET_COLUMN, 512]():
+-        ctx.enqueue_function[m3_state_increment_shared_v_kernel](
+-            pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+-            v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+-            Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+-            grid_dim=((b * nc * nh * p_dim * n_state + 255) // 256, 1, 1),
+-            block_dim=(256, 1, 1),
+-        )
+-    else:
+-        ctx.enqueue_function[m3_state_increment_kernel](
+-            pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+-            v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+-            Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+-            grid_dim=(_grid(b * nc * nh * p_dim * n_state), 1, 1),
++        else:
++            ctx.enqueue_function[m3_state_increment_kernel](
++                pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
++                v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
++                Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
++                grid_dim=(_grid(b * nc * nh * p_dim * n_state), 1, 1),
++                block_dim=(MAMBA3_TPB, 1, 1),
++            )
++        m3_phase_tick(ctx, phase_tick, String("m3_state_increment_kernel"))
++        ctx.enqueue_function[m3_state_scan_kernel](
++            pass_states.unsafe_ptr(), h_last.unsafe_ptr(), h_state.unsafe_ptr(),
++            qk_s.unsafe_ptr(), Int32(b), Int32(nh), Int32(nc), Int32(qv),
++            grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
+             block_dim=(MAMBA3_TPB, 1, 1),
+         )
+-    m3_phase_tick(ctx, phase_tick, String("m3_state_increment_kernel"))
+-    ctx.enqueue_function[m3_state_scan_kernel](
+-        pass_states.unsafe_ptr(), h_last.unsafe_ptr(), h_state.unsafe_ptr(),
+-        qk_s.unsafe_ptr(), Int32(b), Int32(nh), Int32(nc), Int32(qv),
+-        grid_dim=(_grid(b * nh * p_dim * n_state), 1, 1),
+-        block_dim=(MAMBA3_TPB, 1, 1),
+-    )
+-    m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
++        m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
+     # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_QKS (unmeasured old path: the scalar qk_s kernel where the tile fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at acdae84cf3.
+     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_QKS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+     comptime if lib_smem_page_fits_for[TARGET_COLUMN, 5248]():

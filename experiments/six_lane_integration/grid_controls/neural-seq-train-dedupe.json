@@ -138,41 +138,6 @@
    "tags": [],
    "note": "Not merged with NN33: retaining G*L composes with any tile geometry (independent ideas in the same kernels); crossed in an interaction group instead."
   },
-  "m2_grad_fold": {
-   "define": "MOJOLEARN_IDN_M2_GRAD_FOLD",
-   "kind": "arms",
-   "arms": {
-    "0": [],
-    "1": [
-     "MOJOLEARN_IDN_M2_GRAD_FOLD=1"
-    ],
-    "2": [
-     "MOJOLEARN_IDN_M2_GRAD_FOLD=2"
-    ]
-   },
-   "default": "0",
-   "source": [
-    "mamba/impl/ops/neural_gradient_profile.mojo:21",
-    "autograd/kernels/mamba2_ssd.mojo:80"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": true,
-   "status": "rewritten",
-   "entries": [
-    "NN39",
-    "NI44"
-   ],
-   "board": "off-board (no board lane trains Mamba-2)",
-   "tags": [
-    "off_board",
-    "bit_version"
-   ],
-   "arm_names": {
-    "0": "v1_leaf256",
-    "1": "nn39_tree",
-    "2": "ni44_leaf128"
-   }
-  },
   "cnn_conv_relu": {
    "define": "MOJOLEARN_IDN_CNN_CONV_RELU",
    "kind": "arms",
@@ -232,41 +197,6 @@
     "blocked_quality"
    ],
    "note": "Same kernel as SEQ_FAST_LSTM_SCAN, DROPPED-quality on M3 (rab10: lstm-clf acc 0.96->0.50). Owes a repair before any grid run. NI49 row-serial arm deleted. The FAST define MOJOLEARN_SEQ_FAST_LSTM_SCAN (and _SCAN_WIDE) was deleted 2026-10-09 (lane/owed-deletions-D2); this IDENTICAL control keeps the kernels."
-  },
-  "seq_wgrad": {
-   "define": "MOJOLEARN_IDN_SEQ_WGRAD",
-   "kind": "arms",
-   "arms": {
-    "0": [],
-    "1": [
-     "MOJOLEARN_IDN_SEQ_WGRAD=1"
-    ],
-    "2": [
-     "MOJOLEARN_IDN_SEQ_WGRAD=2"
-    ]
-   },
-   "default": "0",
-   "source": [
-    "sequence/recurrent.mojo:80",
-    "sequence/checks/oracle.mojo:194"
-   ],
-   "binding": "_mojolearn_x_sequence",
-   "bits_change": true,
-   "status": "rewritten",
-   "entries": [
-    "NN43",
-    "NI51"
-   ],
-   "board": "off-board (x_sequence)",
-   "tags": [
-    "off_board",
-    "bit_version"
-   ],
-   "arm_names": {
-    "0": "sqrt_min512",
-    "1": "ni51_sqrt_min256",
-    "2": "nn43_fixed128"
-   }
   },
   "seq_ln_leaf": {
    "define": "MOJOLEARN_IDN_SEQ_LN_LEAF",
@@ -1145,31 +1075,6 @@
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
-  "ni54_af_col_fold": {
-   "define": "MOJOLEARN_IDN_AF_COL_CHUNK_FOLD",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_AF_COL_CHUNK_FOLD=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "sequence/adafactor.mojo:29"
-   ],
-   "binding": "_mojolearn_x_sequence",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI54"
-   ],
-   "board": "off-board (x_sequence)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
   "ni57_graph_tree64": {
    "define": "MOJOLEARN_NI57_GRAPH_TREE64",
    "kind": "switch",
@@ -1617,6 +1522,21 @@
    "define": "MOJOLEARN_TRAIN_LIVE_STATUS",
    "control": "train_live_status",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c38a3b0613; patch experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_AF_COL_CHUNK_FOLD",
+   "control": "ni54_af_col_fold",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-28-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): unmeasured opt-in arm; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_M2_GRAD_FOLD",
+   "control": "m2_grad_fold",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-28-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): unmeasured opt-in arms; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_SEQ_WGRAD",
+   "control": "seq_wgrad",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-28-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): unmeasured opt-in arms; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
   }
  ],
  "notes": {

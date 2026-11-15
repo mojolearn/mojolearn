@@ -367,6 +367,31 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_ADMISSION (unmeasured B arm) is gone; the default is kept; code at c33bc3f5d0; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_DOOR (unmeasured B arm) is gone; the default is kept; code at b891c32944; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch"
+    # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch
+    comptime assert not is_defined["MOJOLEARN_CNN_PREDICT_PROGRAM_COPY"](), "removed 2026-11-15 (lane/expdel2-28-neural): CNN_PREDICT_PROGRAM_COPY (unmeasured B arm) is gone; the default is kept; code at cc4a5c63c4; restore: experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_AF_COL_CHUNK_FOLD"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm) is gone; the default is kept; code at ab421749bb; restore: experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_LN_ROW_WARP_OFF (old path beside the measured default) is gone; the default is kept; code at 730ca5e639; restore: experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M2_GRAD_FOLD"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_M2_GRAD_FOLD (unmeasured opt-in arms) is gone; the default is kept; code at 92dbaa2ecb; restore: experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_AF_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_AF_COOP_OFF (unmeasured old path) is gone; the default is kept; code at 2794197ed7; restore: experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_COOP_NVAMD_OFF (unmeasured old path) is gone; the default is kept; code at 14eb8b482b; restore: experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_LN_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_LN_COOP_OFF (unmeasured old path) is gone; the default is kept; code at 2c0d457d23; restore: experiments/removed/MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_PIPE_DOWN_OFF (unmeasured old path) is gone; the default is kept; code at c0a04b3bfd; restore: experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_PIPE_UP_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_PIPE_UP_OFF (unmeasured old path) is gone; the default is kept; code at b25786e9b3; restore: experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_WGRAD"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_WGRAD (unmeasured opt-in arms) is gone; the default is kept; code at d09d3a3b71; restore: experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_WGRAD_BLOCKED_OFF (unmeasured old path) is gone; the default is kept; code at 105cf60fa6; restore: experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_PIPE_CH"](), "removed 2026-11-15 (lane/expdel2-28-neural): SEQ_FAST_PIPE_CH (unmeasured opt-in knob) is gone; the default is kept; code at c5730b729c; restore: experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch"
     return True
 
 

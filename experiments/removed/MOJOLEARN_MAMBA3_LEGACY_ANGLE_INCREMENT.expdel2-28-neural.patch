@@ -1,0 +1,54 @@
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index db14ec29fa..5423a8580f 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -383,8 +383,7 @@ def m3_angle_rate(raw: Float32) -> Float32:
+     return ftz(identical_mul(identical_tanh(ftz(raw)), M3_PI))
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT (unmeasured old path: the S10 increment computed inside the serial angle chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at ed49dbc8f8.
+-# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++comptime M3_PARALLEL_ANGLE_INCREMENT = not is_defined["MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT"]()
+ 
+ 
+ def m3_angle_increment_kernel(
+@@ -446,7 +445,16 @@ def m3_angle_kernel(
+     var qv = m3_q_eff()
+     for li in range(l):
+         var mm = bb * l + li
+-        var inc = theta_out.unsafe_load((mm * nh + hh) * r_ang + r)
++        var inc: Float32
++        comptime if M3_PARALLEL_ANGLE_INCREMENT:
++            inc = theta_out.unsafe_load((mm * nh + hh) * r_ang + r)
++        else:
++            var a = m3_angle_rate(in_proj.unsafe_load(mm * dip + c_ang + r))
++            inc = ftz(
++                identical_mul(
++                    a, ftz(dt_work.unsafe_load((bb * t_work + q0 + li) * nh + hh))
++                )
++            )
+         comptime if SAB3_ANGLE_MOD_PER_CHUNK:
+             # SABOTAGE (829's falsifier 1): accumulate UNMODDED within a
+             # working chunk, mod the OUTPUTS per element and the running
+@@ -1860,13 +1868,14 @@ def m3_siso_forward(
+             block_dim=(MAMBA3_TPB, 1, 1),
+         )
+         m3_phase_tick(ctx, phase_tick, String("m3_scale_kernel"))
+-        ctx.enqueue_function[m3_angle_increment_kernel](
+-            theta_out.unsafe_ptr(), in_proj.unsafe_ptr(), dt_work.unsafe_ptr(),
+-            Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(dip), Int32(c_ang),
+-            grid_dim=(_grid(b * l * nh * r_ang), 1, 1),
+-            block_dim=(MAMBA3_TPB, 1, 1),
+-        )
+-        m3_phase_tick(ctx, phase_tick, String("m3_angle_increment_kernel"))
++        comptime if M3_PARALLEL_ANGLE_INCREMENT:
++            ctx.enqueue_function[m3_angle_increment_kernel](
++                theta_out.unsafe_ptr(), in_proj.unsafe_ptr(), dt_work.unsafe_ptr(),
++                Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(dip), Int32(c_ang),
++                grid_dim=(_grid(b * l * nh * r_ang), 1, 1),
++                block_dim=(MAMBA3_TPB, 1, 1),
++            )
++            m3_phase_tick(ctx, phase_tick, String("m3_angle_increment_kernel"))
+     # TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_PARALLEL (unmeasured opt-in arm: the exact-integer parallel S10 angle chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 42ef6d7c75.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_PARALLEL.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+     ctx.enqueue_function[m3_angle_kernel](

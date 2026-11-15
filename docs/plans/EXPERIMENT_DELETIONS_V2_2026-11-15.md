@@ -1482,6 +1482,8 @@ Files: `mamba/impl/ops/mamba3_siso.mojo`, `mamba/impl/ops/neural_gradient_profil
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `CNN_PREDICT_PROGRAM_COPY`, `ETS_TEAM_OFF`, `IDN_AF_COL_CHUNK_FOLD`, `IDN_ETS_TEAM_OFF`, `IDN_LN_ROW_WARP_OFF`, `IDN_M2_GRAD_FOLD`, `IDN_NM_SPEC_OFF`, `IDN_SEQ_AF_COOP_OFF`, `IDN_SEQ_COOP_NVAMD_OFF`, `IDN_SEQ_LN_COOP_OFF`, `IDN_SEQ_PIPE_DOWN_OFF`, `IDN_SEQ_PIPE_UP_OFF`, `IDN_SEQ_WGRAD`, `IDN_SEQ_WGRAD_BLOCKED_OFF`, `SEQ_CROSTON_REG_OFF`, `SEQ_FAST_PIPE_CH`
 
+Lane result (expdel2-28-neural, 2026-11-15): all 16 owned defines deleted with their records (refusals in core/experiment_guards_neural.mojo and, for the ETS / Croston series switches, core/experiment_guards_series.mojo; grid controls ni54_af_col_fold, m2_grad_fold, seq_wgrad, idn_ets_team, idn_nm_spec, ln_row_warp moved to removed). 20 non-owner defines folded in this lane's files (`IDN_ALL_OFF`, the Mamba-3 angle / tile / legacy switches, `IDN_M1_SCAN`, `CNN_GENERIC_OPS`, comment-only `PROPHET_COOP_OFF`, `IDN_GEMM_SPLITK_OFF`, `SEQ_RNN_SCAN_APPLE`). KEPT: `COLUMN_CPU` (correction). No read in this lane's files: `IDN_MOE_GROUPED_GEMM_OFF`, `IDN_ROW_COOP_OFF`, `IDN_SEQ_GEMM_TILED_OFF`, `MOE_FAST_MMA_OFF`, `TSA2_VAR_OFF`. Left for other lanes: sequence/recurrent.mojo and sequence/layernorm.mojo still read `IDN_SEQ_WGRAD`, `IDN_SEQ_WGRAD_BLOCKED_OFF`, `IDN_LN_ROW_WARP_OFF` (now refused); sequence/adafactor_candidates.mojo af_col_chunk_kernel and mamba/impl/ops/identical_scan_window.mojo have no reader left in this lane's files; the generated mamba/host/gen twins still carry the deleted Mamba arms.
+
 ### expdel2-29-neural (45 defines, 17 code files)
 
 | define | decision | rule | sites | lines | evidence / why |

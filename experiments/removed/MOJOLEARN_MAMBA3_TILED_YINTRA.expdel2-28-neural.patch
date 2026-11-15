@@ -1,0 +1,19 @@
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index 7422208ff5..68acaab65a 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -2096,11 +2096,11 @@ def m3_siso_forward(
+     comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+         # TOMBSTONE: MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE (unmeasured opt-in arm NI42: the y-intra tile on every GPU that fits, IDENTICAL; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f484785e59.
+         # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-        # TOMBSTONE: MOJOLEARN_MAMBA3_TILED_YINTRA (unmeasured opt-in arm: the y-intra tile on every column that fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f4af7989dd.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++        comptime if is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
++            use_yintra_tile = True
+         # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_YINTRA (unmeasured old path: no y-intra tile on NVIDIA; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 3b67ed3496.
+         # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-        comptime if TARGET_COLUMN == COLUMN_NVIDIA:
++        elif TARGET_COLUMN == COLUMN_NVIDIA:
+             use_yintra_tile = b * nc * nh >= 128
+     if use_yintra_tile:
+         ctx.enqueue_function[m3_yintra_tiled_kernel](
