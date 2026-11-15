@@ -6,8 +6,8 @@ microbatch from the caller's buffer and runs the same tree, over all
 microbatches in their original order, on its own GPU.
 The caller receives output only after every owner succeeds.
 """
-from std.os import getenv
 from std.sys import is_defined
+from std.sys.defines import get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_plan import DevicePlan
 from training.optimizer_device_plan import optimizer_device_plan
@@ -18,6 +18,10 @@ from training.samba_ops import samba_accumulate_buffer, samba_accumulate_host, s
 
 
 comptime ACCUMULATE_POOL_FAULT = is_defined["MOJOLEARN_ACCUMULATE_POOL_FAULT"]()
+#: the rank the sabotage build fails (`-D MOJOLEARN_ACCUMULATE_FAIL_RANK=<r>`,
+#: default -1: none). Was an environment read per shard reduce inside the
+#: fault build until 2026-11-15 (lane envgate-train-seq-mamba).
+comptime ACCUMULATE_FAIL_RANK = get_defined_int["MOJOLEARN_ACCUMULATE_FAIL_RANK", -1]()
 
 
 def accumulate_pool_fault_available() -> Int:
@@ -72,7 +76,7 @@ def parallel_accumulate_host(
             _ = views^
             _ = samba_accumulate_buffer(cp[rank],src^,rp+first,count,a)
             comptime if ACCUMULATE_POOL_FAULT:
-                if Int(getenv("MOJOLEARN_ACCUMULATE_FAIL_RANK", "-1")) == rank:
+                if ACCUMULATE_FAIL_RANK == rank:
                     raise Error("injected post-compute accumulation refusal")
         except:
             fp[rank] = 1
