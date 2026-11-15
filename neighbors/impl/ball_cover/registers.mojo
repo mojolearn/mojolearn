@@ -117,7 +117,7 @@ query row copied into a `local_x_ptr[MAX_COL_Q]` register array and used when
 register array needs the dimension at compile time. Recorded in the lane file
 as unimplemented with that reason.
 """
-from experiments.classical_identical_ideas.graph_controls import C32_COUNT_FUSION, C32_EMIT_FUSION
+from experiments.classical_identical_ideas.graph_controls import C32_EMIT_FUSION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -756,11 +756,8 @@ def rbc_eps_pass_count(
                 ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists,
                 r_radius, vd, adj_ia, n_queries, n_cols, n_landmarks, eps, False,
             )
-    comptime if C32_COUNT_FUSION:
-        # Offsets/output are unused in COUNT; one raw view avoids duplicate mutable borrows.
-        var offsets_ptr = adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        ctx.enqueue_function[_c32_radius_stream[False]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),offsets_ptr,vd.unsafe_ptr(),offsets_ptr,Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
-        fast_done=True
+    # TOMBSTONE: MOJOLEARN_C32_COUNT_FUSION (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 75cd76f812.
+    # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
     # fg-tsne-dbscan D1: the tiled count (IDN_DBSCAN_EPS_TILE), the same degrees
     comptime if IDN_DBSCAN_EPS_TILE:
         if not fast_done and metric == RBC_METRIC_DEFAULT:
