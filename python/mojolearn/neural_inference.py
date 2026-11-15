@@ -49,7 +49,6 @@ imports and raises BY NAME when touched.
 from . import _backend
 from . import _native_samba_bridge
 from . import _native_neural_bridge
-from . import _ragged
 from . import lowbit as _lowbit
 from ._mlp_impl import _NATIVE as _MLP_NATIVE
 from ._transformer_impl import TransformerBlock
