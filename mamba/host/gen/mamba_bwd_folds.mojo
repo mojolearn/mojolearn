@@ -39,7 +39,6 @@ Generator-friendly: plain cell kernels, no shared memory, no atomics, no float
 crossing a thread except through the global partials a later launch reads.
 """
 from mamba.host.device_shim import host_launch, launch_count
-from std.sys.compile import is_defined
 
 from checks.numerics import (
     ftz,
@@ -51,11 +50,14 @@ from checks.numerics import (
 from mamba.checks.mamba_rms_fold import MAMBA_RMS_LANES, mamba_rms_tree
 
 
-comptime IDN_MAMBA_BWD_FOLDS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_MAMBA_BWD_FOLDS"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA_BWD_FOLDS (DELETE-ARM, EXP:2271 PENDING, never measured) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.expdel2-26-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
+# The alias and the kernels stay False/unlaunched: mamba2_backward.mojo and
+# mamba3_backward.mojo import them; the integrator removes them with their
+# importers' dead branches.
+comptime IDN_MAMBA_BWD_FOLDS = False
 
 #: Threads per block. Execution plan only (no float crosses a thread inside a
 #: launch), so it moves no bit.
@@ -72,11 +74,6 @@ def mamba_bwd_fold_grid(n: Int) -> Int:
 def mamba_bwd_fold_floats(m: Int) -> Int:
     """Scratch for one row-dot fold over `m` rows: `[m, LANES]` lane partials
     then `[m]` dots, at offset `mamba_bwd_fold_dot_offset(m)`. 1 when off."""
-    comptime if IDN_MAMBA_BWD_FOLDS:
-        var n = m * (MAMBA_RMS_LANES + 1)
-        if n < 1:
-            return 1
-        return n
     return 1
 
 
