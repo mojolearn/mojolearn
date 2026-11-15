@@ -714,6 +714,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C41_FUSED_MINIMA`](#mojolearn_c41_fused_minima-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (x_cluster) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C41_FUSED_MINIMA.patch](../experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch) |
 | [`MOJOLEARN_C42_ACTIVE_TRIANGLE`](#mojolearn_c42_active_triangle-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (x_cluster) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C42_ACTIVE_TRIANGLE.patch](../experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch) |
 | [`MOJOLEARN_C43_RESIDENT_NORMALIZATION`](#mojolearn_c43_resident_normalization-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (spectral, x_neighbors graphs) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch](../experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch) |
+| [`MOJOLEARN_C44_SAMPLING_DESCRIPTORS`](#mojolearn_c44_sampling_descriptors-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (umap) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch](../experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6901,4 +6902,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a4aa6b55b6`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch`, then delete the `MOJOLEARN_C43_RESIDENT_NORMALIZATION` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C44_SAMPLING_DESCRIPTORS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C44): UMAP keeps one epoch sampling-descriptor arena through the optimization. The alias `C44_SAMPLING_DESCRIPTORS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (umap/optimizer_identical_device.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4fdc7dda1a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch`, then delete the `MOJOLEARN_C44_SAMPLING_DESCRIPTORS` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

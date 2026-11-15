@@ -136,7 +136,9 @@ comptime C42_ACTIVE_TRIANGLE = False
 # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at a4aa6b55b6.
 # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch; record in docs/TOMBSTONES.md.
 comptime C43_RESIDENT_NORMALIZATION = False
-comptime C44_SAMPLING_DESCRIPTORS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"]()
+# TOMBSTONE: MOJOLEARN_C44_SAMPLING_DESCRIPTORS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 4fdc7dda1a.
+# Restore: git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch; record in docs/TOMBSTONES.md.
+comptime C44_SAMPLING_DESCRIPTORS = False
 # C61 (lane classical-misc, 2026-10-07): HDBSCAN sparse mutual-reachability
 # Boruvka search, tiled kernel (NVIDIA/AMD default): skip a j tile whose points
 # all lie in the block's single component. Those cells are excluded anyway, so
