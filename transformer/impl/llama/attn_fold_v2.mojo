@@ -52,23 +52,19 @@ chain of the last, partial nodes (P = 13: B8 + (B4 + L12) = node(4, 0)).
 
 from std.collections import Array
 from std.math import max, min
-from std.sys.compile import is_defined
 
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
 )
 
 
-comptime ATTN_FOLD_V2 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_ATTN_FOLD_V2"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-"""The v2 key-axis fold on every column (device eager, fused, host oracle,
-byte-LM host kernels). OFF: v1's serial chains, byte for byte."""
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (DELETE-ARM: no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch
+comptime ATTN_FOLD_V2 = False
+"""Folded constant: the v2 arm is deleted, v1's serial chains are every
+column's fold. Kept because other files import it (the integrator drops it
+with the helpers below once no importer reads them)."""
 
 comptime ATTN_V2_LEAF = 128
 """Keys per leaf, a PROFILE constant (the GEMM contract's leaf minimum, for
