@@ -42,11 +42,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: FAST + Apple default since the M3 re-A/B on lane head c338b88dd (n=1, taxi,
 #: quality the same: ridge-clf 168 -> 122 ms, ridge-cv 3,614 -> 37 ms);
-#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path. Ridge's
+#: the `_OFF` rollback was deleted 2026-11-15 (docs/TOMBSTONES.md). Ridge's
 #: unweighted moments (x_linear/ridge_grid.mojo) and k-fold RidgeCV's fold
 #: Grams (x_linear/device.mojo) from `fast_gram_into`.
-comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-                               and not is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF"]())
+# TOMBSTONE: MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 9eb96f91e6.
+# Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XL_RIDGE_FAST_GRAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 # AFCL-L01/L02: NEVER RUN — PENDING MEASUREMENT. Source-only, uncompiled,
 # unverified; defaults OFF. Half-sized row chunks increase independent

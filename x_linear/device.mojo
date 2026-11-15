@@ -4390,7 +4390,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var wit = Witness(ctx, wcap)
     var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     # lane/apple-fast-gram (2026-10-02), FAST on Apple (default since the M3 A/B;
-    # `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores `kf_cells_kernel`)
+    # every other build takes `kf_cells_kernel`)
     # builds each fold's means, centered Gram and X'y with the shared grid
     # Gram (x_linear/fast_gram.mojo; the same dxm / dg / dxty words) instead
     # of `kf_cells_kernel`, one thread per cell walking the fold's rows
