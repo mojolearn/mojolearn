@@ -59,14 +59,13 @@ comptime MST_WARP = 32
 still runs one 32-thread block per row, and so does ours."""
 
 
-#: fam2-cluster (2026-10-04), IDENTICAL. Four experiments on the Boruvka
-#: solver; each has its own `_OFF` and all are off under
-#: `-D MOJOLEARN_IDN_ALL_OFF=1`. None moves a bit: the MST under the total
-#: edge order (DEVIATION 620) is unique, and every stage below is integer.
-comptime _IDN_MST_ON = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: fam2-cluster (2026-10-04), IDENTICAL. Three defaults on the Boruvka
+#: solver (their `_OFF` old paths were deleted 2026-11-15). None moves a
+#: bit: the MST under the total edge order (DEVIATION 620) is unique, and
+#: every stage below is integer.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here: every switch below off at once) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 374d02eb9f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime _IDN_MST_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: `label_prop` without a readback. The round's kept edges are a forest
 #: over the supervertices (one out-edge per color at most; of a mutual pair
