@@ -34,10 +34,7 @@ defined and ties only another default).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import stack_allocation
 from std.sys.compile import is_defined
 
 from gbdt.apple_fast_classical import AFCL_RESOLVE_RECORDS

@@ -8,7 +8,6 @@ define) compiles main's code unchanged. Profile and mechanisms:
 docs/apple-fast/notes/sym-hist.md, docs/apple-fast/ab/sym-hist.md.
 """
 
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
