@@ -75,8 +75,11 @@ STUB_TREES = textwrap.dedent(r'''
                 continue
             # ours-cpu predicts the same bits as ours (the promise); STUB_CPU_BITS=differ breaks it
             h = "ours" if name == "ours-cpu" and os.environ.get("STUB_CPU_BITS") != "differ" else name
-            print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=h%s"
-                  % (a.lane, name, shape, r, base + r, h))
+            # SMALL ROWS (2026-11-15): STUB_SMALL=1 makes ours a median of 20 calls (calls= min_ms= max_ms=)
+            small = (" calls=20 min_ms=%.6f max_ms=%.6f" % (base + r - 0.5, base + r + 4.0)
+                     if os.environ.get("STUB_SMALL") == "1" and name == "ours" else "")
+            print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=h%s%s"
+                  % (a.lane, name, shape, r, base + r, h, small))
     for name, _, base in arms:
         if name == refuse:
             continue
@@ -125,6 +128,9 @@ STUB_CLASSICAL = textwrap.dedent(r'''
                      "info": info, "digest_stable": True, "mem": mem,
                      "span": {"input_home": "device" if arm.startswith("torch") else "host",
                               "pre_clock_fit": False}}
+        if os.environ.get("STUB_SMALL") == "1" and arm == "ours":   # SMALL ROWS (2026-11-15)
+            arms[arm]["scored_calls"] = [{"round": r + 1, "calls": 20, "ms": x, "min_ms": x - 0.25,
+                                          "max_ms": x + 3.0} for r, x in enumerate(ms)]
     out = {"lane": a.lane, "dataset": a.dataset,
            "block": {"arrays": {"X": {"shape": [4000, 11]}}}, "arms": arms,
            "quality": {arm: {"inertia": 1.5 + i, "n_iter": 20, "reference": "x"}
@@ -279,6 +285,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("STUB_CALLS", str(calls))
     monkeypatch.delenv("STUB_FAIL", raising=False)
     monkeypatch.delenv("STUB_REFUSE", raising=False)
+    monkeypatch.delenv("STUB_SMALL", raising=False)
     out = tmp_path / "out"
     base = ["--out", str(out), "--python-env", sys.executable, "--skip-install",
             "--with-opponents",  # These stub schema tests explicitly exercise opponent cells.
@@ -2129,3 +2136,113 @@ def test_smoke_verdict_names_the_evidence_seal_failure():
     why = bb.smoke_verdict(race, rec, "apple")[0][1]
     assert why.startswith("status failed: incomplete worker evidence")
     assert "ours fit: worker receipt, timing boundary" in why
+
+
+# --- small rows: the median of consecutive calls inside the one scored run (Andrew, 2026-11-15) ---------------
+
+def _small_rows():
+    spec = importlib.util.spec_from_file_location("test_bb_small_rows", os.path.join(HERE, "bench_board_small_rows.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_small_rows_rule_counts_and_spread():
+    sr = _small_rows()
+    assert sr.SMALL_ROW_MS == 10.0 and sr.SMALL_ROW_CALLS == 20
+    assert sr.calls_for(9.99, True) == 20
+    assert sr.calls_for(0.5, True) == 20
+    assert sr.calls_for(10.0, True) == 1          # at or above 10 ms: one call
+    assert sr.calls_for(250.0, True) == 1
+    assert sr.calls_for(0.5, False) == 1          # opponents are never repeated
+    assert sr.calls_for(None, True) == 1          # no warmup (external warmup): one call
+    assert sr.calls_for(float("nan"), True) == 1
+    rec = sr.spread([3.4] + [0.76] * 18 + [0.9])
+    assert rec["calls"] == 20 and rec["ms"] == pytest.approx(0.76)
+    assert rec["min_ms"] == pytest.approx(0.76) and rec["max_ms"] == pytest.approx(3.4)
+    assert sr.line_suffix(rec).startswith(" calls=20 min_ms=")
+    assert sr.line_suffix(sr.spread([12.0])) == ""   # one call: the line is what it was
+    assert sr.cell_fields(None) == {}
+    assert sr.cell_fields([{"calls": 1, "min_ms": 5.0, "max_ms": 5.0}]) == {"calls": 1}
+    assert sr.cell_fields([dict(rec, round=1)]) == {"calls": 20, "min_ms": pytest.approx(0.76),
+                                                    "max_ms": pytest.approx(3.4)}
+    assert sr.parse_suffix({"calls": "20", "min_ms": "0.7", "max_ms": "1.5"}) == {"calls": 20, "min_ms": 0.7,
+                                                                                    "max_ms": 1.5}
+    assert sr.parse_suffix({"ms": "1.0"}) is None
+
+
+def _speed_gbdt_arm():
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    spec = importlib.util.spec_from_file_location("test_bb_speed_gbdt_arm", os.path.join(HERE, "speed_gbdt_arm.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_small_rows_tree_driver_repeats_only_our_small_arm(monkeypatch, capsys):
+    """speed_gbdt_arm.run: our arm with a warmup under 10 ms makes 20 fits in its scored run and prints their
+    median with calls=20; our arm at or above 10 ms and an opponent under 10 ms each make one fit."""
+    import types
+    import time as real_time
+    np = pytest.importorskip("numpy")
+    sg = _speed_gbdt_arm()
+    clock = [0.0]
+    monkeypatch.setattr(sg, "time", types.SimpleNamespace(perf_counter=lambda: clock[0], time=real_time.time))
+    monkeypatch.setattr(sg, "emit_scale_reminder", lambda data, stage: None)
+    monkeypatch.setattr(sg, "check_fit_equivalence", lambda *a, **k: None)
+    fits = {}
+
+    def arm(name, library, costs_ms):
+        it = iter(costs_ms)
+
+        def fit(model, data):
+            fits[name] = fits.get(name, 0) + 1
+            clock[0] += next(it) / 1000.0
+        return sg.Arm(name, lambda: object(), fit, lambda m, d: [("acc", 1.0, np.array([1.0, 2.0]))],
+                      library=library)
+
+    small_costs = [4.0, 3.0] + [1.0] * 10 + [2.0] * 9        # warmup 4, then 20 scored calls
+    arms = [arm("ours", "mojolearn", small_costs),
+            arm("ours-big", "mojolearn", [50.0, 40.0]),
+            arm("xgboost-gpu", "xgboost", [2.0, 1.5])]
+    sg.run("gbdt", arms, types.SimpleNamespace(tag="t-100x4"), 1, "smoke", dev="x")
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.startswith("FSPEED ")]
+    by_arm = {re.search(r"arm=(\S+)", l).group(1): l for l in lines}
+    assert fits == {"ours": 21, "ours-big": 2, "xgboost-gpu": 2}
+    ours = bb._kv(by_arm["ours"].partition(" ")[2])
+    assert ours["round"] == "1" and float(ours["ms"]) == pytest.approx(1.5)   # median of 3, 10x1, 9x2
+    assert ours["calls"] == "20" and float(ours["min_ms"]) == 1.0 and float(ours["max_ms"]) == 3.0
+    assert ours["hash"] != "-"
+    for name, ms in (("ours-big", 40.0), ("xgboost-gpu", 1.5)):
+        assert "calls=" not in by_arm[name], name                 # one call: the line is what it was
+        assert by_arm[name].endswith("ms=%.3f hash=%s" % (ms, bb._kv(by_arm[name].partition(" ")[2])["hash"]))
+
+
+def test_small_rows_board_cells_carry_calls_and_spread(env, monkeypatch):
+    """A small row's cell: median_ms is the driver's median, calls=20 and min/max over every call; opponents and
+    our arms timed once carry no calls."""
+    monkeypatch.setenv("STUB_SMALL", "1")
+    assert _run(env) == 0
+    res = json.loads((env["out"] / "board.json").read_text())
+    rf = {c["arm"]: c for c in res["races"]["trees/rf/taxi/rows=1000"]["cells"]}
+    assert rf["ours"]["calls"] == 20
+    assert rf["ours"]["median_ms"] == pytest.approx(102.0)          # rounds 101, 102, 103: ms read as before
+    assert rf["ours"]["min_ms"] == pytest.approx(100.5) and rf["ours"]["max_ms"] == pytest.approx(107.0)
+    assert "calls" not in rf["sklearn-rf-cpu"] and "calls" not in rf["ours-ab"]
+    assert rf["sklearn-rf-cpu"]["min_ms"] == pytest.approx(201.0)   # opponents untouched
+    km = {c["arm"]: c for c in res["races"]["classical/kmeans/taxi/rows=1000"]["cells"]}
+    assert km["ours"]["calls"] == 20 and km["ours"]["median_ms"] == pytest.approx(11.0)
+    assert km["ours"]["min_ms"] == pytest.approx(9.75) and km["ours"]["max_ms"] == pytest.approx(15.0)
+    assert all("calls" not in c for a, c in km.items() if a != "ours")
+
+
+def test_small_rows_paper_compare_prints_calls_beside_the_time():
+    spec = importlib.util.spec_from_file_location("test_bb_paper_compare", os.path.join(HERE, "paper_compare.py"))
+    pc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pc)
+    cell = {"median_ms": 0.76, "calls": 20, "min_ms": 0.7, "max_ms": 3.4}
+    row = dict({"new_ms": 0.76}, **pc.calls_fields("new", cell))
+    assert pc.fmt_ms_calls(row, "new") == "0.760 (median of 20 calls, 0.7..3.4 ms)"
+    assert pc.calls_fields("new", {"median_ms": 12.0}) == {}
+    assert pc.fmt_ms_calls({"new_ms": 12.0}, "new") == "12.00"
