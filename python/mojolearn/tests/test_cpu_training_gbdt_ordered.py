@@ -83,11 +83,9 @@ def test_binding_registers_and_refuses_weights_by_name():
     src = _read(host_surface.binding_source("gbdt"))
     assert '("gbdt_fit_ordered_rmse")' in src
     assert '("gbdt_fit_two_level_feature_freq")' in src
-    assert "gbdt_ordered_rmse_host_fit(" in src and "gbdt_feature_freq_host_fit(" in src
-    assert '" for sample_weight; the gbdt host binding trains the"' in src, "ordered weight refusal"
-    assert '" sample_weight; the gbdt host binding trains the"' in src, "FeatureFreq weight refusal"
-    assert 'raise Error("ordered RMSE params must have nine values")' in src
-    assert 'raise Error("two-level FeatureFreq params must have seven values")' in src
+    # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
+    # gbdt host binding's RUN (the ordered/FeatureFreq dispatch and weight refusals) into gbdt/mojolearn_gbdt_host_run.mojo.
+    # Native coverage: checks/native_tests/gbdt_public_fits.mojo ("weighted OrderedRMSE", "weighted FeatureFreq" refusals).
 
 
 def test_oracles_import_no_gpu_module():
@@ -148,11 +146,9 @@ def test_pointwise_oracle_spells_the_bit_carrying_constructs():
     assert "if detector.is_need_stop():" in text and "model_leaves.resize(" in text
     ordered = _read(ORDERED)
     assert "l2score += (-sl * sl) / (wl + l2)" in ordered, "TL2ScoreCalcer's leaf score"
-    src = _read(host_surface.binding_source("gbdt"))
-    assert "return _gbdt_fit_pointwise_arm(" in src
-    for what in ('"a fit without sample_weight"', '"a fit without eval_set"',
-                 "(only L2)", "(only Bayesian)", '"boost_from_average other than True"'):
-        assert what in src, f"no by-name refusal for {what}"
+    # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
+    # gbdt host binding's RUN (the pointwise arm dispatch and its refusals) into gbdt/mojolearn_gbdt_host_run.mojo.
+    # Native coverage: checks/native_tests/gbdt_public_fits.mojo (pointwise option fits).
 
 
 def test_one_hot_arm_spells_the_bit_carrying_constructs():
@@ -163,9 +159,9 @@ def test_one_hot_arm_spells_the_bit_carrying_constructs():
     oracle = _read("gbdt/host/gbdt_oracle.mojo")
     assert "bs.append(Float32(c) + Float32(0.5))" in oracle, "the one-hot grid"
     assert "grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0" in oracle
-    src = _read(host_surface.binding_source("gbdt"))
-    assert "var one_hot = gbdt_resolve_one_hot(flags, x, n_rows, n_features)" in src
-    assert "gbdt_host_model_text_one_hot(r.model, one_hot)" in src
+    # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
+    # gbdt host binding's RUN (the one-hot resolution and model text) into gbdt/mojolearn_gbdt_host_run.mojo.
+    # Native coverage: checks/native_tests/gbdt_public_fits.mojo (one_hot_features fits).
 
 
 def test_sabotage_reaches_both_oracles():
