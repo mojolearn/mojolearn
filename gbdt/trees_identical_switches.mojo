@@ -275,4 +275,6 @@ comptime ORD_HIST_FOLD_SKIP_DOCS = 256
 # readbacks (`_PermPartition` settle) are NOT dead before the batched leaf
 # estimation (idea B) lands: `task_partition` builds each task's host leaf
 # sizes from them for the oracle, so they stay.
-comptime IDN_ORD_INDEX_SHARED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_ORD_INDEX_SHARED"]()
+# TOMBSTONE: MOJOLEARN_IDN_ORD_INDEX_SHARED (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at d452e2066a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_INDEX_SHARED.patch
+comptime IDN_ORD_INDEX_SHARED = False
