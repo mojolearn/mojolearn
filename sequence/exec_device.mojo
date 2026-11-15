@@ -32,8 +32,6 @@ from sequence.moe_grouped_fold import MOE_GROUPED_GEMM
 from sequence.moe_grouped import moe_grouped_offsets, moe_grouped_workspace, moe_grouped_hidden, moe_grouped_out
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
 from sequence.execution_profile import ExecutionProfile
@@ -70,8 +68,6 @@ from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
 from sequence.ops import OP_COLSUM_DIV
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
-from sequence.adafactor import AF_COL_CHUNK_FOLD
-from sequence.adafactor_candidates import AF_COL_LANES, af_col_chunk_kernel
 from sequence.theta_spec import THETA_SPEC
 from sequence.ets_spec import ETS_SPEC, op_ets_spec
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
@@ -92,27 +88,33 @@ from core.shared_slot import SharedSlot
 #: cooperative fold is the one-thread op's chain (same fmas, same values,
 #: same order; only the loads are spread over the warp), so no bit moves on
 #: any column; `coop_bcast` keeps a cell inside its 32-lane half of a CDNA
-#: wavefront. -D MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores Apple only.
+#: wavefront.
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (unmeasured old path: Apple-only coop folds in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 14eb8b482b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_COOP_NVAMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SEQ_COOP = TARGET_HAS_APPLE_GPU or SEQ_COOP_NVAMD
 #: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
 #: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
-#: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
-#: MOJOLEARN_IDN_ALL_OFF) restores one thread per row.
+#: IDENTICAL on every GPU.
 #: nr-small D11: Adafactor's row factor (op_af_row) and row-var mean
 #: (op_af_rmean, one thread) on a simdgroup, the same chains; IDENTICAL.
-#: -D MOJOLEARN_IDN_SEQ_AF_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_AF_COOP_OFF (unmeasured old path: one-thread Adafactor row factor in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2794197ed7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_AF_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SEQ_AF_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_LN_COOP_OFF (unmeasured old path: one thread per LayerNorm row in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2c0d457d23.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_LN_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SEQ_LN_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 comptime TPB = 128
@@ -148,19 +150,23 @@ comptime TPB = 128
 comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane idn-opt-resident (2026-10-04): IDENTICAL takes the same pipelined
 #: copies on every vendor (NVIDIA, AMD, Apple). Copies only: the same bytes,
-#: the same launches, no bit moves. -D MOJOLEARN_IDN_SEQ_PIPE_UP_OFF /
-#: -D MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF restore IDENTICAL's serial copies.
+#: the same launches, no bit moves.
 #: FAST on NVIDIA and AMD is unchanged.
 comptime _SEQ_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_PIPE_UP_OFF (unmeasured old path: IDENTICAL serial uploads) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at b25786e9b3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST or (
-    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    _SEQ_IDN
 )
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF (unmeasured old path: IDENTICAL serial downloads) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c0a04b3bfd.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST or (
-    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    _SEQ_IDN
 )
-#: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
-#: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)
-comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
+#: the pipelined chunk, floats (8 MB).
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_CH (unmeasured Apple FAST knob, EXP:680 MERGED-UNMEASURED; default 1 << 21 kept) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c5730b729c.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch; record in docs/TOMBSTONES.md.
+comptime SEQ_PIPE_CH = 1 << 21
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md):
 #: its two read-back candidates for the pipelined downloads (map_to_host,
 #: raw chunked DMA) were deleted 2026-10-09 as losers (TOMBSTONES below).
@@ -306,11 +312,13 @@ def team_kernel[OP: Int](
         comptime if OP == OP_GARCH:
             garch_team(blk, team, a)
         elif (ETS_TEAM or IDN_ETS_TEAM) and OP == OP_ETS:
-            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo);
-            # IDENTICAL default (off: -D MOJOLEARN_IDN_ETS_TEAM_OFF; the tree prefix)
+            # Apple FAST default (sequence/ets_team.mojo);
+            # IDENTICAL default (the tree prefix)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
-            # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
+            # Apple FAST default (sequence/prophet_coop.mojo)
+            # TOMBSTONE: MOJOLEARN_PROPHET_COOP_OFF (old path of the FAST Apple Prophet coop, EXP:537 KEPT 8c2b7de51; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9c780e0ba9.
+            # Restore: git apply experiments/removed/MOJOLEARN_PROPHET_COOP_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
             prophet_fit_coop(blk, team, a)
         else:
             prophet_fit_team(blk, team, a)
@@ -975,15 +983,8 @@ struct DeviceExec(Exec, Movable):
                     raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
         # TOMBSTONE (lane/postmerge-act-5, 2026-10-09: -D MOJOLEARN_IDN_AF_VEC_FUSED (Adafactor fused vector step)): the OP_AF_VFUSE / OP_AF_VFIN
         # launches were NOISE: NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), avg 0.98x, digest aa99a3dc unchanged; recoverable at main 0a7b206f1.
-        # NI54 neural optimizer-only opcode. Every lane's logical leaf is
-        # shared with HostExec's op_af_col; no statistical estimator op moves.
-        comptime if AF_COL_CHUNK_FOLD and OP == OP_AF_COL:
-            self.ctx.enqueue_function[af_col_chunk_kernel](
-                a.p0, a.p1, Int32(a.i0), Int32(a.i1), a.f0,
-                grid_dim=(n, 1, 1), block_dim=(AF_COL_LANES, 1, 1),
-            )
-            self.execution_profile.kernel()
-            return
+        # TOMBSTONE: MOJOLEARN_IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm: NI54 64-row leaf column fold for Adafactor) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at ab421749bb.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
         # recurrence of a layer, one block per batch row (n = B rows); the
         # integers packed as seq_kernel's (lane ag-pass5-recurrent)
@@ -1225,7 +1226,9 @@ struct DeviceExec(Exec, Movable):
         # lane ag-pass6-gemm (BIT VERSION, sequence/gemm_split.mojo): the
         # products the shape rule selects take the split-K order on every GPU
         # column (Apple too), ahead of the coop and tile routes; HostExec takes
-        # the same rule, so the same words. MOJOLEARN_IDN_GEMM_SPLITK_OFF: off.
+        # the same rule, so the same words.
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_SPLITK_OFF (unmeasured old path, EXP:2180 PENDING: the GEMM without the split-K order; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f15596c0c6.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
         comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
             if gemm_split_on[OP](a):
                 self._gemm_split[OP](a)
@@ -1262,7 +1265,7 @@ struct DeviceExec(Exec, Movable):
             )
             self.execution_profile.kernel()
             return
-        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin by default (off: -D MOJOLEARN_IDN_NM_SPEC_OFF)
+        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin by default
         # (sequence/theta_spec.mojo); ETS_SPEC: that define's no-season ETS (sequence/ets_spec.mojo).
         # Both admitted on NVIDIA/AMD by SEQ_COOP_NVAMD; same bits as op_theta / op_ets.
         comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ

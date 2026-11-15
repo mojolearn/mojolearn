@@ -1,0 +1,25 @@
+diff --git a/sequence/checks/oracle.mojo b/sequence/checks/oracle.mojo
+index 745a44e90e..93e9d1d08e 100644
+--- a/sequence/checks/oracle.mojo
++++ b/sequence/checks/oracle.mojo
+@@ -35,6 +35,7 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
+   5515 LayerNorm statistics: the 32-slot fold (slot j sums columns
+        j, j + 32, ... ascending, then the pairwise tree), the mean,
+        then the centred squares the same way                       alt: one ascending chain
++       (under -D MOJOLEARN_IDN_LN_ROW_WARP_OFF: one ascending chain, alt: mean descending)
+   5516 SES recursion (Croston): alpha x + (1 - alpha) f, one fma    alt: f + alpha (x - f)
+   5517 ETS seasonal update: s + gamma (t - s), one fma             alt: (1 - gamma) s + gamma t
+   5518 ETS decomposition moving average: taps ascending, 0.5 x
+@@ -693,10 +694,8 @@ def o_moe_route(x: List[Float32], Wg: List[Float32], T: Int, D: Int, E: Int, k:
+ # ---------------------------------------------------------------- 5515
+ def _o_ln_row_warp() -> Bool:
+     """Restated (sequence/layernorm.mojo `LN_ROW_WARP`): the row folds are the
+-    32-slot fold under IDENTICAL unless the all-off define is set."""
+-    # TOMBSTONE: MOJOLEARN_IDN_LN_ROW_WARP_OFF (old path beside the IDENTICAL LayerNorm 32-slot row fold, EXP:1945 PROMOTED) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 730ca5e639.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch; record in docs/TOMBSTONES.md.
+-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
++    32-slot fold under IDENTICAL unless a row-warp or all-off define is set."""
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+         return False
+     return True
+ 

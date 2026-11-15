@@ -35,7 +35,6 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
   5515 LayerNorm statistics: the 32-slot fold (slot j sums columns
        j, j + 32, ... ascending, then the pairwise tree), the mean,
        then the centred squares the same way                       alt: one ascending chain
-       (under -D MOJOLEARN_IDN_LN_ROW_WARP_OFF: one ascending chain, alt: mean descending)
   5516 SES recursion (Croston): alpha x + (1 - alpha) f, one fma    alt: f + alpha (x - f)
   5517 ETS seasonal update: s + gamma (t - s), one fma             alt: (1 - gamma) s + gamma t
   5518 ETS decomposition moving average: taps ascending, 0.5 x
@@ -68,7 +67,6 @@ from checks.numerics import (
 )
 from checks.fixture_rng import splitmix64_next
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined, get_defined_int
 
 
 @always_inline
@@ -189,17 +187,15 @@ def _o_wgrad_block(K: Int) -> Int:
     """Restated (sequence/recurrent.mojo `wgrad_block`): K itself when the
     blocked order is off, else the smallest power of two R >= 512 with
     R R >= K."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+    # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (unmeasured old path: one ascending BPTT weight-gradient fold in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 105cf60fa6.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return K
-    # NN43: independently restated fixed absolute leaf profile; this is
-    # source only, no oracle/check was executed for the candidate.
-    comptime if get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 2:
-        var leaf = 128
-        while (K + leaf - 1) // leaf > (1 << 22):
-            leaf *= 2
-        return leaf
-    # NI51 arm (IDN_SEQ_WGRAD=1): blocks grow from 256 rows, as recurrent.mojo.
-    var r = 256 if get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 1 else 512
+    # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD (unmeasured opt-in arms 1 (NI51 256-row blocks) and 2 (NN43 leaf profile) of the IDENTICAL BPTT weight-gradient block) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at d09d3a3b71.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.patch; record in docs/TOMBSTONES.md.
+    var r = 512
     while r * r < K:
         r *= 2
     return r
@@ -698,8 +694,12 @@ def o_moe_route(x: List[Float32], Wg: List[Float32], T: Int, D: Int, E: Int, k: 
 # ---------------------------------------------------------------- 5515
 def _o_ln_row_warp() -> Bool:
     """Restated (sequence/layernorm.mojo `LN_ROW_WARP`): the row folds are the
-    32-slot fold under IDENTICAL unless a row-warp or all-off define is set."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+    32-slot fold under IDENTICAL unless the all-off define is set."""
+    # TOMBSTONE: MOJOLEARN_IDN_LN_ROW_WARP_OFF (old path beside the IDENTICAL LayerNorm 32-slot row fold, EXP:1945 PROMOTED) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 730ca5e639.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return False
     return True
 

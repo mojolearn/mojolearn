@@ -38,8 +38,7 @@ RESTORED 2026-11-09 (lane r1-restore-measured-winners; AGENTS.md "A measured
 winner is never deleted on reasoning"): by default each conv block and the
 head are the hand classifier's tuned kernels as executor ops
 (OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR; autograd/cnn_block_op.mojo), captured
-by this same program; `-D MOJOLEARN_CNN_GENERIC_OPS` keeps lane x8's generic
-tape chain (the A/B's B arm). The loss and the optimizer stay the program's.
+by this same program. The loss and the optimizer stay the program's.
 
 Python reaches these through the x_sequence whole-model descriptor ABI
 (sequence/neural_model_dispatch.mojo CNN_FIT, CNN_PREDICT); no Python runs
@@ -69,7 +68,6 @@ from autograd.program_runtime import train_program_control, parameter_buffers, r
 from autograd.program_inference_metadata import PreparedInferenceReplay
 from autograd.ops_api import _SLOT_BITS, _SLOT_MASK
 from sequence.exec_device import DeviceExec
-from std.sys.compile import is_defined
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast
 from autograd.cnn_block_op import OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR, CNN_FUSED_OPS
@@ -116,12 +114,9 @@ comptime _RESIDENT_PROGRAM = 1
 #: the 1.29x of the brief has no source cell). The tuned x_cnn_res_argmax is
 #: deleted (7c9d9d5575) and softmax_xent_row_at is not an executor op, so the
 #: generic OPS_SOFTMAX / OPS_ARGMAX stay in both arms (swapping them would move
-#: the probability bits on every column). `-D MOJOLEARN_CNN_PREDICT_PROGRAM_COPY`
-#: keeps lane x8b's per-call shape (B arm of the owed A/B, owed-pre0867.json
-#: row restore-cnn-predict-call): zero-filled X and output buffers, a new
-#: PreparedProgramReplay per call and the per-chunk copy. Same kernels on the
-#: same bytes in both arms, so no output bit moves.
-comptime CNN_PREDICT_PROGRAM_COPY = is_defined["MOJOLEARN_CNN_PREDICT_PROGRAM_COPY"]()
+#: the probability bits on every column).
+# TOMBSTONE: MOJOLEARN_CNN_PREDICT_PROGRAM_COPY (unmeasured B arm, EXP:2411 PENDING: lane x8b's per-call zero fills, new prepared replay and per-chunk copy) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at cc4a5c63c4.
+# Restore: git apply experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch; record in docs/TOMBSTONES.md.
 
 
 def _device_scratch(mut ex: DeviceExec, n: Int) raises -> FP:
@@ -130,9 +125,9 @@ def _device_scratch(mut ex: DeviceExec, n: Int) raises -> FP:
 
 def _cnn_scratch[E: Exec & Movable & Deinitable](mut s: OpsSession[E], n: Int) raises -> FP:
     """n floats of executor storage that the caller writes in full before
-    any read: no zero fill on the device (CNN_PREDICT_PROGRAM_COPY's A arm);
-    the host executor's `alloc` (a plain list) and the B arm keep `alloc`."""
-    comptime if E.IS_DEVICE and not CNN_PREDICT_PROGRAM_COPY:
+    any read: no zero fill on the device; the host executor keeps `alloc`
+    (a plain list)."""
+    comptime if E.IS_DEVICE:
         return _device_scratch(rebind[DeviceExec](s.ex), n)
     return s.ex.alloc(n)
 
@@ -256,44 +251,24 @@ def _forward[E: Exec & Movable & Deinitable](
     each block is ONE OPS_CNN_CONV_BLOCK (the hand classifier's fused conv +
     ReLU + max pool kernels and pinned GEMM plan) and the head is
     OPS_CNN_LINEAR (its pinned NT GEMM over the (k, flat) weight as stored),
-    autograd/cnn_block_op.mojo. `-D MOJOLEARN_CNN_GENERIC_OPS` captures lane
-    x8's generic tape chain below instead (the A/B's B arm)."""
+    autograd/cnn_block_op.mojo."""
     var none = List[Float32]()
     var h = x
     var nb = g.blocks()
-    comptime if CNN_FUSED_OPS:
-        # RESTORED 2026-11-09 (lane r1-restore-measured-winners): the X8
-        # TOMBSTONE above deleted these kernels' epoch drivers; the kernels
-        # return here as ops of the one program, the drivers stay deleted.
-        for j in range(nb):  # driver-loop: over conv blocks (model structure)
-            var bs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
-            var block_ints: List[Int] = [g.ks // 2, 1 if g.pool[j] else 0, g.ps]
-            h = s.op(OPS_CNN_CONV_BLOCK, bs, block_ints, none)
-        var ffs: List[Int] = [h]
-        var fl_ints: List[Int] = [1, 1, -1]
-        h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
-        var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
-        return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
+    # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm, EXP:2374 PENDING: lane x8's generic tape chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c599b986ce.
+    # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-09 (lane r1-restore-measured-winners): the X8
+    # TOMBSTONE above deleted these kernels' epoch drivers; the kernels
+    # return here as ops of the one program, the drivers stay deleted.
     for j in range(nb):  # driver-loop: over conv blocks (model structure)
-        var hs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
-        var conv_ints: List[Int] = [1, g.ks // 2]
-        h = s.op(OPS_CONV2D, hs, conv_ints, none)
-        var rs: List[Int] = [h]
-        h = s.op(OPS_RELU, rs, List[Int](), none)
-        if g.pool[j]:
-            var ps: List[Int] = [h]
-            var pool_ints: List[Int] = [g.ps, g.ps]
-            h = s.op(OPS_MAXPOOL2D, ps, pool_ints, none)
-    var fs: List[Int] = [h]
-    var flat_ints: List[Int] = [1, 1, -1]
-    h = s.op(OPS_RESHAPE_N, fs, flat_ints, none)
-    # OPS_LINEAR takes the (inputs, outputs) weight; the head keeps torch's
-    # (outputs, inputs) layout, so its parameter downloads as it uploaded.
-    var ts: List[Int] = [params[2 * nb]]
-    var wt = s.op(OPS_TRANSPOSE, ts, List[Int](), none)
-    var ls: List[Int] = [h, wt, params[2 * nb + 1]]
-    var act: List[Int] = [0]
-    return s.op(OPS_LINEAR, ls, act, none)
+        var bs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
+        var block_ints: List[Int] = [g.ks // 2, 1 if g.pool[j] else 0, g.ps]
+        h = s.op(OPS_CNN_CONV_BLOCK, bs, block_ints, none)
+    var ffs: List[Int] = [h]
+    var fl_ints: List[Int] = [1, 1, -1]
+    h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
+    var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
+    return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
 
 
 def _download_params[E: Exec & Movable & Deinitable](
@@ -412,8 +387,8 @@ def _resident_predict[E: Exec & Movable & Deinitable](
 ) raises:
     """Replay the resident forward over the n images at x_addr (uploaded
     once) in chunks of `chunk` rows, each chunk's (m, k) probabilities
-    copied on the executor into one (n, k) buffer (one chunk: read in place,
-    CNN_PREDICT_PROGRAM_COPY), then ONE download: the probabilities, or
+    copied on the executor into one (n, k) buffer (one chunk: read in
+    place), then ONE download: the probabilities, or
     (codes) the int32 OPS_ARGMAX of the whole buffer. The parameters are the
     session's, read in place; nothing else moves."""
     if len(s.programs) != _RESIDENT_PROGRAM:
@@ -426,19 +401,14 @@ def _resident_predict[E: Exec & Movable & Deinitable](
     var k = p.out_shapes[0].d[1]
     var params = parameter_buffers(s, p)
     var trainable = List[Bool](length=len(p.params), fill=False)
-    # A arm: the session's cached replay inventory for program 1 (built once,
+    # the session's cached replay inventory for program 1 (built once,
     # loaned to this call and returned on every exit, as run_program does).
     var pi = s._program_index(_RESIDENT_PROGRAM)
-    var loaned: PreparedInferenceReplay
-    comptime if not CNN_PREDICT_PROGRAM_COPY:
-        if len(s.program_replays[pi]) == 0:
-            s.program_replays[pi].append(PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK))
-        loaned = s.program_replays[pi].pop()
-    else:
-        # B arm (lane x8b): a new prepared replay per call
-        loaned = PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK)
+    if len(s.program_replays[pi]) == 0:
+        s.program_replays[pi].append(PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK))
+    var loaned = s.program_replays[pi].pop()
     # One chunk: the forward's output is read in place (no (n, k) buffer).
-    var direct = (not CNN_PREDICT_PROGRAM_COPY) and n <= chunk
+    var direct = n <= chunk
     var temps = List[Int]()
     var phs = List[Int]()
     var none = List[Float32]()
@@ -509,10 +479,7 @@ def _resident_predict[E: Exec & Movable & Deinitable](
     finally:
         s.ex.free(xb)
         loaned.clear_live()
-        comptime if not CNN_PREDICT_PROGRAM_COPY:
-            s.program_replays[pi].append(loaned^)
-        else:
-            _ = loaned^
+        s.program_replays[pi].append(loaned^)
 
 
 def cnn_predict_program[E: Exec & Movable & Deinitable, KIND: Int](

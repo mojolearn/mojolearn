@@ -1,0 +1,34 @@
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index 83a9d9e746..f9c950345a 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -2013,11 +2013,11 @@ def m3_siso_forward(
+         # Apple retains its prior default until separately performance-validated.
+         var use_increment_tile = False
+         comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
+-            # TOMBSTONE: MOJOLEARN_MAMBA3_TILED_INCREMENT (unmeasured opt-in arm: the state-increment tile on every column that fits, Apple included; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 17dfff96d5.
+-            # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
++            comptime if is_defined["MOJOLEARN_MAMBA3_TILED_INCREMENT"]():
++                use_increment_tile = True
+             # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE (unmeasured old path: no increment tile on NVIDIA and AMD; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2c7e9967c3.
+             # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-            comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
++            elif TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
+                 use_increment_tile = b * nc * nh >= 128
+         if use_increment_tile:
+             # AMD MI300X: six-way interleaved medians were 0.349/0.374 of
+@@ -2031,7 +2031,13 @@ def m3_siso_forward(
+                     Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+                     grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1),
+                 )
+-            # (the 8 x 32 tile was reached only through MOJOLEARN_MAMBA3_TILED_INCREMENT off NVIDIA / AMD)
++            else:
++                ctx.enqueue_function[m3_state_increment_tiled_kernel[8, 32]](
++                    pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
++                    v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
++                    Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
++                    grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1),
++                )
+         # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V (unmeasured old path: the scalar state increment where shared V fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 641484de4f.
+         # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+         elif lib_smem_page_fits_for[TARGET_COLUMN, 512]():

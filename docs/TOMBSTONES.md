@@ -1028,6 +1028,22 @@ in the tables after the sections.
 | [`MOJOLEARN_NN37_TRIANGLE_TASKS`](#mojolearn_nn37_triangle_tasks) | Neural (Mamba-2 SSD, IDENTICAL) | removed (unmeasured arm) | 2026-11-15 | [MOJOLEARN_NN37_TRIANGLE_TASKS.patch](../experiments/removed/MOJOLEARN_NN37_TRIANGLE_TASKS.patch) |
 | [`MOJOLEARN_NN40_OWNED_WEIGHTS`](#mojolearn_nn40_owned_weights) | Neural (Mamba, IDENTICAL) | removed (unmeasured arm) | 2026-11-15 | [MOJOLEARN_NN40_OWNED_WEIGHTS.patch](../experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch) |
 | [`MOJOLEARN_NN40_WS_HEADROOM`](#mojolearn_nn40_ws_headroom) | Neural (Mamba, IDENTICAL) | removed (unmeasured arm) | 2026-11-15 | [MOJOLEARN_NN40_WS_HEADROOM.patch](../experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch) |
+| [`MOJOLEARN_CNN_PREDICT_PROGRAM_COPY`](#mojolearn_cnn_predict_program_copy) | Neural (CNNClassifier predict call shape) | removed (unmeasured B arm) | 2026-11-15 | [MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch](../experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch) |
+| [`MOJOLEARN_ETS_TEAM_OFF`](#mojolearn_ets_team_off) | Series (ETS team, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_ETS_TEAM_OFF.patch](../experiments/removed/MOJOLEARN_ETS_TEAM_OFF.patch) |
+| [`MOJOLEARN_IDN_AF_COL_CHUNK_FOLD`](#mojolearn_idn_af_col_chunk_fold) | Sequence (Adafactor column fold, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch](../experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch) |
+| [`MOJOLEARN_IDN_ETS_TEAM_OFF`](#mojolearn_idn_ets_team_off) | Series (ETS team, IDENTICAL) | removed (old path beside the measured default) | 2026-11-15 | [MOJOLEARN_IDN_ETS_TEAM_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ETS_TEAM_OFF.patch) |
+| [`MOJOLEARN_IDN_LN_ROW_WARP_OFF`](#mojolearn_idn_ln_row_warp_off) | Sequence (LayerNorm 32-slot row fold, IDENTICAL) | removed (old path beside the measured default) | 2026-11-15 | [MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch) |
+| [`MOJOLEARN_IDN_M2_GRAD_FOLD`](#mojolearn_idn_m2_grad_fold) | Mamba-2 (gradient fold, IDENTICAL) | removed (unmeasured opt-in arms) | 2026-11-15 | [MOJOLEARN_IDN_M2_GRAD_FOLD.patch](../experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.patch) |
+| [`MOJOLEARN_IDN_NM_SPEC_OFF`](#mojolearn_idn_nm_spec_off) | Series (ETS Nelder-Mead spec, IDENTICAL) | removed (old path beside the measured default) | 2026-11-15 | [MOJOLEARN_IDN_NM_SPEC_OFF.patch](../experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_AF_COOP_OFF`](#mojolearn_idn_seq_af_coop_off) | Sequence (Adafactor row factor coop, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF`](#mojolearn_idn_seq_coop_nvamd_off) | Sequence (coop long folds on NVIDIA / AMD, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_LN_COOP_OFF`](#mojolearn_idn_seq_ln_coop_off) | Sequence (LayerNorm rows on a simdgroup, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF`](#mojolearn_idn_seq_pipe_down_off) | Sequence (pipelined downloads, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_PIPE_UP_OFF`](#mojolearn_idn_seq_pipe_up_off) | Sequence (pipelined uploads, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_WGRAD`](#mojolearn_idn_seq_wgrad) | Sequence (BPTT weight-gradient block, IDENTICAL) | removed (unmeasured opt-in arms) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_WGRAD.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.patch) |
+| [`MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF`](#mojolearn_idn_seq_wgrad_blocked_off) | Sequence (blocked BPTT weight gradient, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch) |
+| [`MOJOLEARN_SEQ_CROSTON_REG_OFF`](#mojolearn_seq_croston_reg_off) | Series (Croston register smoothing, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_SEQ_CROSTON_REG_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_CROSTON_REG_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_PIPE_CH`](#mojolearn_seq_fast_pipe_ch) | Sequence (pipelined chunk size, FAST Apple) | removed (unmeasured opt-in knob) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_CH.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -15204,3 +15220,175 @@ Inline TOMBSTONE markers only; the owner lane of each define writes its section,
 - `MOJOLEARN_IDN_ALL_OFF`: the umbrella term in ssd_minimal.mojo (IDN_M2_CB_LOWER, _M2_TILE_SWEEP, M2_RETAIN_GL), afn_defines.mojo (_IDN_MAMBA_DEVICE) and idn_gemm_ws.mojo (IDN_MAMBA_GEMM_WS). Patch experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch.
 
 Kept in this lane: `MOJOLEARN_MAMBA_2712_UNBOUNDED` (the poison gate's sabotage control, tools/mamba_poison_gate.sh SABOTAGE=1; SAB_2712_UNBOUNDED in ssd_minimal.mojo) and `MOJOLEARN_COLUMN_CPU` (correction).
+## Experiment deletions: lane expdel2-28-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-28-neural), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte.
+
+### MOJOLEARN_CNN_PREDICT_PROGRAM_COPY
+
+- Tried: B arm: lane x8b's per-call predict (zero-filled X and output buffers, a new prepared replay per call, the per-chunk copy).
+- Evidence: EXPERIMENTS.md row 2411 PENDING (owed row restore-cnn-predict-call never ran): no A/B recorded for the B arm. Deleted unmeasured (rule a).
+- Removed: CNN_PREDICT_PROGRAM_COPY and its branches in `_cnn_scratch` and `_resident_predict`: the cached replay, unfilled scratch and one-chunk in-place read are the only path. Default unchanged: no bits move.
+- Files: sequence/cnn_classifier_program.mojo.
+- Deleted by: lane/expdel2-28-neural `27a9cc7339` (2026-11-15); code recoverable at `cc4a5c63c4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_ETS_TEAM_OFF
+
+- Tried: old path: op_ets (one thread per series) in FAST on Apple.
+- Evidence: EXPERIMENTS.md row 535 KEPT aec9f8c33 (M3 damped-ets taxi-hourly 611.9 -> 48.0 ms, rmse same). Promoted on Apple only; FAST is Apple only, so no NVIDIA / AMD A/B is owed (rule d).
+- Removed: the `_OFF` term of ETS_TEAM. Default unchanged: no bits move.
+- Files: sequence/ets_team.mojo, sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `0fe5074767` (2026-11-15); code recoverable at `8d47995bad`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ETS_TEAM_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_AF_COL_CHUNK_FOLD
+
+- Tried: opt-in arm NI54: Adafactor column second moments as consecutive 64-row fma leaves, host and device (af_col_chunk_kernel).
+- Evidence: no EXPERIMENTS.md row; grid control ni54_af_col_fold (neural-seq-train-dedupe.json) never run: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: AF_COL_CHUNK_FOLD, af_col_canonical_sumsq, the op_af_col branch and the af_col_chunk_kernel launch in DeviceExec. AF_COL_LEAF stays (sequence/adafactor_candidates.mojo imports it; af_col_chunk_kernel there has no reader left). Default unchanged: no bits move. Grid control `ni54_af_col_fold` (neural-seq-train-dedupe.json) moved to `removed`.
+- Files: sequence/adafactor.mojo, sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `8d47995bad` (2026-11-15); code recoverable at `ab421749bb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_ETS_TEAM_OFF
+
+- Tried: old path: op_ets in IDENTICAL (the team is the default).
+- Evidence: EXPERIMENTS.md row 2087 KEEP (IDENTICAL default; damped-ets synthetic 0.017, taxi-hourly 0.014 on NV and AMD); the `_OFF` restore is the loser side (rule e).
+- Removed: the `_OFF` term of IDN_ETS_TEAM. Default unchanged: no bits move. Grid control `idn_ets_team` (ets-team-idn.json) moved to `removed`.
+- Files: sequence/ets_team.mojo, sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `33ca37483e` (2026-11-15); code recoverable at `0fe5074767`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ETS_TEAM_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_LN_ROW_WARP_OFF
+
+- Tried: old path: one ascending chain per LayerNorm row in IDENTICAL.
+- Evidence: EXPERIMENTS.md row 1945 PROMOTED (IDENTICAL default; layernorm NV 1.394 -> 1.071 ms, AMD 1.446 -> 1.143 ms); the `_OFF` restore is the loser side (rule e).
+- Removed: the `_OFF` term of the oracle restatement `_o_ln_row_warp` and its header note. The kernel-side read is in sequence/layernorm.mojo (another lane). Default unchanged: no bits move. Grid control `ln_row_warp` (layernorm-idn.json) moved to `removed`.
+- Files: sequence/checks/oracle.mojo.
+- Deleted by: lane/expdel2-28-neural `1ec110c4c3` (2026-11-15); code recoverable at `730ca5e639`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_M2_GRAD_FOLD
+
+- Tried: int arms 1 (NN39 binary tile tree) and 2 (NI44 128-row leaves) of the Mamba-2 gradient fold.
+- Evidence: no EXPERIMENTS.md row; grid control m2_grad_fold (neural-seq-train-dedupe.json) never run: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the `get_defined_int` read; IDN_M2_GRAD_FOLD_ARM = 0 and NN39_M2_GRAD_TREE = False keep their names for autograd/kernels/mamba2_ssd.mojo (another lane), which also keeps nn39_gradient_tree imported. Default unchanged: no bits move. Grid control `m2_grad_fold` (neural-seq-train-dedupe.json) moved to `removed`.
+- Files: mamba/impl/ops/neural_gradient_profile.mojo.
+- Deleted by: lane/expdel2-28-neural `fcaa656130` (2026-11-15); code recoverable at `92dbaa2ecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_NM_SPEC_OFF
+
+- Tried: old path: op_ets in place of the side-by-side Nelder-Mead candidates in IDENTICAL.
+- Evidence: EXPERIMENTS.md row 2086 KEEP (IDENTICAL default; damped-ets 0.141 NV / 0.126 AMD, same bits); the `_OFF` restore is the loser side (rule e).
+- Removed: the `_OFF` term of ETS_SPEC. Default unchanged: no bits move. Grid control `idn_nm_spec` (seq-nm-spec.json) moved to `removed`.
+- Files: sequence/ets_spec.mojo, sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `a2b075952e` (2026-11-15); code recoverable at `33ca37483e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_SEQ_AF_COOP_OFF
+
+- Tried: old path: one thread per Adafactor row factor / row-var mean in IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SEQ_AF_COOP. Default unchanged: no bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `2c0d457d23` (2026-11-15); code recoverable at `2794197ed7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF
+
+- Tried: old path: the coop folds on Apple only in IDENTICAL (one thread per long fold on NVIDIA and AMD).
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SEQ_COOP_NVAMD (the alias keeps its IDENTICAL term). Default unchanged: no bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `2794197ed7` (2026-11-15); code recoverable at `14eb8b482b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_LN_COOP_OFF
+
+- Tried: old path: one thread per LayerNorm row in IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SEQ_LN_COOP. Default unchanged: no bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `b25786e9b3` (2026-11-15); code recoverable at `2c0d457d23`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF
+
+- Tried: old path: IDENTICAL serial downloads.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SEQ_PIPE_DOWN; the serial download stays for FAST off Apple. Default unchanged: no bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `c5730b729c` (2026-11-15); code recoverable at `c0a04b3bfd`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_PIPE_UP_OFF
+
+- Tried: old path: IDENTICAL serial uploads (no chunked copy / DMA overlap).
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of SEQ_PIPE_UP; the serial upload stays for FAST off Apple. Default unchanged: no bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `c0a04b3bfd` (2026-11-15); code recoverable at `b25786e9b3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_WGRAD
+
+- Tried: int arms 1 (NI51 blocks from 256 rows) and 2 (NN43 fixed 128-row leaf profile) of the IDENTICAL blocked BPTT weight gradient.
+- Evidence: no EXPERIMENTS.md row; grid control seq_wgrad (neural-seq-train-dedupe.json) never run: no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the two arms of the oracle restatement `_o_wgrad_block` (sequence/checks/oracle.mojo, this lane). The kernel-side read is in sequence/recurrent.mojo (another lane: inline marker and its own patch). Default unchanged: no bits move. Grid control `seq_wgrad` (neural-seq-train-dedupe.json) moved to `removed`.
+- Files: sequence/checks/oracle.mojo.
+- Deleted by: lane/expdel2-28-neural `105cf60fa6` (2026-11-15); code recoverable at `d09d3a3b71`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF
+
+- Tried: old path: one ascending fold of the BPTT weight gradient in IDENTICAL.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded for the old path. Deleted unmeasured (rule b).
+- Removed: the `_OFF` term of the oracle restatement `_o_wgrad_block`. The kernel-side read is in sequence/recurrent.mojo (another lane). Default unchanged: no bits move.
+- Files: sequence/checks/oracle.mojo.
+- Deleted by: lane/expdel2-28-neural `730ca5e639` (2026-11-15); code recoverable at `105cf60fa6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_CROSTON_REG_OFF
+
+- Tried: old path: the stored Croston smoothing in FAST on Apple.
+- Evidence: EXPERIMENTS.md row 539 KEPT 2dcdd949f (M3 croston taxi-hourly 3.0 -> 2.4 ms, synthetic 2.7 -> 1.8 ms). Promoted on Apple only; FAST is Apple only, so no NVIDIA / AMD A/B is owed (rule d).
+- Removed: the `_OFF` term of CROSTON_REG. Default unchanged: no bits move.
+- Files: sequence/croston.mojo.
+- Deleted by: lane/expdel2-28-neural `9c780e0ba9` (2026-11-15); code recoverable at `a2b075952e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_CROSTON_REG_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_SEQ_FAST_PIPE_CH
+
+- Tried: int knob: the pipelined copy chunk in floats (default 1 << 21).
+- Evidence: EXPERIMENTS.md row 680 MERGED-UNMEASURED opt-in (neural; Andrew Oct 3): no A/B recorded. Deleted unmeasured (rule a).
+- Removed: the `get_defined_int` read; SEQ_PIPE_CH = 1 << 21 keeps its name (autograd/program_output_copy.mojo imports it). Default unchanged: no bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel2-28-neural `ab421749bb` (2026-11-15); code recoverable at `c5730b729c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### Non-owner folds in this lane's files
+
+- `MOJOLEARN_IDN_ALL_OFF`: the umbrella term of SEQ_COOP_NVAMD, SEQ_AF_COOP, SEQ_LN_COOP, SEQ_PIPE_UP / DOWN, IDN_ETS_TEAM, ETS_SPEC, IDN_M1_PERSISTENT_SCAN, the two oracle restatements and the two GMM E-step candidates (mixture/checks/estep.mojo); the terms inside deleted arms went with them (AF_COL_CHUNK_FOLD, M3_ANGLE_PARALLEL, YINTRA_RESOURCE_TILE, NN39_M2_GRAD_TREE, IDN_M1_STATE_WINDOW); `1b626280ec`, recoverable at `9cf14671a2`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch`.
+- `MOJOLEARN_IDN_M3_ANGLE_BLOCK_32`: the 32-token timing arm of M3_ANGLE_Q_BLOCK (mamba/impl/ops/mamba3_siso.mojo); `9129bd2aa9`, recoverable at `1ec110c4c3`; `experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.expdel2-28-neural.patch`.
+- `MOJOLEARN_IDN_M3_ANGLE_BLOCK_128`: the 128-token timing arm of M3_ANGLE_Q_BLOCK (mamba3_siso.mojo); `42ef6d7c75`, recoverable at `9129bd2aa9`; `experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_128.expdel2-28-neural.patch`.
+- `MOJOLEARN_IDN_M3_ANGLE_PARALLEL`: the exact-integer parallel S10 angle chain: m3_angle_q_block / chain / finish / last kernels, their launch and M3_ANGLE_Q_BLOCK (mamba3_siso.mojo); M3_ANGLE_PARALLEL = False and the count helpers stay for mamba/impl/modules/mamba3.mojo; `ed49dbc8f8`, recoverable at `42ef6d7c75`; `experiments/removed/MOJOLEARN_IDN_M3_ANGLE_PARALLEL.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT`: the in-chain increment of m3_angle_kernel and the M3_PARALLEL_ANGLE_INCREMENT alias; the increment kernel launch is unconditional (mamba3_siso.mojo); `2c7e9967c3`, recoverable at `ed49dbc8f8`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE`: the `not is_defined` term of the NVIDIA / AMD increment-tile rule (mamba3_siso.mojo); `641484de4f`, recoverable at `2c7e9967c3`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V`: the `not is_defined` term of the shared-V increment rule (mamba3_siso.mojo); `acdae84cf3`, recoverable at `641484de4f`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_QKS`: the `not is_defined` term of the qk_s tile rule (mamba3_siso.mojo); `3b67ed3496`, recoverable at `acdae84cf3`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_QKS.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_YINTRA`: the `not is_defined` term of the NVIDIA y-intra tile rule (mamba3_siso.mojo); `84eefc33e6`, recoverable at `3b67ed3496`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_YSTATE`: the `not is_defined` term of the y-state tile rule (mamba3_siso.mojo); `17dfff96d5`, recoverable at `84eefc33e6`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YSTATE.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_TILED_INCREMENT`: the force-on increment tile and the 8 x 32 tile launch it alone reached off NVIDIA / AMD (mamba3_siso.mojo); `0e3f2a5d45`, recoverable at `17dfff96d5`; `experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE`: the 16 x 16 tile term off NVIDIA / AMD (mamba3_siso.mojo); `f484785e59`, recoverable at `0e3f2a5d45`; `experiments/removed/MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.expdel2-28-neural.patch`.
+- `MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE`: the NI42 y-intra tile on every fitting GPU in IDENTICAL (mamba3_siso.mojo); `f4af7989dd`, recoverable at `f484785e59`; `experiments/removed/MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_TILED_YINTRA`: the force-on y-intra tile (mamba3_siso.mojo); `8c5ab3e7af`, recoverable at `f4af7989dd`; `experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.expdel2-28-neural.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_STATEPASS`: m3_statepass_kernel and its launch; decay + increment + scan is the only state pass (mamba3_siso.mojo); `92dbaa2ecb`, recoverable at `8c5ab3e7af`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.expdel2-28-neural.patch`.
+- `MOJOLEARN_IDN_M1_SCAN`: the arm read (M1_SCAN = 3, the promoted persistent scan), IDN_M1_STATE_WINDOW, its launch and import (mamba/impl/ops/selective_scan_interface.mojo); `cc4a5c63c4`, recoverable at `fcaa656130`; `experiments/removed/MOJOLEARN_IDN_M1_SCAN.expdel2-28-neural.patch`.
+- `MOJOLEARN_CNN_GENERIC_OPS`: lane x8's generic tape chain in `_forward` and the comments naming it (sequence/cnn_classifier_program.mojo; also `c599b986ce`); `f15596c0c6`, recoverable at `27a9cc7339`; `experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-28-neural.patch`.
+- `MOJOLEARN_PROPHET_COOP_OFF`: the comment naming it in DeviceExec (sequence/exec_device.mojo); `d09d3a3b71`, recoverable at `9c780e0ba9`; `experiments/removed/MOJOLEARN_PROPHET_COOP_OFF.expdel2-28-neural.patch`.
+- `MOJOLEARN_IDN_GEMM_SPLITK_OFF`: the comments naming it (sequence/exec.mojo, sequence/exec_device.mojo); `9c26def697`, recoverable at `f15596c0c6`; `experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.expdel2-28-neural.patch`.
+- `MOJOLEARN_SEQ_RNN_SCAN_APPLE`: the docstring naming it (sequence/checks/rnn_scan_check.mojo); `9cf14671a2`, recoverable at `9c26def697`; `experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_APPLE.expdel2-28-neural.patch`.
+
+Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; plan correction). No read in this lane's files, nothing to fold: `MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF`, `MOJOLEARN_IDN_ROW_COOP_OFF`, `MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF`, `MOJOLEARN_MOE_FAST_MMA_OFF`, `MOJOLEARN_TSA2_VAR_OFF`. The generated host twins (mamba/host/gen/mamba3_siso.mojo, mamba/host/gen/selective_scan_interface.mojo) still carry the deleted Mamba arms until they are regenerated.
