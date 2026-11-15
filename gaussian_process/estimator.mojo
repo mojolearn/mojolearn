@@ -84,8 +84,7 @@ is the one-shot form, which is what the gates and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
-from std.memory import bitcast
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
@@ -121,13 +120,6 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import cho_solve
-from cholesky.chol_ops import (
-    CHOL_OPS_FIT,
-    chol_op_cho_solve,
-    chol_op_factor,
-    chol_op_logdet,
-    chol_op_logdet_scratch_floats,
-)
 from core.device_zero import enqueue_fill
 from gaussian_process.unnorm import GP_UNNORM_COV, GP_UNNORM_MEAN, GP_UNNORM_STD, gp_unnorm_cell
 from gaussian_process.gpc_items import gpc_fold_blocks, gpr_ydot_fin, gpr_ydot_part_item
@@ -170,8 +162,6 @@ from gaussian_process.checks.sample_y import (
     gp_sample_y_validate,
 )
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_log,
     identical_mul,
@@ -740,12 +730,6 @@ def gpr_fit_host(
     var dev_logdet = Float32(0.0)
     var factor_l = List[Float32]()
     var ctrace = IdentityTrace()
-    # `info` gates the ops' solve below: allocated on the ops route only
-    # (CHOL_OPS_FIT; one word). The default route reads potrf_lower's own
-    # info, so no word is allocated there (lane fix-gmm-chol-leftovers:
-    # the word used to be allocated on both routes and never read on the
-    # default one).
-    var dinfo = Optional[DeviceBuffer[DType.int32]]()
     # The factor and its log-determinant. Under -D MOJOLEARN_IDN_CHOL_OPS_FIT
     # the executor's Cholesky ops (lane n8-gp-krr-smo, cholesky/chol_ops.mojo):
     # enqueued read-free, `info` and log|K| home with the factor's own
@@ -755,43 +739,19 @@ def gpr_fit_host(
     # its info read, then `chol_logdet`. The same kernels in the same
     # order; the ops route measured AMD gpr 1.14-1.18x slower than 0.8.66
     # on the resident fit (cholesky/chol_ops.mojo CHOL_OPS_FIT).
-    comptime if CHOL_OPS_FIT:
-        dinfo = Optional(ctx.enqueue_create_buffer[DType.int32](1))
-        var di = dinfo.value().create_sub_buffer[DType.int32](0, 1)
-        enqueue_fill(ctx, di, Int32(0))
-        var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
-        var dldet = ctx.enqueue_create_buffer[DType.float32](1)
-        var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
-        var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
-        add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-        trace.record_device(ctx, "gp.ridged", dk, n * n)
-        chol_op_factor(ctx, dk, di, n)
-        chol_op_logdet(ctx, dk, di, dldscr, dldet, n)
-        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=di)
-        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
-        factor_l = _download(ctx, dk, n * n)
-        info = Int(hinfo.unsafe_ptr().unsafe_load(0))
-        if info == 0:
-            dev_logdet = hld.unsafe_ptr().unsafe_load(0)
-        _ = di^
-        _ = dldscr^
-        _ = dldet^
-        _ = hinfo^
-        _ = hld^
-    else:
-        var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-        var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-        ctx.synchronize()
-        add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-        trace.record_device(ctx, "gp.ridged", dk, n * n)
-        var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-        info = run.info
-        nb_ran = run.nb
-        if info == 0:
-            dev_logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
-        factor_l = _download(ctx, dk, n * n)
-        _ = ws^
-        _ = dwork^
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    ctx.synchronize()
+    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+    trace.record_device(ctx, "gp.ridged", dk, n * n)
+    var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    info = run.info
+    nb_ran = run.nb
+    if info == 0:
+        dev_logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
+    factor_l = _download(ctx, dk, n * n)
+    _ = ws^
+    _ = dwork^
     trace.record_list_f32("gp.factor", factor_l)
 
     var dual = List[Float32]()
@@ -801,12 +761,7 @@ def gpr_fit_host(
     if info == 0:
         var dy = _upload(ctx, y)
         var ddual = _upload(ctx, y)
-        comptime if CHOL_OPS_FIT:
-            var dis = dinfo.value().create_sub_buffer[DType.int32](0, 1)
-            chol_op_cho_solve(ctx, dk, ddual, dis, n, 1)
-            _ = dis^
-        else:
-            cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
+        cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
         dual = _download(ctx, ddual, n)
         trace.record_list_f32("gp.dual_coef", dual)
         if sabotage == GP_SAB_LOGDET_RECOMPUTED:
@@ -834,7 +789,6 @@ def gpr_fit_host(
     _ = dls^
     _ = dk^
     _ = dstack^
-    _ = dinfo^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
 
@@ -1185,97 +1139,8 @@ def gpr_lml_grad_host(
     # calls in the fit's order on K where the launch left it; before, K, L
     # and K_inv each crossed to the host and back
     chol_validate_jitter(alpha)
-    comptime if not CHOL_OPS_FIT:
-        # the measured 0.8.66 route (`_gpr_lml_grad_potrf`); the code below
-        # is the B arm of the CHOL_OPS_FIT A/B
-        return _gpr_lml_grad_potrf(ctx, dk, dgrad, y, n, n_free, alpha)
-    # Under -D MOJOLEARN_IDN_CHOL_OPS_FIT: the executor's Cholesky ops (lane
-    # n8-gp-krr-smo, cholesky/chol_ops.mojo): every launch enqueued read-free, `info` gating the solves and the
-    # log-determinant on the device, and ONE read at the end (info,
-    # log|K|, y^T alpha_ and the gradient). Before: a drain inside the
-    # factor for `info`, one for the log-determinant, one for y^T alpha_,
-    # one for the gradient.
-    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
-    enqueue_fill(ctx, dinfo, Int32(0))
-    var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
-    var dldet = ctx.enqueue_create_buffer[DType.float32](1)
-    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-    chol_op_factor(ctx, dk, dinfo, n)
-    chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
-    var dy = _upload(ctx, y)
-    var ddual = _upload(ctx, y)
-    chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
-    # `_gpr_ydot_device`'s two launches, the scalar left on the device
-    var nbf = gpc_fold_blocks(n)
-    var dypart = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
-    var dyd = ctx.enqueue_create_buffer[DType.float32](1)
-    if nbf > 0:
-        ctx.enqueue_function[gpr_ydot_part_kernel](
-            _gp(dy), _gp(ddual), Int32(n), _gp(dypart), Int32(nbf),
-            grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
-        )
-    ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
-    var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
-    enqueue_fill(ctx, dkinv, Float32(0.0))
-    ctx.enqueue_function[gp_eye_kernel](
-        _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
-    )
-    chol_op_cho_solve(ctx, dk, dkinv, dinfo, n, n)
-    # the gradient fold on the device, dK_p where the launch left it
-    # (gaussian_process/gp_grad_items.mojo, the host column's items;
-    # cpu-gpu-cleanup c-gp-kernel: every dK_p was downloaded and folded on
-    # the host)
-    var grad = List[Float32](length=n_free, fill=Float32(0.0))
-    var nb = gp_grad_blocks(n)
-    var dpart = ctx.enqueue_create_buffer[DType.float32](max(n_free * nb, 1))
-    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_free, 1))
-    if n_free > 0:
-        ctx.enqueue_function[gp_grad_part_kernel](
-            _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(n_free * nb), _gp(dpart),
-            grid_dim=(n_free * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-        )
-        ctx.enqueue_function[gp_grad_fin_kernel](
-            _gp(dpart), Int32(nb), Int32(n_free), gp_grad_half(), _gp(dout),
-            grid_dim=(n_free + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-        )
-        ctx.enqueue_copy(dst_ptr=grad.unsafe_ptr(), src_buf=dout)
-    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
-    var hyd = ctx.enqueue_create_host_buffer[DType.float32](1)
-    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-    ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
-    ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
-    ctx.synchronize()
-    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
-    var lml = Float32(0.0)
-    if info == 0:
-        lml = gp_log_marginal_likelihood_value(
-            hyd.unsafe_ptr().unsafe_load(0), hld.unsafe_ptr().unsafe_load(0), n
-        )
-    else:
-        # a failed factor: no likelihood and a zero gradient beside its info
-        grad = List[Float32](length=n_free, fill=Float32(0.0))
-    _ = hinfo^
-    _ = hld^
-    _ = hyd^
-    _ = dx^
-    _ = dls^
-    _ = dk^
-    _ = dstack^
-    _ = dinfo^
-    _ = dldscr^
-    _ = dldet^
-    _ = dy^
-    _ = ddual^
-    _ = dypart^
-    _ = dyd^
-    _ = dkinv^
-    _ = dpart^
-    _ = dout^
-    _ = dgrad^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
-    return GPLmlGrad(lml, grad^, info)
+    # the measured 0.8.66 route (`_gpr_lml_grad_potrf`)
+    return _gpr_lml_grad_potrf(ctx, dk, dgrad, y, n, n_free, alpha)
 
 
 def gpr_log_marginal_likelihood(model: GPRegressor) raises -> Float32:
@@ -1831,30 +1696,16 @@ def gpr_sample_y_host(
     # returned. By default the measured 0.8.66 route (lane
     # restore-classical-measured-routes): `potrf_lower` with its info read,
     # refused by name before the draws (cholesky/chol_ops.mojo CHOL_OPS_FIT).
-    # The info word and its host copy exist on the ops route only (lane
-    # fix-gmm-chol-leftovers: they used to be allocated on both routes and
-    # never read on the default one, which reads potrf_lower's own info).
-    var cinfo = Optional[DeviceBuffer[DType.int32]]()
-    var hcinfo = Optional[HostBuffer[DType.int32]]()
-    comptime if CHOL_OPS_FIT:
-        cinfo = Optional(ctx.enqueue_create_buffer[DType.int32](1))
-        hcinfo = Optional(ctx.enqueue_create_host_buffer[DType.int32](1))
-        var ci = cinfo.value().create_sub_buffer[DType.int32](0, 1)
-        enqueue_fill(ctx, ci, Int32(0))
-        add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
-        chol_op_factor(ctx, dcov, ci, n_star)
-        _ = ci^
-    else:
-        var nb_pin = chol_nb_for(n_star, CHOL_NB_PINNED)
-        var cws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n_star, nb_pin))
-        ctx.synchronize()
-        var ctrace = IdentityTrace()
-        add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
-        var run = potrf_lower(
-            ctx, dcov, cws, n_star, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
-        )
-        gp_sample_y_check_factor(run.info, n_star)
-        _ = cws^
+    var nb_pin = chol_nb_for(n_star, CHOL_NB_PINNED)
+    var cws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n_star, nb_pin))
+    ctx.synchronize()
+    var ctrace = IdentityTrace()
+    add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
+    var run = potrf_lower(
+        ctx, dcov, cws, n_star, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
+    )
+    gp_sample_y_check_factor(run.info, n_star)
+    _ = cws^
     var key = gp_sample_y_key(seed)
     var nz = n_star * n_samples
     var dz = ctx.enqueue_create_buffer[DType.float32](nz)
@@ -1879,13 +1730,7 @@ def gpr_sample_y_host(
     if unnorm:
         # every draw un-normalized as the mean, on the device
         _gp_unnorm(ctx, dyo, dyo, nz, y_std, y_mean, GP_UNNORM_MEAN)
-    comptime if CHOL_OPS_FIT:
-        ctx.enqueue_copy(dst_ptr=hcinfo.value().unsafe_ptr(), src_buf=cinfo.value())
     var out = _download(ctx, dyo, nz)
-    comptime if CHOL_OPS_FIT:
-        gp_sample_y_check_factor(Int(hcinfo.value().unsafe_ptr().unsafe_load(0)), n_star)
-    _ = hcinfo^
-    _ = cinfo^
     _ = dx^
     _ = dxs^
     _ = dls^
