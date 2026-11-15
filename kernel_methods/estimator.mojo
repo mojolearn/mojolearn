@@ -52,7 +52,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
 from std.os import getenv
-from std.sys.compile import is_defined
 from std.memory import bitcast
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
@@ -2528,7 +2527,7 @@ def rbf_sampler_transform_host(
     # transform in that launch when no stage needs the projection alone)
     var chain = False
     var whole = False
-    # C25_PROJECTION_REUSE (IDENTICAL default, _OFF restores the old route): the
+    # C25_PROJECTION_REUSE (the IDENTICAL default): the
     # projection for every d through classical_projection_kernel. Restored 2026-10-10
     # from the tombstone patch after grid pass 2 (vendor geo-mean 0.903x, worst 0.983x).
     comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:
@@ -2622,7 +2621,7 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
     # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
     # transform in that launch when no stage needs the projection alone)
     var chain = False
-    # C25_PROJECTION_REUSE (IDENTICAL default, _OFF restores the old route): the
+    # C25_PROJECTION_REUSE (the IDENTICAL default): the
     # projection for every d through classical_projection_kernel. Restored 2026-10-10
     # from the tombstone patch after grid pass 2 (vendor geo-mean 0.903x, worst 0.983x).
     comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:
