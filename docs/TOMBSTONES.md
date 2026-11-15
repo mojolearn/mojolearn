@@ -704,6 +704,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C16_GLM_FUSED`](#mojolearn_classical_c16_glm_fused-unmeasured-arm-deleted-2026-11-15) | Linear (GLM loss, gradient and Hessian in one pass, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch) |
 | [`MOJOLEARN_CLASSICAL_C17_LS_TRIALS`](#mojolearn_classical_c17_ls_trials-unmeasured-arm-deleted-2026-11-15) | Linear (quasi-Newton line search with two speculative trials, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch) |
 | [`MOJOLEARN_CLASSICAL_C17_OVR`](#mojolearn_classical_c17_ovr-unmeasured-arm-deleted-2026-11-15) | Linear (SGD one-vs-rest in waves of four, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C17_OVR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch) |
+| [`MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT`](#mojolearn_classical_c18_residual_next-unmeasured-arm-deleted-2026-11-15) | Linear (CD next-coordinate residual forwarding, IDENTICAL) | removed (opt-in arm; unqualified opt-in arm, neutral) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6808,3 +6809,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `8c1b568a83`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch`, then delete the `MOJOLEARN_CLASSICAL_C17_OVR` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c17_ovr`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which coordinate descent forwarded the next coordinate's residual from the preceding residual update under the unchanged coordinate order (x_linear/cd.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C18_RESIDUAL_NEXT` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: T.C18.residual-only (source 6fe3cfce38fd) read mixed / neutral, NV 1.009/1.006/0.970/1.007, AMD 1.004/1.034/0.946/0.974 (lasso-cv taxi/istella, enet-cv taxi/istella), quality equal; never qualified or promoted, so the opt-in arm goes (plan rule a). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7ca2a3400c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch`, then delete the `MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv.json` control `c18_residual_next`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
