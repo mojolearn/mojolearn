@@ -1836,6 +1836,8 @@ Files: `x_cnn/device.mojo`, `x_cnn/host/gemm_host.mojo`, `x_cnn/host/ops_host.mo
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `IDN_ADAPT_M_OFF`, `IDN_CNN_RESIDENT_GRADS_OFF`, `IDN_DIRECT_CONV_NVAMD_OFF`, `IDN_GRAPH_M_OFF`, `IDN_GROUP_M_OFF`, `IDN_LAYER_DEV_IO_OFF`, `IDN_PAD_M_OFF`, `IDN_PIN_WEIGHTS_OFF`, `IDN_XCNN_BIAS_FOLD_OFF`, `NI11_DIRECT_CONV_TAPS64`, `NI12_IMPLICIT_CONV_OFF`, `NI14_COL2IM`, `NI15_BIAS_NO_ONES`, `NI55_GRAPH_FEATURE4`, `NI57_GRAPH_TREE64`, `NI58_SAGE_FEATURE4`, `NI59_DROPOUT_CHANNEL`, `NI60_DROPOUT_APPLY4`, `NN48_CSR_TILES`, `XCNN_NO_BN_BLOCK`, `XCNN_NO_DIRECT_CONV`, `XCNN_NO_FAST_TUNE`, `XCNN_NO_IM2COL_TAPS`, `XCNN_NO_MMA_SPLIT`, `XCNN_NO_NT_TUNE`, `XCNN_NO_RES_POOL`, `XCNN_NO_TILED_LAYOUT`, `XCNN_ONES_CACHE_OFF`, `XCNN_RES_FREE_ASYNC_OFF`, `XCNN_RES_NEW_NOZERO_OFF`, `XCNN_TILED_ROWS`
 
+Lane result (expdel2-35-neural, 2026-11-15): 30 owned deleted with records; 5 non-owner folds (IDN_ALL_OFF, AFN_CNN_DIRECT, NN14_BOUNDED_IM2COL, IDN_CNN_CONV_RELU, NN47_APPLY_RUNNING); no edit needed for IDN_GAP_BLOCK_FOLD_OFF, IDN_XENT_DEV_FOLD_OFF, IDN_NEURAL_CHAINS, IDN_NEURAL_GEMM_EPILOGUE. KEPT: `NI12_IMPLICIT_CONV_OFF` (its _OFF arm is a measured cnn-clf winner, grid g50ebe26a5 avg 0.90x) and `COLUMN_CPU`. The tiled col2im kernel (x_cnn/neural_col2im.mojo) stays while autograd/kernels/cnn.mojo imports it.
+
 ### expdel2-36-neural-series-linear (38 defines, 13 code files)
 
 | define | decision | rule | sites | lines | evidence / why |
