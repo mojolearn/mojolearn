@@ -764,6 +764,7 @@ in the tables after the sections.
 | [`MOJOLEARN_TRAIN_LIVE_STATUS`](#mojolearn_train_live_status-unmeasured-arm-deleted-2026-11-15) | Neural (byte LM train step live-status candidate, I10) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_TRAIN_LIVE_STATUS.patch](../experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch) |
 | [`MOJOLEARN_IDN_TSQR_REUSE`](#mojolearn_idn_tsqr_reuse-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR immutable-factor reuse across RHS calls, I22) | removed (opt-in arm; component screening only (I22 source5b), never a full-operation A/B) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_REUSE.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch) |
 | [`MOJOLEARN_IDN_RADIX_TILE128`](#mojolearn_idn_radix_tile128-unmeasured-arm-deleted-2026-11-15) | Prep (stable nibble radix pairs with 128-thread tiles, I19) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_RADIX_TILE128.patch](../experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch) |
+| [`MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE`](#mojolearn_idn_ragged_radix_nibble-unmeasured-arm-deleted-2026-11-15) | Prep (four-bit nibble stable radix pairs for ragged sorts, I19) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch](../experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7400,4 +7401,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `51ec4db2c0`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch`, then delete the `MOJOLEARN_IDN_RADIX_TILE128` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the nibble-digit `stable_nibble_pairs_u32` arm of the I19 ragged radix sort in `experiments/performance_ideas/I19/ragged_float.mojo` and `I19/check.mojo`; both use `stable_radix_sort_pairs_u32`.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `36a2cc0af1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch`, then delete the `MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
