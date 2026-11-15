@@ -71,7 +71,9 @@ No arithmetic operators, no broadcasting, no fancy indexing. Every public estima
 
 ## `_serialize.py` (DEVIATION 2302)
 
-Same public functions and the SAME BYTES ON DISK: a hand-written NPY v1.0 codec
+Same public functions and the SAME BYTES ON DISK. Since 2026-11-15 (lane py-archive)
+each function is one call into the compiled archive codec (`bindings/archive_npz_door.mojo`
+over `core/native_archive_{read,npy,write}.mojo`), which writes the NPY v1.0 codec
 (magic `\x93NUMPY`, version 1.0, ASCII header dict with `descr`, `fortran_order`,
 `shape`, padded with spaces to a 64-byte-aligned total length ending in `\n`) inside
 the existing deterministic zip (pinned 1980-01-01 timestamps, sorted members,

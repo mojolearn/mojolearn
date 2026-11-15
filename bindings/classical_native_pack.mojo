@@ -15,6 +15,7 @@ from bindings.classical_attributes_door import classical_check_layout_call, clas
 from bindings.classical_archive_door import classical_archive_save, classical_archive_hash as classical_host_hash
 from bindings.classical_archive_read_door import classical_archive_load, classical_host_model
 from bindings.archive_schema_native_door import archive_schema_save
+from bindings.archive_npz_door import archive_npz_call
 from bindings.linear_score_native_unpack import linear_regressor_score
 from bindings.native_operation_codes import operation_table
 from bindings.classical_native_run import classical_coded_trees
@@ -167,6 +168,12 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             # schema, written by the deterministic NPZ writer.
             var saved = archive_schema_save(model, args[0], context)
             return saved.steal_data()
+        if operation == "archive_npz":
+            # `mojolearn._serialize`: the npz/npy codec helpers, one native
+            # call each (bindings/archive_npz_door.mojo). An uncoded string
+            # operation beside archive_save; coded operations never reach it.
+            var npz = archive_npz_call(args, context)
+            return npz.steal_data()
         if operation == "host_model":
             var host_context = py_get(context, "classical_host_context")
             if host_context is None:
