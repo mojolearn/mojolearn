@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from mojolearn import LinearDiscriminantAnalysis, model_selection as ms
-from mojolearn import _backend, _expansion_metrics
+from mojolearn import _backend
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -21,7 +21,7 @@ def _poison_loaders(monkeypatch):
     def forbidden(*args, **kwargs):
         calls.append('loader')
         raise AssertionError('stratification called a Python binding loader')
-    monkeypatch.setattr(_expansion_metrics, '_binding', forbidden)
+    # `_expansion_metrics._binding` is no longer poisoned: a171a0c425 deleted it.
     monkeypatch.setattr(_backend, 'binding', forbidden)
     return calls
 
