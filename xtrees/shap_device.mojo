@@ -47,14 +47,15 @@ comptime UNITS_MAX = 1 << 20
 
 # lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
 # (the table's terms are `shap_tree_unit`'s statements on the same operands,
-# added in the same order); -D MOJOLEARN_IDN_GATES_OFF (or the _OFF below)
-# restores the per-row units in IDENTICAL.
+# added in the same order).
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old-path switch, EXP:2479 DELETED (old path)) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ec2c023e02.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
 comptime SHAP_TABLE = (
     (
         (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
-        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]())
+        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     )
     and not is_defined["MOJOLEARN_TREESHAP_FAST_TABLE_OFF"]()
 )
