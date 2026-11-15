@@ -41,9 +41,7 @@ stays as its default constant so importers fold their dead arms.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.patch (same patch as T08)
 # TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.patch (same patch as T08)
-comptime T08 = False
-comptime T08_LAYOUT = 1
-comptime T08_BITS = 8
+# (Sweep 2026-11-15: T08, T08_LAYOUT and T08_BITS removed; readers folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T09 (dead code) deleted 2026-10-07 by eb8efb83a; code recoverable at eb8efb83a^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T09.patch; record in docs/TOMBSTONES.md.
 # T09 (the ExtraTrees bootstrap-locality sort) was deleted by lane/grid-prune

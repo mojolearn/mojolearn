@@ -66,7 +66,6 @@ passed as a `DatasetView`, not as loose scalars.
 =================================================================
 """
 
-from ensemble.tree_identical_ideas import T08
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
@@ -185,13 +184,11 @@ struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
         """DEVIATION 314: the precomputed `lower_bound` index for
         (row, col). Valid only when `has_bins`; same offset formula as
         `value` above, or ROW-major under `RF_BINS_ROW_MAJOR` (FAST)."""
-        comptime if T08:
-            # TOMBSTONE: MOJOLEARN_TREES_T08_LAYOUT (unmeasured knob; layout 1 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
-            # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-            # TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured knob; 8 bits kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
-            # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-            var offset = Int(row)*Int(self.n_cols)+Int(col)
-            return Int32(self.bins[unsafe_offset=offset])
+        # TOMBSTONE: MOJOLEARN_TREES_T08_LAYOUT (unmeasured knob; layout 1 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured knob; 8 bits kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: the folded T08 row-major-bins branch was removed here.)
         comptime if RF_BINS_ROW_MAJOR:
             if self.bins_row_major:
                 return Int32(

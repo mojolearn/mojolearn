@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
 
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T08, T14, C48
+from ensemble.tree_identical_ideas import T14, C48
 from max.gpu import (
     WARP_SIZE,
     block_dim,
@@ -3757,18 +3757,15 @@ def bin_dataset_kernel[dtype: DType](
             Int64(i) * row_stride + Int64(Int(col)) * col_stride
         )
         var b = lower_bound_aspace(q, n_bins, data[unsafe_offset=off])
-        comptime if T08:
-            # TOMBSTONE: MOJOLEARN_TREES_T08_LAYOUT (unmeasured knob; layout 1 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
-            # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-            # TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured knob; 8 bits kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
-            # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-            var bin_offset = i*Int(n_cols)+Int(col)
-            bins[unsafe_offset=bin_offset] = UInt8(Int(b))
+        # TOMBSTONE: MOJOLEARN_TREES_T08_LAYOUT (unmeasured knob; layout 1 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured knob; 8 bits kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: the folded T08 row-major-bins branch was removed here.)
+        if bins_row_major != 0:
+            bins[unsafe_offset = i * Int(n_cols) + Int(col)] = UInt8(Int(b))
         else:
-            if bins_row_major != 0:
-                bins[unsafe_offset = i * Int(n_cols) + Int(col)] = UInt8(Int(b))
-            else:
-                bins[unsafe_offset=off] = UInt8(Int(b))
+            bins[unsafe_offset=off] = UInt8(Int(b))
         i += stride
 
 
