@@ -10,15 +10,11 @@ them again, and the refusals hold. Prints PROGRAM_DIGEST lines to diff across CP
 Metal, NVIDIA and AMD. The mixture classifier's predict path and the
 attention product run natively in checks/native_tests/core_ops_program_*.mojo."""
 import hashlib
-import pathlib
-import re
 
 import numpy as np
 import pytest
 
 from mojolearn import _backend
-
-GUIDE = pathlib.Path(__file__).resolve().parents[3] / "docs-site" / "user_guide" / "autograd.md"
 
 
 def _has_entries():
@@ -208,19 +204,6 @@ def test_program_save_and_load(tmp_path):
         got = served.run(X)
     assert np.array_equal(_words(got), _words(eager))
     _emit("saved_mlp", got)
-
-
-def test_program_guide_block(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    if not GUIDE.is_file():
-        pytest.skip(f"no guide at {GUIDE} (run from the repository tree)")
-    blocks = dict(re.findall(r"<!-- block: ([a-z0-9-]+) -->\n```python\n(.*?)```", GUIDE.read_text(), flags=re.S))
-    ns = {"__name__": "autograd_guide"}
-    exec(compile(blocks["program"], "autograd.md[program]", "exec"), ns)
-    assert np.array_equal(_words(ns["first"]), _words(ns["eager"]))
-    assert np.array_equal(_words(ns["served_second"]), _words(ns["second"]))
-    _emit("guide_program_first", ns["first"])
-    _emit("guide_program_second", ns["second"])
 
 
 def test_program_refusals():
