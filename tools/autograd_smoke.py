@@ -129,8 +129,7 @@ ENTRIES = (
      "what": "the program-run board runner: repeated captured inference equals the eager runner"},
     {"name": "autograd-usability", "pytest": "python/mojolearn/tests/test_autograd_usability.py",
      "what": "validation, best-state restore, native Program.fit, custom loss, frozen parameters and dynamic replay"},
-    {"name": "autograd-dropout", "pytest": "python/mojolearn/tests/test_autograd_model.py::test_dropout_trains",
-     "what": "seeded Sequential dropout, inference and resumed training"},
+    # autograd-dropout (test_dropout_trains) moved to the native check training_autograd_model (lane tmig-training-2).
     {"name": "autograd-program", "pytest": "python/mojolearn/tests/test_ops_program.py",
      "what": "captured inference, embedding inputs, save/load and replay refusals"},
     {"name": "autograd-optimizer", "pytest": "python/mojolearn/tests/test_ops_optimizer.py",

@@ -146,6 +146,7 @@ from checks.native_tests.svc_accuracy_native import register as register_svc_acc
 from checks.native_tests.svc_probability import register as register_svc_probability
 from checks.native_tests.svr_native import register as register_svr_native
 from checks.native_tests.theta_state import register as register_theta_state
+from checks.native_tests.training_autograd_model import register as register_training_autograd_model
 from checks.native_tests.training_chunked_lm_head_door import register as register_training_chunked_lm_head_door
 from checks.native_tests.training_distributed_program import register as register_training_distributed_program
 from checks.native_tests.training_moe_backward_ownership import register as register_training_moe_backward_ownership
@@ -305,6 +306,7 @@ def all_checks() -> List[Check]:
     checks.append(register_svc_probability())
     checks.append(register_svr_native())
     checks.append(register_theta_state())
+    checks.append(register_training_autograd_model())
     checks.append(register_training_chunked_lm_head_door())
     checks.append(register_training_distributed_program())
     checks.append(register_training_moe_backward_ownership())
