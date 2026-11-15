@@ -231,6 +231,10 @@ finds in the same round; a wave without that audit does not merge.
 - Opponents are scored once, stored, and run only by an explicit opponent job. No opponent re-score.
 - One scored run per arm, one seed (Andrew, 2026-10-03 and 2026-10-14): the harness may take one excluded warmup.
   `AB_MULTI_RUN=1` is the only override. Queue A/B lines with reps 1, rounds 1, pairs 1.
+- **Small rows are the median of consecutive calls inside the one scored run (Andrew, 2026-11-15).** A row whose warmup
+  call takes under 10 ms is scored as the median of N consecutive calls (N = 20) made inside that one scored run; the cell records N
+  and the spread. One scored run per arm is unchanged; nothing is rerun; big rows keep one call. Reason: a single call of a
+  millisecond-scale row is dominated by first-touch page faults and the allocator (program-run 3.4 ms once vs 0.76 ms steady).
 
 ### Times are compared only on the same box (Andrew, 2026-11-14)
 
@@ -334,7 +338,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
   and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
   at least as fast as 0.8.55 with quality equal.
-- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions.
+- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
+  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15); the last release is timed only on the paper rows.
 - ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
   lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
   it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
@@ -508,6 +513,11 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   branch@sha, A/B tag, before -> after ms, verdict, reason). Search it before writing a new experiment.
 - Experiment code may merge to main after compile evidence on one device, with untested targets and measurements
   marked pending and unproven defaults disabled (owner, 2026-10-05).
+- **An unmeasured arm is deleted (Andrew, 2026-11-15).** An opt-in arm, or an old path kept beside a default, that has no A/B
+  recorded in `docs/apple-fast/EXPERIMENTS.md` within four weeks of merging is deleted with the four tombstone parts (recoverable
+  at its sha). The default path stays byte-identical. An arm recorded as promoted but still opt-in in the code becomes the
+  default (bits change on every column together) and its switch goes. The 1,300 undecided defines of
+  `docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md` go under this rule.
 
 #### Deleting an experiment
 
