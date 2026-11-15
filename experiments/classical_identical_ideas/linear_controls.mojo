@@ -215,7 +215,7 @@ comptime C19_SGD_CHUNK = 2048
 # column), now computed in parallel. NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C23_MCD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 4ab2967a7e.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch; record in docs/TOMBSTONES.md.
-comptime C23_MCD = False
+# (Sweep 2026-11-15: comptime C23_MCD removed; nothing read it.)
 # PCA covariance: MOJOLEARN_CLASSICAL_PCA_COV is gone; the incumbent
 # (column_mean_launch, then split-K or shift + gemm_tn) is the only route.
 # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
