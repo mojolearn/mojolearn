@@ -1794,16 +1794,15 @@ def nystroem_fit_host(
 comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_NYS_DEV_BASIS_OFF` restores the host draw and radix
-#: sort): the pointer fit draws the basis rows on the device
+#: (FAST keeps the host draw and radix sort): the pointer fit draws the basis rows on the device
 #: (`km_basis_indices_device`: every row's key drawn there, the rows under a
 #: threshold compacted and ranked there) instead of n_samples host draws and
 #: a host radix sort inside the device fit. Integer only, the same total
 #: order: the same rows in the same order, no bit moves. Applies on the
 #: pointer route (NYS_IDN_FIT_PTR_IN), where X is resident.
-comptime NYS_IDN_DEV_BASIS = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NYS_DEV_BASIS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 91606051a7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_IDN_DEV_BASIS = _CTX_MODE == _CTX_IDENTICAL
 
 
 def nystroem_fit_ptr(
