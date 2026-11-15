@@ -2933,7 +2933,7 @@ def _sgd_ps_simd_body(
 
 
 # lane/idn-sgd-multiblock (2026-10-04): SGD_IDN_PS_WARP, IDENTICAL on NVIDIA
-# and AMD for d <= SPS_W * MB_DBLK (off: -D MOJOLEARN_SGD_IDN_PS_WARP_OFF).
+# and AMD for d <= SPS_W * MB_DBLK.
 # The block form above pays, per SAMPLE, the partials' stores, two device-
 # ordering barriers and a device load and store of every weight. Here a
 # problem is ONE warp of SPS_W lanes: lane l keeps the weights (and q) of
@@ -2943,9 +2943,10 @@ def _sgd_ps_simd_body(
 # lane (`shuffle_idx`), so the scalars are uniform without a barrier, and
 # updates its own block's weights. The same chains folded in the same order
 # as the block form and the host's `sgd_one`: no bit moves.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_PS_WARP_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 29555cd114.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_PS_WARP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]()
 )
 
 
