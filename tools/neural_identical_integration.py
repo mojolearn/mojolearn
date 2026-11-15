@@ -222,8 +222,6 @@ def resolve_job(job, config, root):
                 continue
             observed.add(family)
             actual = normalized_defines(artifact["defines"])
-            if "MOJOLEARN_IDN_ALL_OFF" in actual:
-                raise ValueError("ALL_OFF cannot stand in for this card's isolated B arm")
             if any(actual.get(name) != expected.get(name) for name in changed_names):
                 raise ValueError("Frozen binding controls differ from neural arm " + arm)
         # CPU-only companions are required in the all-column build/identity

@@ -5746,8 +5746,7 @@ def _build_layer(lane, arm, D):
             # MOJOLEARN_SEQ_DEVICE_IO_OFF=1 (the before arm), keeps host arrays.
             import os as _os
             dev_io = (getattr(layer, "_device_io", False)
-                      and _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") != "1"
-                      and _os.environ.get("MOJOLEARN_IDN_ALL_OFF", "") != "1")
+                      and _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") != "1")
             if dev_io:
                 try:
                     layer._dev_module()
@@ -5851,8 +5850,7 @@ def _build_layer(lane, arm, D):
         elif getattr(layer, "_seq_device_io", False):
             # lane neural-io-2: a sequence-binding layer (MoEBlock) takes x as a resident
             # SequenceDeviceTensor and returns y as one (read back in outputs(), outside the
-            # clock). MOJOLEARN_SEQ_DEVICE_IO_OFF=1, or a binding built with
-            # -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF, keeps the host-array entry (the before arm).
+            # clock). MOJOLEARN_SEQ_DEVICE_IO_OFF=1 keeps the host-array entry (the before arm).
             to_dev = layer.to_device
             x = to_dev(x)
             if getattr(x, "_device_tensor", False):

@@ -64,8 +64,8 @@ def _lu_child():
     warnings.simplefilter("ignore")
     flags = int(_backend.binding("_mojolearn_x_decomp", _backend.default_mode()).x_decomp_idn_flags())
     resident = bool(flags & 2)
-    expected_resident = os.environ.get("MOJOLEARN_IDN_ALL_OFF") != "1"
-    assert resident == expected_resident, 'compiled LU route does not match comparison arm'
+    # The comparison's off arm (MOJOLEARN_IDN_ALL_OFF) was deleted 2026-11-15: every build is resident.
+    assert resident, 'compiled LU route is not the resident route'
     contract = "resident-raw-solve" if resident else "public-solve-refusal"
     artifacts = os.environ.get("MOJOLEARN_IDN_GATE_ARTIFACTS")
     destination = Path(artifacts) / ("lu-" + ml.vendor()) if artifacts else None
