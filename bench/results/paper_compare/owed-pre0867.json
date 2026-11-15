@@ -216,6 +216,10 @@
   "hist-warp-agg": {
    "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
    "status": "define in code (gbdt/trees_hist_switches.mojo HIST_WARP_AGG, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_WAVE_AGG / h8_add_point_wave): B = when a whole wave holds the same bin, one shuffle-tree sum and one atomic per stat (NVIDIA/AMD); A = one atomic per lane"
+  },
+  "lg-level-rounds": {
+   "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
+   "status": "define in code (gbdt/trees_identical_switches.mojo LG_LEVEL_ROUNDS, greedy_search_helper_depthwise.mojo lg_level_rounds): B = when max_leaves >= 2**max_depth (a parameter test), one exact lossguide round splits a whole depth level; A = LG_EXACT_BATCH_WIDTH (32) leaves a round"
   }
  },
  "rows": [
@@ -1370,6 +1374,19 @@
     "hist-warp-agg"
    ],
    "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (integer adds: same cells); time it also crossed with hist-packed-gh (both defines) as one more B set when the box has room"
+  },
+  {
+   "id": "rr-lg-level-rounds",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #1 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; lane S3, never timed; lossguide istella 898,292 ms vs catboost 30,510)",
+   "kind": "ab",
+   "lane": "gbdt-lossguide",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "lg-level-rounds"
+   ],
+   "decides": "B is promoted only when gbdt-lossguide fit (istella, taxi, taxi gain0) is faster on NVIDIA L40S, and a non-board lossguide fit with max_leaves < 2**max_depth (the arm does not engage) does not slow down; digests must not move (best-first replay keeps the same tree)"
   }
  ]
 }

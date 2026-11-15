@@ -505,8 +505,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TREES_C45_GBDT"](), "removed 2026-11-15 (lane/expdel2-45-trees): TREES_C45_GBDT (opt-in arm, GBDT (C45 opt-in); no record, rule a) is gone; the default path is the only one; code recoverable at 92620cf9db; restore: experiments/removed/MOJOLEARN_TREES_C45_GBDT.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"](), "removed 2026-11-15 (lane/expdel2-45-trees): TREES_ORD_STD_GRIDFOLD_OFF (old path, GBDT (ordered 256-lane-chain fold rollback); EXP:1637 PROMOTED, rule e) is gone; the default path is the only one; code recoverable at 56ec6a17df; restore: experiments/removed/MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch
-    comptime assert not is_defined["MOJOLEARN_TREES_LG_LEVEL_ROUNDS"](), "removed 2026-11-15 (lane/expdel2-45-trees): TREES_LG_LEVEL_ROUNDS (opt-in arm, GBDT (lossguide one round per level); no record, rule a) is gone; the default path is the only one; code recoverable at ce4ab6287e; restore: experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch"
+    # MOJOLEARN_TREES_LG_LEVEL_ROUNDS: refusal removed 2026-11-15 (restored by lane/restore-run-arms-trees; RUN arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.patch
     comptime assert not is_defined["MOJOLEARN_TREES_CTR_SORTFREE_SUMS"](), "removed 2026-11-15 (lane/expdel2-45-trees): TREES_CTR_SORTFREE_SUMS (opt-in arm, GBDT (sort-free CTR sums); no record, rule a) is gone; the default path is the only one; code recoverable at a3d500c032; restore: experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF.patch
