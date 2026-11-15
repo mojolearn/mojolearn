@@ -70,7 +70,9 @@ def test_agglo_python_descriptor_factory_is_refused_without_call(route, module, 
     # The product connected the exact compiled module at import (`_native_family_bridge.connect_bindings`); on a
     # CPU-only install `binding()` is the `_HostBinding` facade, so patch the module the product reads.
     monkeypatch.setattr(_backend.exact_host_module(_backend.binding(module, "identical")), factory, forbidden)
-    with pytest.raises(TypeError, match="compiled extension entry"):
+    # one refusal per replaced entry: "native provider requires compiled entry <name>"
+    # (providers/python/neural_descriptor_pyapi_door.mojo:293)
+    with pytest.raises(TypeError, match="compiled (extension )?entry"):
         model.predict(_x()) if route == "predict" else model.fit(_x())
     assert calls == []
 
