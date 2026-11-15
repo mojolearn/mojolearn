@@ -44,8 +44,11 @@ from core.hostptr import list_i32
 from core.neural_context import neural_ctx
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE (opt-in arm, no A/B recorded; owner elsewhere) folded to False
+# 2026-11-15 by lane/expdel2-31-neural (retain_kv_cache=True); code recoverable at f105b7dcfb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.expdel2-31-neural.patch
 from training.neural_identical_experiments import (
-    IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE, IDN_LM_VIEWS_ARM,
+    IDN_LM_PARAM_VIEWS, IDN_LM_VIEWS_ARM,
 )
 from checks.vendor import COMPILED_VENDOR
 # TOMBSTONE: MOJOLEARN_AFN_LM_PARAM_VIEWS / MOJOLEARN_AFN26_LM_PARAM_VIEWS (Apple FAST opt-in, never promoted) folded to False
@@ -1550,11 +1553,11 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    retain_kv_cache=True)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    norm1_ready=norm1_ready, retain_kv_cache=True)
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
@@ -1564,11 +1567,11 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    retain_kv_cache=True)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    norm1_ready=norm1_ready, retain_kv_cache=True)
         if _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()

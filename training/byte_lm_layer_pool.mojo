@@ -15,7 +15,10 @@ from training.byte_lm import (
     _require_finite_params, _require_device_finite,
 )
 from training.byte_lm_config import ByteConfig
-from training.neural_identical_experiments import IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE (opt-in arm, no A/B recorded; owner elsewhere) folded to False
+# 2026-11-15 by lane/expdel2-31-neural (retain_kv_cache=True); code recoverable at f105b7dcfb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.expdel2-31-neural.patch
+from training.neural_identical_experiments import IDN_LM_PARAM_VIEWS
 from training.byte_lm_parallel import _ordered_add_kernel
 from training.checks.train_loop import _zeros, _copy_into, download_f32
 from transformer.impl.llama.modeling_llama import (
@@ -189,7 +192,7 @@ struct ByteLayerPool(Movable):
                     self.caches[owner], self.ropes[owner], layer.weights, layer.input,
                     self.config.batch, self.config.length, 0, trace,
                     String("byte.block")+String(i)+".forward",
-                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    retain_kv_cache=True)
                 self.contexts[owner].synchronize()
                 if i < len(self.layers):
                     layer.forward.residual2.enqueue_copy_to(self.layers[i].input)
