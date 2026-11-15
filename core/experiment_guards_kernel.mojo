@@ -56,6 +56,19 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GPC_OVR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPC_OVR_OFF (Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path)) was old path, no A/B recorded; the batched one-vs-rest default kept; the default is the only path; code recoverable at abe1b14d9d; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GPR_PTR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPR_PTR_OFF (Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path)) was old path, no A/B recorded; the resident pointer default kept; the default is the only path; code recoverable at b2a4adf292; see docs/TOMBSTONES.md"
+    # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L06.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L06"](), "removed 2026-11-15 (lane/expdel2-20-linear): AFCL_L06 (never-run Apple FAST programme card) is gone; the default is kept; code at 1701048c43; restore: experiments/removed/MOJOLEARN_AFCL_L06.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): IDN_SVC_ONE_BLOCK_OFF (old path of the promoted default) is gone; the default is kept; code at ed4cab202e; restore: experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVM_IDN_FUSED_TILE_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): SVM_IDN_FUSED_TILE_OFF (old path, no A/B recorded) is gone; the default is kept; code at 8398142558; restore: experiments/removed/MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): SVM_IDN_FUSED_UPDATE_F_OFF (old path, no A/B recorded) is gone; the default is kept; code at 30ab49dcd7; restore: experiments/removed/MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): SVM_IDN_NAN_SCAN_ONE_OFF (old path, no A/B recorded) is gone; the default is kept; code at 788f90f025; restore: experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch
+    comptime assert not is_defined["MOJOLEARN_SVM_RBF_EPILOGUE_1D"](), "removed 2026-11-15 (lane/expdel2-20-linear): SVM_RBF_EPILOGUE_1D (opt-in arm, no A/B recorded) is gone; the default is kept; code at 58cc0078e2; restore: experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch"
     return True
 
 

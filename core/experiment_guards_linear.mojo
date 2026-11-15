@@ -167,6 +167,63 @@ def _check_configuration() -> Bool:
     # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): MULTIOUT_RIDGE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 7866bd9303; restore: experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch"
+    # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L05.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L05"](), "removed 2026-11-15 (lane/expdel2-20-linear): AFCL_L05 (never-run Apple FAST programme card) is gone; the default is kept; code at 1f4bbd3047; restore: experiments/removed/MOJOLEARN_AFCL_L05.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_FAST_GRAM_OFF (old path, no A/B recorded) is gone; the default is kept; code at d75e2fbb7a; restore: experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_FUSED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CD_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_FUSED_OFF (old path, no A/B recorded) is gone; the default is kept; code at 1048118370; restore: experiments/removed/MOJOLEARN_CD_FUSED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch
+    comptime assert not is_defined["MOJOLEARN_CD_GRAM_BLOCKS"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_GRAM_BLOCKS (opt-in arm, no A/B recorded) is gone; the default is kept; code at 6e1b6c3514; restore: experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_128.patch
+    comptime assert not is_defined["MOJOLEARN_CD_IDN_GRAM_COLS_128"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_IDN_GRAM_COLS_128 (opt-in arm, no A/B recorded) is gone; the default is kept; code at 72da417819; restore: experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_128.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_256.patch
+    comptime assert not is_defined["MOJOLEARN_CD_IDN_GRAM_COLS_256"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_IDN_GRAM_COLS_256 (opt-in arm, no A/B recorded) is gone; the default is kept; code at 72da417819; restore: experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_256.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_IDN_GRAM_COST_RULE_OFF (old path, no A/B recorded) is gone; the default is kept; code at 72da417819; restore: experiments/removed/MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CD_IDN_GRAM_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_IDN_GRAM_OFF (old path, no A/B recorded) is gone; the default is kept; code at 72da417819; restore: experiments/removed/MOJOLEARN_CD_IDN_GRAM_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_WIDE.patch
+    comptime assert not is_defined["MOJOLEARN_CD_IDN_GRAM_WIDE"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_IDN_GRAM_WIDE (opt-in arm, no A/B recorded) is gone; the default is kept; code at 72da417819; restore: experiments/removed/MOJOLEARN_CD_IDN_GRAM_WIDE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_THREE_LAUNCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CD_THREE_LAUNCH_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_THREE_LAUNCH_OFF (old path, no A/B recorded) is gone; the default is kept; code at b7039f2e07; restore: experiments/removed/MOJOLEARN_CD_THREE_LAUNCH_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CD_TWO_STEP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CD_TWO_STEP_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_TWO_STEP_OFF (old path, no A/B recorded) is gone; the default is kept; code at f2dad24e5a; restore: experiments/removed/MOJOLEARN_CD_TWO_STEP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"](), "removed 2026-11-15 (lane/expdel2-20-linear): IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded) is gone; the default is kept; code at fb9523bf09; restore: experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_FX_D.patch
+    comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_FX_D"](), "removed 2026-11-15 (lane/expdel2-20-linear): LEGACY_NARROW_FX_D (old path, no A/B recorded) is gone; the default is kept; code at fd8a1ee12a; restore: experiments/removed/MOJOLEARN_LEGACY_NARROW_FX_D.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_QN_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_QN_ALL"](), "removed 2026-11-15 (lane/expdel2-20-linear): LEGACY_NARROW_QN_ALL (old path, no A/B recorded) is gone; the default is kept; code at e1833e6a98; restore: experiments/removed/MOJOLEARN_LEGACY_NARROW_QN_ALL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LSVR_ALL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LSVR_ALL_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): LSVR_ALL_OFF (old path) is gone; the default is kept; code at ff4bf11f19; restore: experiments/removed/MOJOLEARN_LSVR_ALL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LSVR_EVAL_SLIM_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LSVR_EVAL_SLIM_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): LSVR_EVAL_SLIM_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at e9b815205e; restore: experiments/removed/MOJOLEARN_LSVR_EVAL_SLIM_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): LSVR_LINESEARCH_BATCH_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at 07f25ee298; restore: experiments/removed/MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_SMALL_NT.patch
+    comptime assert not is_defined["MOJOLEARN_OLS_FAST_SMALL_NT"](), "removed 2026-11-15 (lane/expdel2-20-linear): OLS_FAST_SMALL_NT (opt-in arm, no A/B recorded) is gone; the default is kept; code at 6dee0ea324; restore: experiments/removed/MOJOLEARN_OLS_FAST_SMALL_NT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY2_2_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PURITY2_2_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): PURITY2_2_OFF (old path, no A/B recorded) is gone; the default is kept; code at eb10315ddd; restore: experiments/removed/MOJOLEARN_PURITY2_2_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PURITY_1_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): PURITY_1_OFF (old path, no A/B recorded) is gone; the default is kept; code at a3181ec16f; restore: experiments/removed/MOJOLEARN_PURITY_1_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_QN_DEV_ARGMAX_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): QN_DEV_ARGMAX_OFF (old path, no A/B recorded) is gone; the default is kept; code at 4218560b53; restore: experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_XTDZ_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_QN_FAST_XTDZ_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): QN_FAST_XTDZ_OFF (old path) is gone; the default is kept; code at 83e86f6d61; restore: experiments/removed/MOJOLEARN_QN_FAST_XTDZ_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_FUSED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_QN_IDN_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): QN_IDN_FUSED_OFF (old path, no A/B recorded) is gone; the default is kept; code at 42a2855cbe; restore: experiments/removed/MOJOLEARN_QN_IDN_FUSED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_SLIM_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_QN_IDN_SLIM_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): QN_IDN_SLIM_OFF (old path, no A/B recorded) is gone; the default is kept; code at cf050feb2f; restore: experiments/removed/MOJOLEARN_QN_IDN_SLIM_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): QN_OVR_ONE_UPLOAD_OFF (old path, no A/B recorded) is gone; the default is kept; code at 021105e119; restore: experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_QN_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): QN_TILED_OFF (old path) is gone; the default is kept; code at da95043b31; restore: experiments/removed/MOJOLEARN_QN_TILED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_NO_U_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RIDGE_NO_U_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): RIDGE_NO_U_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at 620c4ce37c; restore: experiments/removed/MOJOLEARN_RIDGE_NO_U_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): RIDGE_RESIDENT_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at 3fcdcb78f6; restore: experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch"
     return True
 
 

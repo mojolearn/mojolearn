@@ -1,0 +1,122 @@
+diff --git a/glm/estimator.mojo b/glm/estimator.mojo
+index 21cf9bfe8e..5073ef840c 100644
+--- a/glm/estimator.mojo
++++ b/glm/estimator.mojo
+@@ -193,21 +193,35 @@ def ols_fit_resident_host(
+         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
+         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
+         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
+-        # TOMBSTONE: MOJOLEARN_PURITY_1_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at a3181ec16f.
+-        # Restore: git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch; record in docs/TOMBSTONES.md.
+-        # lane apple-fast-purity: the means on the device (soft binary64,
+-        # center_device.col_means_buf), downloaded once as the fit's outputs.
+-        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+-        col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+-        ctx.synchronize()
+-        for j in range(n_features + 1):
+-            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+-            if j < n_features:
+-                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+-            else:
+-                ymean_ptr.unsafe_store(0, mean)
+-        _ = d_m64^
++        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
++        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
++            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
++            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
++            ctx.synchronize()
++            var rows_f = Float64(n_rows)
++            for j in range(n_features + 1):
++                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
++                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
++                if j < n_features:
++                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
++                else:
++                    ymean_ptr.unsafe_store(0, mean)
++            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
++            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
++        else:
++            # lane apple-fast-purity: the means on the device (soft binary64,
++            # center_device.col_means_buf), downloaded once as the fit's outputs.
++            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
++            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
++            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
++            ctx.synchronize()
++            for j in range(n_features + 1):
++                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
++                if j < n_features:
++                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
++                else:
++                    ymean_ptr.unsafe_store(0, mean)
++            _ = d_m64^
+         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
+         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
+         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
+@@ -219,6 +233,7 @@ def ols_fit_resident_host(
+             n_rows, n_features, trace, OLS_ALGO_EIG,
+         )
+         _ = h_s^
++        _ = h_m^
+         _ = d_sx^
+         _ = d_sy^
+         _ = d_mx^
+@@ -412,21 +427,35 @@ def ridge_fit_resident_host(
+         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
+         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
+         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
+-        # TOMBSTONE: MOJOLEARN_PURITY_1_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at a3181ec16f.
+-        # Restore: git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch; record in docs/TOMBSTONES.md.
+-        # lane apple-fast-purity: the means on the device (soft binary64,
+-        # center_device.col_means_buf), downloaded once as the fit's outputs.
+-        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+-        col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+-        ctx.synchronize()
+-        for j in range(n_features + 1):
+-            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+-            if j < n_features:
+-                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+-            else:
+-                ymean_ptr.unsafe_store(0, mean)
+-        _ = d_m64^
++        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
++        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
++            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
++            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
++            ctx.synchronize()
++            var rows_f = Float64(n_rows)
++            for j in range(n_features + 1):
++                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
++                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
++                if j < n_features:
++                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
++                else:
++                    ymean_ptr.unsafe_store(0, mean)
++            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
++            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
++        else:
++            # lane apple-fast-purity: the means on the device (soft binary64,
++            # center_device.col_means_buf), downloaded once as the fit's outputs.
++            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
++            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
++            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
++            ctx.synchronize()
++            for j in range(n_features + 1):
++                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
++                if j < n_features:
++                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
++                else:
++                    ymean_ptr.unsafe_store(0, mean)
++            _ = d_m64^
+         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
+         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
+         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
+@@ -438,6 +467,7 @@ def ridge_fit_resident_host(
+         # d_x is dead from here: the Gram's gemm_tn scratch.
+         ridge_eig_scratch_traced(ctx, d_cx, n_rows, n_features, d_cy, alpha, w, d_x, trace)
+         _ = h_s^
++        _ = h_m^
+         _ = d_sx^
+         _ = d_sy^
+         _ = d_mx^

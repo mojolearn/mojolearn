@@ -692,6 +692,43 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF`](#mojolearn_idn_ann_knn_prune_off) | ANN (IDENTICAL exact k-NN partial-distance pruning) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF.patch) |
 | [`MOJOLEARN_KNN_WIDE_OFF`](#mojolearn_knn_wide_off) | ANN (exact k-NN for rows wider than 64 features, NVIDIA / AMD) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_KNN_WIDE_OFF.patch](../experiments/removed/MOJOLEARN_KNN_WIDE_OFF.patch) |
 | [`MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF`](#mojolearn_idn_tsne_knn_tile_select_off) | ANN (t-SNE / CAGRA exact k-NN tile top-k select, IDENTICAL) | removed (old path of a promoted default) | 2026-11-15 | [MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch) |
+| [`MOJOLEARN_AFCL_L05`](#mojolearn_afcl_l05) | Linear (FAST+Apple QN X^T dZ rows per partial) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L05.patch](../experiments/removed/MOJOLEARN_AFCL_L05.patch) |
+| [`MOJOLEARN_AFCL_L06`](#mojolearn_afcl_l06) | Kernel (FAST+Apple SMO fused update_f staged page) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L06.patch](../experiments/removed/MOJOLEARN_AFCL_L06.patch) |
+| [`MOJOLEARN_CD_FAST_GRAM_OFF`](#mojolearn_cd_fast_gram_off) | Linear (FAST+Apple coordinate-descent Gram) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch) |
+| [`MOJOLEARN_CD_FUSED_OFF`](#mojolearn_cd_fused_off) | Linear (IDENTICAL CD fused step, NVIDIA / AMD) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_CD_FUSED_OFF.patch) |
+| [`MOJOLEARN_CD_GRAM_BLOCKS`](#mojolearn_cd_gram_blocks) | Linear (FAST+Apple CD Gram from row blocks) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_GRAM_BLOCKS.patch](../experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch) |
+| [`MOJOLEARN_CD_IDN_GRAM_COLS_128`](#mojolearn_cd_idn_gram_cols_128) | Linear (IDENTICAL CD Gram width bound) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_IDN_GRAM_COLS_128.patch](../experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_128.patch) |
+| [`MOJOLEARN_CD_IDN_GRAM_COLS_256`](#mojolearn_cd_idn_gram_cols_256) | Linear (IDENTICAL CD Gram width bound) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_IDN_GRAM_COLS_256.patch](../experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_256.patch) |
+| [`MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF`](#mojolearn_cd_idn_gram_cost_rule_off) | Linear (IDENTICAL CD Gram width bound) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF.patch](../experiments/removed/MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF.patch) |
+| [`MOJOLEARN_CD_IDN_GRAM_OFF`](#mojolearn_cd_idn_gram_off) | Linear (IDENTICAL CD Gram sweeps) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_IDN_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_CD_IDN_GRAM_OFF.patch) |
+| [`MOJOLEARN_CD_IDN_GRAM_WIDE`](#mojolearn_cd_idn_gram_wide) | Linear (IDENTICAL CD Gram width bound) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_IDN_GRAM_WIDE.patch](../experiments/removed/MOJOLEARN_CD_IDN_GRAM_WIDE.patch) |
+| [`MOJOLEARN_CD_THREE_LAUNCH_OFF`](#mojolearn_cd_three_launch_off) | Linear (Apple IDENTICAL CD three-launch sweep) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_THREE_LAUNCH_OFF.patch](../experiments/removed/MOJOLEARN_CD_THREE_LAUNCH_OFF.patch) |
+| [`MOJOLEARN_CD_TWO_STEP_OFF`](#mojolearn_cd_two_step_off) | Linear (Apple IDENTICAL CD two-launch step) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CD_TWO_STEP_OFF.patch](../experiments/removed/MOJOLEARN_CD_TWO_STEP_OFF.patch) |
+| [`MOJOLEARN_IDN_QN_EXACT_TRIALS`](#mojolearn_idn_qn_exact_trials) | Linear (IDENTICAL QN line-search exact trials) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_QN_EXACT_TRIALS.patch](../experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch) |
+| [`MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF`](#mojolearn_idn_svc_one_block_off) | Kernel (IDENTICAL SVC one-block grid solve) | removed (old path of the promoted default) | 2026-11-15 | [MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_FX_D`](#mojolearn_legacy_narrow_fx_d) | Linear (FAST+Apple QN X^T dZ width gate) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_FX_D.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_FX_D.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_QN_ALL`](#mojolearn_legacy_narrow_qn_all) | Linear (FAST+Apple LinearSVR ALL width bound) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_QN_ALL.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_QN_ALL.patch) |
+| [`MOJOLEARN_LSVR_ALL_OFF`](#mojolearn_lsvr_all_off) | Linear (FAST+Apple LinearSVR tiled objective + device line search) | removed (old path) | 2026-11-15 | [MOJOLEARN_LSVR_ALL_OFF.patch](../experiments/removed/MOJOLEARN_LSVR_ALL_OFF.patch) |
+| [`MOJOLEARN_LSVR_EVAL_SLIM_OFF`](#mojolearn_lsvr_eval_slim_off) | Linear (FAST+Apple LinearSVR slim epilogue) | removed (old path of a one-vendor promotion) | 2026-11-15 | [MOJOLEARN_LSVR_EVAL_SLIM_OFF.patch](../experiments/removed/MOJOLEARN_LSVR_EVAL_SLIM_OFF.patch) |
+| [`MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF`](#mojolearn_lsvr_linesearch_batch_off) | Linear (FAST+Apple LinearSVR batched line search) | removed (old path of a one-vendor promotion) | 2026-11-15 | [MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF.patch) |
+| [`MOJOLEARN_OLS_FAST_SMALL_NT`](#mojolearn_ols_fast_small_nt) | Linear (FAST+Apple OLS step-5 small product) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_OLS_FAST_SMALL_NT.patch](../experiments/removed/MOJOLEARN_OLS_FAST_SMALL_NT.patch) |
+| [`MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF`](#mojolearn_prep_fast_cls2_minmax_fused_off) | Preprocessing (FAST+Apple MinMaxScaler fused nonfinite scan) | removed (old path) | 2026-11-15 | [MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF.patch) |
+| [`MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF`](#mojolearn_prep_fast_cls2_minmax_pool_off) | Preprocessing (FAST+Apple MinMaxScaler pooled X buffer) | removed (old path) | 2026-11-15 | [MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch](../experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch) |
+| [`MOJOLEARN_PURITY2_2_OFF`](#mojolearn_purity2_2_off) | Linear (FAST QN tile sum) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_PURITY2_2_OFF.patch](../experiments/removed/MOJOLEARN_PURITY2_2_OFF.patch) |
+| [`MOJOLEARN_PURITY_1_OFF`](#mojolearn_purity_1_off) | Linear (OLS centering means on the host) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_PURITY_1_OFF.patch](../experiments/removed/MOJOLEARN_PURITY_1_OFF.patch) |
+| [`MOJOLEARN_QN_DEV_ARGMAX_OFF`](#mojolearn_qn_dev_argmax_off) | Linear (LogisticRegression device argmax) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_QN_DEV_ARGMAX_OFF.patch](../experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch) |
+| [`MOJOLEARN_QN_FAST_XTDZ_OFF`](#mojolearn_qn_fast_xtdz_off) | Linear (FAST+Apple QN gradient X^T dZ) | removed (old path) | 2026-11-15 | [MOJOLEARN_QN_FAST_XTDZ_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_XTDZ_OFF.patch) |
+| [`MOJOLEARN_QN_IDN_FUSED_OFF`](#mojolearn_qn_idn_fused_off) | Linear (IDENTICAL QN fused evaluation) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_QN_IDN_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_QN_IDN_FUSED_OFF.patch) |
+| [`MOJOLEARN_QN_IDN_SLIM_OFF`](#mojolearn_qn_idn_slim_off) | Linear (IDENTICAL QN slim epilogue) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_QN_IDN_SLIM_OFF.patch](../experiments/removed/MOJOLEARN_QN_IDN_SLIM_OFF.patch) |
+| [`MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF`](#mojolearn_qn_ovr_one_upload_off) | Linear (LinearSVC one-vs-rest one upload) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch](../experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch) |
+| [`MOJOLEARN_QN_TILED_OFF`](#mojolearn_qn_tiled_off) | Linear (IDENTICAL QN tiled objective, device and host column) | removed (old path) | 2026-11-15 | [MOJOLEARN_QN_TILED_OFF.patch](../experiments/removed/MOJOLEARN_QN_TILED_OFF.patch) |
+| [`MOJOLEARN_RIDGE_NO_U_OFF`](#mojolearn_ridge_no_u_off) | Linear (FAST+Apple Ridge without U) | removed (old path of a one-vendor promotion) | 2026-11-15 | [MOJOLEARN_RIDGE_NO_U_OFF.patch](../experiments/removed/MOJOLEARN_RIDGE_NO_U_OFF.patch) |
+| [`MOJOLEARN_RIDGE_RESIDENT_OFF`](#mojolearn_ridge_resident_off) | Linear (FAST+Apple resident Ridge fit) | removed (old path of a one-vendor promotion) | 2026-11-15 | [MOJOLEARN_RIDGE_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_SVM_IDN_FUSED_TILE_OFF`](#mojolearn_svm_idn_fused_tile_off) | Kernel (IDENTICAL SVC fused RBF tile) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch](../experiments/removed/MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch) |
+| [`MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF`](#mojolearn_svm_idn_fused_update_f_off) | Kernel (IDENTICAL SVC fused update_f) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch](../experiments/removed/MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch) |
+| [`MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF`](#mojolearn_svm_idn_nan_scan_one_off) | Kernel (IDENTICAL SVC NaN scan) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch](../experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch) |
+| [`MOJOLEARN_SVM_RBF_EPILOGUE_1D`](#mojolearn_svm_rbf_epilogue_1d) | Kernel (Apple IDENTICAL RBF epilogue grid) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch](../experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch) |
+| [`MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED`](#mojolearn_x_prep_fast_fit_transform_fused) | Preprocessing (FAST+Apple StandardScaler fit_transform) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -10629,3 +10666,384 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 The lane folded these defines (or their aliases) in its own files; each owner lane writes the index row and section. Inline markers and per-lane patches: `MOJOLEARN_IDN_ALL_OFF` (`experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch`, owner expdel2-37-series, recoverable at `c089be9c4a`), `MOJOLEARN_C43_RESIDENT_NORMALIZATION` (`experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-13-cluster.patch`, owner expdel2-05-base, recoverable at `7c24f5181f`), `MOJOLEARN_ANN3_CAGRA_TEAM` (`experiments/removed/MOJOLEARN_ANN3_CAGRA_TEAM.expdel2-13-cluster.patch`, owner expdel2-14-cluster, recoverable at `b3769720bf`), `MOJOLEARN_ANN3_SCAN_SELECT` (`experiments/removed/MOJOLEARN_ANN3_SCAN_SELECT.expdel2-13-cluster.patch`, owner expdel2-14-cluster, recoverable at `f7c28fb531`), `MOJOLEARN_IDN_PQ_LUT_TILED_OFF` (`experiments/removed/MOJOLEARN_IDN_PQ_LUT_TILED_OFF.expdel2-13-cluster.patch`, owner expdel2-14-cluster, recoverable at `474a188ef2`), `MOJOLEARN_PQ_LUT_TILED_OFF` (`experiments/removed/MOJOLEARN_PQ_LUT_TILED_OFF.expdel2-13-cluster.patch`, owner expdel2-14-cluster, recoverable at `2d4a91f2b9`), `MOJOLEARN_PQ_SCAN_FUSED_OFF` (`experiments/removed/MOJOLEARN_PQ_SCAN_FUSED_OFF.expdel2-13-cluster.patch`, owner expdel2-14-cluster, recoverable at `6badf96786`), `MOJOLEARN_ANN3_PREPARE_OFF` (`experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.expdel2-13-cluster.patch`, owner expdel2-14-cluster, recoverable at `a6a1253d08`). No bit changes.
 
 Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, not an experiment; coordinator correction 2026-11-15). The aliases of `MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF`, `MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF` and `MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF` (IDN_PQ_DEVICE_CODEBOOKS, IDN_PQ_TRAINSET_STRIDED, TS_LANE_FOLD) stay the same expression of the numeric mode once their owner drops the rollback term, so their reads in this lane's files (x_ann/ivf_pq_device.mojo, x_ann/host/ivf_pq_host.mojo, x_ann/host/tsne_host.mojo) are unchanged.
+
+## Experiment deletions: lane expdel2-20-linear (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-20-linear), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte.
+
+### MOJOLEARN_AFCL_L05
+
+- Tried: never-run Apple FAST programme card. Linear (FAST+Apple QN X^T dZ rows per partial).
+- Evidence: no record: programme card AFCL-L05 never ran. Verdict: deleted (rule g of the V2 plan).
+- Removed: AFCL_L05 and its halved-rows schedule; FX_CHUNK_ROWS = 2048, FX_BLOCK_LIMIT = 256. Default unchanged: no bits move.
+- Files: glm/impl/qn/fast_xtdz.mojo.
+- Deleted by: lane/expdel2-20-linear `fd8a1ee12a` (2026-11-15); code recoverable at `1f4bbd3047`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L05.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_AFCL_L06
+
+- Tried: never-run Apple FAST programme card. Kernel (FAST+Apple SMO fused update_f staged page).
+- Evidence: no record: programme card AFCL-L06 never ran. Verdict: deleted (rule g of the V2 plan).
+- Removed: AFCL_L06 and the 16 KiB page; FUF_TILE_FLOATS = 3072. Default unchanged: no bits move.
+- Files: svm/impl/fast_update_f.mojo.
+- Deleted by: lane/expdel2-20-linear `30ab49dcd7` (2026-11-15); code recoverable at `1701048c43`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L06.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_FAST_GRAM_OFF
+
+- Tried: old path, no A/B recorded. Linear (FAST+Apple coordinate-descent Gram).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; CD_FAST_GRAM = FAST and Apple. Default unchanged: no bits move.
+- Files: solver/impl/cd.mojo.
+- Deleted by: lane/expdel2-20-linear `b7039f2e07` (2026-11-15); code recoverable at `d75e2fbb7a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_FUSED_OFF
+
+- Tried: old path, no A/B recorded. Linear (IDENTICAL CD fused step, NVIDIA / AMD).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term of CD_FUSED. Default unchanged: no bits move.
+- Files: solver/impl/cd.mojo.
+- Deleted by: lane/expdel2-20-linear `c51e7e9a57` (2026-11-15); code recoverable at `1048118370`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_FUSED_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_GRAM_BLOCKS
+
+- Tried: opt-in arm, no A/B recorded. Linear (FAST+Apple CD Gram from row blocks).
+- Evidence: no record. Verdict: deleted (rule a of the V2 plan).
+- Removed: cd_gram_blocks_kernel, CD_GB_ROWS, CD_GB_TPB, CD_GRAM_CELLS and its branch of cd_fit_traced; the grid Gram is the only route. Default unchanged: no bits move.
+- Files: solver/impl/cd.mojo.
+- Deleted by: lane/expdel2-20-linear `d75e2fbb7a` (2026-11-15); code recoverable at `6e1b6c3514`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_IDN_GRAM_COLS_128
+
+- Tried: opt-in arm, no A/B recorded. Linear (IDENTICAL CD Gram width bound).
+- Evidence: no record. Verdict: deleted (rule a of the V2 plan).
+- Removed: the fixed 128-column bound; the cost rule is the only bound. Default unchanged: no bits move.
+- Files: solver/impl/cd_gram_rule.mojo.
+- Deleted by: lane/expdel2-20-linear `6e1b6c3514` (2026-11-15); code recoverable at `72da417819`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_128.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_IDN_GRAM_COLS_256
+
+- Tried: opt-in arm, no A/B recorded. Linear (IDENTICAL CD Gram width bound).
+- Evidence: no record. Verdict: deleted (rule a of the V2 plan).
+- Removed: the fixed 256-column bound; the cost rule is the only bound. Default unchanged: no bits move.
+- Files: solver/impl/cd_gram_rule.mojo.
+- Deleted by: lane/expdel2-20-linear `6e1b6c3514` (2026-11-15); code recoverable at `72da417819`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_COLS_256.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF
+
+- Tried: old path, no A/B recorded. Linear (IDENTICAL CD Gram width bound).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the fixed 64-column rollback (CD_IDN_GRAM_FIXED_BOUND, CD_IDN_GRAM_MAX_COLS). Default unchanged: no bits move.
+- Files: solver/impl/cd_gram_rule.mojo.
+- Deleted by: lane/expdel2-20-linear `6e1b6c3514` (2026-11-15); code recoverable at `72da417819`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_IDN_GRAM_OFF
+
+- Tried: old path, no A/B recorded. Linear (IDENTICAL CD Gram sweeps).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; CD_IDN_GRAM_ON = True. Default unchanged: no bits move.
+- Files: solver/impl/cd_gram_rule.mojo.
+- Deleted by: lane/expdel2-20-linear `6e1b6c3514` (2026-11-15); code recoverable at `72da417819`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_IDN_GRAM_WIDE
+
+- Tried: opt-in arm, no A/B recorded. Linear (IDENTICAL CD Gram width bound).
+- Evidence: no record. Verdict: deleted (rule a of the V2 plan).
+- Removed: the fixed 256-column arm. Default unchanged: no bits move.
+- Files: solver/impl/cd_gram_rule.mojo.
+- Deleted by: lane/expdel2-20-linear `6e1b6c3514` (2026-11-15); code recoverable at `72da417819`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_IDN_GRAM_WIDE.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_THREE_LAUNCH_OFF
+
+- Tried: old path, no A/B recorded. Linear (Apple IDENTICAL CD three-launch sweep).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term of CD_THREE_LAUNCH. Default unchanged: no bits move.
+- Files: solver/impl/cd.mojo.
+- Deleted by: lane/expdel2-20-linear `f2dad24e5a` (2026-11-15); code recoverable at `b7039f2e07`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_THREE_LAUNCH_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_CD_TWO_STEP_OFF
+
+- Tried: old path, no A/B recorded. Linear (Apple IDENTICAL CD two-launch step).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term of CD_TWO_STEP. Default unchanged: no bits move.
+- Files: solver/impl/cd.mojo.
+- Deleted by: lane/expdel2-20-linear `1048118370` (2026-11-15); code recoverable at `f2dad24e5a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CD_TWO_STEP_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_IDN_QN_EXACT_TRIALS
+
+- Tried: opt-in arm, no A/B recorded. Linear (IDENTICAL QN line-search exact trials).
+- Evidence: no record of an A/B verdict (I12 component screen NV 0.757x / 2.258x, AMD 2.784x / 2.319x, kept off). Verdict: deleted (rule a of the V2 plan).
+- Removed: ls_backtrack_exact_trials and its gate; the deferred evaluation always refuses; the I12 check expects no trial arm. Default unchanged: no bits move.
+- Files: experiments/performance_ideas/I12/trials_check.mojo, glm/impl/qn/glm_base.mojo, glm/impl/qn/qn_linesearch.mojo.
+- Deleted by: lane/expdel2-20-linear `eb10315ddd` (2026-11-15); code recoverable at `fb9523bf09`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF
+
+- Tried: old path of the promoted default. Kernel (IDENTICAL SVC one-block grid solve).
+- Evidence: EXP:2062 KEEP (promoted 2026-10-11; svc istella 0.720, taxi 0.663). Verdict: deleted (rule e of the V2 plan).
+- Removed: the rollback term; SMO_GRID_TPB_CAP = 1024. Default unchanged: no bits move.
+- Files: svm/impl/smosolver.mojo.
+- Deleted by: lane/expdel2-20-linear `58cc0078e2` (2026-11-15); code recoverable at `ed4cab202e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; `grid_controls/gap-svc-tsne.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_LEGACY_NARROW_FX_D
+
+- Tried: old path, no A/B recorded. Linear (FAST+Apple QN X^T dZ width gate).
+- Evidence: EXP:1336 OWED (no A/B recorded). Verdict: deleted (rule b of the V2 plan).
+- Removed: LEGACY_NARROW_FX_D and the d <= 256 gate. Default unchanged: no bits move.
+- Files: glm/impl/qn/fast_xtdz.mojo.
+- Deleted by: lane/expdel2-20-linear `83e86f6d61` (2026-11-15); code recoverable at `fd8a1ee12a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_FX_D.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_LEGACY_NARROW_QN_ALL
+
+- Tried: old path, no A/B recorded. Linear (FAST+Apple LinearSVR ALL width bound).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: QN_ALL_LEGACY_WIDTH, QN_ALL_MAX_D and their two reads. Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `cf050feb2f` (2026-11-15); code recoverable at `e1833e6a98`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_QN_ALL.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_LSVR_ALL_OFF
+
+- Tried: old path. Linear (FAST+Apple LinearSVR tiled objective + device line search).
+- Evidence: EXP:283 DROPPED-noise (record read: the default is the kept path). Verdict: deleted (rule e of the V2 plan).
+- Removed: the rollback term of QN_LSVR_ALL. Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `e1833e6a98` (2026-11-15); code recoverable at `ff4bf11f19`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LSVR_ALL_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_LSVR_EVAL_SLIM_OFF
+
+- Tried: old path of a one-vendor promotion. Linear (FAST+Apple LinearSVR slim epilogue).
+- Evidence: EXP:285 KEPT on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only). Verdict: deleted (rule d of the V2 plan). Promoted on Apple only; the NVIDIA / AMD A/B is owed (FAST runs on Apple only).
+- Removed: the rollback term; QN_FAST_SLIM = FAST and Apple. Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `07f25ee298` (2026-11-15); code recoverable at `e9b815205e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LSVR_EVAL_SLIM_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF
+
+- Tried: old path of a one-vendor promotion. Linear (FAST+Apple LinearSVR batched line search).
+- Evidence: EXP:288 KEEP on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only). Verdict: deleted (rule d of the V2 plan). Promoted on Apple only; the NVIDIA / AMD A/B is owed (FAST runs on Apple only).
+- Removed: the rollback term; QN_FAST_LS_BATCH = FAST and Apple. Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `ff4bf11f19` (2026-11-15); code recoverable at `07f25ee298`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_OLS_FAST_SMALL_NT
+
+- Tried: opt-in arm, no A/B recorded. Linear (FAST+Apple OLS step-5 small product).
+- Evidence: no record. Verdict: deleted (rule a of the V2 plan).
+- Removed: OLS_FAST_SMALL_NT, OLS_FAST_SMALL_NT_MAX and the pinned step-5 launch; gemm_nt in every mode. Default unchanged: no bits move.
+- Files: glm/impl/linalg/detail/lstsq.mojo.
+- Deleted by: lane/expdel2-20-linear `9043ca5365` (2026-11-15); code recoverable at `6dee0ea324`.
+- Restore: `git apply experiments/removed/MOJOLEARN_OLS_FAST_SMALL_NT.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF
+
+- Tried: old path. Preprocessing (FAST+Apple MinMaxScaler fused nonfinite scan).
+- Evidence: EXP:405 KEEP, FAST+Apple default. Verdict: deleted (rule e of the V2 plan).
+- Removed: the rollback term; PREP_CLS2_MINMAX_FUSED = PREP_FAST_MINMAX. Default unchanged: no bits move.
+- Files: preprocessing/minmax.mojo.
+- Deleted by: lane/expdel2-20-linear `008e8e1375` (2026-11-15); code recoverable at `af2a7c589f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+- Records: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF
+
+- Tried: old path. Preprocessing (FAST+Apple MinMaxScaler pooled X buffer).
+- Evidence: EXP:404 KEEP, FAST+Apple default. Verdict: deleted (rule e of the V2 plan).
+- Removed: the rollback term; PREP_CLS2_MINMAX_POOL = PREP_FAST_MINMAX. Default unchanged: no bits move.
+- Files: preprocessing/minmax.mojo.
+- Deleted by: lane/expdel2-20-linear `23c6c58415` (2026-11-15); code recoverable at `008e8e1375`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+- Records: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_PURITY2_2_OFF
+
+- Tried: old path, no A/B recorded. Linear (FAST QN tile sum).
+- Evidence: EXP:721 OPEN (no A/B recorded). Verdict: deleted (rule b of the V2 plan).
+- Removed: the one-tile FAST fold of qn_tile_sum. Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `3c2a7a6d60` (2026-11-15); code recoverable at `eb10315ddd`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PURITY2_2_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_PURITY_1_OFF
+
+- Tried: old path, no A/B recorded. Linear (OLS centering means on the host).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the host-mean branch and its h_m staging buffer in both centered OLS fits. Default unchanged: no bits move.
+- Files: glm/estimator.mojo.
+- Deleted by: lane/expdel2-20-linear `021105e119` (2026-11-15); code recoverable at `a3181ec16f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_QN_DEV_ARGMAX_OFF
+
+- Tried: old path, no A/B recorded. Linear (LogisticRegression device argmax).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; QN_DEV_ARGMAX = True for its importers. Default unchanged: no bits move.
+- Files: glm/estimator.mojo.
+- Deleted by: lane/expdel2-20-linear `5fbedd1130` (2026-11-15); code recoverable at `4218560b53`.
+- Restore: `git apply experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_QN_FAST_XTDZ_OFF
+
+- Tried: old path. Linear (FAST+Apple QN gradient X^T dZ).
+- Evidence: EXP:1930 DELETED (record read: the default is the kept path). Verdict: deleted (rule e of the V2 plan).
+- Removed: the rollback term of QN_FAST_XTDZ. Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `da95043b31` (2026-11-15); code recoverable at `83e86f6d61`.
+- Restore: `git apply experiments/removed/MOJOLEARN_QN_FAST_XTDZ_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_QN_IDN_FUSED_OFF
+
+- Tried: old path, no A/B recorded. Linear (IDENTICAL QN fused evaluation).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; QN_IDN_FUSED = QN_TILED (the weighted four-launch path stays). Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `fb9523bf09` (2026-11-15); code recoverable at `42a2855cbe`.
+- Restore: `git apply experiments/removed/MOJOLEARN_QN_IDN_FUSED_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_QN_IDN_SLIM_OFF
+
+- Tried: old path, no A/B recorded. Linear (IDENTICAL QN slim epilogue).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; QN_IDN_SLIM = QN_TILED. Default unchanged: no bits move.
+- Files: glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `42a2855cbe` (2026-11-15); code recoverable at `cf050feb2f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_QN_IDN_SLIM_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF
+
+- Tried: old path, no A/B recorded. Linear (LinearSVC one-vs-rest one upload).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; QN_OVR_ONE_UPLOAD = True; the per-class route of glm/linear_svc_native_device.mojo. Default unchanged: no bits move.
+- Files: glm/estimator.mojo, glm/linear_svc_native_device.mojo.
+- Deleted by: lane/expdel2-20-linear `4218560b53` (2026-11-15); code recoverable at `021105e119`.
+- Restore: `git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_QN_TILED_OFF
+
+- Tried: old path. Linear (IDENTICAL QN tiled objective, device and host column).
+- Evidence: EXP:2203 DELETED (serial shape; record read). Verdict: deleted (rule e of the V2 plan).
+- Removed: the rollback term; QN_TILED = IDENTICAL, HOST_QN_TILED = True; the 256-chain branches of the two host checks. Default unchanged: no bits move.
+- Files: glm/checks/logistic_check.mojo, glm/checks/qn_losses_check.mojo, glm/host/qn_oracle.mojo, glm/impl/qn/glm_base.mojo.
+- Deleted by: lane/expdel2-20-linear `e9b815205e` (2026-11-15); code recoverable at `da95043b31`.
+- Restore: `git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_RIDGE_NO_U_OFF
+
+- Tried: old path of a one-vendor promotion. Linear (FAST+Apple Ridge without U).
+- Evidence: EXP:246 KEPT 2caff7b0c on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only). Verdict: deleted (rule d of the V2 plan). Promoted on Apple only; the NVIDIA / AMD A/B is owed (FAST runs on Apple only).
+- Removed: the rollback term of RIDGE_NO_U. Default unchanged: no bits move.
+- Files: glm/impl/ridge.mojo.
+- Deleted by: lane/expdel2-20-linear `3fcdcb78f6` (2026-11-15); code recoverable at `620c4ce37c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RIDGE_NO_U_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_RIDGE_RESIDENT_OFF
+
+- Tried: old path of a one-vendor promotion. Linear (FAST+Apple resident Ridge fit).
+- Evidence: EXP:247 KEPT 2caff7b0c on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only). Verdict: deleted (rule d of the V2 plan). Promoted on Apple only; the NVIDIA / AMD A/B is owed (FAST runs on Apple only).
+- Removed: the rollback terms of RIDGE_NO_U and RIDGE_FAST_RESIDENT. Default unchanged: no bits move.
+- Files: glm/impl/ridge.mojo, glm/linear_route_controls.mojo.
+- Deleted by: lane/expdel2-20-linear `b7e3b456d5` (2026-11-15); code recoverable at `3fcdcb78f6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_SVM_IDN_FUSED_TILE_OFF
+
+- Tried: old path, no A/B recorded. Kernel (IDENTICAL SVC fused RBF tile).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; the sabotage terms stay. Default unchanged: no bits move.
+- Files: svm/impl/distance/kernel_matrices.mojo.
+- Deleted by: lane/expdel2-20-linear `efe4d2c321` (2026-11-15); code recoverable at `8398142558`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF
+
+- Tried: old path, no A/B recorded. Kernel (IDENTICAL SVC fused update_f).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; the sabotage terms stay. Default unchanged: no bits move.
+- Files: svm/impl/smosolver.mojo.
+- Deleted by: lane/expdel2-20-linear `788f90f025` (2026-11-15); code recoverable at `30ab49dcd7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF
+
+- Tried: old path, no A/B recorded. Kernel (IDENTICAL SVC NaN scan).
+- Evidence: no record. Verdict: deleted (rule b of the V2 plan).
+- Removed: the rollback term; SVM_IDN_NAN_SCAN_ONE = IDENTICAL. Default unchanged: no bits move.
+- Files: svm/impl/smosolver.mojo.
+- Deleted by: lane/expdel2-20-linear `ed4cab202e` (2026-11-15); code recoverable at `788f90f025`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_SVM_RBF_EPILOGUE_1D
+
+- Tried: opt-in arm, no A/B recorded. Kernel (Apple IDENTICAL RBF epilogue grid).
+- Evidence: no record. Verdict: deleted (rule a of the V2 plan).
+- Removed: the flat-grid arm of RBF_EPILOGUE_2D. Default unchanged: no bits move.
+- Files: svm/impl/distance/kernel_matrices.mojo.
+- Deleted by: lane/expdel2-20-linear `8398142558` (2026-11-15); code recoverable at `58cc0078e2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+### MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED
+
+- Tried: opt-in arm, no A/B recorded. Preprocessing (FAST+Apple StandardScaler fit_transform).
+- Evidence: EXP:1597 OPEN (no A/B recorded). Verdict: deleted (rule a of the V2 plan).
+- Removed: the unread PREP_FAST_FIT_TRANSFORM_FUSED gate and its imports. Default unchanged: no bits move.
+- Files: preprocessing/estimator.mojo.
+- Deleted by: lane/expdel2-20-linear `3fca9aa4b8` (2026-11-15); code recoverable at `23c6c58415`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+- Records: refusal in `core/experiment_guards_base.mojo`; `grid_controls/apple-fast-round2.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-20-linear section).
+
+
+## Experiment deletions: lane expdel2-20-linear, non-owner sites (2026-11-15)
+
+The lane folded these defines (or their aliases) in its own files; each owner lane writes the index row and section. Inline markers and per-lane patches: `MOJOLEARN_CLASSICAL_C22_TRIANGLE` (`experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.expdel2-20-linear.patch`, owner expdel2-06-base, recoverable at `efe4d2c321`), `MOJOLEARN_CLASSICAL_C05_OLS_PHASE` (`experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch`, owner expdel2-07-base, recoverable at `3c2a7a6d60`), `MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA` (`experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.expdel2-20-linear.patch`, owner expdel2-07-base, recoverable at `8431777acf`), `MOJOLEARN_CLASSICAL_C17_LS_TRIALS` (`experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch`, owner expdel2-06-base, recoverable at `fb9523bf09`), `MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF` (`experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.expdel2-20-linear.patch`, owner expdel2-05-base, recoverable at `9043ca5365`), `MOJOLEARN_IDN_ALL_OFF` (`experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-20-linear.patch`, owner lane named in the plan, recoverable at `72da417819`). `MOJOLEARN_IDN_ALL_OFF`: the umbrella term removed beside CD_IDN_GRAM_OFF, SVM_IDN_FUSED_UPDATE_F_OFF, SVM_IDN_NAN_SCAN_ONE_OFF, IDN_SVC_ONE_BLOCK_OFF, SVM_IDN_FUSED_TILE_OFF, QN_IDN_SLIM_OFF, QN_IDN_FUSED_OFF, QN_OVR_ONE_UPLOAD_OFF and QN_DEV_ARGMAX_OFF (the patch is those commits reversed, newest first). `MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF`: comments only (its alias IDN_JACOBI_ROUND_ROBIN is the IDENTICAL mode term, no branch folds). No bit changes.
+
+Not touched here: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; coordinator correction 2026-11-15); `MOJOLEARN_SVM_WS1024` (no read in this lane's files; its read is svm/impl/workingset.mojo).

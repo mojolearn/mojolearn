@@ -1,0 +1,22 @@
+diff --git a/svm/impl/smosolver.mojo b/svm/impl/smosolver.mojo
+index 7dc1e956b8..ddc42c0dee 100644
+--- a/svm/impl/smosolver.mojo
++++ b/svm/impl/smosolver.mojo
+@@ -155,12 +155,13 @@ tile and reading it back; RBF and linear kernels, n_cols <= 64."""
+ #: of writing the `nnz x batch` kernel tile (identical GEMM + RBF epilogue
+ #: launch) and reading it back: RBF and linear kernels, n_cols <= 64, one
+ #: device. Same expressions in the same order per cell, so no bit moves and
+-#: the host column is untouched. The sabotage builds keep the tile path, so
+-#: each still fails its gate through the kernels it names.
+-# TOMBSTONE: MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 30ab49dcd7.
+-# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch; record in docs/TOMBSTONES.md.
++#: the host column is untouched. `-D MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF`
++#: (or the master `MOJOLEARN_IDN_ALL_OFF`) keeps the tile path; the sabotage
++#: builds keep it too, so each still fails its gate through the kernels it
++#: names.
+ comptime SVM_IDN_FUSED_UPDATE_F = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+     and not SAB_FOLD_ROTATE
+     and not SAB_NO_FTZ
+     and not is_defined["MOJOLEARN_SVM_SABOTAGE_STD_EXP"]()

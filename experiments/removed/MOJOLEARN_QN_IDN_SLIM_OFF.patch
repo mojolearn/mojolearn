@@ -1,0 +1,19 @@
+diff --git a/glm/impl/qn/glm_base.mojo b/glm/impl/qn/glm_base.mojo
+index 19956ca971..4b27a726fc 100644
+--- a/glm/impl/qn/glm_base.mojo
++++ b/glm/impl/qn/glm_base.mojo
+@@ -1024,9 +1024,11 @@ def qn_slim_epilogue_gated_kernel(
+ # NO BIT MOVES: `g[j] = ftz(sc + ftz(l2 * w_j))` is the sum the beta = 1
+ # fold formed (an addition, commuted); the regularizer value, `dot_self` /
+ # `nrm1` / `nrm_max` and the l1 term are those kernels' chains and folds.
+-# TOMBSTONE: MOJOLEARN_QN_IDN_SLIM_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at cf050feb2f.
+-# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_SLIM_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime QN_IDN_SLIM = QN_TILED
++# `-D MOJOLEARN_QN_IDN_SLIM_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
++# separate launches.
++comptime QN_IDN_SLIM = QN_TILED and not (
++    is_defined["MOJOLEARN_QN_IDN_SLIM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ @always_inline

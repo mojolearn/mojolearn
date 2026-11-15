@@ -159,6 +159,13 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_PT_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_PT_BLOCKED_OFF (old path, never measured) is gone; the default is kept; code at b358d19039; restore: experiments/removed/MOJOLEARN_IDN_PT_BLOCKED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SELECT_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_SELECT_BLOCKED_OFF (old path, never measured) is gone; the default is kept; code at 27b4b5a66a; restore: experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch"
+    # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): PREP_FAST_CLS2_MINMAX_FUSED_OFF (old path) is gone; the default is kept; code at af2a7c589f; restore: experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): PREP_FAST_CLS2_MINMAX_POOL_OFF (old path) is gone; the default is kept; code at 008e8e1375; restore: experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"](), "removed 2026-11-15 (lane/expdel2-20-linear): X_PREP_FAST_FIT_TRANSFORM_FUSED (opt-in arm, no A/B recorded) is gone; the default is kept; code at 23c6c58415; restore: experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch"
     return True
 
 
