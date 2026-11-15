@@ -514,8 +514,8 @@ _batch_decl(_sequence_batch_optimizer("NAdam", (("default", {}), ("decay", dict(
 # computed in Mojo (autograd/model_verify.mojo verify_digest_py through the
 # x_sequence binding, the digest `verify-model` reports); the seeded weights
 # come from the same file's verify_fill_py (Philox4x32-10, exact in float32).
-# Python only passes buffers. Sizes follow tests/autograd_smoke_digests.json's
-# MLP case (64 rows, 6 features, 8 hidden units): a correctness check that runs
+# Python only passes buffers. Sizes: the autograd smoke's MLP case (64 rows,
+# 6 features, 8 hidden units): a correctness check that runs
 # in seconds, so the routine `verify` scope carries it
 # (python/mojolearn/_verification_profiles.py ROUTINE_TAPE).
 
