@@ -706,6 +706,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C34_PARALLEL_EDGES`](#mojolearn_c34_parallel_edges-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (hdbscan, agglomerative) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C34_PARALLEL_EDGES.patch](../experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.patch) |
 | [`MOJOLEARN_C35_PACKED_LISTS`](#mojolearn_c35_packed_lists-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ivf) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C35_PACKED_LISTS.patch](../experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch) |
 | [`MOJOLEARN_C35_ROWS_128`](#mojolearn_c35_rows_128-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ivf) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C35_ROWS_128.patch](../experiments/removed/MOJOLEARN_C35_ROWS_128.patch) |
+| [`MOJOLEARN_XCLUSTER_ROW_ASSIGN`](#mojolearn_xcluster_row_assign-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (minibatch-kmeans, bisecting-kmeans) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch](../experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6830,3 +6831,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `54b5cb96f6`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C35_ROWS_128.patch`, then delete the `MOJOLEARN_C35_ROWS_128` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_XCLUSTER_ROW_ASSIGN: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (C36 x_cluster half): MiniBatchKMeans / BisectingKMeans nearest center as a row-register kernel, 2 or 4 rows a thread. `XCLUSTER_ROW_ASSIGN` is now `False` too. The alias `XCLUSTER_ROW_ASSIGN_ROWS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `0` so its readers (x_cluster/device_ops.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b1f48f8126`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch`, then delete the `MOJOLEARN_XCLUSTER_ROW_ASSIGN` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `xcluster_row_assign` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
