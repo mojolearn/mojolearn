@@ -27,7 +27,10 @@ comptime T34_CHUNK_FOLD = False
 #: Kept as the folded constants: core/forest_inference_model.mojo imports them.
 comptime T35_LEAF_REUSE = False
 comptime T36_FINITE_STAGE = False
-comptime T37_WORKSPACE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T37_WORKSPACE"]()
+# TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (IDENTICAL opt-in resident prediction workspace, core/forest_inference_model.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 07f7a0733b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch; record in docs/TOMBSTONES.md.
+#: Kept as the folded constant: core/forest_inference_model.mojo import it.
+comptime T37_WORKSPACE = False
 comptime T38_FUSED_LABELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T38_FUSED_LABELS"]()
 
 #: The default fold's finish: the tree-order total divided by the tree count.
