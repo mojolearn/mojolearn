@@ -6,12 +6,12 @@ from core.weight_epoch import registry_epoch_bump
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.causal_lm_public_door import _native_function
-from bindings.generation_buffers_door import generation_array
+from bindings.generation_buffers_door import generation_array_unfilled
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from core.samba_optimizer_plan import SambaOptimizerPlan
 # RUN (lane rs-neural): the resident step words, no Python import.
 from training.samba_resident_run import samba_resident_step_words
-from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_connect_factory_once, neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
 
 
 def samba_resident_provider(fields: PythonObject, entries: PythonObject) raises -> PythonObject:
@@ -83,7 +83,22 @@ def samba_resident_native_forward(fields: PythonObject, config: PythonObject, en
     to `_samba_resident_uploads`."""
     var provider = samba_resident_provider(fields, entries)
     if provider is None:
-        return PythonObject(None)
+        # lane flag-neural-small-rows (2026-11-15): `_native_primitives` is
+        # connected only under MOJOLEARN_NEURAL_NATIVE_DISPATCH=1
+        # (neural_descriptor_cached, c295db1c56, default "0"), so on every
+        # default install this forward returned None here and SambaStack.forward
+        # ran SambaStackProgram (py-spy of 80a7f8aca30a samba-forward/bytes:
+        # bindings/samba_inference_native_door.mojo _samba_program_call ->
+        # training/samba_program_entry.mojo _forward, no resident frame; board
+        # NV L40S 6.58 ms (0.8.55) -> 8.04 ms at fcc934a37c). 0.8.55 called the
+        # resident forward with no opt-in. Same fallback as the resident train
+        # step (bindings/samba_step_native_door.mojo `_samba_resident_step`):
+        # the stack image's primitive entry, connected once per factory
+        # (neural_descriptor_connect_factory_once), so forward and step share
+        # one resident session (samba_resident_session's module check).
+        # Op 24 below still refuses an image without the resident route.
+        provider = neural_descriptor_connect_factory_once(_native_function(entries, "neural_primitives_api_v1"),
+            String(PRIMITIVE_ABI_NAME), 29)
     if Float64(py=config["dropout"]) != 0.0 or neural_descriptor_execute(provider, 24, [], [], [], False) == 0:
         return PythonObject(None)
     var session = samba_resident_session(fields, config, provider)
@@ -91,7 +106,10 @@ def samba_resident_native_forward(fields: PythonObject, config: PythonObject, en
     var shape = ids.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
-    var output = generation_array([b, l, Int(py=config["vocab"])])
+    # Unfilled: op 16 writes every one of the B * L * vocab logits (one
+    # download of the whole logits buffer) before anything reads it; the
+    # zero fill was a 1 MB memset per call at the board shape.
+    var output = generation_array_unfilled([b, l, Int(py=config["vocab"])])
     var parameters = fields["flat"]
     # Op 16 returns the session's registry upload count (lane
     # fix-samba-weight-upload: the forward uploads only when the weight key is
