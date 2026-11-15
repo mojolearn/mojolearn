@@ -14,7 +14,6 @@ from x_cluster.spectral_df64_device import cluster_qr_df64_device, discretize_df
 
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.os import getenv
 from std.time import perf_counter_ns
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -181,6 +180,12 @@ def _gather_rows_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, dst: FPtr):
             f += Int(block_dim.x)
 
 
+#: x_cluster phase timer: `-D MOJOLEARN_XC_PHASES` builds print the phase
+#: walls; default builds compile them out. Before (lane
+#: envgate-classical-deviceplan): a getenv per fit / context.
+comptime XC_PHASES_ON = is_defined["MOJOLEARN_XC_PHASES"]()
+
+
 # lane/neural-pass112 (2026-10-02): the pairwise squared distances in tiles.
 # `_sqdist_kernel` is one thread per cell, each reading its two rows from
 # device memory (M4, istella 10K x 220 self-distances for MeanShift's
@@ -189,13 +194,16 @@ def _gather_rows_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, dst: FPtr):
 # each thread folds SQT_R x SQT_R cells, every cell its own chain over the
 # features ascending with `sq_dist_rows`' statements (the staged words are
 # already flushed: ftz is idempotent), so every word is the same.
-# `MOJOLEARN_XC_SQDIST_TILED=0` restores the per-cell kernel.
+# `-D MOJOLEARN_XC_SQDIST_TILED_OFF` restores the per-cell kernel (before
+# lane envgate-classical-deviceplan: the run-time `MOJOLEARN_XC_SQDIST_TILED=0`,
+# a getenv per sqdist launch; B arm RUN OWED, owed-pre0867.json
+# "xc-sqdist-tiled-off", docs/apple-fast/EXPERIMENTS.md).
 comptime SQT_R = 4
 comptime SQT_TD = 16
 comptime SQT_B = SQT_R * SQT_TD
 comptime SQT_K = 16
 comptime SQT_BYTES = 2 * SQT_B * SQT_K * 4
-comptime SQDIST_TILED = lib_smem_page_fits_for[TARGET_COLUMN, SQT_BYTES]()
+comptime SQDIST_TILED = lib_smem_page_fits_for[TARGET_COLUMN, SQT_BYTES]() and not is_defined["MOJOLEARN_XC_SQDIST_TILED_OFF"]()
 
 
 def _sqdist_tiled_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
@@ -340,7 +348,11 @@ def _meanshift_kernel(
 # rows within the bandwidth, ascending, as `meanshift_seed` does; thread 0
 # runs the quotients, the shift and the stop test in feature order. Every
 # word is `meanshift_seed`'s. d > MST_MAX_D (or a page that does not fit)
-# runs `_meanshift_kernel`; `MOJOLEARN_MEANSHIFT_TEAM=0` restores it.
+# runs `_meanshift_kernel`; `-D MOJOLEARN_MEANSHIFT_TEAM_OFF` restores it
+# (before lane envgate-classical-deviceplan: the run-time
+# `MOJOLEARN_MEANSHIFT_TEAM=0`, a getenv per fit). Identical builds never
+# compile the team kernel (K6 below), so this arm exists only in Apple fast
+# builds (paused programme: kept, not timed; docs/apple-fast/EXPERIMENTS.md).
 comptime MST_TPB = 256
 comptime MST_T = 1024
 comptime MST_MAX_D = 1024
@@ -348,7 +360,7 @@ comptime MST_U = 16
 comptime MST_BYTES = (2 * MST_MAX_D + MST_T + MST_TPB + 4) * 4
 # K6: under IDN_MEANSHIFT_GRID the team kernel's one-chain fold is not the
 # blocked fold of `meanshift_seed`, so it never runs.
-comptime MEANSHIFT_TEAM = lib_smem_page_fits_for[TARGET_COLUMN, MST_BYTES]() and not IDN_MEANSHIFT_GRID
+comptime MEANSHIFT_TEAM = lib_smem_page_fits_for[TARGET_COLUMN, MST_BYTES]() and not IDN_MEANSHIFT_GRID and not is_defined["MOJOLEARN_MEANSHIFT_TEAM_OFF"]()
 
 
 def _meanshift_team_kernel(
@@ -1700,7 +1712,7 @@ struct DeviceOps(ClusterOps):
         self.pend_i = List[List[Int32]]()
         self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
         self.mpart_n = 1
-        self.ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
+        self.ph_on = XC_PHASES_ON
         self.ph_t = Int(perf_counter_ns())
         self.ph_names = List[String]()
         self.ph_ns = List[Int]()
@@ -1889,7 +1901,7 @@ struct DeviceOps(ClusterOps):
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         self._ph0()
         comptime if SQDIST_TILED:
-            if na > 0 and nb > 0 and d > 0 and getenv("MOJOLEARN_XC_SQDIST_TILED") != "0":
+            if na > 0 and nb > 0 and d > 0:
                 self.ctx.enqueue_function[_sqdist_tiled_kernel](
                     self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
                     grid_dim=((nb + SQT_B - 1) // SQT_B, (na + SQT_B - 1) // SQT_B), block_dim=SQT_TD * SQT_TD,
@@ -1973,7 +1985,7 @@ struct DeviceOps(ClusterOps):
                 self._ph1("meanshift")
                 return
         comptime if MEANSHIFT_TEAM:
-            if d <= MST_MAX_D and ns > 0 and getenv("MOJOLEARN_MEANSHIFT_TEAM") != "0":
+            if d <= MST_MAX_D and ns > 0:
                 self.ctx.enqueue_function[_meanshift_team_kernel](
                     self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
                     self._fp(centers), self._ip(intensity), self._ip(iters),
