@@ -495,11 +495,8 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: on every oracle built the ordinary way, whose constructor drains and
     #: fills `weights_cpu` itself.
     var h_weight_stats: Optional[HostBuffer[DType.float32]]
-    #: Lane S3 `CTR_SORTFREE_SUMS`: the rows are in ORIGINAL order, `d_bins`
-    #: is each row's leaf id, and the single-dim per-leaf sums come from
-    #: `enqueue_bin_keyed_stats` into `bk_partials` instead of
-    #: `compute_partition_stats` over partition ranges. False (and None) on
-    #: every oracle built the ordinary way.
+    #: always False: the bin-keyed arm (TREES_CTR_SORTFREE_SUMS) is deleted;
+    #: the field and `bk_partials` stay for the callers in other modules.
     var bin_keyed: Bool
     var bk_partials: Optional[DeviceBuffer[DType.float32]]
     #: lane gbdt-host-loops-12: the host interface's double staging (the
@@ -2342,7 +2339,6 @@ def make_bin_optimized_oracle(
     var bins_gx = 2 * sm
     if bins_gx < 1:
         bins_gx = 1
-    _ = natural_bins^
     ctx.enqueue_function[fill_bins_from_partition_kernel](
         d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
         grid_dim=(bins_gx, bin_count, 1),
