@@ -29,14 +29,12 @@ def ctx_cache_key(ctx: DeviceContext) raises -> Int:
     them. The key is the address of the context's runtime handle: copies of
     one context share it, a second `DeviceContext` on the same GPU does not,
     and a cached buffer keeps its context alive, so an address is never
-    reused while a cache holds an entry under it.
-    `-D MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID` restores the device-id key."""
+    reused while a cache holds an entry under it."""
+    # TOMBSTONE: MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID (opt-in device-id key instead of the context handle; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at b789195239.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID.patch; record in docs/TOMBSTONES.md.
     comptime if IDN_CACHE_CTX_KEY:
-        comptime if is_defined["MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID"]():
-            return Int(ctx.id())
-        else:
-            # _handle is Optional[pointer] in Mojo 1.0 (box-run-2 compile fix).
-            return Int(ctx._handle.value())
+        # _handle is Optional[pointer] in Mojo 1.0 (box-run-2 compile fix).
+        return Int(ctx._handle.value())
     else:
         return 0
 
