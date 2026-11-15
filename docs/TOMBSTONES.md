@@ -654,6 +654,7 @@ in the tables after the sections.
 | [`MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF`](#mojolearn_resample_fast_perm_select_off-old-path-deleted-2026-11-15) | Resample (permutation_test null select, FAST Apple) | removed (old path; FAST+Apple default KEEP, ab1 d51f4b4bf) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch) |
 | [`MOJOLEARN_CV_FAST_SLICE_OFF`](#mojolearn_cv_fast_slice_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold rows, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvslice) | 2026-11-15 | [MOJOLEARN_CV_FAST_SLICE_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch) |
 | [`MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF`](#mojolearn_cv_fast_trust_folds_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold checks, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvtrust) | 2026-11-15 | [MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch) |
+| [`MOJOLEARN_TSA_FAST_SELD_FUSED_OFF`](#mojolearn_tsa_fast_seld_fused_off-old-path-deleted-2026-11-15) | Time series (select_d KPSS rounds, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c0ba4379) | 2026-11-15 | [MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6359,4 +6360,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `CV_FAST_TRUST_FOLDS`, rab1d-cvtrust): M3 one run per arm, cross-val-score taxi 161.86 -> 142.47 ms (-12.0%), istella 3099.08 -> 3089.22 ms (-0.3%), mean_r2 and digest identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8258512ade`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch`, then delete the `MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_TSA_FAST_SELD_FUSED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `TSA_SELD_FUSED` (`tsa/impl/timeSeries/kpss_fused.mojo`, taken in `tsa/estimator.mojo` select_d): with `-D MOJOLEARN_TSA_FAST_SELD_FUSED_OFF` every select_d took the eight-launch round path. Deleted: the define read; `TSA_SELD_FUSED` is FAST and Apple. The round path stays (seasonal differencing, d_max past 2, long series, every other build).
+- **Verdict**: KEPT 6c0ba4379 (EXPERIMENTS.md `TSA_FAST_SELD_FUSED`, gaptsa-seldfused-selectd-taxi-hourly / -synthetic): M3 one run per arm, select-d taxi-hourly 8.5 -> 2.0 ms (-76%), synthetic 8.0 -> 2.2 ms (-73%), quality identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `60cbec7970`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch`, then delete the `MOJOLEARN_TSA_FAST_SELD_FUSED_OFF` refusal in `core/experiment_guards_series.mojo`.
 - **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
