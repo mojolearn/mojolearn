@@ -14,8 +14,7 @@ write the same words on every vendor. The chain it replaces was one thread
 walking the whole row (thousands of terms on a kNN graph at k = n / 10).
 
 `-D MOJOLEARN_IDN_SPMV_LANES_OFF=1` restores the ascending chain on the
-device AND in the host column (both read this constant), as does the master
-`-D MOJOLEARN_IDN_ALL_OFF=1`. The define must reach the host-column build as
+device AND in the host column (both read this constant). The define must reach the host-column build as
 well as the device build.
 """
 
@@ -25,11 +24,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime SPMV_LANES = 32
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_SPMV_LANES = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_SPMV_LANES_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 
@@ -43,12 +43,13 @@ comptime IDN_SPMV_LANES = (
 #: precomputed graph's degrees move (the kNN graph's 0.5 / 1 values sum the
 #: same in any order); the device (`degree_lanes_kernel`) and the host column
 #: (`spectral_oracle.mojo::host_laplacian`) both read this constant.
-#: `-D MOJOLEARN_IDN_LAP_DEGREE_LANES_OFF=1` (or the master) restores the
+#: `-D MOJOLEARN_IDN_LAP_DEGREE_LANES_OFF=1` restores the
 #: per-row chain on both; the define must reach the host-column build too.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_LAP_DEGREE_LANES = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_LAP_DEGREE_LANES_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )

@@ -58,12 +58,13 @@ comptime SYMMETRIZE_TPB = 128
 #: the sorted lookup too (it was Apple only). The same entry is found, so
 #: the output is the scan's. `-D MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF=1`
 #: keeps the scan there.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_SYMMETRIZE_SORTED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not (
         is_defined["MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 comptime SYMMETRIZE_FAST = (

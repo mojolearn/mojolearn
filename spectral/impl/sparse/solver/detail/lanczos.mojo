@@ -2006,11 +2006,12 @@ def lanczos_solve_ritz(
 #: one LANCZOS_ID_DEV ran, on the same words, so no bit moves and the host
 #: column is unchanged. `-D MOJOLEARN_IDN_LANCZOS_POOL_OFF=1` restores the
 #: per-restart allocations and waits.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_LANCZOS_POOL = (
     LANCZOS_ID_DEV
     and not (
         is_defined["MOJOLEARN_IDN_LANCZOS_POOL_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 
@@ -2310,12 +2311,13 @@ def lanczos_restart_pooled(
 #: floats. Copies and the same hash: no bit moves, the host column is
 #: unchanged. A traced run keeps the host lists (the card records them).
 #: `-D MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF=1` restores the round trips.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_SPECTRAL_VECS_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and has_accelerator()
     and not (
         is_defined["MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 

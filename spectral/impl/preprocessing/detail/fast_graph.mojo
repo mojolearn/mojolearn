@@ -60,12 +60,13 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
 #: two-level scan in `fg_bm_row_kernel`, now takes its group width from
 #: `WARP_SIZE` (32 on NVIDIA and Apple, 64 on AMD).
 #: `-D MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF=1` keeps the host path there.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_SPECTRAL_GRAPH_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not (
         is_defined["MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 comptime SPECTRAL_GRAPH_FAST = (

@@ -42,10 +42,12 @@ from x_ann.fast_env import FAST_KNN_BIGD
 #: never beats (ld, li) under `ts_knn_beats`; a NaN never beats either. A
 #: pruned candidate is exactly one the full fold would reject: the same list,
 #: the same bits. Tested every KNP_EVERY features. `-D
-#: MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF` (or MOJOLEARN_IDN_ALL_OFF) folds every
+#: MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF` folds every
 #: feature.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_ANN_KNN_PRUNE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF"]()
 )
 #: features between two prune tests (a multiple of 4)
 comptime KNP_EVERY = 16
@@ -349,14 +351,15 @@ def knn_wide_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I3
 #: the two vendors decides). Trustworthiness@15 equal and digests identical
 #: in every arm on both vendors (istella ce69cdffd6f889b6, taxi
 #: cee32a8a52defb1c): no bit change. -D MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF
-#: (or MOJOLEARN_IDN_ALL_OFF) restores the serial owner insertion (and the
+#: restores the serial owner insertion (and the
 #: one-thread-per-row tile for d <= 64).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_TSNE_KNN_TILE_SELECT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not (
         is_defined["MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 #: candidates of a row per thread in steps A and B (4 threads per row)
