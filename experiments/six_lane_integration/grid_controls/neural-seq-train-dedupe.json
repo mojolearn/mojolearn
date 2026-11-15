@@ -4,33 +4,6 @@
  "branch": "lane/neural-seq-train-dedupe",
  "head": "b81169c61",
  "controls": {
-  "m3_angle_carry_cache": {
-   "define": "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "autograd/kernels/mamba3.mojo:1321",
-    "autograd/kernels/mamba3.mojo:1397",
-    "mamba/host/gen/mamba3_backward.mojo:1012",
-    "core/six_lane_experiment_guards.mojo:195"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "promoted:ge123e6f9",
-   "entries": [
-    "NN38",
-    "NI43"
-   ],
-   "board": "samba-train-step",
-   "tags": [],
-   "note": "PROMOTED 2026-10-08 (lane grid-act-4, grid ge123e6f9, one run per arm): incumbent -> carry cache ms samba-train-step NV 96.0->76.9, AMD 147.2->143.5 (0.883x combined); output hashes equal to the incumbent on both vendors (no bits). Measured alone; it now combines with the promoted samba_resident_step and act_retain=2, and the post-merge race measures the combination. Default on in IDENTICAL; arm off = MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF (each chunk re-sums every later chunk total); the old on define is refused. NN38 and NI43 enabled the identical seeds kernel; one switch. Same fold order as off (bits equal)."
-  },
   "m2_yoff_exp": {
    "define": "MOJOLEARN_IDN_M2_YOFF_EXP",
    "kind": "arms",
@@ -670,32 +643,6 @@
    "note": "bits_change not re-assessed by L11 (unchanged switch)",
    "reach_note": "Declared for samba-forward and samba-train-step by lane/grid-prune 2026-10-07: samba layers are mamba3/attention (python/mojolearn/_samba_impl.py:55) and run mamba3_siso.mojo, where m3_angle_parallel is already declared for samba."
   },
-  "m3_decode_window": {
-   "define": "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "bindings/_mojolearn_mamba.mojo:2019"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI47"
-   ],
-   "board": "off-board (decode)",
-   "tags": [
-    "off_board",
-    "peripheral"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
   "nn42_input_bias": {
    "define": "MOJOLEARN_NN42_INPUT_BIAS_FUSED",
    "kind": "switch",
@@ -821,29 +768,6 @@
    "tags": [
     "off_board"
    ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
-  "nn50_owned_runs": {
-   "define": "MOJOLEARN_NN50_OWNED_RUNS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NN50_OWNED_RUNS=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "autograd/kernels/embedding_runs.mojo:24"
-   ],
-   "binding": "_mojolearn_byte_lm",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NN50"
-   ],
-   "board": "lm-train-step",
-   "tags": [],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
   "nn53_head_chunk": {
@@ -1349,8 +1273,7 @@
     "ce_token_fold",
     "ce_grad_fused",
     "lm_views",
-    "train_scratch",
-    "nn50_owned_runs"
+    "train_scratch"
    ],
    "interaction_groups": [
     [
@@ -1409,7 +1332,6 @@
    "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
    "route": "Python calls mamba3 prefill fwd/bwd (mamba3_backward angle suffix), transformer fwd/bwd (neural_attention_owner tape / forward tape), training samba_ops",
    "controls": [
-    "m3_angle_carry_cache",
     "act_retain",
     "train_scratch",
     "nn58_accumulate_status",
@@ -1617,6 +1539,21 @@
    "define": "MOJOLEARN_TRAIN_LIVE_STATUS",
    "control": "train_live_status",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c38a3b0613; patch experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF",
+   "control": "m3_angle_carry_cache",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-23-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 41312ea653; patch experiments/removed/MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF.patch): old path; EXP:1755 PROMOTED (IDENTICAL default); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE",
+   "control": "m3_decode_window",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-23-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 74754fe939; patch experiments/removed/MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE.patch): unmeasured opt-in arm (A/B owed, never run); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_NN50_OWNED_RUNS",
+   "control": "nn50_owned_runs",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-23-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 4f9d2d5288; patch experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch): unmeasured opt-in arm; the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": {

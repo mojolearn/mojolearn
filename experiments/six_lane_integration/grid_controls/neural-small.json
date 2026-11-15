@@ -142,26 +142,6 @@
    "status": "kept",
    "note": "Block size of the parallel angle kernel; only read with m3_angle_parallel on. Timing only."
   },
-  "m3_s17_tail": {
-   "define": "MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF",
-   "kind": "arms",
-   "arms": {
-    "pipe": [],
-    "off": [
-     "MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF=1"
-    ]
-   },
-   "default": "pipe",
-   "source": [
-    "autograd/kernels/mamba3.mojo:2378",
-    "autograd/kernels/mamba3.mojo:2384",
-    "autograd/kernels/mamba3.mojo:2552"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
-   "note": "Mamba-3 backward S17 tail staging, mamba3_backward_s17_operands_into via the Mamba-3 tape SSD rule (autograd/rules_mamba3.mojo). One control, arms pipe (default) and off; the dbuf arm was deleted 2026-10-11 (lane/owed-decide, avg 1.33x). Needs the shared tail (no MAMBA3_S17_TAIL_NAIVE)."
-  },
   "attn_fwd_tq_rule": {
    "define": "MOJOLEARN_ATTN_FWD_TQ_RULE",
    "kind": "switch",
@@ -380,7 +360,6 @@
     "grouped_projections_v2",
     "m3_angle_parallel",
     "m3_angle_block",
-    "m3_s17_tail",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
@@ -396,10 +375,6 @@
     [
      "m3_angle_parallel",
      "m3_angle_block",
-     "m3_angle_carry_cache"
-    ],
-    [
-     "m3_s17_tail",
      "m3_angle_carry_cache"
     ],
     [
@@ -627,6 +602,11 @@
   {
    "define": "MOJOLEARN_IDN_M3_S17_TAIL_DBUF",
    "reason": "removed 2026-10-11 (lane/owed-decide): LOSER samba-train-step bytes NV 42.36 -> 39.60 ms (0.935x), AMD 69.04 -> 119.20 ms (1.726x), avg 1.33x, vendor split, hash 16f6e13b both; guard refuses; patch experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch"
+  },
+  {
+   "define": "MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF",
+   "control": "m3_s17_tail",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-23-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 1629ea8265; patch experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF.patch): old path; EXP:2014 PROMOTED; the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": {

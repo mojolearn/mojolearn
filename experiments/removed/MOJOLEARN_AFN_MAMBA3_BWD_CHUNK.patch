@@ -1,0 +1,36 @@
+diff --git a/autograd/kernels/mamba3.mojo b/autograd/kernels/mamba3.mojo
+index 7a94f4626d..55a811bfb3 100644
+--- a/autograd/kernels/mamba3.mojo
++++ b/autograd/kernels/mamba3.mojo
+@@ -11,7 +11,8 @@ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from std.os import getenv
+ from std.time import perf_counter_ns
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from core.accelerator_target import TARGET_HAS_APPLE_GPU
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+ from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
+ 
+ from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
+@@ -1410,14 +1411,13 @@ def mamba3_backward_angle_into(
+ # Every line is inside the AFN_M3_BWD_CHUNK guard; IDENTICAL and the other
+ # vendors compile the kernels above unchanged.
+ # ===========================================================================
+-# TOMBSTONE: MOJOLEARN_AFN_MAMBA3_BWD_CHUNK (MERGED-UNMEASURED opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 4f8466c7ca.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_CHUNK.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_AFN_SAMBA_ALL (MERGED-UNMEASURED opt-in umbrella) read deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 4f8466c7ca.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.patch; record in docs/TOMBSTONES.md.
+-# AFN_M3_BWD_CHUNK stays False for autograd/rules_mamba3.mojo and
+-# mamba/host/mamba3_prefill_chain.mojo (other lanes' files), whose chunk
+-# branches keep the kernels below; they go together after the wave.
+-comptime AFN_M3_BWD_CHUNK = False
++comptime AFN_M3_APPLE_FAST = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
++)
++comptime AFN_M3_BWD_CHUNK = AFN_M3_APPLE_FAST and (
++    is_defined["MOJOLEARN_AFN_MAMBA3_BWD_CHUNK"]()
++    or is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()
++)
+ comptime AFN_M3_SCAN_CHUNK = 64
+ 
+ 
