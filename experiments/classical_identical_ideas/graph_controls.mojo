@@ -85,7 +85,7 @@ comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
 comptime C33_CHUNK = 16
 # TOMBSTONE: MOJOLEARN_C34_PARALLEL_EDGES (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at c7dfed9ef3.
 # Restore: git apply experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.patch; record in docs/TOMBSTONES.md.
-comptime C34_PARALLEL_EDGES = False
+# (Sweep 2026-11-15: comptime C34_PARALLEL_EDGES removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C35_PACKED_LISTS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at d391e6ab95.
 # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch; record in docs/TOMBSTONES.md.
 comptime C35_PACKED_LISTS = False
