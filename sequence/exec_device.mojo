@@ -316,7 +316,9 @@ def team_kernel[OP: Int](
             # IDENTICAL default (the tree prefix)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
-            # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
+            # Apple FAST default (sequence/prophet_coop.mojo)
+            # TOMBSTONE: MOJOLEARN_PROPHET_COOP_OFF (old path of the FAST Apple Prophet coop, EXP:537 KEPT 8c2b7de51; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9c780e0ba9.
+            # Restore: git apply experiments/removed/MOJOLEARN_PROPHET_COOP_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
             prophet_fit_coop(blk, team, a)
         else:
             prophet_fit_team(blk, team, a)
