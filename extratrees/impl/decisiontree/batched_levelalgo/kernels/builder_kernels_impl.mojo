@@ -77,8 +77,8 @@ def _search_rows_per_thread() -> Int:
     # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_4.patch; record in docs/TOMBSTONES.md.
     # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_2 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 1e4bce29cc.
     # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_2.patch; record in docs/TOMBSTONES.md.
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
-        return 1
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_1 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at d1cfc6ff2b.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_1.patch; record in docs/TOMBSTONES.md.
     # APPLE: 16, FAST since 2026-09-25 and IDENTICAL since 2026-09-28. Apple
     # M4, 1M rows, 100 trees, alternating processes, same model hash in every
     # arm (2026-09-25, FAST): taxi 1 -> 16 0.766, 16 -> 8 0.978, 16 -> 32
