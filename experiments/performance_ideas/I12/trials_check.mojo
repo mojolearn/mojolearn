@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Full objective trial scheduling versus the unchanged sequential control."""
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from metrics.checks.device_io import upload_f32,download_f32
 from glm.checks.logistic_check import _fixture
@@ -101,9 +100,8 @@ def check_exact_trial_schedule(ctx: DeviceContext) raises:
             if actual.words[i]!=expected.words[i]:
                 raise Error("I12 selected trial/objective/gradient/cache word differs at "+String(i))
         var should_reach=False
-        # NEVER RUN — PENDING MEASUREMENT
-        comptime if is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]():
-            should_reach=fixture!=3
+        # TOMBSTONE: MOJOLEARN_IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded; I12 loser) deleted 2026-11-15 by lane/expdel2-20-linear, with the MOJOLEARN_CLASSICAL_C17_LS_TRIALS reads here (non-owner, owner expdel2-06-base); code recoverable at fb9523bf09.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch (and MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch); record in docs/TOMBSTONES.md.
         if (actual.physical>0)!=should_reach or expected.physical!=0:
             raise Error("I12 full speculative evaluator did not reach the requested arm")
         if fixture==1 and actual.considered<=1:

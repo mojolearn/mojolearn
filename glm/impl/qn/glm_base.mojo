@@ -2073,16 +2073,9 @@ struct GLMWithData(Movable):
         were two (three with `grad_norm`, four under OWL-QN). The host
         arithmetic on them is unchanged."""
         if not drain:
-            # The deferred (no-drain) evaluation is the exact-trials line
-            # search's (qn_linesearch.mojo:171), which either define admits:
-            # MOJOLEARN_CLASSICAL_C17_LS_TRIALS (2 trials) or
-            # MOJOLEARN_IDN_QN_EXACT_TRIALS (4 trials, I12 loser, kept off).
-            # Lane grid-fixups-1 (2026-10-08): this gate named only the second,
-            # so every C17 cell raised at round 0 (grid ge123e6f9, logreg /
-            # linearsvc / linearsvr on NVIDIA and AMD). Same predicate as the
-            # line-search gate now; nothing else reads the define here.
-            comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"]() or is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]())):
-                raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
+            # TOMBSTONE: MOJOLEARN_IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded; I12 loser) deleted 2026-11-15 by lane/expdel2-20-linear, with the MOJOLEARN_CLASSICAL_C17_LS_TRIALS reads here (non-owner, owner expdel2-06-base); code recoverable at fb9523bf09.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch (and MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch); record in docs/TOMBSTONES.md.
+            raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
         self.n_evals += 1
         self.gnorm_at = 0
         var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
