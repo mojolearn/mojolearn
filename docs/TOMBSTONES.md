@@ -660,6 +660,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KNN_FAST_MMA_K64_OFF`](#mojolearn_knn_fast_mma_k64_off-old-path-deleted-2026-11-15) | Neighbors (k-NN matrix-unit kernels at k <= 64, FAST Apple) | removed (old path; FAST+Apple default KEPT 857fd5804, core-knn-k64-istella) | 2026-11-15 | [MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch](../experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch) |
 | [`MOJOLEARN_KNN_FAST_REFINE`](#mojolearn_knn_fast_refine-loser-deleted-2026-11-15) | Neighbors (k-NN pool + exact re-rank, FAST opt-in) | NEUTRAL (REVERTED: no gain, rab5-knnref) | 2026-11-15 | [MOJOLEARN_KNN_FAST_REFINE.patch](../experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch) |
 | [`MOJOLEARN_X_PREP_FAST_UNIQUE_OFF`](#mojolearn_x_prep_fast_unique_off-old-path-deleted-2026-11-15) | Preprocessing (encoders' category fit, FAST Apple) | removed (old path; FAST+Apple default KEPT f419ea9f1, prep-onehot-uniq-taxi) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch) |
+| [`MOJOLEARN_SPLINE_FAST_FUSED_OFF`](#mojolearn_spline_fast_fused_off-old-path-deleted-2026-11-15) | Preprocessing (SplineTransformer fused fit / fit_transform, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-spl-fused) | 2026-11-15 | [MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6409,4 +6410,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT f419ea9f1, FAST+Apple default (EXPERIMENTS.md `X_PREP_FAST_UNIQUE`, prep-onehot-uniq-taxi / prep-ordinal-uniq-taxi): M3, onehot taxi 69.7 -> 30.4 ms, ordinal taxi 67.2 -> 25.3 ms, output digests identical. No bit change on any column.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `c370817612`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_UNIQUE_OFF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_SPLINE_FAST_FUSED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SplineTransformer's fused fit (no unread n*d arena block, count/min/max from the blocked units) and one-program fit_transform (`x_prep_spline_fused`, `bindings/_mojolearn_x_prep.mojo` SPLINE_FAST_FUSED) to main's fit and transform. Only the define read is deleted: main's spline path stays for every other build; the Python probe is unchanged.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `SPLINE_FAST_FUSED`, kap2-spl-fused-{istella,taxi}): M3, spline istella 48.1 -> 11.6 ms, taxi 34.2 -> 10.8 ms, output digests identical. No bit change on any column.
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a9826a67a5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch`, then delete the `MOJOLEARN_SPLINE_FAST_FUSED_OFF` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
