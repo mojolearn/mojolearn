@@ -940,6 +940,38 @@ in the tables after the sections.
 | [`MOJOLEARN_MAMBA3_TILED_INCREMENT`](#mojolearn_mamba3_tiled_increment) | Neural (Mamba-3 state increment tile) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_TILED_INCREMENT.patch](../experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.patch) |
 | [`MOJOLEARN_MAMBA3_TILED_YINTRA`](#mojolearn_mamba3_tiled_yintra) | Neural (Mamba-3 y_intra tile) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_TILED_YINTRA.patch](../experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.patch) |
 | [`MOJOLEARN_NN35_CONV_PAIR`](#mojolearn_nn35_conv_pair) | Neural (Mamba-1/2 causal conv, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN35_CONV_PAIR.patch](../experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch) |
+| [`MOJOLEARN_AFN_LMGRAD_ALL`](#mojolearn_afn_lmgrad_all) | Neural (Apple FAST byte LM block backward) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LMGRAD_ALL.patch](../experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch) |
+| [`MOJOLEARN_AFN_LM_WGRAD_SPLIT`](#mojolearn_afn_lm_wgrad_split) | Neural (Apple FAST byte LM weight-gradient GEMMs) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_WGRAD_SPLIT.patch](../experiments/removed/MOJOLEARN_AFN_LM_WGRAD_SPLIT.patch) |
+| [`MOJOLEARN_AFN26_LM_WGRAD_SPLIT`](#mojolearn_afn26_lm_wgrad_split) | Neural (Apple FAST byte LM weight-gradient GEMMs, AFN26 alias) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_WGRAD_SPLIT.patch](../experiments/removed/MOJOLEARN_AFN26_LM_WGRAD_SPLIT.patch) |
+| [`MOJOLEARN_AFN_LM_BWD_EPILOGUE`](#mojolearn_afn_lm_bwd_epilogue) | Neural (Apple FAST byte LM fan-in epilogue) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_BWD_EPILOGUE.patch](../experiments/removed/MOJOLEARN_AFN_LM_BWD_EPILOGUE.patch) |
+| [`MOJOLEARN_AFN26_LM_BWD_EPILOGUE`](#mojolearn_afn26_lm_bwd_epilogue) | Neural (Apple FAST byte LM fan-in epilogue, AFN26 alias) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_BWD_EPILOGUE.patch](../experiments/removed/MOJOLEARN_AFN26_LM_BWD_EPILOGUE.patch) |
+| [`MOJOLEARN_AFN_LM_BWD_NORM1_RESID`](#mojolearn_afn_lm_bwd_norm1_resid) | Neural (Apple FAST byte LM input-norm residual) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_BWD_NORM1_RESID.patch](../experiments/removed/MOJOLEARN_AFN_LM_BWD_NORM1_RESID.patch) |
+| [`MOJOLEARN_AFN26_LM_BWD_NORM1_RESID`](#mojolearn_afn26_lm_bwd_norm1_resid) | Neural (Apple FAST byte LM input-norm residual, AFN26 alias) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_BWD_NORM1_RESID.patch](../experiments/removed/MOJOLEARN_AFN26_LM_BWD_NORM1_RESID.patch) |
+| [`MOJOLEARN_AFN26_LM_WGRAD_CAP8`](#mojolearn_afn26_lm_wgrad_cap8) | Neural (Apple FAST split-K cap) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_WGRAD_CAP8.patch](../experiments/removed/MOJOLEARN_AFN26_LM_WGRAD_CAP8.patch) |
+| [`MOJOLEARN_AFN26_LM_WGRAD_MIN128`](#mojolearn_afn26_lm_wgrad_min128) | Neural (Apple FAST split-K minimum) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_WGRAD_MIN128.patch](../experiments/removed/MOJOLEARN_AFN26_LM_WGRAD_MIN128.patch) |
+| [`MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF`](#mojolearn_autograd_curve_word_off) | Neural (autograd model_fit curve word) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_FOLD_V2_OFF`](#mojolearn_autograd_fold_v2_off) | Neural (autograd blocked fold geometry) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF`](#mojolearn_autograd_grad_alias_off) | Neural (autograd gradient borrowing) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_HAS_INFERENCE`](#mojolearn_autograd_has_inference) | Neural (autograd model_predict inference mode) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_HAS_INFERENCE.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_HAS_INFERENCE.patch) |
+| [`MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF`](#mojolearn_autograd_loss_reduced_off) | Neural (autograd elementwise losses) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF`](#mojolearn_autograd_mamba_export_off) | Neural (autograd Mamba stack export) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_MODEL_UNFUSED`](#mojolearn_autograd_model_unfused) | Neural (autograd model forward) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_MODEL_UNFUSED.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MODEL_UNFUSED.patch) |
+| [`MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF`](#mojolearn_autograd_opt_clip_fuse_off) | Neural (autograd optimizer clip) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF`](#mojolearn_autograd_opt_fuse_off) | Neural (autograd optimizer gradient finish) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_PAIR_OFF`](#mojolearn_autograd_pair_off) | Neural (autograd linear backward launches) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_PAIR_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF`](#mojolearn_autograd_pass2_fold_off) | Neural (autograd bias gradient fold) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_PASS3_DB_OFF`](#mojolearn_autograd_pass3_db_off) | Neural (autograd bias gradient in dW launch) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF`](#mojolearn_autograd_refuse_defer_off) | Neural (autograd LM and decoder-layer refusal scans) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF`](#mojolearn_autograd_transpose_view_off) | Neural (autograd transpose) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.patch) |
+| [`MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE`](#mojolearn_bwd_norm_legacy_shape_rule) | Neural (RMSNorm backward fused-row dispatch) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE.patch](../experiments/removed/MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE.patch) |
+| [`MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF`](#mojolearn_idn_auc_block_sort_off) | Neural (autograd roc_auc bitonic sort) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch) |
+| [`MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF`](#mojolearn_idn_bwd_entry_alias_off) | Neural (decoder-layer backward entry copy) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch) |
+| [`MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC`](#mojolearn_idn_mamba_backward_generic) | Neural (Mamba-1/2 block step backward) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch) |
+| [`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`](#mojolearn_idn_mlp_gemm_leaf128_off) | Neural (small MLP step GEMMs) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch) |
+| [`MOJOLEARN_IDN_ROW_COOP_OFF`](#mojolearn_idn_row_coop_off) | Neural (autograd softmax-family rows) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ROW_COOP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_TILED_PREDICT`](#mojolearn_idn_seq_tiled_predict) | Neural (autograd model_predict chunk) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch) |
+| [`MOJOLEARN_SMALL_MLP_GENERIC_OPS`](#mojolearn_small_mlp_generic_ops) | Neural (small MLP program capture) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch](../experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch) |
+
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N128`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -14201,3 +14233,328 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e862759b5c` (deletion commit `d95e19da90`).
 - **Restore**: `git apply experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch`, then delete the `MOJOLEARN_NI07_GROUPED_PROJECTIONS` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `grouped_projections_v2` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+## Experiment deletions: lane expdel2-24-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-24-neural), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept as it was. Where the folded alias is still a mode expression (IDENTICAL-only, FAST + Apple), the other mode's branch is live code and stays. No measured winner was deleted: the hand Mamba chain, the leaf-128 small MLP body and the restored OPS_SMALL_MLP op are the defaults kept.
+
+### MOJOLEARN_AFN_LMGRAD_ALL
+
+- Tried: all three Apple FAST block-backward arms at once (WGRAD_SPLIT, BWD_EPILOGUE, BWD_NORM1_RESID).
+- Evidence: arm (MERGED-UNMEASURED, EXP:620). Verdict: deleted (V2 rule, unmeasured).
+- Removed: autograd/kernels/transformer_afn.mojo (the whole file: the define table, afn_lm_wgrad_k_split, afn_lm_zero_into, afn_lm_wgrad_split_into, afn_lm_gemm_resid_into; also the AFN_LM_WGRAD_BLOCKS knob it alone read) and its import in autograd/kernels/transformer.mojo. Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN_LM_WGRAD_SPLIT
+
+- Tried: split-K simdgroup weight-gradient GEMMs with atomic partials.
+- Evidence: arm (MERGED-UNMEASURED, EXP:629). Verdict: deleted (V2 rule, unmeasured).
+- Removed: _AFN_WGRAD, _afn_ptr, _afn_wgrad and the two WGRAD_SPLIT arms in autograd/kernels/transformer.mojo; autograd/kernels/transformer_afn.mojo. Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_WGRAD_SPLIT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN26_LM_WGRAD_SPLIT
+
+- Tried: the AFN26 spelling of AFN_LM_WGRAD_SPLIT.
+- Evidence: arm (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: its term in autograd/kernels/transformer_afn.mojo (file deleted). Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_WGRAD_SPLIT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN_LM_BWD_EPILOGUE
+
+- Tried: the gate/up and q/k/v fan-ins folded into the next dA GEMM store.
+- Evidence: arm (EXP:2201 DELETED; read by no path since 2026-10-19). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the AFN_LM_BWD_EPILOGUE alias, afn_lm_gemm_resid_into and its zero-bias helper in autograd/kernels/transformer_afn.mojo (file deleted). The 2026-10-19 refusal in autograd/rules_transformer.mojo stays. Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_EPILOGUE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN26_LM_BWD_EPILOGUE
+
+- Tried: the AFN26 spelling of AFN_LM_BWD_EPILOGUE.
+- Evidence: arm (EXP:2201 DELETED). Verdict: deleted (V2 rule, unmeasured).
+- Removed: its term in autograd/kernels/transformer_afn.mojo (file deleted). Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_BWD_EPILOGUE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN_LM_BWD_NORM1_RESID
+
+- Tried: the input RMSNorm backward writes d_x = dx + d_residual1 itself.
+- Evidence: arm (MERGED-UNMEASURED, EXP:624). Verdict: deleted (V2 rule, unmeasured).
+- Removed: _AFN_NORM1_RESID (autograd/kernels/transformer.mojo) and its fused arm in autograd/rules_transformer.mojo; the alias in transformer_afn.mojo (file deleted). Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_NORM1_RESID.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN26_LM_BWD_NORM1_RESID
+
+- Tried: the AFN26 spelling of AFN_LM_BWD_NORM1_RESID.
+- Evidence: arm (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: its term in autograd/kernels/transformer_afn.mojo (file deleted). Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_BWD_NORM1_RESID.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN26_LM_WGRAD_CAP8
+
+- Tried: at most 8 split-K partials instead of 16.
+- Evidence: arm (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: AFN_LM_WGRAD_MAX_SPLITS in autograd/kernels/transformer_afn.mojo (file deleted). Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_WGRAD_CAP8.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AFN26_LM_WGRAD_MIN128
+
+- Tried: 128 k steps per split instead of 256.
+- Evidence: arm (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: AFN_LM_WGRAD_MIN_STEPS in autograd/kernels/transformer_afn.mojo (file deleted). Default unchanged: no bits move.
+- Files: autograd/kernels/transformer_afn.mojo, autograd/kernels/transformer.mojo, autograd/rules_transformer.mojo, autograd/rules_lm.mojo.
+- Deleted by: lane/expdel2-24-neural `c15b52cbb4` (2026-11-15); code recoverable at `d2c4643c6b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_WGRAD_MIN128.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF
+
+- Tried: a scale launch and a copy launch per batch for the curve word.
+- Evidence: old path (EXP:2178 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias in autograd/ops.mojo; its arms in autograd/tape.mojo (reduce, loss_reduced) and autograd/model.mojo (model_fit_state). Default unchanged: no bits move.
+- Files: autograd/ops.mojo, autograd/tape.mojo, autograd/model.mojo.
+- Deleted by: lane/expdel2-24-neural `01ab3e0d37` (2026-11-15); code recoverable at `fdb70ce42d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_FOLD_V2_OFF
+
+- Tried: v1 fold geometry (sqrt block rule, two launches, one load a term).
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: _agk_bin_vjp_part_v1, _ag_reduce_part_v1, _ag_reduce_fold_v1 and their dispatch in autograd/ops.mojo; AUTOGRAD_FOLD_V2 = True stays for autograd/fold.mojo, autograd/fold_kernels.mojo and autograd/checks/fold_cases.mojo. Default unchanged: no bits move.
+- Files: autograd/ops.mojo.
+- Deleted by: lane/expdel2-24-neural `56d165c105` (2026-11-15); code recoverable at `01ab3e0d37`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF
+
+- Tried: copy VJPs instead of borrowed gradient buffers.
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its five reads in autograd/tape.mojo. Default unchanged: no bits move.
+- Files: autograd/tape.mojo.
+- Deleted by: lane/expdel2-24-neural `24924c8fc2` (2026-11-15); code recoverable at `4b7b69e04f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_HAS_INFERENCE
+
+- Tried: tape.no_grad() / record() around each predict chunk.
+- Evidence: arm (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its two arms in autograd/model.mojo. Default unchanged: no bits move.
+- Files: autograd/model.mojo.
+- Deleted by: lane/expdel2-24-neural `5cc4c35385` (2026-11-15); code recoverable at `fd8abcf837`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_HAS_INFERENCE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF
+
+- Tried: loss_terms + mean / sum as two nodes; a terms pass in loss_value_into.
+- Evidence: old path (EXP:2174 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias in autograd/ops.mojo; its arms in autograd/losses.mojo (_elem_loss, loss_value_into); tape.loss_terms stays for checks. Default unchanged: no bits move.
+- Files: autograd/ops.mojo, autograd/losses.mojo, autograd/tape.mojo.
+- Deleted by: lane/expdel2-24-neural `4b7b69e04f` (2026-11-15); code recoverable at `56d165c105`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF
+
+- Tried: a device copy per block input and synchronous gradient downloads.
+- Evidence: old path (EXP:2172 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its ten arms in autograd/rules_mamba.mojo (the per-block mamba_zeros inputs, _d2d copies, synchronous mamba_download exports). Default unchanged: no bits move.
+- Files: autograd/rules_mamba.mojo.
+- Deleted by: lane/expdel2-24-neural `530116e4ff` (2026-11-15); code recoverable at `e9b44b3e5b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_MODEL_UNFUSED
+
+- Tried: composed matmul + add nodes instead of the fused linear node.
+- Evidence: arm (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: its three arms in autograd/model.mojo; MODEL_UNFUSED = False stays for autograd/checks/pass1_cases.mojo. Default unchanged: no bits move.
+- Files: autograd/model.mojo.
+- Deleted by: lane/expdel2-24-neural `988a3742d1` (2026-11-15); code recoverable at `5cc4c35385`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_MODEL_UNFUSED.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF
+
+- Tried: three clip launches (SUMSQ_PART, CLIP_COEF, CLIP_SCALE) before OP_OPT.
+- Evidence: old path (EXP:2169 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and clip_grad_norm in autograd/optim.mojo; the OP_AGO_CLIP_COEF / OP_AGO_CLIP_SCALE bodies stay registered in the dispatch range. Default unchanged: no bits move.
+- Files: autograd/optim.mojo.
+- Deleted by: lane/expdel2-24-neural `8535432c53` (2026-11-15); code recoverable at `e770fd25b9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF
+
+- Tried: separate OP_L2GRAD / OP_DIVS finish launches.
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define read; AUTOGRAD_OPT_FUSE = True stays for sequence/mlp_fit.mojo. Default unchanged: no bits move.
+- Files: autograd/optim.mojo.
+- Deleted by: lane/expdel2-24-neural `fd8abcf837` (2026-11-15); code recoverable at `8535432c53`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_PAIR_OFF
+
+- Tried: separate dX and dW launches.
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its arm in autograd/tape.mojo. Default unchanged: no bits move.
+- Files: autograd/tape.mojo.
+- Deleted by: lane/expdel2-24-neural `e770fd25b9` (2026-11-15); code recoverable at `24924c8fc2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_PAIR_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF
+
+- Tried: the one-thread-a-column OP_COLSUM bias gradient for every batch.
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias (autograd/ops.mojo) and its arm in autograd/tape.mojo. Default unchanged: no bits move.
+- Files: autograd/ops.mojo, autograd/tape.mojo.
+- Deleted by: lane/expdel2-24-neural `0399c92e07` (2026-11-15); code recoverable at `094332d07e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_PASS3_DB_OFF
+
+- Tried: db in its own launch.
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias (autograd/ops.mojo) and its two arms in autograd/tape.mojo. Default unchanged: no bits move.
+- Files: autograd/ops.mojo, autograd/tape.mojo.
+- Deleted by: lane/expdel2-24-neural `5b147f4046` (2026-11-15); code recoverable at `0399c92e07`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF
+
+- Tried: one synchronous refusal scan per layer.
+- Evidence: old path (EXP:2171 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: LM_REFUSE_DEFER and its two arms in autograd/rules_lm.mojo; the term in autograd/rules_transformer.mojo, where AUTOGRAD_REFUSE_DEFER = True stays for autograd/rules_samba.mojo and training/samba_resident.mojo. Default unchanged: no bits move.
+- Files: autograd/rules_lm.mojo, autograd/rules_transformer.mojo, autograd/kernels/transformer.mojo.
+- Deleted by: lane/expdel2-24-neural `f97dc11e84` (2026-11-15); code recoverable at `2266129859`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF
+
+- Tried: tape.transpose copies; matmul reads dense operands.
+- Evidence: old path (EXP:2177 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias (autograd/ops.mojo) and its four arms in autograd/tape.mojo. Default unchanged: no bits move.
+- Files: autograd/ops.mojo, autograd/tape.mojo.
+- Deleted by: lane/expdel2-24-neural `fdb70ce42d` (2026-11-15); code recoverable at `5b147f4046`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE
+
+- Tried: the historical exact-size thresholds (m >= 8192 / 32768, dm >= 768).
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its branch in autograd/kernels/transformer.mojo. Default unchanged: no bits move.
+- Files: autograd/kernels/transformer.mojo.
+- Deleted by: lane/expdel2-24-neural `3d189418c5` (2026-11-15); code recoverable at `e7e660e1bc`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF
+
+- Tried: one launch per bitonic stage.
+- Evidence: old path (EXP:2168 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: AUC_BLOCK_SORT (autograd/row_ops.mojo) and the per-stage loop in autograd/metrics.mojo. Default unchanged: no bits move.
+- Files: autograd/row_ops.mojo, autograd/metrics.mojo.
+- Deleted by: lane/expdel2-24-neural `5d81d356e0` (2026-11-15); code recoverable at `fe0b691d9b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF
+
+- Tried: the stage-0 copy of d_out on every call.
+- Evidence: old path (no record). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; IDN_BWD_ENTRY_ALIAS = IDENTICAL. Default unchanged: no bits move.
+- Files: autograd/kernels/transformer.mojo.
+- Deleted by: lane/expdel2-24-neural `fe0b691d9b` (2026-11-15); code recoverable at `3d189418c5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC
+
+- Tried: the tape graph as the product backward (B arm of the owed A/B).
+- Evidence: arm (EXP:2410 PENDING; the hand chain is the measured default). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and the dispatch arms in mamba1_step_backward / mamba2_step_backward; the tape functions stay for mamba/checks/mamba_step_backward_glue_check_suite.mojo. Default unchanged: no bits move.
+- Files: autograd/rules_mamba.mojo.
+- Deleted by: lane/expdel2-24-neural `e9b44b3e5b` (2026-11-15); code recoverable at `f97dc11e84`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF
+
+- Tried: the incumbent dispatch instead of the measured leaf-128 profile body.
+- Evidence: old path (EXP:2373 KEPT default; the rollback has no A/B of its own). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; SMALL_MLP_GEMM_LEAF128 keeps its NEURAL_EXPERIMENTS_ALLOWED / NEURAL_GEMM_EXPERIMENT_ENABLED expression; the tuned body is untouched. Default unchanged: no bits move.
+- Files: autograd/small_mlp_op.mojo.
+- Deleted by: lane/expdel2-24-neural `1acdb0bcd1` (2026-11-15); code recoverable at `530116e4ff`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `mlp_gemm_leaf128` in `grid_controls/neural-gemm-attn-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_IDN_ROW_COOP_OFF
+
+- Tried: the one-chain rows on IDENTICAL.
+- Evidence: old path (EXP:2167 PENDING). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; ROW_COOP = IDENTICAL (the one-chain rows stay for FAST). Default unchanged: no bits move.
+- Files: autograd/row_ops.mojo.
+- Deleted by: lane/expdel2-24-neural `d19ca4f0c2` (2026-11-15); code recoverable at `5d81d356e0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_IDN_SEQ_TILED_PREDICT
+
+- Tried: the whole set in one predict chunk when the scratch fits 1 GiB.
+- Evidence: arm (no record; A/B pending on NVIDIA). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias, PREDICT_WHOLE_SET_BYTES, _predict_split_same and the gemm_split_shape import in autograd/model.mojo; predict_chunk_rows keeps the caller chunk. Default unchanged: no bits move.
+- Files: autograd/model.mojo.
+- Deleted by: lane/expdel2-24-neural `0bbf0a6c7e` (2026-11-15); code recoverable at `d19ca4f0c2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### MOJOLEARN_SMALL_MLP_GENERIC_OPS
+
+- Tried: lane x2 transpose + OPS_LINEAR capture instead of OPS_SMALL_MLP.
+- Evidence: arm (EXP:2372 PENDING; the restored tuned op is the default). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its two arms in autograd/small_mlp_program.mojo. Default unchanged: no bits move.
+- Files: autograd/small_mlp_program.mojo, autograd/small_mlp_op.mojo.
+- Deleted by: lane/expdel2-24-neural `c46456261f` (2026-11-15); code recoverable at `1acdb0bcd1`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+
+### Non-owner sites of lane expdel2-24-neural
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_AFN_LM_BWD_FUSE`: AFN_LM_BWD_FUSE / AFN26_LM_BWD_FUSE folded to False in BWD_FUSE_GATED_SILU, BWD_FUSE_NORM2_RESIDUAL and the norm-backward split rule (autograd/kernels/transformer.mojo); `e7e660e1bc`, recoverable at `c15b52cbb4`; `experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.expdel2-24-neural.patch`.
+- `MOJOLEARN_AFN26_LM_BWD_FUSE`: folded with AFN_LM_BWD_FUSE (same commit, same patch); `e7e660e1bc`, recoverable at `c15b52cbb4`; `experiments/removed/MOJOLEARN_AFN26_LM_BWD_FUSE.expdel2-24-neural.patch`.
+- `MOJOLEARN_IDN_ALL_OFF`: the umbrella term removed from IDN_BWD_ENTRY_ALIAS and the norm-backward fused-row rule (autograd/kernels/transformer.mojo) and ROW_COOP (autograd/row_ops.mojo); `094332d07e`, recoverable at `0bbf0a6c7e`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch`.
+- `MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF`: AUTOGRAD_GATHER_EPOCH folded to True in model_fit_state (autograd/model.mojo); `7251df6425`, recoverable at `988a3742d1`; `experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.expdel2-24-neural.patch`.
+- `MOJOLEARN_NN50_OWNED_RUNS`: NN50_OWNED_RUNS folded to False in the LM embedding rule (autograd/rules_lm.mojo); the emb_runs plumbing stays until training/byte_lm.mojo stops passing it; `2266129859`, recoverable at `7251df6425`; `experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.expdel2-24-neural.patch`.
+
+No edit needed in this lane's files (the alias stays a mode expression or a constant there): `MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF`, `MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS`, `MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF`, `MOJOLEARN_SEQ_FAST_PIPE_CH`, `MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF`, `MOJOLEARN_LN_FAST_BLOCK_FOLD`, `MOJOLEARN_LN_FOLD_BLOCK_OFF`. Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP).

@@ -19,15 +19,17 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_arena import arena_active, arena_take
 # lane afn-lm (2026-10-03): Apple FAST experiments, each False unless the
 # build is FAST, on Apple, and carries its own -D MOJOLEARN_AFN_LM_* define.
-from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
-# lane w2-lmgrad (2026-10-03): the block backward on the merged Apple FAST
-# GEMM; each False unless FAST, Apple, and its own -D MOJOLEARN_AFN_LM_* define
-# (or MOJOLEARN_AFN_LMGRAD_ALL). IDENTICAL compiles none of their arms.
-from autograd.kernels.transformer_afn import (
-    AFN_LM_BWD_NORM1_RESID,
-    AFN_LM_WGRAD_SPLIT,
-    afn_lm_wgrad_split_into,
-)
+# TOMBSTONE: MOJOLEARN_AFN_LM_BWD_FUSE / MOJOLEARN_AFN26_LM_BWD_FUSE (Apple FAST opt-in, never promoted) folded to False
+# here 2026-11-15 by lane/expdel2-24-neural; code recoverable at c15b52cbb4.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.expdel2-24-neural.patch
+from training.byte_lm_afn import AFN_LM_BWD_NOSYNC
+# TOMBSTONE: MOJOLEARN_AFN_LMGRAD_ALL, MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_EPILOGUE and
+# MOJOLEARN_AFN_LM_BWD_NORM1_RESID (Apple FAST block-backward arms, never measured) deleted 2026-11-15 by
+# lane/expdel2-24-neural with autograd/kernels/transformer_afn.mojo; code recoverable at d2c4643c6b.
+# TOMBSTONE: MOJOLEARN_AFN26_LM_WGRAD_SPLIT, MOJOLEARN_AFN26_LM_BWD_EPILOGUE, MOJOLEARN_AFN26_LM_BWD_NORM1_RESID,
+# MOJOLEARN_AFN26_LM_WGRAD_CAP8 and MOJOLEARN_AFN26_LM_WGRAD_MIN128 (their AFN26 aliases and split-K knobs) deleted
+# with them; code recoverable at d2c4643c6b.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
 from core.step_phase import (
     StepPhaseClock,
     step_count_d2h,
@@ -248,15 +250,17 @@ def _fill_ones[wait: Bool = True](
 
 #: The RMSNorm backward's `c` fold spelled product-then-add instead of one
 #: `fma` per term. INERT at `d_model == 1` and on exactly-representable rows.
-comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural; code recoverable at 3d189418c5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term removed here 2026-11-15 by lane/expdel2-24-neural;
+# code recoverable at 0bbf0a6c7e. Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch
+comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/nr-attn (2026-10-04), roadmap C9, default ON under IDENTICAL: the
 layer backward's entry copy of `d_out` into `in_d_residual2` (stage 0, an
 identity) runs only on a traced or materialized call; the production path
 hands `d_out` to the copy's readers instead (one `[M, d_model]` read and
-write fewer per layer). Same bytes read: no bit moves on any column.
-`-D MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF` restores the copy."""
+write fewer per layer). Same bytes read: no bit moves on any column."""
 
 
 comptime SAB_B01_DOT_UNFUSED = is_defined[
@@ -412,11 +416,11 @@ comptime BWD_ANY_SABOTAGE = (
     or SAB_B_FANIN_ORDER_QKV_REVERSED
 )
 
-# lane w2-lmgrad (2026-10-03): the FAST Apple arms, never in a sabotage build.
-comptime _AFN_WGRAD = AFN_LM_WGRAD_SPLIT and not BWD_ANY_SABOTAGE
 # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
-comptime _AFN_NORM1_RESID = AFN_LM_BWD_NORM1_RESID and not BWD_ANY_SABOTAGE
+# TOMBSTONE: _AFN_WGRAD / _AFN_NORM1_RESID (MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_NORM1_RESID) deleted
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at d2c4643c6b.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
 
 #: Evidence-only control for pricing the pre-fusion RMSNorm backward. A
 #: normal build never defines it. Sabotage builds also retain the split
@@ -427,12 +431,9 @@ comptime BWD_NORM_SPLIT_TRIAL = is_defined[
 comptime BWD_NORM_FUSED_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM_FUSED_TRIAL"
 ]()
-# Historical exact-size dispatch is an explicit B arm only. Its old board
-# thresholds are preserved to attribute the removal, never a default route.
-comptime BWD_NORM_LEGACY_SHAPE_RULE = (
-    is_defined["MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE (old exact-size dispatch B arm, no A/B recorded) deleted 2026-11-15
+# by lane/expdel2-24-neural; code recoverable at e7e660e1bc.
+# Restore: git apply experiments/removed/MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE.patch
 
 comptime BWD_NORM2_RESIDUAL_SPLIT_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL"
@@ -450,7 +451,7 @@ comptime BWD_GATED_SILU_FUSED_TRIAL = is_defined[
 #: SwiGLU rule (`autograd/rules_transformer.mojo`); the hand walk that once
 #: spelled it inline is deleted (docs/TOMBSTONES.md).
 comptime BWD_FUSE_GATED_SILU = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (
         TARGET_COLUMN == COLUMN_APPLE
         or TARGET_COLUMN == COLUMN_NVIDIA
@@ -464,7 +465,7 @@ comptime BWD_FUSE_GATED_SILU = (
 #: by the autograd RMSNorm rule (`autograd/rules_transformer.mojo`); the hand
 #: walk that once spelled it inline is deleted (docs/TOMBSTONES.md).
 comptime BWD_FUSE_NORM2_RESIDUAL = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (
         TARGET_COLUMN == COLUMN_APPLE
         or TARGET_COLUMN == COLUMN_NVIDIA
@@ -2035,12 +2036,6 @@ def _route_b(
     plan sections 5.2 and 5.4, and the gate asserts the NEGATIVE property
     that these outputs MOVE under a change of batch composition."""
     var call = gemm_backward_b_call(op, m, n, k)
-    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): the weight
-    # gradient, whose `k'` is the token count and whose output is small,
-    # on the split-K simdgroup route; falls through when it does not split.
-    comptime if _AFN_WGRAD:
-        if _afn_wgrad(ctx, out_buf, dc, other, call):
-            return
     if call[4] == BWD_DC_LEFT:
         workspace.run(
             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
@@ -2048,34 +2043,6 @@ def _route_b(
         return
     workspace.run(
         ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
-    )
-
-
-# lane w2-lmgrad (2026-10-03): FAST + Apple helpers, reached only from
-# `comptime if _AFN_*` arms; IDENTICAL never instantiates them.
-
-
-def _afn_ptr(mut buf: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
-    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-
-
-def _afn_wgrad(
-    ctx: DeviceContext,
-    mut out_buf: DeviceBuffer[DType.float32],
-    mut dc: DeviceBuffer[DType.float32],
-    mut other: DeviceBuffer[DType.float32],
-    call: Tuple[Int, Int, Int, Int, Int],
-) raises -> Bool:
-    """`_route_b`'s product (`call` from `gemm_backward_b_call`) on the
-    split-K route (WGRAD_SPLIT). False when it does not serve it."""
-    if call[4] == BWD_DC_LEFT:
-        return afn_lm_wgrad_split_into(
-            ctx, _afn_ptr(out_buf), _afn_ptr(dc), _afn_ptr(other),
-            call[1], call[2], call[3], call[0],
-        )
-    return afn_lm_wgrad_split_into(
-        ctx, _afn_ptr(out_buf), _afn_ptr(other), _afn_ptr(dc),
-        call[1], call[2], call[3], call[0],
     )
 
 
@@ -3123,7 +3090,7 @@ def _bwd_rms_norm_kernels[which: Int](
     comptime if (
         BWD_ANY_SABOTAGE
         or BWD_NORM_SPLIT_TRIAL
-        or (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_FUSE)
+        or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
     ):
         ctx.enqueue_function[bwd_norm_dh_kernel](
             dh.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
@@ -3151,13 +3118,8 @@ def _bwd_rms_norm_kernels[which: Int](
         var use_fused = False
         comptime if BWD_NORM_FUSED_TRIAL:
             use_fused = True  # explicit experiment really forces the row owner
-        elif BWD_NORM_LEGACY_SHAPE_RULE:
-            # Historical B only: retained verbatim for neighbor/full-workload A/B.
-            comptime if TARGET_COLUMN == COLUMN_APPLE:
-                use_fused = m >= 8192 and dm >= 768
-            elif TARGET_COLUMN == COLUMN_NVIDIA:
-                use_fused = m >= 32768 and dm >= 768
-        elif not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        else:
+            # MOJOLEARN_IDN_ALL_OFF's term removed 2026-11-15 (lane/expdel2-24-neural, see the TOMBSTONE above).
             var units = attn_device_units(ctx)
             use_fused = units > 0 and dot_blocks >= 2 * units
         if use_fused:
@@ -3297,15 +3259,6 @@ def bwd_rms_norm_routed[which: Int](
         residual_out, residual_branch, fuse_residual, m, dm, eps,
     )
     var pc = StepPhaseClock(ctx)
-    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): `ones . dprod`
-    # at (1, dm, M) is a weight gradient over the tokens too; split-K, no
-    # env read, no workspace.
-    comptime if _AFN_WGRAD:
-        if afn_lm_wgrad_split_into(
-            ctx, _afn_ptr(dw_out), _afn_ptr(ones), _afn_ptr(dprod), 1, dm, m, OP_NN
-        ):
-            _bwd_rms_norm_dw_tick[which](ctx, pc)
-            return
     if _norm_dw_own_workspace():
         identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
     else:
@@ -3324,7 +3277,7 @@ def bwd_refuse_nonfinite_d_out(ctx: DeviceContext, mut d_out: DeviceBuffer[DType
     the one offending word read back to name NaN or infinity). Raises
     before any launch of the backward; returns when `d_out` is finite.
     The autograd decoder-layer entry calls it on traced and materialized
-    calls (and under -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF)."""
+    calls."""
     var bad = device_first_nonfinite(ctx, d_out, len(d_out))
     if bad >= 0:
         var bad_view = d_out.create_sub_buffer[DType.float32](bad, 1)

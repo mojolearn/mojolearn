@@ -1,0 +1,49 @@
+diff --git a/autograd/ops.mojo b/autograd/ops.mojo
+index e7426c51f2..b4cdea8b26 100644
+--- a/autograd/ops.mojo
++++ b/autograd/ops.mojo
+@@ -115,10 +115,8 @@ def agk_colsum_args(a: Args) -> Args:
+ # ag_fold_block(rows) = 64 rows is one block: the fold is then the column
+ # sum's chain term for term and keeps the one launch, so its bits are the
+ # old bits; longer batches get new bits on every column and the host
+-# together.
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF (the column-sum old path, no A/B recorded) deleted 2026-11-15 by
+-# lane/expdel2-24-neural with the AUTOGRAD_PASS2_FOLD alias; code recoverable at 094332d07e.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF.patch
++# together. -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF restores the column sum.
++comptime AUTOGRAD_PASS2_FOLD = not is_defined["MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF"]()
+ 
+ # BIT VERSION (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea
+ # 2): a fused linear node with a bias, a divisor and both a weight and a bias
+diff --git a/autograd/tape.mojo b/autograd/tape.mojo
+index 034db948ca..bd59c48177 100644
+--- a/autograd/tape.mojo
++++ b/autograd/tape.mojo
+@@ -22,7 +22,7 @@ from autograd.ops import (
+     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
+     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
+     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
+-    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS3_DB,
++    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD, AUTOGRAD_PASS3_DB,
+     LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_TRANSPOSE_VIEW, AUTOGRAD_CURVE_WORD,
+ )
+ from autograd.loss_ops import (
+@@ -2348,11 +2348,13 @@ struct Tape(Movable):
+             if fuse_db:
+                 return  # written by edge 1's launch
+             # db = column sum of dz over the rows (/ divisor)
+-            # More rows than one fold block: the blocked fold (chains of
+-            # ag_fold_block(rows), parallel over blocks x columns), not
+-            # one serial chain over every row a column. One block is the
+-            # column sum's chain, so the one-launch column sum stays.
+-            var blocked = rows > ag_fold_block(rows)
++            var blocked = False
++            comptime if AUTOGRAD_PASS2_FOLD:
++                # More rows than one fold block: the blocked fold (chains of
++                # ag_fold_block(rows), parallel over blocks x columns), not
++                # one serial chain over every row a column. One block is the
++                # column sum's chain, so the one-launch column sum stays.
++                blocked = rows > ag_fold_block(rows)
+             if blocked:
+                 var partials = self._alloc(ex, fold_partials(rows, fo, AXIS_ROWS))
+                 blocked_fold(ex, dst, dz, rows, fo, AXIS_ROWS, divisor if divisor > 0 else Float32(1),
