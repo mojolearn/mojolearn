@@ -63,11 +63,10 @@ from std.memory import bitcast
 comptime _FAMILY_CTX = "MojolearnKernelMethodsContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsContextOtherV3"
 
 
+# TOMBSTONE: MOJOLEARN_FAMILY_CTX_PER_CALL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 26b4b3147a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch; record in docs/TOMBSTONES.md.
 def _family_ctx() raises -> DeviceContext:
-    """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
-    restores a new context per entry (the A/B arm)."""
-    comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
-        return DeviceContext()
+    """The binding's process-lifetime context."""
     return neural_ctx[_FAMILY_CTX]()
 
 from cholesky.checks.potrf import (

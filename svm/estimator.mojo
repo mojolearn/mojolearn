@@ -69,7 +69,6 @@ that ran them, and no cross-vendor card has been diffed for this header.
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
-from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
@@ -79,11 +78,10 @@ from std.sys.compile import is_defined
 comptime _FAMILY_CTX = "MojolearnSvmContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnSvmContextOtherV3"
 
 
+# TOMBSTONE: MOJOLEARN_FAMILY_CTX_PER_CALL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 26b4b3147a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch; record in docs/TOMBSTONES.md.
 def _family_ctx() raises -> DeviceContext:
-    """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
-    restores a new context per entry (the A/B arm)."""
-    comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
-        return DeviceContext()
+    """The binding's process-lifetime context."""
     return neural_ctx[_FAMILY_CTX]()
 
 from core.device_plan import device_plan_current
