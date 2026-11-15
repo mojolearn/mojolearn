@@ -52,7 +52,6 @@ from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
