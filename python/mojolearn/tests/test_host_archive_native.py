@@ -4,9 +4,7 @@
 The legacy base-class loader is an independent preparation oracle; only the
 public Host*.load call is audited. No fit or inference is hidden in setup.
 """
-import ast
 import struct
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -540,13 +538,3 @@ def test_saved_svm_invalid_controls_and_supports(tmp_path, name, changes, error)
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 
-
-def test_native_load_wrapper_is_one_binding_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
-               and node.name == "_NativeArchiveLoad")
-    function = next(node for node in cls.body if isinstance(node, ast.FunctionDef))
-    assert len(function.body) == 2
-    assert isinstance(function.body[-1], ast.Return)
-    assert isinstance(function.body[-1].value, ast.Call)
-    assert sum(isinstance(node, ast.Call) for node in ast.walk(function.body[-1])) == 1

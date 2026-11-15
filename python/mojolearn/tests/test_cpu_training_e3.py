@@ -1,119 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Workstream E batch 3, CPU training for the rf-clf and rf-reg lanes
-(2026-09-14), checked from SOURCE so it runs on a box with nothing built,
-plus a runtime check that runs only where the rf host binding is built and
-the package took the CPU-only path.
-
-What the source checks hold: the manifest declares the rf family, routes
-`_mojolearn_rf`, covers rf-clf and rf-reg and no longer names the random
-forests as having no CPU training path; the binding registers the GPU
-binding's fit, export and predict names and leaves the shard and
-non-resident GPU engine entries absent so they refuse by name (the weighted
-fit and the resident parallel_groves entries joined on 2026-09-15, see
-test_cpu_training_forest_variants.py); the oracle imports no GPU
-module and nothing from `ensemble/` beyond the `checks/numerics.mojo`
-seams; the oracle spells the device constructs a bit claim rests on (the
-pinned width 32 reduction, the ftz-compared quantile unique, the bootstrap
-stride, the pure-node rule); the sabotage define reaches the bootstrap draw
-and the binding reads it back.
-
-The runtime check (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded): both estimators fit twice through the host
-binding on a small draw and return the same bytes, predictions in range.
-It is a plumbing check. The bit claim against the GPU columns is the CPU
-identity gate's, not this file's.
+"""Workstream E batch 3, CPU training for the rf-clf and rf-reg lanes, run
+only where the rf host binding is built and the package took the CPU-only
+path (skipped, and SAID to be skipped, otherwise): both estimators fit twice
+through the host binding on a small draw and return the same bytes,
+predictions in range, and the binding reads back sabotage False. It is a
+plumbing check. The bit claim against the GPU columns is the CPU identity
+gate's, not this file's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_e3
 """
 
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
-import re
 import sys
-from pathlib import Path
 
 import mojolearn
 from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
-
-ROOT = Path(__file__).resolve().parents[3]
-
-ORACLE = "ensemble/host/rf_oracle.mojo"
-GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
-FIT_NAMES = tuple(
-    f"rf_{kind}_fit{suffix}"
-    for kind in ("classifier", "regressor")
-    for suffix in ("_export",)  # the _rowmajor_export entries were deleted 2026-11-12 (no caller)
-)
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def test_manifest_declares_the_rf_family():
-    fam = host_surface.family("rf")
-    assert fam["routes"] == "_mojolearn_rf"
-    assert fam["training_lanes"][:2] == ("rf-clf", "rf-reg")
-    assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
-    assert (ROOT / host_surface.build_shim("rf")).is_file()
-    assert (ROOT / host_surface.binding_source("rf")).is_file()
-    assert host_surface.routed_modules()["_mojolearn_rf"] == "_mojolearn_rf_host"
-    for lane in ("rf-clf", "rf-reg"):
-        assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
-    assert "random forest" not in host_surface.no_cpu_path_sentence(), host_surface.no_cpu_path_sentence()
-    assert "the random forest classifier" in host_surface.training_sentence()
-    # The forest host binding stays loaded by path, never routed.
-    assert host_surface.family("forest")["routes"] is None
-
-
-def test_binding_registers_the_gpu_names():
-    src = _read(host_surface.binding_source("rf"))
-    exports = host_surface.family("rf")["exports"]
-    for name in FIT_NAMES + ("forest_export", "forest_export_legacy", "forest_export_release",
-                             "rf_predict_proba", "rf_predict_reg", "rf_vendor", "rf_numeric_mode",
-                             "rf_classifier_fit_shard", "rf_regressor_fit_shard"):
-        assert f'("{name}")' in src, f"the rf host binding does not register {name}"
-        assert name in exports, f"the manifest does not list {name} for rf"
-    for absent in ("rf_predict_proba_gpu_parallel", "rf_predict_reg_gpu_parallel",
-                   "forest_predict_resident_gpu", "forest_predict_resident_into_gpu"):
-        assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
-
-
-def test_oracle_imports_no_gpu_and_no_device_module():
-    text = _read(ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
-    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{ORACLE} imports DeviceContext"
-    # The exact import allowlist is deleted: e4c227042e (expdel2-39-trees) deleted
-    # MOJOLEARN_TREES_T14/_T14_EXACT and with them the oracle's imports of
-    # checks.soft_f64, ensemble.tree_identical_ideas and ensemble.tree_moments
-    # (ensemble/tree_moments.mojo is gone). No public-API form; Mojo check: none.
-
-
-def test_oracle_spells_the_bit_carrying_constructs():
-    text = _read(ORACLE)
-    assert "comptime RF_PINNED_LANES = 32" in text, "the split reduction width is pinned to 32"
-    assert "comptime RF_TPB = 128" in text
-    assert "if ftz(cur) != ftz(prev):" in text, "the quantile unique compares flushed operands"
-    assert "comptime RF_RNG_STRIDE = 110592" in text
-    assert "var terminal = s.pure != Int32(0)" in text, "a pure node is a leaf (RETRY_PURE_NODES off)"
-    assert "x[i] = ftz(x[i])" in text, "X is flushed before the quantiles"
-    assert text.count("if n_cells < (1 << 19):") == 1
-    assert "host_parallelize(_flush_cells, flush_tasks)" in text
-    assert "host_parallelize(_bin_columns, bin_tasks)" in text
-    assert "identical_mul_add(-val, val, gain)" in text
-
-
-def test_sabotage_define_moves_the_bootstrap():
-    text = _read(ORACLE)
-    define = host_surface.sabotage_define("rf")
-    assert define == "MOJOLEARN_HOST_SABOTAGE"
-    assert f'is_defined["{define}"]()' in text
-    assert "comptime if RF_ORACLE_HOST_SABOTAGE:" in text
-    assert "sub = sub + UInt64(1)" in text, "the sabotage arm does not move the bootstrap subsequence"
-    assert "RF_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("rf"))
-
+from mojolearn import _backend
 
 
 @reference_training()

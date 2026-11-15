@@ -1,26 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU training for the par-* lanes whose driver shards in Python
-(lane/cpu-training-par-classical, 2026-09-15): par-scaler, par-arima and
-par-holtwinters; since lane/cpu-training-par-wave2 (the same day) also the
-query-sharded and reference-sharded neighbor drivers, and since
-lane/cpu-verifier-par-samba (wave 3, 2026-09-16) the Samba stack's gradient
-shards (par-samba and par-samba-clip), the same ParallelNeuralTrainer route
-par-mlp takes.
-
-Source checks (run on a box with nothing built): every
-Python-sharded driver is one native call whose owner runs its shards on the
-native local pool (bindings/parallel_shard_common_door.mojo `shard_run`, one
-worker process per device index on the CPU route); every cooperative driver
-binds a device plan and refuses the CPU route by name
-(bindings/parallel_plan_door.mojo `plan_devices`). Since 2026-10-24 there is
-no Python pool (docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md).
+"""CPU training for the par-* lanes whose driver shards through the native
+local pool (one worker process per device index on the CPU route): the
+column-sharded scaler, the class-sharded GaussianProcessClassifier and the
+Samba stack's gradient shards (par-samba, the ParallelNeuralTrainer route).
 
 Runtime checks (skipped, and SAID to be skipped, when a binding is absent or
-a GPU set loaded): a column-sharded scaler fit runs one worker request per
-shard and equals the plain fit byte for byte; a cooperative driver refuses
-by name; the driver negative control is off by default, needs both
-variables and is inert at one device.
+a GPU set loaded): a sharded fit runs one worker request per shard and
+equals the plain fit byte for byte; a cooperative driver refuses the CPU
+route by name; the published two-shard Samba gradient is the sum of its
+shard gradients; the driver negative control is off by default, inert at
+one device and fires at two.
 The bit claim against the GPU columns is the CPU identity gate's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_par_classical
@@ -28,93 +18,12 @@ The bit claim against the GPU columns is the CPU identity gate's.
 
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
-import re
 import sys
 from pathlib import Path
 
 import mojolearn
 from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend
-
-ROOT = Path(__file__).resolve().parents[3]
-
-#: The Python-sharded drivers: {module: (its native owner entry, the operations it calls)}.
-DRIVERS = {
-    "python/mojolearn/parallel_preprocessing.py": ("_native_parallel_shard", ("fit_scaler", "transform_scaler")),
-    # parallel_classical's drivers enter the family door, which routes the
-    # row-sharded operation to the same native shard owner (checked below).
-    "python/mojolearn/parallel_classical.py": ("_FAMILY(estimator, 'family_par_public', ",
-                                               ("transform_rbf_sampler",)),
-    "python/mojolearn/parallel_neighbors.py": ("_native_parallel_shard", ("parallel_queries",)),
-    "python/mojolearn/parallel_neighbors_reference.py": ("_native_parallel_shard", ("reference_query",)),
-    "python/mojolearn/parallel_ensemble.py": ("_native_parallel_shard", ("fit_forest",)),
-    "python/mojolearn/parallel_gaussian_process.py": ("_native_parallel_shard",
-                                                      ("fit_gaussian_process_classifier",
-                                                       "predict_gaussian_process_classifier")),
-    "python/mojolearn/parallel_ivf.py": ("_native_parallel_shard", ("ivf_from_index", "ivf_search")),
-}
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def test_python_sharded_drivers_are_native_pools():
-    for rel, (entry, operations) in DRIVERS.items():
-        text = _read(rel)
-        assert "DevicePool" not in text and "cooperative=True" not in text, rel
-        for op in operations:
-            assert f"{entry}('{op}'" in text, f"{op} is not one native call in {rel}"
-    owner = _read("bindings/parallel_shard_native_door.mojo")
-    common = _read("bindings/parallel_shard_common_door.mojo")
-    forecast = _read("bindings/parallel_forecast_native_door.mojo")
-    # one worker process per device index, never a cooperative pool, every
-    # worker admitted by its own identity before it receives work
-    assert "var pool = process_pool_create(devices, False, child)" in common
-    assert "native_require_worker_inventory(identities, p[].vendor, pids, " in common
-    assert "var pool = shard_open(devices, child)" in common
-    # the forecast drivers open no pool of their own: every run (the fits
-    # keep their shard parts, so they call it directly) is shard_run
-    assert owner.count("process_pool_create(") == 0 and forecast.count("process_pool_create(") == 0
-    assert "shard_run(requests, devices, _CHILD)" in forecast
-    for op in ("transform_rbf_sampler", "fit_scaler", "transform_scaler", "fit_gaussian_process_classifier",
-               "predict_gaussian_process_classifier", "fit_forest", "reference_query", "parallel_queries",
-               "ivf_from_index", "ivf_search"):
-        assert f'if operation == "{op}":' in owner, op
-    for op in ("fit_arima", "fit_exponential_smoothing", "predict_arima", "predict_exponential_smoothing"):
-        assert f'if operation == "{op}":' in forecast, op
-    # a cooperative driver binds a device plan and refuses the CPU route
-    door = _read("bindings/parallel_plan_door.mojo")
-    assert '"NotImplementedError: no CPU implementation of the cooperative multi-GPU driver "' in door
-    family = _read("bindings/family_native_door.mojo")
-    assert "var devices = plan_devices(args[1], driver, True, context)" in family
-    # ParallelNeural's public API now enters one native owner. Its native
-    # owner retains the same plain gradient / cooperative update distinction;
-    # complete-operation and child audits live in test_parallel_neural_native.
-    trainer = _read("python/mojolearn/parallel_training.py")
-    assert 'return _native_parallel_neural("init", (self, model, devices, logical_shards))' in trainer
-    assert 'return _native_parallel_neural("train", (self, shards))' in trainer
-    coordinator = _read("bindings/parallel_neural_native_door.mojo")
-    assert 'operation = "mlp_gradient"' in coordinator
-    assert 'operation = "samba_gradient"' in coordinator
-    assert 'process_pool_create(devices, False, child_module)' in coordinator
-    assert 'process_pool_create(pool["devices"], True, child_module)' in coordinator
-    assert '"samba_update" if samba else "mlp_update"' in coordinator
-    assert 'var grads = neural_ordered_sum(args)' in coordinator
-    forecasting = _read("python/mojolearn/parallel_forecasting.py")
-    assert "_binding()._module.parallel_forecast_call" in forecasting
-    assert "DevicePool" not in forecasting and "MOJOLEARN_" not in forecasting
-    causal = _read("python/mojolearn/models/parallel_causal_lm.py")
-    assert "DevicePool" not in causal and "MOJOLEARN_" not in causal
-    assert 'return _native_parallel_causal("route", (layer_devices,))' in causal
-    cv = _read("python/mojolearn/parallel_model_selection.py")
-    assert "DevicePool" not in cv and "cooperative=True" not in cv and "MOJOLEARN_" not in cv
-    assert "_selection._NATIVE(None, 'family_msel_parallel_score'," in cv
-    cv_owner = _read("bindings/parallel_cv_native_door.mojo")
-    assert 'var pool = process_pool_create(devices, False, "mojolearn._native_parallel_cv_worker")' in cv_owner
-    assert "native_require_worker_inventory(identities, " in cv_owner
-    assert not (ROOT / "python/mojolearn/_parallel_worker.py").exists()
-    assert "class DevicePool" not in _read("python/mojolearn/tests/_parallel_pool.py")
 
 
 def _cpu_only_with(*basenames):
@@ -306,13 +215,6 @@ def test_par_driver_sabotage_switch_is_off_by_default_and_inert_at_one_device():
     (`index % len(devices)`) instead. On the CPU route a device index is one
     worker process, so the two-device case runs here as two processes.
     """
-    source = _read("bindings/parallel_shard_common_run.mojo")
-    shift = source[source.index("def shard_read_shift("):source.index("def shard_faults_take(")]
-    assert "if first < 1 or n_devices < 2 or index % n_devices == 0:" in shift
-    # the switch: both variables, read once per process, or the native arm
-    assert "_driver_sabotage()" in shift and "getenv(" not in shift  # the docstring says "no getenv"
-    switch = source[source.index("def _driver_sabotage("):source.index("def shard_fault_mark(")]
-    assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE")) == "1"' in switch and '"MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1"' in switch
     if not _cpu_only_with("_mojolearn_preprocessing_host"):
         return
     import numpy as np

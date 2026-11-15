@@ -3,11 +3,8 @@
 """The gate for `mojolearn.GaussianProcessClassifier` (lane/gaussian-process-
 classifier, 2026-09-15).
 
-Source checks run on a box with nothing built: every refusal in the
-constructor fires by name, both bindings register gpc_fit and gpc_predict,
-the gp host family exports and covers them, the identity lanes and their
-batch declaration exist, the shared steps import no GPU module, and the
-NOT_IMPLEMENTED row is gone.
+The constructor check runs on a box with nothing built: every refusal in
+the constructor fires by name.
 
 Runtime checks run where `_mojolearn_gp` (GPU or CPU host) imports and are
 SKIPPED, and say so, elsewhere: binary and one-vs-rest fits and their
@@ -21,27 +18,18 @@ not this file's.
     cd python && MOJOLEARN_NUMERIC_MODE=identical python3 -m mojolearn.tests.test_gpc_surface
 """
 import os
-import re
 import sys
 import tempfile
-from pathlib import Path
 
 import mojolearn as ml
-from mojolearn import _backend, host_surface
+from mojolearn import _backend
 from mojolearn._cpu_reference import reference_training
 from mojolearn._gpc_impl import GaussianProcessClassifier
 from mojolearn._classical_host import HostGaussianProcessClassifier
 
-ROOT = Path(__file__).resolve().parents[3]
-GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
-
 
 class Skip(Exception):
     pass
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
 
 
 def _raises(exc, needle, fn, *a, **kw):
@@ -53,7 +41,7 @@ def _raises(exc, needle, fn, *a, **kw):
     raise AssertionError(f"expected {exc.__name__} containing {needle!r}")
 
 
-# -- source checks ----------------------------------------------------------------
+# -- constructor checks -----------------------------------------------------------
 
 
 def test_constructor_refuses_by_name():
@@ -77,38 +65,6 @@ def test_constructor_refuses_by_name():
     m = GaussianProcessClassifier()
     assert m.optimizer is None and m.max_iter_predict == 100 and m.multi_class == "one_vs_rest"
     assert "GaussianProcessClassifier" in ml.__all__
-
-
-def test_bindings_and_manifest_carry_the_entries():
-    for rel in ("bindings/_mojolearn_gp.mojo", "bindings/_mojolearn_gp_host.mojo"):
-        text = _read(rel)
-        for name in ("gpc_fit", "gpc_predict"):
-            assert f'("{name}")' in text, f"{rel} does not register {name}"
-    fam = host_surface.family("gp")
-    for name in ("gpc_fit", "gpc_predict"):
-        assert name in fam["exports"]
-    assert {"gpc", "gpc-multiclass"} <= set(fam["training_lanes"])
-    assert "GaussianProcessClassifier" in fam["classes"]
-    for module in ("gaussian_process/host/gpc_oracle.mojo", "gaussian_process/host/gpc_steps.mojo"):
-        assert module in fam["host_modules"] and (ROOT / module).is_file()
-        assert not GPU_IMPORTS.search(_read(module)), f"{module} imports a GPU module"
-    harness = _read("tools/identity_break.py")
-    assert '@lane("gpc")' in harness and '@lane("gpc-multiclass")' in harness
-    assert re.search(r'_batch_decl\(_rows_calls\("predict", "predict_proba"[^\n]*\), "gpc", "gpc-multiclass"\)', harness)
-
-
-def test_classification_is_no_longer_not_implemented():
-    rows = [l for l in _read("gaussian_process/NOT_IMPLEMENTED.tsv").splitlines()
-            if l.startswith("sklearn GaussianProcessClassifier")]
-    # Classification is implemented; its optional hyperparameter optimizer
-    # still has an explicit, narrower refusal documented in this ledger.
-    assert all(row.startswith("sklearn GaussianProcessClassifier's hyperparameter optimizer")
-               for row in rows), rows
-    steps = _read("gaussian_process/host/gpc_steps.mojo")
-    for token in ("identical_softplus", "identical_exp64",
-                  "DEVIATION 2830", "DEVIATION 2831", "DEVIATION 2832"):
-        assert token in steps, token
-    assert "GPC_LML_TOL_BITS: UInt32 = 0x2EDBE6FF" in _read("gaussian_process/gpc_common.mojo")
 
 
 # -- runtime checks (skipped without a binding) ----------------------------------------

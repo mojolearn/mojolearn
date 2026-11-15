@@ -58,6 +58,45 @@ Not a lane here: the verify modules (below) are owned by the eight lanes of `VER
 
 Removed by this lane: nothing. It is an inventory with no code change; the lanes above name what they remove.
 
+## How to move a test
+
+Written by `tests-to-mojo-classical`, the first move lane (its result: `TESTS_TO_MOJO_tests-to-mojo-classical.md`;
+its four checks are the examples: `core_all_finite`, `kernel_methods_poly_degree`, `sequence_theta_variants`,
+`training_residual_dropout_mask`).
+
+1. Read every function of the file; the inventory's class is a heuristic. Most NATIVE rows are leftovers of earlier
+   migrations (the docstring says "numerics run in checks/..."): what remains is usually boundary. Open the named
+   check and compare assert by assert (same inputs, same tolerance) before calling anything COVERED; a check that is
+   not imported in `registry.mojo` never runs in CI (the `archive_*` checks are not) and is no evidence.
+2. Delete outright what asserts on source text, manifests (`host_surface`, `NOT_IMPLEMENTED.tsv`), `ast` of a module,
+   or file layout: those are the retired source guards. Keep boundary functions (admission, `pytest.raises`,
+   returned types and shapes, hook refusal, `audit_native_call`, pickling and archives, outside-library oracles).
+3. Port only what a check can state with the same inputs: literals in the test, or arithmetic regenerated in Mojo.
+   Inputs drawn from `np.random.default_rng` / `random.Random` stay Python (KEEP-NOPORT) unless the bytes are stored
+   as a fixture by a committed generator. When a public test asserted both a numeric relation and a public shape or
+   admission, move the relation and keep a small Python test for the shape.
+4. Call the entry the binding's PACK calls, not the binding: grep the door (`bindings/*_pack.mojo`,
+   `*_native_door.mojo`) for the run function and copy its argument order (the residual-dropout PACK passes
+   `yp, yp, xp, rp` forward and `xp, rp, yp, yp` backward; the theta door passes seven words and three settings).
+   The cpu column and the gpu column may call different entries (`_buffer.all_finite` is `host_helpers_impl` on a
+   CPU install and `LabelsDeviceKernels.finite` on the GPU base binding).
+5. Shape: one file `checks/native_tests/<family>_<topic>.mojo` with `_run_cpu(mut report)` (independent cases via
+   `report.cases(n)` and `report.parallel(task, n)`; the task captures `{imm cases}` and Int addresses, rebuilt
+   with `core.hostptr.f32_ptr` inside the worker, since a `List.unsafe_ptr()` origin does not match a
+   `MutUntrackedOrigin` parameter), `_run_gpu(mut report)` (cases in order on the shared device context, tagged
+   `# driver-loop:`), `run_cases` with `comptime if CPU_COLUMN_BUILD`, and `register() -> Check("<name>", ...)`.
+   Register with one import and one append in `registry.mojo`; `python3 tools/ops/native_checks_report.py plan
+   --column cpu` (source only, no compile) must then list the name. No `main()`, no pixi task.
+6. Traps: Python's `Array.from_list(..., "<f4")` rounds literals, so state float32 words exactly (3.4e38 is
+   `0x7F7FC99E`, 1e-45 is `0x00000001`); NumPy's float32 `sin` may differ from Mojo's by an ulp, so port relations
+   (batch equals single) rather than values that depend on it; write `a * b + c` comparisons with
+   `checks.numerics.identical_mul` so LLVM cannot fuse them; entries that refuse outside `identical` assume the
+   check columns build in identical mode (`comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`); pass every
+   argument a sibling check passes explicitly when unsure of a default (`kernel_ridge_fit_host` `sw=`).
+7. A deleted function takes its now-unused imports and helpers with it; grep `python/` and `tools/` for importers of
+   the file's helpers (`test_host_archive_native.py` `_archive`/`_state` have 20 importers) and for its node ids.
+   Frozen evidence records (`tools/release_public_runtime_profile.json`) are history: leave them.
+
 ## The verify modules (42 files, 21,863 lines)
 
 Protected (AGENTS.md "The verify command is protected"); nothing here changes them. Role: `controller` must stay Python (it drives the installed wheel through the public API, the path users take, and judges the result); `fixture` is a public-API endpoint fixture; `data` is generated or reference data; `internal` reaches into product internals at the sites counted by the verify coverage audit (`coupling_product.tsv`, 75 sites in wheel modules; the other 85 are in `tools/identity_break.py` and `tools/identity_lanes/`). The replacement for each coupling kind is in the audit's section 4 table (one `mojolearn.runtime_report()` for vendor/route/binding identity, public `Session`/`ImportedProgram` calls, fixtures moved under verify ownership).

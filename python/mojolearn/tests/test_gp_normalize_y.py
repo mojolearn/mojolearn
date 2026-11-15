@@ -3,22 +3,17 @@
 """GaussianProcessRegressor(normalize_y=True) (lane/cpu-training-small-gaps,
 2026-09-15).
 
-The refusal and source checks always run; the value checks run through
+The refusal check always runs; the value checks run through
 whichever GP and preprocessing bindings this install loads and are skipped,
 saying so, without them. The statistics are Float32 (StandardScaler's pinned
 folds) where scikit-learn's reference is Float64, so values are compared to a
 tolerance and repeated runs bitwise.
 """
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
-from mojolearn import host_surface
 from mojolearn._gp_impl import RBF, ConstantKernel, GaussianProcessRegressor, WhiteKernel
-
-ROOT = Path(__file__).resolve().parents[3]
 
 
 def _data():
@@ -42,14 +37,6 @@ def _fit_or_skip(x, y, normalize_y=True):
 def test_non_bool_is_refused_by_name():
     with pytest.raises(TypeError, match="normalize_y must be a bool"):
         GaussianProcessRegressor(normalize_y="yes").fit([[0.0], [1.0]], [0.0, 1.0])
-
-
-def test_the_absence_row_and_the_refusal_are_gone():
-    tsv = (ROOT / "gaussian_process/NOT_IMPLEMENTED.tsv").read_text()
-    assert "sklearn normalize_y" not in tsv
-    src = (ROOT / "python/mojolearn/_gp_impl.py").read_text()
-    assert "normalize_y=True is \"\n                \"refused" not in src
-    assert "gp-normalize-y" in host_surface.family("gp")["training_lanes"]
 
 
 def test_normalized_prediction_repeats_bitwise_and_tracks_sklearn():

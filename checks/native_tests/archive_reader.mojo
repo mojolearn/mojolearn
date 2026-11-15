@@ -6,6 +6,7 @@ from core.native_archive_read import native_archive_read
 from core.native_archive_npy import native_npy_layout_collect, ArchiveLiteralWarning
 from core.native_archive_codec import archive_codec_library
 from checks.native_tests.archive_reader_vectors import archive_reader_fixture
+from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -73,7 +74,7 @@ def _warning_before_failure(unit: Int) raises:
     _ = source
 
 
-def main() raises:
+def run_checks() raises:
     comptime FIXTURES = 10
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
@@ -92,3 +93,17 @@ def main() raises:
         failures += value
     _require(failures == 0, "native archive reader failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
     print("PASS archive_reader:", FIXTURES, "native fixtures, parallel")
+
+
+# The one runner (runner.mojo): the fixtures run across host cores inside
+# run_checks, which raises after printing each failed fixture; the check counts
+# as one case. Host column only: archive reading and writing is host work.
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("archive_reader", cpu=True, gpu=False, serial="", run=run_cases)
