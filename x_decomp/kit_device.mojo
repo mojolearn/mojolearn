@@ -26,7 +26,6 @@ enqueued launch, with no sync:
 
 Host floats a launch reads are held (`hold_f`, `hold_i`) until the next
 sync, so an enqueued upload never reads freed memory."""
-from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
 from experiments.classical_identical_ideas.linear_controls import C28_BUCKET_SOLVES
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
@@ -1328,14 +1327,10 @@ struct DMcd:
         return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
 
     def emp_cov_at(self, Xs: DMat, loc: DMat) raises -> DMat:
-        # C57 retains this candidate's just-computed immutable subset mean.
-        # No reuse across support changes; the centered products are unchanged.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
         # TOMBSTONE: MOJOLEARN_CLASSICAL_C23_MCD (its use here: the centered-Gram covariance arm) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 7b5151da9b.
         # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.expdel2-17-decomposition.patch.
-        comptime if C57_CANDIDATE_STATE:
-            var Xc = self.k.ew2(OP_SUB, Xs, loc)
-            return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
+        # TOMBSTONE: MOJOLEARN_C57_CANDIDATE_STATE (its use here: the covariance centred at the candidate's mean) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-07-base); code recoverable at 3b6b933bcc.
+        # Restore: git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.expdel2-17-decomposition.patch.
         return self.emp_cov(Xs)
 
     def mahal(self, X: DMat, loc: DMat, P: DMat) raises -> DMat:

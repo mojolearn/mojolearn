@@ -28,7 +28,6 @@ The CPU column runs this file on `x_decomp/kit.mojo`; the GPU binding runs
 x_decomp/kit_device.mojo's `fast_mcd_dev`, the same search with every
 matrix resident on the device.
 """
-from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
 from std.memory import bitcast
 from std.builtin.sort import sort
 
@@ -230,14 +229,10 @@ struct Mcd[E: Exec]:
         return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
 
     def emp_cov_at(self, Xs: Mat, loc: Mat) raises -> Mat:
-        # C57 retains this candidate's just-computed immutable subset mean.
-        # No reuse across support changes; the centered products are unchanged.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
         # TOMBSTONE: MOJOLEARN_CLASSICAL_C23_MCD (its use here: the centered-Gram covariance arm) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 7b5151da9b.
         # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.expdel2-17-decomposition.patch.
-        comptime if C57_CANDIDATE_STATE:
-            var Xc = self.k.ew2(OP_SUB, Xs, loc)
-            return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
+        # TOMBSTONE: MOJOLEARN_C57_CANDIDATE_STATE (its use here: the covariance centred at the candidate's mean) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-07-base); code recoverable at 3b6b933bcc.
+        # Restore: git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.expdel2-17-decomposition.patch.
         return self.emp_cov(Xs)
 
     def mahal(self, X: Mat, loc: Mat, P: Mat) raises -> Mat:
