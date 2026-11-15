@@ -31,7 +31,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
-from core.forest_experiments import (T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
+from core.forest_experiments import (T33_COST_SCHEDULE, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, forest_chunk_finish)
 
 # TOMBSTONE: MOJOLEARN_AFCL_T08 (never-run Apple FAST card: two SIMD groups per RF traversal workgroup) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 5bc2865240.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T08.patch; record in docs/TOMBSTONES.md.
@@ -420,12 +420,8 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     comptime if T35_LEAF_REUSE:
         _launch_forest_leaf_reuse[RF_INPUT, GROVE, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
         return
-    comptime if T34_CHUNK_FOLD:
-        ctx.enqueue_function[forest_chunk_kernel[RF_INPUT, PACKED]](
-            doff.unsafe_ptr(), dcol.unsafe_ptr(), dthr.unsafe_ptr(), dleft.unsafe_ptr(),
-            dleaf.unsafe_ptr(), dx.unsafe_ptr(), dout.unsafe_ptr(), Int32(n_rows), Int32(n_features), Int32(n_outputs), Int32(trees),
-            grid_dim=(n_rows*n_outputs+127)//128, block_dim=128)
-        return
+    # TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in 32-tree chunk fold version, forest_chunk_kernel; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
     comptime if GROVE:
         comptime if T33_COST_SCHEDULE:
             # Compare feature cache lines with live logical tree lanes. All
@@ -1047,7 +1043,7 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
         raise Error("forest inference prototype requires finite Float32 values")
     return result^
 
-# T34/T35/T38, C50. Default OFF through core.forest_experiments.
+# T35/T38 helpers (FOREST_ROUTE 1/2, fused labels). Default OFF through core.forest_experiments.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 @always_inline
 def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # device-helper: one row's tree fold inside the forest kernels
@@ -1057,18 +1053,7 @@ def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # devic
     row: Int, features: Int, outputs: Int, trees: Int, channel: Int,
 ) -> Float32:
     var total = Float32(0)
-    comptime if T34_CHUNK_FOLD:
-        var chunk = Array[Float32, FOREST_CHUNK](fill=Float32(0))
-        var first = 0
-        while first < trees:
-            for i in range(FOREST_CHUNK):
-                chunk[i] = 0
-                if first + i < trees:
-                    var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, first+i, row, features)
-                    chunk[i] = leaves.unsafe_load(node*outputs+channel)
-            total = forest_add(total, forest_chunk_sum(chunk))
-            first += FOREST_CHUNK
-    elif GROVE:
+    comptime if GROVE:
         var sums = Array[Float32, 32](fill=Float32(0))
         for lane in range(32):
             var tree = lane
@@ -1087,18 +1072,6 @@ def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # devic
             var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, row, features)
             total = forest_add(total, leaves.unsafe_load(node*outputs+channel))
     return forest_chunk_finish(total, trees)
-
-
-def forest_chunk_kernel[RF_INPUT: Bool, PACKED: Bool](
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-    output: MutPointer[Float32, MutAnyOrigin], rows: Int32, features: Int32, outputs: Int32, trees: Int32,
-):
-    var u = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if u < Int(rows)*Int(outputs):
-        output.unsafe_store(u, forest_prediction_value[RF_INPUT, False, PACKED](offsets, columns, thresholds, left, leaves, x,
-            u//Int(outputs), Int(features), Int(outputs), Int(trees), u%Int(outputs)))
 
 
 def forest_leaf_ids_kernel[RF_INPUT: Bool, PACKED: Bool](
@@ -1127,16 +1100,7 @@ def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves
                                    row: Int, k: Int, nt: Int, channel: Int) -> Float32:
     var total = Float32(0)
     var sums = Array[Float32, 32](fill=Float32(0))
-    comptime if T34_CHUNK_FOLD:
-        var first = 0
-        while first < nt:
-            for i in range(32):
-                sums[i] = 0
-                if first+i < nt:
-                    sums[i] = leaves.unsafe_load(Int(ids.unsafe_load(row*nt+first+i))*k+channel)
-            total = forest_add(total, forest_chunk_sum(sums))
-            first += 32
-    elif GROVE:
+    comptime if GROVE:
         for lane in range(32):
             var t = lane
             while t < nt:

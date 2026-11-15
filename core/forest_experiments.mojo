@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""T31–T39 experiment controls and the T34 cross-column arithmetic contract.
+"""T31–T39 experiment controls and the forest fold finish.
 
 All new switches are default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT
 VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED. No device-specific arithmetic.
@@ -15,7 +15,10 @@ from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDE
 # TOMBSTONE: MOJOLEARN_TREES_T32_SHARED_ROWS (IDENTICAL opt-in shared-row staging, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at a5502e594d.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch; record in docs/TOMBSTONES.md.
 comptime T33_COST_SCHEDULE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"]()
-comptime T34_CHUNK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T34_CHUNK_FOLD"]()
+# TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in chunk fold version: FOREST_CHUNK, chunk_add, forest_chunk_sum; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
+#: Kept as the folded constant: core/forest_inference_model.mojo imports it.
+comptime T34_CHUNK_FOLD = False
 # Forest prediction ROUTE: one arms switch (trees-cleanup 2026-10-07; replaces
 # T35_LEAF_REUSE / T36_FINITE_STAGE, whose silent precedence over T34 and the
 # grove schedule hid T33). `launch_forest_inference` takes exactly one route:
@@ -36,26 +39,7 @@ comptime T36_FINITE_STAGE = FOREST_ROUTE == 2
 comptime T37_WORKSPACE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T37_WORKSPACE"]()
 comptime T38_FUSED_LABELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T38_FUSED_LABELS"]()
 
-# Fixed logical chunks are the numerical version, not launch or warp widths.
-# Each chunk contains consecutive trees, zero-padded to 32; pair adjacent
-# entries at strides 1,2,4,8,16. Chunk roots fold in increasing chunk order.
-comptime FOREST_CHUNK = 32
-
-@always_inline
-def chunk_add(a: Float32, b: Float32) -> Float32:
-    return ftz(ftz(a) + ftz(b))
-
-@always_inline
-def forest_chunk_sum(mut values: Array[Float32, FOREST_CHUNK]) -> Float32:
-    var stride = 1
-    while stride < FOREST_CHUNK:
-        var i = 0
-        while i < FOREST_CHUNK:
-            values[i] = chunk_add(values[i], values[i + stride])
-            i += 2 * stride
-        stride *= 2
-    return values[0]
-
+#: The default fold's finish: the tree-order total divided by the tree count.
 @always_inline
 def forest_chunk_finish(total: Float32, trees: Int) -> Float32:
     return ftz(identical_div(ftz(total), Float32(trees)))
