@@ -104,7 +104,7 @@ comptime C35_TASK_ROWS = 256
 # row-register kernel, R rows per thread. Arms off|2|4 (one define, int value).
 # TOMBSTONE: MOJOLEARN_XCLUSTER_ROW_ASSIGN (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b1f48f8126.
 # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch; record in docs/TOMBSTONES.md.
-comptime XCLUSTER_ROW_ASSIGN_ROWS = 0
+# (Sweep 2026-11-15: comptime XCLUSTER_ROW_ASSIGN_ROWS removed; nothing read it.)
 # (Sweep 2026-11-15: comptime XCLUSTER_ROW_ASSIGN removed; nothing read it.)
 # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): the C37 rewrite fused the
 # Lloyd assignment with the Int32 row-block centroid accumulation in shared memory (cluster/impl/detail/kmeans_fused_accumulate.mojo).
