@@ -30,8 +30,6 @@ row `(q & 4) + ((lane / 2) % 4)`, columns `(q & 2) * 2 + (lane % 2) * 2 + {0,1}`
 with `q = lane / 4`.
 
 Only for FAST builds on the Apple column; see `fast_mma_knn_applies`.
-`-D MOJOLEARN_KNN_FAST_MMA_OFF` turns it off (the scalar fused arm, then the
-tiled arm, take over).
 
 WHAT MADE IT FAST (M4, 10,000 queries x 1,000,000 x 16, k = 5; measured
 2026-09-25). The matrix unit alone did NOT help (2.2 s against the scalar
@@ -48,7 +46,6 @@ from max.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
 from std.bit import count_trailing_zeros
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.apple_air import simdgroup_load_legacy_air
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -82,11 +79,9 @@ infinities away)."""
 comptime MQ_PAD = Float32(3.3e38)
 """Norm of a padding row: above `MQ_BIG`, so never admitted."""
 
-comptime FAST_MMA_KNN_ENABLED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_KNN_FAST_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_KNN_FAST_MMA_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 2beee3664f.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_MMA_KNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # TOMBSTONE: MOJOLEARN_KNN_FAST_CLS1_SLICES2 (DROPPED-slower) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
 # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_KNN_FAST_CLS1_PRESEED (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
