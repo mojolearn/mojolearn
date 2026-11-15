@@ -661,6 +661,7 @@ in the tables after the sections.
 | [`MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF`](#mojolearn_fast_ols_normal_eq_off-old-path-deleted-2026-11-15) | Linear (LinearRegression resident normal equations, FAST Apple) | removed (old path; FAST+Apple default KEPT, olsne-taxi / olsne-istella) | 2026-11-15 | [MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch](../experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch) |
 | [`MOJOLEARN_QN_FAST_BLOCKS_OFF`](#mojolearn_qn_fast_blocks_off-old-path-deleted-2026-11-15) | Linear (QN one-class objective in two launches, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-*-blocks-istella) | 2026-11-15 | [MOJOLEARN_QN_FAST_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch) |
 | [`MOJOLEARN_PREP_FAST_MINMAX_OFF`](#mojolearn_prep_fast_minmax_off-old-path-deleted-2026-11-15) | Preprocessing (MinMaxScaler row-tiled extrema, FAST Apple) | removed (old path; FAST+Apple default KEPT, prep-minmax-istella) | 2026-11-15 | [MOJOLEARN_PREP_FAST_MINMAX_OFF.patch](../experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch) |
+| [`MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF`](#mojolearn_x_prep_fast_staged_out_off-old-path-deleted-2026-11-15) | Preprocessing (x_prep staged output download, FAST Apple) | removed (old path; FAST+Apple default KEPT, gmp-staged-*) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6418,4 +6419,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT f419ea9f1 (EXPERIMENTS.md `PREP_FAST_MINMAX`, prep-minmax-istella): M3 one run per arm, minmax-scaler istella 152 -> 106 ms, output digest identical. No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6c544e9855`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch`, then delete the `MOJOLEARN_PREP_FAST_MINMAX_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the x_prep program's output region (and arena ranges of 1M+ words) from the pinned-stage download (core/staged_download.mojo) to raw host-pointer copies. Only the `and not is_defined` term of `X_PREP_STAGED_OUT` (x_prep/device.mojo) is gone; the raw copies stay the path of every non-FAST-Apple build.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `X_PREP_FAST_STAGED_OUT`, gmp-staged-lb-taxi, gmp-staged-mlb-taxi, gmp-staged-te-taxi): M3 one run per arm, label-binarizer taxi 563 -> 345 ms, multilabel-binarizer 287 -> 193, target-encoder 281 -> 272, digests the same (copies only). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `509aa1c3a5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
