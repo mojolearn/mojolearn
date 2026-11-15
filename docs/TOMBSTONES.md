@@ -631,6 +631,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AF_FAST_NOFILL_OFF`](#mojolearn_af_fast_nofill_off) | Neural (Apple FAST Adafactor step, x_sequence) | superseded (AF_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_AF_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch) |
 | [`MOJOLEARN_LN_FAST_NOFILL_OFF`](#mojolearn_ln_fast_nofill_off) | Neural (Apple FAST LayerNorm, x_sequence) | superseded (LN_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_LN_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_PIPE_UP_OFF`](#mojolearn_seq_fast_pipe_up_off) | Neural (Apple FAST x_sequence executor uploads) | superseded (SEQ_FAST_PIPE_UP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF`](#mojolearn_seq_fast_pipe_down_off) | Neural (Apple FAST x_sequence executor downloads) | superseded (SEQ_FAST_PIPE_DOWN default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5945,3 +5946,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/exec_device.mojo.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `eff4ddd2d8`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF
+
+- Tried: the rollback of `SEQ_FAST_PIPE_DOWN` in `sequence/exec_device.mojo`: under FAST + Apple, serial downloads at a sync instead of two pinned halves whose DMA overlaps the read of the previous chunk.
+- Verdict: the pipelined default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_PIPE_DOWN`, lane/apple-fast-regress @ 93951fafb, M3 regress-adafactor-down / -pipe, regress-adagrad-pipe: adafactor 684 -> 390 ms (-43%), adagrad 195.5 -> 199.1 neutral, digests identical). KEPT f6a9e7c04. Apple FAST only.
+- Removed: the `_OFF` term of `SEQ_PIPE_DOWN`'s FAST + Apple half (now `_SEQ_APPLE_FAST`). The serial download stays: FAST off Apple and `MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF` / `IDN_ALL_OFF` compile it; `autograd/program_output_copy.mojo` reads `SEQ_PIPE_DOWN` unchanged. No bits move.
+- Files: sequence/exec_device.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `2e31a412c9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
