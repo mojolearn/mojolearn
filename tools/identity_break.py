@@ -6982,14 +6982,21 @@ def _(ml, X, yc, yr, Xh=None):
     for tag, labels, clf in (("strat", np.ascontiguousarray(yc[:n]).tolist(), True),
                              ("kfold", np.ascontiguousarray(yr[:n]).tolist(), False)):
         for splits in (3, 5):
-            # The public route to the folds an integer cv means: `check_cv`
-            # (StratifiedKFold for a classifier's discrete labels, KFold
-            # otherwise, unshuffled), as scikit-learn defines cross_val_score's
-            # cv=int. Before 2026-11-15 the lane called the private native
-            # operation `ms._NATIVE(None, "family_msel_default_folds", ...)`;
-            # the fold indices are the same rows (the Python definition the
-            # fold tests hold both to is mojolearn/tests/_fold_reference.py).
-            folds = list(ms.check_cv(splits, labels, classifier=clf).split(Xn, labels))
+            # the product's route: cross_val_score's default folds for
+            # cv=None or an integer are bindings/msel_split_door.mojo
+            # `msel_default_folds` (the core fold helpers, the sabotage
+            # control included). f4d37e5eec deleted the Python
+            # `_default_fold_arrays` shim; verify calls the native owner's
+            # `family_msel_default_folds` operation, the same function
+            # msel_fold_source calls (the Python definition the fold tests
+            # hold it to stays mojolearn/tests/_fold_reference.py).
+            # KEPT PRIVATE (2026-11-15, verify-harness-decouple): the public
+            # `check_cv(...).split` reaches `msel_stratified_split`, which
+            # does not apply `msel_sabotage()`, so the msel sabotage arm could
+            # no longer move this cell. Needs a public route to the default
+            # folds (docs/plans/VERIFY_HARNESS_DECOUPLE_2026-11-15.md).
+            folds = [(a.tolist(), b.tolist()) for a, b in ms._NATIVE(
+                None, "family_msel_default_folds", (labels, splits, clf), ms._NATIVE_CONTEXT)]
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
             test = [np.asarray(b, dtype=np.int64) for _, b in folds]
             parts[f"{tag}{splits}"] = _h(*(train + test))
