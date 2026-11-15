@@ -53,12 +53,12 @@ comptime CORPUS_ENVIRONMENT = SharedSlot[CorpusEnvironment, "MojolearnCorpusEnvi
 
 def corpus_env_home() raises -> String:
     """`HOME` as the process started (empty when unset)."""
-    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].home
+    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].home.copy()
 
 
 def corpus_env_lm_cache() raises -> String:
     """`MOJOLEARN_LM_CACHE` as the process started (empty when unset)."""
-    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].lm_cache
+    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].lm_cache.copy()
 
 
 def corpus_files_initialize() raises:
