@@ -727,6 +727,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`](#mojolearn_idn_tsvd_one_upload_off-old-path-deleted-2026-11-15) | Decomposition (TruncatedSVD one upload of X, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED g50ebe26a5, _OFF 1.610x slower) | 2026-11-15 | [MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch) |
 | [`MOJOLEARN_PCA_FAST_POOL_OFF`](#mojolearn_pca_fast_pool_off-old-path-deleted-2026-11-15) | Decomposition (PCA pooled device copy of X, FAST Apple) | removed (old path; FAST+Apple default, READY-AB with no A/B row (V2 rule b)) | 2026-11-15 | [MOJOLEARN_PCA_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch) |
 | [`MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL`](#mojolearn_samba_weight_epoch_global-unmeasured-arm-deleted-2026-11-15) | Neural (Samba resident copy keyed by the process weight epoch) | removed (unmeasured B arm; EXPERIMENTS.md PENDING, owed A/B never ran) | 2026-11-15 | [MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch](../experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch) |
+| [`MOJOLEARN_FOREST_DEVICE_FINITE_OFF`](#mojolearn_forest_device_finite_off-old-path-deleted-2026-11-15) | Trees (RandomForest / ExtraTrees device finite scan, FAST Apple) | removed (old path; FAST+Apple default KEPT 69f7a41fd, promoted on Apple M3 only) | 2026-11-15 | [MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch](../experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7019,3 +7020,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4fdfffd7c8`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch`, then delete the `MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_FOREST_DEVICE_FINITE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The FAST+Apple rollback of `FOREST_DEVICE_FINITE` (ensemble/device_finite.mojo): the RandomForest / ExtraTrees fits kept the Python one-thread host scan of every cell and the RF binding its pooled host NaN scan instead of the device scan of the uploaded X. `FOREST_DEVICE_FINITE` is now FAST and Apple GPU (read by bindings/_mojolearn_rf.mojo, bindings/_mojolearn_trees.mojo, core/mojolearn_rf_run.mojo, extratrees/.../builder.mojo).
+- **Verdict**: KEPT 69f7a41fd (M3 A/B b272364e4, n=2, identical output hashes): ET taxi 2,867 -> 2,829 ms, istella 4,143 -> 4,059 ms; RF neutral. V2 rule d: promoted on Apple only; the path is FAST+Apple only, so no NVIDIA / AMD arm exists and none is owed. The scan only reads X: no bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cffcc56511`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch`, then delete the `MOJOLEARN_FOREST_DEVICE_FINITE_OFF` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
