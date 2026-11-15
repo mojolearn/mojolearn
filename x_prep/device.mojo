@@ -175,8 +175,9 @@ comptime OP_QDA_DEC = 42
 #: accuracy / logloss unchanged (lda .9131 / .2357, qda .8805 / 3.608 -> 3.609).
 #: `-D MOJOLEARN_LDAQDA_<NAME>_OFF` restores main's path for that stage; the old
 #: `-D MOJOLEARN_LDAQDA_<NAME>` stays harmless. The three are independent.
-comptime PAR_STAGES = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-                       and not is_defined["MOJOLEARN_LDAQDA_PAR_STAGES_OFF"]())
+# TOMBSTONE: MOJOLEARN_LDAQDA_PAR_STAGES_OFF (old path; promoted on FAST+Apple only (M3 A/B lane/apple-fast-ldaqda, EXP:242); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 7decc17403.
+# Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_PAR_STAGES_OFF.patch
+comptime PAR_STAGES = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime DEC_TILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                      and not is_defined["MOJOLEARN_LDAQDA_DEC_TILE_OFF"]())
 comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
