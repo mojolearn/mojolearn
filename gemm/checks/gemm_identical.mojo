@@ -219,6 +219,8 @@ from core.shared_slot import SharedSlot
 #
 #: The leaf boundary reads the LAUNCH instead of `k`: `L` is scaled by the
 #: block size. Contract section 6's first sentence, violated.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime SAB_LEAF_READS_LAUNCH = is_defined[
     "MOJOLEARN_GEMM_SABOTAGE_LEAF_READS_LAUNCH"
 ]()
@@ -298,7 +300,7 @@ comptime GEMM_FOLD_SLOTS = 16
 
 # NI01/NI02/NI06 source-only arms, all default OFF. No compilation,
 # identity, quality or timing evidence was collected for this source.
-comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime NI01_GEOMETRIC_WORKSPACE = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI01_GEMM_GEOMETRIC_WORKSPACE"]()
 # Tried 2026-10-08 (NI02, MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3 stream_all: bounded 16-leaf partial windows for every
 # GEMM caller, run ge123e6f9): NV/AMD gemm gaussian 2.07x/1.78x, lm-train-step 1.11x/1.07x SLOWER (quality not
@@ -3234,7 +3236,7 @@ def _mfma_run(
 
 
 comptime IDN_GEMM_MFMA_REUSE_WS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF"]()
 )
 """lane/fam-lm (2026-10-04), default ON under IDENTICAL; reached only where
 `lib_gemm_mfma_for` is on (the AMD column). The matrix-core GROUP launch
@@ -3250,7 +3252,7 @@ workspace is smaller takes `_mfma_run` unchanged.
 
 
 comptime IDN_GEMM_MFMA_NO_LONE_GROUP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF"]()
 )
 """lane/nr-gemm (2026-10-04), default ON under IDENTICAL; reached only where
 `lib_gemm_mfma_for` is on (the AMD column). The leaf split's rule answers a
@@ -3269,7 +3271,7 @@ which the non-group store applies itself. Same bits.
 
 comptime IDN_GEMM_AMD_BAND_MFMA = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     # A01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]()
 )
 """lane/nr-gemm (2026-10-04, review rank 1 "A4 fix"), default ON under
 IDENTICAL; reached only on the AMD column with `lib_gemm_mfma_for` on. The
@@ -3374,12 +3376,12 @@ def _mfma_run_ws(
 # and the wave count are scheduling: no product, leaf or fold moves.
 
 #: `-D MOJOLEARN_IDN_GEMM_MFMA16_OFF` keeps the scalar stepped-down and split
-#: plans on the AMD column; also off under `MOJOLEARN_IDN_ALL_OFF`.
+#: plans on the AMD column.
 # A01 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # A01 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Incumbent MFMA16 default retained; this card only compares explicit rollback arms.
 comptime IDN_GEMM_MFMA16 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GEMM_MFMA16_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA16_OFF"]()
 )
 
 
@@ -3824,7 +3826,7 @@ def _mfma16_try(
 
 comptime IDN_AMD_MFMA_KPACK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
     "MOJOLEARN_IDN_AMD_MFMA_KPACK"
-]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+]()
 
 #: Waves a packed block holds: a 64 x (32 GEMM_AMD_KPACK_NW) tile; two waves
 #: share each staged A page.
@@ -4194,10 +4196,10 @@ def _mfma_kpack_try(
 
 #: lane/nr-gemm (2026-10-04, review A2), default ON under IDENTICAL on the
 #: NVIDIA column (kernel body row 1). `-D MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF`
-#: keeps the scalar stepped-down plans; also off under `MOJOLEARN_IDN_ALL_OFF`.
+#: keeps the scalar stepped-down plans.
 comptime IDN_GEMM_NV_STEP_KPACK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     # N01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    is_defined["MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF"]()
 )
 
 
@@ -4797,7 +4799,7 @@ def _gemm_tile_step_down_rules(m: Int, n: Int, k: Int, plan: Int) -> Int:
 #: keeps today's pick instead of changing the schedule.
 comptime IDN_GEMM_FILL_TILES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
     "MOJOLEARN_IDN_GEMM_FILL_TILES"
-]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+]()
 comptime GEMM_FILL_WARPS_PER_SCHEDULER = 2
 comptime GEMM_FILL_SCHEDULERS_PER_SM = 4
 
@@ -7126,7 +7128,7 @@ comptime GEMM_KSPLIT_KS = 16
 # ZERO timed samples. This checks GEMM only, not full models or combined
 # defines. Apple checks identity; these scheduling changes target NVIDIA/AMD.
 # Evidence: experiments/identical_speed/results/20261005/light-identity/.
-comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # PROMOTED 2026-10-08 (lane/grid-act-2): slack 8 is the IDENTICAL default.
 # IDENTICAL grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD MI325X gfx942, full
 # board data, one scored run per arm, noise floor from incumbent repeats),
@@ -7144,8 +7146,7 @@ comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not
 # long-k call with few output tiles issues about 8 blocks per SM instead of 4,
 # which hides more load latency per SM at the cost of more `m n G` workspace
 # (still under SPLITK_MAX_WORKSPACE_FLOATS, `gemm_step_ksplit_finest_leaves`)
-# and a longer second-level fold. Off IDENTICAL (and under
-# MOJOLEARN_IDN_ALL_OFF) the slack stays 4.
+# and a longer second-level fold. Off IDENTICAL the slack stays 4.
 comptime GEMM_KSPLIT_BRIEF_SLACK = 4
 """The slack the long-k brief's section 4 hand counts were written at."""
 comptime GEMM_KSPLIT_SLACK = (

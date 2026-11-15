@@ -40,6 +40,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime SAB_FOLD_DESCENDING = is_defined[
     "MOJOLEARN_EMB_SABOTAGE_FOLD_DESCENDING"
 ]()
@@ -184,7 +186,7 @@ def emb_sabotage_name() -> String:
 comptime PLAN_AUTO = 2
 comptime EMB_AUTO_SORT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_EMB_AUTO_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_EMB_AUTO_SORT_OFF"]()
 )
 comptime EMB_AUTO_SORT_MIN_CELLS = get_defined_int["MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS", 1 << 26]()
 
@@ -270,11 +272,11 @@ comptime EMB_RUN_BEGIN_THREADS = 256
 # every touched cell gets the same bits and every untouched cell keeps its
 # seed. Both plans fill `perm[0 : run_begin[V]]` with non-padding positions,
 # so the row is `ids[perm[r]]`. Off under every embedding sabotage arm (they
-# patch `emb_backward_kernel`). -D MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF (or
-# MOJOLEARN_IDN_ALL_OFF) restores the V * d launch.
+# patch `emb_backward_kernel`). -D MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF
+# restores the V * d launch.
 comptime EMB_TOUCHED_ROWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF"]()
     and not ANY_EMB_SABOTAGE
 )
 
@@ -284,7 +286,6 @@ comptime EMB_TOUCHED_ROWS = (
 comptime NN49_EMB_VECTOR4 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_NN49_EMB_VECTOR4"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not ANY_EMB_SABOTAGE
 )
 
@@ -309,10 +310,9 @@ comptime NN49_EMB_VECTOR4 = (
 # runs. Integer counts are exactly associative: the compaction is the same
 # list on every vendor. Opt-in per caller (`unique_rows`, the embedding
 # binding's entries; the training loops keep their launch and their wait
-# count); off with -D MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF (or
-# MOJOLEARN_IDN_ALL_OFF) and under every sabotage arm (EMB_TOUCHED_ROWS).
+# count); off with -D MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF and under every sabotage arm (EMB_TOUCHED_ROWS).
 comptime EMB_UNIQUE_ROWS = EMB_TOUCHED_ROWS and not (
-    is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"]()
 )
 #: threads per block of the compaction (a power of two: the tree folds halve it)
 comptime EMB_UNIQ_TPB = 256

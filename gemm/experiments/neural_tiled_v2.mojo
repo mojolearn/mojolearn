@@ -19,7 +19,9 @@ from gemm.checks.gemm_identical import (
     contract_partition, gemm_operand_strides,
 )
 
-comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"]()
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1 (slower) deleted 2026-10-09 by d48c5eaaf; code recoverable at d48c5eaaf^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch; record in docs/TOMBSTONES.md.

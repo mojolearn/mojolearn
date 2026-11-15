@@ -82,8 +82,10 @@ from gaussian_process.host.gp_theta import gp_free_count
 #: is rounded before the subtraction either way (DEVIATION 1753): no bit
 #: moves, and the host column is untouched. The function now waits once at
 #: its end (the scaled copy is its own).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime GP_IDN_GRAD_PRESCALE = GP_IDN_PRESCALE and not (
-    is_defined["MOJOLEARN_IDN_GP_GRAD_PRESCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GP_GRAD_PRESCALE_OFF"]()
 )
 
 comptime GP_GRAD_RBF = 0

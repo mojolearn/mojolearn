@@ -40,9 +40,10 @@ every binding evaluates through GLOBAL_NUMERIC_MODE.
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime _ALLOWED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 comptime SCHED_INCUMBENT = 0

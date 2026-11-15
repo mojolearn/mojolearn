@@ -14,9 +14,10 @@ from gemm.contract import (
     GEMM_LEAF_ARM, GEMM_LEAF_ARM_NEURAL128, GEMM_LEAF_ARM_NEURAL256,
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime NEURAL_EXPERIMENTS_ALLOWED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 # Leaf length and accumulator chains stay separate controls.
 # NN03 = the neural arms (1 neural128, 2 neural256) of the ONE leaf switch

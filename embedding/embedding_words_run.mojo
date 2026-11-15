@@ -51,6 +51,8 @@ from embedding.checks.embedding_oracle import (
 from core.shared_slot import SharedSlot
 
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime _NEURAL_CTX = "MojolearnNeuralEmbeddingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralEmbeddingContextFastV3"
 # The pinned stages of this binding's downloads (core/staged_download.mojo),
 # one pool per binding and tier like the context above.
@@ -121,10 +123,10 @@ comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # scratch separately; the IDENTICAL controls retain their existing policy.
 # TOMBSTONE: MOJOLEARN_EMB_RESIDENT_OFF (old path in IDENTICAL: the per-call table upload and scan; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 63a7445f96.
 # Restore: git apply experiments/removed/MOJOLEARN_EMB_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
-comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or (_EMB_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or _EMB_IDENTICAL
 # TOMBSTONE: MOJOLEARN_EMB_DEVICE_SCRATCH_OFF (old path in IDENTICAL: host-filled per-call scratch; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 9b6b13052d.
 # Restore: git apply experiments/removed/MOJOLEARN_EMB_DEVICE_SCRATCH_OFF.patch; record in docs/TOMBSTONES.md.
-comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or (_EMB_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or _EMB_IDENTICAL
 #: buffers kept per element type (the oldest is retired past these)
 comptime EMB_POOL_F32_KEEP = 3
 comptime EMB_POOL_I32_KEEP = 6

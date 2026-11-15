@@ -14,6 +14,8 @@ from checks.numerics import (
 )
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime COLUMN_BIT_IDENTICAL = 0
 comptime COLUMN_APPLE = 1
 comptime COLUMN_NVIDIA = 2
@@ -934,14 +936,12 @@ def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
         # record) gather through the index too. Opt-out:
         # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`. Lane gap-trees-nv: `-D
         # MOJOLEARN_GBDT_ID_RIDX` takes the same schedule on NVIDIA and AMD
-        # IDENTICAL (opt-in until its A/B). fix-g1-gbdt: that opt-in arm
-        # also turns off under the master `-D MOJOLEARN_IDN_ALL_OFF`
-        # (Apple's schedule is its pre-existing default and stays).
+        # IDENTICAL (opt-in until its A/B; Apple's schedule is its
+        # pre-existing default and stays).
         return (
             column == COLUMN_APPLE
             or (
                 is_defined["MOJOLEARN_GBDT_ID_RIDX"]()
-                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
                 and (
                     column == COLUMN_NVIDIA
                     or column == COLUMN_AMD
